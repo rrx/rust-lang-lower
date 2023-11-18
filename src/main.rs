@@ -225,16 +225,9 @@ fn lower_stmt<'a>(context: &'a Context, codemap: &CodeMap, ast: &syntax::ast::As
                 Some(expr) => {
                     let op = lower_expr(context, codemap, expr);
                     let results: Vec<Value> = op.results().map(|r| r.into()).collect();
-                    //let result: Value = op.result(0).unwrap().into();
+                    let ret_op = func::r#return( results.as_slice(), location);
                     println!("op: {:?}", results);
-                    let index_type = Type::index(context);
-                    let dummy = arith::constant(context, attribute::IntegerAttribute::new(1, index_type).into(), location);
-                    let op = func::r#return( &[dummy.result(0).unwrap().into()], location);
-                    //vec![func::r#return( results.as_slice(), location)]
-                    vec![dummy, op]
-                    //vec![func::r#return( &[], location)]
-                    //let rhs = arith::constant(context, attribute::IntegerAttribute::new(1, index_type).into(), location);
-                    //vec![func::r#return( &[rhs.results(0).unwrap().into()], location)]
+                    vec![op, ret_op]
                 }
                 None =>  {
                     vec![func::r#return( &[], location)]
@@ -293,17 +286,17 @@ fn test(context: &Context) {
     module.body().append_operation(f);
 
     module.as_operation().dump();
-    //assert!(module.as_operation().verify());
-    //module.as_operation().dump();
+    assert!(module.as_operation().verify());
+    module.as_operation().dump();
 }
 
 fn main() {
     let context = Context::new();
 
-    //context.attach_diagnostic_handler(|diagnostic| {
-        //eprintln!("E: {}", diagnostic);
-        //true
-    //});
+    context.attach_diagnostic_handler(|diagnostic| {
+        eprintln!("E: {}", diagnostic);
+        true
+    });
 
     let registry = DialectRegistry::new();
     register_all_dialects(&registry);
@@ -311,7 +304,7 @@ fn main() {
     context.load_all_available_dialects();
     register_all_llvm_translations(&context);
 
-    test(&context);
+    //test(&context);
 
     let location = Location::unknown(&context);
     let mut module = Module::new(location);
