@@ -1,27 +1,15 @@
 use std::error::Error;
-use std::fmt::Debug;
-use std::fs::File;
-use std::io::Write;
-use std::ops::Deref;
 use std::path::Path;
 
 use melior::{
-    dialect::{arith, func, DialectRegistry},
-    ir::{
-        attribute::{StringAttribute, TypeAttribute},
-        r#type::FunctionType,
-        *,
-    },
-    utility::{register_all_dialects, register_all_llvm_translations},
+    ir::*,
     Context,
 };
 
-use starlark_syntax::codemap;
 use starlark_syntax::codemap::CodeMap;
 use starlark_syntax::lexer;
 use starlark_syntax::syntax;
 use starlark_syntax::syntax::module::AstModuleFields;
-use starlark_syntax::syntax::Dialect;
 
 use crate::ast::Extra;
 use crate::ast::*;
@@ -153,7 +141,6 @@ impl<E: Extra> Parameter<E> {
 impl<E: Extra> ParameterNode<E> {
     fn from<P: syntax::ast::AstPayload>(
         item: syntax::ast::AstParameterP<P>,
-        context: &Context,
         codemap: &CodeMap,
     ) -> Self {
         use syntax::ast::ParameterP;
@@ -194,7 +181,6 @@ impl<E: Extra> AstNode<E> {
         codemap: &CodeMap,
     ) -> Self {
         use syntax::ast::StmtP;
-        //use syntax::ast::ParameterP;
 
         let r = codemap.resolve_span(item.span);
         let begin = CodeLocation {
@@ -223,7 +209,7 @@ impl<E: Extra> AstNode<E> {
                 let params = def
                     .params
                     .into_iter()
-                    .map(|p| ParameterNode::from(p, context, codemap))
+                    .map(|p| ParameterNode::from(p, codemap))
                     .collect();
                 let d = Definition {
                     name: def.name.ident.clone(),
@@ -275,12 +261,7 @@ pub fn parse<'a>(context: &'a Context, path: &Path) -> Result<Vec<Operation<'a>>
     let dialect = syntax::Dialect::Extended;
     let m = syntax::AstModule::parse_file(&path, &dialect)?;
     let (codemap, stmt, _dialect, _typecheck) = m.into_parts();
-
-    //let stmt = m.statement();
-    //let codemap = m.codemap();
     println!("m: {:?}", &stmt);
     let ast: AstNode<SimpleExtra> = AstNode::from_stmt(stmt, context, &codemap);
     Ok(lower_expr2(context, &codemap, ast))
-
-    //Ok(lower_stmt(context, codemap, &stmt))
 }

@@ -342,7 +342,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     //test(&context);
 
     let location = ir::Location::unknown(&context);
-    let mut module = ir::Module::new(location);
+    let module = ir::Module::new(location);
 
     let ops = parse(&context, Path::new("examples/test_simple.py")).unwrap();
     for op in ops {
