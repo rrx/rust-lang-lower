@@ -5,7 +5,7 @@ use std::path::Path;
 
 use melior::{
     dialect::DialectRegistry,
-    ir,
+    ir, pass,
     utility::{register_all_dialects, register_all_llvm_translations},
     Context,
 };
@@ -328,6 +328,15 @@ fn test(context: &Context) {
 fn main() -> Result<(), Box<dyn Error>> {
     let context = Context::new();
 
+    let pass_manager = pass::PassManager::new(&context);
+    pass_manager.enable_verifier(true);
+    //pass_manager.enable_ir_printing();
+    pass_manager.add_pass(pass::conversion::create_func_to_llvm());
+    pass_manager.add_pass(pass::conversion::create_arith_to_llvm());
+    //pass_manager.add_pass(pass::conversion::create_async_to_llvm());
+    pass_manager.add_pass(pass::conversion::create_complex_to_llvm());
+    pass_manager.add_pass(pass::conversion::create_math_to_llvm());
+
     context.attach_diagnostic_handler(|diagnostic| {
         eprintln!("E: {}", diagnostic);
         true
@@ -339,20 +348,25 @@ fn main() -> Result<(), Box<dyn Error>> {
     context.load_all_available_dialects();
     register_all_llvm_translations(&context);
 
-    //test(&context);
-
     let location = ir::Location::unknown(&context);
-    let module = ir::Module::new(location);
+    let mut module = ir::Module::new(location);
 
     let ops = parse(&context, Path::new("examples/test_simple.py")).unwrap();
     for op in ops {
         module.body().append_operation(op);
     }
-    let s = module.as_operation().to_string();
     module.as_operation().dump();
-
     assert!(module.as_operation().verify());
     let mut output = File::create("out.mlir")?;
+    let s = module.as_operation().to_string();
     write!(output, "{}", s)?;
+
+    pass_manager.run(&mut module)?;
+
+    module.as_operation().dump();
+    let mut output = File::create("out.ll")?;
+    let s = module.as_operation().to_string();
+    write!(output, "{}", s)?;
+
     Ok(())
 }

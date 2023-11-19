@@ -1,10 +1,7 @@
 use std::error::Error;
 use std::path::Path;
 
-use melior::{
-    ir::*,
-    Context,
-};
+use melior::{ir::*, Context};
 
 use starlark_syntax::codemap::CodeMap;
 use starlark_syntax::lexer;
@@ -119,20 +116,6 @@ impl<E: Extra> Argument<E> {
             ArgumentP::Positional(expr) => {
                 Argument::Positional(Box::new(AstNode::from_expr(expr, context, codemap)))
             }
-            _ => unimplemented!(),
-        }
-    }
-}
-
-impl<E: Extra> Parameter<E> {
-    fn from<P: syntax::ast::AstPayload>(
-        item: syntax::ast::AstParameterP<P>,
-        context: &Context,
-        codemap: &CodeMap,
-    ) -> Self {
-        use syntax::ast::ParameterP;
-        match item.node {
-            ParameterP::Normal(ident, maybe_type) => Parameter::Normal(ident.node.ident),
             _ => unimplemented!(),
         }
     }
