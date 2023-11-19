@@ -1,7 +1,8 @@
 
 use std::path::Path;
 use std::error::Error;
-
+use std::fs::File;
+use std::io::Write;
 
 use melior::{
     Context,
@@ -42,10 +43,11 @@ pub fn parse<'a>(context: &'a Context, path: &Path, module: &mut Module) -> Resu
     let m = syntax::AstModule::parse_file(&path, &dialect)?;
     let stmt = m.statement();
     let codemap = m.codemap();
+    println!("m: {:?}", &stmt);
     Ok(lower_stmt(context, codemap, &stmt))
 }
 
-fn lower_expr<'c>(context: &'c Context, codemap: &CodeMap, expr: &syntax::ast::AstExpr) -> Operation<'c> {
+fn lower_expr<'c>(context: &'c Context, codemap: &CodeMap, expr: &syntax::ast::AstExpr) -> Vec<Operation<'c>> {
     use syntax::ast::ExprP;
     use syntax::ast::BinOp;
     use syntax::ast::AstLiteral;
@@ -55,32 +57,43 @@ fn lower_expr<'c>(context: &'c Context, codemap: &CodeMap, expr: &syntax::ast::A
     let index_type = Type::index(context);
     let r = codemap.resolve_span(expr.span);
     let location = Location::new(context, codemap.filename(), r.begin.line, r.begin.column);
-    let dummy = arith::constant(context, attribute::IntegerAttribute::new(1, index_type).into(), location);
 
     match &expr.node {
         ExprP::Op(a, op, b) =>  {
+            let mut lhs_ops = lower_expr(context, codemap, a);
+            let mut rhs_ops = lower_expr(context, codemap, b);
+            let r_lhs = lhs_ops.last().unwrap().result(0).unwrap();
+            let r_rhs = rhs_ops.last().unwrap().result(0).unwrap();
             //let mut ops = vec![];
             match op {
                 BinOp::Add => {
-                    let r = codemap.resolve_span(expr.span);
-                    let location = Location::new(context, codemap.filename(), r.begin.line, r.begin.column);
-                    let lhs = lower_expr(context, codemap, a);
-                    let rhs = lower_expr(context, codemap, b);
                     let index_type = Type::index(context);
-                    let lhs = arith::constant(context, attribute::IntegerAttribute::new(1, index_type).into(), location);
-                    let rhs = arith::constant(context, attribute::IntegerAttribute::new(2, index_type).into(), location);
-                    //arith::addi(lhs.result(0).unwrap().into(), rhs.result(0).unwrap().into(), location)
-                    dummy
+                    let op = arith::addi(r_lhs.into(), r_rhs.into(), location);
+                    let mut out = vec![];
+                    out.append(&mut lhs_ops);
+                    out.append(&mut rhs_ops);
+                    out.push(op); 
+                    out
+                    //vec![lhs_ops, rhs_ops, op]
+                    //dummy
                 }
                 BinOp::Subtract => {
-                    lower_expr(context, codemap, a);
-                    lower_expr(context, codemap, b);
-                    dummy
+                    let index_type = Type::index(context);
+                    let op = arith::subi(r_lhs.into(), r_rhs.into(), location);
+                    let mut out = vec![];
+                    out.append(&mut lhs_ops);
+                    out.append(&mut rhs_ops);
+                    out.push(op); 
+                    out
                 }
                 BinOp::Equal => {
-                    lower_expr(context, codemap, a);
-                    lower_expr(context, codemap, b);
-                    dummy
+                    let index_type = Type::index(context);
+                    let op = arith::cmpi(context, arith::CmpiPredicate::Eq, r_lhs.into(), r_rhs.into(), location);
+                    let mut out = vec![];
+                    out.append(&mut lhs_ops);
+                    out.append(&mut rhs_ops);
+                    out.push(op); 
+                    out
                 }
                 _ => {
                     println!("not implemented: {:?}", op);
@@ -93,32 +106,69 @@ fn lower_expr<'c>(context: &'c Context, codemap: &CodeMap, expr: &syntax::ast::A
         ExprP::Identifier(ident) => {
             let name = &ident.node.ident;
             println!("ident: {}", name);
-            dummy
+            //vec![dummy]
+            println!("not implemented: {:?}", ident);
+            unimplemented!();
         }
 
         ExprP::Call(expr, args) => {
-            lower_expr(context, codemap, expr);
+            // function to call
+            let f = match &expr.node {
+                ExprP::Identifier(ident) => {
+                    let name = &ident.node.ident;
+                    attribute::FlatSymbolRefAttribute::new(context, name)
+                }
+                _ => {
+                    println!("not implemented: {:?}", expr.node);
+                    unimplemented!();
+                }
+            };
+
+
+            // handle call arguments
+            let mut ops: Vec<Operation> = vec![];
+            let mut call_index: Vec<usize> = vec![];
             for a in args {
                 match &a.node {
-                    ArgumentP::Positional(ref arg) => {
+                    ArgumentP::Positional(arg) => {
                         println!("arg: {:?}", arg.node);
-                        lower_expr(context, codemap, arg);
+                        let mut arg_ops = lower_expr(context, codemap, arg);
+                        ops.append(&mut arg_ops);
+                        call_index.push(ops.len()-1);
                     }
                     _ => {
                         println!("not implemented: {:?}", a.node);
                         unimplemented!();
                     }
-                }
+                };
+
             }
-            dummy
+
+            let call_args: Vec<Value> = call_index.iter().map(|index| {
+                let results = ops.get(*index).unwrap().results();
+                let results: Vec<Value> = results.map(|r| r.into()).collect();
+                results.last().unwrap().clone()
+            }).collect::<Vec<Value>>();
+
+            println!("call_index: {:?}", call_index);
+            println!("call_args: {:?}", call_args);
+            let op = func::call(context, f, call_args.as_slice(), &[index_type], location);
+            ops.push(op);
+            println!("ops: {:?}", ops);
+            ops
         }
 
         ExprP::Literal(lit) => {
             match lit {
+                AstLiteral::Float(ast) => {
+                    let f = ast.node;
+                    let float_type = Type::float64(context);
+                    vec![arith::constant(context, attribute::FloatAttribute::new(context, f, float_type).into(), location)]
+                }
                 AstLiteral::Int(ast) => {
                     match ast.node {
                         TokenInt::I32(x) => {
-                            println!("lit: {:?}", x);
+                            vec![arith::constant(context, attribute::IntegerAttribute::new(x as i64, index_type).into(), location)]
                         }
                         _ => {
                             println!("not implemented: {:?}", ast.node);
@@ -131,7 +181,6 @@ fn lower_expr<'c>(context: &'c Context, codemap: &CodeMap, expr: &syntax::ast::A
                     unimplemented!();
                 }
             }
-            dummy
         }
 
         _ => {
@@ -171,11 +220,9 @@ fn lower_stmt<'a>(context: &'a Context, codemap: &CodeMap, ast: &syntax::ast::As
                     }
                 }
             }
-            //println!("body {:?}", def.body);
             println!("ret {:?}", def.return_type);
 
             let ops = lower_stmt(context, codemap, &*def.body);
-            //println!("body {:?}", ops);
             let index_type = Type::index(context);
             let r = codemap.resolve_span(ast.span);
             let location = Location::new(context, codemap.filename(), r.begin.line, r.begin.column);
@@ -191,7 +238,6 @@ fn lower_stmt<'a>(context: &'a Context, codemap: &CodeMap, ast: &syntax::ast::As
 
             let types = params.iter().map(|x| x.0).collect::<Vec<Type>>();
             let ret_type = vec![index_type];
-            //let ret_type = vec![];
             let func_type = FunctionType::new(context, &types, &ret_type);
 
             let f = func::func(
@@ -223,11 +269,11 @@ fn lower_stmt<'a>(context: &'a Context, codemap: &CodeMap, ast: &syntax::ast::As
             let location = Location::new(context, codemap.filename(), r.begin.line, r.begin.column);
             match maybe_expr {
                 Some(expr) => {
-                    let op = lower_expr(context, codemap, expr);
-                    let results: Vec<Value> = op.results().map(|r| r.into()).collect();
+                    let mut ops = lower_expr(context, codemap, expr);
+                    let results: Vec<Value> = ops.last().unwrap().results().map(|r| r.into()).collect();
                     let ret_op = func::r#return( results.as_slice(), location);
-                    println!("op: {:?}", results);
-                    vec![op, ret_op]
+                    ops.push(ret_op);
+                    ops
                 }
                 None =>  {
                     vec![func::r#return( &[], location)]
@@ -236,7 +282,7 @@ fn lower_stmt<'a>(context: &'a Context, codemap: &CodeMap, ast: &syntax::ast::As
         }
 
         StmtP::Assign(assign) => {
-            lower_expr(context, codemap, &assign.rhs);
+            let ops = lower_expr(context, codemap, &assign.rhs);
             match &*assign.lhs {
                 syntax::ast::AssignTarget::Identifier(ident) => {
                     println!("assign ident {:?}", ident.node.ident);
@@ -246,7 +292,15 @@ fn lower_stmt<'a>(context: &'a Context, codemap: &CodeMap, ast: &syntax::ast::As
                     unimplemented!();
                 }
             }
-            vec![]
+            ops
+            //vec![ops]
+        }
+
+        StmtP::Expression(expr) => {
+            let ops = lower_expr(context, codemap, expr);
+            println!("not implemented: {:?}", expr);
+            unimplemented!();
+            //vec![ops]
         }
 
         _ => {
@@ -290,7 +344,7 @@ fn test(context: &Context) {
     module.as_operation().dump();
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn Error>> {
     let context = Context::new();
 
     context.attach_diagnostic_handler(|diagnostic| {
@@ -313,9 +367,11 @@ fn main() {
     for op in ops {
         module.body().append_operation(op);
     }
-    //println!("{}", module.as_operation().to_string());
+    let s = module.as_operation().to_string();
     module.as_operation().dump();
 
     assert!(module.as_operation().verify());
-    module.as_operation().dump();
+    let mut output = File::create("out.mlir")?;
+    write!(output, "{}", s)?;
+    Ok(())
 }
