@@ -41,14 +41,14 @@ int main() {
 */
 
 #[derive(Debug)]
-enum Literal {
+pub enum Literal {
     Int(i64),
     Float(f64),
 }
 
 
 #[derive(Debug)]
-enum BinaryOperation {
+pub enum BinaryOperation {
     Add,
     Subtract,
     Equal
@@ -67,7 +67,7 @@ impl From<syntax::ast::BinOp> for BinaryOperation {
 }
 
 #[derive(Debug)]
-enum Argument<P> {
+pub enum Argument<P> {
     Positional(Box<AstNode<P>>)
 }
 
@@ -81,24 +81,52 @@ impl<E: Extra> Argument<E> {
     }
 }
 
+#[derive(Debug)]
+pub enum Parameter<E> {
+    Normal(String),
+    Dummy(AstNode<E>)
+}
+
+impl<E: Extra> Parameter<E> {
+    fn from<P: syntax::ast::AstPayload>(item: syntax::ast::AstParameterP<P>, context: &Context, codemap: &CodeMap) -> Self {
+        use syntax::ast::ParameterP;
+        match item.node {
+            ParameterP::Normal(ident, maybe_type) => Parameter::Normal(ident.node.ident),
+            _ => unimplemented!()
+        }
+    }
+}
 
 #[derive(Debug)]
-enum Ast<E> {
+pub struct Definition<E> {
+    pub name: String,
+    pub params: Vec<Parameter<E>>,
+    //pub return_type: Option<Box<AstTypeExprP<P>>>,
+    pub body: Box<AstNode<E>>,
+    //pub payload: P::DefPayload,
+}
+
+#[derive(Debug)]
+pub enum Ast<E> {
     BinaryOp(BinaryOperation, Box<AstNode<E>>, Box<AstNode<E>>),
     Call(Box<AstNode<E>>, Vec<Argument<E>>),
     Identifier(String),
     Literal(Literal),
     Sequence(Vec<AstNode<E>>),
+    Definition(Definition<E>),
+    Assign(AssignTarget, Box<AstNode<E>>),
+    Conditional(Box<AstNode<E>>, Box<AstNode<E>>, Option<Box<AstNode<E>>>),
+    Return(Option<Box<AstNode<E>>>),
 }
 
 #[derive(Debug)]
-struct CodeLocation {
+pub struct CodeLocation {
     line: usize,
     col: usize
 }
 
 #[derive(Debug)]
-struct SimpleExtra {
+pub struct SimpleExtra {
     span: Span
 }
 
@@ -117,15 +145,29 @@ trait Extra: Debug {
 }
 
 #[derive(Debug)]
-struct Span {
+pub struct Span {
     begin: CodeLocation,
     end: CodeLocation,
 }
 
 #[derive(Debug)]
-struct AstNode<E> {
+pub struct AstNode<E> {
     node: Ast<E>,
     extra: E,
+}
+
+#[derive(Debug)]
+pub enum AssignTarget {
+    Identifier(String)
+}
+impl<P: syntax::ast::AstPayload> From<syntax::ast::AssignTargetP<P>> for AssignTarget {
+    fn from(item: syntax::ast::AssignTargetP<P>) -> Self {
+        use syntax::ast::AssignTargetP;
+        match item {
+            AssignTargetP::Identifier(ident) => AssignTarget::Identifier(ident.node.ident),
+            _ => unimplemented!()
+        }
+    }
 }
 
 //impl<E: Extra> Ast<E> {
@@ -151,6 +193,42 @@ impl<E: Extra> AstNode<E> {
                 let ast = Ast::Sequence(exprs);
                 AstNode { node: ast, extra: E::new(begin, end) }
             }
+
+            StmtP::Def(def) => {
+                let d = Definition {
+                    name: def.name.ident.clone(),
+                    body: Box::new(AstNode::from_stmt(*def.body, context, codemap)),
+                    params: vec![],
+                };
+                let ast = Ast::Definition(d);
+                AstNode { node: ast, extra: E::new(begin, end) }
+            }
+
+            StmtP::IfElse(expr, options) => {
+                let condition = AstNode::from_expr(expr, context, codemap);
+                let truestmt = AstNode::from_stmt(options.0, context, codemap);
+                let elsestmt = Some(Box::new(AstNode::from_stmt(options.1, context, codemap)));
+                AstNode { node: Ast::Conditional(condition.into(), truestmt.into(), elsestmt), extra: E::new(begin, end) }
+            }
+
+            StmtP::Return(maybe_expr) => {
+                let expr = maybe_expr.map(|x| {
+                    Box::new(AstNode::from_expr(x, context, codemap))
+                });
+                AstNode { node: Ast::Return(expr.into()), extra: E::new(begin, end) }
+            }
+
+            StmtP::Assign(assign) => {
+                let rhs = AstNode::from_expr(assign.rhs, context, codemap);
+                let target: AssignTarget = assign.lhs.node.into();
+                AstNode { node: Ast::Assign(target, Box::new(rhs)), extra: E::new(begin, end) }
+            }
+
+            StmtP::Expression(expr) => {
+                AstNode::from_expr(expr, context, codemap)
+            }
+
+
             _ => unimplemented!()
         }
     }
