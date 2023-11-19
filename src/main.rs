@@ -3,6 +3,7 @@ use std::path::Path;
 use std::error::Error;
 use std::fs::File;
 use std::io::Write;
+use std::ops::Deref;
 
 use melior::{
     Context,
@@ -38,6 +39,88 @@ int main() {
 
 */
 
+enum BinaryOperation {
+    Add,
+    Subtract,
+    Equal
+}
+
+impl From<syntax::ast::BinOp> for BinaryOperation {
+    fn from(item: syntax::ast::BinOp) -> Self {
+        use syntax::ast::BinOp;
+        match item {
+            BinOp::Add => BinaryOperation::Add,
+            BinOp::Subtract => BinaryOperation::Subtract,
+            BinOp::Equal => BinaryOperation::Equal,
+            _ => unimplemented!()
+        }
+    }
+}
+
+enum Argument {
+    Positional(Box<AstNode>)
+}
+
+impl Argument {
+    fn from<P: syntax::ast::AstPayload>(item: syntax::ast::AstArgumentP<P>, context: &Context, codemap: &CodeMap) -> Self {
+        use syntax::ast::ArgumentP;
+        match item.node {
+            ArgumentP::Positional(expr) => Argument::Positional(Box::new(AstNode::from_expr(expr, context, codemap))),
+            _ => unimplemented!()
+        }
+    }
+}
+
+
+enum Ast {
+    BinaryOp(BinaryOperation, Box<AstNode>, Box<AstNode>),
+    Call(Box<AstNode>, Vec<Argument>),
+}
+
+struct CodeLocation {
+    line: usize,
+    col: usize
+}
+
+struct AstNode {
+    node: Ast,
+    begin: CodeLocation,
+    end: CodeLocation,
+}
+
+impl Ast {
+    fn node(self, begin: CodeLocation, end: CodeLocation ) -> AstNode {
+        AstNode { node: self, begin, end }
+    }
+}
+
+impl AstNode {
+    fn from_expr<P: syntax::ast::AstPayload>(
+        item: syntax::ast::AstExprP<P>,
+        context: &Context,
+        codemap: &CodeMap) -> Self {
+        use syntax::ast::ExprP;
+        let r = codemap.resolve_span(item.span);
+        let begin = CodeLocation { line: r.begin.line, col: r.begin.column};
+        let end = CodeLocation { line: r.end.line, col: r.end.column};
+
+        match item.node {
+            ExprP::Op(lhs, op, rhs) => {
+                Ast::BinaryOp(
+                    op.into(),
+                    Box::new(AstNode::from_expr(*lhs, context, codemap)),
+                    Box::new(AstNode::from_expr(*rhs, context, codemap)),
+                    ).node(begin, end)
+            }
+            ExprP::Call(expr, args) => {
+                let args = args.into_iter().map(|arg| Argument::from(arg, context, codemap)).collect::<Vec<Argument>>();
+                Ast::Call(Box::new(AstNode::from_expr(*expr, context, codemap)), args).node(begin, end)
+            }
+            _ => unimplemented!()
+        }
+    }
+}
+
 pub fn parse<'a>(context: &'a Context, path: &Path, module: &mut Module) -> Result<Vec<Operation<'a>>, Box<dyn Error>> {
     let dialect = syntax::Dialect::Extended;
     let m = syntax::AstModule::parse_file(&path, &dialect)?;
@@ -64,43 +147,57 @@ fn lower_expr<'c>(context: &'c Context, codemap: &CodeMap, expr: &syntax::ast::A
             let mut rhs_ops = lower_expr(context, codemap, b);
             let r_lhs = lhs_ops.last().unwrap().result(0).unwrap();
             let r_rhs = rhs_ops.last().unwrap().result(0).unwrap();
-            //let mut ops = vec![];
-            match op {
+            println!("lhs: {:?}", lhs_ops);
+            println!("rhs: {:?}", rhs_ops);
+            println!("lhs: {:?}", r_lhs.r#type());
+            println!("rhs: {:?}", r_rhs.r#type());
+
+            // types must be the same for binary operation, no implicit casting
+            assert!(r_lhs.r#type() == r_rhs.r#type());
+
+            let ty = r_lhs.r#type();
+            let float_type = Type::float64(context);
+
+            let mut out = vec![];
+            let binop = match op {
                 BinOp::Add => {
-                    let index_type = Type::index(context);
-                    let op = arith::addi(r_lhs.into(), r_rhs.into(), location);
-                    let mut out = vec![];
-                    out.append(&mut lhs_ops);
-                    out.append(&mut rhs_ops);
-                    out.push(op); 
-                    out
-                    //vec![lhs_ops, rhs_ops, op]
-                    //dummy
+                    if ty == index_type {
+                        arith::addi(r_lhs.into(), r_rhs.into(), location)
+                    } else if ty == float_type {
+                        arith::addf(r_lhs.into(), r_rhs.into(), location)
+                    } else {
+                        unimplemented!()
+                    }
                 }
                 BinOp::Subtract => {
-                    let index_type = Type::index(context);
-                    let op = arith::subi(r_lhs.into(), r_rhs.into(), location);
-                    let mut out = vec![];
-                    out.append(&mut lhs_ops);
-                    out.append(&mut rhs_ops);
-                    out.push(op); 
-                    out
+                    if ty == index_type {
+                        arith::subi(r_lhs.into(), r_rhs.into(), location)
+                    } else if ty == float_type {
+                        arith::subf(r_lhs.into(), r_rhs.into(), location)
+                    } else {
+                        unimplemented!()
+                    }
                 }
                 BinOp::Equal => {
-                    let index_type = Type::index(context);
-                    let op = arith::cmpi(context, arith::CmpiPredicate::Eq, r_lhs.into(), r_rhs.into(), location);
-                    let mut out = vec![];
-                    out.append(&mut lhs_ops);
-                    out.append(&mut rhs_ops);
-                    out.push(op); 
-                    out
+                    if ty == index_type {
+                        arith::cmpi(context, arith::CmpiPredicate::Eq, r_lhs.into(), r_rhs.into(), location)
+                    } else if ty == float_type {
+                        // ordered comparison
+                        arith::cmpf(context, arith::CmpfPredicate::Oeq, r_lhs.into(), r_rhs.into(), location)
+                    } else {
+                        unimplemented!()
+                    }
                 }
                 _ => {
                     println!("not implemented: {:?}", op);
                     unimplemented!();
                 }
 
-            }
+            };
+            out.append(&mut lhs_ops);
+            out.append(&mut rhs_ops);
+            out.push(binop); 
+            out
         }
 
         ExprP::Identifier(ident) => {
