@@ -4,6 +4,7 @@ use std::error::Error;
 use std::fs::File;
 use std::io::Write;
 use std::ops::Deref;
+use std::fmt::Debug;
 
 use melior::{
     Context,
@@ -39,6 +40,14 @@ int main() {
 
 */
 
+#[derive(Debug)]
+enum Literal {
+    Int(i64),
+    Float(f64),
+}
+
+
+#[derive(Debug)]
 enum BinaryOperation {
     Add,
     Subtract,
@@ -57,11 +66,12 @@ impl From<syntax::ast::BinOp> for BinaryOperation {
     }
 }
 
-enum Argument {
-    Positional(Box<AstNode>)
+#[derive(Debug)]
+enum Argument<P> {
+    Positional(Box<AstNode<P>>)
 }
 
-impl Argument {
+impl<E: Extra> Argument<E> {
     fn from<P: syntax::ast::AstPayload>(item: syntax::ast::AstArgumentP<P>, context: &Context, codemap: &CodeMap) -> Self {
         use syntax::ast::ArgumentP;
         match item.node {
@@ -72,29 +82,81 @@ impl Argument {
 }
 
 
-enum Ast {
-    BinaryOp(BinaryOperation, Box<AstNode>, Box<AstNode>),
-    Call(Box<AstNode>, Vec<Argument>),
+#[derive(Debug)]
+enum Ast<E> {
+    BinaryOp(BinaryOperation, Box<AstNode<E>>, Box<AstNode<E>>),
+    Call(Box<AstNode<E>>, Vec<Argument<E>>),
+    Identifier(String),
+    Literal(Literal),
+    Sequence(Vec<AstNode<E>>),
 }
 
+#[derive(Debug)]
 struct CodeLocation {
     line: usize,
     col: usize
 }
 
-struct AstNode {
-    node: Ast,
+#[derive(Debug)]
+struct SimpleExtra {
+    span: Span
+}
+
+impl Extra for SimpleExtra {
+    fn new(begin: CodeLocation, end: CodeLocation ) -> Self {
+        Self { span: Span { begin, end } }
+    }
+    fn location<'c> (&self, context: &'c Context, codemap: &CodeMap) -> Location<'c> {
+        Location::new(context, codemap.filename(), self.span.begin.line, self.span.begin.col)
+    }
+}
+
+trait Extra: Debug {
+    fn new(begin: CodeLocation, end: CodeLocation ) -> Self;
+    fn location<'c>(&self, context: &'c Context, codemap: &CodeMap) -> Location<'c>;
+}
+
+#[derive(Debug)]
+struct Span {
     begin: CodeLocation,
     end: CodeLocation,
 }
 
-impl Ast {
-    fn node(self, begin: CodeLocation, end: CodeLocation ) -> AstNode {
-        AstNode { node: self, begin, end }
+#[derive(Debug)]
+struct AstNode<E> {
+    node: Ast<E>,
+    extra: E,
+}
+
+//impl<E: Extra> Ast<E> {
+    //fn node(self, begin: CodeLocation, end: CodeLocation ) -> AstNode {
+        //AstNode { node: self, extra: extrabegin, end }
+    //}
+//}
+impl<E: Extra> AstNode<E> {
+    fn from_stmt<P: syntax::ast::AstPayload>(
+        item: syntax::ast::AstStmtP<P>,
+        context: &Context,
+        codemap: &CodeMap) -> Self {
+        use syntax::ast::StmtP;
+        use syntax::ast::ParameterP;
+
+        let r = codemap.resolve_span(item.span);
+        let begin = CodeLocation { line: r.begin.line, col: r.begin.column};
+        let end = CodeLocation { line: r.end.line, col: r.end.column};
+
+        match item.node {
+            StmtP::Statements(stmts) => {
+                let exprs = stmts.into_iter().map(|stmt| AstNode::from_stmt(stmt, context, codemap)).collect::<Vec<AstNode<E>>>();
+                let ast = Ast::Sequence(exprs);
+                AstNode { node: ast, extra: E::new(begin, end) }
+            }
+            _ => unimplemented!()
+        }
     }
 }
 
-impl AstNode {
+impl<E: Extra> AstNode<E> {
     fn from_expr<P: syntax::ast::AstPayload>(
         item: syntax::ast::AstExprP<P>,
         context: &Context,
@@ -106,15 +168,20 @@ impl AstNode {
 
         match item.node {
             ExprP::Op(lhs, op, rhs) => {
-                Ast::BinaryOp(
+                let ast = Ast::BinaryOp(
                     op.into(),
                     Box::new(AstNode::from_expr(*lhs, context, codemap)),
                     Box::new(AstNode::from_expr(*rhs, context, codemap)),
-                    ).node(begin, end)
+                    );
+                //.node(begin, end)
+                AstNode { node: ast, extra: E::new(begin, end) }
             }
             ExprP::Call(expr, args) => {
-                let args = args.into_iter().map(|arg| Argument::from(arg, context, codemap)).collect::<Vec<Argument>>();
-                Ast::Call(Box::new(AstNode::from_expr(*expr, context, codemap)), args).node(begin, end)
+                let args = args.into_iter().map(|arg| Argument::from(arg, context, codemap)).collect::<Vec<Argument<E>>>();
+                let ast = Ast::Call(Box::new(AstNode::from_expr(*expr, context, codemap)), args);
+                //.node(begin, end)
+                //kkkkk
+                AstNode { node: ast, extra: E::new(begin, end) }
             }
             _ => unimplemented!()
         }
@@ -128,6 +195,152 @@ pub fn parse<'a>(context: &'a Context, path: &Path, module: &mut Module) -> Resu
     let codemap = m.codemap();
     println!("m: {:?}", &stmt);
     Ok(lower_stmt(context, codemap, &stmt))
+}
+
+fn lower_expr2<'c, E: Extra>(context: &'c Context, codemap: &CodeMap, expr: &'c AstNode<E>) -> Vec<Operation<'c>> {
+    let index_type = Type::index(context);
+    let location = expr.extra.location(context, codemap);
+    //let location = Location::new(context, codemap.filename(), expr.begin.line, expr.begin.col);
+    match &expr.node {
+        Ast::BinaryOp(op, a, b) =>  {
+            let mut lhs_ops = lower_expr2(context, codemap, a);
+            let mut rhs_ops = lower_expr2(context, codemap, b);
+            let r_lhs = lhs_ops.last().unwrap().result(0).unwrap();
+            let r_rhs = rhs_ops.last().unwrap().result(0).unwrap();
+            println!("lhs: {:?}", lhs_ops);
+            println!("rhs: {:?}", rhs_ops);
+            println!("lhs: {:?}", r_lhs.r#type());
+            println!("rhs: {:?}", r_rhs.r#type());
+
+            // types must be the same for binary operation, no implicit casting
+            assert!(r_lhs.r#type() == r_rhs.r#type());
+
+            let ty = r_lhs.r#type();
+            let float_type = Type::float64(context);
+
+            let mut out = vec![];
+            let binop = match op {
+                BinaryOperation::Add => {
+                    if ty == index_type {
+                        arith::addi(r_lhs.into(), r_rhs.into(), location)
+                    } else if ty == float_type {
+                        arith::addf(r_lhs.into(), r_rhs.into(), location)
+                    } else {
+                        unimplemented!()
+                    }
+                }
+                BinaryOperation::Subtract => {
+                    if ty == index_type {
+                        arith::subi(r_lhs.into(), r_rhs.into(), location)
+                    } else if ty == float_type {
+                        arith::subf(r_lhs.into(), r_rhs.into(), location)
+                    } else {
+                        unimplemented!()
+                    }
+                }
+                BinaryOperation::Equal => {
+                    if ty == index_type {
+                        arith::cmpi(context, arith::CmpiPredicate::Eq, r_lhs.into(), r_rhs.into(), location)
+                    } else if ty == float_type {
+                        // ordered comparison
+                        arith::cmpf(context, arith::CmpfPredicate::Oeq, r_lhs.into(), r_rhs.into(), location)
+                    } else {
+                        unimplemented!()
+                    }
+                }
+                _ => {
+                    println!("not implemented: {:?}", op);
+                    unimplemented!();
+                }
+
+            };
+            out.append(&mut lhs_ops);
+            out.append(&mut rhs_ops);
+            out.push(binop); 
+            out
+        }
+
+        Ast::Identifier(ident) => {
+            println!("not implemented: {:?}", ident);
+            unimplemented!();
+        }
+
+        Ast::Call(expr, args) => {
+            // function to call
+            let f = match &expr.node {
+                Ast::Identifier(ident) => {
+                    attribute::FlatSymbolRefAttribute::new(context, ident)
+                }
+                _ => {
+                    println!("not implemented: {:?}", expr.node);
+                    unimplemented!();
+                }
+            };
+
+
+            // handle call arguments
+            let mut ops: Vec<Operation> = vec![];
+            let mut call_index: Vec<usize> = vec![];
+            for a in args {
+                match &a {
+                    Argument::Positional(arg) => {
+                        println!("arg: {:?}", arg.node);
+                        let mut arg_ops = lower_expr2(context, codemap, arg);
+                        ops.append(&mut arg_ops);
+                        call_index.push(ops.len()-1);
+                    }
+                    _ => {
+                        println!("not implemented: {:?}", a);
+                        unimplemented!();
+                    }
+                };
+
+            }
+
+            let call_args: Vec<Value> = call_index.iter().map(|index| {
+                let results = ops.get(*index).unwrap().results();
+                let results: Vec<Value> = results.map(|r| r.into()).collect();
+                results.last().unwrap().clone()
+            }).collect::<Vec<Value>>();
+
+            println!("call_index: {:?}", call_index);
+            println!("call_args: {:?}", call_args);
+            let op = func::call(context, f, call_args.as_slice(), &[index_type], location);
+            ops.push(op);
+            println!("ops: {:?}", ops);
+            ops
+        }
+
+        Ast::Literal(lit) => {
+            match lit {
+                Literal::Float(f) => {
+                    let float_type = Type::float64(context);
+                    vec![arith::constant(context, attribute::FloatAttribute::new(context, *f, float_type).into(), location)]
+                }
+                Literal::Int(x) => {
+                    vec![arith::constant(context, attribute::IntegerAttribute::new(*x, index_type).into(), location)]
+                }
+                _ => {
+                    println!("not implemented: {:?}", lit);
+                    unimplemented!();
+                }
+            }
+        }
+
+        Ast::Sequence(exprs) => {
+            let mut out = vec![];
+            for s in exprs {
+                out.extend(lower_expr2(context, codemap, s));
+            }
+            out
+        }
+
+
+        _ => {
+            println!("not implemented: {:?}", expr.node);
+            unimplemented!();
+        }
+    }
 }
 
 fn lower_expr<'c>(context: &'c Context, codemap: &CodeMap, expr: &syntax::ast::AstExpr) -> Vec<Operation<'c>> {
