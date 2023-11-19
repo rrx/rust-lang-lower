@@ -1,13 +1,13 @@
-use std::path::Path;
 use std::error::Error;
 use std::fs::File;
 use std::io::Write;
+use std::path::Path;
 
 use melior::{
-    Context,
     dialect::DialectRegistry,
     ir,
     utility::{register_all_dialects, register_all_llvm_translations},
+    Context,
 };
 
 use lower::starlark::parse;
@@ -79,7 +79,7 @@ fn lower_expr<'c>(context: &'c Context, codemap: &CodeMap, expr: &syntax::ast::A
             };
             out.append(&mut lhs_ops);
             out.append(&mut rhs_ops);
-            out.push(binop); 
+            out.push(binop);
             out
         }
 
@@ -206,7 +206,7 @@ fn lower_stmt<'a>(context: &'a Context, codemap: &CodeMap, ast: &syntax::ast::As
             let index_type = Type::index(context);
             let r = codemap.resolve_span(ast.span);
             let location = Location::new(context, codemap.filename(), r.begin.line, r.begin.column);
-            
+
 
             let block = Block::new(params.as_slice());
             for op in ops {
@@ -295,7 +295,7 @@ fn test(context: &Context) {
     let location = Location::unknown(context);
     let dummy = arith::constant(context, attribute::IntegerAttribute::new(1, index_type).into(), location);
     let op = func::r#return( &[dummy.result(0).unwrap().into()], location);
-    
+
     let func_type = FunctionType::new(context, &[], &[index_type]);
     let block = Block::new(&[]);
     block.append_operation(dummy);

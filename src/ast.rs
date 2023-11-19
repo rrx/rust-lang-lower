@@ -1,9 +1,8 @@
-use std::fmt::Debug;
-use melior::Context;
 use melior::ir;
+use melior::Context;
+use std::fmt::Debug;
 
 use starlark_syntax::codemap::CodeMap;
-
 
 #[derive(Debug)]
 pub enum Literal {
@@ -15,18 +14,18 @@ pub enum Literal {
 pub enum BinaryOperation {
     Add,
     Subtract,
-    Equal
+    Equal,
 }
 
 #[derive(Debug)]
 pub enum Argument<P> {
-    Positional(Box<AstNode<P>>)
+    Positional(Box<AstNode<P>>),
 }
 
 #[derive(Debug)]
 pub enum Parameter<E> {
     Normal(String),
-    Dummy(AstNode<E>)
+    Dummy(AstNode<E>),
 }
 
 #[derive(Debug)]
@@ -60,25 +59,32 @@ pub enum Ast<E> {
 #[derive(Debug)]
 pub struct CodeLocation {
     pub line: usize,
-    pub col: usize
+    pub col: usize,
 }
 
 #[derive(Debug)]
 pub struct SimpleExtra {
-    span: Span
+    span: Span,
 }
 
 impl Extra for SimpleExtra {
-    fn new(begin: CodeLocation, end: CodeLocation ) -> Self {
-        Self { span: Span { begin, end } }
+    fn new(begin: CodeLocation, end: CodeLocation) -> Self {
+        Self {
+            span: Span { begin, end },
+        }
     }
-    fn location<'c> (&self, context: &'c Context, codemap: &CodeMap) -> ir::Location<'c> {
-        ir::Location::new(context, codemap.filename(), self.span.begin.line, self.span.begin.col)
+    fn location<'c>(&self, context: &'c Context, codemap: &CodeMap) -> ir::Location<'c> {
+        ir::Location::new(
+            context,
+            codemap.filename(),
+            self.span.begin.line,
+            self.span.begin.col,
+        )
     }
 }
 
 pub trait Extra: Debug {
-    fn new(begin: CodeLocation, end: CodeLocation ) -> Self;
+    fn new(begin: CodeLocation, end: CodeLocation) -> Self;
     fn location<'c>(&self, context: &'c Context, codemap: &CodeMap) -> ir::Location<'c>;
 }
 
@@ -96,6 +102,5 @@ pub struct AstNode<E> {
 
 #[derive(Debug)]
 pub enum AssignTarget {
-    Identifier(String)
+    Identifier(String),
 }
-

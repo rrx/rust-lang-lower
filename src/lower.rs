@@ -1,18 +1,26 @@
 use melior::{
-    Context,
     dialect::{arith, func},
-    ir::{*, attribute::{StringAttribute, TypeAttribute}, r#type::FunctionType},
+    ir::{
+        attribute::{StringAttribute, TypeAttribute},
+        r#type::FunctionType,
+        *,
+    },
+    Context,
 };
 
-use starlark_syntax::codemap::CodeMap;
 use crate::ast::*;
+use starlark_syntax::codemap::CodeMap;
 
-pub fn lower_expr2<'c, E: Extra>(context: &'c Context, codemap: &CodeMap, expr: AstNode<E>) -> Vec<Operation<'c>> {
+pub fn lower_expr2<'c, E: Extra>(
+    context: &'c Context,
+    codemap: &CodeMap,
+    expr: AstNode<E>,
+) -> Vec<Operation<'c>> {
     let index_type = Type::index(context);
     let location = expr.extra.location(context, codemap);
     //let location = Location::new(context, codemap.filename(), expr.begin.line, expr.begin.col);
     match expr.node {
-        Ast::BinaryOp(op, a, b) =>  {
+        Ast::BinaryOp(op, a, b) => {
             let mut lhs_ops = lower_expr2(context, codemap, *a);
             let mut rhs_ops = lower_expr2(context, codemap, *b);
             let r_lhs = lhs_ops.last().unwrap().result(0).unwrap();
@@ -50,10 +58,22 @@ pub fn lower_expr2<'c, E: Extra>(context: &'c Context, codemap: &CodeMap, expr: 
                 }
                 BinaryOperation::Equal => {
                     if ty == index_type {
-                        arith::cmpi(context, arith::CmpiPredicate::Eq, r_lhs.into(), r_rhs.into(), location)
+                        arith::cmpi(
+                            context,
+                            arith::CmpiPredicate::Eq,
+                            r_lhs.into(),
+                            r_rhs.into(),
+                            location,
+                        )
                     } else if ty == float_type {
                         // ordered comparison
-                        arith::cmpf(context, arith::CmpfPredicate::Oeq, r_lhs.into(), r_rhs.into(), location)
+                        arith::cmpf(
+                            context,
+                            arith::CmpfPredicate::Oeq,
+                            r_lhs.into(),
+                            r_rhs.into(),
+                            location,
+                        )
                     } else {
                         unimplemented!()
                     }
@@ -62,11 +82,10 @@ pub fn lower_expr2<'c, E: Extra>(context: &'c Context, codemap: &CodeMap, expr: 
                     println!("not implemented: {:?}", op);
                     unimplemented!();
                 }
-
             };
             out.append(&mut lhs_ops);
             out.append(&mut rhs_ops);
-            out.push(binop); 
+            out.push(binop);
             out
         }
 
@@ -78,15 +97,12 @@ pub fn lower_expr2<'c, E: Extra>(context: &'c Context, codemap: &CodeMap, expr: 
         Ast::Call(expr, args) => {
             // function to call
             let f = match &expr.node {
-                Ast::Identifier(ident) => {
-                    attribute::FlatSymbolRefAttribute::new(context, ident)
-                }
+                Ast::Identifier(ident) => attribute::FlatSymbolRefAttribute::new(context, ident),
                 _ => {
                     println!("not implemented: {:?}", expr.node);
                     unimplemented!();
                 }
             };
-
 
             // handle call arguments
             let mut ops: Vec<Operation> = vec![];
@@ -97,21 +113,23 @@ pub fn lower_expr2<'c, E: Extra>(context: &'c Context, codemap: &CodeMap, expr: 
                         println!("arg: {:?}", arg.node);
                         let mut arg_ops = lower_expr2(context, codemap, *arg);
                         ops.append(&mut arg_ops);
-                        call_index.push(ops.len()-1);
+                        call_index.push(ops.len() - 1);
                     }
                     _ => {
                         println!("not implemented: {:?}", a);
                         unimplemented!();
                     }
                 };
-
             }
 
-            let call_args: Vec<Value> = call_index.iter().map(|index| {
-                let results = ops.get(*index).unwrap().results();
-                let results: Vec<Value> = results.map(|r| r.into()).collect();
-                results.last().unwrap().clone()
-            }).collect::<Vec<Value>>();
+            let call_args: Vec<Value> = call_index
+                .iter()
+                .map(|index| {
+                    let results = ops.get(*index).unwrap().results();
+                    let results: Vec<Value> = results.map(|r| r.into()).collect();
+                    results.last().unwrap().clone()
+                })
+                .collect::<Vec<Value>>();
 
             println!("call_index: {:?}", call_index);
             println!("call_args: {:?}", call_args);
@@ -121,21 +139,27 @@ pub fn lower_expr2<'c, E: Extra>(context: &'c Context, codemap: &CodeMap, expr: 
             ops
         }
 
-        Ast::Literal(lit) => {
-            match lit {
-                Literal::Float(f) => {
-                    let float_type = Type::float64(context);
-                    vec![arith::constant(context, attribute::FloatAttribute::new(context, f, float_type).into(), location)]
-                }
-                Literal::Int(x) => {
-                    vec![arith::constant(context, attribute::IntegerAttribute::new(x, index_type).into(), location)]
-                }
-                _ => {
-                    println!("not implemented: {:?}", lit);
-                    unimplemented!();
-                }
+        Ast::Literal(lit) => match lit {
+            Literal::Float(f) => {
+                let float_type = Type::float64(context);
+                vec![arith::constant(
+                    context,
+                    attribute::FloatAttribute::new(context, f, float_type).into(),
+                    location,
+                )]
             }
-        }
+            Literal::Int(x) => {
+                vec![arith::constant(
+                    context,
+                    attribute::IntegerAttribute::new(x, index_type).into(),
+                    location,
+                )]
+            }
+            _ => {
+                println!("not implemented: {:?}", lit);
+                unimplemented!();
+            }
+        },
 
         Ast::Sequence(exprs) => {
             let mut out = vec![];
@@ -169,7 +193,6 @@ pub fn lower_expr2<'c, E: Extra>(context: &'c Context, codemap: &CodeMap, expr: 
             //let r = codemap.resolve_span(ast.span);
             //let location = Location::new(context, codemap.filename(), r.begin.line, r.begin.column);
             let location = expr.extra.location(context, codemap);
-            
 
             let block = Block::new(params.as_slice());
             for op in ops {
@@ -193,7 +216,7 @@ pub fn lower_expr2<'c, E: Extra>(context: &'c Context, codemap: &CodeMap, expr: 
                     StringAttribute::new(&context, "private").into(),
                 )],
                 location,
-                );
+            );
             vec![f]
         }
 
@@ -203,13 +226,14 @@ pub fn lower_expr2<'c, E: Extra>(context: &'c Context, codemap: &CodeMap, expr: 
             match maybe_expr {
                 Some(expr) => {
                     let mut ops = lower_expr2(context, codemap, *expr);
-                    let results: Vec<Value> = ops.last().unwrap().results().map(|r| r.into()).collect();
-                    let ret_op = func::r#return( results.as_slice(), location);
+                    let results: Vec<Value> =
+                        ops.last().unwrap().results().map(|r| r.into()).collect();
+                    let ret_op = func::r#return(results.as_slice(), location);
                     ops.push(ret_op);
                     ops
                 }
-                None =>  {
-                    vec![func::r#return( &[], location)]
+                None => {
+                    vec![func::r#return(&[], location)]
                 }
             }
         }
@@ -235,5 +259,3 @@ pub fn lower_expr2<'c, E: Extra>(context: &'c Context, codemap: &CodeMap, expr: 
         }
     }
 }
-
-
