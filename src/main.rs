@@ -46,6 +46,23 @@ pub enum Literal {
     Float(f64),
 }
 
+impl From<syntax::ast::AstLiteral> for Literal {
+    fn from(item: syntax::ast::AstLiteral) -> Self {
+        use syntax::ast::AstLiteral;
+        match item {
+            AstLiteral::Int(x) => {
+                use lexer::TokenInt;
+                match x.node {
+                    TokenInt::I32(y) => Literal::Int(y as i64),
+                    _ => unimplemented!()
+                }
+            }
+            AstLiteral::Float(x) => Literal::Float(x.node),
+            _ => unimplemented!()
+        }
+    }
+}
+
 
 #[derive(Debug)]
 pub enum BinaryOperation {
@@ -98,9 +115,29 @@ impl<E: Extra> Parameter<E> {
 }
 
 #[derive(Debug)]
+pub struct ParameterNode<E> {
+    node: Parameter<E>,
+    extra: E,
+}
+
+impl<E: Extra> ParameterNode<E> {
+    fn from<P: syntax::ast::AstPayload>(item: syntax::ast::AstParameterP<P>, context: &Context, codemap: &CodeMap) -> Self {
+        use syntax::ast::ParameterP;
+        let r = codemap.resolve_span(item.span);
+        let begin = CodeLocation { line: r.begin.line, col: r.begin.column};
+        let end = CodeLocation { line: r.end.line, col: r.end.column};
+
+        match item.node {
+            ParameterP::Normal(ident, maybe_type) => Self { node: Parameter::Normal(ident.node.ident), extra: E::new(begin, end) },
+            _ => unimplemented!()
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct Definition<E> {
     pub name: String,
-    pub params: Vec<Parameter<E>>,
+    pub params: Vec<ParameterNode<E>>,
     //pub return_type: Option<Box<AstTypeExprP<P>>>,
     pub body: Box<AstNode<E>>,
     //pub payload: P::DefPayload,
@@ -170,18 +207,13 @@ impl<P: syntax::ast::AstPayload> From<syntax::ast::AssignTargetP<P>> for AssignT
     }
 }
 
-//impl<E: Extra> Ast<E> {
-    //fn node(self, begin: CodeLocation, end: CodeLocation ) -> AstNode {
-        //AstNode { node: self, extra: extrabegin, end }
-    //}
-//}
 impl<E: Extra> AstNode<E> {
     fn from_stmt<P: syntax::ast::AstPayload>(
         item: syntax::ast::AstStmtP<P>,
         context: &Context,
         codemap: &CodeMap) -> Self {
         use syntax::ast::StmtP;
-        use syntax::ast::ParameterP;
+        //use syntax::ast::ParameterP;
 
         let r = codemap.resolve_span(item.span);
         let begin = CodeLocation { line: r.begin.line, col: r.begin.column};
@@ -195,10 +227,11 @@ impl<E: Extra> AstNode<E> {
             }
 
             StmtP::Def(def) => {
+                let params = def.params.into_iter().map(|p| ParameterNode::from(p, context, codemap)).collect();
                 let d = Definition {
                     name: def.name.ident.clone(),
                     body: Box::new(AstNode::from_stmt(*def.body, context, codemap)),
-                    params: vec![],
+                    params,
                 };
                 let ast = Ast::Definition(d);
                 AstNode { node: ast, extra: E::new(begin, end) }
@@ -261,6 +294,16 @@ impl<E: Extra> AstNode<E> {
                 //kkkkk
                 AstNode { node: ast, extra: E::new(begin, end) }
             }
+            ExprP::Identifier(ident) => {
+                let name = ident.node.ident;
+                AstNode { node: Ast::Identifier(name), extra: E::new(begin, end) }
+            }
+
+            ExprP::Literal(lit) => {
+                let x: Literal = lit.into();
+                AstNode { node: Ast::Literal(x), extra: E::new(begin, end) }
+            }
+
             _ => unimplemented!()
         }
     }
@@ -269,20 +312,25 @@ impl<E: Extra> AstNode<E> {
 pub fn parse<'a>(context: &'a Context, path: &Path, module: &mut Module) -> Result<Vec<Operation<'a>>, Box<dyn Error>> {
     let dialect = syntax::Dialect::Extended;
     let m = syntax::AstModule::parse_file(&path, &dialect)?;
-    let stmt = m.statement();
-    let codemap = m.codemap();
+    let (codemap, stmt, dialect, typecheck) = m.into_parts();
+
+    //let stmt = m.statement();
+    //let codemap = m.codemap();
     println!("m: {:?}", &stmt);
-    Ok(lower_stmt(context, codemap, &stmt))
+    let ast: AstNode<SimpleExtra> = AstNode::from_stmt(stmt, context, &codemap);
+    Ok(lower_expr2(context, &codemap, ast))
+
+    //Ok(lower_stmt(context, codemap, &stmt))
 }
 
-fn lower_expr2<'c, E: Extra>(context: &'c Context, codemap: &CodeMap, expr: &'c AstNode<E>) -> Vec<Operation<'c>> {
+fn lower_expr2<'c, E: Extra>(context: &'c Context, codemap: &CodeMap, expr: AstNode<E>) -> Vec<Operation<'c>> {
     let index_type = Type::index(context);
     let location = expr.extra.location(context, codemap);
     //let location = Location::new(context, codemap.filename(), expr.begin.line, expr.begin.col);
-    match &expr.node {
+    match expr.node {
         Ast::BinaryOp(op, a, b) =>  {
-            let mut lhs_ops = lower_expr2(context, codemap, a);
-            let mut rhs_ops = lower_expr2(context, codemap, b);
+            let mut lhs_ops = lower_expr2(context, codemap, *a);
+            let mut rhs_ops = lower_expr2(context, codemap, *b);
             let r_lhs = lhs_ops.last().unwrap().result(0).unwrap();
             let r_rhs = rhs_ops.last().unwrap().result(0).unwrap();
             println!("lhs: {:?}", lhs_ops);
@@ -360,10 +408,10 @@ fn lower_expr2<'c, E: Extra>(context: &'c Context, codemap: &CodeMap, expr: &'c 
             let mut ops: Vec<Operation> = vec![];
             let mut call_index: Vec<usize> = vec![];
             for a in args {
-                match &a {
+                match a {
                     Argument::Positional(arg) => {
                         println!("arg: {:?}", arg.node);
-                        let mut arg_ops = lower_expr2(context, codemap, arg);
+                        let mut arg_ops = lower_expr2(context, codemap, *arg);
                         ops.append(&mut arg_ops);
                         call_index.push(ops.len()-1);
                     }
@@ -393,10 +441,10 @@ fn lower_expr2<'c, E: Extra>(context: &'c Context, codemap: &CodeMap, expr: &'c 
             match lit {
                 Literal::Float(f) => {
                     let float_type = Type::float64(context);
-                    vec![arith::constant(context, attribute::FloatAttribute::new(context, *f, float_type).into(), location)]
+                    vec![arith::constant(context, attribute::FloatAttribute::new(context, f, float_type).into(), location)]
                 }
                 Literal::Int(x) => {
-                    vec![arith::constant(context, attribute::IntegerAttribute::new(*x, index_type).into(), location)]
+                    vec![arith::constant(context, attribute::IntegerAttribute::new(x, index_type).into(), location)]
                 }
                 _ => {
                     println!("not implemented: {:?}", lit);
@@ -413,6 +461,89 @@ fn lower_expr2<'c, E: Extra>(context: &'c Context, codemap: &CodeMap, expr: &'c 
             out
         }
 
+        Ast::Definition(def) => {
+            println!("name {:?}", def.name);
+            let mut params = vec![];
+            let index_type = Type::index(context);
+            for p in def.params {
+                match p.node {
+                    Parameter::Normal(ident) => {
+                        println!("params {:?}", ident);
+                        let location = p.extra.location(context, codemap);
+                        params.push((index_type, location));
+                    }
+                    _ => {
+                        println!("not implemented: {:?}", p);
+                        unimplemented!();
+                    }
+                }
+            }
+            //println!("ret {:?}", def.return_type);
+
+            let ops = lower_expr2(context, codemap, *def.body);
+            let index_type = Type::index(context);
+            //let r = codemap.resolve_span(ast.span);
+            //let location = Location::new(context, codemap.filename(), r.begin.line, r.begin.column);
+            let location = expr.extra.location(context, codemap);
+            
+
+            let block = Block::new(params.as_slice());
+            for op in ops {
+                block.append_operation(op);
+            }
+
+            let region = Region::new();
+            region.append_block(block);
+
+            let types = params.iter().map(|x| x.0).collect::<Vec<Type>>();
+            let ret_type = vec![index_type];
+            let func_type = FunctionType::new(context, &types, &ret_type);
+
+            let f = func::func(
+                context,
+                StringAttribute::new(context, &def.name),
+                TypeAttribute::new(func_type.into()),
+                region,
+                &[(
+                    Identifier::new(&context, "sym_visibility"),
+                    StringAttribute::new(&context, "private").into(),
+                )],
+                location,
+                );
+            vec![f]
+        }
+
+        Ast::Return(maybe_expr) => {
+            //let r = codemap.resolve_span(ast.span);
+            //let location = Location::new(context, codemap.filename(), r.begin.line, r.begin.column);
+            match maybe_expr {
+                Some(expr) => {
+                    let mut ops = lower_expr2(context, codemap, *expr);
+                    let results: Vec<Value> = ops.last().unwrap().results().map(|r| r.into()).collect();
+                    let ret_op = func::r#return( results.as_slice(), location);
+                    ops.push(ret_op);
+                    ops
+                }
+                None =>  {
+                    vec![func::r#return( &[], location)]
+                }
+            }
+        }
+
+        Ast::Assign(target, rhs) => {
+            let ops = lower_expr2(context, codemap, *rhs);
+            match target {
+                AssignTarget::Identifier(ident) => {
+                    println!("assign ident {:?}", ident);
+                }
+                _ => {
+                    println!("not implemented: {:?}", target);
+                    unimplemented!();
+                }
+            }
+            ops
+            //vec![ops]
+        }
 
         _ => {
             println!("not implemented: {:?}", expr.node);
