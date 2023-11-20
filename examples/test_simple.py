@@ -1,4 +1,9 @@
 def x1(y):
+    x = 0
+    if True:
+        x = 1
+    else:
+        x = 2
     return 3 - 7
 
 def main():

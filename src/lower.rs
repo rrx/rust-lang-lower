@@ -1,7 +1,8 @@
 use melior::{
-    dialect::{arith, func},
+    dialect::{arith, cf, func, scf},
     ir::{
         attribute::{StringAttribute, TypeAttribute},
+        operation::OperationBuilder,
         r#type::FunctionType,
         *,
     },
@@ -11,7 +12,7 @@ use melior::{
 use crate::ast::*;
 use starlark_syntax::codemap::CodeMap;
 
-pub fn lower_expr2<'c, E: Extra>(
+pub fn lower_expr<'c, E: Extra>(
     context: &'c Context,
     codemap: &CodeMap,
     expr: AstNode<E>,
@@ -21,14 +22,14 @@ pub fn lower_expr2<'c, E: Extra>(
     //let location = Location::new(context, codemap.filename(), expr.begin.line, expr.begin.col);
     match expr.node {
         Ast::BinaryOp(op, a, b) => {
-            let mut lhs_ops = lower_expr2(context, codemap, *a);
-            let mut rhs_ops = lower_expr2(context, codemap, *b);
+            let mut lhs_ops = lower_expr(context, codemap, *a);
+            let mut rhs_ops = lower_expr(context, codemap, *b);
             let r_lhs = lhs_ops.last().unwrap().result(0).unwrap();
             let r_rhs = rhs_ops.last().unwrap().result(0).unwrap();
-            println!("lhs: {:?}", lhs_ops);
-            println!("rhs: {:?}", rhs_ops);
-            println!("lhs: {:?}", r_lhs.r#type());
-            println!("rhs: {:?}", r_rhs.r#type());
+            //println!("lhs: {:?}", lhs_ops);
+            //println!("rhs: {:?}", rhs_ops);
+            //println!("lhs: {:?}", r_lhs.r#type());
+            //println!("rhs: {:?}", r_rhs.r#type());
 
             // types must be the same for binary operation, no implicit casting
             assert!(r_lhs.r#type() == r_rhs.r#type());
@@ -89,10 +90,18 @@ pub fn lower_expr2<'c, E: Extra>(
             out
         }
 
-        Ast::Identifier(ident) => {
-            println!("not implemented: {:?}", ident);
-            unimplemented!();
-        }
+        Ast::Identifier(ident) => match ident.as_str() {
+            "True" => {
+                let bool_type = melior::ir::r#type::IntegerType::new(context, 1);
+                vec![arith::constant(
+                    context,
+                    attribute::IntegerAttribute::new(1, bool_type.into()).into(),
+                    location,
+                )]
+            }
+            "False" => vec![],
+            _ => unimplemented!("Ident({:?})", ident),
+        },
 
         Ast::Call(expr, args) => {
             // function to call
@@ -111,7 +120,7 @@ pub fn lower_expr2<'c, E: Extra>(
                 match a {
                     Argument::Positional(arg) => {
                         println!("arg: {:?}", arg.node);
-                        let mut arg_ops = lower_expr2(context, codemap, *arg);
+                        let mut arg_ops = lower_expr(context, codemap, *arg);
                         ops.append(&mut arg_ops);
                         call_index.push(ops.len() - 1);
                     }
@@ -131,11 +140,11 @@ pub fn lower_expr2<'c, E: Extra>(
                 })
                 .collect::<Vec<Value>>();
 
-            println!("call_index: {:?}", call_index);
-            println!("call_args: {:?}", call_args);
+            //println!("call_index: {:?}", call_index);
+            //println!("call_args: {:?}", call_args);
             let op = func::call(context, f, call_args.as_slice(), &[index_type], location);
             ops.push(op);
-            println!("ops: {:?}", ops);
+            //println!("ops: {:?}", ops);
             ops
         }
 
@@ -164,7 +173,7 @@ pub fn lower_expr2<'c, E: Extra>(
         Ast::Sequence(exprs) => {
             let mut out = vec![];
             for s in exprs {
-                out.extend(lower_expr2(context, codemap, s));
+                out.extend(lower_expr(context, codemap, s));
             }
             out
         }
@@ -186,12 +195,9 @@ pub fn lower_expr2<'c, E: Extra>(
                     }
                 }
             }
-            //println!("ret {:?}", def.return_type);
 
-            let ops = lower_expr2(context, codemap, *def.body);
+            let ops = lower_expr(context, codemap, *def.body);
             let index_type = Type::index(context);
-            //let r = codemap.resolve_span(ast.span);
-            //let location = Location::new(context, codemap.filename(), r.begin.line, r.begin.column);
             let location = expr.extra.location(context, codemap);
 
             let block = Block::new(params.as_slice());
@@ -220,42 +226,77 @@ pub fn lower_expr2<'c, E: Extra>(
             vec![f]
         }
 
-        Ast::Return(maybe_expr) => {
-            //let r = codemap.resolve_span(ast.span);
-            //let location = Location::new(context, codemap.filename(), r.begin.line, r.begin.column);
-            match maybe_expr {
-                Some(expr) => {
-                    let mut ops = lower_expr2(context, codemap, *expr);
-                    let results: Vec<Value> =
-                        ops.last().unwrap().results().map(|r| r.into()).collect();
-                    let ret_op = func::r#return(results.as_slice(), location);
-                    ops.push(ret_op);
-                    ops
+        Ast::Return(maybe_expr) => match maybe_expr {
+            Some(expr) => {
+                let mut ops = lower_expr(context, codemap, *expr);
+                let results: Vec<Value> = ops.last().unwrap().results().map(|r| r.into()).collect();
+                let ret_op = func::r#return(results.as_slice(), location);
+                ops.push(ret_op);
+                ops
+            }
+            None => {
+                vec![func::r#return(&[], location)]
+            }
+        },
+
+        Ast::Conditional(condition, true_expr, maybe_false_expr) => {
+            let mut condition_ops = lower_expr(context, codemap, *condition);
+            let r_condition = condition_ops.last().unwrap().result(0).unwrap().into();
+            let true_ops = lower_expr(context, codemap, *true_expr);
+
+            let true_block = Block::new(&[]);
+            for op in true_ops {
+                true_block.append_operation(op);
+            }
+            true_block.append_operation(scf::r#yield(&[], location));
+
+            let mut out = vec![];
+            match maybe_false_expr {
+                Some(false_expr) => {
+                    let false_ops = lower_expr(context, codemap, *false_expr);
+                    let false_block = Block::new(&[]);
+                    for op in false_ops {
+                        false_block.append_operation(op);
+                    }
+                    false_block.append_operation(scf::r#yield(&[], location));
+                    let then_region = Region::new();
+                    then_region.append_block(true_block);
+                    let else_region = Region::new();
+                    else_region.append_block(false_block);
+                    let op = scf::r#if(r_condition, &[], then_region, else_region, location);
+
+                    out.append(&mut condition_ops);
+                    out.push(op);
+                    out
                 }
                 None => {
-                    vec![func::r#return(&[], location)]
+                    let then_region = Region::new();
+                    then_region.append_block(true_block);
+                    let else_region = Region::new();
+                    let op = scf::r#if(r_condition, &[], then_region, else_region, location);
+
+                    out.append(&mut condition_ops);
+                    out.push(op);
+                    out
                 }
             }
         }
 
         Ast::Assign(target, rhs) => {
-            let ops = lower_expr2(context, codemap, *rhs);
+            let ops = lower_expr(context, codemap, *rhs);
             match target {
                 AssignTarget::Identifier(ident) => {
                     println!("assign ident {:?}", ident);
                 }
                 _ => {
-                    println!("not implemented: {:?}", target);
-                    unimplemented!();
+                    unimplemented!("{:?}", target);
                 }
             }
             ops
-            //vec![ops]
         }
 
         _ => {
-            println!("not implemented: {:?}", expr.node);
-            unimplemented!();
+            unimplemented!("{:?}", expr.node);
         }
     }
 }

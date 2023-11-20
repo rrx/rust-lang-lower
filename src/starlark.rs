@@ -53,7 +53,6 @@ impl<E: Extra> AstNode<E> {
                     Box::new(AstNode::from_expr(*lhs, context, codemap)),
                     Box::new(AstNode::from_expr(*rhs, context, codemap)),
                 );
-                //.node(begin, end)
                 AstNode {
                     node: ast,
                     extra: E::new(begin, end),
@@ -65,8 +64,6 @@ impl<E: Extra> AstNode<E> {
                     .map(|arg| Argument::from(arg, context, codemap))
                     .collect::<Vec<Argument<E>>>();
                 let ast = Ast::Call(Box::new(AstNode::from_expr(*expr, context, codemap)), args);
-                //.node(begin, end)
-                //kkkkk
                 AstNode {
                     node: ast,
                     extra: E::new(begin, end),
@@ -206,6 +203,15 @@ impl<E: Extra> AstNode<E> {
                 }
             }
 
+            StmtP::If(expr, truestmt) => {
+                let condition = AstNode::from_expr(expr, context, codemap);
+                let truestmt = AstNode::from_stmt(*truestmt, context, codemap);
+                AstNode {
+                    node: Ast::Conditional(condition.into(), truestmt.into(), None),
+                    extra: E::new(begin, end),
+                }
+            }
+
             StmtP::IfElse(expr, options) => {
                 let condition = AstNode::from_expr(expr, context, codemap);
                 let truestmt = AstNode::from_stmt(options.0, context, codemap);
@@ -235,7 +241,7 @@ impl<E: Extra> AstNode<E> {
 
             StmtP::Expression(expr) => AstNode::from_expr(expr, context, codemap),
 
-            _ => unimplemented!(),
+            _ => unimplemented!("{:?}", item),
         }
     }
 }
@@ -246,5 +252,5 @@ pub fn parse<'a>(context: &'a Context, path: &Path) -> Result<Vec<Operation<'a>>
     let (codemap, stmt, _dialect, _typecheck) = m.into_parts();
     println!("m: {:?}", &stmt);
     let ast: AstNode<SimpleExtra> = AstNode::from_stmt(stmt, context, &codemap);
-    Ok(lower_expr2(context, &codemap, ast))
+    Ok(lower_expr(context, &codemap, ast))
 }
