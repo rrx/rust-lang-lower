@@ -1,9 +1,10 @@
 use melior::{
-    dialect::{arith, cf, func, scf},
+    dialect::{arith, cf, func, memref, scf},
+    ir,
     ir::{
         attribute::{StringAttribute, TypeAttribute},
         operation::OperationBuilder,
-        r#type::FunctionType,
+        r#type::{FunctionType, MemRefType},
         *,
     },
     Context,
@@ -11,6 +12,16 @@ use melior::{
 
 use crate::ast::*;
 use starlark_syntax::codemap::CodeMap;
+
+/*
+ * Environment
+ * - is this in a function context?
+ * - is this a scf.if region?  requiring a final yield
+ * - how to we handle a return statement in an scf.if region?  return requires the function as the
+ * parent. We need to maybe use cf directly instead.  Or transform it into something that removes
+ * the return from within the scf.if.
+ * - handle loops, scf.while doesn't handle deeply nested loops
+ */
 
 pub fn lower_expr<'c, E: Extra>(
     context: &'c Context,
@@ -283,16 +294,33 @@ pub fn lower_expr<'c, E: Extra>(
         }
 
         Ast::Assign(target, rhs) => {
-            let ops = lower_expr(context, codemap, *rhs);
+            let mut out = vec![];
             match target {
                 AssignTarget::Identifier(ident) => {
+                    // TODO: handle global variables properly, currently assume function context
                     println!("assign ident {:?}", ident);
+                    let ty = MemRefType::new(index_type, &[], None, None);
+                    let op1 = memref::alloca(context, ty, &[], &[], None, location);
+                    let x: Value = op1.result(0).unwrap().into();
+
+                    let c = arith::constant(
+                        context,
+                        attribute::IntegerAttribute::new(10, index_type).into(),
+                        location,
+                    );
+
+                    let op = memref::store(c.result(0).unwrap().into(), x, &[], location);
+                    out.push(c);
+                    out.push(op1);
+                    out.push(op);
                 }
                 _ => {
                     unimplemented!("{:?}", target);
                 }
             }
-            ops
+
+            out.extend(lower_expr(context, codemap, *rhs));
+            out
         }
 
         _ => {
