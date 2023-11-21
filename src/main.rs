@@ -58,7 +58,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     register_all_llvm_translations(&context);
 
     let location = ir::Location::unknown(&context);
-    let mut module = ir::Module::new(location);
+    let module = ir::Module::new(location);
 
     let mut parser = Parser::new();
     let path = Path::new("examples/test_simple.py");
