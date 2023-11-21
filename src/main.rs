@@ -1,5 +1,6 @@
 use std::error::Error;
 use std::fs::File;
+use std::io::Read;
 use std::io::Write;
 use std::path::Path;
 
@@ -10,7 +11,7 @@ use melior::{
     Context, ExecutionEngine,
 };
 
-use lower::starlark::parse;
+use lower::starlark::Parser;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let context = Context::new();
@@ -22,6 +23,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     //pass_manager.enable_ir_printing();
 
     // lower to llvm
+    /*
     pass_manager.add_pass(pass::conversion::create_scf_to_control_flow());
     pass_manager.add_pass(pass::conversion::create_control_flow_to_llvm());
     pass_manager.add_pass(pass::conversion::create_index_to_llvm());
@@ -41,6 +43,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     pass_manager.add_pass(pass::transform::create_sccp());
     pass_manager.add_pass(pass::transform::create_control_flow_sink());
     pass_manager.add_pass(pass::transform::create_symbol_privatize());
+    */
 
     context.attach_diagnostic_handler(|diagnostic| {
         let location = diagnostic.location();
@@ -57,16 +60,20 @@ fn main() -> Result<(), Box<dyn Error>> {
     let location = ir::Location::unknown(&context);
     let mut module = ir::Module::new(location);
 
-    let ops = parse(&context, Path::new("examples/test_simple.py")).unwrap();
+    let mut parser = Parser::new();
+    let path = Path::new("examples/test_simple.py");
+    let ops = parser.parse(&context, &path)?;
     for op in ops {
         module.body().append_operation(op);
     }
+
     module.as_operation().dump();
     assert!(module.as_operation().verify());
     let mut output = File::create("out.mlir")?;
     let s = module.as_operation().to_string();
     write!(output, "{}", s)?;
 
+    /*
     pass_manager.run(&mut module)?;
 
     module.as_operation().dump();
@@ -76,6 +83,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let engine = ExecutionEngine::new(&module, 0, &[], true);
     engine.dump_to_object_file("out.o");
-
+    */
     Ok(())
 }

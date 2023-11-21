@@ -19,9 +19,90 @@ use starlark_syntax::codemap::CodeMap;
  * - is this a scf.if region?  requiring a final yield
  * - how to we handle a return statement in an scf.if region?  return requires the function as the
  * parent. We need to maybe use cf directly instead.  Or transform it into something that removes
- * the return from within the scf.if.
+ * the return from within the scf.if.  We need to transform it to remove nested ifs.  We can
+ * replace the return with a yield that returns 1+ values.  The first value being a boolean
+ * determining if a return is requested, subsequent values could contain the return value, or the
+ * value of a non-return yield from the scf.if.
  * - handle loops, scf.while doesn't handle deeply nested loops
+ * - determine if a loop is affine, and then use affine, if not, then we need to use other looping
+ * mechanisms.  Breaks preclude affine, and we use either scf, or cf
+ * There's probably a default case that handles everything cleanly, and we can specialize from
+ * there.  do everything with a set of while loops.  Each loop has an escape variable.  And the
+ * outer loop escapes with a return statement which is the child of the func.func.  Every nested
+ * loop needs to handle breakout.   Things like continue, break, return, as well as breaking out to
+ * a specific labelled loop (as in rust, but not in python)
+ * - buildins: assert, int, float
+ * - keywords: continue, break, pass, return
+ * - nested layers of loops, lambdas and conditionals, handling break, continue, pass and return
+ * ra = loop a (depth=0):
+ *   rb = loop b (depth=1):
+ *     rc = loop c (depth=2):
+ *       if False:
+ *         return 1
+ *       if False:
+ *         break
+ *       if False:
+ *         continue
+ *       if False:
+ *         continue b
+ *       if False
+ *         break a
+ *
  */
+
+pub fn build_bool_op<'c>(
+    context: &'c Context,
+    value: bool,
+    location: Location<'c>,
+) -> Operation<'c> {
+    let bool_type = melior::ir::r#type::IntegerType::new(context, 1);
+    arith::constant(
+        context,
+        attribute::IntegerAttribute::new(if value { 1 } else { 0 }, bool_type.into()).into(),
+        location,
+    )
+}
+
+pub fn build_loop<'c, E: Extra>(
+    context: &'c Context,
+    codemap: &CodeMap,
+    condition: AstNode<E>,
+    body: AstNode<E>,
+    depth: usize,
+) -> Vec<Operation<'c>> {
+    let location = Location::unknown(context);
+    let bool_type = melior::ir::r#type::IntegerType::new(context, 1);
+    let b_true = build_bool_op(context, true, location);
+    let b_false = build_bool_op(context, true, location);
+
+    let before_region = Region::new();
+    let before_block = Block::new(&[(bool_type.into(), location)]);
+    let before_block_arg: Value = before_block.argument(0).unwrap().into();
+    before_block.append_operation(scf::condition(before_block_arg, &[], location));
+    before_region.append_block(before_block);
+
+    let after_region = Region::new();
+    let after_block = Block::new(&[]);
+    after_block.append_operation(scf::r#yield(&[b_false.result(0).unwrap().into()], location));
+    after_region.append_block(after_block);
+
+    let ty = Type::index(context);
+    let mut condition_ops = lower_expr(context, codemap, condition);
+    let op = scf::r#while(
+        &[b_true.result(0).unwrap().into()],
+        &[ty],
+        before_region,
+        after_region,
+        location,
+    );
+
+    //if depth == 0 {
+    // function level, non-zero result means return immediately
+    //} else {
+    //}
+    //let op = cf::cond_br(context
+    vec![op]
+}
 
 pub fn lower_expr<'c, E: Extra>(
     context: &'c Context,
@@ -30,19 +111,15 @@ pub fn lower_expr<'c, E: Extra>(
 ) -> Vec<Operation<'c>> {
     let index_type = Type::index(context);
     let location = expr.extra.location(context, codemap);
-    //let location = Location::new(context, codemap.filename(), expr.begin.line, expr.begin.col);
+
     match expr.node {
         Ast::BinaryOp(op, a, b) => {
             let mut lhs_ops = lower_expr(context, codemap, *a);
             let mut rhs_ops = lower_expr(context, codemap, *b);
             let r_lhs = lhs_ops.last().unwrap().result(0).unwrap();
             let r_rhs = rhs_ops.last().unwrap().result(0).unwrap();
-            //println!("lhs: {:?}", lhs_ops);
-            //println!("rhs: {:?}", rhs_ops);
-            //println!("lhs: {:?}", r_lhs.r#type());
-            //println!("rhs: {:?}", r_rhs.r#type());
 
-            // types must be the same for binary operation, no implicit casting
+            // types must be the same for binary operation, no implicit casting yet
             assert!(r_lhs.r#type() == r_rhs.r#type());
 
             let ty = r_lhs.r#type();
@@ -326,5 +403,20 @@ pub fn lower_expr<'c, E: Extra>(
         _ => {
             unimplemented!("{:?}", expr.node);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    //use test_log::test;
+
+    #[test]
+    fn test_loop() {
+        //let context = Context::new();
+        //let ops = build_loop(context, codemap, condition, body, 0);
+
+        let result = 2 + 2;
+        assert_eq!(result, 4);
     }
 }

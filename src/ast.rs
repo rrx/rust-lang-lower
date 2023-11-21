@@ -18,8 +18,8 @@ pub enum BinaryOperation {
 }
 
 #[derive(Debug)]
-pub enum Argument<P> {
-    Positional(Box<AstNode<P>>),
+pub enum Argument<E> {
+    Positional(Box<AstNode<E>>),
 }
 
 #[derive(Debug)]

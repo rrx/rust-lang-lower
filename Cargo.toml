@@ -8,3 +8,14 @@ edition = "2021"
 [dependencies]
 starlark_syntax = { git = "https://github.com/facebookexperimental/starlark-rust.git", branch = "main" }
 melior = "*"
+im = "15.1.0"
+log = "0.4"
+miette = "5.10.0"
+thiserror = "*"
+codespan-reporting = "*"
+anyhow = "*"
+
+[dev-dependencies]
+criterion = "0.3"
+test-log = "0.2"
+
