@@ -84,29 +84,31 @@ impl<P: syntax::ast::AstPayload> From<syntax::ast::AssignTargetP<P>> for AssignT
 
 pub struct Parser {
     diagnostics: Vec<Diagnostic<usize>>,
-    pub files: SimpleFiles<String, String>,
 }
 
 impl Parser {
     pub fn new() -> Self {
         Self {
             diagnostics: vec![],
-            files: SimpleFiles::new(),
         }
     }
 
-    pub fn dump(&self) {
+    pub fn dump(&self, files: &SimpleFiles<String, String>) {
         let writer = StandardStream::stderr(ColorChoice::Always);
         let config = codespan_reporting::term::Config::default();
         for d in self.diagnostics.iter() {
-            term::emit(&mut writer.lock(), &config, &self.files, &d).unwrap();
+            term::emit(&mut writer.lock(), &config, files, &d).unwrap();
         }
     }
 
-    //pub fn parse<'a>(&mut self, context: &'a Context, path: &Path) -> Result<Vec<Operation<'a>>> {
-    pub fn parse<'a, E: Extra>(&mut self, context: &'a Context, path: &Path) -> Result<AstNode<E>> {
+    pub fn parse<'a, E: Extra>(
+        &mut self,
+        context: &'a Context,
+        path: &Path,
+        files: &mut SimpleFiles<String, String>,
+    ) -> Result<AstNode<E>> {
         let path = Path::new("examples/test_simple.py");
-        let file_id = self.files.add(
+        let file_id = files.add(
             path.to_str().unwrap().to_string(),
             std::fs::read_to_string(path)?,
         );
@@ -115,11 +117,8 @@ impl Parser {
         let m = syntax::AstModule::parse_file(&path, &dialect)?;
         let (codemap, stmt, _dialect, _typecheck) = m.into_parts();
         println!("m: {:?}", &stmt);
-        //let mut parser = Parser::new();
         let ast: AstNode<E> = self.from_stmt(stmt, context, &codemap, file_id)?;
         Ok(ast)
-        //parser.dump();
-        //Ok(lower_expr(context, &codemap, ast))
     }
 
     pub fn from_stmt<E: Extra, P: syntax::ast::AstPayload>(
