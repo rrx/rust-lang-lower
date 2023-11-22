@@ -13,7 +13,7 @@ use melior::{
 
 use codespan_reporting::files::{Files, SimpleFiles};
 use lower::ast::{AstNode, SimpleExtra};
-use lower::lower::lower_expr;
+use lower::lower::Lower;
 use lower::starlark::Parser;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -68,7 +68,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let path = Path::new("examples/test_simple.py");
     let ast: AstNode<SimpleExtra> = parser.parse(&context, &path, &mut files)?;
     parser.dump(&files);
-    let ops = lower_expr(&context, ast, &files);
+
+    let lower = Lower::new(&context, &files);
+    let ops = lower.lower_expr(ast);
     for op in ops {
         module.body().append_operation(op);
     }
