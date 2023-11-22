@@ -50,19 +50,6 @@ use codespan_reporting::files::{Files, SimpleFiles};
  *
  */
 
-pub fn build_bool_op<'c>(
-    context: &'c Context,
-    value: bool,
-    location: Location<'c>,
-) -> Operation<'c> {
-    let bool_type = melior::ir::r#type::IntegerType::new(context, 1);
-    arith::constant(
-        context,
-        attribute::IntegerAttribute::new(if value { 1 } else { 0 }, bool_type.into()).into(),
-        location,
-    )
-}
-
 pub struct Lower<'a> {
     context: &'a Context,
     files: &'a SimpleFiles<String, String>,
@@ -73,6 +60,15 @@ impl<'c> Lower<'c> {
         Self { context, files }
     }
 
+    pub fn build_bool_op(&self, value: bool, location: Location<'c>) -> Operation<'c> {
+        let bool_type = melior::ir::r#type::IntegerType::new(self.context, 1);
+        arith::constant(
+            self.context,
+            attribute::IntegerAttribute::new(if value { 1 } else { 0 }, bool_type.into()).into(),
+            location,
+        )
+    }
+
     pub fn build_loop<E: Extra>(
         &self,
         condition: AstNode<E>,
@@ -81,8 +77,8 @@ impl<'c> Lower<'c> {
     ) -> Vec<Operation<'c>> {
         let location = Location::unknown(self.context);
         let bool_type = melior::ir::r#type::IntegerType::new(self.context, 1);
-        let b_true = build_bool_op(self.context, true, location);
-        let b_false = build_bool_op(self.context, true, location);
+        let b_true = self.build_bool_op(true, location);
+        let b_false = self.build_bool_op(true, location);
 
         let before_region = Region::new();
         let before_block = Block::new(&[(bool_type.into(), location)]);
