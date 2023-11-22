@@ -75,20 +75,24 @@ impl<'c> Lower<'c> {
         body: AstNode<E>,
         depth: usize,
     ) -> Vec<Operation<'c>> {
-        let location = Location::unknown(self.context);
+        let condition_location = self.location(&condition);
+        let body_location = self.location(&condition);
         let bool_type = melior::ir::r#type::IntegerType::new(self.context, 1);
-        let b_true = self.build_bool_op(true, location);
-        let b_false = self.build_bool_op(true, location);
+        let b_true = self.build_bool_op(true, condition_location);
+        let b_false = self.build_bool_op(true, condition_location);
 
         let before_region = Region::new();
-        let before_block = Block::new(&[(bool_type.into(), location)]);
+        let before_block = Block::new(&[(bool_type.into(), condition_location)]);
         let before_block_arg: Value = before_block.argument(0).unwrap().into();
-        before_block.append_operation(scf::condition(before_block_arg, &[], location));
+        before_block.append_operation(scf::condition(before_block_arg, &[], condition_location));
         before_region.append_block(before_block);
 
         let after_region = Region::new();
         let after_block = Block::new(&[]);
-        after_block.append_operation(scf::r#yield(&[b_false.result(0).unwrap().into()], location));
+        after_block.append_operation(scf::r#yield(
+            &[b_false.result(0).unwrap().into()],
+            body_location,
+        ));
         after_region.append_block(after_block);
 
         let ty = Type::index(self.context);
@@ -98,7 +102,7 @@ impl<'c> Lower<'c> {
             &[ty],
             before_region,
             after_region,
-            location,
+            body_location,
         );
 
         //if depth == 0 {
@@ -109,9 +113,13 @@ impl<'c> Lower<'c> {
         vec![op]
     }
 
+    pub fn location<E: Extra>(&self, expr: &AstNode<E>) -> Location<'c> {
+        expr.extra.location(self.context, self.files)
+    }
+
     pub fn lower_expr<E: Extra>(&self, expr: AstNode<E>) -> Vec<Operation<'c>> {
         let index_type = Type::index(self.context);
-        let location = expr.extra.location(self.context, self.files);
+        let location = self.location(&expr);
 
         match expr.node {
             Ast::BinaryOp(op, a, b) => {
