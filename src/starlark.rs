@@ -9,12 +9,12 @@ use starlark_syntax::syntax;
 use starlark_syntax::syntax::module::AstModuleFields;
 
 use codespan_reporting::diagnostic::{Diagnostic, Label};
-use codespan_reporting::files::SimpleFiles;
 use codespan_reporting::term;
 use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
 
 use crate::ast::Extra;
 use crate::ast::*;
+use crate::lower::FileDB;
 
 impl From<syntax::ast::AstLiteral> for Literal {
     fn from(item: syntax::ast::AstLiteral) -> Self {
@@ -93,7 +93,7 @@ impl Parser {
         }
     }
 
-    pub fn dump(&self, files: &SimpleFiles<String, String>) {
+    pub fn dump(&self, files: &FileDB) {
         let writer = StandardStream::stderr(ColorChoice::Always);
         let config = codespan_reporting::term::Config::default();
         for d in self.diagnostics.iter() {
@@ -105,7 +105,7 @@ impl Parser {
         &mut self,
         context: &'a Context,
         path: &Path,
-        files: &mut SimpleFiles<String, String>,
+        files: &mut FileDB,
     ) -> Result<AstNode<E>> {
         let path = Path::new("examples/test_simple.py");
         let file_id = files.add(

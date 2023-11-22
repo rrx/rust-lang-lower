@@ -50,13 +50,15 @@ use codespan_reporting::files::{Files, SimpleFiles};
  *
  */
 
+pub type FileDB = SimpleFiles<String, String>;
+
 pub struct Lower<'a> {
     context: &'a Context,
-    files: &'a SimpleFiles<String, String>,
+    files: &'a FileDB,
 }
 
 impl<'c> Lower<'c> {
-    pub fn new(context: &'c Context, files: &'c SimpleFiles<String, String>) -> Self {
+    pub fn new(context: &'c Context, files: &'c FileDB) -> Self {
         Self { context, files }
     }
 
