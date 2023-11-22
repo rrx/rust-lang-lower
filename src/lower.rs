@@ -11,7 +11,7 @@ use melior::{
 };
 
 use crate::ast::*;
-use starlark_syntax::codemap::CodeMap;
+use codespan_reporting::files::{Files, SimpleFiles};
 
 /*
  * Environment
@@ -65,7 +65,7 @@ pub fn build_bool_op<'c>(
 
 pub fn build_loop<'c, E: Extra>(
     context: &'c Context,
-    codemap: &CodeMap,
+    files: &SimpleFiles<String, String>,
     condition: AstNode<E>,
     body: AstNode<E>,
     depth: usize,
@@ -87,7 +87,7 @@ pub fn build_loop<'c, E: Extra>(
     after_region.append_block(after_block);
 
     let ty = Type::index(context);
-    let mut condition_ops = lower_expr(context, codemap, condition);
+    let mut condition_ops = lower_expr(context, condition, files);
     let op = scf::r#while(
         &[b_true.result(0).unwrap().into()],
         &[ty],
@@ -106,16 +106,16 @@ pub fn build_loop<'c, E: Extra>(
 
 pub fn lower_expr<'c, E: Extra>(
     context: &'c Context,
-    codemap: &CodeMap,
     expr: AstNode<E>,
+    files: &SimpleFiles<String, String>,
 ) -> Vec<Operation<'c>> {
     let index_type = Type::index(context);
-    let location = expr.extra.location(context, codemap);
+    let location = expr.extra.location(context, files);
 
     match expr.node {
         Ast::BinaryOp(op, a, b) => {
-            let mut lhs_ops = lower_expr(context, codemap, *a);
-            let mut rhs_ops = lower_expr(context, codemap, *b);
+            let mut lhs_ops = lower_expr(context, *a, files);
+            let mut rhs_ops = lower_expr(context, *b, files);
             let r_lhs = lhs_ops.last().unwrap().result(0).unwrap();
             let r_rhs = rhs_ops.last().unwrap().result(0).unwrap();
 
@@ -208,7 +208,7 @@ pub fn lower_expr<'c, E: Extra>(
                 match a {
                     Argument::Positional(arg) => {
                         println!("arg: {:?}", arg.node);
-                        let mut arg_ops = lower_expr(context, codemap, *arg);
+                        let mut arg_ops = lower_expr(context, *arg, files);
                         ops.append(&mut arg_ops);
                         call_index.push(ops.len() - 1);
                     }
@@ -261,7 +261,7 @@ pub fn lower_expr<'c, E: Extra>(
         Ast::Sequence(exprs) => {
             let mut out = vec![];
             for s in exprs {
-                out.extend(lower_expr(context, codemap, s));
+                out.extend(lower_expr(context, s, files));
             }
             out
         }
@@ -274,7 +274,7 @@ pub fn lower_expr<'c, E: Extra>(
                 match p.node {
                     Parameter::Normal(ident) => {
                         println!("params {:?}", ident);
-                        let location = p.extra.location(context, codemap);
+                        let location = p.extra.location(context, files);
                         params.push((index_type, location));
                     }
                     _ => {
@@ -284,9 +284,9 @@ pub fn lower_expr<'c, E: Extra>(
                 }
             }
 
-            let ops = lower_expr(context, codemap, *def.body);
+            let ops = lower_expr(context, *def.body, files);
             let index_type = Type::index(context);
-            let location = expr.extra.location(context, codemap);
+            let location = expr.extra.location(context, files);
 
             let block = Block::new(params.as_slice());
             for op in ops {
@@ -316,7 +316,7 @@ pub fn lower_expr<'c, E: Extra>(
 
         Ast::Return(maybe_expr) => match maybe_expr {
             Some(expr) => {
-                let mut ops = lower_expr(context, codemap, *expr);
+                let mut ops = lower_expr(context, *expr, files);
                 let results: Vec<Value> = ops.last().unwrap().results().map(|r| r.into()).collect();
                 let ret_op = func::r#return(results.as_slice(), location);
                 ops.push(ret_op);
@@ -328,9 +328,9 @@ pub fn lower_expr<'c, E: Extra>(
         },
 
         Ast::Conditional(condition, true_expr, maybe_false_expr) => {
-            let mut condition_ops = lower_expr(context, codemap, *condition);
+            let mut condition_ops = lower_expr(context, *condition, files);
             let r_condition = condition_ops.last().unwrap().result(0).unwrap().into();
-            let true_ops = lower_expr(context, codemap, *true_expr);
+            let true_ops = lower_expr(context, *true_expr, files);
 
             let true_block = Block::new(&[]);
             for op in true_ops {
@@ -341,7 +341,7 @@ pub fn lower_expr<'c, E: Extra>(
             let mut out = vec![];
             match maybe_false_expr {
                 Some(false_expr) => {
-                    let false_ops = lower_expr(context, codemap, *false_expr);
+                    let false_ops = lower_expr(context, *false_expr, files);
                     let false_block = Block::new(&[]);
                     for op in false_ops {
                         false_block.append_operation(op);
@@ -396,7 +396,7 @@ pub fn lower_expr<'c, E: Extra>(
                 }
             }
 
-            out.extend(lower_expr(context, codemap, *rhs));
+            out.extend(lower_expr(context, *rhs, files));
             out
         }
 
@@ -414,7 +414,7 @@ mod tests {
     #[test]
     fn test_loop() {
         //let context = Context::new();
-        //let ops = build_loop(context, codemap, condition, body, 0);
+        //let ops = build_loop(context, condition, body, 0);
 
         let result = 2 + 2;
         assert_eq!(result, 4);

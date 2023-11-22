@@ -11,6 +11,8 @@ use melior::{
     Context, ExecutionEngine,
 };
 
+use lower::ast::{AstNode, SimpleExtra};
+use lower::lower::lower_expr;
 use lower::starlark::Parser;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -62,7 +64,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut parser = Parser::new();
     let path = Path::new("examples/test_simple.py");
-    let ops = parser.parse(&context, &path)?;
+    let ast: AstNode<SimpleExtra> = parser.parse(&context, &path)?;
+    parser.dump();
+    let ops = lower_expr(&context, ast, &parser.files);
     for op in ops {
         module.body().append_operation(op);
     }

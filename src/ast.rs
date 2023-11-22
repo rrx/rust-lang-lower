@@ -2,7 +2,7 @@ use melior::ir;
 use melior::Context;
 use std::fmt::Debug;
 
-use starlark_syntax::codemap::CodeMap;
+use codespan_reporting::files::{Files, SimpleFiles};
 
 #[derive(Debug)]
 pub enum Literal {
@@ -68,28 +68,40 @@ pub struct SimpleExtra {
 }
 
 impl Extra for SimpleExtra {
-    fn new(begin: CodeLocation, end: CodeLocation) -> Self {
+    fn new(file_id: usize, begin: CodeLocation, end: CodeLocation) -> Self {
         Self {
-            span: Span { begin, end },
+            span: Span {
+                file_id,
+                begin,
+                end,
+            },
         }
     }
-    fn location<'c>(&self, context: &'c Context, codemap: &CodeMap) -> ir::Location<'c> {
-        ir::Location::new(
-            context,
-            codemap.filename(),
-            self.span.begin.line,
-            self.span.begin.col,
-        )
+    fn location<'c>(
+        &self,
+        context: &'c Context,
+        files: &SimpleFiles<String, String>,
+    ) -> ir::Location<'c> {
+        if let Ok(name) = files.name(self.span.file_id) {
+            ir::Location::new(context, &name, self.span.begin.line, self.span.begin.col)
+        } else {
+            ir::Location::unknown(context)
+        }
     }
 }
 
 pub trait Extra: Debug {
-    fn new(begin: CodeLocation, end: CodeLocation) -> Self;
-    fn location<'c>(&self, context: &'c Context, codemap: &CodeMap) -> ir::Location<'c>;
+    fn new(file_id: usize, begin: CodeLocation, end: CodeLocation) -> Self;
+    fn location<'c>(
+        &self,
+        context: &'c Context,
+        files: &SimpleFiles<String, String>,
+    ) -> ir::Location<'c>;
 }
 
 #[derive(Debug)]
 pub struct Span {
+    pub file_id: usize,
     pub begin: CodeLocation,
     pub end: CodeLocation,
 }
