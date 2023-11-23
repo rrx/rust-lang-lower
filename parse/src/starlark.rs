@@ -101,7 +101,6 @@ impl Parser {
         path: &Path,
         files: &mut FileDB,
     ) -> Result<AstNode<E>> {
-        let path = Path::new("examples/test_simple.py");
         let file_id = files.add(
             path.to_str().unwrap().to_string(),
             std::fs::read_to_string(path)?,

@@ -12,9 +12,9 @@ run:
 	#mlir-opt-17 out.ll | mlir-translate-17 -mlir-to-llvmir | clang-17 -x ir -o out -
 	#mlir-opt-17 out.ll | mlir-translate-17 -mlir-to-llvmir
 	#mlir-translate-17 --mlir-to-llvmir out.ll | clang-17 -x ir -o out - 
-	mlir-opt-17 \
-		-test-print-defuse \
-		out.ll
+	#mlir-opt-17 \
+		#-test-print-defuse \
+		#out.ll
 	./out ; echo $$?
 
 test:

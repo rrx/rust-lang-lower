@@ -65,7 +65,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut files = SimpleFiles::new();
     let mut parser = Parser::new();
-    let path = Path::new("examples/test_simple.py");
+    let path = Path::new("tests/test_simple.py");
     let ast: AstNode<SimpleExtra> = parser.parse(&context, &path, &mut files)?;
     parser.dump(&files);
 
