@@ -143,12 +143,18 @@ impl<'c> Lower<'c> {
         let after_block = Block::new(after_args);
 
         //let op = self.build_int_op(10, body_location);
+        let body_ops = self.lower_expr(body);
+        println!("ops: {:?}", body_ops);
+
         let op = self.build_bool_op(false, condition_location);
+        //let op = ops.last().unwrap();
         let rs = op.results().map(|r| r.into()).collect::<Vec<Value>>();
 
         // check types
         rs.iter().for_each(|r| {
-            //assert!(r.r#type() == before_args[0].0);
+            println!("type: {:?}", r.r#type());
+            println!("type: {:?}", before_args[0].0);
+            assert!(r.r#type() == before_args[0].0);
         });
         //let rs = [];
 
@@ -157,6 +163,9 @@ impl<'c> Lower<'c> {
         // yield passes result to region 0
         let y = scf::r#yield(&rs, body_location);
         after_block.append_operation(op);
+        for op in body_ops {
+            after_block.append_operation(op);
+        }
         after_block.append_operation(y);
 
         after_region.append_block(after_block);
@@ -541,7 +550,7 @@ mod tests {
                         file_id,
                         Ast::Test(
                             Box::new(node(file_id, Ast::Literal(Literal::Bool(true)))),
-                            Box::new(node(file_id, Ast::Literal(Literal::Int(1)))),
+                            Box::new(node(file_id, Ast::Literal(Literal::Int(2)))),
                         ),
                     ),
                     node(
