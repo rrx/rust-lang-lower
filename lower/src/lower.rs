@@ -97,12 +97,22 @@ impl<'c> Lower<'c> {
         let before_block = Block::new(before_args);
         let init_arg: Value = before_block.argument(0).unwrap().into();
 
-        let mut ops = self.lower_expr(condition);
-        let r_condition = ops.last().unwrap().result(0).unwrap();
+        let mut out = vec![];
+        let mut condition_ops = self.lower_expr(condition);
+        //let r_condition = ops.last().unwrap().result(0).unwrap();
+        //let op = self.build_int_op(2, body_location);
+        let condition_op = condition_ops.last().unwrap();
+        let condition_rs = condition_op
+            .results()
+            .map(|r| r.into())
+            .collect::<Vec<Value>>();
 
+        // should be bool type
+        assert!(condition_rs[0].r#type() == bool_type);
+
+        // to pass to after
         let op = self.build_int_op(2, body_location);
         let rs = op.results().map(|r| r.into()).collect::<Vec<Value>>();
-
         // check types
         rs.iter().for_each(|r| {
             assert!(r.r#type() == after_args[0].0);
@@ -111,6 +121,9 @@ impl<'c> Lower<'c> {
         // condition passes result to region 1 if true, or terminates with result
         let c = scf::condition(init_arg, &rs, condition_location);
         before_block.append_operation(op);
+        for op in condition_ops {
+            before_block.append_operation(op);
+        }
         before_block.append_operation(c);
         before_region.append_block(before_block);
 
@@ -133,7 +146,6 @@ impl<'c> Lower<'c> {
 
         after_region.append_block(after_block);
 
-        //let ty = Type::index(self.context);
         let init_op = self.build_bool_op(true, condition_location);
         let rs = init_op.results().map(|r| r.into()).collect::<Vec<Value>>();
         let op = scf::r#while(
@@ -143,8 +155,8 @@ impl<'c> Lower<'c> {
             after_region,
             body_location,
         );
-        ops.push(init_op);
-        ops.push(op);
+        out.push(init_op);
+        out.push(op);
 
         //if depth == 0 {
         // function level, non-zero result means return immediately
@@ -152,7 +164,7 @@ impl<'c> Lower<'c> {
         //}
         //let op = cf::cond_br(context
         //println!("op: {:?}", ops);
-        ops
+        out
     }
 
     pub fn location<E: Extra>(&self, expr: &AstNode<E>) -> Location<'c> {
