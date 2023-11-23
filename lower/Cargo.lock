@@ -31,7 +31,7 @@ dependencies = [
 [[package]]
 name = "allocative"
 version = "0.3.1"
-source = "git+https://github.com/facebookexperimental/starlark-rust.git?branch=main#8cb048d6942bc92b6e07cb2d5fb3deecdbed4530"
+source = "git+https://github.com/facebookexperimental/starlark-rust.git?branch=main#2e1c6a33e1c37740920cd664b6e8000ca9c70fc5"
 dependencies = [
  "allocative_derive",
  "ctor",
@@ -41,7 +41,7 @@ dependencies = [
 [[package]]
 name = "allocative_derive"
 version = "0.3.1"
-source = "git+https://github.com/facebookexperimental/starlark-rust.git?branch=main#8cb048d6942bc92b6e07cb2d5fb3deecdbed4530"
+source = "git+https://github.com/facebookexperimental/starlark-rust.git?branch=main#2e1c6a33e1c37740920cd664b6e8000ca9c70fc5"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -338,16 +338,6 @@ name = "clap_lex"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "702fc72eb24e5a1e48ce58027a675bc24edd52096d5397d4aea7c6dd9eca0bd1"
-
-[[package]]
-name = "cli"
-version = "0.1.0"
-dependencies = [
- "codespan-reporting",
- "lower",
- "melior",
- "parse",
-]
 
 [[package]]
 name = "codespan-reporting"
@@ -663,7 +653,7 @@ dependencies = [
 [[package]]
 name = "dupe"
 version = "0.9.0"
-source = "git+https://github.com/facebookexperimental/starlark-rust.git?branch=main#8cb048d6942bc92b6e07cb2d5fb3deecdbed4530"
+source = "git+https://github.com/facebookexperimental/starlark-rust.git?branch=main#2e1c6a33e1c37740920cd664b6e8000ca9c70fc5"
 dependencies = [
  "dupe_derive",
 ]
@@ -671,7 +661,7 @@ dependencies = [
 [[package]]
 name = "dupe_derive"
 version = "0.9.0"
-source = "git+https://github.com/facebookexperimental/starlark-rust.git?branch=main#8cb048d6942bc92b6e07cb2d5fb3deecdbed4530"
+source = "git+https://github.com/facebookexperimental/starlark-rust.git?branch=main#2e1c6a33e1c37740920cd664b6e8000ca9c70fc5"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -749,9 +739,9 @@ checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
 name = "form_urlencoded"
-version = "1.2.1"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e13624c2627564efccf4934284bdd98cbaa14e79b0b5a141218e507b3a823456"
+checksum = "a62bc1cf6f830c2ec14a513a9fb124d0a213a629668a4186f329db21fe045652"
 dependencies = [
  "percent-encoding",
 ]
@@ -832,9 +822,9 @@ checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 
 [[package]]
 name = "idna"
-version = "0.5.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "634d9b1461af396cad843f47fdba5597a4f9e6ddd4bfb6ff5d85028c25cb12f6"
+checksum = "7d20d6b07bfbc108882d88ed8e37d39636dcc260e15e30c45e6ba089610b917c"
 dependencies = [
  "unicode-bidi",
  "unicode-normalization",
@@ -1040,6 +1030,7 @@ dependencies = [
  "log",
  "melior",
  "miette",
+ "starlark_syntax",
  "test-log",
  "thiserror",
 ]
@@ -1252,18 +1243,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "parse"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "codespan-reporting",
- "lower",
- "melior",
- "starlark_syntax",
- "thiserror",
-]
-
-[[package]]
 name = "paste"
 version = "1.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1277,9 +1256,9 @@ checksum = "19b17cddbe7ec3f8bc800887bab5e717348c95ea2ca0b1bf0837fb964dc67099"
 
 [[package]]
 name = "percent-encoding"
-version = "2.3.1"
+version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
+checksum = "9b2a4787296e9989611394c33f193f676704af1686e70b8f8033ab5ba9a35a94"
 
 [[package]]
 name = "petgraph"
@@ -1510,9 +1489,9 @@ dependencies = [
 
 [[package]]
 name = "rustix"
-version = "0.38.25"
+version = "0.38.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc99bc2d4f1fed22595588a013687477aedf3cdcfb26558c559edb67b4d9b22e"
+checksum = "9ad981d6c340a49cdc40a1028d9c6084ec7e9fa33fcb839cab656a267071e234"
 dependencies = [
  "bitflags 2.4.1",
  "errno",
@@ -1562,9 +1541,9 @@ checksum = "836fa6a3e1e547f9a2c4040802ec865b5d85f4014efe00555d7090a3dcaa1090"
 
 [[package]]
 name = "serde"
-version = "1.0.193"
+version = "1.0.192"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25dd9975e68d0cb5aa1120c288333fc98731bd1dd12f561e468ea4728c042b89"
+checksum = "bca2a08484b285dcb282d0f67b26cadc0df8b19f8c12502c13d966bf9482f001"
 dependencies = [
  "serde_derive",
 ]
@@ -1581,9 +1560,9 @@ dependencies = [
 
 [[package]]
 name = "serde_derive"
-version = "1.0.193"
+version = "1.0.192"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43576ca501357b9b071ac53cdc7da8ef0cbd9493d8df094cd821777ea6e894d3"
+checksum = "d6c7207fbec9faa48073f3e3074cbe553af6ea512d7c21ba46e434e70ea9fbc1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1659,7 +1638,7 @@ checksum = "4dccd0940a2dcdf68d092b8cbab7dc0ad8fa938bf95787e1b916b0e3d0e8e970"
 [[package]]
 name = "starlark_map"
 version = "0.10.0"
-source = "git+https://github.com/facebookexperimental/starlark-rust.git?branch=main#8cb048d6942bc92b6e07cb2d5fb3deecdbed4530"
+source = "git+https://github.com/facebookexperimental/starlark-rust.git?branch=main#2e1c6a33e1c37740920cd664b6e8000ca9c70fc5"
 dependencies = [
  "allocative",
  "dupe",
@@ -1672,7 +1651,7 @@ dependencies = [
 [[package]]
 name = "starlark_syntax"
 version = "0.10.0"
-source = "git+https://github.com/facebookexperimental/starlark-rust.git?branch=main#8cb048d6942bc92b6e07cb2d5fb3deecdbed4530"
+source = "git+https://github.com/facebookexperimental/starlark-rust.git?branch=main#2e1c6a33e1c37740920cd664b6e8000ca9c70fc5"
 dependencies = [
  "allocative",
  "annotate-snippets",
@@ -1965,9 +1944,9 @@ checksum = "c7de7d73e1754487cb58364ee906a499937a0dfabd86bcb980fa99ec8c8fa2ce"
 
 [[package]]
 name = "url"
-version = "2.5.0"
+version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "31e6302e3bb753d46e83516cae55ae196fc0c309407cf11ab35cc51a4c2a4633"
+checksum = "143b538f18257fac9cad154828a57c6bf5157e1aa604d4816b5995bf6de87ae5"
 dependencies = [
  "form_urlencoded",
  "idna",

@@ -12,73 +12,67 @@ use codespan_reporting::diagnostic::{Diagnostic, Label};
 use codespan_reporting::term;
 use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
 
-use crate::ast::Extra;
-use crate::ast::*;
-use crate::lower::FileDB;
+use lower::ast::Extra;
+use lower::ast::*;
+use lower::lower::FileDB;
 
-impl From<syntax::ast::AstLiteral> for Literal {
-    fn from(item: syntax::ast::AstLiteral) -> Self {
-        use syntax::ast::AstLiteral;
-        match item {
-            AstLiteral::Int(x) => {
-                use lexer::TokenInt;
-                match x.node {
-                    TokenInt::I32(y) => Literal::Int(y as i64),
-                    _ => unimplemented!(),
-                }
+fn from_literal(item: syntax::ast::AstLiteral) -> Literal {
+    use syntax::ast::AstLiteral;
+    match item {
+        AstLiteral::Int(x) => {
+            use lexer::TokenInt;
+            match x.node {
+                TokenInt::I32(y) => Literal::Int(y as i64),
+                _ => unimplemented!(),
             }
-            AstLiteral::Float(x) => Literal::Float(x.node),
-            _ => unimplemented!(),
         }
+        AstLiteral::Float(x) => Literal::Float(x.node),
+        _ => unimplemented!(),
     }
 }
 
-impl From<syntax::ast::BinOp> for BinaryOperation {
-    fn from(item: syntax::ast::BinOp) -> Self {
-        use syntax::ast::BinOp;
-        match item {
-            BinOp::Add => BinaryOperation::Add,
-            BinOp::Subtract => BinaryOperation::Subtract,
-            BinOp::Equal => BinaryOperation::Equal,
-            _ => unimplemented!(),
-        }
+fn from_binop(item: syntax::ast::BinOp) -> BinaryOperation {
+    use syntax::ast::BinOp;
+    match item {
+        BinOp::Add => BinaryOperation::Add,
+        BinOp::Subtract => BinaryOperation::Subtract,
+        BinOp::Equal => BinaryOperation::Equal,
+        _ => unimplemented!(),
     }
 }
 
-impl<E: Extra> ParameterNode<E> {
-    fn from<P: syntax::ast::AstPayload>(
-        item: syntax::ast::AstParameterP<P>,
-        codemap: &CodeMap,
-        file_id: usize,
-    ) -> Self {
-        use syntax::ast::ParameterP;
-        let r = codemap.resolve_span(item.span);
-        let begin = CodeLocation {
-            line: r.begin.line,
-            col: r.begin.column,
-        };
-        let end = CodeLocation {
-            line: r.end.line,
-            col: r.end.column,
-        };
+fn from_parameter<E: Extra, P: syntax::ast::AstPayload>(
+    item: syntax::ast::AstParameterP<P>,
+    codemap: &CodeMap,
+    file_id: usize,
+) -> ParameterNode<E> {
+    use syntax::ast::ParameterP;
+    let r = codemap.resolve_span(item.span);
+    let begin = CodeLocation {
+        line: r.begin.line,
+        col: r.begin.column,
+    };
+    let end = CodeLocation {
+        line: r.end.line,
+        col: r.end.column,
+    };
 
-        match item.node {
-            ParameterP::Normal(ident, maybe_type) => Self {
-                node: Parameter::Normal(ident.node.ident),
-                extra: E::new(file_id, begin, end),
-            },
-            _ => unimplemented!(),
-        }
+    match item.node {
+        ParameterP::Normal(ident, maybe_type) => ParameterNode {
+            node: Parameter::Normal(ident.node.ident),
+            extra: E::new(file_id, begin, end),
+        },
+        _ => unimplemented!(),
     }
 }
 
-impl<P: syntax::ast::AstPayload> From<syntax::ast::AssignTargetP<P>> for AssignTarget {
-    fn from(item: syntax::ast::AssignTargetP<P>) -> Self {
-        use syntax::ast::AssignTargetP;
-        match item {
-            AssignTargetP::Identifier(ident) => AssignTarget::Identifier(ident.node.ident),
-            _ => unimplemented!(),
-        }
+fn from_assign_target<P: syntax::ast::AstPayload>(
+    item: syntax::ast::AssignTargetP<P>,
+) -> AssignTarget {
+    use syntax::ast::AssignTargetP;
+    match item {
+        AssignTargetP::Identifier(ident) => AssignTarget::Identifier(ident.node.ident),
+        _ => unimplemented!(),
     }
 }
 
@@ -158,7 +152,7 @@ impl Parser {
                 let params = def
                     .params
                     .into_iter()
-                    .map(|p| ParameterNode::from(p, codemap, file_id))
+                    .map(|p| from_parameter(p, codemap, file_id))
                     .collect();
                 let d = Definition {
                     name: def.name.ident.clone(),
@@ -208,7 +202,7 @@ impl Parser {
 
             StmtP::Assign(assign) => {
                 let rhs = self.from_expr(assign.rhs, context, codemap, file_id)?;
-                let target: AssignTarget = assign.lhs.node.into();
+                let target: AssignTarget = from_assign_target(assign.lhs.node);
                 Ok(AstNode {
                     node: Ast::Assign(target, Box::new(rhs)),
                     extra: E::new(file_id, begin, end),
@@ -242,7 +236,7 @@ impl Parser {
         match item.node {
             ExprP::Op(lhs, op, rhs) => {
                 let ast = Ast::BinaryOp(
-                    op.into(),
+                    from_binop(op),
                     Box::new(self.from_expr(*lhs, context, codemap, file_id)?),
                     Box::new(self.from_expr(*rhs, context, codemap, file_id)?),
                 );
@@ -274,7 +268,7 @@ impl Parser {
             }
 
             ExprP::Literal(lit) => {
-                let x: Literal = lit.into();
+                let x: Literal = from_literal(lit);
                 Ok(AstNode {
                     node: Ast::Literal(x),
                     extra: E::new(file_id, begin, end),

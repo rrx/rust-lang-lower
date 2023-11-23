@@ -14,7 +14,7 @@ use melior::{
 use codespan_reporting::files::{Files, SimpleFiles};
 use lower::ast::{AstNode, SimpleExtra};
 use lower::lower::Lower;
-use lower::starlark::Parser;
+use parse::starlark::Parser;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let context = Context::new();

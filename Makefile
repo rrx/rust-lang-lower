@@ -1,7 +1,7 @@
 default: run
 
 run:
-	cargo run --bin lower
+	cargo run --bin cli
 	mlir-opt-17 \
 		--mem2reg \
 		--sccp \
