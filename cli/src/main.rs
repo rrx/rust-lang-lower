@@ -1,6 +1,5 @@
 use std::error::Error;
 use std::fs::File;
-use std::io::Read;
 use std::io::Write;
 use std::path::Path;
 
@@ -26,7 +25,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     //pass_manager.enable_ir_printing();
 
     // lower to llvm
-    /*
     pass_manager.add_pass(pass::conversion::create_scf_to_control_flow());
     pass_manager.add_pass(pass::conversion::create_control_flow_to_llvm());
     pass_manager.add_pass(pass::conversion::create_index_to_llvm());
@@ -46,7 +44,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     pass_manager.add_pass(pass::transform::create_sccp());
     pass_manager.add_pass(pass::transform::create_control_flow_sink());
     pass_manager.add_pass(pass::transform::create_symbol_privatize());
-    */
 
     context.attach_diagnostic_handler(|diagnostic| {
         let location = diagnostic.location();
@@ -61,13 +58,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     register_all_llvm_translations(&context);
 
     let location = ir::Location::unknown(&context);
-    let module = ir::Module::new(location);
+    let mut module = ir::Module::new(location);
 
     let mut files = SimpleFiles::new();
     let mut parser = Parser::new();
     let path = Path::new("tests/test_simple.py");
-    let ast: AstNode<SimpleExtra> = parser.parse(&context, &path, &mut files)?;
+    let result = parser.parse(&context, &path, &mut files);
     parser.dump(&files);
+    let ast: AstNode<SimpleExtra> = result?;
 
     let lower = Lower::new(&context, &files);
     let ops = lower.lower_expr(ast);
@@ -81,7 +79,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let s = module.as_operation().to_string();
     write!(output, "{}", s)?;
 
-    /*
     pass_manager.run(&mut module)?;
 
     module.as_operation().dump();
@@ -89,8 +86,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let s = module.as_operation().to_string();
     write!(output, "{}", s)?;
 
-    let engine = ExecutionEngine::new(&module, 0, &[], true);
-    engine.dump_to_object_file("out.o");
-    */
+    //let engine = ExecutionEngine::new(&module, 0, &[], true);
+    //engine.dump_to_object_file("out.o");
+
     Ok(())
 }
