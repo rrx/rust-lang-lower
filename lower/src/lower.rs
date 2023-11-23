@@ -81,24 +81,31 @@ impl<'c> Lower<'c> {
 
     pub fn build_loop<E: Extra>(
         &self,
+        init_args: &[Value<'c, '_>],
         condition: AstNode<E>,
         body: AstNode<E>,
         depth: usize,
     ) -> Vec<Operation<'c>> {
         let bool_type = melior::ir::r#type::IntegerType::new(self.context, 1).into();
+        let float_type = Type::float64(self.context);
         let index_type = Type::index(self.context);
         let condition_location = self.location(&condition);
         let body_location = self.location(&body);
 
-        let before_args = &[(bool_type, condition_location)];
+        //let init_args = &[(float_type, condition_location)];
+        //let before_args = &[];//(bool_type, condition_location)];
+        let before_args = init_args
+            .iter()
+            .map(|a| (a.r#type(), condition_location))
+            .collect::<Vec<_>>();
         let after_args = &[(index_type, body_location)];
 
         let before_region = Region::new();
-        let before_block = Block::new(before_args);
-        let init_arg: Value = before_block.argument(0).unwrap().into();
+        let before_block = Block::new(&before_args);
+        //let init_args = before_block.argument(0).unwrap().into();
 
         let mut out = vec![];
-        let mut condition_ops = self.lower_expr(condition);
+        let condition_ops = self.lower_expr(condition);
         //let r_condition = ops.last().unwrap().result(0).unwrap();
         //let op = self.build_int_op(2, body_location);
         let condition_op = condition_ops.last().unwrap();
@@ -119,7 +126,12 @@ impl<'c> Lower<'c> {
         });
 
         // condition passes result to region 1 if true, or terminates with result
-        let c = scf::condition(init_arg, &rs, condition_location);
+        let c = scf::condition(
+            //init_arg,
+            condition_rs[0].into(),
+            &rs,
+            condition_location,
+        );
         before_block.append_operation(op);
         for op in condition_ops {
             before_block.append_operation(op);
@@ -136,8 +148,11 @@ impl<'c> Lower<'c> {
 
         // check types
         rs.iter().for_each(|r| {
-            assert!(r.r#type() == before_args[0].0);
+            //assert!(r.r#type() == before_args[0].0);
         });
+        //let rs = [];
+
+        assert!(rs.len() == init_args.len());
 
         // yield passes result to region 0
         let y = scf::r#yield(&rs, body_location);
@@ -146,16 +161,17 @@ impl<'c> Lower<'c> {
 
         after_region.append_block(after_block);
 
-        let init_op = self.build_bool_op(true, condition_location);
-        let rs = init_op.results().map(|r| r.into()).collect::<Vec<Value>>();
+        //let init_op = self.build_bool_op(true, condition_location);
+        //let rs = init_op.results().map(|r| r.into()).collect::<Vec<Value>>();
         let op = scf::r#while(
-            &rs,
+            //&rs,
+            init_args,
             &after_args.iter().map(|x| x.0).collect::<Vec<Type<'_>>>(),
             before_region,
             after_region,
             body_location,
         );
-        out.push(init_op);
+        //out.push(init_op);
         out.push(op);
 
         //if depth == 0 {
@@ -478,7 +494,16 @@ impl<'c> Lower<'c> {
                 out
             }
 
-            Ast::Test(condition, body) => self.build_loop(*condition, *body, 0),
+            Ast::Test(condition, body) => {
+                let mut out = vec![];
+                let condition_location = self.location(&condition);
+                let init_op = self.build_bool_op(true, condition_location);
+                let rs = init_op.results().map(|r| r.into()).collect::<Vec<Value>>();
+                let ops = self.build_loop(&rs, *condition, *body, 0);
+                out.push(init_op);
+                out.extend(ops);
+                out
+            }
 
             _ => {
                 unimplemented!("{:?}", expr.node);
