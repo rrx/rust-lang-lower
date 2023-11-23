@@ -134,13 +134,16 @@ impl<'c> Lower<'c> {
         after_region.append_block(after_block);
 
         //let ty = Type::index(self.context);
+        let init_op = self.build_bool_op(true, condition_location);
+        let rs = init_op.results().map(|r| r.into()).collect::<Vec<Value>>();
         let op = scf::r#while(
-            &[r_condition.into()],
+            &rs,
             &after_args.iter().map(|x| x.0).collect::<Vec<Type<'_>>>(),
             before_region,
             after_region,
             body_location,
         );
+        ops.push(init_op);
         ops.push(op);
 
         //if depth == 0 {
