@@ -267,15 +267,8 @@ impl<'c> Lower<'c> {
             }
 
             Ast::Identifier(ident) => match ident.as_str() {
-                "True" => {
-                    let bool_type = melior::ir::r#type::IntegerType::new(self.context, 1);
-                    vec![arith::constant(
-                        self.context,
-                        attribute::IntegerAttribute::new(1, bool_type.into()).into(),
-                        location,
-                    )]
-                }
-                "False" => vec![],
+                "True" => vec![self.build_bool_op(true, location)],
+                "False" => vec![self.build_bool_op(false, location)],
                 _ => unimplemented!("Ident({:?})", ident),
             },
 
@@ -512,6 +505,33 @@ impl<'c> Lower<'c> {
                 out.push(init_op);
                 out.extend(ops);
                 out
+            }
+
+            Ast::Builtin(b) => {
+                match b {
+                    Builtin::Assert(arg) => {
+                        match *arg {
+                            Argument::Positional(expr) => {
+                                //let location = self.location(&expr);
+                                let mut out = vec![];
+                                println!("ops: {:?}", expr);
+                                let ops = self.lower_expr(*expr);
+                                println!("ops: {:?}", ops);
+                                let op = ops.last().unwrap();
+                                let r = op.result(0).unwrap().into();
+
+                                let msg = format!("assert at {}", location);
+                                let assert_op = cf::assert(self.context, r, &msg, location);
+                                out.extend(ops);
+                                out.push(assert_op);
+                                out
+                            }
+                        }
+                    }
+                    _ => {
+                        unimplemented!("{:?}", b);
+                    }
+                }
             }
 
             _ => {

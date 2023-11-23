@@ -9,5 +9,7 @@ def x1(y):
 
 def main():
     v = 1.2 + 0.1
+    check(True)
+    check(False)
     return 2+1 + x1(1)
 

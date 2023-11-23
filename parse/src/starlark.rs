@@ -235,10 +235,18 @@ impl Parser {
                 for arg in expr_args {
                     args.push(self.from_argument(arg, context, codemap, file_id)?);
                 }
-                let ast = Ast::Call(
-                    Box::new(self.from_expr(*expr, context, codemap, file_id)?),
-                    args,
-                );
+                let f = self.from_expr(*expr, context, codemap, file_id)?;
+                let ast = match &f.node {
+                    Ast::Identifier(name) => match name.as_str() {
+                        "check" => {
+                            assert!(args.len() == 1);
+                            let arg = args.pop().unwrap();
+                            Ast::Builtin(Builtin::Assert(Box::new(arg)))
+                        }
+                        _ => Ast::Call(Box::new(f), args),
+                    },
+                    _ => Ast::Call(Box::new(f), args),
+                };
                 Ok(AstNode { node: ast, extra })
             }
             ExprP::Identifier(ident) => {

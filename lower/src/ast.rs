@@ -45,6 +45,11 @@ pub struct Definition<E> {
 }
 
 #[derive(Debug)]
+pub enum Builtin<E> {
+    Assert(Box<Argument<E>>),
+}
+
+#[derive(Debug)]
 pub enum Ast<E> {
     BinaryOp(BinaryOperation, Box<AstNode<E>>, Box<AstNode<E>>),
     Call(Box<AstNode<E>>, Vec<Argument<E>>),
@@ -56,6 +61,7 @@ pub enum Ast<E> {
     Conditional(Box<AstNode<E>>, Box<AstNode<E>>, Option<Box<AstNode<E>>>),
     Return(Option<Box<AstNode<E>>>),
     Test(Box<AstNode<E>>, Box<AstNode<E>>),
+    Builtin(Builtin<E>),
 }
 
 impl<E: Extra> Ast<E> {
@@ -94,7 +100,12 @@ impl Extra for SimpleExtra {
         files: &SimpleFiles<String, String>,
     ) -> ir::Location<'c> {
         if let Ok(name) = files.name(self.span.file_id) {
-            ir::Location::new(context, &name, self.span.begin.line, self.span.begin.col)
+            ir::Location::new(
+                context,
+                &name,
+                self.span.begin.line + 1,
+                self.span.begin.col + 1,
+            )
         } else {
             ir::Location::unknown(context)
         }
