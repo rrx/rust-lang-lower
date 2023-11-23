@@ -88,27 +88,28 @@ impl<'c> Lower<'c> {
         let bool_type = melior::ir::r#type::IntegerType::new(self.context, 1).into();
         let index_type = Type::index(self.context);
         let condition_location = self.location(&condition);
-        let body_location = self.location(&condition);
+        let body_location = self.location(&body);
 
         let before_args = &[(bool_type, condition_location)];
         let after_args = &[(index_type, body_location)];
-
-        let mut ops = self.lower_expr(condition);
-        let r_condition = ops.last().unwrap().result(0).unwrap();
 
         let before_region = Region::new();
         let before_block = Block::new(before_args);
         let init_arg: Value = before_block.argument(0).unwrap().into();
 
+        let mut ops = self.lower_expr(condition);
+        let r_condition = ops.last().unwrap().result(0).unwrap();
+
         let op = self.build_int_op(2, body_location);
-        //let op = self.build_bool_op(true, condition_location);
-        let r: Value = op.result(0).unwrap().into();
+        let rs = op.results().map(|r| r.into()).collect::<Vec<Value>>();
 
         // check types
-        assert!(r.r#type() == after_args[0].0);
+        rs.iter().for_each(|r| {
+            assert!(r.r#type() == after_args[0].0);
+        });
 
         // condition passes result to region 1 if true, or terminates with result
-        let c = scf::condition(init_arg, &[r], condition_location);
+        let c = scf::condition(init_arg, &rs, condition_location);
         before_block.append_operation(op);
         before_block.append_operation(c);
         before_region.append_block(before_block);
@@ -118,13 +119,15 @@ impl<'c> Lower<'c> {
 
         //let op = self.build_int_op(10, body_location);
         let op = self.build_bool_op(false, condition_location);
-        let r: Value = op.result(0).unwrap().into();
+        let rs = op.results().map(|r| r.into()).collect::<Vec<Value>>();
 
         // check types
-        assert!(r.r#type() == before_args[0].0);
+        rs.iter().for_each(|r| {
+            assert!(r.r#type() == before_args[0].0);
+        });
 
         // yield passes result to region 0
-        let y = scf::r#yield(&[r], body_location);
+        let y = scf::r#yield(&rs, body_location);
         after_block.append_operation(op);
         after_block.append_operation(y);
 
@@ -132,8 +135,8 @@ impl<'c> Lower<'c> {
 
         //let ty = Type::index(self.context);
         let op = scf::r#while(
-            &[r_condition.into()], //b_true.result(0).unwrap().into()],
-            &[Type::index(self.context)],
+            &[r_condition.into()],
+            &after_args.iter().map(|x| x.0).collect::<Vec<Type<'_>>>(),
             before_region,
             after_region,
             body_location,
@@ -145,7 +148,7 @@ impl<'c> Lower<'c> {
         //} else {
         //}
         //let op = cf::cond_br(context
-        println!("op: {:?}", ops);
+        //println!("op: {:?}", ops);
         ops
     }
 
