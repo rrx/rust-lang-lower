@@ -5,12 +5,14 @@ use std::path::Path;
 
 use melior::{
     dialect::DialectRegistry,
-    ir, pass,
+    ir,
+    pass,
     utility::{register_all_dialects, register_all_llvm_translations},
-    Context, ExecutionEngine,
+    Context,
+    //ExecutionEngine,
 };
 
-use codespan_reporting::files::{Files, SimpleFiles};
+use codespan_reporting::files::SimpleFiles;
 use lower::ast::{AstNode, SimpleExtra};
 use lower::lower::Lower;
 use parse::starlark::Parser;

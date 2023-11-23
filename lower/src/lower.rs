@@ -71,48 +71,82 @@ impl<'c> Lower<'c> {
         )
     }
 
+    pub fn build_int_op(&self, value: i64, location: Location<'c>) -> Operation<'c> {
+        arith::constant(
+            self.context,
+            attribute::IntegerAttribute::new(value, Type::index(self.context)).into(),
+            location,
+        )
+    }
+
     pub fn build_loop<E: Extra>(
         &self,
         condition: AstNode<E>,
         body: AstNode<E>,
         depth: usize,
     ) -> Vec<Operation<'c>> {
+        let bool_type = melior::ir::r#type::IntegerType::new(self.context, 1).into();
+        let index_type = Type::index(self.context);
         let condition_location = self.location(&condition);
         let body_location = self.location(&condition);
-        let bool_type = melior::ir::r#type::IntegerType::new(self.context, 1);
-        let b_true = self.build_bool_op(true, condition_location);
-        let b_false = self.build_bool_op(true, condition_location);
+
+        let before_args = &[(bool_type, condition_location)];
+        let after_args = &[(index_type, body_location)];
+
+        let mut ops = self.lower_expr(condition);
+        let r_condition = ops.last().unwrap().result(0).unwrap();
 
         let before_region = Region::new();
-        let before_block = Block::new(&[(bool_type.into(), condition_location)]);
-        let before_block_arg: Value = before_block.argument(0).unwrap().into();
-        before_block.append_operation(scf::condition(before_block_arg, &[], condition_location));
+        let before_block = Block::new(before_args);
+        let init_arg: Value = before_block.argument(0).unwrap().into();
+
+        let op = self.build_int_op(2, body_location);
+        //let op = self.build_bool_op(true, condition_location);
+        let r: Value = op.result(0).unwrap().into();
+
+        // check types
+        assert!(r.r#type() == after_args[0].0);
+
+        // condition passes result to region 1 if true, or terminates with result
+        let c = scf::condition(init_arg, &[r], condition_location);
+        before_block.append_operation(op);
+        before_block.append_operation(c);
         before_region.append_block(before_block);
 
         let after_region = Region::new();
-        let after_block = Block::new(&[]);
-        after_block.append_operation(scf::r#yield(
-            &[b_false.result(0).unwrap().into()],
-            body_location,
-        ));
+        let after_block = Block::new(after_args);
+
+        //let op = self.build_int_op(10, body_location);
+        let op = self.build_bool_op(false, condition_location);
+        let r: Value = op.result(0).unwrap().into();
+
+        // check types
+        assert!(r.r#type() == before_args[0].0);
+
+        // yield passes result to region 0
+        let y = scf::r#yield(&[r], body_location);
+        after_block.append_operation(op);
+        after_block.append_operation(y);
+
         after_region.append_block(after_block);
 
-        let ty = Type::index(self.context);
-        let mut condition_ops = self.lower_expr(condition);
+        //let ty = Type::index(self.context);
         let op = scf::r#while(
-            &[b_true.result(0).unwrap().into()],
-            &[ty],
+            &[r_condition.into()], //b_true.result(0).unwrap().into()],
+            &[Type::index(self.context)],
             before_region,
             after_region,
             body_location,
         );
+        ops.push(op);
 
         //if depth == 0 {
         // function level, non-zero result means return immediately
         //} else {
         //}
         //let op = cf::cond_br(context
-        vec![op]
+        println!("op: {:?}", ops);
+        ops
     }
 
     pub fn location<E: Extra>(&self, expr: &AstNode<E>) -> Location<'c> {
@@ -264,6 +298,7 @@ impl<'c> Lower<'c> {
                         location,
                     )]
                 }
+
                 Literal::Int(x) => {
                     vec![arith::constant(
                         self.context,
@@ -271,6 +306,11 @@ impl<'c> Lower<'c> {
                         location,
                     )]
                 }
+
+                Literal::Bool(x) => {
+                    vec![self.build_bool_op(x, location)]
+                }
+
                 _ => {
                     println!("not implemented: {:?}", lit);
                     unimplemented!();
@@ -420,6 +460,8 @@ impl<'c> Lower<'c> {
                 out
             }
 
+            Ast::Test(condition, body) => self.build_loop(*condition, *body, 0),
+
             _ => {
                 unimplemented!("{:?}", expr.node);
             }
@@ -431,13 +473,71 @@ impl<'c> Lower<'c> {
 mod tests {
     use super::*;
     //use test_log::test;
+    use melior::{
+        dialect::DialectRegistry,
+        utility::{register_all_dialects, register_all_llvm_translations},
+        Context,
+    };
+
+    fn node<E: Extra>(file_id: usize, ast: Ast<E>) -> AstNode<E> {
+        let begin = CodeLocation { line: 0, col: 0 };
+        let end = CodeLocation { line: 0, col: 0 };
+        ast.node(file_id, begin, end)
+    }
+
+    fn gen_test(file_id: usize) -> AstNode<SimpleExtra> {
+        let begin = CodeLocation { line: 0, col: 0 };
+        let end = CodeLocation { line: 0, col: 0 };
+        Ast::Definition(Definition {
+            name: "test".into(),
+            params: vec![],
+            body: Box::new(node(
+                file_id,
+                Ast::Sequence(vec![
+                    node(
+                        file_id,
+                        Ast::Test(
+                            Box::new(node(file_id, Ast::Literal(Literal::Bool(true)))),
+                            Box::new(node(file_id, Ast::Literal(Literal::Int(1)))),
+                        ),
+                    ),
+                    node(
+                        file_id,
+                        Ast::Return(Some(Box::new(node(file_id, Ast::Literal(Literal::Int(1)))))),
+                    ),
+                ]),
+            )),
+        })
+        .node(file_id, begin, end)
+    }
 
     #[test]
     fn test_loop() {
-        //let context = Context::new();
-        //let ops = build_loop(context, condition, body, 0);
+        let context = Context::new();
+        context.set_allow_unregistered_dialects(true);
 
-        let result = 2 + 2;
-        assert_eq!(result, 4);
+        let registry = DialectRegistry::new();
+        register_all_dialects(&registry);
+        context.append_dialect_registry(&registry);
+        context.load_all_available_dialects();
+        register_all_llvm_translations(&context);
+
+        let location = Location::unknown(&context);
+
+        let mut files = FileDB::new();
+        let begin = CodeLocation { line: 0, col: 0 };
+        let end = CodeLocation { line: 0, col: 0 };
+        let file_id = files.add("test.py".into(), "test".into());
+        let ast = gen_test(file_id);
+        let lower = Lower::new(&context, &files);
+        let ops = lower.lower_expr(ast);
+        println!("{:?}", ops);
+        let module = ir::Module::new(Location::unknown(&context));
+        for op in ops {
+            module.body().append_operation(op);
+        }
+        let s = module.as_operation().to_string();
+        println!("{}", s);
+        assert!(module.as_operation().verify());
     }
 }

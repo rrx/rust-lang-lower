@@ -8,6 +8,7 @@ use codespan_reporting::files::{Files, SimpleFiles};
 pub enum Literal {
     Int(i64),
     Float(f64),
+    Bool(bool),
 }
 
 #[derive(Debug)]
@@ -54,9 +55,19 @@ pub enum Ast<E> {
     Assign(AssignTarget, Box<AstNode<E>>),
     Conditional(Box<AstNode<E>>, Box<AstNode<E>>, Option<Box<AstNode<E>>>),
     Return(Option<Box<AstNode<E>>>),
+    Test(Box<AstNode<E>>, Box<AstNode<E>>),
 }
 
-#[derive(Debug)]
+impl<E: Extra> Ast<E> {
+    pub fn node(self, file_id: usize, begin: CodeLocation, end: CodeLocation) -> AstNode<E> {
+        AstNode {
+            node: self,
+            extra: E::new(file_id, begin, end),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct CodeLocation {
     pub line: usize,
     pub col: usize,
