@@ -9,6 +9,7 @@ use melior::{
     },
     Context,
 };
+use std::convert::From;
 
 use crate::ast::*;
 use codespan_reporting::files::{Files, SimpleFiles};
@@ -50,6 +51,26 @@ use codespan_reporting::files::{Files, SimpleFiles};
  *
  */
 
+/*
+fn test(ops: Vec<ir::Operation<'_>>) -> (Vec<ir::operation::OperationResult<'_, '_>>, Vec<ir::Operation<'_>>) {
+    let op = ops.last().unwrap();
+    let r = op.results().collect::<Vec<_>>();
+    (r, ops)
+}
+*/
+
+fn op2r<'c>(op: &'c ir::Operation<'c>) -> Vec<Value<'c, '_>> {
+    op.results().map(|x| x.into()).collect::<Vec<_>>()
+}
+
+fn ops2r<'c>(ops: &'c Vec<ir::Operation<'c>>) -> Vec<Value<'c, '_>> {
+    ops.last()
+        .unwrap()
+        .results()
+        .map(|x| x.into())
+        .collect::<Vec<_>>()
+}
+
 pub type FileDB = SimpleFiles<String, String>;
 
 pub struct Lower<'a> {
@@ -69,6 +90,7 @@ impl<'c> Lower<'c> {
                 Literal::Float(_) => AstType::Float,
                 Literal::Bool(_) => AstType::Bool,
             },
+            Ast::Identifier(_) => AstType::Unknown,
 
             _ => unreachable!("{:?}", expr),
         }
@@ -79,6 +101,7 @@ impl<'c> Lower<'c> {
             AstType::Int => Type::index(self.context),
             AstType::Float => Type::float64(self.context),
             AstType::Bool => melior::ir::r#type::IntegerType::new(self.context, 1).into(),
+            AstType::Unknown => unreachable!(),
         }
     }
 
@@ -99,37 +122,52 @@ impl<'c> Lower<'c> {
         )
     }
 
+    pub fn build_float_op(&self, value: f64, location: Location<'c>) -> Operation<'c> {
+        arith::constant(
+            self.context,
+            attribute::FloatAttribute::new(self.context, value, Type::float64(self.context)).into(),
+            location,
+        )
+    }
+
     pub fn build_loop<E: Extra>(
         &self,
         init_args: &[Value<'c, '_>],
         condition: AstNode<E>,
         body: AstNode<E>,
         depth: usize,
-    ) -> Vec<Operation<'c>> {
+    ) -> (Vec<Value<'c, '_>>, Vec<Operation<'c>>) {
         let bool_type = melior::ir::r#type::IntegerType::new(self.context, 1).into();
-        let float_type = Type::float64(self.context);
         let index_type = Type::index(self.context);
         let condition_location = self.location(&condition);
         let body_location = self.location(&body);
 
         //let init_args = &[(float_type, condition_location)];
         //let before_args = &[];//(bool_type, condition_location)];
+        // before
         let before_args = init_args
             .iter()
             .map(|a| (a.r#type(), condition_location))
             .collect::<Vec<_>>();
-        let after_args = &[(index_type, body_location)];
 
         let before_region = Region::new();
         let before_block = Block::new(&before_args);
-        //let init_args = before_block.argument(0).unwrap().into();
+
+        // bool
+        let a: Value<'c, '_> = before_block.argument(0).unwrap().into();
+
+        //index
+        let b: Value<'c, '_> = before_block.argument(1).unwrap().into();
 
         let mut out = vec![];
-        let condition_ops = self.lower_expr(condition);
+        let (_, condition_ops) = self.lower_expr(condition);
         //let r_condition = ops.last().unwrap().result(0).unwrap();
         //let op = self.build_int_op(2, body_location);
-        let condition_op = condition_ops.last().unwrap();
-        let condition_rs = condition_op
+        //let condition_op = condition_ops.last().unwrap();
+        //
+        let condition_rs = condition_ops
+            .last()
+            .unwrap()
             .results()
             .map(|r| r.into())
             .collect::<Vec<Value>>();
@@ -138,43 +176,54 @@ impl<'c> Lower<'c> {
         assert!(condition_rs[0].r#type() == bool_type);
 
         // to pass to after
-        let op = self.build_int_op(2, body_location);
-        let rs = op.results().map(|r| r.into()).collect::<Vec<Value>>();
+        //let op = self.build_int_op(2, body_location);
+        //let rs = op.results().map(|r| r.into()).collect::<Vec<Value>>();
         // check types
-        rs.iter().for_each(|r| {
-            assert!(r.r#type() == after_args[0].0);
-        });
+        //rs.iter().for_each(|r| {
+        //assert!(r.r#type() == after_args[0].0);
+        //});
 
         // condition passes result to region 1 if true, or terminates with result
         let c = scf::condition(
-            //init_arg,
             condition_rs[0].into(),
-            &rs,
+            //&rs,
+            &[b],
             condition_location,
         );
-        before_block.append_operation(op);
+        //before_block.append_operation(op);
         for op in condition_ops {
             before_block.append_operation(op);
         }
         before_block.append_operation(c);
         before_region.append_block(before_block);
 
+        // after
+        let after_args = &[(index_type, body_location)];
         let after_region = Region::new();
         let after_block = Block::new(after_args);
 
         //let op = self.build_int_op(10, body_location);
-        let body_ops = self.lower_expr(body);
+        let (_, body_ops) = self.lower_expr(body);
         println!("ops: {:?}", body_ops);
 
         let op = self.build_bool_op(false, condition_location);
         //let op = ops.last().unwrap();
-        let rs = op.results().map(|r| r.into()).collect::<Vec<Value>>();
+        //let rs = op2r(&op);//op.results().map(|r| r.into()).collect::<Vec<Value>>();
+        let mut rs = op.results().map(|r| r.into()).collect::<Vec<Value>>();
+        //let op2 = self.build_int_op(0, condition_location);
+        let rs2 = body_ops
+            .last()
+            .unwrap()
+            .results()
+            .map(|r| r.into())
+            .collect::<Vec<Value>>();
+        rs.extend(rs2);
 
         // check types
         rs.iter().for_each(|r| {
             println!("type: {:?}", r.r#type());
             println!("type: {:?}", before_args[0].0);
-            assert!(r.r#type() == before_args[0].0);
+            //assert!(r.r#type() == before_args[0].0);
         });
         //let rs = [];
 
@@ -183,6 +232,7 @@ impl<'c> Lower<'c> {
         // yield passes result to region 0
         let y = scf::r#yield(&rs, body_location);
         after_block.append_operation(op);
+        //after_block.append_operation(op2);
         for op in body_ops {
             after_block.append_operation(op);
         }
@@ -201,7 +251,11 @@ impl<'c> Lower<'c> {
             body_location,
         );
         //out.push(init_op);
+        //let r: Value<'c, '_> = op.result(0).unwrap().into();
+        //let r: Vec<Value<'c, '_>> = op.results().map(|x| x.into()).collect::<Vec<_>>();
         out.push(op);
+        //let r = ops2r(&out);
+        //let r = out.last().unwrap().results().map(|x| x.into()).collect::<Vec<_>>();
 
         //if depth == 0 {
         // function level, non-zero result means return immediately
@@ -209,26 +263,35 @@ impl<'c> Lower<'c> {
         //}
         //let op = cf::cond_br(context
         //println!("op: {:?}", ops);
-        out
+        (vec![], out) //vec![op])
     }
 
     pub fn location<E: Extra>(&self, expr: &AstNode<E>) -> Location<'c> {
         expr.extra.location(self.context, self.files)
     }
 
-    pub fn lower_expr<E: Extra>(&self, expr: AstNode<E>) -> Vec<Operation<'c>> {
+    pub fn lower_expr<E: Extra>(
+        &self,
+        expr: AstNode<E>,
+    ) -> (Vec<Value<'c, '_>>, Vec<Operation<'c>>) {
         let index_type = Type::index(self.context);
         let location = self.location(&expr);
 
         match expr.node {
             Ast::BinaryOp(op, a, b) => {
-                let mut lhs_ops = self.lower_expr(*a);
-                let mut rhs_ops = self.lower_expr(*b);
+                let (_, mut lhs_ops) = self.lower_expr(*a);
+                let (_, mut rhs_ops) = self.lower_expr(*b);
                 let r_lhs = lhs_ops.last().unwrap().result(0).unwrap();
                 let r_rhs = rhs_ops.last().unwrap().result(0).unwrap();
 
                 // types must be the same for binary operation, no implicit casting yet
-                assert!(r_lhs.r#type() == r_rhs.r#type());
+                //assert!(r_lhs.len() == r_rhs.len());
+                //std::iter::zip(r_lhs, r_rhs).for_each(|(a, b)| {
+                //assert!(a.r#type() == b.r#type());
+                //});
+
+                //let r_lhs = r_lhs.pop().unwrap();
+                //let r_rhs = r_rhs.pop().unwrap();//[0];
 
                 let ty = r_lhs.r#type();
                 let float_type = Type::float64(self.context);
@@ -283,14 +346,20 @@ impl<'c> Lower<'c> {
                 out.append(&mut lhs_ops);
                 out.append(&mut rhs_ops);
                 out.push(binop);
-                out
+                //let r = out.last().unwrap().result(0).unwrap().into();
+                //let r = binop.results().map(|x| x.into()).collect::<Vec<_>>();
+                (vec![], out)
             }
 
-            Ast::Identifier(ident) => match ident.as_str() {
-                "True" => vec![self.build_bool_op(true, location)],
-                "False" => vec![self.build_bool_op(false, location)],
-                _ => unimplemented!("Ident({:?})", ident),
-            },
+            Ast::Identifier(ident) => {
+                let op = match ident.as_str() {
+                    "True" => self.build_bool_op(true, location),
+                    "False" => self.build_bool_op(false, location),
+                    _ => unimplemented!("Ident({:?})", ident),
+                };
+                //(op2r(&op), vec![op])
+                (vec![], vec![op])
+            }
 
             Ast::Call(expr, args) => {
                 // function to call
@@ -311,7 +380,7 @@ impl<'c> Lower<'c> {
                     match a {
                         Argument::Positional(arg) => {
                             println!("arg: {:?}", arg.node);
-                            let mut arg_ops = self.lower_expr(*arg);
+                            let (_, mut arg_ops) = self.lower_expr(*arg);
                             ops.append(&mut arg_ops);
                             call_index.push(ops.len() - 1);
                         }
@@ -340,31 +409,31 @@ impl<'c> Lower<'c> {
                     &[index_type],
                     location,
                 );
-                ops.push(op);
+                //(ops2r(&ops), ops)
+                (vec![], ops)
+                //let r = op2r(&op);
+                //ops.push(op);
                 //println!("ops: {:?}", ops);
-                ops
+                //(r, ops)
             }
 
             Ast::Literal(lit) => match lit {
                 Literal::Float(f) => {
-                    let float_type = Type::float64(self.context);
-                    vec![arith::constant(
-                        self.context,
-                        attribute::FloatAttribute::new(self.context, f, float_type).into(),
-                        location,
-                    )]
+                    let op = self.build_float_op(f, location);
+                    //(op2r(&op), vec![op])
+                    (vec![], vec![op])
                 }
 
                 Literal::Int(x) => {
-                    vec![arith::constant(
-                        self.context,
-                        attribute::IntegerAttribute::new(x, index_type).into(),
-                        location,
-                    )]
+                    let op = self.build_int_op(x, location);
+                    (vec![], vec![op])
+                    //(op2r(&op), vec![op])
                 }
 
                 Literal::Bool(x) => {
-                    vec![self.build_bool_op(x, location)]
+                    let op = self.build_bool_op(x, location);
+                    (vec![], vec![op])
+                    //(op2r(&op), vec![op])
                 }
 
                 _ => {
@@ -374,11 +443,16 @@ impl<'c> Lower<'c> {
             },
 
             Ast::Sequence(exprs) => {
-                let mut out = vec![];
-                for s in exprs {
-                    out.extend(self.lower_expr(s));
-                }
-                out
+                let out = exprs
+                    .into_iter()
+                    .map(|expr| {
+                        let (_, ops) = self.lower_expr(expr);
+                        ops
+                    })
+                    .flatten()
+                    .collect::<Vec<_>>();
+                (vec![], out)
+                //(ops2r(&out), out)
             }
 
             Ast::Definition(def) => {
@@ -402,7 +476,7 @@ impl<'c> Lower<'c> {
 
                 let region = Region::new();
                 if let Some(body) = def.body {
-                    let ops = self.lower_expr(*body);
+                    let (_, ops) = self.lower_expr(*body);
                     let index_type = Type::index(self.context);
                     let location = expr.extra.location(self.context, self.files);
 
@@ -410,7 +484,6 @@ impl<'c> Lower<'c> {
                     for op in ops {
                         block.append_operation(op);
                     }
-
                     region.append_block(block);
                 }
 
@@ -429,27 +502,32 @@ impl<'c> Lower<'c> {
                     )],
                     location,
                 );
-                vec![f]
+                //(op2r(&f), vec![f])
+                (vec![], vec![f])
             }
 
             Ast::Return(maybe_expr) => match maybe_expr {
                 Some(expr) => {
-                    let mut ops = self.lower_expr(*expr);
+                    let (_, mut ops) = self.lower_expr(*expr);
+                    //let r = ops2r(&ops);
                     let results: Vec<Value> =
                         ops.last().unwrap().results().map(|r| r.into()).collect();
                     let ret_op = func::r#return(results.as_slice(), location);
                     ops.push(ret_op);
-                    ops
+                    //(ops2r(&ops), ops)
+                    (vec![], ops)
                 }
                 None => {
-                    vec![func::r#return(&[], location)]
+                    let op = func::r#return(&[], location);
+                    //(op2r(&op), vec![op])
+                    (vec![], vec![op])
                 }
             },
 
             Ast::Conditional(condition, true_expr, maybe_false_expr) => {
-                let mut condition_ops = self.lower_expr(*condition);
+                let (_, mut condition_ops) = self.lower_expr(*condition);
                 let r_condition = condition_ops.last().unwrap().result(0).unwrap().into();
-                let true_ops = self.lower_expr(*true_expr);
+                let (_, true_ops) = self.lower_expr(*true_expr);
 
                 let true_block = Block::new(&[]);
                 for op in true_ops {
@@ -460,7 +538,7 @@ impl<'c> Lower<'c> {
                 let mut out = vec![];
                 match maybe_false_expr {
                     Some(false_expr) => {
-                        let false_ops = self.lower_expr(*false_expr);
+                        let (_, false_ops) = self.lower_expr(*false_expr);
                         let false_block = Block::new(&[]);
                         for op in false_ops {
                             false_block.append_operation(op);
@@ -474,7 +552,8 @@ impl<'c> Lower<'c> {
 
                         out.append(&mut condition_ops);
                         out.push(op);
-                        out
+                        //(ops2r(&out), out)
+                        (vec![], out)
                     }
                     None => {
                         let then_region = Region::new();
@@ -484,7 +563,8 @@ impl<'c> Lower<'c> {
 
                         out.append(&mut condition_ops);
                         out.push(op);
-                        out
+                        //(ops2r(&out), out)
+                        (vec![], out)
                     }
                 }
             }
@@ -510,47 +590,46 @@ impl<'c> Lower<'c> {
                         out.push(op1);
                         out.push(op);
                     }
-                    _ => {
-                        unimplemented!("{:?}", target);
-                    }
+                    _ => unimplemented!("{:?}", target),
                 }
 
-                out.extend(self.lower_expr(*rhs));
-                out
+                let (r, ops) = self.lower_expr(*rhs);
+                out.extend(ops);
+                (r, out)
             }
 
             Ast::Test(condition, body) => {
                 let mut out = vec![];
                 let condition_location = self.location(&condition);
                 let init_op = self.build_bool_op(true, condition_location);
-                let rs = init_op.results().map(|r| r.into()).collect::<Vec<Value>>();
-                let ops = self.build_loop(&rs, *condition, *body, 0);
+                let mut rs = init_op.results().map(|r| r.into()).collect::<Vec<Value>>();
+                let init_op2 = self.build_int_op(10, condition_location);
+                let mut rs2 = init_op2.results().map(|r| r.into()).collect::<Vec<Value>>();
+                rs.extend(rs2);
+                let (r, ops) = self.build_loop(&rs, *condition, *body, 0);
                 out.push(init_op);
+                out.push(init_op2);
                 out.extend(ops);
-                out
+                (r, out)
             }
 
             Ast::Builtin(b) => {
                 match b {
-                    Builtin::Assert(arg) => {
-                        match *arg {
-                            Argument::Positional(expr) => {
-                                //let location = self.location(&expr);
-                                let mut out = vec![];
-                                println!("ops: {:?}", expr);
-                                let ops = self.lower_expr(*expr);
-                                println!("ops: {:?}", ops);
-                                let op = ops.last().unwrap();
-                                let r = op.result(0).unwrap().into();
-
-                                let msg = format!("assert at {}", location);
-                                let assert_op = cf::assert(self.context, r, &msg, location);
-                                out.extend(ops);
-                                out.push(assert_op);
-                                out
-                            }
+                    Builtin::Assert(arg) => match *arg {
+                        Argument::Positional(expr) => {
+                            let mut out = vec![];
+                            let (_, ops) = self.lower_expr(*expr);
+                            let op = ops.last().unwrap();
+                            let r = op.result(0).unwrap().into();
+                            let msg = format!("assert at {}", location);
+                            let assert_op = cf::assert(self.context, r, &msg, location);
+                            out.extend(ops);
+                            out.push(assert_op);
+                            let r = ops2r(&out);
+                            //(r, out)
+                            (vec![], out)
                         }
-                    }
+                    },
                     Builtin::Print(arg) => match *arg {
                         Argument::Positional(expr) => {
                             println!("x: {:?}", expr);
@@ -558,9 +637,8 @@ impl<'c> Lower<'c> {
                             let ast_ty = self.type_from_expr(&expr);
 
                             // eval expr
-                            let mut ops = self.lower_expr(*expr);
+                            let (_, mut ops) = self.lower_expr(*expr);
                             let r = ops.last().unwrap().result(0).unwrap();
-                            //let ty = r.r#type();
 
                             let ident = match &ast_ty {
                                 AstType::Int => "print_index",
@@ -568,28 +646,20 @@ impl<'c> Lower<'c> {
                                 _ => unimplemented!(),
                             };
 
-                            //let ty = self.from_type(ast_ty);
-                            //println!("ty: {:?}", ty);
-
-                            //println!("ident: {:?}", ident);
-
                             let f = attribute::FlatSymbolRefAttribute::new(self.context, ident);
                             let op =
                                 func::call(self.context, f, &[r.into()], &[index_type], location);
 
                             ops.push(op);
-                            ops
+                            let r = ops2r(&ops);
+                            //(r, ops)
+                            (vec![], ops)
                         }
                     },
-                    _ => {
-                        unimplemented!("{:?}", b);
-                    }
+                    _ => unimplemented!("{:?}", b),
                 }
             }
-
-            _ => {
-                unimplemented!("{:?}", expr.node);
-            }
+            _ => unimplemented!("{:?}", expr.node),
         }
     }
 }
@@ -652,9 +722,51 @@ mod tests {
                     Ast::Sequence(vec![
                         node(
                             file_id,
+                            Ast::Assign(
+                                AssignTarget::Identifier("x".to_string()),
+                                Box::new(node(file_id, Ast::Literal(Literal::Int(123)))),
+                            ),
+                        ),
+                        node(
+                            file_id,
                             Ast::Test(
                                 Box::new(node(file_id, Ast::Literal(Literal::Bool(true)))),
-                                Box::new(node(file_id, Ast::Literal(Literal::Int(2)))),
+                                Box::new(node(
+                                    file_id,
+                                    Ast::Sequence(vec![
+                                        node(
+                                            file_id,
+                                            Ast::BinaryOp(
+                                                BinaryOperation::Subtract,
+                                                node(file_id, Ast::Literal(Literal::Int(2))).into(),
+                                                node(file_id, Ast::Literal(Literal::Int(1))).into(),
+                                            ),
+                                        ),
+                                        node(
+                                            file_id,
+                                            Ast::Builtin(Builtin::Print(
+                                                Argument::Positional(
+                                                    node(file_id, Ast::Literal(Literal::Int(1)))
+                                                        .into(), //node(file_id, Ast::Identifier("x".to_string())).into()
+                                                )
+                                                .into(),
+                                            )),
+                                        ),
+                                        /*
+                                        node(
+                                            file_id,
+                                            Ast::BinaryOp(
+                                                BinaryOperation::Subtract,
+                                                node(file_id, Ast::Identifier("x".to_string()))
+                                                    .into(),
+                                                node(file_id, Ast::Literal(Literal::Int(1))).into(),
+                                            ),
+                                        ),
+                                        */
+                                        //node(file_id, Ast::Identifier("x".to_string())),
+                                        node(file_id, Ast::Literal(Literal::Int(1))),
+                                    ]),
+                                )),
                             ),
                         ),
                         node(
@@ -691,7 +803,7 @@ mod tests {
         let file_id = files.add("test.py".into(), "test".into());
         let ast = gen_test(file_id);
         let lower = Lower::new(&context, &files);
-        let ops = lower.lower_expr(ast);
+        let (_, ops) = lower.lower_expr(ast);
         println!("{:?}", ops);
         let module = ir::Module::new(Location::unknown(&context));
         for op in ops {

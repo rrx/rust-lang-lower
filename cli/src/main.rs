@@ -70,7 +70,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let ast: AstNode<SimpleExtra> = result?;
 
     let lower = Lower::new(&context, &files);
-    let ops = lower.lower_expr(ast);
+    let (_, ops) = lower.lower_expr(ast);
     for op in ops {
         module.body().append_operation(op);
     }

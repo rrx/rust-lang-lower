@@ -9,6 +9,7 @@ pub enum AstType {
     Int,
     Float,
     Bool,
+    Unknown,
 }
 
 #[derive(Debug)]
