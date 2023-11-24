@@ -532,18 +532,12 @@ impl<'c> Lower<'c> {
                     }
                     Builtin::Print(arg) => match *arg {
                         Argument::Positional(expr) => {
-                            let mut out = vec![];
-                            println!("ops: {:?}", expr);
-                            let ops = self.lower_expr(*expr);
-                            println!("ops: {:?}", ops);
-                            let op = ops.last().unwrap();
-                            let r = op.result(0).unwrap().into();
-
-                            let msg = format!("assert at {}", location);
-                            let assert_op = cf::assert(self.context, r, &msg, location);
-                            out.extend(ops);
-                            out.push(assert_op);
-                            out
+                            let file_id = 0;
+                            let ident_node =
+                                node(file_id, Ast::Identifier("print_index".to_string()));
+                            let arg = Argument::Positional(expr);
+                            let node = node(file_id, Ast::Call(Box::new(ident_node), vec![arg]));
+                            self.lower_expr(node)
                         }
                     },
                     _ => {
