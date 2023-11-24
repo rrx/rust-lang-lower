@@ -3,16 +3,18 @@ use melior::{
     ir,
     ir::{
         attribute::{StringAttribute, TypeAttribute},
-        operation::OperationBuilder,
+        //operation::OperationBuilder,
         r#type::{FunctionType, MemRefType},
         *,
     },
     Context,
 };
-use std::convert::From;
+//use std::convert::From;
 
 use crate::ast::*;
-use codespan_reporting::files::{Files, SimpleFiles};
+use codespan_reporting::files::SimpleFiles;
+
+pub type Environment = crate::env::EnvLayers<String, usize>;
 
 /*
  * Environment
@@ -135,7 +137,8 @@ impl<'c> Lower<'c> {
         init_args: &[Value<'c, '_>],
         condition: AstNode<E>,
         body: AstNode<E>,
-        depth: usize,
+        env: Environment,
+        //depth: usize,
     ) -> (Vec<Value<'c, '_>>, Vec<Operation<'c>>) {
         let bool_type = melior::ir::r#type::IntegerType::new(self.context, 1).into();
         let index_type = Type::index(self.context);
@@ -154,13 +157,13 @@ impl<'c> Lower<'c> {
         let before_block = Block::new(&before_args);
 
         // bool
-        let a: Value<'c, '_> = before_block.argument(0).unwrap().into();
+        let _a: Value<'c, '_> = before_block.argument(0).unwrap().into();
 
         //index
         let b: Value<'c, '_> = before_block.argument(1).unwrap().into();
 
         let mut out = vec![];
-        let (_, condition_ops) = self.lower_expr(condition);
+        let (_, condition_ops) = self.lower_expr(condition, env.clone());
         //let r_condition = ops.last().unwrap().result(0).unwrap();
         //let op = self.build_int_op(2, body_location);
         //let condition_op = condition_ops.last().unwrap();
@@ -203,7 +206,7 @@ impl<'c> Lower<'c> {
         let after_block = Block::new(after_args);
 
         //let op = self.build_int_op(10, body_location);
-        let (_, body_ops) = self.lower_expr(body);
+        let (_, body_ops) = self.lower_expr(body, env);
         println!("ops: {:?}", body_ops);
 
         let op = self.build_bool_op(false, condition_location);
@@ -273,14 +276,15 @@ impl<'c> Lower<'c> {
     pub fn lower_expr<E: Extra>(
         &self,
         expr: AstNode<E>,
+        env: Environment,
     ) -> (Vec<Value<'c, '_>>, Vec<Operation<'c>>) {
         let index_type = Type::index(self.context);
         let location = self.location(&expr);
 
         match expr.node {
             Ast::BinaryOp(op, a, b) => {
-                let (_, mut lhs_ops) = self.lower_expr(*a);
-                let (_, mut rhs_ops) = self.lower_expr(*b);
+                let (_, mut lhs_ops) = self.lower_expr(*a, env.clone());
+                let (_, mut rhs_ops) = self.lower_expr(*b, env);
                 let r_lhs = lhs_ops.last().unwrap().result(0).unwrap();
                 let r_rhs = rhs_ops.last().unwrap().result(0).unwrap();
 
@@ -337,11 +341,7 @@ impl<'c> Lower<'c> {
                         } else {
                             unimplemented!()
                         }
-                    }
-                    _ => {
-                        println!("not implemented: {:?}", op);
-                        unimplemented!();
-                    }
+                    } //_ => unimplemented!("{:?}", op)
                 };
                 out.append(&mut lhs_ops);
                 out.append(&mut rhs_ops);
@@ -380,14 +380,10 @@ impl<'c> Lower<'c> {
                     match a {
                         Argument::Positional(arg) => {
                             println!("arg: {:?}", arg.node);
-                            let (_, mut arg_ops) = self.lower_expr(*arg);
+                            let (_, mut arg_ops) = self.lower_expr(*arg, env.clone());
                             ops.append(&mut arg_ops);
                             call_index.push(ops.len() - 1);
-                        }
-                        _ => {
-                            println!("not implemented: {:?}", a);
-                            unimplemented!();
-                        }
+                        } //_ => unimplemented!("{:?}", a)
                     };
                 }
 
@@ -410,9 +406,9 @@ impl<'c> Lower<'c> {
                     location,
                 );
                 //(ops2r(&ops), ops)
+                ops.push(op);
                 (vec![], ops)
                 //let r = op2r(&op);
-                //ops.push(op);
                 //println!("ops: {:?}", ops);
                 //(r, ops)
             }
@@ -434,19 +430,14 @@ impl<'c> Lower<'c> {
                     let op = self.build_bool_op(x, location);
                     (vec![], vec![op])
                     //(op2r(&op), vec![op])
-                }
-
-                _ => {
-                    println!("not implemented: {:?}", lit);
-                    unimplemented!();
-                }
+                } //_ => unimplemented!("{:?}", lit)
             },
 
             Ast::Sequence(exprs) => {
                 let out = exprs
                     .into_iter()
                     .map(|expr| {
-                        let (_, ops) = self.lower_expr(expr);
+                        let (_, ops) = self.lower_expr(expr, env.clone());
                         ops
                     })
                     .flatten()
@@ -476,9 +467,9 @@ impl<'c> Lower<'c> {
 
                 let region = Region::new();
                 if let Some(body) = def.body {
-                    let (_, ops) = self.lower_expr(*body);
-                    let index_type = Type::index(self.context);
-                    let location = expr.extra.location(self.context, self.files);
+                    let (_, ops) = self.lower_expr(*body, env);
+                    //let index_type = Type::index(self.context);
+                    //let location = expr.extra.location(self.context, self.files);
 
                     let block = Block::new(params.as_slice());
                     for op in ops {
@@ -508,7 +499,7 @@ impl<'c> Lower<'c> {
 
             Ast::Return(maybe_expr) => match maybe_expr {
                 Some(expr) => {
-                    let (_, mut ops) = self.lower_expr(*expr);
+                    let (_, mut ops) = self.lower_expr(*expr, env);
                     //let r = ops2r(&ops);
                     let results: Vec<Value> =
                         ops.last().unwrap().results().map(|r| r.into()).collect();
@@ -525,9 +516,9 @@ impl<'c> Lower<'c> {
             },
 
             Ast::Conditional(condition, true_expr, maybe_false_expr) => {
-                let (_, mut condition_ops) = self.lower_expr(*condition);
+                let (_, mut condition_ops) = self.lower_expr(*condition, env.clone());
                 let r_condition = condition_ops.last().unwrap().result(0).unwrap().into();
-                let (_, true_ops) = self.lower_expr(*true_expr);
+                let (_, true_ops) = self.lower_expr(*true_expr, env.clone());
 
                 let true_block = Block::new(&[]);
                 for op in true_ops {
@@ -538,7 +529,7 @@ impl<'c> Lower<'c> {
                 let mut out = vec![];
                 match maybe_false_expr {
                     Some(false_expr) => {
-                        let (_, false_ops) = self.lower_expr(*false_expr);
+                        let (_, false_ops) = self.lower_expr(*false_expr, env);
                         let false_block = Block::new(&[]);
                         for op in false_ops {
                             false_block.append_operation(op);
@@ -589,11 +580,10 @@ impl<'c> Lower<'c> {
                         out.push(c);
                         out.push(op1);
                         out.push(op);
-                    }
-                    _ => unimplemented!("{:?}", target),
+                    } //_ => unimplemented!("{:?}", target),
                 }
 
-                let (r, ops) = self.lower_expr(*rhs);
+                let (r, ops) = self.lower_expr(*rhs, env);
                 out.extend(ops);
                 (r, out)
             }
@@ -604,9 +594,9 @@ impl<'c> Lower<'c> {
                 let init_op = self.build_bool_op(true, condition_location);
                 let mut rs = init_op.results().map(|r| r.into()).collect::<Vec<Value>>();
                 let init_op2 = self.build_int_op(10, condition_location);
-                let mut rs2 = init_op2.results().map(|r| r.into()).collect::<Vec<Value>>();
+                let rs2 = init_op2.results().map(|r| r.into()).collect::<Vec<Value>>();
                 rs.extend(rs2);
-                let (r, ops) = self.build_loop(&rs, *condition, *body, 0);
+                let (r, ops) = self.build_loop(&rs, *condition, *body, env);
                 out.push(init_op);
                 out.push(init_op2);
                 out.extend(ops);
@@ -618,14 +608,14 @@ impl<'c> Lower<'c> {
                     Builtin::Assert(arg) => match *arg {
                         Argument::Positional(expr) => {
                             let mut out = vec![];
-                            let (_, ops) = self.lower_expr(*expr);
+                            let (_, ops) = self.lower_expr(*expr, env);
                             let op = ops.last().unwrap();
                             let r = op.result(0).unwrap().into();
                             let msg = format!("assert at {}", location);
                             let assert_op = cf::assert(self.context, r, &msg, location);
                             out.extend(ops);
                             out.push(assert_op);
-                            let r = ops2r(&out);
+                            //let r = ops2r(&out);
                             //(r, out)
                             (vec![], out)
                         }
@@ -637,7 +627,7 @@ impl<'c> Lower<'c> {
                             let ast_ty = self.type_from_expr(&expr);
 
                             // eval expr
-                            let (_, mut ops) = self.lower_expr(*expr);
+                            let (_, mut ops) = self.lower_expr(*expr, env);
                             let r = ops.last().unwrap().result(0).unwrap();
 
                             let ident = match &ast_ty {
@@ -651,15 +641,14 @@ impl<'c> Lower<'c> {
                                 func::call(self.context, f, &[r.into()], &[index_type], location);
 
                             ops.push(op);
-                            let r = ops2r(&ops);
+                            //let r = ops2r(&ops);
                             //(r, ops)
                             (vec![], ops)
                         }
                     },
-                    _ => unimplemented!("{:?}", b),
+                    //_ => unimplemented!("{:?}", b),
                 }
-            }
-            _ => unimplemented!("{:?}", expr.node),
+            } //_ => unimplemented!("{:?}", expr.node),
         }
     }
 }
@@ -803,7 +792,8 @@ mod tests {
         let file_id = files.add("test.py".into(), "test".into());
         let ast = gen_test(file_id);
         let lower = Lower::new(&context, &files);
-        let (_, ops) = lower.lower_expr(ast);
+        let env = Environment::default();
+        let (_, ops) = lower.lower_expr(ast, env);
         println!("{:?}", ops);
         let module = ir::Module::new(Location::unknown(&context));
         for op in ops {
