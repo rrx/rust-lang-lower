@@ -125,8 +125,10 @@ impl Parser {
         let m = syntax::AstModule::parse_file(&path, &dialect)?;
         let (codemap, stmt, _dialect, _typecheck) = m.into_parts();
         println!("m: {:?}", &stmt);
+        let mut seq = lower::lower::prelude(file_id);
         let ast: AstNode<E> = self.from_stmt(stmt, context, &codemap, file_id)?;
-        Ok(ast)
+        seq.push(ast);
+        Ok(lower::lower::node(file_id, Ast::Sequence(seq)))
     }
 
     pub fn from_stmt<E: Extra, P: syntax::ast::AstPayload>(
@@ -158,7 +160,9 @@ impl Parser {
                     .collect();
                 let d = Definition {
                     name: def.name.ident.clone(),
-                    body: Box::new(self.from_stmt(*def.body, context, codemap, file_id)?),
+                    body: Some(Box::new(
+                        self.from_stmt(*def.body, context, codemap, file_id)?,
+                    )),
                     params,
                 };
                 let ast = Ast::Definition(d);
@@ -242,6 +246,11 @@ impl Parser {
                             assert!(args.len() == 1);
                             let arg = args.pop().unwrap();
                             Ast::Builtin(Builtin::Assert(Box::new(arg)))
+                        }
+                        "print" => {
+                            assert!(args.len() == 1);
+                            let arg = args.pop().unwrap();
+                            Ast::Builtin(Builtin::Print(Box::new(arg)))
                         }
                         _ => Ast::Call(Box::new(f), args),
                     },

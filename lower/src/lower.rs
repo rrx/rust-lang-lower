@@ -379,17 +379,19 @@ impl<'c> Lower<'c> {
                     }
                 }
 
-                let ops = self.lower_expr(*def.body);
-                let index_type = Type::index(self.context);
-                let location = expr.extra.location(self.context, self.files);
-
-                let block = Block::new(params.as_slice());
-                for op in ops {
-                    block.append_operation(op);
-                }
-
                 let region = Region::new();
-                region.append_block(block);
+                if let Some(body) = def.body {
+                    let ops = self.lower_expr(*body);
+                    let index_type = Type::index(self.context);
+                    let location = expr.extra.location(self.context, self.files);
+
+                    let block = Block::new(params.as_slice());
+                    for op in ops {
+                        block.append_operation(op);
+                    }
+
+                    region.append_block(block);
+                }
 
                 let types = params.iter().map(|x| x.0).collect::<Vec<Type>>();
                 let ret_type = vec![index_type];
@@ -528,6 +530,22 @@ impl<'c> Lower<'c> {
                             }
                         }
                     }
+                    Builtin::Print(arg) => match *arg {
+                        Argument::Positional(expr) => {
+                            let mut out = vec![];
+                            println!("ops: {:?}", expr);
+                            let ops = self.lower_expr(*expr);
+                            println!("ops: {:?}", ops);
+                            let op = ops.last().unwrap();
+                            let r = op.result(0).unwrap().into();
+
+                            let msg = format!("assert at {}", location);
+                            let assert_op = cf::assert(self.context, r, &msg, location);
+                            out.extend(ops);
+                            out.push(assert_op);
+                            out
+                        }
+                    },
                     _ => {
                         unimplemented!("{:?}", b);
                     }
@@ -541,6 +559,42 @@ impl<'c> Lower<'c> {
     }
 }
 
+pub fn node<E: Extra>(file_id: usize, ast: Ast<E>) -> AstNode<E> {
+    let begin = CodeLocation { line: 0, col: 0 };
+    let end = CodeLocation { line: 0, col: 0 };
+    ast.node(file_id, begin, end)
+}
+
+pub fn prelude<E: Extra>(file_id: usize) -> Vec<AstNode<E>> {
+    let ident = "fresh0".to_string();
+    let begin = CodeLocation { line: 0, col: 0 };
+    let end = CodeLocation { line: 0, col: 0 };
+    vec![
+        node(
+            file_id,
+            Ast::Definition(Definition {
+                name: "print_index".to_string(),
+                params: vec![ParameterNode {
+                    node: Parameter::Normal(ident.clone()),
+                    extra: E::new(file_id, begin.clone(), end.clone()),
+                }],
+                body: None,
+            }),
+        ),
+        node(
+            file_id,
+            Ast::Definition(Definition {
+                name: "print_float".to_string(),
+                params: vec![ParameterNode {
+                    node: Parameter::Normal(ident),
+                    extra: E::new(file_id, begin, end),
+                }],
+                body: None,
+            }),
+        ),
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -551,40 +605,39 @@ mod tests {
         Context,
     };
 
-    fn node<E: Extra>(file_id: usize, ast: Ast<E>) -> AstNode<E> {
-        let begin = CodeLocation { line: 0, col: 0 };
-        let end = CodeLocation { line: 0, col: 0 };
-        ast.node(file_id, begin, end)
-    }
-
     fn gen_test(file_id: usize) -> AstNode<SimpleExtra> {
-        let begin = CodeLocation { line: 0, col: 0 };
-        let end = CodeLocation { line: 0, col: 0 };
-        Ast::Definition(Definition {
-            name: "test".into(),
-            params: vec![],
-            body: Box::new(node(
-                file_id,
-                Ast::Sequence(vec![
-                    node(
-                        file_id,
-                        Ast::Test(
-                            Box::new(node(file_id, Ast::Literal(Literal::Bool(true)))),
-                            Box::new(node(file_id, Ast::Literal(Literal::Int(2)))),
+        let mut seq = prelude(file_id);
+        seq.push(node(
+            file_id,
+            Ast::Definition(Definition {
+                name: "test".into(),
+                params: vec![],
+                body: Some(Box::new(node(
+                    file_id,
+                    Ast::Sequence(vec![
+                        node(
+                            file_id,
+                            Ast::Test(
+                                Box::new(node(file_id, Ast::Literal(Literal::Bool(true)))),
+                                Box::new(node(file_id, Ast::Literal(Literal::Int(2)))),
+                            ),
                         ),
-                    ),
-                    node(
-                        file_id,
-                        Ast::Return(Some(Box::new(node(file_id, Ast::Literal(Literal::Int(1)))))),
-                    ),
-                ]),
-            )),
-        })
-        .node(file_id, begin, end)
+                        node(
+                            file_id,
+                            Ast::Return(Some(Box::new(node(
+                                file_id,
+                                Ast::Literal(Literal::Int(1)),
+                            )))),
+                        ),
+                    ]),
+                ))),
+            }),
+        ));
+
+        node(file_id, Ast::Sequence(seq))
     }
 
-    #[test]
-    fn test_loop() {
+    fn test_context() -> Context {
         let context = Context::new();
         context.set_allow_unregistered_dialects(true);
 
@@ -593,12 +646,13 @@ mod tests {
         context.append_dialect_registry(&registry);
         context.load_all_available_dialects();
         register_all_llvm_translations(&context);
+        context
+    }
 
-        let location = Location::unknown(&context);
-
+    #[test]
+    fn test_loop() {
+        let context = test_context();
         let mut files = FileDB::new();
-        let begin = CodeLocation { line: 0, col: 0 };
-        let end = CodeLocation { line: 0, col: 0 };
         let file_id = files.add("test.py".into(), "test".into());
         let ast = gen_test(file_id);
         let lower = Lower::new(&context, &files);

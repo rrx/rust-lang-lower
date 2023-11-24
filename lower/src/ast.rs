@@ -40,13 +40,14 @@ pub struct Definition<E> {
     pub name: String,
     pub params: Vec<ParameterNode<E>>,
     //pub return_type: Option<Box<AstTypeExprP<P>>>,
-    pub body: Box<AstNode<E>>,
+    pub body: Option<Box<AstNode<E>>>,
     //pub payload: P::DefPayload,
 }
 
 #[derive(Debug)]
 pub enum Builtin<E> {
     Assert(Box<Argument<E>>),
+    Print(Box<Argument<E>>),
 }
 
 #[derive(Debug)]
