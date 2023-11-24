@@ -17,6 +17,8 @@ use lower::ast::Extra;
 use lower::ast::*;
 use lower::lower::FileDB;
 
+pub type Environment = lower::env::EnvLayers<String, usize>;
+
 fn from_literal(item: syntax::ast::AstLiteral) -> Literal {
     use syntax::ast::AstLiteral;
     match item {
@@ -132,12 +134,13 @@ impl Parser {
             std::fs::read_to_string(path)?,
         );
 
+        let env = Environment::default();
         let dialect = syntax::Dialect::Extended;
         let m = syntax::AstModule::parse_file(&path, &dialect)?;
         let (codemap, stmt, _dialect, _typecheck) = m.into_parts();
         println!("m: {:?}", &stmt);
         let mut seq = lower::lower::prelude(file_id);
-        let ast: AstNode<E> = self.from_stmt(stmt, context, &codemap, file_id)?;
+        let ast: AstNode<E> = self.from_stmt(stmt, context, &codemap, file_id, env)?;
         seq.push(ast);
         Ok(lower::lower::node(file_id, Ast::Sequence(seq)))
     }
@@ -148,6 +151,7 @@ impl Parser {
         context: &Context,
         codemap: &CodeMap,
         file_id: usize,
+        mut env: Environment,
     ) -> Result<AstNode<E>> {
         use syntax::ast::StmtP;
         let extra = extra(file_id, codemap, item.span);
@@ -156,7 +160,7 @@ impl Parser {
             StmtP::Statements(stmts) => {
                 let mut exprs = vec![];
                 for stmt in stmts {
-                    exprs.push(self.from_stmt(stmt, context, codemap, file_id)?);
+                    exprs.push(self.from_stmt(stmt, context, codemap, file_id, env.clone())?);
                 }
 
                 let ast = Ast::Sequence(exprs);
@@ -172,7 +176,7 @@ impl Parser {
                 let d = Definition {
                     name: def.name.ident.clone(),
                     body: Some(Box::new(
-                        self.from_stmt(*def.body, context, codemap, file_id)?,
+                        self.from_stmt(*def.body, context, codemap, file_id, env)?,
                     )),
                     params,
                 };
@@ -181,8 +185,8 @@ impl Parser {
             }
 
             StmtP::If(expr, truestmt) => {
-                let condition = self.from_expr(expr, context, codemap, file_id)?;
-                let truestmt = self.from_stmt(*truestmt, context, codemap, file_id)?;
+                let condition = self.from_expr(expr, context, codemap, file_id, env.clone())?;
+                let truestmt = self.from_stmt(*truestmt, context, codemap, file_id, env)?;
                 Ok(AstNode {
                     node: Ast::Conditional(condition.into(), truestmt.into(), None),
                     extra,
@@ -190,10 +194,10 @@ impl Parser {
             }
 
             StmtP::IfElse(expr, options) => {
-                let condition = self.from_expr(expr, context, codemap, file_id)?;
-                let truestmt = self.from_stmt(options.0, context, codemap, file_id)?;
+                let condition = self.from_expr(expr, context, codemap, file_id, env.clone())?;
+                let truestmt = self.from_stmt(options.0, context, codemap, file_id, env.clone())?;
                 let elsestmt = Some(Box::new(
-                    self.from_stmt(options.1, context, codemap, file_id)?,
+                    self.from_stmt(options.1, context, codemap, file_id, env)?,
                 ));
                 Ok(AstNode {
                     node: Ast::Conditional(condition.into(), truestmt.into(), elsestmt),
@@ -204,7 +208,7 @@ impl Parser {
             StmtP::Return(maybe_expr) => {
                 let node = match maybe_expr {
                     Some(expr) => Ast::Return(Some(Box::new(
-                        self.from_expr(expr, context, codemap, file_id)?,
+                        self.from_expr(expr, context, codemap, file_id, env)?,
                     ))),
                     None => Ast::Return(None),
                 };
@@ -212,15 +216,40 @@ impl Parser {
             }
 
             StmtP::Assign(assign) => {
-                let rhs = self.from_expr(assign.rhs, context, codemap, file_id)?;
-                let target: AssignTarget = from_assign_target(assign.lhs.node);
-                Ok(AstNode {
-                    node: Ast::Assign(target, Box::new(rhs)),
-                    extra,
-                })
+                use syntax::ast::AssignTargetP;
+                let rhs = self.from_expr(assign.rhs, context, codemap, file_id, env.clone())?;
+                match assign.lhs.node {
+                    AssignTargetP::Identifier(ident) => {
+                        let name = ident.node.ident;
+                        let exists = env.resolve(&name).is_some();
+                        if exists {
+                            env.define(name.clone(), 0);
+                            let target = AssignTarget::Identifier(name);
+                            Ok(AstNode {
+                                node: Ast::Assign(target, Box::new(rhs)),
+                                extra,
+                            })
+                        } else {
+                            Ok(AstNode {
+                                node: Ast::Variable(Definition {
+                                    name,
+                                    params: vec![],
+                                    body: Some(Box::new(rhs)),
+                                }),
+                                extra,
+                            })
+                        }
+                    }
+                    _ => unimplemented!(),
+                }
+                //let target: AssignTarget = from_assign_target(assign.lhs.node);
+                //Ok(AstNode {
+                //node: Ast::Assign(target, Box::new(rhs)),
+                //extra,
+                //})
             }
 
-            StmtP::Expression(expr) => self.from_expr(expr, context, codemap, file_id),
+            StmtP::Expression(expr) => self.from_expr(expr, context, codemap, file_id, env),
 
             _ => unimplemented!("{:?}", item),
         }
@@ -232,6 +261,7 @@ impl Parser {
         context: &Context,
         codemap: &CodeMap,
         file_id: usize,
+        env: Environment,
     ) -> Result<AstNode<E>> {
         use syntax::ast::ExprP;
         let extra = extra(file_id, codemap, item.span);
@@ -240,17 +270,17 @@ impl Parser {
             ExprP::Op(lhs, op, rhs) => {
                 let ast = Ast::BinaryOp(
                     from_binop(op),
-                    Box::new(self.from_expr(*lhs, context, codemap, file_id)?),
-                    Box::new(self.from_expr(*rhs, context, codemap, file_id)?),
+                    Box::new(self.from_expr(*lhs, context, codemap, file_id, env.clone())?),
+                    Box::new(self.from_expr(*rhs, context, codemap, file_id, env)?),
                 );
                 Ok(AstNode { node: ast, extra })
             }
             ExprP::Call(expr, expr_args) => {
                 let mut args = vec![];
                 for arg in expr_args {
-                    args.push(self.from_argument(arg, context, codemap, file_id)?);
+                    args.push(self.from_argument(arg, context, codemap, file_id, env.clone())?);
                 }
-                let f = self.from_expr(*expr, context, codemap, file_id)?;
+                let f = self.from_expr(*expr, context, codemap, file_id, env)?;
                 println!("args: {:?}", args);
                 let ast = match &f.node {
                     Ast::Identifier(name) => match name.as_str() {
@@ -296,11 +326,12 @@ impl Parser {
         context: &Context,
         codemap: &CodeMap,
         file_id: usize,
+        env: Environment,
     ) -> Result<Argument<E>> {
         use syntax::ast::ArgumentP;
         match item.node {
             ArgumentP::Positional(expr) => Ok(Argument::Positional(Box::new(
-                self.from_expr(expr, context, codemap, file_id)?,
+                self.from_expr(expr, context, codemap, file_id, env)?,
             ))),
             _ => unimplemented!(),
         }

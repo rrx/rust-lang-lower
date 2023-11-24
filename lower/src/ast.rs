@@ -66,6 +66,7 @@ pub enum Ast<E> {
     Literal(Literal),
     Sequence(Vec<AstNode<E>>),
     Definition(Definition<E>),
+    Variable(Definition<E>),
     Assign(AssignTarget, Box<AstNode<E>>),
     Conditional(Box<AstNode<E>>, Box<AstNode<E>>, Option<Box<AstNode<E>>>),
     Return(Option<Box<AstNode<E>>>),

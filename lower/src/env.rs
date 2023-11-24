@@ -42,9 +42,9 @@ impl<K: LayerKey, V: LayerValue> Layer<K, V> {
         self.values.contains_key(name)
     }
 
-    pub fn get(&self, name: &K) -> Option<&V> {
+    pub fn get(&self, name: &K) -> Option<V> {
         match self.values.get(name) {
-            Some(v) => Some(v),
+            Some(v) => Some(v.clone()),
             None => None,
         }
     }
@@ -129,15 +129,15 @@ impl<K: LayerKey, V: LayerValue> EnvLayers<K, V> {
         }
     }
 
-    pub fn resolve(&self, name: &K) -> Option<&V> {
+    pub fn resolve(&self, name: &K) -> Option<V> {
         self.layers
             .iter()
             .find(|layer| layer.values.contains_key(name))
-            .map(|layer| layer.get(name))
+            .map(|layer| layer.get(name).clone())
             .flatten()
     }
 
-    pub fn resolve_all(&self, name: &K) -> Vec<&V> {
+    pub fn resolve_all(&self, name: &K) -> Vec<V> {
         self.layers
             .iter()
             .filter(|layer| layer.values.contains_key(name))
@@ -168,9 +168,9 @@ mod tests {
         env.define("asdf".into(), v_id);
 
         env.define("Asdf".into(), 1);
-        assert_eq!(Some(&1), env.resolve(&"Asdf".into()));
+        assert_eq!(Some(1), env.resolve(&"Asdf".into()));
         env.define("Asdf".into(), 2);
-        assert_eq!(Some(&2), env.resolve(&"Asdf".into()));
+        assert_eq!(Some(2), env.resolve(&"Asdf".into()));
 
         let all_asdf = env.resolve_all(&"Asdf".to_string());
         assert_eq!(all_asdf.len(), 2);
@@ -183,7 +183,7 @@ mod tests {
         env3.define("Asdf2".into(), 1);
         assert!(env1 != env3);
 
-        assert_eq!(Some(&1), env3.resolve(&"Asdf2".into()));
+        assert_eq!(Some(1), env3.resolve(&"Asdf2".into()));
         assert_eq!(None, env.resolve(&"Asdf2".into()));
         assert_eq!(None, env2.resolve(&"Asdf2".into()));
     }
@@ -193,7 +193,7 @@ mod tests {
         let mut env = Environment::default();
         env.push();
         env.define(String::from("asdf"), 0);
-        assert_eq!(Some(&0), env.resolve(&"asdf".into()));
+        assert_eq!(Some(0), env.resolve(&"asdf".into()));
         env.pop();
         assert_eq!(None, env.resolve(&"asdf".into()));
     }

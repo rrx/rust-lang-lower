@@ -1,4 +1,7 @@
 # z = 100
+# def x2(y):
+    # return y+1
+
 def x1(y):
     x = 0
     if True:
@@ -8,7 +11,8 @@ def x1(y):
     return 3 - 7
 
 def main():
-    v = 1.2 + 0.1
+    1.2 + 0.1
+    v = 1252153
     print(100);
     print(4.6666);
     check(True)

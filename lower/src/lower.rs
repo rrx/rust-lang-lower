@@ -1,6 +1,5 @@
 use melior::{
     dialect::{arith, cf, func, memref, scf},
-    ir,
     ir::{
         attribute::{StringAttribute, TypeAttribute},
         //operation::OperationBuilder,
@@ -14,7 +13,22 @@ use melior::{
 use crate::ast::*;
 use codespan_reporting::files::SimpleFiles;
 
-pub type Environment = crate::env::EnvLayers<String, usize>;
+//impl<'c, 'a> crate::env::LayerValue for Value<'c, 'a> {}
+impl<'c> crate::env::LayerValue for Operation<'c> {}
+//pub type Environment<'c, 'a> = crate::env::EnvLayers<String, Value<'c, 'a>>;
+
+#[derive(Clone)]
+pub struct Environment<'c> {
+    values: im::HashMap<String, Operation<'c>>,
+}
+
+impl<'c> Default for Environment<'c> {
+    fn default() -> Self {
+        Self {
+            values: im::HashMap::new(),
+        }
+    }
+}
 
 /*
  * Environment
@@ -59,7 +73,6 @@ fn test(ops: Vec<ir::Operation<'_>>) -> (Vec<ir::operation::OperationResult<'_, 
     let r = op.results().collect::<Vec<_>>();
     (r, ops)
 }
-*/
 
 fn op2r<'c>(op: &'c ir::Operation<'c>) -> Vec<Value<'c, '_>> {
     op.results().map(|x| x.into()).collect::<Vec<_>>()
@@ -72,12 +85,13 @@ fn ops2r<'c>(ops: &'c Vec<ir::Operation<'c>>) -> Vec<Value<'c, '_>> {
         .map(|x| x.into())
         .collect::<Vec<_>>()
 }
+*/
 
 pub type FileDB = SimpleFiles<String, String>;
 
-pub struct Lower<'a> {
-    context: &'a Context,
-    files: &'a FileDB,
+pub struct Lower<'c> {
+    context: &'c Context,
+    files: &'c FileDB,
 }
 
 impl<'c> Lower<'c> {
@@ -137,7 +151,7 @@ impl<'c> Lower<'c> {
         init_args: &[Value<'c, '_>],
         condition: AstNode<E>,
         body: AstNode<E>,
-        env: Environment,
+        env: Environment<'c>,
         //depth: usize,
     ) -> (Vec<Value<'c, '_>>, Vec<Operation<'c>>) {
         let bool_type = melior::ir::r#type::IntegerType::new(self.context, 1).into();
@@ -276,7 +290,7 @@ impl<'c> Lower<'c> {
     pub fn lower_expr<E: Extra>(
         &self,
         expr: AstNode<E>,
-        env: Environment,
+        mut env: Environment<'c>,
     ) -> (Vec<Value<'c, '_>>, Vec<Operation<'c>>) {
         let index_type = Type::index(self.context);
         let location = self.location(&expr);
@@ -352,13 +366,28 @@ impl<'c> Lower<'c> {
             }
 
             Ast::Identifier(ident) => {
-                let op = match ident.as_str() {
-                    "True" => self.build_bool_op(true, location),
-                    "False" => self.build_bool_op(false, location),
-                    _ => unimplemented!("Ident({:?})", ident),
-                };
+                //let (r, ops)
+                match ident.as_str() {
+                    "True" => (vec![], vec![self.build_bool_op(true, location)]),
+                    "False" => (vec![], vec![self.build_bool_op(false, location)]),
+                    _ => {
+                        if let Some(r) = env.values.get(&ident) {
+                            println!("r: {:?}", r);
+                        }
+
+                        //if let Some(r) = env.resolve(&ident) {
+                        //r.r#type();
+                        //let r = r.to_owned();
+
+                        //(vec![r], vec![])
+                        //(vec![], vec![])
+                        //} else {
+                        unimplemented!("Ident({:?})", ident)
+                        //}
+                    }
+                }
                 //(op2r(&op), vec![op])
-                (vec![], vec![op])
+                //(vec![], vec![op])
             }
 
             Ast::Call(expr, args) => {
@@ -446,6 +475,26 @@ impl<'c> Lower<'c> {
                 //(ops2r(&out), out)
             }
 
+            Ast::Variable(def) => {
+                let mut out = vec![];
+                let ident = def.name;
+                // TODO: handle global variables properly, currently assume function context
+                println!("variable ident {:?}", ident);
+                let ty = MemRefType::new(index_type, &[], None, None);
+                let op1 = memref::alloca(self.context, ty, &[], &[], None, location);
+                let x: Value = op1.result(0).unwrap().into();
+
+                let (_, ops) = self.lower_expr(*def.body.unwrap(), env);
+                let r: Value<'c, '_> = ops.last().unwrap().result(0).unwrap().into();
+                //env.values.insert(ident, r.clone());
+                let op = memref::store(r, x, &[], location);
+                out.push(op1);
+                out.extend(ops);
+                out.push(op);
+
+                //out.extend(ops);
+                (vec![], out)
+            }
             Ast::Definition(def) => {
                 println!("name {:?}", def.name);
                 let mut params = vec![];
@@ -575,9 +624,11 @@ impl<'c> Lower<'c> {
                             attribute::IntegerAttribute::new(10, index_type).into(),
                             location,
                         );
-
-                        let op = memref::store(c.result(0).unwrap().into(), x, &[], location);
-                        out.push(c);
+                        //let mut env = Environment::default();
+                        let r: Value<'c, '_> = c.result(0).unwrap().into();
+                        //env.values.insert(ident, r.clone());
+                        let op = memref::store(r.clone(), x, &[], location);
+                        out.push(c); //.clone());
                         out.push(op1);
                         out.push(op);
                     } //_ => unimplemented!("{:?}", target),
@@ -695,6 +746,7 @@ mod tests {
     //use test_log::test;
     use melior::{
         dialect::DialectRegistry,
+        ir,
         utility::{register_all_dialects, register_all_llvm_translations},
         Context,
     };
