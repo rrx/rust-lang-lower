@@ -62,6 +62,26 @@ impl<'c> Lower<'c> {
         Self { context, files }
     }
 
+    pub fn type_from_expr<E: Extra>(&self, expr: &AstNode<E>) -> AstType {
+        match &expr.node {
+            Ast::Literal(x) => match x {
+                Literal::Int(_) => AstType::Int,
+                Literal::Float(_) => AstType::Float,
+                Literal::Bool(_) => AstType::Bool,
+            },
+
+            _ => unreachable!("{:?}", expr),
+        }
+    }
+
+    pub fn from_type(&self, ty: AstType) -> Type<'c> {
+        match ty {
+            AstType::Int => Type::index(self.context),
+            AstType::Float => Type::float64(self.context),
+            AstType::Bool => melior::ir::r#type::IntegerType::new(self.context, 1).into(),
+        }
+    }
+
     pub fn build_bool_op(&self, value: bool, location: Location<'c>) -> Operation<'c> {
         let bool_type = melior::ir::r#type::IntegerType::new(self.context, 1);
         arith::constant(
@@ -367,10 +387,11 @@ impl<'c> Lower<'c> {
                 let index_type = Type::index(self.context);
                 for p in def.params {
                     match p.node {
-                        Parameter::Normal(ident) => {
-                            println!("params {:?}", ident);
+                        Parameter::Normal(ident, ty) => {
+                            println!("params {:?}: {:?}", ident, ty);
                             let location = p.extra.location(self.context, self.files);
-                            params.push((index_type, location));
+                            let ir_ty = self.from_type(ty);
+                            params.push((ir_ty, location));
                         }
                         _ => {
                             println!("not implemented: {:?}", p);
@@ -532,12 +553,34 @@ impl<'c> Lower<'c> {
                     }
                     Builtin::Print(arg) => match *arg {
                         Argument::Positional(expr) => {
-                            let file_id = 0;
-                            let ident_node =
-                                node(file_id, Ast::Identifier("print_index".to_string()));
-                            let arg = Argument::Positional(expr);
-                            let node = node(file_id, Ast::Call(Box::new(ident_node), vec![arg]));
-                            self.lower_expr(node)
+                            println!("x: {:?}", expr);
+
+                            let ty = self.from_type(self.type_from_expr(&expr));
+
+                            // eval expr
+                            let mut ops = self.lower_expr(*expr);
+                            let r = ops.last().unwrap().result(0).unwrap();
+                            //let ty = r.r#type();
+                            println!("ty: {:?}", ty);
+                            let type_index = Type::index(self.context);
+                            let type_float = Type::float64(self.context);
+
+                            let ident = if ty == type_index {
+                                "print_index"
+                            } else if ty == type_float {
+                                "print_float"
+                            } else {
+                                unimplemented!()
+                            };
+
+                            println!("ident: {:?}", ident);
+
+                            let f = attribute::FlatSymbolRefAttribute::new(self.context, ident);
+                            let op =
+                                func::call(self.context, f, &[r.into()], &[index_type], location);
+
+                            ops.push(op);
+                            ops
                         }
                     },
                     _ => {
@@ -569,7 +612,7 @@ pub fn prelude<E: Extra>(file_id: usize) -> Vec<AstNode<E>> {
             Ast::Definition(Definition {
                 name: "print_index".to_string(),
                 params: vec![ParameterNode {
-                    node: Parameter::Normal(ident.clone()),
+                    node: Parameter::Normal(ident.clone(), AstType::Int),
                     extra: E::new(file_id, begin.clone(), end.clone()),
                 }],
                 body: None,
@@ -580,7 +623,7 @@ pub fn prelude<E: Extra>(file_id: usize) -> Vec<AstNode<E>> {
             Ast::Definition(Definition {
                 name: "print_float".to_string(),
                 params: vec![ParameterNode {
-                    node: Parameter::Normal(ident),
+                    node: Parameter::Normal(ident, AstType::Float),
                     extra: E::new(file_id, begin, end),
                 }],
                 body: None,

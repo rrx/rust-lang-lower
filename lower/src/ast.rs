@@ -5,6 +5,13 @@ use std::fmt::Debug;
 use codespan_reporting::files::{Files, SimpleFiles};
 
 #[derive(Debug)]
+pub enum AstType {
+    Int,
+    Float,
+    Bool,
+}
+
+#[derive(Debug)]
 pub enum Literal {
     Int(i64),
     Float(f64),
@@ -25,7 +32,7 @@ pub enum Argument<E> {
 
 #[derive(Debug)]
 pub enum Parameter<E> {
-    Normal(String),
+    Normal(String, AstType),
     Dummy(AstNode<E>),
 }
 

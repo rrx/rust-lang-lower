@@ -58,11 +58,22 @@ fn from_parameter<E: Extra, P: syntax::ast::AstPayload>(
         col: r.end.column,
     };
 
+    //println!("param: {:?}", &item);
     match item.node {
-        ParameterP::Normal(ident, maybe_type) => ParameterNode {
-            node: Parameter::Normal(ident.node.ident),
-            extra: E::new(file_id, begin, end),
-        },
+        ParameterP::Normal(ident, maybe_type) => {
+            let ty = if let Some(_ty) = maybe_type {
+                //let node = &ty.node.expr.node;
+                //println!("tyx: {:?}", &ty);
+                //println!("tyx: {:?}", &ty);
+                AstType::Int
+            } else {
+                AstType::Int
+            };
+            ParameterNode {
+                node: Parameter::Normal(ident.node.ident, ty),
+                extra: E::new(file_id, begin, end),
+            }
+        }
         _ => unimplemented!(),
     }
 }
@@ -240,6 +251,7 @@ impl Parser {
                     args.push(self.from_argument(arg, context, codemap, file_id)?);
                 }
                 let f = self.from_expr(*expr, context, codemap, file_id)?;
+                println!("args: {:?}", args);
                 let ast = match &f.node {
                     Ast::Identifier(name) => match name.as_str() {
                         "check" => {
