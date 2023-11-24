@@ -555,25 +555,23 @@ impl<'c> Lower<'c> {
                         Argument::Positional(expr) => {
                             println!("x: {:?}", expr);
 
-                            let ty = self.from_type(self.type_from_expr(&expr));
+                            let ast_ty = self.type_from_expr(&expr);
 
                             // eval expr
                             let mut ops = self.lower_expr(*expr);
                             let r = ops.last().unwrap().result(0).unwrap();
                             //let ty = r.r#type();
-                            println!("ty: {:?}", ty);
-                            let type_index = Type::index(self.context);
-                            let type_float = Type::float64(self.context);
 
-                            let ident = if ty == type_index {
-                                "print_index"
-                            } else if ty == type_float {
-                                "print_float"
-                            } else {
-                                unimplemented!()
+                            let ident = match &ast_ty {
+                                AstType::Int => "print_index",
+                                AstType::Float => "print_float",
+                                _ => unimplemented!(),
                             };
 
-                            println!("ident: {:?}", ident);
+                            //let ty = self.from_type(ast_ty);
+                            //println!("ty: {:?}", ty);
+
+                            //println!("ident: {:?}", ident);
 
                             let f = attribute::FlatSymbolRefAttribute::new(self.context, ident);
                             let op =
