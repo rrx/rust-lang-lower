@@ -183,6 +183,10 @@ impl<'c> ScopeStack<'c> {
         }
     }
 
+    pub fn last_values(&self) -> Vec<Value<'c, '_>> {
+        self.values(self.last_index())
+    }
+
     pub fn index_from_name(&self, name: &str) -> Option<OpIndex> {
         let mut exists = false;
         let mut result = 0;
@@ -207,6 +211,10 @@ impl<'c> ScopeStack<'c> {
                 None
             }
         }
+    }
+
+    pub fn take_ops(&mut self) -> Vec<Operation<'c>> {
+        self.statics.ops.drain(..).collect()
     }
 }
 
