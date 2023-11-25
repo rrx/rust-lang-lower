@@ -11,24 +11,12 @@ use melior::{
 //use std::convert::From;
 
 use crate::ast::*;
+use crate::scope::{LayerType, OpIndex, ScopeStack};
 use codespan_reporting::files::SimpleFiles;
 
 //impl<'c, 'a> crate::env::LayerValue for Value<'c, 'a> {}
-impl<'c> crate::env::LayerValue for Operation<'c> {}
+//impl<'c> crate::env::LayerValue for Layer<'c> {}
 //pub type Environment<'c, 'a> = crate::env::EnvLayers<String, Value<'c, 'a>>;
-
-#[derive(Clone)]
-pub struct Environment<'c> {
-    values: im::HashMap<String, Operation<'c>>,
-}
-
-impl<'c> Default for Environment<'c> {
-    fn default() -> Self {
-        Self {
-            values: im::HashMap::new(),
-        }
-    }
-}
 
 /*
  * Environment
@@ -151,9 +139,10 @@ impl<'c> Lower<'c> {
         init_args: &[Value<'c, '_>],
         condition: AstNode<E>,
         body: AstNode<E>,
-        env: Environment<'c>,
+        env: &mut ScopeStack<'c>,
         //depth: usize,
     ) -> (Vec<Value<'c, '_>>, Vec<Operation<'c>>) {
+        env.enter(LayerType::Closed);
         let bool_type = melior::ir::r#type::IntegerType::new(self.context, 1).into();
         let index_type = Type::index(self.context);
         let condition_location = self.location(&condition);
@@ -176,8 +165,7 @@ impl<'c> Lower<'c> {
         //index
         let b: Value<'c, '_> = before_block.argument(1).unwrap().into();
 
-        let mut out = vec![];
-        let (_, condition_ops) = self.lower_expr(condition, env.clone());
+        let (_, condition_ops) = self.lower_expr(condition, env);
         //let r_condition = ops.last().unwrap().result(0).unwrap();
         //let op = self.build_int_op(2, body_location);
         //let condition_op = condition_ops.last().unwrap();
@@ -267,10 +255,14 @@ impl<'c> Lower<'c> {
             after_region,
             body_location,
         );
+        //env.push(op);
+        env.exit();
+        //env.last_index()
+        //let mut out = vec![];
         //out.push(init_op);
         //let r: Value<'c, '_> = op.result(0).unwrap().into();
         //let r: Vec<Value<'c, '_>> = op.results().map(|x| x.into()).collect::<Vec<_>>();
-        out.push(op);
+        //out.push(op);
         //let r = ops2r(&out);
         //let r = out.last().unwrap().results().map(|x| x.into()).collect::<Vec<_>>();
 
@@ -280,7 +272,7 @@ impl<'c> Lower<'c> {
         //}
         //let op = cf::cond_br(context
         //println!("op: {:?}", ops);
-        (vec![], out) //vec![op])
+        (vec![], vec![op]) //vec![op])
     }
 
     pub fn location<E: Extra>(&self, expr: &AstNode<E>) -> Location<'c> {
@@ -290,14 +282,14 @@ impl<'c> Lower<'c> {
     pub fn lower_expr<E: Extra>(
         &self,
         expr: AstNode<E>,
-        mut env: Environment<'c>,
+        env: &mut ScopeStack<'c>,
     ) -> (Vec<Value<'c, '_>>, Vec<Operation<'c>>) {
         let index_type = Type::index(self.context);
         let location = self.location(&expr);
 
         match expr.node {
             Ast::BinaryOp(op, a, b) => {
-                let (_, mut lhs_ops) = self.lower_expr(*a, env.clone());
+                let (_, mut lhs_ops) = self.lower_expr(*a, env);
                 let (_, mut rhs_ops) = self.lower_expr(*b, env);
                 let r_lhs = lhs_ops.last().unwrap().result(0).unwrap();
                 let r_rhs = rhs_ops.last().unwrap().result(0).unwrap();
@@ -371,9 +363,9 @@ impl<'c> Lower<'c> {
                     "True" => (vec![], vec![self.build_bool_op(true, location)]),
                     "False" => (vec![], vec![self.build_bool_op(false, location)]),
                     _ => {
-                        if let Some(r) = env.values.get(&ident) {
-                            println!("r: {:?}", r);
-                        }
+                        //if let Some(r) = env.values.get(&ident) {
+                        //println!("r: {:?}", r);
+                        //}
 
                         //if let Some(r) = env.resolve(&ident) {
                         //r.r#type();
@@ -409,7 +401,7 @@ impl<'c> Lower<'c> {
                     match a {
                         Argument::Positional(arg) => {
                             println!("arg: {:?}", arg.node);
-                            let (_, mut arg_ops) = self.lower_expr(*arg, env.clone());
+                            let (_, mut arg_ops) = self.lower_expr(*arg, env);
                             ops.append(&mut arg_ops);
                             call_index.push(ops.len() - 1);
                         } //_ => unimplemented!("{:?}", a)
@@ -466,7 +458,7 @@ impl<'c> Lower<'c> {
                 let out = exprs
                     .into_iter()
                     .map(|expr| {
-                        let (_, ops) = self.lower_expr(expr, env.clone());
+                        let (_, ops) = self.lower_expr(expr, env);
                         ops
                     })
                     .flatten()
@@ -565,9 +557,9 @@ impl<'c> Lower<'c> {
             },
 
             Ast::Conditional(condition, true_expr, maybe_false_expr) => {
-                let (_, mut condition_ops) = self.lower_expr(*condition, env.clone());
+                let (_, mut condition_ops) = self.lower_expr(*condition, env);
                 let r_condition = condition_ops.last().unwrap().result(0).unwrap().into();
-                let (_, true_ops) = self.lower_expr(*true_expr, env.clone());
+                let (_, true_ops) = self.lower_expr(*true_expr, env);
 
                 let true_block = Block::new(&[]);
                 for op in true_ops {
@@ -647,11 +639,11 @@ impl<'c> Lower<'c> {
                 let init_op2 = self.build_int_op(10, condition_location);
                 let rs2 = init_op2.results().map(|r| r.into()).collect::<Vec<Value>>();
                 rs.extend(rs2);
-                let (r, ops) = self.build_loop(&rs, *condition, *body, env);
+                let index = self.build_loop(&rs, *condition, *body, env);
                 out.push(init_op);
                 out.push(init_op2);
-                out.extend(ops);
-                (r, out)
+                //out.extend(ops);
+                (vec![], out)
             }
 
             Ast::Builtin(b) => {
@@ -741,7 +733,7 @@ pub fn prelude<E: Extra>(file_id: usize) -> Vec<AstNode<E>> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     //use test_log::test;
     use melior::{
@@ -825,7 +817,7 @@ mod tests {
         node(file_id, Ast::Sequence(seq))
     }
 
-    fn test_context() -> Context {
+    pub(crate) fn test_context() -> Context {
         let context = Context::new();
         context.set_allow_unregistered_dialects(true);
 
@@ -844,8 +836,8 @@ mod tests {
         let file_id = files.add("test.py".into(), "test".into());
         let ast = gen_test(file_id);
         let lower = Lower::new(&context, &files);
-        let env = Environment::default();
-        let (_, ops) = lower.lower_expr(ast, env);
+        let mut env = ScopeStack::default();
+        let (_, ops) = lower.lower_expr(ast, &mut env);
         println!("{:?}", ops);
         let module = ir::Module::new(Location::unknown(&context));
         for op in ops {
