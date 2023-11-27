@@ -19,11 +19,26 @@ impl From<usize> for OpIndex {
     }
 }
 
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum LayerIndex {
+    Op(usize),
+    Argument(usize),
+}
+impl LayerIndex {
+    pub fn op(index: OpIndex) -> Self {
+        Self::Op(index.0)
+    }
+
+    pub fn arg(index: usize) -> Self {
+        Self::Argument(index)
+    }
+}
+
 #[derive(Debug)]
 pub struct Layer<'c> {
     ty: LayerType,
     pub ops: Vec<Operation<'c>>,
-    names: HashMap<String, OpIndex>,
+    names: HashMap<String, LayerIndex>,
 }
 
 impl<'c> Layer<'c> {
@@ -46,7 +61,9 @@ impl<'c> Layer<'c> {
         // overwrite existing names, thus shadowing
         if preserve_names {
             for (k, v) in layer.names {
-                self.names.insert(k, OpIndex(v.0 + start));
+                if let LayerIndex::Op(index) = v {
+                    self.names.insert(k, LayerIndex::op(OpIndex(index + start)));
+                }
             }
         }
 
@@ -55,13 +72,13 @@ impl<'c> Layer<'c> {
         }
     }
 
-    pub fn push(&mut self, op: Operation<'c>) -> OpIndex {
-        let index = OpIndex(self.ops.len());
+    pub fn push(&mut self, op: Operation<'c>) -> LayerIndex {
+        let index = LayerIndex::Op(self.ops.len());
         self.ops.push(op);
         index
     }
 
-    pub fn push_with_name(&mut self, op: Operation<'c>, name: &str) -> OpIndex {
+    pub fn push_with_name(&mut self, op: Operation<'c>, name: &str) -> LayerIndex {
         let index = self.push(op);
         self.names.insert(name.to_string(), index);
         index
@@ -72,19 +89,19 @@ impl<'c> Layer<'c> {
     }
 
     pub fn value_from_name(&self, name: &str) -> Vec<Value<'c, '_>> {
-        if let Some(index) = self.names.get(name) {
-            return self
+        match self.names.get(name) {
+            Some(LayerIndex::Op(index)) => self
                 .ops
-                .get(index.0)
+                .get(*index)
                 .unwrap()
                 .results()
                 .map(|x| x.into())
-                .collect();
+                .collect(),
+            _ => vec![],
         }
-        vec![]
     }
 
-    pub fn index_from_name(&self, name: &str) -> Option<OpIndex> {
+    pub fn index_from_name(&self, name: &str) -> Option<LayerIndex> {
         self.names.get(name).cloned()
     }
 
@@ -127,9 +144,15 @@ impl<'c> ScopeStack<'c> {
     pub fn enter_func(&mut self) {
         self.enter(LayerType::Closed);
     }
-    pub fn enter_block(&mut self) {
+
+    pub fn enter_block(&mut self, arguments: &[(Type<'c>, Location<'c>, &str)]) {
         self.enter(LayerType::Block);
+        let block_args = arguments.iter().map(|a| (a.0, a.1)).collect::<Vec<_>>();
+
+        let block = Block::new(&block_args);
+        self.block = Some(block);
     }
+
     pub fn enter(&mut self, ty: LayerType) {
         self.layers.push(Layer {
             ty,
@@ -160,11 +183,11 @@ impl<'c> ScopeStack<'c> {
         }
     }
 
-    pub fn push(&mut self, op: Operation<'c>) -> OpIndex {
+    pub fn push(&mut self, op: Operation<'c>) -> LayerIndex {
         self.last_mut().push(op)
     }
 
-    pub fn push_with_name(&mut self, op: Operation<'c>, name: &str) -> OpIndex {
+    pub fn push_with_name(&mut self, op: Operation<'c>, name: &str) -> LayerIndex {
         self.last_mut().push_with_name(op, name)
     }
 
@@ -186,26 +209,35 @@ impl<'c> ScopeStack<'c> {
         self.statics.value_from_name(name)
     }
 
-    pub fn values(&self, index: OpIndex) -> Vec<Value<'c, '_>> {
-        let mut index = index.0;
-        if index < self.statics.ops.len() {
-            self.statics.values(OpIndex(index))
-        } else {
-            index -= self.statics.ops.len();
-            for layer in self.layers.iter() {
-                if index < layer.ops.len() {
-                    return layer.values(OpIndex(index));
+    pub fn values(&self, index: LayerIndex) -> Vec<Value<'c, '_>> {
+        match index {
+            LayerIndex::Op(mut index) => {
+                //let mut index = index.0;
+                if index < self.statics.ops.len() {
+                    self.statics.values(OpIndex(index))
+                } else {
+                    index -= self.statics.ops.len();
+                    for layer in self.layers.iter() {
+                        if index < layer.ops.len() {
+                            return layer.values(OpIndex(index));
+                        }
+                    }
+                    unreachable!()
                 }
             }
-            unreachable!()
+            LayerIndex::Argument(index) => {
+                let r: Value<'c, '_> = self.block.as_ref().unwrap().argument(index).unwrap().into();
+                vec![r]
+            }
         }
     }
 
     pub fn last_values(&self) -> Vec<Value<'c, '_>> {
-        self.values(self.last_index())
+        self.values(LayerIndex::Op(self.last_index().0))
     }
 
-    pub fn index_from_name(&self, name: &str) -> Option<OpIndex> {
+    /*
+    pub fn index_from_name(&self, name: &str) -> Option<LayerIndex> {
         let mut exists = false;
         let mut result = 0;
         for layer in self.layers.iter().rev() {
@@ -213,7 +245,7 @@ impl<'c> ScopeStack<'c> {
                 result += layer.ops.len();
             } else {
                 if let Some(index) = layer.index_from_name(name) {
-                    result = index.0;
+                    result = index;
                     exists = true;
                 }
             }
@@ -221,7 +253,7 @@ impl<'c> ScopeStack<'c> {
 
         if exists {
             result += self.statics.ops.len();
-            Some(OpIndex(result))
+            Some(result)//OpIndex(result))
         } else {
             if let Some(index) = self.statics.index_from_name(name) {
                 Some(index)
@@ -230,6 +262,7 @@ impl<'c> ScopeStack<'c> {
             }
         }
     }
+    */
 
     pub fn take_ops(&mut self) -> Vec<Operation<'c>> {
         self.statics.ops.drain(..).collect()
@@ -296,41 +329,41 @@ mod tests {
         s.push_with_name(op, "y");
         assert_eq!(s.last_index(), 2.into());
 
-        let rs = s.values(s.last_index());
+        let rs = s.values(LayerIndex::Op(s.last_index().0));
         //println!("rs: {:?}", rs);
 
         let rs = s.value_from_name("x");
         //println!("rs: {:?}", rs);
         //println!("s: {:?}", s);
         assert!(rs.len() > 0);
-        assert_eq!(s.index_from_name("x").unwrap(), 1.into());
+        //assert_eq!(s.index_from_name("x").unwrap(), 1.into());
 
         let rs = s.value_from_name("y");
         //println!("rs: {:?}", rs);
         assert!(rs.len() > 0);
-        assert_eq!(s.index_from_name("y").unwrap(), 2.into());
+        //assert_eq!(s.index_from_name("y").unwrap(), 2.into());
 
         //println!("s: {:?}", s);
 
-        s.enter_block();
+        s.enter_func();
 
         let op = lower.build_bool_op(true, location);
         s.push_with_name(op, "y");
         assert_eq!(s.last_index(), 3.into());
-        assert_eq!(s.index_from_name("y").unwrap(), 3.into());
+        //assert_eq!(s.index_from_name("y").unwrap(), 3.into());
 
         let op = lower.build_bool_op(false, location);
         s.push_with_name(op, "x");
         assert_eq!(s.last_index(), 4.into());
-        assert_eq!(s.index_from_name("x").unwrap(), 4.into());
+        //assert_eq!(s.index_from_name("x").unwrap(), 4.into());
 
         s.enter_closed();
         let op = lower.build_bool_op(false, location);
         s.push_with_name(op, "z");
         println!("s: {:?}", s);
         assert_eq!(s.last_index(), 5.into());
-        assert_eq!(s.index_from_name("z").unwrap(), 5.into());
-        assert_eq!(s.index_from_name("x").unwrap(), 4.into());
+        //assert_eq!(s.index_from_name("z").unwrap(), 5.into());
+        //assert_eq!(s.index_from_name("x").unwrap(), 4.into());
         let rs = s.value_from_name("z");
         assert!(rs.len() > 0);
 
@@ -343,8 +376,8 @@ mod tests {
         // but we should have all of the ops
         println!("s: {:?}", s);
         assert_eq!(s.last_index(), 5.into());
-        assert_eq!(s.index_from_name("x").unwrap(), 1.into());
-        assert!(s.index_from_name("z").is_none());
+        //assert_eq!(s.index_from_name("x").unwrap(), 1.into());
+        //assert!(s.index_from_name("z").is_none());
         let rs = s.value_from_name("y");
         assert!(rs.len() > 0);
     }
@@ -417,19 +450,21 @@ mod tests {
         test_env2(&context, &mut env, location, ops);
     }
 
+    /*
     #[derive(Debug)]
     pub struct LayerTest<'c> {
         ty: LayerType,
         pub ops: Vec<Operation<'c>>,
         //names: HashMap<String, OperationRef<'c>>,
     }
+    */
 
     fn test_int<'c>(
         lower: &'c Lower,
         scope: &mut ScopeStack<'c>,
         location: Location<'c>,
         v: i64,
-    ) -> OpIndex {
+    ) -> LayerIndex {
         let op = lower.build_int_op(v, location);
         scope.push(op)
     }
@@ -440,7 +475,7 @@ mod tests {
         location: Location<'c>,
         v: i64,
         name: &str,
-    ) -> OpIndex {
+    ) -> LayerIndex {
         let op = lower.build_int_op(v, location);
         scope.push_with_name(op, name)
     }
@@ -448,9 +483,9 @@ mod tests {
     fn test_add<'c>(
         scope: &mut ScopeStack<'c>,
         location: Location<'c>,
-        a: OpIndex,
-        b: OpIndex,
-    ) -> OpIndex {
+        a: LayerIndex,
+        b: LayerIndex,
+    ) -> LayerIndex {
         scope.push(arith::addi(
             scope.values(a)[0],
             scope.values(b)[0],
@@ -487,12 +522,12 @@ mod tests {
 
         let r3 = test_add(scope, location, r_op1, r_e);
         //let rz = scope.value_from_name("z")[0];
-        let r4 = test_add(scope, location, scope.index_from_name("z").unwrap(), r3);
+        //let r4 = test_add(scope, location, scope.index_from_name("z").unwrap(), r3);
         //let op = arith::addi(scope.values(r_e)[0], rz, location);
 
         //scope.push_with_name(op, "result");
 
-        let ret = func::r#return(&scope.values(r4), location);
+        let ret = func::r#return(&scope.values(r3), location);
         scope.push(ret);
     }
 
@@ -502,10 +537,9 @@ mod tests {
         let ret_type = vec![index_type];
         let func_type = FunctionType::new(&lower.context, &types, &ret_type);
 
-        env.enter_func();
-        let region = Region::new();
-        let block = Block::new(&[(index_type, location)]);
-        let p0: Value<'c, '_> = block.argument(0).unwrap().into();
+        env.enter_block(&[(index_type, location, "p0")]);
+        //P
+        //let p0: Value<'c, '_> = block.argument(0).unwrap().into();
 
         //env.push_with_name("p0
         // add function parameters to the scope, so they can be referenced later
@@ -515,11 +549,17 @@ mod tests {
         test_fill(lower, env, location);
         let layer = env.exit();
 
+        // append ops
+        let block = env.block.take().unwrap();
         for op in layer.ops {
             block.append_operation(op);
         }
+
+        // build region
+        let region = Region::new();
         region.append_block(block);
 
+        // build function
         let f = func::func(
             &lower.context,
             StringAttribute::new(&lower.context, "test"),
@@ -531,6 +571,8 @@ mod tests {
             )],
             location,
         );
+
+        // push result
         env.push(f);
     }
 
