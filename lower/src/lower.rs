@@ -12,7 +12,7 @@ use melior::{
 use std::collections::HashMap;
 
 use crate::ast::*;
-use crate::scope::{Layer, LayerType, OpIndex, ScopeStack};
+use crate::scope::{Layer, LayerType, OpIndex, ScopeStack, LayerIndex};
 use codespan_reporting::files::SimpleFiles;
 
 type Environment<'c> = ScopeStack<'c>;
@@ -146,6 +146,69 @@ impl<'c> Lower<'c> {
         )
     }
 
+    pub fn build_while<'a, E: Extra>(
+        &self,
+        //init_args: &[Value<'c, 'a>],
+        condition: AstNode<E>,
+        body: AstNode<E>,
+        env: &mut Environment<'c>,
+    ) -> Vec<Operation<'c>> {
+        let bool_type = self.from_type(AstType::Bool);
+        let condition_location = self.location(&condition);
+        let body_location = self.location(&body);
+
+        // before
+        env.enter_block(&[]);
+        let (_, condition_ops) = self.lower_expr(condition, env);
+        for op in condition_ops {
+            env.push(op);
+        }
+        let condition_rs = env.last_values();
+        // should be bool type
+        assert!(condition_rs[0].r#type() == bool_type);
+        let c = scf::condition(condition_rs[0].into(), &[], condition_location);
+
+        // exit block
+        let mut layer = env.exit();
+        let before_block = layer.block.take().unwrap();
+        let ops = layer.take_ops();
+        for op in ops {
+            before_block.append_operation(op);
+        }
+        before_block.append_operation(c);
+        let before_region = Region::new();
+        before_region.append_block(before_block);
+
+        // after
+        env.enter_block(&[]);
+        let after_region = Region::new();
+        let (_, body_ops) = self.lower_expr(body, env);
+        for op in body_ops {
+            env.push(op);
+        }
+        // yield passes result to region 0
+        let y = scf::r#yield(&[], body_location);
+        env.push(y);
+
+        let mut layer = env.exit();
+        let after_block = layer.block.take().unwrap();
+        let ops = layer.take_ops();
+        for op in ops {
+            after_block.append_operation(op);
+        }
+        after_region.append_block(after_block);
+
+        // after complete
+
+        vec![scf::r#while(
+            &[],
+            &[],
+            before_region,
+            after_region,
+            body_location,
+        )]
+    }
+
     pub fn build_loop<'a, E: Extra>(
         &self,
         //init_args: &[Value<'c, 'a>],
@@ -153,6 +216,29 @@ impl<'c> Lower<'c> {
         body: AstNode<E>,
         env: &mut Environment<'c>,
     ) -> (Vec<Value<'c, '_>>, Vec<Operation<'c>>) {
+        /*
+         * while condition_expr, body_expr, bool init_op, int init_op2 -> (bool, int) -> int:
+         *   region0:
+         *     block(bool arg0=init_op, int arg1=init_op2):
+         *       bool result = condition_expr()
+         *       # first param to continue is the condition
+         *       # the following parameters are passed as arguments to region1 block
+         *       # if condition is false, then arg1 is returned as result
+         *       continue(result: bool) arg1: int
+         *   region1:
+         *     block(arg1: int):
+         *       int result = body_expr()
+         *       # yield arguments for block in region0
+         *       yield true: bool, result: int
+         *    
+         *    for a while Loop, we only need the condition and the body expressions
+         *    we can ignore the return results
+         *    we don't need to handle any free variables, since it has lexical scope with the
+         *    function.
+         *    yeild will have no args and continue will only have the condition which gets
+         *    evaluated on each iteration.
+         *    type is ()->()
+         */
         let bool_type = self.from_type(AstType::Bool);
         let index_type = self.from_type(AstType::Int);
         let condition_location = self.location(&condition);
@@ -162,6 +248,7 @@ impl<'c> Lower<'c> {
         let x_op = self.build_int_op(1, condition_location);
         env.push_with_name(x_op, "test");
 
+        // init args - bool, int
         let init_op = self.build_bool_op(true, condition_location);
         env.push_with_name(init_op, "init_op");
         let init_op2 = self.build_int_op(10, condition_location);
@@ -292,7 +379,7 @@ impl<'c> Lower<'c> {
         &self,
         expr: AstNode<E>,
         env: &mut Environment<'c>,
-    ) -> (Vec<Value<'c, 'a>>, Vec<Operation<'c>>) {
+    ) -> (Vec<LayerIndex>, Vec<Operation<'c>>) {
         let index_type = Type::index(self.context);
         let location = self.location(&expr);
 
@@ -304,13 +391,7 @@ impl<'c> Lower<'c> {
                 let r_rhs = rhs_ops.last().unwrap().result(0).unwrap();
 
                 // types must be the same for binary operation, no implicit casting yet
-                //assert!(r_lhs.len() == r_rhs.len());
-                //std::iter::zip(r_lhs, r_rhs).for_each(|(a, b)| {
-                //assert!(a.r#type() == b.r#type());
-                //});
-
-                //let r_lhs = r_lhs.pop().unwrap();
-                //let r_rhs = r_rhs.pop().unwrap();//[0];
+                assert!(r_lhs.r#type() == r_rhs.r#type());
 
                 let ty = r_lhs.r#type();
                 let float_type = Type::float64(self.context);
@@ -361,8 +442,6 @@ impl<'c> Lower<'c> {
                 out.append(&mut lhs_ops);
                 out.append(&mut rhs_ops);
                 out.push(binop);
-                //let r = out.last().unwrap().result(0).unwrap().into();
-                //let r = binop.results().map(|x| x.into()).collect::<Vec<_>>();
                 (vec![], out)
             }
 
@@ -370,7 +449,11 @@ impl<'c> Lower<'c> {
                 //let (r, ops)
                 match ident.as_str() {
                     "True" => (vec![], vec![self.build_bool_op(true, location)]),
-                    "False" => (vec![], vec![self.build_bool_op(false, location)]),
+                    "False" => {
+                        let op = self.build_bool_op(false, location);
+                        //env.push(op);
+                        (vec![], vec![op])
+                         }
                     _ => {
                         //if let Some(r) = env.values.get(&ident) {
                         //println!("r: {:?}", r);
@@ -659,18 +742,16 @@ impl<'c> Lower<'c> {
                 //(vec![], vec![])
             }
 
+            Ast::While(condition, body) => {
+                let ops = self.build_while(*condition, *body, env);
+                (vec![], ops)
+            }
+
             Ast::Test(condition, body) => {
                 let mut out = vec![];
-                let condition_location = self.location(&condition);
-                //let mut h = std::collections::HashMap::new();
-                let mut layer = Layer::new(LayerType::Static);
-                let (_, ops) = self.build_loop(*condition, *body, env); //, layer, &mut h);
-                                                                        //env.push(init_op);
-                                                                        //env.push(init_op2);
-                                                                        //out.push(init_op);
-                                                                        //out.push(init_op2);
+                let (_, ops) = self.build_loop(*condition, *body, env);
                 out.extend(ops);
-                (vec![], out) //vec![])
+                (vec![], out)
             }
 
             Ast::Builtin(b) => {
@@ -803,7 +884,7 @@ pub(crate) mod tests {
                                             Ast::Builtin(Builtin::Print(
                                                 Argument::Positional(
                                                     node(file_id, Ast::Literal(Literal::Int(1)))
-                                                        .into(), //node(file_id, Ast::Identifier("x".to_string())).into()
+                                                        .into(),
                                                 )
                                                 .into(),
                                             )),

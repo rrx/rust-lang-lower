@@ -71,6 +71,7 @@ pub enum Ast<E> {
     Conditional(Box<AstNode<E>>, Box<AstNode<E>>, Option<Box<AstNode<E>>>),
     Return(Option<Box<AstNode<E>>>),
     Test(Box<AstNode<E>>, Box<AstNode<E>>),
+    While(Box<AstNode<E>>, Box<AstNode<E>>),
     Builtin(Builtin<E>),
 }
 
