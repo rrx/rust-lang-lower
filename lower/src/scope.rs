@@ -38,7 +38,9 @@ impl LayerIndex {
 pub struct Layer<'c> {
     ty: LayerType,
     pub ops: Vec<Operation<'c>>,
+    args_count: usize,
     names: HashMap<String, LayerIndex>,
+    block: Option<Block<'c>>,
 }
 
 impl<'c> Layer<'c> {
@@ -46,7 +48,9 @@ impl<'c> Layer<'c> {
         Self {
             ty: LayerType::Static,
             ops: vec![],
+            args_count: 0,
             names: HashMap::new(),
+            block: None,
         }
     }
     pub fn merge(&mut self, mut layer: Layer<'c>) {
@@ -105,9 +109,18 @@ impl<'c> Layer<'c> {
         self.names.get(name).cloned()
     }
 
-    pub fn values(&self, index: OpIndex) -> Vec<Value<'c, '_>> {
-        let index = index.0;
-        self.ops[index].results().map(|x| x.into()).collect()
+    pub fn values(&self, index: LayerIndex) -> Vec<Value<'c, '_>> {
+        match index {
+            LayerIndex::Op(index) => {
+                let index = index;
+                self.ops[index].results().map(|x| x.into()).collect()
+            }
+            LayerIndex::Argument(index) => {
+                assert!(index < self.args_count);
+                let r: Value<'c, '_> = self.block.as_ref().unwrap().argument(index).unwrap().into();
+                vec![r]
+            }
+        }
     }
 
     pub fn take_ops(&mut self) -> Vec<Operation<'c>> {
@@ -118,47 +131,38 @@ impl<'c> Layer<'c> {
 
 #[derive(Debug)]
 pub struct ScopeStack<'c> {
-    statics: Layer<'c>,
     layers: Vec<Layer<'c>>,
-    block: Option<Block<'c>>,
 }
 
 impl<'c> Default for ScopeStack<'c> {
     fn default() -> Self {
+        let layer = Layer::new(LayerType::Static);
         Self {
-            statics: Layer {
-                ty: LayerType::Static,
-                ops: vec![],
-                names: HashMap::new(),
-            },
-            layers: vec![],
-            block: None,
+            layers: vec![layer],
         }
     }
 }
 
 impl<'c> ScopeStack<'c> {
     pub fn enter_closed(&mut self) {
-        self.enter(LayerType::Closed);
+        let mut layer = Layer::new(LayerType::Closed);
+        self.enter(layer);
     }
     pub fn enter_func(&mut self) {
-        self.enter(LayerType::Closed);
+        let mut layer = Layer::new(LayerType::Closed);
+        self.enter(layer);
     }
 
     pub fn enter_block(&mut self, arguments: &[(Type<'c>, Location<'c>, &str)]) {
-        self.enter(LayerType::Block);
+        let mut layer = Layer::new(LayerType::Block);
         let block_args = arguments.iter().map(|a| (a.0, a.1)).collect::<Vec<_>>();
-
         let block = Block::new(&block_args);
-        self.block = Some(block);
+        layer.block = Some(block);
+        self.enter(layer);
     }
 
-    pub fn enter(&mut self, ty: LayerType) {
-        self.layers.push(Layer {
-            ty,
-            ops: vec![],
-            names: HashMap::new(),
-        });
+    pub fn enter(&mut self, layer: Layer<'c>) {
+        self.layers.push(layer);
     }
 
     pub fn exit(&mut self) -> Layer<'c> {
@@ -171,7 +175,7 @@ impl<'c> ScopeStack<'c> {
         if let Some(last) = self.layers.last_mut() {
             last.merge(layer);
         } else {
-            self.statics.merge(layer);
+            unreachable!()
         }
     }
 
@@ -179,7 +183,7 @@ impl<'c> ScopeStack<'c> {
         if let Some(last) = self.layers.last_mut() {
             last
         } else {
-            &mut self.statics
+            unreachable!()
         }
     }
 
@@ -192,7 +196,7 @@ impl<'c> ScopeStack<'c> {
     }
 
     pub fn last_index(&self) -> OpIndex {
-        let mut index = self.statics.ops.len();
+        let mut index = 0;
         for layer in self.layers.iter() {
             index += layer.ops.len();
         }
@@ -203,31 +207,31 @@ impl<'c> ScopeStack<'c> {
         for layer in self.layers.iter().rev() {
             println!("x: {:?}", self);
             if let Some(_) = layer.names.get(name) {
-                return layer.value_from_name(name); //.ops.get(index.0).unwrap().results().map(|x| x.into()).collect();
+                return layer.value_from_name(name);
             }
         }
-        self.statics.value_from_name(name)
+        vec![]
     }
 
     pub fn values(&self, index: LayerIndex) -> Vec<Value<'c, '_>> {
         match index {
             LayerIndex::Op(mut index) => {
-                //let mut index = index.0;
-                if index < self.statics.ops.len() {
-                    self.statics.values(OpIndex(index))
-                } else {
-                    index -= self.statics.ops.len();
-                    for layer in self.layers.iter() {
-                        if index < layer.ops.len() {
-                            return layer.values(OpIndex(index));
-                        }
+                for layer in self.layers.iter() {
+                    if index < layer.ops.len() {
+                        return layer.values(LayerIndex::Op(index));
                     }
-                    unreachable!()
+                    index -= layer.ops.len();
                 }
+                unreachable!()
             }
-            LayerIndex::Argument(index) => {
-                let r: Value<'c, '_> = self.block.as_ref().unwrap().argument(index).unwrap().into();
-                vec![r]
+            LayerIndex::Argument(mut index) => {
+                for layer in self.layers.iter() {
+                    if index < layer.args_count {
+                        return layer.values(LayerIndex::Argument(index));
+                    }
+                    index -= layer.args_count;
+                }
+                unreachable!()
             }
         }
     }
@@ -265,7 +269,11 @@ impl<'c> ScopeStack<'c> {
     */
 
     pub fn take_ops(&mut self) -> Vec<Operation<'c>> {
-        self.statics.ops.drain(..).collect()
+        let mut out = vec![];
+        for layer in self.layers.iter_mut() {
+            out.extend(layer.take_ops());
+        }
+        out
     }
 }
 
@@ -547,10 +555,10 @@ mod tests {
         let three = lower.build_int_op(3, location);
         env.push_with_name(three, "z");
         test_fill(lower, env, location);
-        let layer = env.exit();
+        let mut layer = env.exit();
 
         // append ops
-        let block = env.block.take().unwrap();
+        let block = layer.block.take().unwrap();
         for op in layer.ops {
             block.append_operation(op);
         }
