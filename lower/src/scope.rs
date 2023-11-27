@@ -392,16 +392,14 @@ mod tests {
         // check that previous block is no longer visible
         // but we should have all of the ops
         println!("s2: {:?}", s);
-        //assert_eq!(s.last_index(), 5.into());
-        //assert_eq!(s.index_from_name("x").unwrap(), 1.into());
-        //assert_op_index(&s, "x", 1);
-
-        //assert!(s.index_from_name("z").is_none());
+        assert_eq!(s.last_index(), 6.into());
 
         assert_op_index(&s, "y", 2);
         assert_op_index(&s, "x", 1);
         let rs = s.value_from_name("y");
         assert!(rs.len() > 0);
+
+        assert!(s.index_from_name("z").is_none());
     }
 
     fn test_env<'c>(context: &'c Context, env: &mut SEnv<'c>, location: Location<'c>) {
