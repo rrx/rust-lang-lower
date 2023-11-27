@@ -240,33 +240,25 @@ impl<'c> ScopeStack<'c> {
         self.values(LayerIndex::Op(self.last_index().0))
     }
 
-    /*
     pub fn index_from_name(&self, name: &str) -> Option<LayerIndex> {
-        let mut exists = false;
-        let mut result = 0;
+        let mut result = None;
         for layer in self.layers.iter().rev() {
-            if exists {
-                result += layer.ops.len();
-            } else {
-                if let Some(index) = layer.index_from_name(name) {
-                    result = index;
-                    exists = true;
+            result = match result {
+                Some(LayerIndex::Op(index)) => Some(LayerIndex::Op(index + layer.ops.len())),
+                Some(LayerIndex::Argument(index)) => {
+                    Some(LayerIndex::Argument(index + layer.args_count))
                 }
-            }
+                _ => {
+                    if let Some(index) = layer.index_from_name(name) {
+                        Some(index)
+                    } else {
+                        None
+                    }
+                }
+            };
         }
-
-        if exists {
-            result += self.statics.ops.len();
-            Some(result)//OpIndex(result))
-        } else {
-            if let Some(index) = self.statics.index_from_name(name) {
-                Some(index)
-            } else {
-                None
-            }
-        }
+        result
     }
-    */
 
     pub fn take_ops(&mut self) -> Vec<Operation<'c>> {
         let mut out = vec![];
@@ -321,6 +313,10 @@ mod tests {
     use melior::ir::{Location, Type};
     use melior::Context;
 
+    fn assert_op_index(s: &ScopeStack, name: &str, op_index: usize) {
+        assert_eq!(s.index_from_name(name).unwrap(), LayerIndex::Op(op_index));
+    }
+
     #[test]
     fn test_scope1() {
         let context = test_context();
@@ -344,12 +340,14 @@ mod tests {
         //println!("rs: {:?}", rs);
         //println!("s: {:?}", s);
         assert!(rs.len() > 0);
-        //assert_eq!(s.index_from_name("x").unwrap(), 1.into());
+        assert_op_index(&s, "x", 1);
+        //assert_eq!(s.index_from_name("x").unwrap(), LayerIndex::Op(1));
 
         let rs = s.value_from_name("y");
         //println!("rs: {:?}", rs);
         assert!(rs.len() > 0);
-        //assert_eq!(s.index_from_name("y").unwrap(), 2.into());
+        //assert_eq!(s.index_from_name("y").unwrap(), LayerIndex::Op(2));
+        assert_op_index(&s, "y", 2);
 
         //println!("s: {:?}", s);
 
@@ -359,11 +357,13 @@ mod tests {
         s.push_with_name(op, "y");
         assert_eq!(s.last_index(), 3.into());
         //assert_eq!(s.index_from_name("y").unwrap(), 3.into());
+        assert_op_index(&s, "y", 3);
 
         let op = lower.build_bool_op(false, location);
         s.push_with_name(op, "x");
         assert_eq!(s.last_index(), 4.into());
         //assert_eq!(s.index_from_name("x").unwrap(), 4.into());
+        assert_op_index(&s, "x", 4);
 
         s.enter_closed();
         let op = lower.build_bool_op(false, location);
@@ -372,6 +372,8 @@ mod tests {
         assert_eq!(s.last_index(), 5.into());
         //assert_eq!(s.index_from_name("z").unwrap(), 5.into());
         //assert_eq!(s.index_from_name("x").unwrap(), 4.into());
+        assert_op_index(&s, "z", 5);
+        assert_op_index(&s, "x", 4);
         let rs = s.value_from_name("z");
         assert!(rs.len() > 0);
 
@@ -385,7 +387,10 @@ mod tests {
         println!("s: {:?}", s);
         assert_eq!(s.last_index(), 5.into());
         //assert_eq!(s.index_from_name("x").unwrap(), 1.into());
+        //assert_op_index(&s, "x", 1);
+
         //assert!(s.index_from_name("z").is_none());
+
         let rs = s.value_from_name("y");
         assert!(rs.len() > 0);
     }
