@@ -1,3 +1,4 @@
+use im::OrdMap;
 use melior::ir::*;
 use melior::ir::{Operation, Value};
 use std::collections::HashMap;
@@ -19,7 +20,7 @@ impl From<usize> for OpIndex {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum LayerIndex {
     Op(usize),
     Argument(usize),
@@ -37,10 +38,12 @@ impl LayerIndex {
 #[derive(Debug)]
 pub struct Layer<'c> {
     ty: LayerType,
-    pub ops: Vec<Operation<'c>>,
+    pub(crate) ops: Vec<Operation<'c>>,
     args_count: usize,
     names: HashMap<String, LayerIndex>,
-    block: Option<Block<'c>>,
+    //index: HashMap<LayerIndex, usize>,
+    pub(crate) block: Option<Block<'c>>,
+    last_index: Option<LayerIndex>,
 }
 
 impl<'c> Layer<'c> {
@@ -50,11 +53,13 @@ impl<'c> Layer<'c> {
             ops: vec![],
             args_count: 0,
             names: HashMap::new(),
+            //index: HashMap::new(),
             block: None,
+            last_index: None,
         }
     }
     pub fn merge(&mut self, mut layer: Layer<'c>) {
-        let start = self.ops.len();
+        //let start = self.ops.len();
 
         let preserve_names = match layer.ty {
             LayerType::Closed | LayerType::Function | LayerType::Block => false,
@@ -65,8 +70,9 @@ impl<'c> Layer<'c> {
         // overwrite existing names, thus shadowing
         if preserve_names {
             for (k, v) in layer.names {
-                if let LayerIndex::Op(index) = v {
-                    self.names.insert(k, LayerIndex::op(OpIndex(index + start)));
+                // only do ops, not args
+                if let LayerIndex::Op(_) = v {
+                    self.names.insert(k, v);
                 }
             }
         }
@@ -74,22 +80,24 @@ impl<'c> Layer<'c> {
         for op in layer.ops.drain(..) {
             self.ops.push(op);
         }
+        self.last_index = layer.last_index;
     }
 
     pub fn name_index(&mut self, index: LayerIndex, name: &str) {
         self.names.insert(name.to_string(), index);
     }
 
-    pub fn push(&mut self, op: Operation<'c>) -> LayerIndex {
-        let index = LayerIndex::Op(self.ops.len());
+    pub fn push(&mut self, op: Operation<'c>, index: LayerIndex) {
+        //let pos = self.ops.len();
         self.ops.push(op);
-        index
+        //self.index.insert(index, pos);
+        self.last_index = Some(index);
     }
 
-    pub fn push_with_name(&mut self, op: Operation<'c>, name: &str) -> LayerIndex {
-        let index = self.push(op);
+    pub fn push_with_name(&mut self, op: Operation<'c>, index: LayerIndex, name: &str) {
+        self.push(op, index);
         self.names.insert(name.to_string(), index);
-        index
+        self.last_index = Some(index);
     }
 
     pub fn last_index(&self) -> OpIndex {
@@ -135,6 +143,8 @@ impl<'c> Layer<'c> {
 
 #[derive(Debug)]
 pub struct ScopeStack<'c> {
+    arg_count: usize,
+    op_count: usize,
     layers: Vec<Layer<'c>>,
 }
 
@@ -142,12 +152,25 @@ impl<'c> Default for ScopeStack<'c> {
     fn default() -> Self {
         let layer = Layer::new(LayerType::Static);
         Self {
+            arg_count: 0,
+            op_count: 0,
             layers: vec![layer],
         }
     }
 }
 
 impl<'c> ScopeStack<'c> {
+    pub fn fresh_argument(&mut self) -> LayerIndex {
+        let index = LayerIndex::Argument(self.arg_count);
+        self.arg_count += 1;
+        index
+    }
+
+    pub fn fresh_op(&mut self) -> LayerIndex {
+        let index = LayerIndex::Op(self.op_count);
+        self.op_count += 1;
+        index
+    }
     pub fn enter_closed(&mut self) {
         let layer = Layer::new(LayerType::Closed);
         self.enter(layer);
@@ -206,19 +229,19 @@ impl<'c> ScopeStack<'c> {
     }
 
     pub fn push(&mut self, op: Operation<'c>) -> LayerIndex {
-        self.last_mut().push(op)
+        let index = self.fresh_op();
+        self.last_mut().push(op, index);
+        index
     }
 
     pub fn push_with_name(&mut self, op: Operation<'c>, name: &str) -> LayerIndex {
-        self.last_mut().push_with_name(op, name)
+        let index = self.fresh_op();
+        self.last_mut().push_with_name(op, index, name);
+        index
     }
 
-    pub fn last_index(&self) -> OpIndex {
-        let mut index = 0;
-        for layer in self.layers.iter() {
-            index += layer.ops.len();
-        }
-        OpIndex(index - 1)
+    pub fn last_index(&self) -> Option<LayerIndex> {
+        self.layers.last().map(|x| x.last_index.unwrap())
     }
 
     pub fn value_from_name(&self, name: &str) -> Vec<Value<'c, '_>> {
@@ -232,50 +255,27 @@ impl<'c> ScopeStack<'c> {
     }
 
     pub fn values(&self, index: LayerIndex) -> Vec<Value<'c, '_>> {
-        match index {
-            LayerIndex::Op(mut index) => {
-                for layer in self.layers.iter() {
-                    if index < layer.ops.len() {
-                        return layer.values(LayerIndex::Op(index));
-                    }
-                    index -= layer.ops.len();
-                }
-                unreachable!()
-            }
-            LayerIndex::Argument(mut index) => {
-                for layer in self.layers.iter() {
-                    if index < layer.args_count {
-                        return layer.values(LayerIndex::Argument(index));
-                    }
-                    index -= layer.args_count;
-                }
-                unreachable!()
+        for layer in self.layers.iter().rev() {
+            let result = layer.values(index);
+            if result.len() > 0 {
+                return result;
             }
         }
+        vec![]
     }
 
     pub fn last_values(&self) -> Vec<Value<'c, '_>> {
-        self.values(LayerIndex::Op(self.last_index().0))
+        self.values(self.last_index().unwrap())
     }
 
     pub fn index_from_name(&self, name: &str) -> Option<LayerIndex> {
-        let mut result = None;
         for layer in self.layers.iter().rev() {
-            result = match result {
-                Some(LayerIndex::Op(index)) => Some(LayerIndex::Op(index + layer.ops.len())),
-                Some(LayerIndex::Argument(index)) => {
-                    Some(LayerIndex::Argument(index + layer.args_count))
-                }
-                _ => {
-                    if let Some(index) = layer.index_from_name(name) {
-                        Some(index)
-                    } else {
-                        None
-                    }
-                }
-            };
+            let result = layer.index_from_name(name);
+            if result.is_some() {
+                return result;
+            }
         }
-        result
+        None
     }
 
     pub fn take_ops(&mut self) -> Vec<Operation<'c>> {
@@ -304,14 +304,14 @@ mod tests {
     use melior::ir::{Location, Type};
     use melior::Context;
 
-    fn assert_op_index(s: &ScopeStack, name: &str, op_index: usize) {
-        assert_eq!(s.index_from_name(name).unwrap(), LayerIndex::Op(op_index));
+    fn assert_op_index(s: &ScopeStack, name: &str, index: LayerIndex) {
+        assert_eq!(s.index_from_name(name).unwrap(), index);
     }
 
     #[test]
     fn test_scope1() {
         let context = test_context();
-        let mut files = FileDB::new();
+        let files = FileDB::new();
         //let file_id = files.add("test.py".into(), "test".into());
         let lower = Lower::new(&context, &files);
         let mut s = ScopeStack::default();
@@ -321,52 +321,53 @@ mod tests {
         let op = lower.build_bool_op(false, location);
         s.push_with_name(op, "x");
         let op = lower.build_bool_op(true, location);
-        s.push_with_name(op, "x");
-        let op = lower.build_bool_op(true, location);
-        s.push_with_name(op, "y");
-        assert_eq!(s.last_index(), 2.into());
+        let x_index = s.push_with_name(op, "x");
+        // ensure x is shadowed
+        assert_op_index(&s, "x", x_index);
 
-        //let rs = s.values(LayerIndex::Op(s.last_index().0));
-        //println!("rs: {:?}", rs);
+        let op = lower.build_bool_op(true, location);
+        let y_index = s.push_with_name(op, "y");
+        assert_eq!(s.last_index().unwrap(), y_index);
+        assert_op_index(&s, "y", y_index);
 
         let rs = s.value_from_name("x");
         assert!(rs.len() > 0);
-        // ensure x is shadowed
-        assert_op_index(&s, "x", 1);
 
         // ensure y
         let rs = s.value_from_name("y");
         assert!(rs.len() > 0);
-        assert_op_index(&s, "y", 2);
 
         // enter function context
         s.enter_func();
 
         // push y, should shadow static context
         let op = lower.build_bool_op(true, location);
-        s.push_with_name(op, "y");
-        assert_op_index(&s, "y", 3);
+        let index = s.push_with_name(op, "y");
+        assert_op_index(&s, "y", index);
 
         // push x, should shadow static context
         let op = lower.build_bool_op(false, location);
-        s.push_with_name(op, "x");
-        assert_op_index(&s, "x", 4);
+        let index = s.push_with_name(op, "x");
+        assert_op_index(&s, "x", index);
 
         // enter closed context
         s.enter_closed();
 
         // push x in a closed context
         let op = lower.build_bool_op(false, location);
-        s.push_with_name(op, "x");
+        let index = s.push_with_name(op, "x");
+        assert_op_index(&s, "x", index);
 
         // push z in a closed context
         let op = lower.build_bool_op(false, location);
-        s.push_with_name(op, "z");
+        let index = s.push_with_name(op, "z");
+        assert_op_index(&s, "z", index);
 
         //println!("s: {:?}", s);
         //assert_eq!(s.last_index(), 5.into());
-        assert_op_index(&s, "z", 6);
-        assert_op_index(&s, "x", 5);
+
+        println!("s2: {:?}", s);
+        assert_eq!(s.last_index().unwrap(), s.index_from_name("z").unwrap());
 
         println!("s1: {:?}", s);
         let layer = s.exit();
@@ -376,11 +377,9 @@ mod tests {
 
         // check that previous block is no longer visible
         // but we should have all of the ops
-        println!("s2: {:?}", s);
-        assert_eq!(s.last_index(), 6.into());
 
-        assert_op_index(&s, "y", 2);
-        assert_op_index(&s, "x", 1);
+        assert_op_index(&s, "y", y_index);
+        assert_op_index(&s, "x", x_index);
         let rs = s.value_from_name("y");
         assert!(rs.len() > 0);
 
@@ -504,10 +503,9 @@ mod tests {
     fn test_scope3() {
         let context = test_context();
         let mut files = FileDB::new();
-        let file_id = files.add("test.py".into(), "test".into());
-        let lower = Lower::new(&context, &files);
+        let _file_id = files.add("test.py".into(), "test".into());
         let location = Location::unknown(&context);
-        let ast = crate::lower::tests::gen_test(file_id);
+        //let ast = crate::lower::tests::gen_test(file_id);
         let lower = Lower::new(&context, &files);
         let mut env = ScopeStack::default();
         test_env3(&lower, &mut env, location);

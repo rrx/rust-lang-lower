@@ -152,47 +152,42 @@ impl<'c> Lower<'c> {
         condition: AstNode<E>,
         body: AstNode<E>,
         env: &mut Environment<'c>,
-        mut layer: Layer<'c>,
-        h2: &mut HashMap<&str, Value<'c, 'a>>, //depth: usize,
     ) -> (Vec<Value<'c, '_>>, Vec<Operation<'c>>) {
-        //let mut h = std::collections::HashMap::new();
         //env.enter(LayerType::Closed);
-        let bool_type = melior::ir::r#type::IntegerType::new(self.context, 1).into();
-        let index_type = Type::index(self.context);
+        let bool_type = self.from_type(AstType::Bool);
+        let index_type = self.from_type(AstType::Int);
         let condition_location = self.location(&condition);
         let body_location = self.location(&body);
+
+        env.enter_closed();
         let x_op = self.build_int_op(1, condition_location);
-        let r_op: Value<'c, '_> = x_op.result(0).unwrap().into();
-        //layer.push(x_op);
-        //out.push(op);
-        //let r_op = layer.values(layer.last_index());
-        //let r_op = out.last().unwrap().result(0).unwrap().into();
-        //h.insert("test", r_op[0]);
+        env.push_with_name(x_op, "test");
 
         let init_op = self.build_bool_op(true, condition_location);
+        env.push_with_name(init_op, "init_op");
         let init_op2 = self.build_int_op(10, condition_location);
-        let mut init_args = init_op.results().map(|r| r.into()).collect::<Vec<Value>>();
-        //h.insert("init_op", init_args[0]);
-        let rs2 = init_op2.results().map(|r| r.into()).collect::<Vec<Value>>();
-        //h.insert("init_op2", rs2[0]);
-        init_args.extend(rs2);
+        env.push_with_name(init_op2, "init_op2");
 
-        //let init_args = &[(float_type, condition_location)];
-        //let before_args = &[];//(bool_type, condition_location)];
-        // before
-        let before_args = init_args
-            .iter()
-            .map(|a| (a.r#type(), condition_location))
-            .collect::<Vec<_>>();
+        let init_args = vec![("arg0", "init_op"), ("arg1", "init_op2")];
 
-        let before_region = Region::new();
-        let before_block = Block::new(&before_args);
+        let before_args: Vec<(Type, Location, &str)> = init_args
+            .into_iter()
+            .map(|(arg_name, init_name)| {
+                let r = env.value_from_name(init_name);
+                (r[0].r#type(), condition_location, arg_name)
+            })
+            .collect();
+
+        env.enter_block(&before_args);
+        println!("x: {:?}", env);
+        //let before_block = Block::new(&before_args);
 
         // bool
-        let _a: Value<'c, '_> = before_block.argument(0).unwrap().into();
+        //let _a: Value<'c, '_> = env.value_from_name("arg0")[0];//before_block.argument(0).unwrap().into();
 
         //index
-        let b: Value<'c, '_> = before_block.argument(1).unwrap().into();
+        //let b: Value<'c, '_> = before_block.argument(1).unwrap().into();
+        //let b: Value<'c, '_> = env.value_from_name("arg1")[0];
 
         //let r_op = h.get("test").unwrap().clone();
         //let op2 = arith::addi(b, r_op, condition_location);
@@ -222,19 +217,35 @@ impl<'c> Lower<'c> {
         //});
 
         // condition passes result to region 1 if true, or terminates with result
+        let b_index = env.index_from_name("arg1").unwrap();
+        println!("b: {:?}", b_index);
+        let b = env.value_from_name("arg1");
+        println!("b: {:?}", b);
+        let b = env.values(b_index);
+        println!("b: {:?}", b);
+
+        let b: Value<'c, '_> = env.value_from_name("init_op2")[0];
         let c = scf::condition(
             condition_rs[0].into(),
             //&rs,
             &[b],
             condition_location,
         );
-        //before_block.append_operation(op2);
-        //before_block.append_operation(op);
+
+        let mut layer = env.exit();
+        let before_block = layer.block.take().unwrap();
+        let ops = layer.take_ops();
+        for op in ops {
+            before_block.append_operation(op);
+        }
         for op in condition_ops {
             before_block.append_operation(op);
         }
         before_block.append_operation(c);
+        let before_region = Region::new();
         before_region.append_block(before_block);
+
+        // Before Complete
 
         // after
         let after_args = &[(index_type, body_location)];
@@ -271,7 +282,7 @@ impl<'c> Lower<'c> {
             //assert!(r.r#type() == before_args[0].0);
         });
 
-        assert!(rs.len() == init_args.len());
+        //assert!(rs.len() == init_args.len());
 
         // yield passes result to region 0
         let y = scf::r#yield(&rs, body_location);
@@ -283,37 +294,26 @@ impl<'c> Lower<'c> {
 
         after_region.append_block(after_block);
 
-        let op = scf::r#while(
+        let init_args = vec![
+            env.value_from_name("init_op")[0],
+            env.value_from_name("init_op2")[0],
+        ];
+        env.push(scf::r#while(
             &init_args,
             &after_args.iter().map(|x| x.0).collect::<Vec<Type<'_>>>(),
             before_region,
             after_region,
             body_location,
-        );
-
-        //env.push(op);
-        //env.exit();
-        //env.last_index()
-        //let mut out = vec![];
-        //out.push(init_op);
-        //let r: Value<'c, '_> = op.result(0).unwrap().into();
-        //let r: Vec<Value<'c, '_>> = op.results().map(|x| x.into()).collect::<Vec<_>>();
-        //out.push(op);
-        //let r = ops2r(&out);
-        //let r = out.last().unwrap().results().map(|x| x.into()).collect::<Vec<_>>();
+        ));
 
         //if depth == 0 {
         // function level, non-zero result means return immediately
         //} else {
         //}
-        //let op = cf::cond_br(context
-        //println!("op: {:?}", ops);
-        //out.push(x_op);
-        //for op in layer.ops.into_iter() {
-        //out.push(op);
-        //}
 
-        (vec![], vec![init_op, init_op2, op]) //vec![op])
+        let mut layer = env.exit();
+        let out = layer.take_ops();
+        (vec![], out)
     }
 
     pub fn location<E: Extra>(&self, expr: &AstNode<E>) -> Location<'c> {
@@ -694,13 +694,13 @@ impl<'c> Lower<'c> {
             Ast::Test(condition, body) => {
                 let mut out = vec![];
                 let condition_location = self.location(&condition);
-                let mut h = std::collections::HashMap::new();
+                //let mut h = std::collections::HashMap::new();
                 let mut layer = Layer::new(LayerType::Static);
-                let (_, ops) = self.build_loop(*condition, *body, env, layer, &mut h);
-                //env.push(init_op);
-                //env.push(init_op2);
-                //out.push(init_op);
-                //out.push(init_op2);
+                let (_, ops) = self.build_loop(*condition, *body, env); //, layer, &mut h);
+                                                                        //env.push(init_op);
+                                                                        //env.push(init_op2);
+                                                                        //out.push(init_op);
+                                                                        //out.push(init_op2);
                 out.extend(ops);
                 (vec![], out) //vec![])
             }
