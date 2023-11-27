@@ -21,11 +21,18 @@ impl From<usize> for OpIndex {
 #[derive(Debug)]
 pub struct Layer<'c> {
     ty: LayerType,
-    ops: Vec<Operation<'c>>,
+    pub ops: Vec<Operation<'c>>,
     names: HashMap<String, OpIndex>,
 }
 
 impl<'c> Layer<'c> {
+    pub fn new(ty: LayerType) -> Self {
+        Self {
+            ty: LayerType::Static,
+            ops: vec![],
+            names: HashMap::new(),
+        }
+    }
     pub fn merge(&mut self, mut layer: Layer<'c>) {
         let start = self.ops.len();
 
@@ -218,6 +225,31 @@ impl<'c> ScopeStack<'c> {
     }
 }
 
+#[derive(Debug)]
+struct SEnv<'c> {
+    layer: Vec<Layer<'c>>
+}
+
+impl<'c> SEnv<'c> {
+    fn new() -> Self {
+        Self { layer: vec![] }
+    }
+    fn enter(&mut self) {
+        self.layer.push(Layer::new(LayerType::Static));
+    }
+    fn exit(&mut self) {
+        self.layer.pop();
+    }
+    fn push(&mut self, op: Operation<'c>) {
+        self.layer.last_mut().unwrap().ops.push(op);
+    }
+    fn get(&self, index: usize) -> Vec<Value<'c, '_>> {
+        let r1 = self.layer.last().unwrap().ops[index].results().map(|x| x.into()).collect::<Vec<Value<'_, '_>>>();
+        r1
+    }
+
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -226,7 +258,11 @@ mod tests {
     use crate::lower::tests::test_context;
     use crate::lower::FileDB;
     use crate::lower::Lower;
-    use melior::ir::Location;
+    use melior::ir::{Location, Type};
+    use melior::ir::r#type::{FunctionType, MemRefType};
+    use melior::dialect::{arith, memref};
+    use melior::Context;
+
 
     #[test]
     fn test_scope() {
@@ -282,6 +318,8 @@ mod tests {
         let rs = s.value_from_name("z");
         assert!(rs.len() > 0);
 
+
+
         s.exit();
         s.exit();
 
@@ -293,5 +331,68 @@ mod tests {
         assert!(s.index_from_name("z").is_none());
         let rs = s.value_from_name("y");
         assert!(rs.len() > 0);
+    }
+
+    fn test_env<'c>(context: &'c Context, env: &mut SEnv<'c>, location: Location<'c>) {
+        let r3 = env.get(0);
+        let r4 = env.get(1);
+        println!("{:?}", r3);
+        println!("{:?}", r4);
+        let index_type = Type::index(&context); 
+        let ty = MemRefType::new(index_type, &[], None, None);
+        let op = memref::global(context, "x", None, ty, None, true, None, location);
+        let r = op.result(0).unwrap().into();
+        let op = memref::store(r3[0], r, &[], location);
+        println!("{:?}", op);
+        env.push(op);
+
+        //let op = arith::addi(r3[0], r4[0], location);
+        println!("{:?}", env);
+        //env.push(op);
+    }
+
+    fn test_env2<'c>(context: &'c Context, env: &mut SEnv<'c>, location: Location<'c>, ops: Vec<Operation<'c>>) {
+        env.enter();
+        for op in ops {
+            env.push(op);
+        }
+        println!("{:?}", env);
+        let r3 = env.get(0);
+        let r4 = env.get(1);
+        //let op = arith::addi(r3[0], r4[0], location);
+        env.exit();
+    }
+
+    #[test]
+    fn test_scope2() {
+        let context = test_context();
+        let mut files = FileDB::new();
+        let file_id = files.add("test.py".into(), "test".into());
+        let lower = Lower::new(&context, &files);
+        let location = Location::unknown(&context);
+        let ast = crate::lower::tests::gen_test(file_id);
+        let lower = Lower::new(&context, &files);
+        //let mut env = ScopeStack::default();
+        let mut env = crate::lower::Environment::default();
+        let (_, ops) = lower.lower_expr(ast, &mut env);
+
+        //let one = lower.build_int_op(1, location);
+        //let two = lower.build_int_op(2, location);
+
+        let mut env = SEnv::new();
+
+        //env.push(one);
+        //env.push(two);
+        //let r3 = env.get(0);
+        //let r4 = env.get(1);
+
+        //let r1 = env.last_values();
+        //let r2 = env.last_values();
+        //env.push(one);
+        //env.push(two);
+        //let op = arith::addi(r1[0], r2[0], location);
+        //let op = arith::addi(r3[0], r4[0], location);
+        //env.push(op);
+        test_env2(&context, &mut env, location, ops);
     }
 }
