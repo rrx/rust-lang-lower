@@ -224,7 +224,8 @@ impl<'c> Lower<'c> {
         let b = env.values(b_index);
         println!("b: {:?}", b);
 
-        let b: Value<'c, '_> = env.value_from_name("init_op2")[0];
+        println!("env: {:?}", env);
+        let b: Value<'c, '_> = env.value_from_name("arg1")[0];
         let c = scf::condition(
             condition_rs[0].into(),
             //&rs,

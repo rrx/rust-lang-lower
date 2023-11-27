@@ -41,7 +41,7 @@ pub struct Layer<'c> {
     pub(crate) ops: Vec<Operation<'c>>,
     args_count: usize,
     names: HashMap<String, LayerIndex>,
-    //index: HashMap<LayerIndex, usize>,
+    index: HashMap<LayerIndex, usize>,
     pub(crate) block: Option<Block<'c>>,
     last_index: Option<LayerIndex>,
 }
@@ -53,7 +53,7 @@ impl<'c> Layer<'c> {
             ops: vec![],
             args_count: 0,
             names: HashMap::new(),
-            //index: HashMap::new(),
+            index: HashMap::new(),
             block: None,
             last_index: None,
         }
@@ -88,9 +88,9 @@ impl<'c> Layer<'c> {
     }
 
     pub fn push(&mut self, op: Operation<'c>, index: LayerIndex) {
-        //let pos = self.ops.len();
+        let pos = self.ops.len();
         self.ops.push(op);
-        //self.index.insert(index, pos);
+        self.index.insert(index, pos);
         self.last_index = Some(index);
     }
 
@@ -106,13 +106,27 @@ impl<'c> Layer<'c> {
 
     pub fn value_from_name(&self, name: &str) -> Vec<Value<'c, '_>> {
         match self.names.get(name) {
-            Some(LayerIndex::Op(index)) => self
-                .ops
-                .get(*index)
-                .unwrap()
-                .results()
-                .map(|x| x.into())
-                .collect(),
+            Some(index) => {
+                let offset = self.index.get(index).unwrap();
+                match index {
+                    LayerIndex::Op(_) => self
+                        .ops
+                        .get(*offset)
+                        .unwrap()
+                        .results()
+                        .map(|x| x.into())
+                        .collect(),
+                    LayerIndex::Argument(_) => {
+                        vec![self
+                            .block
+                            .as_ref()
+                            .unwrap()
+                            .argument(*offset)
+                            .unwrap()
+                            .into()]
+                    }
+                }
+            }
             _ => vec![],
         }
     }
@@ -190,7 +204,10 @@ impl<'c> ScopeStack<'c> {
         let mut layer = Layer::new(LayerType::Block);
         layer.args_count = arguments.len();
         for (i, a) in arguments.iter().enumerate() {
-            layer.names.insert(a.2.to_string(), LayerIndex::Argument(i));
+            let index = LayerIndex::Argument(self.arg_count);
+            self.arg_count += 1;
+            layer.names.insert(a.2.to_string(), index);
+            layer.index.insert(index, i);
         }
         let block_args = arguments.iter().map(|a| (a.0, a.1)).collect::<Vec<_>>();
         let block = Block::new(&block_args);
@@ -246,9 +263,9 @@ impl<'c> ScopeStack<'c> {
 
     pub fn value_from_name(&self, name: &str) -> Vec<Value<'c, '_>> {
         for layer in self.layers.iter().rev() {
-            //println!("x: {:?}", self);
-            if let Some(_) = layer.names.get(name) {
-                return layer.value_from_name(name);
+            let r = layer.value_from_name(name);
+            if r.len() > 0 {
+                return r;
             }
         }
         vec![]
