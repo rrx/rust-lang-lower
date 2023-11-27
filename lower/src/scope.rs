@@ -136,6 +136,26 @@ impl<'c> Layer<'c> {
     }
 
     pub fn values(&self, index: LayerIndex) -> Vec<Value<'c, '_>> {
+        if let Some(offset) = self.index.get(&index) {
+            return match index {
+                LayerIndex::Op(_) => self
+                    .ops
+                    .get(*offset)
+                    .unwrap()
+                    .results()
+                    .map(|x| x.into())
+                    .collect(),
+                LayerIndex::Argument(_) => vec![self
+                    .block
+                    .as_ref()
+                    .unwrap()
+                    .argument(*offset)
+                    .unwrap()
+                    .into()],
+            };
+        }
+        vec![]
+        /*
         match index {
             LayerIndex::Op(index) => {
                 let index = index;
@@ -147,6 +167,7 @@ impl<'c> Layer<'c> {
                 vec![r]
             }
         }
+        */
     }
 
     pub fn take_ops(&mut self) -> Vec<Operation<'c>> {

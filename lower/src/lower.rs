@@ -193,17 +193,21 @@ impl<'c> Lower<'c> {
         //let op2 = arith::addi(b, r_op, condition_location);
 
         let (_, condition_ops) = self.lower_expr(condition, env);
+        for op in condition_ops {
+            env.push(op);
+        }
         //let r_condition = ops.last().unwrap().result(0).unwrap();
         //let op = self.build_int_op(2, body_location);
         //let condition_op = condition_ops.last().unwrap();
         //
-        let condition_rs = condition_ops
-            .last()
-            .unwrap()
-            .results()
-            .map(|r| r.into())
-            .collect::<Vec<Value>>();
+        //let condition_rs = condition_ops
+        //.last()
+        //.unwrap()
+        //.results()
+        //.map(|r| r.into())
+        //.collect::<Vec<Value>>();
 
+        let condition_rs = env.last_values();
         // should be bool type
         assert!(condition_rs[0].r#type() == bool_type);
 
@@ -233,15 +237,16 @@ impl<'c> Lower<'c> {
             condition_location,
         );
 
+        // exit block
         let mut layer = env.exit();
         let before_block = layer.block.take().unwrap();
         let ops = layer.take_ops();
         for op in ops {
             before_block.append_operation(op);
         }
-        for op in condition_ops {
-            before_block.append_operation(op);
-        }
+        //for op in condition_ops {
+        //before_block.append_operation(op);
+        //}
         before_block.append_operation(c);
         let before_region = Region::new();
         before_region.append_block(before_block);
