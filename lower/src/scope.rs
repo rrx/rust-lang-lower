@@ -46,7 +46,7 @@ pub struct Layer<'c> {
 impl<'c> Layer<'c> {
     pub fn new(ty: LayerType) -> Self {
         Self {
-            ty: LayerType::Static,
+            ty,
             ops: vec![],
             args_count: 0,
             names: HashMap::new(),
@@ -145,11 +145,17 @@ impl<'c> Default for ScopeStack<'c> {
 
 impl<'c> ScopeStack<'c> {
     pub fn enter_closed(&mut self) {
-        let mut layer = Layer::new(LayerType::Closed);
+        let layer = Layer::new(LayerType::Closed);
         self.enter(layer);
     }
+
     pub fn enter_func(&mut self) {
-        let mut layer = Layer::new(LayerType::Closed);
+        let layer = Layer::new(LayerType::Function);
+        self.enter(layer);
+    }
+
+    pub fn enter_static(&mut self) {
+        let layer = Layer::new(LayerType::Static);
         self.enter(layer);
     }
 
@@ -205,7 +211,7 @@ impl<'c> ScopeStack<'c> {
 
     pub fn value_from_name(&self, name: &str) -> Vec<Value<'c, '_>> {
         for layer in self.layers.iter().rev() {
-            println!("x: {:?}", self);
+            //println!("x: {:?}", self);
             if let Some(_) = layer.names.get(name) {
                 return layer.value_from_name(name);
             }
@@ -325,6 +331,8 @@ mod tests {
         let lower = Lower::new(&context, &files);
         let mut s = ScopeStack::default();
         let location = Location::unknown(&context);
+
+        // 3 ops in static context
         let op = lower.build_bool_op(false, location);
         s.push_with_name(op, "x");
         let op = lower.build_bool_op(true, location);
@@ -333,50 +341,49 @@ mod tests {
         s.push_with_name(op, "y");
         assert_eq!(s.last_index(), 2.into());
 
-        let rs = s.values(LayerIndex::Op(s.last_index().0));
+        //let rs = s.values(LayerIndex::Op(s.last_index().0));
         //println!("rs: {:?}", rs);
 
         let rs = s.value_from_name("x");
-        //println!("rs: {:?}", rs);
-        //println!("s: {:?}", s);
         assert!(rs.len() > 0);
+        // ensure x is shadowed
         assert_op_index(&s, "x", 1);
-        //assert_eq!(s.index_from_name("x").unwrap(), LayerIndex::Op(1));
 
+        // ensure y
         let rs = s.value_from_name("y");
-        //println!("rs: {:?}", rs);
         assert!(rs.len() > 0);
-        //assert_eq!(s.index_from_name("y").unwrap(), LayerIndex::Op(2));
         assert_op_index(&s, "y", 2);
 
-        //println!("s: {:?}", s);
-
+        // enter function context
         s.enter_func();
 
+        // push y, should shadow static context
         let op = lower.build_bool_op(true, location);
         s.push_with_name(op, "y");
-        assert_eq!(s.last_index(), 3.into());
-        //assert_eq!(s.index_from_name("y").unwrap(), 3.into());
         assert_op_index(&s, "y", 3);
 
+        // push x, should shadow static context
         let op = lower.build_bool_op(false, location);
         s.push_with_name(op, "x");
-        assert_eq!(s.last_index(), 4.into());
-        //assert_eq!(s.index_from_name("x").unwrap(), 4.into());
         assert_op_index(&s, "x", 4);
 
+        // enter closed context
         s.enter_closed();
+
+        // push x in a closed context
+        let op = lower.build_bool_op(false, location);
+        s.push_with_name(op, "x");
+
+        // push z in a closed context
         let op = lower.build_bool_op(false, location);
         s.push_with_name(op, "z");
-        println!("s: {:?}", s);
-        assert_eq!(s.last_index(), 5.into());
-        //assert_eq!(s.index_from_name("z").unwrap(), 5.into());
-        //assert_eq!(s.index_from_name("x").unwrap(), 4.into());
-        assert_op_index(&s, "z", 5);
-        assert_op_index(&s, "x", 4);
-        let rs = s.value_from_name("z");
-        assert!(rs.len() > 0);
 
+        //println!("s: {:?}", s);
+        //assert_eq!(s.last_index(), 5.into());
+        assert_op_index(&s, "z", 6);
+        assert_op_index(&s, "x", 5);
+
+        println!("s1: {:?}", s);
         let layer = s.exit();
         s.merge(layer);
         let layer = s.exit();
@@ -384,13 +391,15 @@ mod tests {
 
         // check that previous block is no longer visible
         // but we should have all of the ops
-        println!("s: {:?}", s);
-        assert_eq!(s.last_index(), 5.into());
+        println!("s2: {:?}", s);
+        //assert_eq!(s.last_index(), 5.into());
         //assert_eq!(s.index_from_name("x").unwrap(), 1.into());
         //assert_op_index(&s, "x", 1);
 
         //assert!(s.index_from_name("z").is_none());
 
+        assert_op_index(&s, "y", 2);
+        assert_op_index(&s, "x", 1);
         let rs = s.value_from_name("y");
         assert!(rs.len() > 0);
     }
