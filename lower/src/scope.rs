@@ -76,6 +76,10 @@ impl<'c> Layer<'c> {
         }
     }
 
+    pub fn name_index(&mut self, index: LayerIndex, name: &str) {
+        self.names.insert(name.to_string(), index);
+    }
+
     pub fn push(&mut self, op: Operation<'c>) -> LayerIndex {
         let index = LayerIndex::Op(self.ops.len());
         self.ops.push(op);
@@ -161,6 +165,10 @@ impl<'c> ScopeStack<'c> {
 
     pub fn enter_block(&mut self, arguments: &[(Type<'c>, Location<'c>, &str)]) {
         let mut layer = Layer::new(LayerType::Block);
+        layer.args_count = arguments.len();
+        for (i, a) in arguments.iter().enumerate() {
+            layer.names.insert(a.2.to_string(), LayerIndex::Argument(i));
+        }
         let block_args = arguments.iter().map(|a| (a.0, a.1)).collect::<Vec<_>>();
         let block = Block::new(&block_args);
         layer.block = Some(block);
@@ -191,6 +199,10 @@ impl<'c> ScopeStack<'c> {
         } else {
             unreachable!()
         }
+    }
+
+    pub fn name_index(&mut self, index: LayerIndex, name: &str) {
+        self.last_mut().name_index(index, name);
     }
 
     pub fn push(&mut self, op: Operation<'c>) -> LayerIndex {
@@ -272,33 +284,6 @@ impl<'c> ScopeStack<'c> {
             out.extend(layer.take_ops());
         }
         out
-    }
-}
-
-#[derive(Debug)]
-struct SEnv<'c> {
-    layer: Vec<Layer<'c>>,
-}
-
-impl<'c> SEnv<'c> {
-    fn new() -> Self {
-        Self { layer: vec![] }
-    }
-    fn enter(&mut self) {
-        self.layer.push(Layer::new(LayerType::Static));
-    }
-    fn exit(&mut self) {
-        self.layer.pop();
-    }
-    fn push(&mut self, op: Operation<'c>) {
-        self.layer.last_mut().unwrap().ops.push(op);
-    }
-    fn get(&self, index: usize) -> Vec<Value<'c, '_>> {
-        let r1 = self.layer.last().unwrap().ops[index]
-            .results()
-            .map(|x| x.into())
-            .collect::<Vec<Value<'_, '_>>>();
-        r1
     }
 }
 
@@ -402,83 +387,6 @@ mod tests {
         assert!(s.index_from_name("z").is_none());
     }
 
-    fn test_env<'c>(context: &'c Context, env: &mut SEnv<'c>, location: Location<'c>) {
-        let r3 = env.get(0);
-        let r4 = env.get(1);
-        println!("{:?}", r3);
-        println!("{:?}", r4);
-        let index_type = Type::index(&context);
-        let ty = MemRefType::new(index_type, &[], None, None);
-        let op = memref::global(context, "x", None, ty, None, true, None, location);
-        let r = op.result(0).unwrap().into();
-        let op = memref::store(r3[0], r, &[], location);
-        println!("{:?}", op);
-        env.push(op);
-
-        //let op = arith::addi(r3[0], r4[0], location);
-        println!("{:?}", env);
-        //env.push(op);
-    }
-
-    fn test_env2<'c>(
-        context: &'c Context,
-        env: &mut SEnv<'c>,
-        location: Location<'c>,
-        ops: Vec<Operation<'c>>,
-    ) {
-        env.enter();
-        for op in ops {
-            env.push(op);
-        }
-        println!("{:?}", env);
-        let r3 = env.get(0);
-        let r4 = env.get(1);
-        //let op = arith::addi(r3[0], r4[0], location);
-        env.exit();
-    }
-
-    #[test]
-    fn test_scope2() {
-        let context = test_context();
-        let mut files = FileDB::new();
-        let file_id = files.add("test.py".into(), "test".into());
-        let lower = Lower::new(&context, &files);
-        let location = Location::unknown(&context);
-        let ast = crate::lower::tests::gen_test(file_id);
-        let lower = Lower::new(&context, &files);
-        //let mut env = ScopeStack::default();
-        let mut env = crate::lower::Environment::default();
-        let (_, ops) = lower.lower_expr(ast, &mut env);
-
-        //let one = lower.build_int_op(1, location);
-        //let two = lower.build_int_op(2, location);
-
-        let mut env = SEnv::new();
-
-        //env.push(one);
-        //env.push(two);
-        //let r3 = env.get(0);
-        //let r4 = env.get(1);
-
-        //let r1 = env.last_values();
-        //let r2 = env.last_values();
-        //env.push(one);
-        //env.push(two);
-        //let op = arith::addi(r1[0], r2[0], location);
-        //let op = arith::addi(r3[0], r4[0], location);
-        //env.push(op);
-        test_env2(&context, &mut env, location, ops);
-    }
-
-    /*
-    #[derive(Debug)]
-    pub struct LayerTest<'c> {
-        ty: LayerType,
-        pub ops: Vec<Operation<'c>>,
-        //names: HashMap<String, OperationRef<'c>>,
-    }
-    */
-
     fn test_int<'c>(
         lower: &'c Lower,
         scope: &mut ScopeStack<'c>,
@@ -540,14 +448,14 @@ mod tests {
         let r_d = test_add(scope, location, x, y);
         let r_e = test_add(scope, location, r_c, r_d);
 
-        let r3 = test_add(scope, location, r_op1, r_e);
-        //let rz = scope.value_from_name("z")[0];
-        //let r4 = test_add(scope, location, scope.index_from_name("z").unwrap(), r3);
-        //let op = arith::addi(scope.values(r_e)[0], rz, location);
+        let r = test_add(scope, location, r_op1, r_e);
+        let rz = scope.index_from_name("z").unwrap();
+        let r = test_add(scope, location, rz, r);
+        let p0 = scope.index_from_name("p0").unwrap();
+        let r = test_add(scope, location, r, p0);
+        scope.name_index(r, "result");
 
-        //scope.push_with_name(op, "result");
-
-        let ret = func::r#return(&scope.values(r3), location);
+        let ret = func::r#return(&scope.value_from_name("result"), location);
         scope.push(ret);
     }
 
@@ -558,11 +466,7 @@ mod tests {
         let func_type = FunctionType::new(&lower.context, &types, &ret_type);
 
         env.enter_block(&[(index_type, location, "p0")]);
-        //P
-        //let p0: Value<'c, '_> = block.argument(0).unwrap().into();
-
-        //env.push_with_name("p0
-        // add function parameters to the scope, so they can be referenced later
+        assert_eq!(env.index_from_name("p0").unwrap(), LayerIndex::Argument(0));
 
         let three = lower.build_int_op(3, location);
         env.push_with_name(three, "z");

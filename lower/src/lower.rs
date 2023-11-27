@@ -15,16 +15,16 @@ use crate::ast::*;
 use crate::scope::{Layer, LayerType, OpIndex, ScopeStack};
 use codespan_reporting::files::SimpleFiles;
 
-//type Environment<'c> = ScopeStack<'c>;
+type Environment<'c> = ScopeStack<'c>;
 
-pub struct Environment<'c, 'a> {
-    h: HashMap<String, Value<'c, 'a>>,
-}
-impl<'c, 'a> Default for Environment<'c, 'a> {
-    fn default() -> Self {
-        Self { h: HashMap::new() }
-    }
-}
+//pub struct Environment<'c, 'a> {
+//h: HashMap<String, Value<'c, 'a>>,
+//}
+//impl<'c, 'a> Default for Environment<'c, 'a> {
+//fn default() -> Self {
+//Self { h: HashMap::new() }
+//}
+//}
 
 //impl<'c, 'a> crate::env::LayerValue for Value<'c, 'a> {}
 //impl<'c> crate::env::LayerValue for Layer<'c> {}
@@ -151,7 +151,7 @@ impl<'c> Lower<'c> {
         //init_args: &[Value<'c, 'a>],
         condition: AstNode<E>,
         body: AstNode<E>,
-        env: &mut Environment<'c, 'a>,
+        env: &mut Environment<'c>,
         mut layer: Layer<'c>,
         h2: &mut HashMap<&str, Value<'c, 'a>>, //depth: usize,
     ) -> (Vec<Value<'c, '_>>, Vec<Operation<'c>>) {
@@ -323,7 +323,7 @@ impl<'c> Lower<'c> {
     pub fn lower_expr<'a, E: Extra>(
         &self,
         expr: AstNode<E>,
-        env: &mut Environment<'c, 'a>,
+        env: &mut Environment<'c>,
     ) -> (Vec<Value<'c, 'a>>, Vec<Operation<'c>>) {
         let index_type = Type::index(self.context);
         let location = self.location(&expr);
