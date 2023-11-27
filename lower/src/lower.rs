@@ -2,7 +2,7 @@ use melior::{
     dialect::{arith, cf, func, memref, scf},
     ir::{
         attribute::{StringAttribute, TypeAttribute},
-        operation::{OperationResult, OperationRef},
+        operation::{OperationRef, OperationResult},
         r#type::{FunctionType, MemRefType},
         *,
     },
@@ -12,13 +12,13 @@ use melior::{
 use std::collections::HashMap;
 
 use crate::ast::*;
-use crate::scope::{LayerType, OpIndex, ScopeStack, Layer};
+use crate::scope::{Layer, LayerType, OpIndex, ScopeStack};
 use codespan_reporting::files::SimpleFiles;
 
 //type Environment<'c> = ScopeStack<'c>;
 
 pub struct Environment<'c, 'a> {
-    h: HashMap<String, Value<'c, 'a>>
+    h: HashMap<String, Value<'c, 'a>>,
 }
 impl<'c, 'a> Default for Environment<'c, 'a> {
     fn default() -> Self {
@@ -90,7 +90,7 @@ fn ops2r<'c>(ops: &'c Vec<ir::Operation<'c>>) -> Vec<Value<'c, '_>> {
 pub type FileDB = SimpleFiles<String, String>;
 
 pub struct Lower<'c> {
-    context: &'c Context,
+    pub(crate) context: &'c Context,
     files: &'c FileDB,
 }
 
@@ -153,10 +153,8 @@ impl<'c> Lower<'c> {
         body: AstNode<E>,
         env: &mut Environment<'c, 'a>,
         mut layer: Layer<'c>,
-        h2: &mut HashMap<&str, Value<'c, 'a>>
-        //depth: usize,
+        h2: &mut HashMap<&str, Value<'c, 'a>>, //depth: usize,
     ) -> (Vec<Value<'c, '_>>, Vec<Operation<'c>>) {
-
         //let mut h = std::collections::HashMap::new();
         //env.enter(LayerType::Closed);
         let bool_type = melior::ir::r#type::IntegerType::new(self.context, 1).into();
@@ -190,7 +188,6 @@ impl<'c> Lower<'c> {
         let before_region = Region::new();
         let before_block = Block::new(&before_args);
 
-
         // bool
         let _a: Value<'c, '_> = before_block.argument(0).unwrap().into();
 
@@ -216,7 +213,7 @@ impl<'c> Lower<'c> {
         assert!(condition_rs[0].r#type() == bool_type);
 
         // to pass to after
-        
+
         //let op = self.build_int_op(2, body_location);
         //let rs = op.results().map(|r| r.into()).collect::<Vec<Value>>();
         // check types
@@ -313,14 +310,10 @@ impl<'c> Lower<'c> {
         //println!("op: {:?}", ops);
         //out.push(x_op);
         //for op in layer.ops.into_iter() {
-            //out.push(op);
+        //out.push(op);
         //}
 
-        (vec![], vec![
-         init_op,
-         init_op2,
-         op
-        ]) //vec![op])
+        (vec![], vec![init_op, init_op2, op]) //vec![op])
     }
 
     pub fn location<E: Extra>(&self, expr: &AstNode<E>) -> Location<'c> {
@@ -626,7 +619,7 @@ impl<'c> Lower<'c> {
                 match maybe_false_expr {
                     Some(false_expr) => {
                         //let mut s = Environment::default();
-                        let (_, false_ops) = self.lower_expr(*false_expr, env);//&mut s);
+                        let (_, false_ops) = self.lower_expr(*false_expr, env); //&mut s);
                         let false_block = Block::new(&[]);
                         for op in false_ops {
                             //for op in s.take_ops() {
