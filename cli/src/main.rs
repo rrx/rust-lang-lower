@@ -72,8 +72,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let lower = Lower::new(&context, &files);
     let mut env = lower::scope::ScopeStack::default();
     //let mut env = lower::lower::Environment::default();
-    let (_, ops) = lower.lower_expr(ast, &mut env);
-    for op in ops {
+    lower.lower_expr(ast, &mut env);
+    for op in env.take_ops() {
         module.body().append_operation(op);
     }
 

@@ -10,11 +10,11 @@ def x1(y):
         x = 2
     return 3 - 7
 
-def test():
-    1
+# def test():
+    # 1
 
 def main():
-    loop(False, test)
+    # loop(False, test)
 
     1.2 + 0.1
     v = 1252153
