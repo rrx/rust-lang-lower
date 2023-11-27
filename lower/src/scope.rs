@@ -155,19 +155,6 @@ impl<'c> Layer<'c> {
             };
         }
         vec![]
-        /*
-        match index {
-            LayerIndex::Op(index) => {
-                let index = index;
-                self.ops[index].results().map(|x| x.into()).collect()
-            }
-            LayerIndex::Argument(index) => {
-                assert!(index < self.args_count);
-                let r: Value<'c, '_> = self.block.as_ref().unwrap().argument(index).unwrap().into();
-                vec![r]
-            }
-        }
-        */
     }
 
     pub fn take_ops(&mut self) -> Vec<Operation<'c>> {

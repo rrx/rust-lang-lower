@@ -244,9 +244,6 @@ impl<'c> Lower<'c> {
         for op in ops {
             before_block.append_operation(op);
         }
-        //for op in condition_ops {
-        //before_block.append_operation(op);
-        //}
         before_block.append_operation(c);
         let before_region = Region::new();
         before_region.append_block(before_block);
@@ -254,9 +251,10 @@ impl<'c> Lower<'c> {
         // Before Complete
 
         // after
-        let after_args = &[(index_type, body_location)];
+        let after_args = &[(index_type, body_location, "arg0")];
+        env.enter_block(after_args);
+        //let after_block = Block::new(after_args);
         let after_region = Region::new();
-        let after_block = Block::new(after_args);
 
         //let a: Value<'c, '_> = after_block.argument(0).unwrap().into();
 
@@ -292,13 +290,27 @@ impl<'c> Lower<'c> {
 
         // yield passes result to region 0
         let y = scf::r#yield(&rs, body_location);
-        after_block.append_operation(op);
+        //after_block.append_operation(op);
+        env.push(op);
         for op in body_ops {
+            env.push(op);
+        }
+
+        //for op in body_ops {
+        //after_block.append_operation(op);
+        //}
+        //after_block.append_operation(y);
+        env.push(y);
+
+        let mut layer = env.exit();
+        let after_block = layer.block.take().unwrap();
+        let ops = layer.take_ops();
+        for op in ops {
             after_block.append_operation(op);
         }
-        after_block.append_operation(y);
-
         after_region.append_block(after_block);
+
+        // after complete
 
         let init_args = vec![
             env.value_from_name("init_op")[0],
