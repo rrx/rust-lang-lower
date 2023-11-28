@@ -43,7 +43,7 @@ pub struct Layer<'c> {
     names: HashMap<String, LayerIndex>,
     index: HashMap<LayerIndex, usize>,
     pub(crate) block: Option<Block<'c>>,
-    last_index: Option<LayerIndex>,
+    _last_index: Option<LayerIndex>,
 }
 
 impl<'c> Layer<'c> {
@@ -55,7 +55,7 @@ impl<'c> Layer<'c> {
             names: HashMap::new(),
             index: HashMap::new(),
             block: None,
-            last_index: None,
+            _last_index: None,
         }
     }
     pub fn merge(&mut self, mut layer: Layer<'c>) {
@@ -80,7 +80,7 @@ impl<'c> Layer<'c> {
         for op in layer.ops.drain(..) {
             self.ops.push(op);
         }
-        self.last_index = layer.last_index;
+        self._last_index = layer._last_index;
     }
 
     pub fn name_index(&mut self, index: LayerIndex, name: &str) {
@@ -91,17 +91,17 @@ impl<'c> Layer<'c> {
         let pos = self.ops.len();
         self.ops.push(op);
         self.index.insert(index, pos);
-        self.last_index = Some(index);
+        self._last_index = Some(index);
     }
 
     pub fn push_with_name(&mut self, op: Operation<'c>, index: LayerIndex, name: &str) {
         self.push(op, index);
         self.names.insert(name.to_string(), index);
-        self.last_index = Some(index);
+        self._last_index = Some(index);
     }
 
-    pub fn last_index(&self) -> OpIndex {
-        OpIndex(self.ops.len())
+    pub fn last_index(&self) -> LayerIndex {
+        self._last_index.unwrap()
     }
 
     pub fn value_from_name(&self, name: &str) -> Vec<Value<'c, '_>> {
@@ -155,6 +155,10 @@ impl<'c> Layer<'c> {
             };
         }
         vec![]
+    }
+
+    pub fn push_index(&mut self, index: LayerIndex) {
+        self._last_index = Some(index);
     }
 
     pub fn take_ops(&mut self) -> Vec<Operation<'c>> {
@@ -265,8 +269,12 @@ impl<'c> ScopeStack<'c> {
         index
     }
 
+    pub fn push_index(&mut self, index: LayerIndex) {
+        self.layers.last_mut().unwrap().push_index(index)
+    }
+
     pub fn last_index(&self) -> Option<LayerIndex> {
-        self.layers.last().map(|x| x.last_index.unwrap())
+        self.layers.last().map(|x| x.last_index())
     }
 
     pub fn value_from_name(&self, name: &str) -> Vec<Value<'c, '_>> {

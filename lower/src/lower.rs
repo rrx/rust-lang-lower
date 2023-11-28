@@ -159,11 +159,7 @@ impl<'c> Lower<'c> {
 
         // before
         env.enter_block(&[]);
-        //let (_, condition_ops) = self.lower_expr(condition, env);
         self.lower_expr(condition, env);
-        //for op in condition_ops {
-        //env.push(op);
-        //}
         let condition_rs = env.last_values();
         // should be bool type
         assert!(condition_rs[0].r#type() == bool_type);
@@ -183,11 +179,7 @@ impl<'c> Lower<'c> {
         // after
         env.enter_block(&[]);
         let after_region = Region::new();
-        //let (_, body_ops) = self.lower_expr(body, env);
         self.lower_expr(body, env);
-        //for op in body_ops {
-        //env.push(op);
-        //}
         // yield passes result to region 0
         let y = scf::r#yield(&[], body_location);
         env.push(y);
@@ -271,9 +263,6 @@ impl<'c> Lower<'c> {
         println!("x: {:?}", env);
 
         self.lower_expr(condition, env);
-        //for op in condition_ops {
-        //env.push(op);
-        //}
 
         let condition_rs = env.last_values();
         // should be bool type
@@ -321,11 +310,7 @@ impl<'c> Lower<'c> {
         let op = self.build_bool_op(false, condition_location);
         let index1 = env.push(op);
 
-        //for op in body_ops {
-        //env.push(op);
-        //}
         self.lower_expr(body, env);
-        //println!("ops: {:?}", body_ops);
         let index2 = env.last_index().unwrap();
 
         let mut rs = env.values(index1);
@@ -368,10 +353,6 @@ impl<'c> Lower<'c> {
         // function level, non-zero result means return immediately
         //} else {
         //}
-
-        //let mut layer = env.exit();
-        //let out = layer.take_ops();
-        //(vec![], out)
     }
 
     pub fn location<E: Extra>(&self, expr: &AstNode<E>) -> Location<'c> {
@@ -393,16 +374,12 @@ impl<'c> Lower<'c> {
                 let r_lhs = env.values(r_lhs)[0];
                 let r_rhs = env.values(r_rhs)[0];
 
-                //let r_lhs = lhs_ops.last().unwrap().result(0).unwrap();
-                //let r_rhs = rhs_ops.last().unwrap().result(0).unwrap();
-
                 // types must be the same for binary operation, no implicit casting yet
                 assert!(r_lhs.r#type() == r_rhs.r#type());
 
                 let ty = r_lhs.r#type();
                 let float_type = Type::float64(self.context);
 
-                //let mut out = vec![];
                 let binop = match op {
                     BinaryOperation::Add => {
                         if ty == index_type {
@@ -445,47 +422,34 @@ impl<'c> Lower<'c> {
                         }
                     } //_ => unimplemented!("{:?}", op)
                 };
-                //out.append(&mut lhs_ops);
-                //out.append(&mut rhs_ops);
-                //out.push(binop);
+
                 env.push(binop);
                 env.last_index().unwrap()
-                //(vec![], out)
             }
 
             Ast::Identifier(ident) => {
-                //let (r, ops)
                 match ident.as_str() {
                     "True" => {
                         let op = self.build_bool_op(true, location);
                         env.push(op);
                         env.last_index().unwrap()
-                        //(vec![], vec![self.build_bool_op(true, location)]),
                     }
                     "False" => {
                         let op = self.build_bool_op(false, location);
                         env.push(op);
                         env.last_index().unwrap()
-                        //(vec![], vec![op])
                     }
                     _ => {
-                        //if let Some(r) = env.values.get(&ident) {
-                        //println!("r: {:?}", r);
-                        //}
-
-                        //if let Some(r) = env.resolve(&ident) {
-                        //r.r#type();
-                        //let r = r.to_owned();
-
-                        //(vec![r], vec![])
-                        //(vec![], vec![])
-                        //} else {
-                        unimplemented!("Ident({:?})", ident)
-                        //}
+                        println!("x: {:?}", env);
+                        if let Some(index) = env.index_from_name(ident.as_str()) {
+                            // no new ops, just push the referenced variable into the last index
+                            env.push_index(index);
+                            env.last_index().unwrap()
+                        } else {
+                            unimplemented!("Ident({:?})", ident)
+                        }
                     }
                 }
-                //(op2r(&op), vec![op])
-                //(vec![], vec![op])
             }
 
             Ast::Call(expr, args) => {
@@ -501,21 +465,12 @@ impl<'c> Lower<'c> {
                 };
 
                 // handle call arguments
-                //let mut ops: Vec<Operation> = vec![];
-                //let mut call_index: Vec<usize> = vec![];
-                //let mut call_args = vec![];
                 let mut indices = vec![];
                 for a in args {
                     match a {
                         Argument::Positional(arg) => {
-                            println!("arg: {:?}", arg.node);
-                            //let (_, mut arg_ops) = self.lower_expr(*arg, env);
                             let index = self.lower_expr(*arg, env);
                             indices.push(index);
-                            //let r = env.values(index)[0];
-                            //call_args.push(env.values(index)[0]);
-                            //ops.append(&mut arg_ops);
-                            //call_index.push(ops.len() - 1);
                         } //_ => unimplemented!("{:?}", a)
                     };
                 }
@@ -525,17 +480,6 @@ impl<'c> Lower<'c> {
                     .map(|index| env.values(index)[0])
                     .collect::<Vec<_>>();
 
-                //let call_args: Vec<Value> = call_index
-                //.iter()
-                //.map(|index| {
-                //let results = ops.get(*index).unwrap().results();
-                //let results: Vec<Value> = results.map(|r| r.into()).collect();
-                //results.last().unwrap().clone()
-                //})
-                //.collect::<Vec<Value>>();
-
-                //println!("call_index: {:?}", call_index);
-                //println!("call_args: {:?}", call_args);
                 let op = func::call(
                     self.context,
                     f,
@@ -543,14 +487,8 @@ impl<'c> Lower<'c> {
                     &[index_type],
                     location,
                 );
-                //(ops2r(&ops), ops)
-                //ops.push(op);
                 env.push(op);
                 env.last_index().unwrap()
-                //(vec![], ops)
-                //let r = op2r(&op);
-                //println!("ops: {:?}", ops);
-                //(r, ops)
             }
 
             Ast::Literal(lit) => match lit {
@@ -558,64 +496,40 @@ impl<'c> Lower<'c> {
                     let op = self.build_float_op(f, location);
                     env.push(op);
                     env.last_index().unwrap()
-                    //(op2r(&op), vec![op])
-                    //(vec![], vec![op])
                 }
 
                 Literal::Int(x) => {
                     let op = self.build_int_op(x, location);
                     env.push(op);
                     env.last_index().unwrap()
-                    //(vec![], vec![op])
-                    //(op2r(&op), vec![op])
                 }
 
                 Literal::Bool(x) => {
                     let op = self.build_bool_op(x, location);
                     env.push(op);
                     env.last_index().unwrap()
-                    //(vec![], vec![op])
-                    //(op2r(&op), vec![op])
                 } //_ => unimplemented!("{:?}", lit)
             },
 
             Ast::Sequence(exprs) => {
                 exprs.into_iter().for_each(|expr| {
-                    //let (_, ops) = self.lower_expr(expr, env);
                     self.lower_expr(expr, env);
-                    //ops
                 });
-                //.flatten()
-                //.collect::<Vec<_>>();
-                //(vec![], out)
-                //(ops2r(&out), out)
                 env.last_index().unwrap()
             }
 
             Ast::Variable(def) => {
-                //let mut out = vec![];
                 let ident = def.name;
                 // TODO: handle global variables properly, currently assume function context
                 println!("variable ident {:?}", ident);
                 let ty = MemRefType::new(index_type, &[], None, None);
                 let op1 = memref::alloca(self.context, ty, &[], &[], None, location);
                 let x = env.push(op1);
-                //let x: Value = op1.result(0).unwrap().into();
-
-                //let (_, ops) = self.lower_expr(*def.body.unwrap(), env);
                 self.lower_expr(*def.body.unwrap(), env);
                 let r = env.last_values();
-                //let r: Value<'c, '_> = ops.last().unwrap().result(0).unwrap().into();
-                //env.values.insert(ident, r.clone());
                 let op = memref::store(r[0], env.values(x)[0], &[], location);
-                env.push(op);
-                //out.push(op1);
-                //out.extend(ops);
-                //out.push(op);
-
-                //out.extend(ops);
+                env.push_with_name(op, &ident);
                 env.last_index().unwrap()
-                //(vec![], out)
             }
             Ast::Definition(def) => {
                 println!("name {:?}", def.name);
@@ -638,15 +552,10 @@ impl<'c> Lower<'c> {
 
                 let region = Region::new();
                 if let Some(body) = def.body {
-                    //let (_, ops) = self.lower_expr(*body, env);
-                    //let index_type = Type::index(self.context);
-                    //let location = expr.extra.location(self.context, self.files);
-
                     env.enter_block(params.as_slice());
                     self.lower_expr(*body, env);
                     let mut layer = env.exit();
                     let block = layer.block.take().unwrap();
-                    //let block = Block::new(params.as_slice());
                     for op in layer.take_ops() {
                         block.append_operation(op);
                     }
@@ -670,66 +579,41 @@ impl<'c> Lower<'c> {
                 );
                 env.push(f);
                 env.last_index().unwrap()
-                //(op2r(&f), vec![f])
-                //(vec![], vec![f])
             }
 
             Ast::Return(maybe_expr) => match maybe_expr {
                 Some(expr) => {
-                    //let (_, mut ops) = self.lower_expr(*expr, env);
                     self.lower_expr(*expr, env);
-
-                    //let results = env.last_values();
-                    //let r = ops2r(&ops);
-                    //let results: Vec<Value> =
-                    //ops.last().unwrap().results().map(|r| r.into()).collect();
                     let ret_op = func::r#return(&env.last_values(), location);
                     env.push(ret_op);
-                    //(ops2r(&ops), ops)
-                    //(vec![], ops)
                     env.last_index().unwrap()
                 }
                 None => {
                     let op = func::r#return(&[], location);
                     env.push(op);
                     env.last_index().unwrap()
-                    //(op2r(&op), vec![op])
-                    //(vec![], vec![op])
                 }
             },
 
             Ast::Conditional(condition, true_expr, maybe_false_expr) => {
-                //let (_, mut condition_ops) = self.lower_expr(*condition, env);
                 let index_conditions = self.lower_expr(*condition, env);
-                //let index = env.last_index();
-                //let r_conditions = env.values(index);//.last_values();
-                //let r_condition = condition_ops.last().unwrap().result(0).unwrap().into();
-                //let (_, true_ops) = self.lower_expr(*true_expr, env);
                 env.enter_block(&[]);
-                let index_true = self.lower_expr(*true_expr, env);
+                self.lower_expr(*true_expr, env);
                 let mut layer = env.exit();
                 let true_block = layer.block.take().unwrap();
 
-                //let mut s = Environment::default();
-                //let true_block = Block::new(&[]);
                 for op in layer.take_ops() {
-                    //for op in s.take_ops() {
                     true_block.append_operation(op);
                 }
                 true_block.append_operation(scf::r#yield(&[], location));
 
-                //let mut out = vec![];
                 match maybe_false_expr {
                     Some(false_expr) => {
-                        //let mut s = Environment::default();
-                        //let (_, false_ops) = self.lower_expr(*false_expr, env); //&mut s);
                         env.enter_block(&[]);
-                        let index_false = self.lower_expr(*false_expr, env); //&mut s);
-                                                                             //let false_block = Block::new(&[]);
+                        self.lower_expr(*false_expr, env);
                         let mut layer = env.exit();
                         let false_block = layer.block.take().unwrap();
                         for op in layer.take_ops() {
-                            //for op in s.take_ops() {
                             false_block.append_operation(op);
                         }
                         false_block.append_operation(scf::r#yield(&[], location));
@@ -744,14 +628,7 @@ impl<'c> Lower<'c> {
                             else_region,
                             location,
                         );
-
-                        //out.append(&mut condition_ops);
-                        //for op in condition_ops {
-                        //out.push(op);
-                        //}
                         env.push(if_op);
-                        //(ops2r(&out), out)
-                        //(vec![], out)
                         env.last_index().unwrap()
                     }
                     None => {
@@ -765,67 +642,48 @@ impl<'c> Lower<'c> {
                             else_region,
                             location,
                         );
-                        //for op in condition_ops {
-                        //out.push(op);
-                        //}
-                        //out.append(&mut condition_ops);
                         env.push(if_op);
-                        //out.push(op);
-                        //(ops2r(&out), out)
-                        //(vec![], out) //vec![])
                         env.last_index().unwrap()
                     }
                 }
             }
 
             Ast::Assign(target, rhs) => {
-                //let mut out = vec![];
                 match target {
                     AssignTarget::Identifier(ident) => {
                         // TODO: handle global variables properly, currently assume function context
                         println!("assign ident {:?}", ident);
-                        let ty = MemRefType::new(index_type, &[], None, None);
-                        let op1 = memref::alloca(self.context, ty, &[], &[], None, location);
-                        let x: Value = op1.result(0).unwrap().into();
+                        //let ty = MemRefType::new(index_type, &[], None, None);
+                        //let op1 = memref::alloca(self.context, ty, &[], &[], None, location);
+                        //let x: Value = op1.result(0).unwrap().into();
 
-                        let c = arith::constant(
-                            self.context,
-                            attribute::IntegerAttribute::new(10, index_type).into(),
-                            location,
-                        );
-                        //let mut env = Environment::default();
-                        let r: Value<'c, '_> = c.result(0).unwrap().into();
-                        //env.values.insert(ident, r.clone());
-                        let op = memref::store(r, x, &[], location);
-                        //env.push(c);
+                        //let c = arith::constant(
+                        //self.context,
+                        //attribute::IntegerAttribute::new(10, index_type).into(),
+                        //location,
+                        //);
+
+                        //let r: Value<'c, '_> = c.result(0).unwrap().into();
+                        //let op = memref::store(r, x, &[], location);
+                        self.lower_expr(*rhs, env);
+                        let index = env.last_index().unwrap();
+                        env.name_index(index, &ident);
+                        //env.push_with_name(c, &ident);
                         //env.push(op1);
                         //env.push(op);
-                        env.push(c);
-                        env.push(op1);
-                        env.push(op);
-                    } //_ => unimplemented!("{:?}", target),
+                        env.last_index().unwrap()
+                    }
+                    _ => unimplemented!("{:?}", target),
                 }
-
-                //let (r, ops) = self.lower_expr(*rhs, env);
-                self.lower_expr(*rhs, env);
-                env.last_index().unwrap()
-
-                //out.extend(ops);
-                //(r, out)
-                //(vec![], vec![])
             }
 
             Ast::While(condition, body) => {
                 self.build_while(*condition, *body, env);
                 env.last_index().unwrap()
-                //(vec![], ops)
             }
 
             Ast::Test(condition, body) => {
-                //let mut out = vec![];
                 self.build_loop(*condition, *body, env);
-                //out.extend(ops);
-                //(vec![], out)
                 env.last_index().unwrap()
             }
 
@@ -833,34 +691,37 @@ impl<'c> Lower<'c> {
                 match b {
                     Builtin::Assert(arg) => match *arg {
                         Argument::Positional(expr) => {
-                            //let mut out = vec![];
                             let index = self.lower_expr(*expr, env);
-                            //let op = ops.last().unwrap();
-                            //let r = op.result(0).unwrap().into();
                             let msg = format!("assert at {}", location);
                             let assert_op =
                                 cf::assert(self.context, env.values(index)[0], &msg, location);
-                            //out.extend(ops);
                             env.push(assert_op);
-                            //(vec![], out)
                             env.last_index().unwrap()
                         }
                     },
                     Builtin::Print(arg) => match *arg {
                         Argument::Positional(expr) => {
-                            println!("x: {:?}", expr);
-
                             let ast_ty = self.type_from_expr(&expr);
 
                             // eval expr
                             let index = self.lower_expr(*expr, env);
-                            //let r = ops.last().unwrap().result(0).unwrap();
+                            let r = env.values(index);
+                            let ty = r[0].r#type();
 
-                            let ident = match &ast_ty {
+                            let ident = if ty == Type::index(self.context) {
+                                "print_index"
+                            } else if ty == Type::float64(self.context) {
+                                "print_float"
+                            } else {
+                                unimplemented!("{:?}", &ast_ty)
+                            };
+                            /*
+                            let ident = match &ty {
                                 AstType::Int => "print_index",
                                 AstType::Float => "print_float",
-                                _ => unimplemented!(),
+                                _ => unimplemented!("{:?}", &ast_ty),
                             };
+                            */
 
                             let f = attribute::FlatSymbolRefAttribute::new(self.context, ident);
                             let op = func::call(
@@ -872,7 +733,6 @@ impl<'c> Lower<'c> {
                             );
 
                             env.push(op);
-                            //(vec![], ops)
                             env.last_index().unwrap()
                         }
                     },
@@ -1004,6 +864,94 @@ pub(crate) mod tests {
         node(file_id, Ast::Sequence(seq))
     }
 
+    pub fn gen_while(file_id: usize) -> AstNode<SimpleExtra> {
+        let mut seq = prelude(file_id);
+        seq.push(node(
+            file_id,
+            Ast::Definition(Definition {
+                name: "test".into(),
+                params: vec![],
+                body: Some(Box::new(node(
+                    file_id,
+                    Ast::Sequence(vec![
+                        // global variable x = 123
+                        node(
+                            file_id,
+                            Ast::Assign(
+                                AssignTarget::Identifier("x".to_string()),
+                                Box::new(node(file_id, Ast::Literal(Literal::Int(123)))),
+                            ),
+                        ),
+                        node(
+                            file_id,
+                            Ast::While(
+                                // condition
+                                Box::new(node(file_id, Ast::Literal(Literal::Bool(true)))),
+                                // body
+                                Box::new(node(
+                                    file_id,
+                                    Ast::Sequence(vec![
+                                        node(
+                                            file_id,
+                                            Ast::Assign(
+                                                AssignTarget::Identifier("y".to_string()),
+                                                Box::new(node(
+                                                    file_id,
+                                                    Ast::Literal(Literal::Int(1234)),
+                                                )),
+                                            ),
+                                        ),
+                                        node(
+                                            file_id,
+                                            Ast::Assign(
+                                                AssignTarget::Identifier("y".to_string()),
+                                                Box::new(node(
+                                                    file_id,
+                                                    Ast::BinaryOp(
+                                                        BinaryOperation::Subtract,
+                                                        node(
+                                                            file_id,
+                                                            Ast::Identifier("x".to_string()),
+                                                        )
+                                                        .into(),
+                                                        node(
+                                                            file_id,
+                                                            Ast::Identifier("y".to_string()),
+                                                        )
+                                                        .into(),
+                                                    ),
+                                                )),
+                                            ),
+                                        ),
+                                        node(
+                                            file_id,
+                                            Ast::Builtin(Builtin::Print(
+                                                Argument::Positional(
+                                                    node(file_id, Ast::Identifier("y".to_string()))
+                                                        .into(),
+                                                )
+                                                .into(),
+                                            )),
+                                        ),
+                                    ]),
+                                )),
+                            ),
+                        ),
+                        node(
+                            file_id,
+                            Ast::Return(Some(Box::new(node(
+                                file_id,
+                                Ast::Literal(Literal::Int(1)),
+                            )))),
+                        ),
+                    ]),
+                ))),
+            }),
+        ));
+
+        node(file_id, Ast::Sequence(seq))
+    }
+
     pub(crate) fn test_context() -> Context {
         let context = Context::new();
         context.set_allow_unregistered_dialects(true);
@@ -1014,6 +962,24 @@ pub(crate) mod tests {
         context.load_all_available_dialects();
         register_all_llvm_translations(&context);
         context
+    }
+
+    #[test]
+    fn test_while() {
+        let context = test_context();
+        let mut files = FileDB::new();
+        let file_id = files.add("test.py".into(), "test".into());
+        let ast = gen_while(file_id);
+        let lower = Lower::new(&context, &files);
+        let mut env = Environment::default();
+        lower.lower_expr(ast, &mut env);
+        let module = ir::Module::new(Location::unknown(&context));
+        for op in env.take_ops() {
+            module.body().append_operation(op);
+        }
+        let s = module.as_operation().to_string();
+        println!("{}", s);
+        assert!(module.as_operation().verify());
     }
 
     #[test]
