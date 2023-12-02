@@ -1,15 +1,18 @@
 use melior::{
-    dialect::{arith, cf, func, memref, scf},
+    dialect::{arith, cf, func, llvm, memref, ods, scf},
     ir::{
-        attribute::{StringAttribute, TypeAttribute},
+        attribute::{
+            Attribute, DenseElementsAttribute, DenseI64ArrayAttribute, IntegerAttribute,
+            StringAttribute, TypeAttribute,
+        },
         operation::{OperationRef, OperationResult},
-        r#type::{FunctionType, MemRefType},
+        r#type::{FunctionType, MemRefType, RankedTensorType},
         *,
     },
     Context,
 };
 //use std::convert::From;
-use std::collections::HashMap;
+//use std::collections::HashMap;
 
 use crate::ast::*;
 use crate::scope::{Layer, LayerIndex, LayerType, OpIndex, ScopeStack};
@@ -146,6 +149,72 @@ impl<'c> Lower<'c> {
         )
     }
 
+    //pub fn lower_static<E: Extra>(&self, expr: AstNode<E>, env: &mut Environment<'c>) -> (MemRefType<'c>, Attribute<'c>) {
+    pub fn lower_static<E: Extra>(
+        &self,
+        expr: AstNode<E>,
+        env: &mut Environment<'c>,
+    ) -> Operation<'c> {
+        match expr.node {
+            Ast::Literal(Literal::Bool(x)) => {
+                let location = Location::unknown(self.context);
+                let ty = melior::ir::r#type::IntegerType::new(self.context, 1);
+                return arith::constant(
+                    self.context,
+                    attribute::IntegerAttribute::new(x as i64, ty.into()).into(),
+                    location,
+                );
+            }
+            Ast::Literal(Literal::Int(x)) => {
+                let location = Location::unknown(self.context);
+                let ty = melior::ir::r#type::IntegerType::new(self.context, 64);
+                return arith::constant(
+                    self.context,
+                    attribute::IntegerAttribute::new(x, ty.into()).into(),
+                    location,
+                );
+                //return self.build_int_op(x, location);
+                /*
+                let linkage = llvm::attributes::linkage(self.context, llvm::attributes::Linkage::External);
+                let region = Region::new();
+                let i32_type = melior::ir::r#type::IntegerType::new(self.context, 32);
+                let ty = TypeAttribute::new(i32_type.into());
+
+                let name = StringAttribute::new(self.context, "x");
+
+                let op = ods::llvm::mlir_global(self.context, region, ty, name, linkage, location);
+                //let ty = Type::parse(self.context, "tensor<1xindex>").unwrap();
+                //let ty = MemRefType::new(Type::index(self.context), &[], None, None);
+                //let value  = Attribute::unit(self.context);
+                //let value = Attribute::parse(self.context, "[122, 0]").unwrap();
+                op.into()
+                //(ty, op)
+                */
+                /*
+                //MemRefType::new(ty
+                //let ty: MemRefType<'c> = MemRefType::from(ty);
+                println!("ty: {:?}", ty);
+                //let ty = Type::index(self.context);
+                //let  = IntegerAttribute::new(x, Type::index(self.context)).into();
+                //let memref_type = MemRefType::new(Type::index(self.context), &[], None, None);
+                //let memref_type = MemRefType::new(ty, &[1], None, None);//.into();
+                //let memref_type = RankedTensorType::new(&[1], ty, None);//.into();
+                //let value = DenseI64ArrayAttribute::new(self.context, &[x]).into();
+                let value = DenseElementsAttribute::new(
+                    //memref_type.into(),
+                    ty,
+                    //MemRefType::new(ty, &[1], None, None).into(),
+                    &[IntegerAttribute::new(x, ty).into()],
+                    )
+                    .unwrap().into();
+                //let value = IntegerAttribute::new(x, Type::index(self.context)).into();
+                (ty, value)
+                */
+            }
+            _ => unreachable!("{:?}", expr.node),
+        }
+    }
+
     pub fn build_while<'a, E: Extra>(
         &self,
         //init_args: &[Value<'c, 'a>],
@@ -248,6 +317,7 @@ impl<'c> Lower<'c> {
         env.push_with_name(init_op, "init_op");
         let init_op2 = self.build_int_op(10, condition_location);
         env.push_with_name(init_op2, "init_op2");
+        //env.dump();
 
         let init_args = vec![("arg0", "init_op"), ("arg1", "init_op2")];
 
@@ -255,6 +325,7 @@ impl<'c> Lower<'c> {
             .into_iter()
             .map(|(arg_name, init_name)| {
                 let r = env.value_from_name(init_name);
+                println!("R: {:?}, {:?}", init_name, r);
                 (r[0].r#type(), condition_location, arg_name)
             })
             .collect();
@@ -375,6 +446,7 @@ impl<'c> Lower<'c> {
                 let r_rhs = env.values(r_rhs)[0];
 
                 // types must be the same for binary operation, no implicit casting yet
+                println!("bin: {:?}, {:?}", r_lhs.r#type(), r_rhs.r#type());
                 assert!(r_lhs.r#type() == r_rhs.r#type());
 
                 let ty = r_lhs.r#type();
@@ -440,13 +512,45 @@ impl<'c> Lower<'c> {
                         env.last_index().unwrap()
                     }
                     _ => {
-                        println!("x: {:?}", env);
-                        if let Some(index) = env.index_from_name(ident.as_str()) {
-                            // no new ops, just push the referenced variable into the last index
-                            env.push_index(index);
-                            env.last_index().unwrap()
-                        } else {
-                            unimplemented!("Ident({:?})", ident)
+                        println!("x: {:?}", ident);
+                        println!("env: {:?}", env);
+                        match env.index_from_name(ident.as_str()) {
+                            Some(LayerIndex::Op(index)) => {
+                                // no new ops, just push the referenced variable into the last index
+                                env.push_index(LayerIndex::Op(index));
+                                env.last_index().unwrap()
+                            }
+                            Some(LayerIndex::Static(index)) => {
+                                println!("y: {:?}", index);
+                                //let location = Location::unknown(self.context);
+                                //let linkage = llvm::attributes::linkage(self.context, llvm::attributes::Linkage::External);
+                                //let region = Region::new();
+                                let i64_type =
+                                    melior::ir::r#type::IntegerType::new(self.context, 64);
+                                //let index_type = Type::index(self.context);
+                                let ty = llvm::r#type::opaque_pointer(self.context);
+                                //let ty = TypeAttribute::new(i32_type.into());
+                                let f =
+                                    attribute::FlatSymbolRefAttribute::new(self.context, &ident);
+                                // get global
+                                let op1: Operation<'c> =
+                                    ods::llvm::mlir_addressof(self.context, ty.into(), f, location)
+                                        .into();
+                                let r = op1.result(0).unwrap().into();
+                                let options = llvm::LoadStoreOptions::new();
+                                let op2 =
+                                    llvm::load(self.context, r, i64_type.into(), location, options);
+
+                                let r = op2.result(0).unwrap().into();
+                                let op3 = arith::index_cast(r, Type::index(self.context), location);
+                                //let ty = MemRefType::new(index_type, &[], None, None);
+                                //let op = memref::get_global(self.context, &ident, ty, location);
+                                env.push(op1);
+                                env.push(op2);
+                                env.push(op3);
+                                env.last_index().unwrap()
+                            }
+                            _ => unimplemented!("Ident({:?})", ident),
                         }
                     }
                 }
@@ -554,6 +658,7 @@ impl<'c> Lower<'c> {
                 if let Some(body) = def.body {
                     env.enter_block(params.as_slice());
                     self.lower_expr(*body, env);
+                    //env.dump();
                     let mut layer = env.exit();
                     let block = layer.block.take().unwrap();
                     for op in layer.take_ops() {
@@ -652,7 +757,62 @@ impl<'c> Lower<'c> {
                 match target {
                     AssignTarget::Identifier(ident) => {
                         // TODO: handle global variables properly, currently assume function context
-                        println!("assign ident {:?}", ident);
+                        let ty = env.current_layer_type();
+                        println!("assign ident {:?}, {:?}", ident, ty);
+
+                        match ty {
+                            LayerType::Static => {
+                                //env.push(op);
+                                //println!("assign global {:?}", op);
+                                //env.push(ret_op);
+                                let block = Block::new(&[]);
+                                let op1 = self.lower_static(*rhs, env);
+                                let r = op1.result(0).unwrap().into();
+                                let op2 = llvm::r#return(Some(r), location);
+                                block.append_operation(op1);
+                                block.append_operation(op2);
+                                let region = Region::new();
+                                region.append_block(block);
+
+                                let i64_type =
+                                    melior::ir::r#type::IntegerType::new(self.context, 64);
+                                let ty = TypeAttribute::new(i64_type.into());
+
+                                let name = StringAttribute::new(self.context, &ident);
+
+                                let linkage = llvm::attributes::linkage(
+                                    self.context,
+                                    llvm::attributes::Linkage::External,
+                                );
+                                let op = ods::llvm::mlir_global(
+                                    self.context,
+                                    region,
+                                    ty,
+                                    name,
+                                    linkage,
+                                    location,
+                                );
+
+                                //let (memref_type, value) = self.lower_static(*rhs, env);
+                                //println!("assign mem {:?}, {:?}", memref_type, value);
+                                //let op = memref::global(self.context, &ident, None, memref_type, Some(value), true, None, location);
+                                //env.push_static(op, &ident);
+                                //env.push_with_name(op.into(), &ident);
+                                let index = LayerIndex::Static(env.fresh_op());
+                                env.name_index(index, &ident);
+                                //env.push_static
+                                //.push_index(index);
+                                env.push(op.into());
+                                env.last_index().unwrap()
+                            }
+                            _ => {
+                                self.lower_expr(*rhs, env);
+                                let index = env.last_index().unwrap();
+                                env.name_index(index, &ident);
+                                env.last_index().unwrap()
+                            }
+                        }
+
                         //let ty = MemRefType::new(index_type, &[], None, None);
                         //let op1 = memref::alloca(self.context, ty, &[], &[], None, location);
                         //let x: Value = op1.result(0).unwrap().into();
@@ -665,13 +825,6 @@ impl<'c> Lower<'c> {
 
                         //let r: Value<'c, '_> = c.result(0).unwrap().into();
                         //let op = memref::store(r, x, &[], location);
-                        self.lower_expr(*rhs, env);
-                        let index = env.last_index().unwrap();
-                        env.name_index(index, &ident);
-                        //env.push_with_name(c, &ident);
-                        //env.push(op1);
-                        //env.push(op);
-                        env.last_index().unwrap()
                     }
                     _ => unimplemented!("{:?}", target),
                 }
@@ -866,6 +1019,14 @@ pub(crate) mod tests {
 
     pub fn gen_while(file_id: usize) -> AstNode<SimpleExtra> {
         let mut seq = prelude(file_id);
+        // global variable
+        seq.push(node(
+            file_id,
+            Ast::Assign(
+                AssignTarget::Identifier("z".to_string()),
+                Box::new(node(file_id, Ast::Literal(Literal::Int(122)))),
+            ),
+        ));
         seq.push(node(
             file_id,
             Ast::Definition(Definition {
@@ -916,7 +1077,7 @@ pub(crate) mod tests {
                                                         .into(),
                                                         node(
                                                             file_id,
-                                                            Ast::Identifier("y".to_string()),
+                                                            Ast::Identifier("x".to_string()),
                                                         )
                                                         .into(),
                                                     ),
@@ -988,10 +1149,10 @@ pub(crate) mod tests {
         let mut files = FileDB::new();
         let file_id = files.add("test.py".into(), "test".into());
         let ast = gen_test(file_id);
+        println!("ast: {:?}", ast);
         let lower = Lower::new(&context, &files);
         let mut env = Environment::default();
         lower.lower_expr(ast, &mut env);
-        //println!("{:?}", ops);
         let module = ir::Module::new(Location::unknown(&context));
         for op in env.take_ops() {
             module.body().append_operation(op);

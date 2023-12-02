@@ -18,6 +18,8 @@ use lower::lower::Lower;
 use parse::starlark::Parser;
 
 fn main() -> Result<(), Box<dyn Error>> {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+
     let context = Context::new();
     context.set_allow_unregistered_dialects(true);
     context.enable_multi_threading(true);
@@ -64,32 +66,35 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut files = SimpleFiles::new();
     let mut parser = Parser::new();
-    let path = Path::new("tests/test_simple.py");
-    let result = parser.parse(&context, &path, &mut files);
-    parser.dump(&files);
-    let ast: AstNode<SimpleExtra> = result?;
 
-    let lower = Lower::new(&context, &files);
-    let mut env = lower::scope::ScopeStack::default();
-    //let mut env = lower::lower::Environment::default();
-    lower.lower_expr(ast, &mut env);
-    for op in env.take_ops() {
-        module.body().append_operation(op);
+    for path in args {
+        let path = Path::new(&path); //"tests/test_global.star");
+        println!("path: {:?}", path);
+        let result = parser.parse(&context, &path, &mut files);
+        parser.dump(&files);
+        let ast: AstNode<SimpleExtra> = result?;
+
+        let lower = Lower::new(&context, &files);
+        let mut env = lower::scope::ScopeStack::default();
+        //let mut env = lower::lower::Environment::default();
+        lower.lower_expr(ast, &mut env);
+        for op in env.take_ops() {
+            module.body().append_operation(op);
+        }
+
+        module.as_operation().dump();
+        assert!(module.as_operation().verify());
+        let mut output = File::create("out.mlir")?;
+        let s = module.as_operation().to_string();
+        write!(output, "{}", s)?;
+
+        pass_manager.run(&mut module)?;
+
+        module.as_operation().dump();
+        let mut output = File::create("out.ll")?;
+        let s = module.as_operation().to_string();
+        write!(output, "{}", s)?;
     }
-
-    module.as_operation().dump();
-    assert!(module.as_operation().verify());
-    let mut output = File::create("out.mlir")?;
-    let s = module.as_operation().to_string();
-    write!(output, "{}", s)?;
-
-    pass_manager.run(&mut module)?;
-
-    module.as_operation().dump();
-    let mut output = File::create("out.ll")?;
-    let s = module.as_operation().to_string();
-    write!(output, "{}", s)?;
-
     //let engine = ExecutionEngine::new(&module, 0, &[], true);
     //engine.dump_to_object_file("out.o");
 

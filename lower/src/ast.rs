@@ -82,6 +82,14 @@ impl<E: Extra> Ast<E> {
             extra: E::new(file_id, begin, end),
         }
     }
+
+    pub fn assign(target: AssignTarget, node: AstNode<E>) -> Self {
+        Ast::Assign(target, Box::new(node))
+    }
+
+    pub fn bool(x: bool) -> Self {
+        Ast::Literal(Literal::Bool(x))
+    }
 }
 
 #[derive(Debug, Clone)]

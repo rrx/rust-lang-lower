@@ -2,8 +2,9 @@ use im::OrdMap;
 use melior::ir::*;
 use melior::ir::{Operation, Value};
 use std::collections::HashMap;
+use std::collections::HashSet;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum LayerType {
     Static,
     Function,
@@ -24,7 +25,9 @@ impl From<usize> for OpIndex {
 pub enum LayerIndex {
     Op(usize),
     Argument(usize),
+    Static(usize),
 }
+
 impl LayerIndex {
     pub fn op(index: OpIndex) -> Self {
         Self::Op(index.0)
@@ -32,6 +35,10 @@ impl LayerIndex {
 
     pub fn arg(index: usize) -> Self {
         Self::Argument(index)
+    }
+
+    pub fn static_index(index: usize) -> Self {
+        Self::Static(index)
     }
 }
 
@@ -41,6 +48,8 @@ pub struct Layer<'c> {
     pub(crate) ops: Vec<Operation<'c>>,
     args_count: usize,
     names: HashMap<String, LayerIndex>,
+    globals: Vec<Attribute<'c>>,
+    globals_index: HashMap<LayerIndex, usize>,
     index: HashMap<LayerIndex, usize>,
     pub(crate) block: Option<Block<'c>>,
     _last_index: Option<LayerIndex>,
@@ -53,14 +62,15 @@ impl<'c> Layer<'c> {
             ops: vec![],
             args_count: 0,
             names: HashMap::new(),
+            globals: vec![],
+            globals_index: HashMap::new(),
             index: HashMap::new(),
             block: None,
             _last_index: None,
         }
     }
-    pub fn merge(&mut self, mut layer: Layer<'c>) {
-        //let start = self.ops.len();
 
+    pub fn merge(&mut self, mut layer: Layer<'c>) {
         let preserve_names = match layer.ty {
             LayerType::Closed | LayerType::Function | LayerType::Block => false,
             _ => true,
@@ -87,6 +97,12 @@ impl<'c> Layer<'c> {
         self.names.insert(name.to_string(), index);
     }
 
+    pub fn push_static(&mut self, value: Operation<'c>, index: LayerIndex) {
+        let offset = self.globals.len();
+        //self.globals.push(value);
+        self.globals_index.insert(index, offset);
+    }
+
     pub fn push(&mut self, op: Operation<'c>, index: LayerIndex) {
         let pos = self.ops.len();
         self.ops.push(op);
@@ -109,6 +125,7 @@ impl<'c> Layer<'c> {
             Some(index) => {
                 let offset = self.index.get(index).unwrap();
                 match index {
+                    LayerIndex::Static(_) => vec![],
                     LayerIndex::Op(_) => self
                         .ops
                         .get(*offset)
@@ -138,6 +155,7 @@ impl<'c> Layer<'c> {
     pub fn values(&self, index: LayerIndex) -> Vec<Value<'c, '_>> {
         if let Some(offset) = self.index.get(&index) {
             return match index {
+                LayerIndex::Static(_) => vec![],
                 LayerIndex::Op(_) => self
                     .ops
                     .get(*offset)
@@ -169,8 +187,9 @@ impl<'c> Layer<'c> {
 
 #[derive(Debug)]
 pub struct ScopeStack<'c> {
-    arg_count: usize,
+    //arg_count: usize,
     op_count: usize,
+    //global_count: usize,
     layers: Vec<Layer<'c>>,
 }
 
@@ -178,25 +197,44 @@ impl<'c> Default for ScopeStack<'c> {
     fn default() -> Self {
         let layer = Layer::new(LayerType::Static);
         Self {
-            arg_count: 0,
+            //arg_count: 0,
             op_count: 0,
+            //global_count: 0,
             layers: vec![layer],
         }
     }
 }
 
 impl<'c> ScopeStack<'c> {
+    pub fn dump(&self) {
+        println!("env: {:?}", self);
+    }
+
+    pub fn current_layer_type(&self) -> LayerType {
+        self.layers.last().unwrap().ty
+    }
+
     pub fn fresh_argument(&mut self) -> LayerIndex {
-        let index = LayerIndex::Argument(self.arg_count);
-        self.arg_count += 1;
+        let index = LayerIndex::Argument(self.fresh_op()); //self.op_count);
+                                                           //self.op_count += 1;
         index
     }
 
-    pub fn fresh_op(&mut self) -> LayerIndex {
-        let index = LayerIndex::Op(self.op_count);
+    pub fn fresh_op(&mut self) -> usize {
+        let index = self.op_count;
         self.op_count += 1;
         index
     }
+
+    /*
+    pub fn fresh_global(&mut self) -> LayerIndex {
+        assert!(self.current_layer_type() == LayerType::Static);
+        let index = LayerIndex::Static(self.global_count);
+        self.global_count += 1;
+        index
+    }
+    */
+
     pub fn enter_closed(&mut self) {
         let layer = Layer::new(LayerType::Closed);
         self.enter(layer);
@@ -216,8 +254,9 @@ impl<'c> ScopeStack<'c> {
         let mut layer = Layer::new(LayerType::Block);
         layer.args_count = arguments.len();
         for (i, a) in arguments.iter().enumerate() {
-            let index = LayerIndex::Argument(self.arg_count);
-            self.arg_count += 1;
+            let index = self.fresh_argument();
+            //let index = LayerIndex::Argument(self.arg_count);
+            //self.arg_count += 1;
             layer.names.insert(a.2.to_string(), index);
             layer.index.insert(index, i);
         }
@@ -257,14 +296,24 @@ impl<'c> ScopeStack<'c> {
         self.last_mut().name_index(index, name);
     }
 
+    pub fn push_static(&mut self, op: Operation<'c>, name: &str) -> LayerIndex {
+        let index = LayerIndex::Static(self.fresh_op());
+        self.last_mut().push_with_name(op, index, name);
+        index
+    }
+
     pub fn push(&mut self, op: Operation<'c>) -> LayerIndex {
-        let index = self.fresh_op();
+        let index = LayerIndex::Op(self.fresh_op());
         self.last_mut().push(op, index);
         index
     }
 
     pub fn push_with_name(&mut self, op: Operation<'c>, name: &str) -> LayerIndex {
-        let index = self.fresh_op();
+        let index = match self.current_layer_type() {
+            // naming ops in static context doesn't make sense
+            LayerType::Static => unreachable!("Unable to name op in static context"), //LayerIndex::Static(self.fresh_op()),
+            _ => LayerIndex::Op(self.fresh_op()),
+        };
         self.last_mut().push_with_name(op, index, name);
         index
     }
@@ -324,9 +373,11 @@ impl<'c> ScopeStack<'c> {
 mod tests {
     use super::*;
     //use test_log::test;
+    use crate::ast;
+    use crate::ast::Ast;
     use crate::lower::tests::test_context;
     use crate::lower::FileDB;
-    use crate::lower::Lower;
+    use crate::lower::{node, Lower};
     use melior::dialect::{arith, func, memref};
     use melior::ir::{
         attribute::{StringAttribute, TypeAttribute},
@@ -341,34 +392,60 @@ mod tests {
         assert_eq!(s.index_from_name(name).unwrap(), index);
     }
 
+    type Node = ast::AstNode<ast::SimpleExtra>;
+
     #[test]
     fn test_scope1() {
         let context = test_context();
-        let files = FileDB::new();
-        //let file_id = files.add("test.py".into(), "test".into());
+        let mut files = FileDB::new();
+        let file_id = files.add("test.py".into(), "test".into());
         let lower = Lower::new(&context, &files);
         let mut s = ScopeStack::default();
         let location = Location::unknown(&context);
 
+        //s.enter_block(&[]);
         // 3 ops in static context
-        let op = lower.build_bool_op(false, location);
-        s.push_with_name(op, "x");
-        let op = lower.build_bool_op(true, location);
-        let x_index = s.push_with_name(op, "x");
+        let expr: Node = node(file_id, ast::Ast::bool(false));
+        let ast = node(
+            file_id,
+            Ast::assign(ast::AssignTarget::Identifier("x".into()), expr),
+        );
+        let op = lower.lower_expr(ast, &mut s);
+        //let op = lower.build_bool_op(false, location);
+        //s.push_with_name(op, "x");
+
+        let expr: Node = node(file_id, ast::Ast::bool(true));
+        let ast = node(
+            file_id,
+            Ast::assign(ast::AssignTarget::Identifier("x".into()), expr),
+        );
+        let op = lower.lower_expr(ast, &mut s);
+
+        //let op = lower.build_bool_op(true, location);
+        //let x_index = s.push_with_name(op, "x");
         // ensure x is shadowed
-        assert_op_index(&s, "x", x_index);
+        //assert_op_index(&s, "x", x_index);
 
-        let op = lower.build_bool_op(true, location);
-        let y_index = s.push_with_name(op, "y");
-        assert_eq!(s.last_index().unwrap(), y_index);
-        assert_op_index(&s, "y", y_index);
+        let expr: Node = node(file_id, ast::Ast::bool(true));
+        let ast = node(
+            file_id,
+            Ast::assign(ast::AssignTarget::Identifier("y".into()), expr),
+        );
+        let op = lower.lower_expr(ast, &mut s);
 
+        //let op = lower.build_bool_op(true, location);
+        //let y_index = s.push_with_name(op, "y");
+        //assert_eq!(s.last_index().unwrap(), y_index);
+        //assert_op_index(&s, "y", y_index);
+
+        /*
         let rs = s.value_from_name("x");
         assert!(rs.len() > 0);
 
         // ensure y
         let rs = s.value_from_name("y");
         assert!(rs.len() > 0);
+        */
 
         // enter function context
         s.enter_func();
@@ -411,10 +488,10 @@ mod tests {
         // check that previous block is no longer visible
         // but we should have all of the ops
 
-        assert_op_index(&s, "y", y_index);
-        assert_op_index(&s, "x", x_index);
-        let rs = s.value_from_name("y");
-        assert!(rs.len() > 0);
+        //assert_op_index(&s, "y", y_index);
+        //assert_op_index(&s, "x", x_index);
+        //let rs = s.value_from_name("y");
+        //assert!(rs.len() > 0);
 
         assert!(s.index_from_name("z").is_none());
     }

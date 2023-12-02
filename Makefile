@@ -2,7 +2,7 @@ default: run
 
 run:
 	clang-17 -c tests/prelude.c -o target/debug/prelude.o
-	cargo run --bin cli
+	cargo run --bin cli tests/test_global.star
 	mlir-opt-17 \
 		--mem2reg \
 		--sccp \
@@ -25,3 +25,9 @@ test:
 	cargo test -- --nocapture
 fmt:
 	cargo fmt
+
+.PHONY: examples
+examples:
+	clang-17 -c examples/test.c -o target/debug/test.o
+	clang-17 -S -emit-llvm examples/test.c -o target/debug/test.ll
+	cat target/debug/test.ll

@@ -222,7 +222,7 @@ impl Parser {
                     AssignTargetP::Identifier(ident) => {
                         let name = ident.node.ident;
                         let exists = env.resolve(&name).is_some();
-                        if exists {
+                        if true || exists {
                             env.define(name.clone(), 0);
                             let target = AssignTarget::Identifier(name);
                             Ok(AstNode {
