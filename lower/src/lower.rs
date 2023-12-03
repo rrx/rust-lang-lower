@@ -104,6 +104,16 @@ impl<'c> Lower<'c> {
 
     pub fn from_type(&self, ty: &AstType) -> Type<'c> {
         match ty {
+            AstType::Ptr => melior::ir::r#type::IntegerType::unsigned(self.context, 64).into(),
+            AstType::Tuple(args) => {
+                let types = args.iter().map(|a| self.from_type(a)).collect::<Vec<_>>();
+                melior::ir::r#type::TupleType::new(self.context, &types).into()
+            }
+            AstType::Func(args, ret) => {
+                let inputs = args.iter().map(|a| self.from_type(a)).collect::<Vec<_>>();
+                let results = vec![self.from_type(ret)];
+                melior::ir::r#type::FunctionType::new(self.context, &inputs, &results).into()
+            }
             AstType::Int => melior::ir::r#type::IntegerType::new(self.context, 64).into(),
             AstType::Index => Type::index(self.context),
             AstType::Float => Type::float64(self.context),
@@ -417,13 +427,18 @@ impl<'c> Lower<'c> {
             }
 
             Ast::BinaryOp(op, a, b) => {
+                println!("binop: {:?}, {:?}, {:?}", op, a, b);
                 let index_lhs = self.lower_expr(*a, env);
                 let index_rhs = self.lower_expr(*b, env);
+                env.dump();
+                println!("inx: {:?}, {:?}", index_lhs, index_rhs);
                 let r_lhs = env.values(index_lhs)[0];
                 let r_rhs = env.values(index_rhs)[0];
+                println!("r: {:?}, {:?}", r_lhs, r_rhs);
 
-                let data_lhs = env.data(&index_lhs).unwrap();
-                let data_rhs = env.data(&index_rhs).unwrap();
+                let data_lhs = env.data(&index_lhs).expect("LHS data missing");
+                let data_rhs = env.data(&index_rhs).expect("RHS data missing");
+                println!("ty: {:?}, {:?}", data_lhs.ty, data_lhs.ty);
                 let ast_ty = data_lhs.ty.clone();
 
                 assert_eq!(data_lhs.ty, data_rhs.ty);
@@ -506,7 +521,6 @@ impl<'c> Lower<'c> {
                         let (index, data) = match env.index_from_name(ident.as_str()) {
                             Some(index) => {
                                 let data = env.data(&index).unwrap().clone();
-                                //let ty = self.from_type(&data.ty);
                                 (index, data)
                             }
                             _ => unimplemented!("Ident({:?})", ident),
@@ -555,41 +569,58 @@ impl<'c> Lower<'c> {
 
             Ast::Call(expr, args) => {
                 // function to call
-                let f = match &expr.node {
+                //env.dump();
+                let (f, data) = match &expr.node {
                     Ast::Identifier(ident) => {
-                        attribute::FlatSymbolRefAttribute::new(self.context, ident)
+                        let index = env.index_from_name(ident).unwrap();
+                        let data = env.data(&index).unwrap();
+                        println!("data: {:?}, {:?}", data, index);
+
+                        (
+                            attribute::FlatSymbolRefAttribute::new(self.context, ident),
+                            data,
+                        )
                     }
                     _ => {
-                        println!("not implemented: {:?}", expr.node);
-                        unimplemented!();
+                        unimplemented!("not implemented: {:?}", expr.node);
                     }
                 };
 
-                // handle call arguments
-                let mut indices = vec![];
-                for a in args {
-                    match a {
-                        Argument::Positional(arg) => {
-                            let index = self.lower_expr(*arg, env);
-                            indices.push(index);
-                        } //_ => unimplemented!("{:?}", a)
-                    };
+                println!("data: {:?}", data);
+                if let AstType::Func(func_arg_types, ret) = &data.ty {
+                    let data = Data::new(*ret.clone());
+                    let ret_ty = self.from_type(ret);
+                    // handle call arguments
+                    let mut indices = vec![];
+                    for a in args {
+                        match a {
+                            Argument::Positional(arg) => {
+                                let index = self.lower_expr(*arg, env);
+                                indices.push(index);
+                            } //_ => unimplemented!("{:?}", a)
+                        };
+                    }
+
+                    let call_args = indices
+                        .into_iter()
+                        .map(|index| env.values(index)[0])
+                        .collect::<Vec<_>>();
+
+                    let op = func::call(
+                        self.context,
+                        f,
+                        call_args.as_slice(),
+                        &[ret_ty], //Type::index(self.context)],
+                        location,
+                    );
+                    let index = env.push(op);
+                    env.index_data(index, data);
+
+                    //env.last_index().unwrap()
+                    index
+                } else {
+                    unimplemented!("calling non function type: {:?}", data);
                 }
-
-                let call_args = indices
-                    .into_iter()
-                    .map(|index| env.values(index)[0])
-                    .collect::<Vec<_>>();
-
-                let op = func::call(
-                    self.context,
-                    f,
-                    call_args.as_slice(),
-                    &[Type::index(self.context)],
-                    location,
-                );
-                env.push(op);
-                env.last_index().unwrap()
             }
 
             Ast::Literal(lit) => match lit {
@@ -652,6 +683,9 @@ impl<'c> Lower<'c> {
                 println!("name {:?}", def.name);
                 let mut params = vec![];
                 let ty = self.from_type(&*def.return_type);
+                let mut ast_types = vec![];
+                let ast_ret_type = def.return_type;
+
                 for p in def.params {
                     match p.node {
                         Parameter::Normal(ident, ty) => {
@@ -659,6 +693,7 @@ impl<'c> Lower<'c> {
                             let location = p.extra.location(self.context, self.files);
                             let ir_ty = self.from_type(&ty);
                             params.push((ir_ty, location, "x"));
+                            ast_types.push(ty);
                         }
                         _ => {
                             println!("not implemented: {:?}", p);
@@ -696,7 +731,12 @@ impl<'c> Lower<'c> {
                     )],
                     location,
                 );
-                env.push(f);
+                let index = env.push(f);
+                env.name_index(index, &def.name);
+                let f_type = AstType::Func(ast_types, ast_ret_type);
+                let mut data = Data::new(f_type);
+                data.is_static = true;
+                env.index_data(index, data);
                 env.last_index().unwrap()
             }
 

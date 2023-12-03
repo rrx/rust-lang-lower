@@ -235,13 +235,15 @@ impl Parser {
                 env.enter_func();
                 let ast = self.from_stmt(*def.body, context, codemap, file_id, env)?;
                 env.exit_func();
+                let name = &def.name.ident;
                 let d = Definition {
-                    name: def.name.ident.clone(),
+                    name: name.clone(),
                     body: Some(Box::new(ast)),
                     return_type: AstType::Int.into(),
                     params,
                 };
                 let ast = Ast::Definition(d);
+                env.define(&name, 0);
                 Ok(AstNode { node: ast, extra })
             }
 

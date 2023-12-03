@@ -11,6 +11,10 @@ pub enum AstType {
     Float,
     Bool,
     Unit,
+    Ptr,
+    Tuple(Vec<AstType>),
+    // Func(parameters, return type)
+    Func(Vec<AstType>, Box<AstType>),
     //Unknown,
 }
 
