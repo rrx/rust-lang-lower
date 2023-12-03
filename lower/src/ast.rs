@@ -11,7 +11,7 @@ pub enum AstType {
     Float,
     Bool,
     Unit,
-    Unknown,
+    //Unknown,
 }
 
 #[derive(Debug)]

@@ -70,7 +70,7 @@ impl<'c> Lower<'c> {
         Self { context, files }
     }
 
-    pub fn type_from_expr<E: Extra>(&self, expr: &AstNode<E>) -> AstType {
+    pub fn type_from_expr<E: Extra>(&self, expr: &AstNode<E>, env: &Environment) -> AstType {
         match &expr.node {
             Ast::Literal(x) => match x {
                 Literal::Int(_) => AstType::Int,
@@ -78,7 +78,17 @@ impl<'c> Lower<'c> {
                 Literal::Bool(_) => AstType::Bool,
                 Literal::Index(_) => AstType::Index,
             },
-            Ast::Identifier(_) => AstType::Unknown,
+            Ast::Identifier(name) => {
+                let r = env.value_from_name(name);
+                let ty = r[0].r#type();
+                if ty.is_index() {
+                    AstType::Index
+                } else if ty.is_integer() {
+                    AstType::Int
+                } else {
+                    unreachable!("{:?}", ty);
+                }
+            }
 
             _ => unreachable!("{:?}", expr),
         }
@@ -90,7 +100,7 @@ impl<'c> Lower<'c> {
             AstType::Index => Type::index(self.context),
             AstType::Float => Type::float64(self.context),
             AstType::Bool => melior::ir::r#type::IntegerType::new(self.context, 1).into(),
-            AstType::Unknown => unreachable!(),
+            //AstType::Unknown => unreachable!(),
             AstType::Unit => Type::none(self.context),
         }
     }
@@ -766,7 +776,7 @@ impl<'c> Lower<'c> {
                     },
                     Builtin::Print(arg) => match *arg {
                         Argument::Positional(expr) => {
-                            let ast_ty = self.type_from_expr(&expr);
+                            let ast_ty = self.type_from_expr(&expr, env);
 
                             // eval expr
                             let index = self.lower_expr(*expr, env);
