@@ -4,7 +4,7 @@ use std::fmt::Debug;
 
 use codespan_reporting::files::{Files, SimpleFiles};
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum AstType {
     Int,
     Index,

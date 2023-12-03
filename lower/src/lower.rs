@@ -19,7 +19,7 @@ use crate::ast::*;
 use crate::scope::{LayerIndex, LayerType, ScopeStack};
 use codespan_reporting::files::SimpleFiles;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Data {
     ty: AstType,
 }
@@ -155,12 +155,12 @@ impl<'c> Lower<'c> {
         &self,
         expr: AstNode<E>,
         _env: &mut Environment<'c>,
-    ) -> Operation<'c> {
+    ) -> (AstType, Operation<'c>) {
         let location = self.location(&expr);
         match expr.node {
-            Ast::Literal(Literal::Bool(x)) => self.build_bool_op(x, location),
-            Ast::Literal(Literal::Int(x)) => self.build_int_op(x, location),
-            Ast::Literal(Literal::Float(x)) => self.build_float_op(x, location),
+            Ast::Literal(Literal::Bool(x)) => (AstType::Bool, self.build_bool_op(x, location)),
+            Ast::Literal(Literal::Int(x)) => (AstType::Int, self.build_int_op(x, location)),
+            Ast::Literal(Literal::Float(x)) => (AstType::Float, self.build_float_op(x, location)),
             _ => unreachable!("{:?}", expr.node),
         }
     }
@@ -391,7 +391,7 @@ impl<'c> Lower<'c> {
         match expr.node {
             Ast::Global(ident, expr) => {
                 let block = Block::new(&[]);
-                let op1 = self.lower_static(*expr, env);
+                let (ast_ty, op1) = self.lower_static(*expr, env);
                 let r = op1.result(0).unwrap().into();
                 let op2 = llvm::r#return(Some(r), location);
                 block.append_operation(op1);
@@ -409,17 +409,25 @@ impl<'c> Lower<'c> {
                 let op = ods::llvm::mlir_global(self.context, region, ty, name, linkage, location);
 
                 let index = LayerIndex::Static(env.fresh_index());
+                let data = Data::new(ast_ty);
                 env.name_index(index, &ident);
+                env.index_data(index, data);
                 env.push(op.into());
                 env.push_index(index);
                 env.last_index().unwrap()
             }
 
             Ast::BinaryOp(op, a, b) => {
-                let r_lhs = self.lower_expr(*a, env);
-                let r_rhs = self.lower_expr(*b, env);
-                let r_lhs = env.values(r_lhs)[0];
-                let r_rhs = env.values(r_rhs)[0];
+                let index_lhs = self.lower_expr(*a, env);
+                let index_rhs = self.lower_expr(*b, env);
+                let r_lhs = env.values(index_lhs)[0];
+                let r_rhs = env.values(index_rhs)[0];
+
+                let data_lhs = env.data(&index_lhs).unwrap();
+                let data_rhs = env.data(&index_rhs).unwrap();
+                let ast_ty = data_lhs.ty.clone();
+
+                assert_eq!(data_lhs.ty, data_rhs.ty);
 
                 // types must be the same for binary operation, no implicit casting yet
                 println!("bin: {:?}, {:?}", r_lhs.r#type(), r_rhs.r#type());
@@ -470,7 +478,9 @@ impl<'c> Lower<'c> {
                     } //_ => unimplemented!("{:?}", op)
                 };
 
-                env.push(binop);
+                let index = env.push(binop);
+                let data = Data::new(ast_ty);
+                env.index_data(index, data);
                 env.last_index().unwrap()
             }
 
@@ -489,8 +499,8 @@ impl<'c> Lower<'c> {
                         env.last_index().unwrap()
                     }
                     _ => {
-                        println!("x: {:?}", ident);
-                        println!("env: {:?}", env);
+                        //println!("x: {:?}", ident);
+                        //println!("env: {:?}", env);
                         match env.index_from_name(ident.as_str()) {
                             Some(LayerIndex::Op(index)) => {
                                 // no new ops, just push the referenced variable into the last index
@@ -498,6 +508,7 @@ impl<'c> Lower<'c> {
                                 env.last_index().unwrap()
                             }
                             Some(LayerIndex::Static(index)) => {
+                                let data = env.data(&LayerIndex::Static(index)).unwrap().clone();
                                 println!("y: {:?}", index);
                                 //let location = Location::unknown(self.context);
                                 //let linkage = llvm::attributes::linkage(self.context, llvm::attributes::Linkage::External);
@@ -524,7 +535,8 @@ impl<'c> Lower<'c> {
                                 //let ty = MemRefType::new(index_type, &[], None, None);
                                 //let op = memref::get_global(self.context, &ident, ty, location);
                                 env.push(op1);
-                                env.push(op2);
+                                let index = env.push(op2);
+                                env.index_data(index, data);
                                 //env.push(op3);
                                 env.last_index().unwrap()
                             }

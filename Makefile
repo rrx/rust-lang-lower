@@ -2,7 +2,7 @@ default: run
 
 run:
 	clang-17 -c tests/prelude.c -o target/debug/prelude.o
-	cargo run --bin cli tests/test_global.star
+	RUST_BACKTRACE=1 cargo run --bin cli tests/test_global.star
 	mlir-opt-17 \
 		--mem2reg \
 		--sccp \
