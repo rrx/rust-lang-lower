@@ -403,62 +403,51 @@ mod tests {
         let mut s = ScopeStack::default();
         let location = Location::unknown(&context);
 
-        //s.enter_block(&[]);
         // 3 ops in static context
         let expr: Node = node(file_id, ast::Ast::bool(false));
-        let ast = node(
-            file_id,
-            Ast::assign(ast::AssignTarget::Identifier("x".into()), expr),
-        );
-        let op = lower.lower_expr(ast, &mut s);
-        //let op = lower.build_bool_op(false, location);
-        //s.push_with_name(op, "x");
+        let ast = node(file_id, Ast::global("x", expr));
+        lower.lower_expr(ast, &mut s);
 
         let expr: Node = node(file_id, ast::Ast::bool(true));
-        let ast = node(
-            file_id,
-            Ast::assign(ast::AssignTarget::Identifier("x".into()), expr),
-        );
-        let op = lower.lower_expr(ast, &mut s);
+        let ast = node(file_id, Ast::global("x", expr));
+        lower.lower_expr(ast, &mut s);
+        let index_x = s.last_index().unwrap();
 
-        //let op = lower.build_bool_op(true, location);
-        //let x_index = s.push_with_name(op, "x");
+        let expr: Node = node(file_id, ast::Ast::bool(true));
+        let ast = node(file_id, Ast::global("y", expr));
+        lower.lower_expr(ast, &mut s);
+        let index_y = s.last_index().unwrap();
+
         // ensure x is shadowed
-        //assert_op_index(&s, "x", x_index);
-
-        let expr: Node = node(file_id, ast::Ast::bool(true));
-        let ast = node(
-            file_id,
-            Ast::assign(ast::AssignTarget::Identifier("y".into()), expr),
-        );
-        let op = lower.lower_expr(ast, &mut s);
-
-        //let op = lower.build_bool_op(true, location);
-        //let y_index = s.push_with_name(op, "y");
-        //assert_eq!(s.last_index().unwrap(), y_index);
-        //assert_op_index(&s, "y", y_index);
-
-        /*
-        let rs = s.value_from_name("x");
-        assert!(rs.len() > 0);
+        let index_x2 = s.index_from_name("x").unwrap();
+        assert_eq!(index_x, index_x2);
 
         // ensure y
-        let rs = s.value_from_name("y");
-        assert!(rs.len() > 0);
-        */
+        let index_y2 = s.index_from_name("y").unwrap();
+        assert_eq!(index_y, index_y2);
 
         // enter function context
         s.enter_func();
 
         // push y, should shadow static context
-        let op = lower.build_bool_op(true, location);
-        let index = s.push_with_name(op, "y");
-        assert_op_index(&s, "y", index);
+        let expr: Node = node(file_id, ast::Ast::bool(true));
+        let ast = node(
+            file_id,
+            Ast::assign(ast::AssignTarget::Identifier("y".into()), expr),
+        );
+        lower.lower_expr(ast, &mut s);
+        let y_index = s.last_index().unwrap();
+        assert_op_index(&s, "y", y_index);
 
         // push x, should shadow static context
-        let op = lower.build_bool_op(false, location);
-        let index = s.push_with_name(op, "x");
-        assert_op_index(&s, "x", index);
+        let expr: Node = node(file_id, ast::Ast::bool(false));
+        let ast = node(
+            file_id,
+            Ast::assign(ast::AssignTarget::Identifier("x".into()), expr),
+        );
+        lower.lower_expr(ast, &mut s);
+        let x_index = s.last_index().unwrap();
+        assert_op_index(&s, "x", x_index);
 
         // enter closed context
         s.enter_closed();
@@ -473,26 +462,27 @@ mod tests {
         let index = s.push_with_name(op, "z");
         assert_op_index(&s, "z", index);
 
-        //println!("s: {:?}", s);
-        //assert_eq!(s.last_index(), 5.into());
-
-        println!("s2: {:?}", s);
+        // check z existence in closed
         assert_eq!(s.last_index().unwrap(), s.index_from_name("z").unwrap());
 
-        println!("s1: {:?}", s);
+        // exit closed
         let layer = s.exit();
         s.merge(layer);
+
+        // exit func
         let layer = s.exit();
         s.merge(layer);
 
         // check that previous block is no longer visible
         // but we should have all of the ops
 
-        //assert_op_index(&s, "y", y_index);
-        //assert_op_index(&s, "x", x_index);
+        s.dump();
+        assert_op_index(&s, "y", index_y);
+        assert_op_index(&s, "x", index_x);
         //let rs = s.value_from_name("y");
         //assert!(rs.len() > 0);
 
+        // z is not visible, out of scope
         assert!(s.index_from_name("z").is_none());
     }
 

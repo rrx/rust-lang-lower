@@ -67,6 +67,7 @@ pub enum Ast<E> {
     Sequence(Vec<AstNode<E>>),
     Definition(Definition<E>),
     Variable(Definition<E>),
+    Global(String, Box<AstNode<E>>),
     Assign(AssignTarget, Box<AstNode<E>>),
     Conditional(Box<AstNode<E>>, Box<AstNode<E>>, Option<Box<AstNode<E>>>),
     Return(Option<Box<AstNode<E>>>),
@@ -81,6 +82,10 @@ impl<E: Extra> Ast<E> {
             node: self,
             extra: E::new(file_id, begin, end),
         }
+    }
+
+    pub fn global(name: &str, node: AstNode<E>) -> Self {
+        Ast::Global(name.to_string(), Box::new(node))
     }
 
     pub fn assign(target: AssignTarget, node: AstNode<E>) -> Self {

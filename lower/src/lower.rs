@@ -439,6 +439,32 @@ impl<'c> Lower<'c> {
         let location = self.location(&expr);
 
         match expr.node {
+            Ast::Global(ident, expr) => {
+                let block = Block::new(&[]);
+                let op1 = self.lower_static(*expr, env);
+                let r = op1.result(0).unwrap().into();
+                let op2 = llvm::r#return(Some(r), location);
+                block.append_operation(op1);
+                block.append_operation(op2);
+                let region = Region::new();
+                region.append_block(block);
+
+                let i64_type = melior::ir::r#type::IntegerType::new(self.context, 64);
+                let ty = TypeAttribute::new(i64_type.into());
+
+                let name = StringAttribute::new(self.context, &ident);
+
+                let linkage =
+                    llvm::attributes::linkage(self.context, llvm::attributes::Linkage::External);
+                let op = ods::llvm::mlir_global(self.context, region, ty, name, linkage, location);
+
+                let index = LayerIndex::Static(env.fresh_op());
+                env.name_index(index, &ident);
+                env.push(op.into());
+                env.push_index(index);
+                env.last_index().unwrap()
+            }
+
             Ast::BinaryOp(op, a, b) => {
                 let r_lhs = self.lower_expr(*a, env);
                 let r_rhs = self.lower_expr(*b, env);
@@ -800,9 +826,8 @@ impl<'c> Lower<'c> {
                                 //env.push_with_name(op.into(), &ident);
                                 let index = LayerIndex::Static(env.fresh_op());
                                 env.name_index(index, &ident);
-                                //env.push_static
-                                //.push_index(index);
                                 env.push(op.into());
+                                env.push_index(index);
                                 env.last_index().unwrap()
                             }
                             _ => {

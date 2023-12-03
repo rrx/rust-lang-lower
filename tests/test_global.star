@@ -1,4 +1,4 @@
 z = 6
 
 def main():
-  return z
+  return z - 6 
