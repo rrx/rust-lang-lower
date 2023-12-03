@@ -70,7 +70,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     for path in args {
         let path = Path::new(&path); //"tests/test_global.star");
         println!("path: {:?}", path);
-        let result = parser.parse(&context, &path, &mut files);
+        let result = parser.parse(&path, &mut files);
         parser.dump(&files);
         let ast: AstNode<SimpleExtra> = result?;
 

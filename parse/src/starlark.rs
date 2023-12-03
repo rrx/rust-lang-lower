@@ -2,8 +2,6 @@ use anyhow::Result;
 use std::path::Path;
 use thiserror::Error;
 
-use melior::Context;
-
 use starlark_syntax::codemap::CodeMap;
 use starlark_syntax::lexer;
 use starlark_syntax::syntax;
@@ -170,12 +168,7 @@ impl Parser {
         }
     }
 
-    pub fn parse<'a, E: Extra>(
-        &mut self,
-        context: &'a Context,
-        path: &Path,
-        files: &mut FileDB,
-    ) -> Result<AstNode<E>> {
+    pub fn parse<'a, E: Extra>(&mut self, path: &Path, files: &mut FileDB) -> Result<AstNode<E>> {
         let file_id = files.add(
             path.to_str().unwrap().to_string(),
             std::fs::read_to_string(path)?,
@@ -187,7 +180,7 @@ impl Parser {
         let mut env = Environment::new(&codemap, file_id);
         println!("m: {:?}", &stmt);
         let mut seq = lower::lower::prelude(file_id);
-        let ast: AstNode<E> = self.from_stmt(stmt, context, &mut env)?;
+        let ast: AstNode<E> = self.from_stmt(stmt, &mut env)?;
         seq.push(ast);
         Ok(lower::lower::node(file_id, Ast::Sequence(seq)))
     }
@@ -195,7 +188,6 @@ impl Parser {
     pub fn from_stmt<'a, E: Extra, P: syntax::ast::AstPayload>(
         &mut self,
         item: syntax::ast::AstStmtP<P>,
-        context: &Context,
         env: &mut Environment<'a>,
     ) -> Result<AstNode<E>> {
         use syntax::ast::StmtP;
@@ -205,7 +197,7 @@ impl Parser {
             StmtP::Statements(stmts) => {
                 let mut exprs = vec![];
                 for stmt in stmts {
-                    exprs.push(self.from_stmt(stmt, context, env)?);
+                    exprs.push(self.from_stmt(stmt, env)?);
                 }
 
                 let ast = Ast::Sequence(exprs);
@@ -219,7 +211,7 @@ impl Parser {
                     .map(|p| from_parameter(p, env))
                     .collect();
                 env.enter_func();
-                let ast = self.from_stmt(*def.body, context, env)?;
+                let ast = self.from_stmt(*def.body, env)?;
                 env.exit_func();
                 let name = &def.name.ident;
                 let d = Definition {
@@ -234,8 +226,8 @@ impl Parser {
             }
 
             StmtP::If(expr, truestmt) => {
-                let condition = self.from_expr(expr, context, env)?;
-                let truestmt = self.from_stmt(*truestmt, context, env)?;
+                let condition = self.from_expr(expr, env)?;
+                let truestmt = self.from_stmt(*truestmt, env)?;
                 Ok(AstNode {
                     node: Ast::Conditional(condition.into(), truestmt.into(), None),
                     extra,
@@ -243,9 +235,9 @@ impl Parser {
             }
 
             StmtP::IfElse(expr, options) => {
-                let condition = self.from_expr(expr, context, env)?;
-                let truestmt = self.from_stmt(options.0, context, env)?;
-                let elsestmt = Some(Box::new(self.from_stmt(options.1, context, env)?));
+                let condition = self.from_expr(expr, env)?;
+                let truestmt = self.from_stmt(options.0, env)?;
+                let elsestmt = Some(Box::new(self.from_stmt(options.1, env)?));
                 Ok(AstNode {
                     node: Ast::Conditional(condition.into(), truestmt.into(), elsestmt),
                     extra,
@@ -254,7 +246,7 @@ impl Parser {
 
             StmtP::Return(maybe_expr) => {
                 let node = match maybe_expr {
-                    Some(expr) => Ast::Return(Some(Box::new(self.from_expr(expr, context, env)?))),
+                    Some(expr) => Ast::Return(Some(Box::new(self.from_expr(expr, env)?))),
                     None => Ast::Return(None),
                 };
                 Ok(AstNode { node, extra })
@@ -262,7 +254,7 @@ impl Parser {
 
             StmtP::Assign(assign) => {
                 use syntax::ast::AssignTargetP;
-                let rhs = self.from_expr(assign.rhs, context, env)?;
+                let rhs = self.from_expr(assign.rhs, env)?;
                 match assign.lhs.node {
                     AssignTargetP::Identifier(ident) => {
                         let name = ident.node.ident;
@@ -284,7 +276,7 @@ impl Parser {
                 }
             }
 
-            StmtP::Expression(expr) => self.from_expr(expr, context, env),
+            StmtP::Expression(expr) => self.from_expr(expr, env),
 
             _ => unimplemented!("{:?}", item),
         }
@@ -293,7 +285,6 @@ impl Parser {
     fn from_expr<E: Extra, P: syntax::ast::AstPayload>(
         &mut self,
         item: syntax::ast::AstExprP<P>,
-        context: &Context,
         env: &mut Environment,
     ) -> Result<AstNode<E>> {
         use syntax::ast::ExprP;
@@ -303,17 +294,17 @@ impl Parser {
             ExprP::Op(lhs, op, rhs) => {
                 let ast = Ast::BinaryOp(
                     from_binop(op),
-                    Box::new(self.from_expr(*lhs, context, env)?),
-                    Box::new(self.from_expr(*rhs, context, env)?),
+                    Box::new(self.from_expr(*lhs, env)?),
+                    Box::new(self.from_expr(*rhs, env)?),
                 );
                 Ok(AstNode { node: ast, extra })
             }
             ExprP::Call(expr, expr_args) => {
                 let mut args = vec![];
                 for arg in expr_args {
-                    args.push(self.from_argument(arg, context, env)?);
+                    args.push(self.from_argument(arg, env)?);
                 }
-                let f = self.from_expr(*expr, context, env)?;
+                let f = self.from_expr(*expr, env)?;
                 println!("args: {:?}", args);
                 let ast = match &f.node {
                     Ast::Identifier(name) => match name.as_str() {
@@ -368,14 +359,13 @@ impl Parser {
     fn from_argument<E: Extra, P: syntax::ast::AstPayload>(
         &mut self,
         item: syntax::ast::AstArgumentP<P>,
-        context: &Context,
         env: &mut Environment,
     ) -> Result<Argument<E>> {
         use syntax::ast::ArgumentP;
         match item.node {
-            ArgumentP::Positional(expr) => Ok(Argument::Positional(Box::new(
-                self.from_expr(expr, context, env)?,
-            ))),
+            ArgumentP::Positional(expr) => {
+                Ok(Argument::Positional(Box::new(self.from_expr(expr, env)?)))
+            }
             _ => unimplemented!(),
         }
     }
