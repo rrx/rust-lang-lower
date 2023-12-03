@@ -186,14 +186,15 @@ impl<'c> Layer<'c> {
 }
 
 #[derive(Debug)]
-pub struct ScopeStack<'c> {
+pub struct ScopeStack<'c, D> {
     //arg_count: usize,
     op_count: usize,
     //global_count: usize,
     layers: Vec<Layer<'c>>,
+    types: HashMap<LayerIndex, D>,
 }
 
-impl<'c> Default for ScopeStack<'c> {
+impl<'c, D> Default for ScopeStack<'c, D> {
     fn default() -> Self {
         let layer = Layer::new(LayerType::Static);
         Self {
@@ -201,13 +202,22 @@ impl<'c> Default for ScopeStack<'c> {
             op_count: 0,
             //global_count: 0,
             layers: vec![layer],
+            types: HashMap::new(),
         }
     }
 }
 
-impl<'c> ScopeStack<'c> {
+impl<'c, D: std::fmt::Debug> ScopeStack<'c, D> {
     pub fn dump(&self) {
         println!("env: {:?}", self);
+    }
+
+    pub fn index_data(&mut self, index: LayerIndex, data: D) {
+        self.types.insert(index, data);
+    }
+
+    pub fn data(&self, index: &LayerIndex) -> Option<&D> {
+        self.types.get(index)
     }
 
     pub fn current_layer_type(&self) -> LayerType {
@@ -374,14 +384,14 @@ mod tests {
     use crate::ast;
     use crate::ast::Ast;
     use crate::lower::tests::test_context;
+    use crate::lower::Environment;
     use crate::lower::FileDB;
     use crate::lower::{node, Lower};
     use melior::dialect::{arith, func};
     use melior::ir::attribute::{StringAttribute, TypeAttribute};
     use melior::ir::r#type::FunctionType;
     use melior::ir::{Location, Type};
-
-    fn assert_op_index(s: &ScopeStack, name: &str, index: LayerIndex) {
+    fn assert_op_index(s: &Environment, name: &str, index: LayerIndex) {
         assert_eq!(s.index_from_name(name).unwrap(), index);
     }
 
@@ -393,7 +403,7 @@ mod tests {
         let mut files = FileDB::new();
         let file_id = files.add("test.py".into(), "test".into());
         let lower = Lower::new(&context, &files);
-        let mut s = ScopeStack::default();
+        let mut s = Environment::default();
         let location = Location::unknown(&context);
 
         // 3 ops in static context
@@ -479,7 +489,7 @@ mod tests {
 
     fn test_int<'c>(
         lower: &'c Lower,
-        scope: &mut ScopeStack<'c>,
+        scope: &mut Environment<'c>,
         location: Location<'c>,
         v: i64,
     ) -> LayerIndex {
@@ -489,7 +499,7 @@ mod tests {
 
     fn test_int_name<'c>(
         lower: &'c Lower,
-        scope: &mut ScopeStack<'c>,
+        scope: &mut Environment<'c>,
         location: Location<'c>,
         v: i64,
         name: &str,
@@ -499,7 +509,7 @@ mod tests {
     }
 
     fn test_add<'c>(
-        scope: &mut ScopeStack<'c>,
+        scope: &mut Environment<'c>,
         location: Location<'c>,
         a: LayerIndex,
         b: LayerIndex,
@@ -511,7 +521,7 @@ mod tests {
         ))
     }
 
-    fn test_fill<'c>(lower: &'c Lower, scope: &mut ScopeStack<'c>, location: Location<'c>) {
+    fn test_fill<'c>(lower: &'c Lower, scope: &mut Environment<'c>, location: Location<'c>) {
         let x = test_int_name(lower, scope, location, 1, "x");
         let y = test_add(scope, location, x, x);
 
@@ -549,7 +559,7 @@ mod tests {
         scope.push(ret);
     }
 
-    fn test_env3<'c>(lower: &'c Lower, env: &mut ScopeStack<'c>, location: Location<'c>) {
+    fn test_env3<'c>(lower: &'c Lower, env: &mut Environment<'c>, location: Location<'c>) {
         let index_type = Type::index(lower.context);
         let types = vec![index_type];
         let ret_type = vec![index_type];

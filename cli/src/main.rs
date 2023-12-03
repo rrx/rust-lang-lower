@@ -75,8 +75,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         let ast: AstNode<SimpleExtra> = result?;
 
         let lower = Lower::new(&context, &files);
-        let mut env = lower::scope::ScopeStack::default();
-        //let mut env = lower::lower::Environment::default();
+        let mut env: lower::scope::ScopeStack<lower::lower::Data> =
+            lower::scope::ScopeStack::default();
         lower.lower_expr(ast, &mut env);
         for op in env.take_ops() {
             module.body().append_operation(op);

@@ -19,7 +19,17 @@ use crate::ast::*;
 use crate::scope::{LayerIndex, LayerType, ScopeStack};
 use codespan_reporting::files::SimpleFiles;
 
-type Environment<'c> = ScopeStack<'c>;
+#[derive(Debug)]
+pub struct Data {
+    ty: AstType,
+}
+impl Data {
+    pub fn new(ty: AstType) -> Self {
+        Self { ty }
+    }
+}
+
+pub type Environment<'c> = ScopeStack<'c, Data>;
 
 /*
  * Environment
@@ -79,6 +89,7 @@ impl<'c> Lower<'c> {
                 Literal::Index(_) => AstType::Index,
             },
             Ast::Identifier(name) => {
+                // infer type from the operation
                 let r = env.value_from_name(name);
                 let ty = r[0].r#type();
                 if ty.is_index() {
@@ -467,12 +478,14 @@ impl<'c> Lower<'c> {
                 match ident.as_str() {
                     "True" => {
                         let op = self.build_bool_op(true, location);
-                        env.push(op);
+                        let index = env.push(op);
+                        env.index_data(index, Data::new(AstType::Bool));
                         env.last_index().unwrap()
                     }
                     "False" => {
                         let op = self.build_bool_op(false, location);
-                        env.push(op);
+                        let index = env.push(op);
+                        env.index_data(index, Data::new(AstType::Bool));
                         env.last_index().unwrap()
                     }
                     _ => {
@@ -563,25 +576,29 @@ impl<'c> Lower<'c> {
             Ast::Literal(lit) => match lit {
                 Literal::Float(f) => {
                     let op = self.build_float_op(f, location);
-                    env.push(op);
+                    let index = env.push(op);
+                    env.index_data(index, Data::new(AstType::Float));
                     env.last_index().unwrap()
                 }
 
                 Literal::Int(x) => {
                     let op = self.build_int_op(x, location);
-                    env.push(op);
+                    let index = env.push(op);
+                    env.index_data(index, Data::new(AstType::Int));
                     env.last_index().unwrap()
                 }
 
                 Literal::Index(x) => {
                     let op = self.build_index_op(x as i64, location);
-                    env.push(op);
+                    let index = env.push(op);
+                    env.index_data(index, Data::new(AstType::Index));
                     env.last_index().unwrap()
                 }
 
                 Literal::Bool(x) => {
                     let op = self.build_bool_op(x, location);
-                    env.push(op);
+                    let index = env.push(op);
+                    env.index_data(index, Data::new(AstType::Bool));
                     env.last_index().unwrap()
                 } //_ => unimplemented!("{:?}", lit)
             },
@@ -1056,7 +1073,7 @@ pub(crate) mod tests {
         let file_id = files.add("test.py".into(), "test".into());
         let ast = gen_while(file_id);
         let lower = Lower::new(&context, &files);
-        let mut env = Environment::default();
+        let mut env: Environment = Environment::default();
         lower.lower_expr(ast, &mut env);
         let module = ir::Module::new(Location::unknown(&context));
         for op in env.take_ops() {
@@ -1075,7 +1092,7 @@ pub(crate) mod tests {
         let ast = gen_test(file_id);
         println!("ast: {:?}", ast);
         let lower = Lower::new(&context, &files);
-        let mut env = Environment::default();
+        let mut env: Environment = Environment::default();
         lower.lower_expr(ast, &mut env);
         let module = ir::Module::new(Location::unknown(&context));
         for op in env.take_ops() {
