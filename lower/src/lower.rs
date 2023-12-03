@@ -1,19 +1,12 @@
 use melior::{
     dialect::{arith, cf, func, llvm, memref, ods, scf},
     ir::{
-        attribute::{
-            //Attribute, DenseElementsAttribute, DenseI64ArrayAttribute, IntegerAttribute,
-            StringAttribute,
-            TypeAttribute,
-        },
-        //operation::{OperationRef, OperationResult},
+        attribute::{StringAttribute, TypeAttribute},
         r#type::{FunctionType, MemRefType},
         *,
     },
     Context,
 };
-//use std::convert::From;
-//use std::collections::HashMap;
 
 use crate::ast::*;
 use crate::scope::{LayerIndex, LayerType, ScopeStack};
@@ -22,10 +15,14 @@ use codespan_reporting::files::SimpleFiles;
 #[derive(Debug, Clone)]
 pub struct Data {
     ty: AstType,
+    is_static: bool,
 }
 impl Data {
     pub fn new(ty: AstType) -> Self {
-        Self { ty }
+        Self {
+            ty,
+            is_static: false,
+        }
     }
 }
 
@@ -105,13 +102,12 @@ impl<'c> Lower<'c> {
         }
     }
 
-    pub fn from_type(&self, ty: AstType) -> Type<'c> {
+    pub fn from_type(&self, ty: &AstType) -> Type<'c> {
         match ty {
             AstType::Int => melior::ir::r#type::IntegerType::new(self.context, 64).into(),
             AstType::Index => Type::index(self.context),
             AstType::Float => Type::float64(self.context),
             AstType::Bool => melior::ir::r#type::IntegerType::new(self.context, 1).into(),
-            //AstType::Unknown => unreachable!(),
             AstType::Unit => Type::none(self.context),
         }
     }
@@ -172,7 +168,7 @@ impl<'c> Lower<'c> {
         body: AstNode<E>,
         env: &mut Environment<'c>,
     ) -> LayerIndex {
-        let bool_type = self.from_type(AstType::Bool);
+        let bool_type = self.from_type(&AstType::Bool);
         let condition_location = self.location(&condition);
         let body_location = self.location(&body);
 
@@ -253,8 +249,8 @@ impl<'c> Lower<'c> {
          *    evaluated on each iteration.
          *    type is ()->()
          */
-        let bool_type = self.from_type(AstType::Bool);
-        let index_type = self.from_type(AstType::Index);
+        let bool_type = self.from_type(&AstType::Bool);
+        let index_type = self.from_type(&AstType::Index);
         let condition_location = self.location(&condition);
         let body_location = self.location(&body);
 
@@ -407,14 +403,17 @@ impl<'c> Lower<'c> {
                 let linkage =
                     llvm::attributes::linkage(self.context, llvm::attributes::Linkage::External);
                 let op = ods::llvm::mlir_global(self.context, region, ty, name, linkage, location);
+                let index = env.push(op.into());
 
-                let index = LayerIndex::Static(env.fresh_index());
-                let data = Data::new(ast_ty);
+                //let index = LayerIndex::Static(env.fresh_index());
+                let mut data = Data::new(ast_ty);
+                data.is_static = true;
+
                 env.name_index(index, &ident);
                 env.index_data(index, data);
-                env.push(op.into());
-                env.push_index(index);
-                env.last_index().unwrap()
+                //env.push_index(index);
+                index
+                //env.last_index().unwrap()
             }
 
             Ast::BinaryOp(op, a, b) => {
@@ -481,7 +480,8 @@ impl<'c> Lower<'c> {
                 let index = env.push(binop);
                 let data = Data::new(ast_ty);
                 env.index_data(index, data);
-                env.last_index().unwrap()
+                index
+                //env.last_index().unwrap()
             }
 
             Ast::Identifier(ident) => {
@@ -490,57 +490,64 @@ impl<'c> Lower<'c> {
                         let op = self.build_bool_op(true, location);
                         let index = env.push(op);
                         env.index_data(index, Data::new(AstType::Bool));
-                        env.last_index().unwrap()
+                        index
+                        //env.last_index().unwrap()
                     }
                     "False" => {
                         let op = self.build_bool_op(false, location);
                         let index = env.push(op);
                         env.index_data(index, Data::new(AstType::Bool));
-                        env.last_index().unwrap()
+                        index
+                        //env.last_index().unwrap()
                     }
                     _ => {
                         //println!("x: {:?}", ident);
                         //println!("env: {:?}", env);
-                        match env.index_from_name(ident.as_str()) {
-                            Some(LayerIndex::Op(index)) => {
-                                // no new ops, just push the referenced variable into the last index
-                                env.push_index(LayerIndex::Op(index));
-                                env.last_index().unwrap()
-                            }
-                            Some(LayerIndex::Static(index)) => {
-                                let data = env.data(&LayerIndex::Static(index)).unwrap().clone();
-                                println!("y: {:?}", index);
-                                //let location = Location::unknown(self.context);
-                                //let linkage = llvm::attributes::linkage(self.context, llvm::attributes::Linkage::External);
-                                //let region = Region::new();
-                                let i64_type =
-                                    melior::ir::r#type::IntegerType::new(self.context, 64);
-                                //let index_type = Type::index(self.context);
-                                let ty = llvm::r#type::opaque_pointer(self.context);
-                                //let ty = TypeAttribute::new(i32_type.into());
-                                let f =
-                                    attribute::FlatSymbolRefAttribute::new(self.context, &ident);
-                                // get global
-                                let op1: Operation<'c> =
-                                    ods::llvm::mlir_addressof(self.context, ty.into(), f, location)
-                                        .into();
-                                let r = op1.result(0).unwrap().into();
-                                let options = llvm::LoadStoreOptions::new();
-                                let op2 =
-                                    llvm::load(self.context, r, i64_type.into(), location, options);
-
-                                //let r = op2.result(0).unwrap().into();
-                                //let op3 = arith::index_cast(r, Type::index(self.context), location);
-                                //println!("ty: {:?}", r.r#type());
-                                //let ty = MemRefType::new(index_type, &[], None, None);
-                                //let op = memref::get_global(self.context, &ident, ty, location);
-                                env.push(op1);
-                                let index = env.push(op2);
-                                env.index_data(index, data);
-                                //env.push(op3);
-                                env.last_index().unwrap()
+                        let (index, data) = match env.index_from_name(ident.as_str()) {
+                            Some(index) => {
+                                let data = env.data(&index).unwrap().clone();
+                                //let ty = self.from_type(&data.ty);
+                                (index, data)
                             }
                             _ => unimplemented!("Ident({:?})", ident),
+                        };
+
+                        let is_static = match index {
+                            LayerIndex::Op(_) => data.is_static,
+                            LayerIndex::Static(_) => true,
+                            _ => false,
+                        };
+
+                        if is_static {
+                            println!("y: {:?}", index);
+                            let data = env.data(&index).unwrap().clone();
+                            let ty = self.from_type(&data.ty);
+
+                            let opaque_ty = llvm::r#type::opaque_pointer(self.context);
+                            let f = attribute::FlatSymbolRefAttribute::new(self.context, &ident);
+                            // get global
+                            let op1: Operation<'c> = ods::llvm::mlir_addressof(
+                                self.context,
+                                opaque_ty.into(),
+                                f,
+                                location,
+                            )
+                            .into();
+                            let r = op1.result(0).unwrap().into();
+                            let options = llvm::LoadStoreOptions::new();
+                            let op2 = llvm::load(self.context, r, ty.into(), location, options);
+
+                            // maybe cast?
+                            //let op3 = arith::index_cast(r, Type::index(self.context), location);
+
+                            env.push(op1);
+                            let index = env.push(op2);
+                            env.index_data(index, data);
+                            //env.push(op3);
+                            index
+                        } else {
+                            env.push_index(index);
+                            index
                         }
                     }
                 }
@@ -590,28 +597,32 @@ impl<'c> Lower<'c> {
                     let op = self.build_float_op(f, location);
                     let index = env.push(op);
                     env.index_data(index, Data::new(AstType::Float));
-                    env.last_index().unwrap()
+                    index
+                    //env.last_index().unwrap()
                 }
 
                 Literal::Int(x) => {
                     let op = self.build_int_op(x, location);
                     let index = env.push(op);
                     env.index_data(index, Data::new(AstType::Int));
-                    env.last_index().unwrap()
+                    index
+                    //env.last_index().unwrap()
                 }
 
                 Literal::Index(x) => {
                     let op = self.build_index_op(x as i64, location);
                     let index = env.push(op);
                     env.index_data(index, Data::new(AstType::Index));
-                    env.last_index().unwrap()
+                    index
+                    //env.last_index().unwrap()
                 }
 
                 Literal::Bool(x) => {
                     let op = self.build_bool_op(x, location);
                     let index = env.push(op);
                     env.index_data(index, Data::new(AstType::Bool));
-                    env.last_index().unwrap()
+                    index
+                    //env.last_index().unwrap()
                 } //_ => unimplemented!("{:?}", lit)
             },
 
@@ -640,13 +651,13 @@ impl<'c> Lower<'c> {
             Ast::Definition(def) => {
                 println!("name {:?}", def.name);
                 let mut params = vec![];
-                let ty = self.from_type(*def.return_type);
+                let ty = self.from_type(&*def.return_type);
                 for p in def.params {
                     match p.node {
                         Parameter::Normal(ident, ty) => {
                             println!("params {:?}: {:?}", ident, ty);
                             let location = p.extra.location(self.context, self.files);
-                            let ir_ty = self.from_type(ty);
+                            let ir_ty = self.from_type(&ty);
                             params.push((ir_ty, location, "x"));
                         }
                         _ => {
