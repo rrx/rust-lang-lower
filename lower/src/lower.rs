@@ -2,11 +2,12 @@ use melior::{
     dialect::{arith, cf, func, llvm, memref, ods, scf},
     ir::{
         attribute::{
-            Attribute, DenseElementsAttribute, DenseI64ArrayAttribute, IntegerAttribute,
-            StringAttribute, TypeAttribute,
+            //Attribute, DenseElementsAttribute, DenseI64ArrayAttribute, IntegerAttribute,
+            StringAttribute,
+            TypeAttribute,
         },
-        operation::{OperationRef, OperationResult},
-        r#type::{FunctionType, MemRefType, RankedTensorType},
+        //operation::{OperationRef, OperationResult},
+        r#type::{FunctionType, MemRefType},
         *,
     },
     Context,
@@ -15,23 +16,10 @@ use melior::{
 //use std::collections::HashMap;
 
 use crate::ast::*;
-use crate::scope::{Layer, LayerIndex, LayerType, OpIndex, ScopeStack};
+use crate::scope::{LayerIndex, LayerType, ScopeStack};
 use codespan_reporting::files::SimpleFiles;
 
 type Environment<'c> = ScopeStack<'c>;
-
-//pub struct Environment<'c, 'a> {
-//h: HashMap<String, Value<'c, 'a>>,
-//}
-//impl<'c, 'a> Default for Environment<'c, 'a> {
-//fn default() -> Self {
-//Self { h: HashMap::new() }
-//}
-//}
-
-//impl<'c, 'a> crate::env::LayerValue for Value<'c, 'a> {}
-//impl<'c> crate::env::LayerValue for Layer<'c> {}
-//pub type Environment<'c, 'a> = crate::env::EnvLayers<String, Value<'c, 'a>>;
 
 /*
  * Environment
@@ -70,26 +58,6 @@ type Environment<'c> = ScopeStack<'c>;
  *
  */
 
-/*
-fn test(ops: Vec<ir::Operation<'_>>) -> (Vec<ir::operation::OperationResult<'_, '_>>, Vec<ir::Operation<'_>>) {
-    let op = ops.last().unwrap();
-    let r = op.results().collect::<Vec<_>>();
-    (r, ops)
-}
-
-fn op2r<'c>(op: &'c ir::Operation<'c>) -> Vec<Value<'c, '_>> {
-    op.results().map(|x| x.into()).collect::<Vec<_>>()
-}
-
-fn ops2r<'c>(ops: &'c Vec<ir::Operation<'c>>) -> Vec<Value<'c, '_>> {
-    ops.last()
-        .unwrap()
-        .results()
-        .map(|x| x.into())
-        .collect::<Vec<_>>()
-}
-*/
-
 pub type FileDB = SimpleFiles<String, String>;
 
 pub struct Lower<'c> {
@@ -108,6 +76,7 @@ impl<'c> Lower<'c> {
                 Literal::Int(_) => AstType::Int,
                 Literal::Float(_) => AstType::Float,
                 Literal::Bool(_) => AstType::Bool,
+                Literal::Index(_) => AstType::Index,
             },
             Ast::Identifier(_) => AstType::Unknown,
 
@@ -117,10 +86,12 @@ impl<'c> Lower<'c> {
 
     pub fn from_type(&self, ty: AstType) -> Type<'c> {
         match ty {
-            AstType::Int => Type::index(self.context),
+            AstType::Int => melior::ir::r#type::IntegerType::new(self.context, 64).into(),
+            AstType::Index => Type::index(self.context),
             AstType::Float => Type::float64(self.context),
             AstType::Bool => melior::ir::r#type::IntegerType::new(self.context, 1).into(),
             AstType::Unknown => unreachable!(),
+            AstType::Unit => Type::none(self.context),
         }
     }
 
@@ -134,9 +105,19 @@ impl<'c> Lower<'c> {
     }
 
     pub fn build_int_op(&self, value: i64, location: Location<'c>) -> Operation<'c> {
+        let ty = melior::ir::r#type::IntegerType::new(self.context, 64);
         arith::constant(
             self.context,
-            attribute::IntegerAttribute::new(value, Type::index(self.context)).into(),
+            attribute::IntegerAttribute::new(value, ty.into()).into(),
+            location,
+        )
+    }
+
+    pub fn build_index_op(&self, value: i64, location: Location<'c>) -> Operation<'c> {
+        let ty = Type::index(self.context);
+        arith::constant(
+            self.context,
+            attribute::IntegerAttribute::new(value, ty.into()).into(),
             location,
         )
     }
@@ -154,32 +135,11 @@ impl<'c> Lower<'c> {
         expr: AstNode<E>,
         _env: &mut Environment<'c>,
     ) -> Operation<'c> {
-        let location = expr.extra.location(self.context, self.files);
+        let location = self.location(&expr);
         match expr.node {
-            Ast::Literal(Literal::Bool(x)) => {
-                let ty = melior::ir::r#type::IntegerType::new(self.context, 1);
-                return arith::constant(
-                    self.context,
-                    attribute::IntegerAttribute::new(x as i64, ty.into()).into(),
-                    location,
-                );
-            }
-            Ast::Literal(Literal::Int(x)) => {
-                let ty = melior::ir::r#type::IntegerType::new(self.context, 64);
-                return arith::constant(
-                    self.context,
-                    attribute::IntegerAttribute::new(x, ty.into()).into(),
-                    location,
-                );
-            }
-            Ast::Literal(Literal::Float(x)) => {
-                let ty = Type::float64(self.context);
-                return arith::constant(
-                    self.context,
-                    attribute::FloatAttribute::new(self.context, x, ty).into(),
-                    location,
-                );
-            }
+            Ast::Literal(Literal::Bool(x)) => self.build_bool_op(x, location),
+            Ast::Literal(Literal::Int(x)) => self.build_int_op(x, location),
+            Ast::Literal(Literal::Float(x)) => self.build_float_op(x, location),
             _ => unreachable!("{:?}", expr.node),
         }
     }
@@ -273,18 +233,18 @@ impl<'c> Lower<'c> {
          *    type is ()->()
          */
         let bool_type = self.from_type(AstType::Bool);
-        let index_type = self.from_type(AstType::Int);
+        let index_type = self.from_type(AstType::Index);
         let condition_location = self.location(&condition);
         let body_location = self.location(&body);
 
         //env.enter_closed();
-        let x_op = self.build_int_op(1, condition_location);
+        let x_op = self.build_index_op(1, condition_location);
         env.push_with_name(x_op, "test");
 
         // init args - bool, int
         let init_op = self.build_bool_op(true, condition_location);
         env.push_with_name(init_op, "init_op");
-        let init_op2 = self.build_int_op(10, condition_location);
+        let init_op2 = self.build_index_op(10, condition_location);
         env.push_with_name(init_op2, "init_op2");
         //env.dump();
 
@@ -404,7 +364,7 @@ impl<'c> Lower<'c> {
         expr: AstNode<E>,
         env: &mut Environment<'c>,
     ) -> LayerIndex {
-        let index_type = Type::index(self.context);
+        //let index_type = Type::index(self.context);
         let location = self.location(&expr);
 
         match expr.node {
@@ -445,29 +405,28 @@ impl<'c> Lower<'c> {
                 assert!(r_lhs.r#type() == r_rhs.r#type());
 
                 let ty = r_lhs.r#type();
-                let float_type = Type::float64(self.context);
 
                 let binop = match op {
                     BinaryOperation::Add => {
-                        if ty == index_type {
+                        if ty.is_index() || ty.is_integer() {
                             arith::addi(r_lhs.into(), r_rhs.into(), location)
-                        } else if ty == float_type {
+                        } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
                             arith::addf(r_lhs.into(), r_rhs.into(), location)
                         } else {
                             unimplemented!()
                         }
                     }
                     BinaryOperation::Subtract => {
-                        if ty == index_type {
+                        if ty.is_index() || ty.is_integer() {
                             arith::subi(r_lhs.into(), r_rhs.into(), location)
-                        } else if ty == float_type {
+                        } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
                             arith::subf(r_lhs.into(), r_rhs.into(), location)
                         } else {
                             unimplemented!()
                         }
                     }
                     BinaryOperation::Equal => {
-                        if ty == index_type {
+                        if ty.is_index() || ty.is_integer() {
                             arith::cmpi(
                                 self.context,
                                 arith::CmpiPredicate::Eq,
@@ -475,7 +434,7 @@ impl<'c> Lower<'c> {
                                 r_rhs.into(),
                                 location,
                             )
-                        } else if ty == float_type {
+                        } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
                             // ordered comparison
                             arith::cmpf(
                                 self.context,
@@ -536,13 +495,14 @@ impl<'c> Lower<'c> {
                                 let op2 =
                                     llvm::load(self.context, r, i64_type.into(), location, options);
 
-                                let r = op2.result(0).unwrap().into();
-                                let op3 = arith::index_cast(r, Type::index(self.context), location);
+                                //let r = op2.result(0).unwrap().into();
+                                //let op3 = arith::index_cast(r, Type::index(self.context), location);
+                                //println!("ty: {:?}", r.r#type());
                                 //let ty = MemRefType::new(index_type, &[], None, None);
                                 //let op = memref::get_global(self.context, &ident, ty, location);
                                 env.push(op1);
                                 env.push(op2);
-                                env.push(op3);
+                                //env.push(op3);
                                 env.last_index().unwrap()
                             }
                             _ => unimplemented!("Ident({:?})", ident),
@@ -583,7 +543,7 @@ impl<'c> Lower<'c> {
                     self.context,
                     f,
                     call_args.as_slice(),
-                    &[index_type],
+                    &[Type::index(self.context)],
                     location,
                 );
                 env.push(op);
@@ -599,6 +559,12 @@ impl<'c> Lower<'c> {
 
                 Literal::Int(x) => {
                     let op = self.build_int_op(x, location);
+                    env.push(op);
+                    env.last_index().unwrap()
+                }
+
+                Literal::Index(x) => {
+                    let op = self.build_index_op(x as i64, location);
                     env.push(op);
                     env.last_index().unwrap()
                 }
@@ -621,6 +587,7 @@ impl<'c> Lower<'c> {
                 let ident = def.name;
                 // TODO: handle global variables properly, currently assume function context
                 println!("variable ident {:?}", ident);
+                let index_type = Type::index(self.context);
                 let ty = MemRefType::new(index_type, &[], None, None);
                 let op1 = memref::alloca(self.context, ty, &[], &[], None, location);
                 let x = env.push(op1);
@@ -630,10 +597,11 @@ impl<'c> Lower<'c> {
                 env.push_with_name(op, &ident);
                 env.last_index().unwrap()
             }
+
             Ast::Definition(def) => {
                 println!("name {:?}", def.name);
                 let mut params = vec![];
-                let index_type = Type::index(self.context);
+                let ty = self.from_type(*def.return_type);
                 for p in def.params {
                     match p.node {
                         Parameter::Normal(ident, ty) => {
@@ -653,7 +621,6 @@ impl<'c> Lower<'c> {
                 if let Some(body) = def.body {
                     env.enter_block(params.as_slice());
                     self.lower_expr(*body, env);
-                    //env.dump();
                     let mut layer = env.exit();
                     let block = layer.block.take().unwrap();
                     for op in layer.take_ops() {
@@ -663,7 +630,9 @@ impl<'c> Lower<'c> {
                 }
 
                 let types = params.iter().map(|x| x.0).collect::<Vec<Type>>();
-                let ret_type = vec![index_type];
+
+                let ret_type = if ty.is_none() { vec![] } else { vec![ty] };
+
                 let func_type = FunctionType::new(self.context, &types, &ret_type);
 
                 let f = func::func(
@@ -683,6 +652,7 @@ impl<'c> Lower<'c> {
 
             Ast::Return(maybe_expr) => match maybe_expr {
                 Some(expr) => {
+                    let location = self.location(&expr);
                     self.lower_expr(*expr, env);
                     let ret_op = func::r#return(&env.last_values(), location);
                     env.push(ret_op);
@@ -757,48 +727,9 @@ impl<'c> Lower<'c> {
 
                         match ty {
                             LayerType::Static => {
-                                unreachable!();
-                                //env.push(op);
-                                //println!("assign global {:?}", op);
-                                //env.push(ret_op);
-                                let block = Block::new(&[]);
-                                let op1 = self.lower_static(*rhs, env);
-                                let r = op1.result(0).unwrap().into();
-                                let op2 = llvm::r#return(Some(r), location);
-                                block.append_operation(op1);
-                                block.append_operation(op2);
-                                let region = Region::new();
-                                region.append_block(block);
-
-                                let i64_type =
-                                    melior::ir::r#type::IntegerType::new(self.context, 64);
-                                let ty = TypeAttribute::new(i64_type.into());
-
-                                let name = StringAttribute::new(self.context, &ident);
-
-                                let linkage = llvm::attributes::linkage(
-                                    self.context,
-                                    llvm::attributes::Linkage::External,
+                                unreachable!(
+                                    "Assign not possible in global context, use Global instead"
                                 );
-                                let op = ods::llvm::mlir_global(
-                                    self.context,
-                                    region,
-                                    ty,
-                                    name,
-                                    linkage,
-                                    location,
-                                );
-
-                                //let (memref_type, value) = self.lower_static(*rhs, env);
-                                //println!("assign mem {:?}, {:?}", memref_type, value);
-                                //let op = memref::global(self.context, &ident, None, memref_type, Some(value), true, None, location);
-                                //env.push_static(op, &ident);
-                                //env.push_with_name(op.into(), &ident);
-                                let index = LayerIndex::Static(env.fresh_index());
-                                env.name_index(index, &ident);
-                                env.push(op.into());
-                                env.push_index(index);
-                                env.last_index().unwrap()
                             }
                             _ => {
                                 self.lower_expr(*rhs, env);
@@ -807,21 +738,7 @@ impl<'c> Lower<'c> {
                                 env.last_index().unwrap()
                             }
                         }
-
-                        //let ty = MemRefType::new(index_type, &[], None, None);
-                        //let op1 = memref::alloca(self.context, ty, &[], &[], None, location);
-                        //let x: Value = op1.result(0).unwrap().into();
-
-                        //let c = arith::constant(
-                        //self.context,
-                        //attribute::IntegerAttribute::new(10, index_type).into(),
-                        //location,
-                        //);
-
-                        //let r: Value<'c, '_> = c.result(0).unwrap().into();
-                        //let op = memref::store(r, x, &[], location);
-                    }
-                    _ => unimplemented!("{:?}", target),
+                    } //_ => unimplemented!("{:?}", target),
                 }
             }
 
@@ -856,9 +773,9 @@ impl<'c> Lower<'c> {
                             let r = env.values(index);
                             let ty = r[0].r#type();
 
-                            let ident = if ty == Type::index(self.context) {
+                            let ident = if ty.is_index() || ty.is_integer() {
                                 "print_index"
-                            } else if ty == Type::float64(self.context) {
+                            } else if ty.is_f64() {
                                 "print_float"
                             } else {
                                 unimplemented!("{:?}", &ast_ty)
@@ -872,6 +789,7 @@ impl<'c> Lower<'c> {
                             */
 
                             let f = attribute::FlatSymbolRefAttribute::new(self.context, ident);
+                            let index_type = Type::index(self.context);
                             let op = func::call(
                                 self.context,
                                 f,
@@ -910,6 +828,7 @@ pub fn prelude<E: Extra>(file_id: usize) -> Vec<AstNode<E>> {
                     node: Parameter::Normal(ident.clone(), AstType::Int),
                     extra: E::new(file_id, begin.clone(), end.clone()),
                 }],
+                return_type: AstType::Index.into(),
                 body: None,
             }),
         ),
@@ -921,6 +840,7 @@ pub fn prelude<E: Extra>(file_id: usize) -> Vec<AstNode<E>> {
                     node: Parameter::Normal(ident, AstType::Float),
                     extra: E::new(file_id, begin, end),
                 }],
+                return_type: AstType::Index.into(),
                 body: None,
             }),
         ),
@@ -945,6 +865,7 @@ pub(crate) mod tests {
             Ast::Definition(Definition {
                 name: "test".into(),
                 params: vec![],
+                return_type: AstType::Int.into(),
                 body: Some(Box::new(node(
                     file_id,
                     Ast::Sequence(vec![
@@ -980,7 +901,6 @@ pub(crate) mod tests {
                                                 .into(),
                                             )),
                                         ),
-                                        /*
                                         node(
                                             file_id,
                                             Ast::BinaryOp(
@@ -990,9 +910,7 @@ pub(crate) mod tests {
                                                 node(file_id, Ast::Literal(Literal::Int(1))).into(),
                                             ),
                                         ),
-                                        */
-                                        //node(file_id, Ast::Identifier("x".to_string())),
-                                        node(file_id, Ast::Literal(Literal::Int(1))),
+                                        node(file_id, Ast::Literal(Literal::Index(1))),
                                     ]),
                                 )),
                             ),
@@ -1027,6 +945,7 @@ pub(crate) mod tests {
             Ast::Definition(Definition {
                 name: "test".into(),
                 params: vec![],
+                return_type: AstType::Int.into(),
                 body: Some(Box::new(node(
                     file_id,
                     Ast::Sequence(vec![

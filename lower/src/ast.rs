@@ -7,14 +7,17 @@ use codespan_reporting::files::{Files, SimpleFiles};
 #[derive(Debug)]
 pub enum AstType {
     Int,
+    Index,
     Float,
     Bool,
+    Unit,
     Unknown,
 }
 
 #[derive(Debug)]
 pub enum Literal {
     Int(i64),
+    Index(usize),
     Float(f64),
     Bool(bool),
 }
@@ -47,7 +50,7 @@ pub struct ParameterNode<E> {
 pub struct Definition<E> {
     pub name: String,
     pub params: Vec<ParameterNode<E>>,
-    //pub return_type: Option<Box<AstTypeExprP<P>>>,
+    pub return_type: Box<AstType>,
     pub body: Option<Box<AstNode<E>>>,
     //pub payload: P::DefPayload,
 }

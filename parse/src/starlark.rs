@@ -238,6 +238,7 @@ impl Parser {
                 let d = Definition {
                     name: def.name.ident.clone(),
                     body: Some(Box::new(ast)),
+                    return_type: AstType::Int.into(),
                     params,
                 };
                 let ast = Ast::Definition(d);
