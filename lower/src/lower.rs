@@ -149,15 +149,14 @@ impl<'c> Lower<'c> {
         )
     }
 
-    //pub fn lower_static<E: Extra>(&self, expr: AstNode<E>, env: &mut Environment<'c>) -> (MemRefType<'c>, Attribute<'c>) {
     pub fn lower_static<E: Extra>(
         &self,
         expr: AstNode<E>,
-        env: &mut Environment<'c>,
+        _env: &mut Environment<'c>,
     ) -> Operation<'c> {
+        let location = expr.extra.location(self.context, self.files);
         match expr.node {
             Ast::Literal(Literal::Bool(x)) => {
-                let location = Location::unknown(self.context);
                 let ty = melior::ir::r#type::IntegerType::new(self.context, 1);
                 return arith::constant(
                     self.context,
@@ -166,50 +165,20 @@ impl<'c> Lower<'c> {
                 );
             }
             Ast::Literal(Literal::Int(x)) => {
-                let location = Location::unknown(self.context);
                 let ty = melior::ir::r#type::IntegerType::new(self.context, 64);
                 return arith::constant(
                     self.context,
                     attribute::IntegerAttribute::new(x, ty.into()).into(),
                     location,
                 );
-                //return self.build_int_op(x, location);
-                /*
-                let linkage = llvm::attributes::linkage(self.context, llvm::attributes::Linkage::External);
-                let region = Region::new();
-                let i32_type = melior::ir::r#type::IntegerType::new(self.context, 32);
-                let ty = TypeAttribute::new(i32_type.into());
-
-                let name = StringAttribute::new(self.context, "x");
-
-                let op = ods::llvm::mlir_global(self.context, region, ty, name, linkage, location);
-                //let ty = Type::parse(self.context, "tensor<1xindex>").unwrap();
-                //let ty = MemRefType::new(Type::index(self.context), &[], None, None);
-                //let value  = Attribute::unit(self.context);
-                //let value = Attribute::parse(self.context, "[122, 0]").unwrap();
-                op.into()
-                //(ty, op)
-                */
-                /*
-                //MemRefType::new(ty
-                //let ty: MemRefType<'c> = MemRefType::from(ty);
-                println!("ty: {:?}", ty);
-                //let ty = Type::index(self.context);
-                //let  = IntegerAttribute::new(x, Type::index(self.context)).into();
-                //let memref_type = MemRefType::new(Type::index(self.context), &[], None, None);
-                //let memref_type = MemRefType::new(ty, &[1], None, None);//.into();
-                //let memref_type = RankedTensorType::new(&[1], ty, None);//.into();
-                //let value = DenseI64ArrayAttribute::new(self.context, &[x]).into();
-                let value = DenseElementsAttribute::new(
-                    //memref_type.into(),
-                    ty,
-                    //MemRefType::new(ty, &[1], None, None).into(),
-                    &[IntegerAttribute::new(x, ty).into()],
-                    )
-                    .unwrap().into();
-                //let value = IntegerAttribute::new(x, Type::index(self.context)).into();
-                (ty, value)
-                */
+            }
+            Ast::Literal(Literal::Float(x)) => {
+                let ty = Type::float64(self.context);
+                return arith::constant(
+                    self.context,
+                    attribute::FloatAttribute::new(self.context, x, ty).into(),
+                    location,
+                );
             }
             _ => unreachable!("{:?}", expr.node),
         }
@@ -458,7 +427,7 @@ impl<'c> Lower<'c> {
                     llvm::attributes::linkage(self.context, llvm::attributes::Linkage::External);
                 let op = ods::llvm::mlir_global(self.context, region, ty, name, linkage, location);
 
-                let index = LayerIndex::Static(env.fresh_op());
+                let index = LayerIndex::Static(env.fresh_index());
                 env.name_index(index, &ident);
                 env.push(op.into());
                 env.push_index(index);
@@ -788,6 +757,7 @@ impl<'c> Lower<'c> {
 
                         match ty {
                             LayerType::Static => {
+                                unreachable!();
                                 //env.push(op);
                                 //println!("assign global {:?}", op);
                                 //env.push(ret_op);
@@ -824,7 +794,7 @@ impl<'c> Lower<'c> {
                                 //let op = memref::global(self.context, &ident, None, memref_type, Some(value), true, None, location);
                                 //env.push_static(op, &ident);
                                 //env.push_with_name(op.into(), &ident);
-                                let index = LayerIndex::Static(env.fresh_op());
+                                let index = LayerIndex::Static(env.fresh_index());
                                 env.name_index(index, &ident);
                                 env.push(op.into());
                                 env.push_index(index);
@@ -1047,8 +1017,8 @@ pub(crate) mod tests {
         // global variable
         seq.push(node(
             file_id,
-            Ast::Assign(
-                AssignTarget::Identifier("z".to_string()),
+            Ast::Global(
+                "z".into(),
                 Box::new(node(file_id, Ast::Literal(Literal::Int(122)))),
             ),
         ));

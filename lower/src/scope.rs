@@ -1,8 +1,6 @@
-use im::OrdMap;
 use melior::ir::*;
 use melior::ir::{Operation, Value};
 use std::collections::HashMap;
-use std::collections::HashSet;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum LayerType {
@@ -97,11 +95,13 @@ impl<'c> Layer<'c> {
         self.names.insert(name.to_string(), index);
     }
 
+    /*
     pub fn push_static(&mut self, value: Operation<'c>, index: LayerIndex) {
         let offset = self.globals.len();
         //self.globals.push(value);
         self.globals_index.insert(index, offset);
     }
+    */
 
     pub fn push(&mut self, op: Operation<'c>, index: LayerIndex) {
         let pos = self.ops.len();
@@ -215,12 +215,10 @@ impl<'c> ScopeStack<'c> {
     }
 
     pub fn fresh_argument(&mut self) -> LayerIndex {
-        let index = LayerIndex::Argument(self.fresh_op()); //self.op_count);
-                                                           //self.op_count += 1;
-        index
+        LayerIndex::Argument(self.fresh_index())
     }
 
-    pub fn fresh_op(&mut self) -> usize {
+    pub fn fresh_index(&mut self) -> usize {
         let index = self.op_count;
         self.op_count += 1;
         index
@@ -297,13 +295,13 @@ impl<'c> ScopeStack<'c> {
     }
 
     pub fn push_static(&mut self, op: Operation<'c>, name: &str) -> LayerIndex {
-        let index = LayerIndex::Static(self.fresh_op());
+        let index = LayerIndex::Static(self.fresh_index());
         self.last_mut().push_with_name(op, index, name);
         index
     }
 
     pub fn push(&mut self, op: Operation<'c>) -> LayerIndex {
-        let index = LayerIndex::Op(self.fresh_op());
+        let index = LayerIndex::Op(self.fresh_index());
         self.last_mut().push(op, index);
         index
     }
@@ -312,7 +310,7 @@ impl<'c> ScopeStack<'c> {
         let index = match self.current_layer_type() {
             // naming ops in static context doesn't make sense
             LayerType::Static => unreachable!("Unable to name op in static context"), //LayerIndex::Static(self.fresh_op()),
-            _ => LayerIndex::Op(self.fresh_op()),
+            _ => LayerIndex::Op(self.fresh_index()),
         };
         self.last_mut().push_with_name(op, index, name);
         index
@@ -378,15 +376,10 @@ mod tests {
     use crate::lower::tests::test_context;
     use crate::lower::FileDB;
     use crate::lower::{node, Lower};
-    use melior::dialect::{arith, func, memref};
-    use melior::ir::{
-        attribute::{StringAttribute, TypeAttribute},
-        operation::{OperationRef, OperationResult},
-        r#type::{FunctionType, MemRefType},
-        *,
-    };
+    use melior::dialect::{arith, func};
+    use melior::ir::attribute::{StringAttribute, TypeAttribute};
+    use melior::ir::r#type::FunctionType;
     use melior::ir::{Location, Type};
-    use melior::Context;
 
     fn assert_op_index(s: &ScopeStack, name: &str, index: LayerIndex) {
         assert_eq!(s.index_from_name(name).unwrap(), index);
@@ -411,20 +404,20 @@ mod tests {
         let expr: Node = node(file_id, ast::Ast::bool(true));
         let ast = node(file_id, Ast::global("x", expr));
         lower.lower_expr(ast, &mut s);
-        let index_x = s.last_index().unwrap();
+        let g_index_x = s.last_index().unwrap();
 
         let expr: Node = node(file_id, ast::Ast::bool(true));
         let ast = node(file_id, Ast::global("y", expr));
         lower.lower_expr(ast, &mut s);
-        let index_y = s.last_index().unwrap();
+        let g_index_y = s.last_index().unwrap();
 
         // ensure x is shadowed
         let index_x2 = s.index_from_name("x").unwrap();
-        assert_eq!(index_x, index_x2);
+        assert_eq!(g_index_x, index_x2);
 
         // ensure y
         let index_y2 = s.index_from_name("y").unwrap();
-        assert_eq!(index_y, index_y2);
+        assert_eq!(g_index_y, index_y2);
 
         // enter function context
         s.enter_func();
@@ -477,10 +470,8 @@ mod tests {
         // but we should have all of the ops
 
         s.dump();
-        assert_op_index(&s, "y", index_y);
-        assert_op_index(&s, "x", index_x);
-        //let rs = s.value_from_name("y");
-        //assert!(rs.len() > 0);
+        assert_op_index(&s, "y", g_index_y);
+        assert_op_index(&s, "x", g_index_x);
 
         // z is not visible, out of scope
         assert!(s.index_from_name("z").is_none());

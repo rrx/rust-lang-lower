@@ -25,7 +25,6 @@ pub enum ParseError {
     Invalid,
 }
 
-//pub type Environment = lower::env::EnvLayers<String, usize>;
 #[derive(Debug)]
 pub struct Layer {
     names: HashMap<String, usize>,
@@ -123,13 +122,9 @@ fn from_parameter<E: Extra, P: syntax::ast::AstPayload>(
         col: r.end.column,
     };
 
-    //println!("param: {:?}", &item);
     match item.node {
         ParameterP::Normal(ident, maybe_type) => {
             let ty = if let Some(_ty) = maybe_type {
-                //let node = &ty.node.expr.node;
-                //println!("tyx: {:?}", &ty);
-                //println!("tyx: {:?}", &ty);
                 AstType::Int
             } else {
                 AstType::Int
