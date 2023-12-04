@@ -18,6 +18,13 @@ pub struct Data {
     is_static: bool,
 }
 impl Data {
+    pub fn new_static(ty: AstType) -> Self {
+        Self {
+            ty,
+            is_static: true,
+        }
+    }
+
     pub fn new(ty: AstType) -> Self {
         Self {
             ty,
@@ -391,7 +398,6 @@ impl<'c> Lower<'c> {
         expr: AstNode<E>,
         env: &mut Environment<'c>,
     ) -> LayerIndex {
-        //let index_type = Type::index(self.context);
         let location = self.location(&expr);
 
         match expr.node {
@@ -415,17 +421,39 @@ impl<'c> Lower<'c> {
                 let op = ods::llvm::mlir_global(self.context, region, ty, name, linkage, location);
                 let index = env.push(op.into());
 
-                //let index = LayerIndex::Static(env.fresh_index());
-                let mut data = Data::new(ast_ty);
-                data.is_static = true;
-
                 env.name_index(index, &ident);
-                env.index_data(index, data);
-                //env.push_index(index);
+                env.index_data(index, Data::new_static(ast_ty));
                 index
-                //env.last_index().unwrap()
             }
 
+            Ast::UnaryOp(op, a) => {
+                let index_rhs = self.lower_expr(*a, env);
+
+                // get the type of the RHS
+                let ty = env.values(index_rhs)[0].r#type();
+
+                match op {
+                    UnaryOperation::Minus => {
+                        if ty.is_index() {
+                            unreachable!("Unable to negate index type");
+                        } else if ty.is_integer() {
+                            // Multiply by -1
+                            let int_op = self.build_int_op(-1, location);
+                            let index_lhs = env.push(int_op);
+                            let r = env.values(index_lhs)[0];
+                            let r_rhs = env.values(index_rhs)[0];
+                            env.push(arith::muli(r.into(), r_rhs.into(), location));
+                        } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
+                            // arith has an op for negation
+                            let r_rhs = env.values(index_rhs)[0];
+                            env.push(arith::negf(r_rhs.into(), location));
+                        } else {
+                            unimplemented!()
+                        }
+                    }
+                }
+                env.last_index().unwrap()
+            }
             Ast::BinaryOp(op, a, b) => {
                 println!("binop: {:?}, {:?}, {:?}", op, a, b);
                 let index_lhs = self.lower_expr(*a, env);
@@ -852,10 +880,9 @@ impl<'c> Lower<'c> {
                             }
                             _ => {
                                 let index = self.lower_expr(*rhs, env);
-                                //let index = env.last_index().unwrap();
                                 env.name_index(index, &ident);
-                                env.dump();
-                                env.last_index().unwrap()
+                                //env.dump();
+                                index
                             }
                         }
                     } //_ => unimplemented!("{:?}", target),

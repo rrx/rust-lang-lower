@@ -27,6 +27,11 @@ pub enum Literal {
 }
 
 #[derive(Debug)]
+pub enum UnaryOperation {
+    Minus,
+}
+
+#[derive(Debug)]
 pub enum BinaryOperation {
     Add,
     Subtract,
@@ -89,6 +94,7 @@ impl Builtin {
 #[derive(Debug)]
 pub enum Ast<E> {
     BinaryOp(BinaryOperation, Box<AstNode<E>>, Box<AstNode<E>>),
+    UnaryOp(UnaryOperation, Box<AstNode<E>>),
     Call(Box<AstNode<E>>, Vec<Argument<E>>),
     Identifier(String),
     Literal(Literal),

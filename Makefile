@@ -22,7 +22,7 @@ run:
 	./out ; echo $$?
 
 test:
-	cargo test -- --nocapture
+	cargo test
 fmt:
 	cargo fmt
 

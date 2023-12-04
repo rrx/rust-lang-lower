@@ -11,8 +11,8 @@ use codespan_reporting::diagnostic::{Diagnostic, Label};
 use codespan_reporting::term;
 use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
 
-use lower::ast::Extra;
-use lower::ast::*;
+use lower::ast;
+use lower::ast::{AssignTarget, Ast, AstNode, AstType, CodeLocation, Extra, Literal};
 use lower::lower::FileDB;
 use std::collections::HashMap;
 
@@ -91,29 +91,29 @@ impl<'a> Environment<'a> {
     }
 }
 
-fn from_literal(item: syntax::ast::AstLiteral) -> Literal {
+fn from_literal(item: syntax::ast::AstLiteral) -> ast::Literal {
     use syntax::ast::AstLiteral;
     match item {
         AstLiteral::Int(x) => {
             use lexer::TokenInt;
             match x.node {
-                TokenInt::I32(y) => Literal::Int(y as i64),
+                TokenInt::I32(y) => ast::Literal::Int(y as i64),
                 _ => unimplemented!(),
             }
         }
-        AstLiteral::Float(x) => Literal::Float(x.node),
+        AstLiteral::Float(x) => ast::Literal::Float(x.node),
         _ => unimplemented!(),
     }
 }
 
-fn from_binop(item: syntax::ast::BinOp) -> BinaryOperation {
+fn from_binop(item: syntax::ast::BinOp) -> ast::BinaryOperation {
     use syntax::ast::BinOp;
     match item {
-        BinOp::Add => BinaryOperation::Add,
-        BinOp::Subtract => BinaryOperation::Subtract,
-        BinOp::Multiply => BinaryOperation::Multiply,
-        BinOp::Divide => BinaryOperation::Divide,
-        BinOp::Equal => BinaryOperation::Equal,
+        BinOp::Add => ast::BinaryOperation::Add,
+        BinOp::Subtract => ast::BinaryOperation::Subtract,
+        BinOp::Multiply => ast::BinaryOperation::Multiply,
+        BinOp::Divide => ast::BinaryOperation::Divide,
+        BinOp::Equal => ast::BinaryOperation::Equal,
         _ => unimplemented!("{:?}", item),
     }
 }
@@ -121,19 +121,19 @@ fn from_binop(item: syntax::ast::BinOp) -> BinaryOperation {
 fn from_parameter<'a, E: Extra, P: syntax::ast::AstPayload>(
     item: syntax::ast::AstParameterP<P>,
     env: &Environment<'a>,
-) -> ParameterNode<E> {
+) -> ast::ParameterNode<E> {
     use syntax::ast::ParameterP;
     let extra = env.extra(item.span);
 
     match item.node {
         ParameterP::Normal(ident, maybe_type) => {
             let ty = if let Some(_ty) = maybe_type {
-                AstType::Int
+                ast::AstType::Int
             } else {
-                AstType::Int
+                ast::AstType::Int
             };
-            ParameterNode {
-                node: Parameter::Normal(ident.node.ident, ty),
+            ast::ParameterNode {
+                node: ast::Parameter::Normal(ident.node.ident, ty),
                 extra,
             }
         }
@@ -143,10 +143,10 @@ fn from_parameter<'a, E: Extra, P: syntax::ast::AstPayload>(
 
 fn from_assign_target<P: syntax::ast::AstPayload>(
     item: syntax::ast::AssignTargetP<P>,
-) -> AssignTarget {
+) -> ast::AssignTarget {
     use syntax::ast::AssignTargetP;
     match item {
-        AssignTargetP::Identifier(ident) => AssignTarget::Identifier(ident.node.ident),
+        AssignTargetP::Identifier(ident) => ast::AssignTarget::Identifier(ident.node.ident),
         _ => unimplemented!(),
     }
 }
@@ -170,7 +170,11 @@ impl Parser {
         }
     }
 
-    pub fn parse<'a, E: Extra>(&mut self, path: &Path, files: &mut FileDB) -> Result<AstNode<E>> {
+    pub fn parse<'a, E: Extra>(
+        &mut self,
+        path: &Path,
+        files: &mut FileDB,
+    ) -> Result<ast::AstNode<E>> {
         let file_id = files.add(
             path.to_str().unwrap().to_string(),
             std::fs::read_to_string(path)?,
@@ -181,16 +185,16 @@ impl Parser {
         let (codemap, stmt, _dialect, _typecheck) = m.into_parts();
         let mut env = Environment::new(&codemap, file_id);
         let mut seq = lower::lower::prelude(file_id);
-        let ast: AstNode<E> = self.from_stmt(stmt, &mut env)?;
+        let ast: ast::AstNode<E> = self.from_stmt(stmt, &mut env)?;
         seq.push(ast);
-        Ok(lower::lower::node(file_id, Ast::Sequence(seq)))
+        Ok(lower::lower::node(file_id, ast::Ast::Sequence(seq)))
     }
 
     pub fn from_stmt<'a, E: Extra, P: syntax::ast::AstPayload>(
         &mut self,
         item: syntax::ast::AstStmtP<P>,
         env: &mut Environment<'a>,
-    ) -> Result<AstNode<E>> {
+    ) -> Result<ast::AstNode<E>> {
         use syntax::ast::StmtP;
         let extra = env.extra(item.span);
 
@@ -215,7 +219,7 @@ impl Parser {
                 let ast = self.from_stmt(*def.body, env)?;
                 env.exit_func();
                 let name = &def.name.ident;
-                let d = Definition {
+                let d = ast::Definition {
                     name: name.clone(),
                     body: Some(Box::new(ast)),
                     return_type: AstType::Int.into(),
@@ -309,7 +313,7 @@ impl Parser {
                 let f = self.from_expr(*expr, env)?;
                 let ast = match &f.node {
                     Ast::Identifier(name) => {
-                        if let Some(b) = Builtin::from_name(name) {
+                        if let Some(b) = ast::Builtin::from_name(name) {
                             assert_eq!(args.len(), b.arity());
                             Ast::Builtin(b, args)
                         } else {
@@ -349,7 +353,15 @@ impl Parser {
                 })
             }
 
-            _ => unimplemented!(),
+            ExprP::Minus(expr) => {
+                let ast = Ast::UnaryOp(
+                    ast::UnaryOperation::Minus,
+                    Box::new(self.from_expr(*expr, env)?),
+                );
+                Ok(AstNode { node: ast, extra })
+            }
+
+            _ => unimplemented!("{:?}", item.node),
         }
     }
 
@@ -357,12 +369,12 @@ impl Parser {
         &mut self,
         item: syntax::ast::AstArgumentP<P>,
         env: &mut Environment,
-    ) -> Result<Argument<E>> {
+    ) -> Result<ast::Argument<E>> {
         use syntax::ast::ArgumentP;
         match item.node {
-            ArgumentP::Positional(expr) => {
-                Ok(Argument::Positional(Box::new(self.from_expr(expr, env)?)))
-            }
+            ArgumentP::Positional(expr) => Ok(ast::Argument::Positional(Box::new(
+                self.from_expr(expr, env)?,
+            ))),
             _ => unimplemented!(),
         }
     }
@@ -426,7 +438,7 @@ pub(crate) mod tests {
         let mut files = SimpleFiles::new();
         let path = Path::new(filename);
 
-        let ast: AstNode<SimpleExtra> = parser.parse(&path, &mut files).unwrap();
+        let ast: AstNode<ast::SimpleExtra> = parser.parse(&path, &mut files).unwrap();
         parser.dump(&files);
 
         let lower = Lower::new(&context, &files);
