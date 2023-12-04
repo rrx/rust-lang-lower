@@ -30,6 +30,7 @@ pub enum Literal {
 pub enum BinaryOperation {
     Add,
     Subtract,
+    Multiply,
     Equal,
 }
 

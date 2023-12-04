@@ -450,6 +450,15 @@ impl<'c> Lower<'c> {
                 let ty = r_lhs.r#type();
 
                 let binop = match op {
+                    BinaryOperation::Multiply => {
+                        if ty.is_index() || ty.is_integer() {
+                            arith::muli(r_lhs.into(), r_rhs.into(), location)
+                        } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
+                            arith::mulf(r_lhs.into(), r_rhs.into(), location)
+                        } else {
+                            unimplemented!()
+                        }
+                    }
                     BinaryOperation::Add => {
                         if ty.is_index() || ty.is_integer() {
                             arith::addi(r_lhs.into(), r_rhs.into(), location)

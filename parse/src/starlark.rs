@@ -111,6 +111,7 @@ fn from_binop(item: syntax::ast::BinOp) -> BinaryOperation {
     match item {
         BinOp::Add => BinaryOperation::Add,
         BinOp::Subtract => BinaryOperation::Subtract,
+        BinOp::Multiply => BinaryOperation::Multiply,
         BinOp::Equal => BinaryOperation::Equal,
         _ => unimplemented!(),
     }
