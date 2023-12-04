@@ -112,8 +112,9 @@ fn from_binop(item: syntax::ast::BinOp) -> BinaryOperation {
         BinOp::Add => BinaryOperation::Add,
         BinOp::Subtract => BinaryOperation::Subtract,
         BinOp::Multiply => BinaryOperation::Multiply,
+        BinOp::Divide => BinaryOperation::Divide,
         BinOp::Equal => BinaryOperation::Equal,
-        _ => unimplemented!(),
+        _ => unimplemented!("{:?}", item),
     }
 }
 

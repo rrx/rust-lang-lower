@@ -450,6 +450,19 @@ impl<'c> Lower<'c> {
                 let ty = r_lhs.r#type();
 
                 let binop = match op {
+                    BinaryOperation::Divide => {
+                        if ty.is_index() {
+                            // index type is unsigned
+                            arith::divui(r_lhs.into(), r_rhs.into(), location)
+                        } else if ty.is_integer() {
+                            // we assume all integers are signed for now
+                            arith::divsi(r_lhs.into(), r_rhs.into(), location)
+                        } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
+                            arith::divf(r_lhs.into(), r_rhs.into(), location)
+                        } else {
+                            unimplemented!()
+                        }
+                    }
                     BinaryOperation::Multiply => {
                         if ty.is_index() || ty.is_integer() {
                             arith::muli(r_lhs.into(), r_rhs.into(), location)

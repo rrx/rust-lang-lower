@@ -31,6 +31,7 @@ pub enum BinaryOperation {
     Add,
     Subtract,
     Multiply,
+    Divide,
     Equal,
 }
 
