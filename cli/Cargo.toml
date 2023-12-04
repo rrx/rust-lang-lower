@@ -11,3 +11,5 @@ lower = { path = "../lower" }
 codespan-reporting = "*"
 melior = "*"
 argh = "0.1.12"
+simple_logger = "^4.3.0"
+log = "*"

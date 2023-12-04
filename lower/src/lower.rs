@@ -288,13 +288,11 @@ impl<'c> Lower<'c> {
             .into_iter()
             .map(|(arg_name, init_name)| {
                 let r = env.value_from_name(init_name);
-                println!("R: {:?}, {:?}", init_name, r);
                 (r[0].r#type(), condition_location, arg_name)
             })
             .collect();
 
         env.enter_block(&before_args);
-        println!("x: {:?}", env);
 
         self.lower_expr(condition, env);
 
@@ -305,14 +303,9 @@ impl<'c> Lower<'c> {
         // to pass to after
 
         // condition passes result to region 1 if true, or terminates with result
-        let b_index = env.index_from_name("arg1").unwrap();
-        println!("b: {:?}", b_index);
-        let b = env.value_from_name("arg1");
-        println!("b: {:?}", b);
-        let b = env.values(b_index);
-        println!("b: {:?}", b);
-
-        println!("env: {:?}", env);
+        //let b_index = env.index_from_name("arg1").unwrap();
+        //let b = env.value_from_name("arg1");
+        //let b = env.values(b_index);
         let b: Value<'c, '_> = env.value_from_name("arg1")[0];
         let c = scf::condition(condition_rs[0].into(), &[b], condition_location);
 
@@ -352,8 +345,8 @@ impl<'c> Lower<'c> {
 
         // print types
         rs.iter().for_each(|r| {
-            println!("type: {:?}", r.r#type());
-            println!("type: {:?}", before_args[0].0);
+            log::debug!("type: {:?}", r.r#type());
+            log::debug!("type: {:?}", before_args[0].0);
         });
 
         // yield passes result to region 0
@@ -455,24 +448,24 @@ impl<'c> Lower<'c> {
                 env.last_index().unwrap()
             }
             Ast::BinaryOp(op, a, b) => {
-                println!("binop: {:?}, {:?}, {:?}", op, a, b);
+                log::debug!("binop: {:?}, {:?}, {:?}", op, a, b);
                 let index_lhs = self.lower_expr(*a, env);
                 let index_rhs = self.lower_expr(*b, env);
                 env.dump();
-                println!("inx: {:?}, {:?}", index_lhs, index_rhs);
+                log::debug!("inx: {:?}, {:?}", index_lhs, index_rhs);
                 let r_lhs = env.values(index_lhs)[0];
                 let r_rhs = env.values(index_rhs)[0];
-                println!("r: {:?}, {:?}", r_lhs, r_rhs);
+                log::debug!("r: {:?}, {:?}", r_lhs, r_rhs);
 
                 let data_lhs = env.data(&index_lhs).expect("LHS data missing");
                 let data_rhs = env.data(&index_rhs).expect("RHS data missing");
-                println!("ty: {:?}, {:?}", data_lhs.ty, data_lhs.ty);
+                log::debug!("ty: {:?}, {:?}", data_lhs.ty, data_lhs.ty);
                 let ast_ty = data_lhs.ty.clone();
 
                 assert_eq!(data_lhs.ty, data_rhs.ty);
 
                 // types must be the same for binary operation, no implicit casting yet
-                println!("bin: {:?}, {:?}", r_lhs.r#type(), r_rhs.r#type());
+                log::debug!("bin: {:?}, {:?}", r_lhs.r#type(), r_rhs.r#type());
                 assert!(r_lhs.r#type() == r_rhs.r#type());
 
                 let ty = r_lhs.r#type();
@@ -566,8 +559,6 @@ impl<'c> Lower<'c> {
                         //env.last_index().unwrap()
                     }
                     _ => {
-                        //println!("x: {:?}", ident);
-                        //println!("env: {:?}", env);
                         let (index, data) = match env.index_from_name(ident.as_str()) {
                             Some(index) => {
                                 let data = env.data(&index).unwrap().clone();
@@ -583,7 +574,6 @@ impl<'c> Lower<'c> {
                         };
 
                         if is_static {
-                            println!("y: {:?}", index);
                             let source_data = env.data(&index).unwrap().clone();
                             // create a new type, drop other information (static)
                             let data = Data::new(source_data.ty);
@@ -622,13 +612,10 @@ impl<'c> Lower<'c> {
 
             Ast::Call(expr, args) => {
                 // function to call
-                //env.dump();
                 let (f, data) = match &expr.node {
                     Ast::Identifier(ident) => {
                         let index = env.index_from_name(ident).unwrap();
                         let data = env.data(&index).unwrap();
-                        println!("data: {:?}, {:?}", data, index);
-
                         (
                             attribute::FlatSymbolRefAttribute::new(self.context, ident),
                             data,
@@ -639,8 +626,7 @@ impl<'c> Lower<'c> {
                     }
                 };
 
-                println!("data: {:?}", data);
-                if let AstType::Func(func_arg_types, ret) = &data.ty {
+                if let AstType::Func(_func_arg_types, ret) = &data.ty {
                     let data = Data::new(*ret.clone());
                     let ret_ty = self.from_type(ret);
                     // handle call arguments
@@ -714,7 +700,7 @@ impl<'c> Lower<'c> {
             Ast::Variable(def) => {
                 let ident = def.name;
                 // TODO: handle global variables properly, currently assume function context
-                println!("variable ident {:?}", ident);
+                log::debug!("variable ident {:?}", ident);
                 let index_type = Type::index(self.context);
                 let ty = MemRefType::new(index_type, &[], None, None);
                 let op1 = memref::alloca(self.context, ty, &[], &[], None, location);
@@ -727,7 +713,7 @@ impl<'c> Lower<'c> {
             }
 
             Ast::Definition(def) => {
-                println!("name {:?}", def.name);
+                log::debug!("name {:?}", def.name);
                 let mut params = vec![];
                 let ty = self.from_type(&*def.return_type);
                 let mut ast_types = vec![];
@@ -736,15 +722,14 @@ impl<'c> Lower<'c> {
                 for p in def.params {
                     match p.node {
                         Parameter::Normal(ident, ty) => {
-                            println!("params {:?}: {:?}", ident, ty);
+                            log::debug!("params {:?}: {:?}", ident, ty);
                             let location = p.extra.location(self.context, self.files);
                             let ir_ty = self.from_type(&ty);
                             params.push((ir_ty, location, "x"));
                             ast_types.push(ty);
                         }
                         _ => {
-                            println!("not implemented: {:?}", p);
-                            unimplemented!();
+                            unimplemented!("{:?}", p);
                         }
                     }
                 }
@@ -871,7 +856,7 @@ impl<'c> Lower<'c> {
                     AssignTarget::Identifier(ident) => {
                         // TODO: handle global variables properly, currently assume function context
                         let ty = env.current_layer_type();
-                        println!("assign ident {:?}, {:?}", ident, ty);
+                        log::debug!("assign ident {:?}, {:?}", ident, ty);
                         match ty {
                             LayerType::Static => {
                                 unreachable!(
@@ -1199,7 +1184,7 @@ pub(crate) mod tests {
             module.body().append_operation(op);
         }
         let s = module.as_operation().to_string();
-        println!("{}", s);
+        log::debug!("{}", s);
         assert!(module.as_operation().verify());
     }
 
@@ -1209,7 +1194,7 @@ pub(crate) mod tests {
         let mut files = FileDB::new();
         let file_id = files.add("test.py".into(), "test".into());
         let ast = gen_test(file_id);
-        println!("ast: {:?}", ast);
+        log::debug!("ast: {:?}", ast);
         let lower = Lower::new(&context, &files);
         let mut env: Environment = Environment::default();
         lower.lower_expr(ast, &mut env);
@@ -1218,7 +1203,7 @@ pub(crate) mod tests {
             module.body().append_operation(op);
         }
         let s = module.as_operation().to_string();
-        println!("{}", s);
+        log::debug!("{}", s);
         assert!(module.as_operation().verify());
     }
 }

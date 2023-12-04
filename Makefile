@@ -2,7 +2,7 @@ default: run
 
 run:
 	clang-17 -c tests/prelude.c -o target/debug/prelude.o
-	RUST_BACKTRACE=1 cargo run --bin cli -- -l \
+	RUST_BACKTRACE=1 cargo run --bin cli -- -l -v \
 		       -o target/debug/out.mlir \
 		       tests/test_global.star
 	mlir-opt-17 \

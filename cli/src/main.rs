@@ -3,19 +3,19 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 
+use argh::FromArgs;
+use codespan_reporting::files::SimpleFiles;
 use melior::{
     dialect::DialectRegistry,
     ir, pass,
     utility::{register_all_dialects, register_all_llvm_translations},
     Context, ExecutionEngine,
 };
+use simple_logger::SimpleLogger;
 
-use codespan_reporting::files::SimpleFiles;
 use lower::ast::{AstNode, SimpleExtra};
 use lower::lower::Lower;
 use parse::starlark::Parser;
-
-use argh::FromArgs;
 
 #[derive(FromArgs, Debug)]
 /// Compile Stuff
@@ -23,6 +23,10 @@ struct Config {
     /// compile flag
     #[argh(switch, short = 'l')]
     lower: bool,
+
+    /// verbose flag
+    #[argh(switch, short = 'v')]
+    verbose: bool,
 
     /// output file
     #[argh(option, short = 'o')]
@@ -34,9 +38,16 @@ struct Config {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    //let args: Vec<String> = std::env::args().skip(1).collect();
+    SimpleLogger::new().init().unwrap();
     let config: Config = argh::from_env();
-    println!("config: {:?}", config);
+
+    if config.verbose {
+        log::set_max_level(log::LevelFilter::Trace);
+    } else {
+        log::set_max_level(log::LevelFilter::Warn);
+    }
+
+    log::debug!("config: {:?}", config);
     let context = Context::new();
     context.set_allow_unregistered_dialects(true);
     context.enable_multi_threading(true);
@@ -68,7 +79,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     context.attach_diagnostic_handler(|diagnostic| {
         let location = diagnostic.location();
-        eprintln!("E: {}: {}", diagnostic, location);
+        log::error!("E: {}: {}", diagnostic, location);
         true
     });
 
@@ -84,15 +95,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut files = SimpleFiles::new();
     let mut parser = Parser::new();
 
-    let default_out = "out.mlir".to_string();
-    let out_filename = config.output.as_ref().unwrap_or(&default_out);
-    let mut output = File::create(out_filename)?;
-
     for path in config.inputs {
         let path = Path::new(&path);
-        println!("path: {:?}", path);
+        log::debug!("parsing: {}", path.to_str().unwrap());
         let result = parser.parse(&path, &mut files);
-        parser.dump(&files);
+        if config.verbose {
+            parser.dump(&files);
+        }
         let ast: AstNode<SimpleExtra> = result?;
 
         let lower = Lower::new(&context, &files);
@@ -104,7 +113,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    module.as_operation().dump();
+    if config.verbose {
+        module.as_operation().dump();
+    }
     assert!(module.as_operation().verify());
 
     let default_out = "out.mlir".to_string();
@@ -112,7 +123,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut output = File::create(out_filename)?;
     if config.lower {
         pass_manager.run(&mut module)?;
-        module.as_operation().dump();
+        if config.verbose {
+            module.as_operation().dump();
+        }
     }
 
     let s = module.as_operation().to_string();

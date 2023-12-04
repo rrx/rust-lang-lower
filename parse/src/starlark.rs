@@ -421,7 +421,7 @@ pub(crate) mod tests {
 
         context.attach_diagnostic_handler(|diagnostic| {
             let location = diagnostic.location();
-            eprintln!("E: {}: {}", diagnostic, location);
+            log::error!("E: {}: {}", diagnostic, location);
             true
         });
 

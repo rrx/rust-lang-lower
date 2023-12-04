@@ -9,6 +9,7 @@ edition = "2021"
 lower = { path = "../lower" }
 starlark_syntax = { git = "https://github.com/facebookexperimental/starlark-rust.git", branch = "main" }
 melior = "*"
+log = "*"
 anyhow = "*"
 thiserror = "*"
 codespan-reporting = "*"
