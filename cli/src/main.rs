@@ -11,7 +11,7 @@ use melior::{
     utility::{register_all_dialects, register_all_llvm_translations},
     Context, ExecutionEngine,
 };
-use simple_logger::SimpleLogger;
+use simple_logger::{set_up_color_terminal, SimpleLogger};
 
 use lower::ast::{AstNode, SimpleExtra};
 use lower::lower::Lower;
@@ -38,6 +38,7 @@ struct Config {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
+    set_up_color_terminal();
     SimpleLogger::new().init().unwrap();
     let config: Config = argh::from_env();
 

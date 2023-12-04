@@ -280,7 +280,6 @@ impl<'c> Lower<'c> {
         env.push_with_name(init_op, "init_op");
         let init_op2 = self.build_index_op(10, condition_location);
         env.push_with_name(init_op2, "init_op2");
-        //env.dump();
 
         let init_args = vec![("arg0", "init_op"), ("arg1", "init_op2")];
 
@@ -451,7 +450,6 @@ impl<'c> Lower<'c> {
                 log::debug!("binop: {:?}, {:?}, {:?}", op, a, b);
                 let index_lhs = self.lower_expr(*a, env);
                 let index_rhs = self.lower_expr(*b, env);
-                env.dump();
                 log::debug!("inx: {:?}, {:?}", index_lhs, index_rhs);
                 let r_lhs = env.values(index_lhs)[0];
                 let r_rhs = env.values(index_rhs)[0];
@@ -866,7 +864,6 @@ impl<'c> Lower<'c> {
                             _ => {
                                 let index = self.lower_expr(*rhs, env);
                                 env.name_index(index, &ident);
-                                //env.dump();
                                 index
                             }
                         }
@@ -980,13 +977,13 @@ pub fn prelude<E: Extra>(file_id: usize) -> Vec<AstNode<E>> {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    //use test_log::test;
     use melior::{
         dialect::DialectRegistry,
         ir,
         utility::{register_all_dialects, register_all_llvm_translations},
         Context,
     };
+    use test_log::test;
 
     pub fn gen_test(file_id: usize) -> AstNode<SimpleExtra> {
         let mut seq = prelude(file_id);
@@ -1194,7 +1191,6 @@ pub(crate) mod tests {
         let mut files = FileDB::new();
         let file_id = files.add("test.py".into(), "test".into());
         let ast = gen_test(file_id);
-        log::debug!("ast: {:?}", ast);
         let lower = Lower::new(&context, &files);
         let mut env: Environment = Environment::default();
         lower.lower_expr(ast, &mut env);

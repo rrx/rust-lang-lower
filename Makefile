@@ -24,7 +24,7 @@ run:
 	./target/debug/out ; echo $$?
 
 test:
-	cargo test
+	cargo test -- --nocapture
 fmt:
 	cargo fmt
 

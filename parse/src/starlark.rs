@@ -387,6 +387,7 @@ pub(crate) mod tests {
     use lower::lower::Lower;
     use melior::dialect::DialectRegistry;
     use melior::ir;
+    use melior::ir::operation::OperationPrintingFlags;
     use melior::pass;
     use melior::utility::{register_all_dialects, register_all_llvm_translations};
     use melior::Context;
@@ -439,7 +440,7 @@ pub(crate) mod tests {
         let path = Path::new(filename);
 
         let ast: AstNode<ast::SimpleExtra> = parser.parse(&path, &mut files).unwrap();
-        parser.dump(&files);
+        //parser.dump(&files);
 
         let lower = Lower::new(&context, &files);
         let mut env: lower::scope::ScopeStack<lower::lower::Data> =
@@ -449,10 +450,22 @@ pub(crate) mod tests {
             module.body().append_operation(op);
         }
 
-        module.as_operation().dump();
+        log::debug!(
+            "before {}",
+            module
+                .as_operation()
+                .to_string_with_flags(OperationPrintingFlags::new())
+                .unwrap()
+        );
         pass_manager.run(&mut module).unwrap();
         assert!(module.as_operation().verify());
-        module.as_operation().dump();
+        log::debug!(
+            "after pass {}",
+            module
+                .as_operation()
+                .to_string_with_flags(OperationPrintingFlags::new())
+                .unwrap()
+        );
         let engine = ExecutionEngine::new(&module, 0, &[], true);
         let mut result: i64 = -1;
         unsafe {
