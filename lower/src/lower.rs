@@ -978,12 +978,6 @@ pub fn prelude<E: Extra>(file_id: usize) -> Vec<AstNode<E>> {
 pub(crate) mod tests {
     use super::*;
     use crate::compile::run_ast;
-    use melior::{
-        dialect::DialectRegistry,
-        utility::{register_all_dialects, register_all_llvm_translations},
-        Context,
-    };
-
     use test_log::test;
 
     pub fn gen_test(file_id: usize) -> AstNode<SimpleExtra> {
