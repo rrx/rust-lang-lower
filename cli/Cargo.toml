@@ -10,4 +10,4 @@ parse = { path = "../parse" }
 lower = { path = "../lower" }
 codespan-reporting = "*"
 melior = "*"
-
+argh = "0.1.12"

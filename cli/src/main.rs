@@ -9,7 +9,7 @@ use melior::{
     pass,
     utility::{register_all_dialects, register_all_llvm_translations},
     Context,
-    //ExecutionEngine,
+    ExecutionEngine,
 };
 
 use codespan_reporting::files::SimpleFiles;
@@ -17,9 +17,28 @@ use lower::ast::{AstNode, SimpleExtra};
 use lower::lower::Lower;
 use parse::starlark::Parser;
 
-fn main() -> Result<(), Box<dyn Error>> {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+use argh::FromArgs;
 
+#[derive(FromArgs, Debug)]
+/// Compile Stuff
+struct Config {
+    /// compile flag
+    #[argh(switch, short='l')]
+    lower: bool,
+
+    /// output file
+    #[argh(option, short='o')]
+    output: Option<String>,
+
+    /// compile file
+    #[argh(positional)]
+    inputs: Vec<String>,
+}
+
+fn main() -> Result<(), Box<dyn Error>> {
+    //let args: Vec<String> = std::env::args().skip(1).collect();
+    let config: Config = argh::from_env();
+    println!("config: {:?}", config);
     let context = Context::new();
     context.set_allow_unregistered_dialects(true);
     context.enable_multi_threading(true);
@@ -67,7 +86,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut files = SimpleFiles::new();
     let mut parser = Parser::new();
 
-    for path in args {
+    let default_out = "out.mlir".to_string();
+    let out_filename = config.output.as_ref().unwrap_or(&default_out);
+    let mut output = File::create(out_filename)?;
+
+    for path in config.inputs {
         let path = Path::new(&path);
         println!("path: {:?}", path);
         let result = parser.parse(&path, &mut files);
@@ -82,19 +105,21 @@ fn main() -> Result<(), Box<dyn Error>> {
             module.body().append_operation(op);
         }
 
-        module.as_operation().dump();
-        assert!(module.as_operation().verify());
-        let mut output = File::create("out.mlir")?;
-        let s = module.as_operation().to_string();
-        write!(output, "{}", s)?;
-
-        pass_manager.run(&mut module)?;
-
-        module.as_operation().dump();
-        let mut output = File::create("out.ll")?;
-        let s = module.as_operation().to_string();
-        write!(output, "{}", s)?;
     }
+
+    module.as_operation().dump();
+    assert!(module.as_operation().verify());
+
+    let default_out = "out.mlir".to_string();
+    let out_filename = config.output.as_ref().unwrap_or(&default_out);
+    let mut output = File::create(out_filename)?;
+    if config.lower {
+        pass_manager.run(&mut module)?;
+        module.as_operation().dump();
+    }
+
+    let s = module.as_operation().to_string();
+    write!(output, "{}", s)?;
     //let engine = ExecutionEngine::new(&module, 0, &[], true);
     //engine.dump_to_object_file("out.o");
 
