@@ -842,56 +842,55 @@ impl<'c> Lower<'c> {
                 env.last_index().unwrap()
             }
 
-            Ast::Builtin(b) => {
+            Ast::Builtin(b, mut args) => {
+                let arity = b.arity();
+                assert_eq!(arity, args.len());
                 match b {
-                    Builtin::Assert(arg) => match *arg {
-                        Argument::Positional(expr) => {
-                            let index = self.lower_expr(*expr, env);
-                            let msg = format!("assert at {}", location);
-                            let assert_op =
-                                cf::assert(self.context, env.values(index)[0], &msg, location);
-                            env.push(assert_op);
-                            env.last_index().unwrap()
+                    Builtin::Assert => {
+                        let arg = args.pop().unwrap();
+                        match arg {
+                            Argument::Positional(expr) => {
+                                let index = self.lower_expr(*expr, env);
+                                let msg = format!("assert at {}", location);
+                                let assert_op =
+                                    cf::assert(self.context, env.values(index)[0], &msg, location);
+                                env.push(assert_op);
+                                env.last_index().unwrap()
+                            }
                         }
-                    },
-                    Builtin::Print(arg) => match *arg {
-                        Argument::Positional(expr) => {
-                            let ast_ty = self.type_from_expr(&expr, env);
+                    }
+                    Builtin::Print => {
+                        let arg = args.pop().unwrap();
+                        match arg {
+                            Argument::Positional(expr) => {
+                                let ast_ty = self.type_from_expr(&expr, env);
 
-                            // eval expr
-                            let index = self.lower_expr(*expr, env);
-                            let r = env.values(index);
-                            let ty = r[0].r#type();
+                                // eval expr
+                                let index = self.lower_expr(*expr, env);
+                                let r = env.values(index);
+                                let ty = r[0].r#type();
 
-                            let ident = if ty.is_index() || ty.is_integer() {
-                                "print_index"
-                            } else if ty.is_f64() {
-                                "print_float"
-                            } else {
-                                unimplemented!("{:?}", &ast_ty)
-                            };
-                            /*
-                            let ident = match &ty {
-                                AstType::Int => "print_index",
-                                AstType::Float => "print_float",
-                                _ => unimplemented!("{:?}", &ast_ty),
-                            };
-                            */
+                                // Select the baked version based on parameters
+                                // TODO: A more dynamic way of doing this
+                                // TODO: We only want to import these if they are referenced
+                                let ident = if ty.is_index() || ty.is_integer() {
+                                    "print_index"
+                                } else if ty.is_f64() {
+                                    "print_float"
+                                } else {
+                                    unimplemented!("{:?}", &ast_ty)
+                                };
 
-                            let f = attribute::FlatSymbolRefAttribute::new(self.context, ident);
-                            let index_type = Type::index(self.context);
-                            let op = func::call(
-                                self.context,
-                                f,
-                                &env.values(index),
-                                &[index_type],
-                                location,
-                            );
+                                let f = attribute::FlatSymbolRefAttribute::new(self.context, ident);
+                                //let index_type = Type::index(self.context);
+                                let op =
+                                    func::call(self.context, f, &env.values(index), &[], location);
 
-                            env.push(op);
-                            env.last_index().unwrap()
+                                env.push(op);
+                                env.last_index().unwrap()
+                            }
                         }
-                    },
+                    }
                     //_ => unimplemented!("{:?}", b),
                 }
             } //_ => unimplemented!("{:?}", expr.node),
@@ -918,7 +917,7 @@ pub fn prelude<E: Extra>(file_id: usize) -> Vec<AstNode<E>> {
                     node: Parameter::Normal(ident.clone(), AstType::Int),
                     extra: E::new(file_id, begin.clone(), end.clone()),
                 }],
-                return_type: AstType::Index.into(),
+                return_type: AstType::Unit.into(),
                 body: None,
             }),
         ),
@@ -930,7 +929,7 @@ pub fn prelude<E: Extra>(file_id: usize) -> Vec<AstNode<E>> {
                     node: Parameter::Normal(ident, AstType::Float),
                     extra: E::new(file_id, begin, end),
                 }],
-                return_type: AstType::Index.into(),
+                return_type: AstType::Unit.into(),
                 body: None,
             }),
         ),
@@ -983,13 +982,14 @@ pub(crate) mod tests {
                                         ),
                                         node(
                                             file_id,
-                                            Ast::Builtin(Builtin::Print(
-                                                Argument::Positional(
+                                            Ast::Builtin(
+                                                Builtin::Print,
+                                                vec![Argument::Positional(
                                                     node(file_id, Ast::Literal(Literal::Int(1)))
                                                         .into(),
-                                                )
-                                                .into(),
-                                            )),
+                                                )],
+                                            )
+                                            .into(),
                                         ),
                                         node(
                                             file_id,
@@ -1090,13 +1090,13 @@ pub(crate) mod tests {
                                         ),
                                         node(
                                             file_id,
-                                            Ast::Builtin(Builtin::Print(
-                                                Argument::Positional(
+                                            Ast::Builtin(
+                                                Builtin::Print,
+                                                vec![Argument::Positional(
                                                     node(file_id, Ast::Identifier("y".to_string()))
                                                         .into(),
-                                                )
-                                                .into(),
-                                            )),
+                                                )],
+                                            ),
                                         ),
                                     ]),
                                 )),

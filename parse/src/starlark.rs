@@ -178,7 +178,6 @@ impl Parser {
         let m = syntax::AstModule::parse_file(&path, &dialect)?;
         let (codemap, stmt, _dialect, _typecheck) = m.into_parts();
         let mut env = Environment::new(&codemap, file_id);
-        println!("m: {:?}", &stmt);
         let mut seq = lower::lower::prelude(file_id);
         let ast: AstNode<E> = self.from_stmt(stmt, &mut env)?;
         seq.push(ast);
@@ -299,31 +298,27 @@ impl Parser {
                 );
                 Ok(AstNode { node: ast, extra })
             }
+
             ExprP::Call(expr, expr_args) => {
                 let mut args = vec![];
                 for arg in expr_args {
                     args.push(self.from_argument(arg, env)?);
                 }
                 let f = self.from_expr(*expr, env)?;
-                println!("args: {:?}", args);
                 let ast = match &f.node {
-                    Ast::Identifier(name) => match name.as_str() {
-                        "check" => {
-                            assert!(args.len() == 1);
-                            let arg = args.pop().unwrap();
-                            Ast::Builtin(Builtin::Assert(Box::new(arg)))
+                    Ast::Identifier(name) => {
+                        if let Some(b) = Builtin::from_name(name) {
+                            assert_eq!(args.len(), b.arity());
+                            Ast::Builtin(b, args)
+                        } else {
+                            Ast::Call(Box::new(f), args)
                         }
-                        "print" => {
-                            assert!(args.len() == 1);
-                            let arg = args.pop().unwrap();
-                            Ast::Builtin(Builtin::Print(Box::new(arg)))
-                        }
-                        _ => Ast::Call(Box::new(f), args),
-                    },
+                    }
                     _ => Ast::Call(Box::new(f), args),
                 };
                 Ok(AstNode { node: ast, extra })
             }
+
             ExprP::Identifier(ident) => {
                 if let Some(_index) = env.resolve(&ident.node.ident) {
                     let name = ident.node.ident;

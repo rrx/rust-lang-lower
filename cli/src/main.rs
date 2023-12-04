@@ -68,7 +68,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut parser = Parser::new();
 
     for path in args {
-        let path = Path::new(&path); //"tests/test_global.star");
+        let path = Path::new(&path);
         println!("path: {:?}", path);
         let result = parser.parse(&path, &mut files);
         parser.dump(&files);

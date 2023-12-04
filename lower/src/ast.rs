@@ -60,9 +60,28 @@ pub struct Definition<E> {
 }
 
 #[derive(Debug)]
-pub enum Builtin<E> {
-    Assert(Box<Argument<E>>),
-    Print(Box<Argument<E>>),
+pub enum Builtin {
+    Assert,
+    Print,
+}
+
+impl Builtin {
+    pub fn from_name(name: &str) -> Option<Builtin> {
+        if name == "check" {
+            Some(Builtin::Assert)
+        } else if name == "print" {
+            Some(Builtin::Print)
+        } else {
+            None
+        }
+    }
+
+    pub fn arity(&self) -> usize {
+        match self {
+            Self::Assert => 1,
+            Self::Print => 1,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -80,7 +99,7 @@ pub enum Ast<E> {
     Return(Option<Box<AstNode<E>>>),
     Test(Box<AstNode<E>>, Box<AstNode<E>>),
     While(Box<AstNode<E>>, Box<AstNode<E>>),
-    Builtin(Builtin<E>),
+    Builtin(Builtin, Vec<Argument<E>>),
 }
 
 impl<E: Extra> Ast<E> {
