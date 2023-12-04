@@ -5,11 +5,9 @@ use std::path::Path;
 
 use melior::{
     dialect::DialectRegistry,
-    ir,
-    pass,
+    ir, pass,
     utility::{register_all_dialects, register_all_llvm_translations},
-    Context,
-    ExecutionEngine,
+    Context, ExecutionEngine,
 };
 
 use codespan_reporting::files::SimpleFiles;
@@ -23,11 +21,11 @@ use argh::FromArgs;
 /// Compile Stuff
 struct Config {
     /// compile flag
-    #[argh(switch, short='l')]
+    #[argh(switch, short = 'l')]
     lower: bool,
 
     /// output file
-    #[argh(option, short='o')]
+    #[argh(option, short = 'o')]
     output: Option<String>,
 
     /// compile file
@@ -104,7 +102,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         for op in env.take_ops() {
             module.body().append_operation(op);
         }
-
     }
 
     module.as_operation().dump();
