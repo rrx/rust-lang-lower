@@ -99,7 +99,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     for path in config.inputs {
         let path = Path::new(&path);
         log::debug!("parsing: {}", path.to_str().unwrap());
-        let result = parser.parse(&path, &mut files);
+        let result = parser.parse(&path, None, &mut files);
         if config.verbose {
             parser.dump(&files);
         }

@@ -979,7 +979,6 @@ pub(crate) mod tests {
     use super::*;
     use melior::{
         dialect::DialectRegistry,
-        ir,
         utility::{register_all_dialects, register_all_llvm_translations},
         Context,
     };
@@ -990,7 +989,7 @@ pub(crate) mod tests {
         seq.push(node(
             file_id,
             Ast::Definition(Definition {
-                name: "test".into(),
+                name: "main".into(),
                 params: vec![],
                 return_type: AstType::Int.into(),
                 body: Some(Box::new(node(
@@ -1006,7 +1005,7 @@ pub(crate) mod tests {
                         node(
                             file_id,
                             Ast::Test(
-                                Box::new(node(file_id, Ast::Literal(Literal::Bool(true)))),
+                                Box::new(node(file_id, Ast::Literal(Literal::Bool(false)))),
                                 Box::new(node(
                                     file_id,
                                     Ast::Sequence(vec![
@@ -1017,17 +1016,6 @@ pub(crate) mod tests {
                                                 node(file_id, Ast::Literal(Literal::Int(2))).into(),
                                                 node(file_id, Ast::Literal(Literal::Int(1))).into(),
                                             ),
-                                        ),
-                                        node(
-                                            file_id,
-                                            Ast::Builtin(
-                                                Builtin::Print,
-                                                vec![Argument::Positional(
-                                                    node(file_id, Ast::Literal(Literal::Int(1)))
-                                                        .into(),
-                                                )],
-                                            )
-                                            .into(),
                                         ),
                                         node(
                                             file_id,
@@ -1047,7 +1035,7 @@ pub(crate) mod tests {
                             file_id,
                             Ast::Return(Some(Box::new(node(
                                 file_id,
-                                Ast::Literal(Literal::Int(1)),
+                                Ast::Literal(Literal::Int(0)),
                             )))),
                         ),
                     ]),
@@ -1071,7 +1059,7 @@ pub(crate) mod tests {
         seq.push(node(
             file_id,
             Ast::Definition(Definition {
-                name: "test".into(),
+                name: "main".into(),
                 params: vec![],
                 return_type: AstType::Int.into(),
                 body: Some(Box::new(node(
@@ -1089,7 +1077,7 @@ pub(crate) mod tests {
                             file_id,
                             Ast::While(
                                 // condition
-                                Box::new(node(file_id, Ast::Literal(Literal::Bool(true)))),
+                                Box::new(node(file_id, Ast::Literal(Literal::Bool(false)))),
                                 // body
                                 Box::new(node(
                                     file_id,
@@ -1126,16 +1114,6 @@ pub(crate) mod tests {
                                                 )),
                                             ),
                                         ),
-                                        node(
-                                            file_id,
-                                            Ast::Builtin(
-                                                Builtin::Print,
-                                                vec![Argument::Positional(
-                                                    node(file_id, Ast::Identifier("y".to_string()))
-                                                        .into(),
-                                                )],
-                                            ),
-                                        ),
                                     ]),
                                 )),
                             ),
@@ -1144,7 +1122,7 @@ pub(crate) mod tests {
                             file_id,
                             Ast::Return(Some(Box::new(node(
                                 file_id,
-                                Ast::Literal(Literal::Int(1)),
+                                Ast::Literal(Literal::Int(0)),
                             )))),
                         ),
                     ]),
@@ -1169,37 +1147,17 @@ pub(crate) mod tests {
 
     #[test]
     fn test_while() {
-        let context = test_context();
         let mut files = FileDB::new();
         let file_id = files.add("test.py".into(), "test".into());
         let ast = gen_while(file_id);
-        let lower = Lower::new(&context, &files);
-        let mut env: Environment = Environment::default();
-        lower.lower_expr(ast, &mut env);
-        let module = ir::Module::new(Location::unknown(&context));
-        for op in env.take_ops() {
-            module.body().append_operation(op);
-        }
-        let s = module.as_operation().to_string();
-        log::debug!("{}", s);
-        assert!(module.as_operation().verify());
+        crate::compile::run_test_content(0, &mut files, ast);
     }
 
     #[test]
     fn test_loop() {
-        let context = test_context();
         let mut files = FileDB::new();
         let file_id = files.add("test.py".into(), "test".into());
         let ast = gen_test(file_id);
-        let lower = Lower::new(&context, &files);
-        let mut env: Environment = Environment::default();
-        lower.lower_expr(ast, &mut env);
-        let module = ir::Module::new(Location::unknown(&context));
-        for op in env.take_ops() {
-            module.body().append_operation(op);
-        }
-        let s = module.as_operation().to_string();
-        log::debug!("{}", s);
-        assert!(module.as_operation().verify());
+        crate::compile::run_test_content(0, &mut files, ast);
     }
 }

@@ -173,6 +173,7 @@ impl Parser {
     pub fn parse<'a, E: Extra>(
         &mut self,
         path: &Path,
+        content: Option<&str>,
         files: &mut FileDB,
     ) -> Result<ast::AstNode<E>> {
         let file_id = files.add(
@@ -181,7 +182,12 @@ impl Parser {
         );
 
         let dialect = syntax::Dialect::Extended;
-        let m = syntax::AstModule::parse_file(&path, &dialect)?;
+        let m = match content {
+            Some(content) => {
+                syntax::AstModule::parse(path.to_str().unwrap(), content.to_string(), &dialect)?
+            }
+            None => syntax::AstModule::parse_file(&path, &dialect)?,
+        };
         let (codemap, stmt, _dialect, _typecheck) = m.into_parts();
         let mut env = Environment::new(&codemap, file_id);
         let mut seq = lower::lower::prelude(file_id);
@@ -384,96 +390,15 @@ impl Parser {
 pub(crate) mod tests {
     use super::*;
     use codespan_reporting::files::SimpleFiles;
-    use lower::lower::Lower;
-    use melior::dialect::DialectRegistry;
-    use melior::ir;
-    use melior::ir::operation::OperationPrintingFlags;
-    use melior::pass;
-    use melior::utility::{register_all_dialects, register_all_llvm_translations};
-    use melior::Context;
-    use melior::ExecutionEngine;
+    use lower::compile::run_test_content;
 
     fn run_test(filename: &str, expected: i64) {
-        let context = Context::new();
-        context.set_allow_unregistered_dialects(true);
-
-        // passes
-        let pass_manager = pass::PassManager::new(&context);
-        pass_manager.enable_verifier(true);
-        // lower to llvm
-        pass_manager.add_pass(pass::conversion::create_scf_to_control_flow());
-        pass_manager.add_pass(pass::conversion::create_control_flow_to_llvm());
-        pass_manager.add_pass(pass::conversion::create_index_to_llvm());
-        pass_manager.add_pass(pass::conversion::create_math_to_llvm());
-        pass_manager.add_pass(pass::conversion::create_func_to_llvm());
-        pass_manager.add_pass(pass::conversion::create_arith_to_llvm());
-        pass_manager.add_pass(pass::conversion::create_complex_to_llvm());
-        pass_manager.add_pass(pass::conversion::create_math_to_llvm());
-        pass_manager.add_pass(pass::conversion::create_finalize_mem_ref_to_llvm());
-        pass_manager.add_pass(pass::conversion::create_reconcile_unrealized_casts());
-
-        // some optimization passes
-        //pass_manager.add_pass(pass::transform::create_inliner());
-        pass_manager.add_pass(pass::transform::create_canonicalizer());
-        pass_manager.add_pass(pass::transform::create_cse());
-        pass_manager.add_pass(pass::transform::create_sccp());
-        pass_manager.add_pass(pass::transform::create_control_flow_sink());
-        pass_manager.add_pass(pass::transform::create_symbol_privatize());
-
-        context.attach_diagnostic_handler(|diagnostic| {
-            let location = diagnostic.location();
-            log::error!("E: {}: {}", diagnostic, location);
-            true
-        });
-
-        // registry
-        let registry = DialectRegistry::new();
-        register_all_dialects(&registry);
-        context.append_dialect_registry(&registry);
-        context.load_all_available_dialects();
-        register_all_llvm_translations(&context);
-
-        let location = ir::Location::unknown(&context);
-        let mut module = ir::Module::new(location);
-        let mut parser = Parser::new();
         let mut files = SimpleFiles::new();
-        let path = Path::new(filename);
-
-        let ast: AstNode<ast::SimpleExtra> = parser.parse(&path, &mut files).unwrap();
+        let mut parser = Parser::new();
+        let ast: AstNode<ast::SimpleExtra> =
+            parser.parse(Path::new(filename), None, &mut files).unwrap();
         //parser.dump(&files);
-
-        let lower = Lower::new(&context, &files);
-        let mut env: lower::scope::ScopeStack<lower::lower::Data> =
-            lower::scope::ScopeStack::default();
-        lower.lower_expr(ast, &mut env);
-        for op in env.take_ops() {
-            module.body().append_operation(op);
-        }
-
-        log::debug!(
-            "before {}",
-            module
-                .as_operation()
-                .to_string_with_flags(OperationPrintingFlags::new())
-                .unwrap()
-        );
-        pass_manager.run(&mut module).unwrap();
-        assert!(module.as_operation().verify());
-        log::debug!(
-            "after pass {}",
-            module
-                .as_operation()
-                .to_string_with_flags(OperationPrintingFlags::new())
-                .unwrap()
-        );
-        let engine = ExecutionEngine::new(&module, 0, &[], true);
-        let mut result: i64 = -1;
-        unsafe {
-            engine
-                .invoke_packed("main", &mut [&mut result as *mut i64 as *mut ()])
-                .unwrap();
-            assert_eq!(result, expected);
-        }
+        run_test_content(expected, &mut files, ast);
     }
 
     #[test]
