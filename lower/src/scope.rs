@@ -187,9 +187,7 @@ impl<'c> Layer<'c> {
 
 #[derive(Debug)]
 pub struct ScopeStack<'c, D> {
-    //arg_count: usize,
     op_count: usize,
-    //global_count: usize,
     layers: Vec<Layer<'c>>,
     types: HashMap<LayerIndex, D>,
 }
@@ -198,9 +196,7 @@ impl<'c, D> Default for ScopeStack<'c, D> {
     fn default() -> Self {
         let layer = Layer::new(LayerType::Static);
         Self {
-            //arg_count: 0,
             op_count: 0,
-            //global_count: 0,
             layers: vec![layer],
             types: HashMap::new(),
         }
@@ -210,6 +206,12 @@ impl<'c, D> Default for ScopeStack<'c, D> {
 impl<'c, D: std::fmt::Debug> ScopeStack<'c, D> {
     pub fn dump(&self) {
         println!("env: {:?}", self);
+        for layer in &self.layers {
+            println!("Layer: {:?}", layer.ty);
+            for (k, v) in layer.names.iter() {
+                println!("\t{:?}: {:?}, ty: {:?}", k, v, self.types.get(v));
+            }
+        }
     }
 
     pub fn index_data(&mut self, index: LayerIndex, data: D) {
@@ -233,15 +235,6 @@ impl<'c, D: std::fmt::Debug> ScopeStack<'c, D> {
         self.op_count += 1;
         index
     }
-
-    /*
-    pub fn fresh_global(&mut self) -> LayerIndex {
-        assert!(self.current_layer_type() == LayerType::Static);
-        let index = LayerIndex::Static(self.global_count);
-        self.global_count += 1;
-        index
-    }
-    */
 
     pub fn enter_closed(&mut self) {
         let layer = Layer::new(LayerType::Closed);

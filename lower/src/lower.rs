@@ -534,7 +534,10 @@ impl<'c> Lower<'c> {
 
                         if is_static {
                             println!("y: {:?}", index);
-                            let data = env.data(&index).unwrap().clone();
+                            let source_data = env.data(&index).unwrap().clone();
+                            // create a new type, drop other information (static)
+                            let data = Data::new(source_data.ty);
+
                             let ty = self.from_type(&data.ty);
 
                             let opaque_ty = llvm::r#type::opaque_pointer(self.context);
@@ -606,13 +609,7 @@ impl<'c> Lower<'c> {
                         .map(|index| env.values(index)[0])
                         .collect::<Vec<_>>();
 
-                    let op = func::call(
-                        self.context,
-                        f,
-                        call_args.as_slice(),
-                        &[ret_ty], //Type::index(self.context)],
-                        location,
-                    );
+                    let op = func::call(self.context, f, call_args.as_slice(), &[ret_ty], location);
                     let index = env.push(op);
                     env.index_data(index, data);
 
@@ -703,6 +700,12 @@ impl<'c> Lower<'c> {
                 }
 
                 let region = Region::new();
+
+                let mut attributes = vec![(
+                    Identifier::new(self.context, "sym_visibility"),
+                    StringAttribute::new(self.context, "private").into(),
+                )];
+
                 if let Some(body) = def.body {
                     env.enter_block(params.as_slice());
                     self.lower_expr(*body, env);
@@ -712,6 +715,13 @@ impl<'c> Lower<'c> {
                         block.append_operation(op);
                     }
                     region.append_block(block);
+
+                    // declare as C interface only if body is defined
+                    // function declarations represent functions that are already C interfaces
+                    attributes.push((
+                        Identifier::new(self.context, "llvm.emit_c_interface"),
+                        Attribute::unit(self.context),
+                    ));
                 }
 
                 let types = params.iter().map(|x| x.0).collect::<Vec<Type>>();
@@ -725,12 +735,10 @@ impl<'c> Lower<'c> {
                     StringAttribute::new(self.context, &def.name),
                     TypeAttribute::new(func_type.into()),
                     region,
-                    &[(
-                        Identifier::new(self.context, "sym_visibility"),
-                        StringAttribute::new(self.context, "private").into(),
-                    )],
+                    &attributes,
                     location,
                 );
+
                 let index = env.push(f);
                 env.name_index(index, &def.name);
                 let f_type = AstType::Func(ast_types, ast_ret_type);
@@ -814,7 +822,6 @@ impl<'c> Lower<'c> {
                         // TODO: handle global variables properly, currently assume function context
                         let ty = env.current_layer_type();
                         println!("assign ident {:?}, {:?}", ident, ty);
-
                         match ty {
                             LayerType::Static => {
                                 unreachable!(
@@ -822,9 +829,10 @@ impl<'c> Lower<'c> {
                                 );
                             }
                             _ => {
-                                self.lower_expr(*rhs, env);
-                                let index = env.last_index().unwrap();
+                                let index = self.lower_expr(*rhs, env);
+                                //let index = env.last_index().unwrap();
                                 env.name_index(index, &ident);
+                                env.dump();
                                 env.last_index().unwrap()
                             }
                         }
@@ -890,8 +898,7 @@ impl<'c> Lower<'c> {
                                 env.last_index().unwrap()
                             }
                         }
-                    }
-                    //_ => unimplemented!("{:?}", b),
+                    } //_ => unimplemented!("{:?}", b),
                 }
             } //_ => unimplemented!("{:?}", expr.node),
         }

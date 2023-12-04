@@ -365,3 +365,97 @@ impl Parser {
         }
     }
 }
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::*;
+    use codespan_reporting::files::SimpleFiles;
+    use lower::lower::Lower;
+    use melior::dialect::DialectRegistry;
+    use melior::ir;
+    use melior::pass;
+    use melior::utility::{register_all_dialects, register_all_llvm_translations};
+    use melior::Context;
+    use melior::ExecutionEngine;
+
+    fn run_test(filename: &str, expected: i64) {
+        let context = Context::new();
+        context.set_allow_unregistered_dialects(true);
+
+        // passes
+        let pass_manager = pass::PassManager::new(&context);
+        pass_manager.enable_verifier(true);
+        // lower to llvm
+        pass_manager.add_pass(pass::conversion::create_scf_to_control_flow());
+        pass_manager.add_pass(pass::conversion::create_control_flow_to_llvm());
+        pass_manager.add_pass(pass::conversion::create_index_to_llvm());
+        pass_manager.add_pass(pass::conversion::create_math_to_llvm());
+        pass_manager.add_pass(pass::conversion::create_func_to_llvm());
+        pass_manager.add_pass(pass::conversion::create_arith_to_llvm());
+        pass_manager.add_pass(pass::conversion::create_complex_to_llvm());
+        pass_manager.add_pass(pass::conversion::create_math_to_llvm());
+        pass_manager.add_pass(pass::conversion::create_finalize_mem_ref_to_llvm());
+        pass_manager.add_pass(pass::conversion::create_reconcile_unrealized_casts());
+
+        // some optimization passes
+        //pass_manager.add_pass(pass::transform::create_inliner());
+        pass_manager.add_pass(pass::transform::create_canonicalizer());
+        pass_manager.add_pass(pass::transform::create_cse());
+        pass_manager.add_pass(pass::transform::create_sccp());
+        pass_manager.add_pass(pass::transform::create_control_flow_sink());
+        pass_manager.add_pass(pass::transform::create_symbol_privatize());
+
+        context.attach_diagnostic_handler(|diagnostic| {
+            let location = diagnostic.location();
+            eprintln!("E: {}: {}", diagnostic, location);
+            true
+        });
+
+        // registry
+        let registry = DialectRegistry::new();
+        register_all_dialects(&registry);
+        context.append_dialect_registry(&registry);
+        context.load_all_available_dialects();
+        register_all_llvm_translations(&context);
+
+        let location = ir::Location::unknown(&context);
+        let mut module = ir::Module::new(location);
+        let mut parser = Parser::new();
+        let mut files = SimpleFiles::new();
+        let path = Path::new(filename);
+
+        let ast: AstNode<SimpleExtra> = parser.parse(&path, &mut files).unwrap();
+        parser.dump(&files);
+
+        let lower = Lower::new(&context, &files);
+        let mut env: lower::scope::ScopeStack<lower::lower::Data> =
+            lower::scope::ScopeStack::default();
+        lower.lower_expr(ast, &mut env);
+        for op in env.take_ops() {
+            module.body().append_operation(op);
+        }
+
+        module.as_operation().dump();
+        pass_manager.run(&mut module).unwrap();
+        assert!(module.as_operation().verify());
+        module.as_operation().dump();
+        let engine = ExecutionEngine::new(&module, 0, &[], true);
+        let mut result: i64 = -1;
+        unsafe {
+            engine
+                .invoke_packed("main", &mut [&mut result as *mut i64 as *mut ()])
+                .unwrap();
+            assert_eq!(result, expected);
+        }
+    }
+
+    #[test]
+    fn test_global() {
+        run_test("../tests/test_global.star", 0);
+    }
+
+    #[test]
+    fn test_assign1() {
+        run_test("../tests/test_assign1.star", 0);
+    }
+}
