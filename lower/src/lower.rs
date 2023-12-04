@@ -977,11 +977,13 @@ pub fn prelude<E: Extra>(file_id: usize) -> Vec<AstNode<E>> {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use crate::compile::run_ast;
     use melior::{
         dialect::DialectRegistry,
         utility::{register_all_dialects, register_all_llvm_translations},
         Context,
     };
+
     use test_log::test;
 
     pub fn gen_test(file_id: usize) -> AstNode<SimpleExtra> {
@@ -1133,24 +1135,12 @@ pub(crate) mod tests {
         node(file_id, Ast::Sequence(seq))
     }
 
-    pub(crate) fn test_context() -> Context {
-        let context = Context::new();
-        context.set_allow_unregistered_dialects(true);
-
-        let registry = DialectRegistry::new();
-        register_all_dialects(&registry);
-        context.append_dialect_registry(&registry);
-        context.load_all_available_dialects();
-        register_all_llvm_translations(&context);
-        context
-    }
-
     #[test]
     fn test_while() {
         let mut files = FileDB::new();
         let file_id = files.add("test.py".into(), "test".into());
         let ast = gen_while(file_id);
-        crate::compile::run_test_content(0, &mut files, ast);
+        run_ast(0, &mut files, ast);
     }
 
     #[test]
@@ -1158,6 +1148,6 @@ pub(crate) mod tests {
         let mut files = FileDB::new();
         let file_id = files.add("test.py".into(), "test".into());
         let ast = gen_test(file_id);
-        crate::compile::run_test_content(0, &mut files, ast);
+        run_ast(0, &mut files, ast);
     }
 }

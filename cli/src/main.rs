@@ -21,8 +21,16 @@ use parse::starlark::Parser;
 /// Compile Stuff
 struct Config {
     /// compile flag
+    #[argh(switch, short = 'c')]
+    compile: bool,
+
+    /// lower flag
     #[argh(switch, short = 'l')]
     lower: bool,
+
+    /// exec flag
+    #[argh(switch, short = 'x')]
+    exec: bool,
 
     /// verbose flag
     #[argh(switch, short = 'v')]
@@ -131,8 +139,19 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let s = module.as_operation().to_string();
     write!(output, "{}", s)?;
-    //let engine = ExecutionEngine::new(&module, 0, &[], true);
-    //engine.dump_to_object_file("out.o");
+
+    if config.exec {
+        let engine = ExecutionEngine::new(&module, 0, &[], true);
+        //engine.dump_to_object_file("out.o");
+        let mut result: i32 = -1;
+        unsafe {
+            engine
+                .invoke_packed("main", &mut [&mut result as *mut i32 as *mut ()])
+                .unwrap();
+            println!("exec: {}", result);
+            std::process::exit(result);
+        }
+    }
 
     Ok(())
 }

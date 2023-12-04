@@ -10,7 +10,7 @@ use melior::{
     Context,
 };
 
-pub fn run_test_content<E: ast::Extra>(expected: i64, files: &lower::FileDB, ast: ast::AstNode<E>) {
+pub fn run_ast<E: ast::Extra>(expected: i64, files: &lower::FileDB, ast: ast::AstNode<E>) {
     let context = Context::new();
     context.set_allow_unregistered_dialects(true);
 

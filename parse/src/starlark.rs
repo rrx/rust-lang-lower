@@ -390,15 +390,14 @@ impl Parser {
 pub(crate) mod tests {
     use super::*;
     use codespan_reporting::files::SimpleFiles;
-    use lower::compile::run_test_content;
+    use lower::compile::run_ast;
 
     fn run_test(filename: &str, expected: i64) {
         let mut files = SimpleFiles::new();
         let mut parser = Parser::new();
         let ast: AstNode<ast::SimpleExtra> =
             parser.parse(Path::new(filename), None, &mut files).unwrap();
-        //parser.dump(&files);
-        run_test_content(expected, &mut files, ast);
+        run_ast(expected, &mut files, ast);
     }
 
     #[test]

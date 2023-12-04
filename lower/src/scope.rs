@@ -373,10 +373,8 @@ impl<'c, D: std::fmt::Debug> ScopeStack<'c, D> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    //use test_log::test;
     use crate::ast;
     use crate::ast::Ast;
-    use crate::lower::tests::test_context;
     use crate::lower::Environment;
     use crate::lower::FileDB;
     use crate::lower::{node, Lower};
@@ -384,11 +382,30 @@ mod tests {
     use melior::ir::attribute::{StringAttribute, TypeAttribute};
     use melior::ir::r#type::FunctionType;
     use melior::ir::{Location, Type};
+    use melior::{
+        dialect::DialectRegistry,
+        utility::{register_all_dialects, register_all_llvm_translations},
+        Context,
+    };
+    use test_log::test;
+
     fn assert_op_index(s: &Environment, name: &str, index: LayerIndex) {
         assert_eq!(s.index_from_name(name).unwrap(), index);
     }
 
     type Node = ast::AstNode<ast::SimpleExtra>;
+
+    fn test_context() -> Context {
+        let context = Context::new();
+        context.set_allow_unregistered_dialects(true);
+
+        let registry = DialectRegistry::new();
+        register_all_dialects(&registry);
+        context.append_dialect_registry(&registry);
+        context.load_all_available_dialects();
+        register_all_llvm_translations(&context);
+        context
+    }
 
     #[test]
     fn test_scope1() {
