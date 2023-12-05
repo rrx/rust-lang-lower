@@ -1,7 +1,10 @@
 use melior::{
     dialect::{arith, cf, func, llvm, memref, ods, scf},
     ir::{
-        attribute::{DenseElementsAttribute, IntegerAttribute, StringAttribute, TypeAttribute},
+        attribute::{
+            DenseElementsAttribute, FloatAttribute, IntegerAttribute, StringAttribute,
+            TypeAttribute,
+        },
         r#type::{FunctionType, IntegerType, MemRefType, RankedTensorType},
         *,
     },
@@ -385,20 +388,18 @@ impl<'c> Lower<'c> {
         expr.extra.location(self.context, self.files)
     }
 
-    pub fn build_global_int(
+    pub fn build_global(
         &self,
         name: &str,
-        x: i64,
-        width: u32,
+        ty: Type<'c>,
+        value: Attribute<'c>,
         constant: bool,
         location: Location<'c>,
     ) -> Operation<'c> {
-        let integer_type = IntegerType::new(self.context, width).into();
-        let attribute = DenseElementsAttribute::new(
-            RankedTensorType::new(&[], integer_type, None).into(),
-            &[IntegerAttribute::new(x, integer_type).into()],
-        )
-        .unwrap();
+        let integer_type = IntegerType::new(self.context, 64).into();
+        let attribute =
+            DenseElementsAttribute::new(RankedTensorType::new(&[], ty, None).into(), &[value])
+                .unwrap();
         let alignment = IntegerAttribute::new(8, integer_type);
         let memspace = IntegerAttribute::new(0, integer_type).into();
 
@@ -406,7 +407,7 @@ impl<'c> Lower<'c> {
             self.context,
             name,
             Some("private"),
-            MemRefType::new(integer_type, &[], None, Some(memspace)),
+            MemRefType::new(ty, &[], None, Some(memspace)),
             Some(attribute.into()),
             constant,
             Some(alignment),
@@ -505,16 +506,33 @@ impl<'c> Lower<'c> {
 
         match expr.node {
             Ast::Global(ident, expr) => {
+                // evaluate expr at compile time
                 let (ast_ty, op) = match expr.node {
-                    Ast::Literal(Literal::Bool(x)) => (
-                        AstType::Bool,
-                        self.build_global_int(&ident, if x { 1 } else { 0 }, 1, false, location),
-                    ),
-                    Ast::Literal(Literal::Int(x)) => (
-                        AstType::Int,
-                        self.build_global_int(&ident, x, 64, false, location),
-                    ),
-                    //Ast::Literal(Literal::Float(x)) => (AstType::Float, self.build_float_op(x, location)),
+                    Ast::Literal(Literal::Bool(x)) => {
+                        let ast_ty = AstType::Bool;
+                        let ty = self.from_type(&ast_ty);
+                        let v = if x { 1 } else { 0 };
+                        let value = IntegerAttribute::new(v, ty).into();
+                        let op = self.build_global(&ident, ty, value, false, location);
+                        (ast_ty, op)
+                    }
+
+                    Ast::Literal(Literal::Int(x)) => {
+                        let ast_ty = AstType::Int;
+                        let ty = self.from_type(&ast_ty);
+                        let value = IntegerAttribute::new(x, ty).into();
+                        let op = self.build_global(&ident, ty, value, false, location);
+                        (ast_ty, op)
+                    }
+
+                    Ast::Literal(Literal::Float(x)) => {
+                        let ast_ty = AstType::Float;
+                        let ty = self.from_type(&ast_ty);
+                        let value = FloatAttribute::new(self.context, x, ty).into();
+                        let op = self.build_global(&ident, ty, value, false, location);
+                        (ast_ty, op)
+                    }
+
                     _ => unreachable!("{:?}", expr.node),
                 };
                 let index = env.push(op);
@@ -689,14 +707,12 @@ impl<'c> Lower<'c> {
                         let index = env.push(op);
                         env.index_data(index, Data::new(AstType::Bool));
                         index
-                        //env.last_index().unwrap()
                     }
                     "False" => {
                         let op = self.build_bool_op(false, location);
                         let index = env.push(op);
                         env.index_data(index, Data::new(AstType::Bool));
                         index
-                        //env.last_index().unwrap()
                     }
                     _ => {
                         let (index, data) = match env.index_from_name(ident.as_str()) {
@@ -720,19 +736,9 @@ impl<'c> Lower<'c> {
 
                             let ty = self.from_type(&data.ty);
 
-                            let opaque_ty = llvm::r#type::opaque_pointer(self.context);
-                            let f = attribute::FlatSymbolRefAttribute::new(self.context, &ident);
-                            // get global
-                            let op1: Operation<'c> = ods::llvm::mlir_addressof(
-                                self.context,
-                                opaque_ty.into(),
-                                f,
-                                location,
-                            )
-                            .into();
-
                             let ty = MemRefType::new(
-                                IntegerType::new(self.context, 64).into(),
+                                //IntegerType::new(self.context, 64).into(),
+                                ty,
                                 &[],
                                 None,
                                 None,
@@ -745,7 +751,6 @@ impl<'c> Lower<'c> {
                             env.push(op1);
                             let index = env.push(op2);
                             env.index_data(index, data);
-                            //env.push(op3);
                             index
                         } else {
                             env.push_index(index);
