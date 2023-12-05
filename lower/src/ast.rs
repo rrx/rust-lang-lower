@@ -37,7 +37,8 @@ pub enum BinaryOperation {
     Subtract,
     Multiply,
     Divide,
-    Equal,
+    NE,
+    EQ,
     GT,
     GTE,
 }
@@ -105,6 +106,7 @@ pub enum Ast<E> {
     Variable(Definition<E>),
     Global(String, Box<AstNode<E>>),
     Assign(AssignTarget, Box<AstNode<E>>),
+    Replace(AssignTarget, Box<AstNode<E>>),
     Conditional(Box<AstNode<E>>, Box<AstNode<E>>, Option<Box<AstNode<E>>>),
     Return(Option<Box<AstNode<E>>>),
     Test(Box<AstNode<E>>, Box<AstNode<E>>),
@@ -197,4 +199,5 @@ pub struct AstNode<E> {
 #[derive(Debug)]
 pub enum AssignTarget {
     Identifier(String),
+    Alloca(String),
 }

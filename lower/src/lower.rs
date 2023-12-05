@@ -2,7 +2,7 @@ use melior::{
     dialect::{arith, cf, func, llvm, memref, ods, scf},
     ir::{
         attribute::{StringAttribute, TypeAttribute},
-        r#type::{FunctionType, MemRefType},
+        r#type::{FunctionType, IntegerType, MemRefType},
         *,
     },
     Context,
@@ -111,7 +111,7 @@ impl<'c> Lower<'c> {
 
     pub fn from_type(&self, ty: &AstType) -> Type<'c> {
         match ty {
-            AstType::Ptr => melior::ir::r#type::IntegerType::unsigned(self.context, 64).into(),
+            AstType::Ptr => IntegerType::unsigned(self.context, 64).into(),
             AstType::Tuple(args) => {
                 let types = args.iter().map(|a| self.from_type(a)).collect::<Vec<_>>();
                 melior::ir::r#type::TupleType::new(self.context, &types).into()
@@ -121,16 +121,16 @@ impl<'c> Lower<'c> {
                 let results = vec![self.from_type(ret)];
                 melior::ir::r#type::FunctionType::new(self.context, &inputs, &results).into()
             }
-            AstType::Int => melior::ir::r#type::IntegerType::new(self.context, 64).into(),
+            AstType::Int => IntegerType::new(self.context, 64).into(),
             AstType::Index => Type::index(self.context),
             AstType::Float => Type::float64(self.context),
-            AstType::Bool => melior::ir::r#type::IntegerType::new(self.context, 1).into(),
+            AstType::Bool => IntegerType::new(self.context, 1).into(),
             AstType::Unit => Type::none(self.context),
         }
     }
 
     pub fn build_bool_op(&self, value: bool, location: Location<'c>) -> Operation<'c> {
-        let bool_type = melior::ir::r#type::IntegerType::new(self.context, 1);
+        let bool_type = IntegerType::new(self.context, 1);
         arith::constant(
             self.context,
             attribute::IntegerAttribute::new(if value { 1 } else { 0 }, bool_type.into()).into(),
@@ -139,7 +139,7 @@ impl<'c> Lower<'c> {
     }
 
     pub fn build_int_op(&self, value: i64, location: Location<'c>) -> Operation<'c> {
-        let ty = melior::ir::r#type::IntegerType::new(self.context, 64);
+        let ty = IntegerType::new(self.context, 64);
         arith::constant(
             self.context,
             attribute::IntegerAttribute::new(value, ty.into()).into(),
@@ -403,7 +403,7 @@ impl<'c> Lower<'c> {
                 let region = Region::new();
                 region.append_block(block);
 
-                let i64_type = melior::ir::r#type::IntegerType::new(self.context, 64);
+                let i64_type = IntegerType::new(self.context, 64);
                 let ty = TypeAttribute::new(i64_type.into());
 
                 let name = StringAttribute::new(self.context, &ident);
@@ -448,12 +448,8 @@ impl<'c> Lower<'c> {
             }
             Ast::BinaryOp(op, a, b) => {
                 log::debug!("binop: {:?}, {:?}, {:?}", op, a, b);
-                let index_lhs = self.lower_expr(*a, env);
-                let index_rhs = self.lower_expr(*b, env);
-                log::debug!("inx: {:?}, {:?}", index_lhs, index_rhs);
-                let r_lhs = env.values(index_lhs)[0];
-                let r_rhs = env.values(index_rhs)[0];
-                log::debug!("r: {:?}, {:?}", r_lhs, r_rhs);
+                let mut index_lhs = self.lower_expr(*a, env);
+                let mut index_rhs = self.lower_expr(*b, env);
 
                 let data_lhs = env.data(&index_lhs).expect("LHS data missing");
                 let data_rhs = env.data(&index_rhs).expect("RHS data missing");
@@ -462,49 +458,77 @@ impl<'c> Lower<'c> {
 
                 assert_eq!(data_lhs.ty, data_rhs.ty);
 
-                // types must be the same for binary operation, no implicit casting yet
-                log::debug!("bin: {:?}, {:?}", r_lhs.r#type(), r_rhs.r#type());
-                assert!(r_lhs.r#type() == r_rhs.r#type());
+                log::debug!("inx: {:?}, {:?}", index_lhs, index_rhs);
+                {
+                    let r_lhs = env.values(index_lhs)[0];
+                    if r_lhs.r#type().is_mem_ref() {
+                        // load
+                        let op = memref::load(r_lhs, &[], location);
+                        index_lhs = env.push(op);
+                    }
 
-                let ty = r_lhs.r#type();
+                    let r_rhs = env.values(index_rhs)[0];
+                    if r_rhs.r#type().is_mem_ref() {
+                        // load
+                        let op = memref::load(r_rhs, &[], location);
+                        index_rhs = env.push(op);
+                    }
+
+                    //log::debug!("r: {:?}, {:?}", &r_lhs, &r_rhs);
+                }
+
+                // types must be the same for binary operation, no implicit casting yet
+                {
+                    let a: Value<'c, '_> = env.values(index_lhs)[0].into();
+                    let b: Value<'c, '_> = env.values(index_rhs)[0].into(); //);//r_lhs.r#type(), r_rhs.r#type());
+                    log::debug!("bin: {:?}, {:?}", a, b); //env.values(index_lhs)[0], env.values(index_rhs)[0]);//r_lhs.r#type(), r_rhs.r#type());
+                                                          //assert!(r_lhs.r#type() == r_rhs.r#type());
+                    assert!(a.r#type() == b.r#type()); //r_lhs.r#type() == r_rhs.r#type());
+                }
+
+                let a: Value<'c, '_> = env.values(index_lhs)[0].into();
+                //let ty = r_lhs.r#type();
+                let ty = a.r#type();
+                let a: Value<'c, '_> = env.values(index_lhs)[0].into();
+                let b: Value<'c, '_> = env.values(index_rhs)[0].into();
 
                 let binop = match op {
                     BinaryOperation::Divide => {
                         if ty.is_index() {
                             // index type is unsigned
-                            arith::divui(r_lhs.into(), r_rhs.into(), location)
+                            arith::divui(a, b, location)
                         } else if ty.is_integer() {
                             // we assume all integers are signed for now
-                            arith::divsi(r_lhs.into(), r_rhs.into(), location)
+                            arith::divsi(a, b, location)
                         } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
-                            arith::divf(r_lhs.into(), r_rhs.into(), location)
+                            arith::divf(a, b, location)
                         } else {
                             unimplemented!()
                         }
                     }
                     BinaryOperation::Multiply => {
                         if ty.is_index() || ty.is_integer() {
-                            arith::muli(r_lhs.into(), r_rhs.into(), location)
+                            arith::muli(a, b, location)
                         } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
-                            arith::mulf(r_lhs.into(), r_rhs.into(), location)
+                            arith::mulf(a, b, location)
                         } else {
                             unimplemented!()
                         }
                     }
                     BinaryOperation::Add => {
                         if ty.is_index() || ty.is_integer() {
-                            arith::addi(r_lhs.into(), r_rhs.into(), location)
+                            arith::addi(a, b, location)
                         } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
-                            arith::addf(r_lhs.into(), r_rhs.into(), location)
+                            arith::addf(a, b, location)
                         } else {
                             unimplemented!()
                         }
                     }
                     BinaryOperation::Subtract => {
                         if ty.is_index() || ty.is_integer() {
-                            arith::subi(r_lhs.into(), r_rhs.into(), location)
+                            arith::subi(a, b, location)
                         } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
-                            arith::subf(r_lhs.into(), r_rhs.into(), location)
+                            arith::subf(a, b, location)
                         } else {
                             unimplemented!()
                         }
@@ -512,22 +536,10 @@ impl<'c> Lower<'c> {
                     BinaryOperation::GTE => {
                         if ty.is_index() {
                             // unsigned
-                            arith::cmpi(
-                                self.context,
-                                arith::CmpiPredicate::Uge,
-                                r_lhs.into(),
-                                r_rhs.into(),
-                                location,
-                            )
+                            arith::cmpi(self.context, arith::CmpiPredicate::Uge, a, b, location)
                         } else if ty.is_integer() {
                             // signed
-                            arith::cmpi(
-                                self.context,
-                                arith::CmpiPredicate::Sge,
-                                r_lhs.into(),
-                                r_rhs.into(),
-                                location,
-                            )
+                            arith::cmpi(self.context, arith::CmpiPredicate::Sge, a, b, location)
                         } else {
                             unimplemented!();
                         }
@@ -535,44 +547,30 @@ impl<'c> Lower<'c> {
                     BinaryOperation::GT => {
                         if ty.is_index() {
                             // unsigned
-                            arith::cmpi(
-                                self.context,
-                                arith::CmpiPredicate::Ugt,
-                                r_lhs.into(),
-                                r_rhs.into(),
-                                location,
-                            )
+                            arith::cmpi(self.context, arith::CmpiPredicate::Ugt, a, b, location)
                         } else if ty.is_integer() {
                             // signed
-                            arith::cmpi(
-                                self.context,
-                                arith::CmpiPredicate::Sgt,
-                                r_lhs.into(),
-                                r_rhs.into(),
-                                location,
-                            )
+                            arith::cmpi(self.context, arith::CmpiPredicate::Sgt, a, b, location)
                         } else {
                             unimplemented!();
                         }
                     }
-                    BinaryOperation::Equal => {
+                    BinaryOperation::NE => {
                         if ty.is_index() || ty.is_integer() {
-                            arith::cmpi(
-                                self.context,
-                                arith::CmpiPredicate::Eq,
-                                r_lhs.into(),
-                                r_rhs.into(),
-                                location,
-                            )
+                            arith::cmpi(self.context, arith::CmpiPredicate::Ne, a, b, location)
                         } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
                             // ordered comparison
-                            arith::cmpf(
-                                self.context,
-                                arith::CmpfPredicate::Oeq,
-                                r_lhs.into(),
-                                r_rhs.into(),
-                                location,
-                            )
+                            arith::cmpf(self.context, arith::CmpfPredicate::One, a, b, location)
+                        } else {
+                            unimplemented!()
+                        }
+                    }
+                    BinaryOperation::EQ => {
+                        if ty.is_index() || ty.is_integer() {
+                            arith::cmpi(self.context, arith::CmpiPredicate::Eq, a, b, location)
+                        } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
+                            // ordered comparison
+                            arith::cmpf(self.context, arith::CmpfPredicate::Oeq, a, b, location)
                         } else {
                             unimplemented!()
                         }
@@ -608,7 +606,7 @@ impl<'c> Lower<'c> {
                                 let data = env.data(&index).unwrap().clone();
                                 (index, data)
                             }
-                            _ => unimplemented!("Ident({:?})", ident),
+                            _ => unimplemented!("Ident not found: {:?}", ident),
                         };
 
                         let is_static = match index {
@@ -742,6 +740,7 @@ impl<'c> Lower<'c> {
             }
 
             Ast::Variable(def) => {
+                unimplemented!();
                 let ident = def.name;
                 // TODO: handle global variables properly, currently assume function context
                 log::debug!("variable ident {:?}", ident);
@@ -830,8 +829,23 @@ impl<'c> Lower<'c> {
             Ast::Return(maybe_expr) => match maybe_expr {
                 Some(expr) => {
                     let location = self.location(&expr);
-                    self.lower_expr(*expr, env);
-                    let ret_op = func::r#return(&env.last_values(), location);
+                    let mut index = self.lower_expr(*expr, env);
+
+                    let is_mem_ref = {
+                        let rs = env.values(index); //.last_values();
+                        let r = rs[0];
+                        r.r#type().is_mem_ref()
+                    };
+
+                    if is_mem_ref {
+                        let rs = env.values(index); //.last_values();
+                        let op = memref::load(rs[0], &[], location);
+                        index = env.push(op);
+                    }
+
+                    let rs = env.values(index); //.last_values();
+                    let ret_op = func::r#return(&rs, location);
+
                     env.push(ret_op);
                     env.last_index().unwrap()
                 }
@@ -895,10 +909,110 @@ impl<'c> Lower<'c> {
                 }
             }
 
-            Ast::Assign(target, rhs) => {
+            Ast::Replace(target, rhs) => {
+                // mutate variable in place
+                // This requires that the variable has a place either on the stack or in memory
+                // global vars have a place, so start with those
                 match target {
                     AssignTarget::Identifier(ident) => {
-                        // TODO: handle global variables properly, currently assume function context
+                        log::debug!("replace ident {:?}", ident);
+                        let (index, data) = match env.index_from_name(ident.as_str()) {
+                            Some(index) => {
+                                let data = env.data(&index).unwrap().clone();
+                                (index, data)
+                            }
+                            _ => unimplemented!("Ident({:?})", ident),
+                        };
+
+                        let is_static = match index {
+                            LayerIndex::Op(_) => data.is_static,
+                            LayerIndex::Static(_) => true,
+                            _ => false,
+                        };
+
+                        // do we enforce types here? or do we just overwrite with what ever new
+                        // type
+
+                        //let source_data = env.data(&index).unwrap().clone();
+                        // create a new type, drop other information (static)
+                        //let data = Data::new(source_data.ty);
+
+                        //let ty = self.from_type(&data.ty);
+
+                        if is_static {
+                            let opaque_ty = llvm::r#type::opaque_pointer(self.context);
+                            let f = attribute::FlatSymbolRefAttribute::new(self.context, &ident);
+                            // get global address
+                            let op1: Operation<'c> = ods::llvm::mlir_addressof(
+                                self.context,
+                                opaque_ty.into(),
+                                f,
+                                location,
+                            )
+                            .into();
+                            let addr_index = env.push(op1);
+
+                            let index = self.lower_expr(*rhs, env);
+
+                            let r_value = env.values(index)[0];
+                            let r_addr = env.values(addr_index)[0];
+
+                            let options = llvm::LoadStoreOptions::new();
+                            env.push(llvm::store(
+                                self.context,
+                                r_value,
+                                r_addr,
+                                location,
+                                options,
+                            ))
+                        } else {
+                            //let ty = self.from_type(&data.ty);
+                            let value_index = self.lower_expr(*rhs, env);
+                            let r_value = env.values(value_index)[0];
+                            let r_addr = env.values(index)[0];
+                            //let op = llvm::store(self.context, r_value, r_addr, location, llvm::LoadStoreOptions::new());
+                            let op = memref::store(r_value, r_addr, &[], location);
+                            let index = env.push(op);
+                            index
+                            //unimplemented!();
+                        }
+                    }
+                    _ => unimplemented!("{:?}", target),
+                }
+            }
+
+            Ast::Assign(target, rhs) => {
+                match target {
+                    AssignTarget::Alloca(ident) => {
+                        let ty = env.current_layer_type();
+                        assert_ne!(ty, LayerType::Static);
+                        let extra_options = llvm::AllocaOptions::new();
+
+                        let ty = IntegerType::new(self.context, 64);
+                        //let ptr_type = llvm::r#type::pointer(ty.into(), 0);
+                        //let array_op = self.build_int_op(1, location);
+                        //env.push(array_op);
+                        //let array_size = env.last_values()[0];
+                        //let op = llvm::alloca(self.context, array_size, ptr_type, location, extra_options);
+                        let memref_ty = MemRefType::new(ty.into(), &[], None, None);
+                        let op = memref::alloca(self.context, memref_ty, &[], &[], None, location);
+
+                        let ptr_index = env.push(op);
+                        env.name_index(ptr_index, &ident);
+
+                        let rhs_index = self.lower_expr(*rhs, env);
+                        let data = env.data(&rhs_index).unwrap();
+
+                        env.index_data(ptr_index, Data::new(data.ty.clone()));
+
+                        let r_value = env.values(rhs_index)[0];
+                        let r_addr = env.values(ptr_index)[0];
+                        //let op = llvm::store(self.context, r_value, r_addr, location, llvm::LoadStoreOptions::new());
+                        //let op = memref::store(self.context, r_value, r_addr, location, llvm::LoadStoreOptions::new());
+                        let op = memref::store(r_value, r_addr, &[], location);
+                        env.push(op)
+                    }
+                    AssignTarget::Identifier(ident) => {
                         let ty = env.current_layer_type();
                         log::debug!("assign ident {:?}, {:?}", ident, ty);
                         match ty {
@@ -1102,9 +1216,23 @@ impl<E: Extra> NodeBuilder<E> {
         self.func("main", &[], AstType::Int, body)
     }
 
+    pub fn replace(&self, name: &str, rhs: AstNode<E>) -> AstNode<E> {
+        self.node(Ast::Replace(
+            AssignTarget::Identifier(name.to_string()),
+            rhs.into(),
+        ))
+    }
+
     pub fn assign(&self, name: &str, rhs: AstNode<E>) -> AstNode<E> {
         self.node(Ast::Assign(
             AssignTarget::Identifier(name.to_string()),
+            rhs.into(),
+        ))
+    }
+
+    pub fn alloca(&self, name: &str, rhs: AstNode<E>) -> AstNode<E> {
+        self.node(Ast::Assign(
+            AssignTarget::Alloca(name.to_string()),
             rhs.into(),
         ))
     }
@@ -1156,13 +1284,22 @@ pub(crate) mod tests {
         let mut seq = b.prelude();
 
         // global variable
-        seq.push(b.global("z", b.integer(122)));
+        seq.push(b.global("z", b.integer(10)));
         seq.push(b.main(b.seq(vec![
             // global variable x = 123
             b.assign("x", b.integer(123).into()),
+            b.alloca("x2", b.integer(10).into()),
             b.while_loop(
-                b.bool(false),
+                b.binop(BinaryOperation::NE, b.ident("z"), b.integer(0)),
                 b.seq(vec![
+                    b.replace(
+                        "z",
+                        b.binop(BinaryOperation::Subtract, b.ident("z"), b.integer(1)),
+                    ),
+                    b.replace(
+                        "x2",
+                        b.binop(BinaryOperation::Subtract, b.ident("x2"), b.integer(1)),
+                    ),
                     b.assign("y", b.integer(1234).into()),
                     b.assign(
                         "y",
@@ -1170,7 +1307,7 @@ pub(crate) mod tests {
                     ),
                 ]),
             ),
-            b.ret(Some(b.integer(0))),
+            b.ret(Some(b.ident("x2"))),
         ])));
 
         b.seq(seq)

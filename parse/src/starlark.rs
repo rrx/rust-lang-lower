@@ -113,7 +113,10 @@ fn from_binop(item: syntax::ast::BinOp) -> ast::BinaryOperation {
         BinOp::Subtract => ast::BinaryOperation::Subtract,
         BinOp::Multiply => ast::BinaryOperation::Multiply,
         BinOp::Divide => ast::BinaryOperation::Divide,
-        BinOp::Equal => ast::BinaryOperation::Equal,
+        BinOp::Equal => ast::BinaryOperation::EQ,
+        BinOp::NotEqual => ast::BinaryOperation::NE,
+        BinOp::Greater => ast::BinaryOperation::GT,
+        BinOp::GreaterOrEqual => ast::BinaryOperation::GTE,
         _ => unimplemented!("{:?}", item),
     }
 }
