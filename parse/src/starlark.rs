@@ -13,7 +13,7 @@ use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
 
 use lower::ast;
 use lower::ast::{AssignTarget, Ast, AstNode, AstType, CodeLocation, Extra, Literal};
-use lower::lower::FileDB;
+use lower::lower::{FileDB, NodeBuilder};
 use std::collections::HashMap;
 
 #[derive(Error, Debug)]
@@ -176,10 +176,12 @@ impl Parser {
         content: Option<&str>,
         files: &mut FileDB,
     ) -> Result<ast::AstNode<E>> {
+        let mut b = NodeBuilder::new();
         let file_id = files.add(
             path.to_str().unwrap().to_string(),
             std::fs::read_to_string(path)?,
         );
+        b.enter_file(file_id);
 
         let dialect = syntax::Dialect::Extended;
         let m = match content {
@@ -190,10 +192,10 @@ impl Parser {
         };
         let (codemap, stmt, _dialect, _typecheck) = m.into_parts();
         let mut env = Environment::new(&codemap, file_id);
-        let mut seq = lower::lower::prelude(file_id);
+        let mut seq = b.prelude();
         let ast: ast::AstNode<E> = self.from_stmt(stmt, &mut env)?;
         seq.push(ast);
-        Ok(lower::lower::node(file_id, ast::Ast::Sequence(seq)))
+        Ok(b.seq(seq))
     }
 
     pub fn from_stmt<'a, E: Extra, P: syntax::ast::AstPayload>(

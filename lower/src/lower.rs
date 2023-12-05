@@ -936,42 +936,138 @@ impl<'c> Lower<'c> {
     }
 }
 
+pub struct NodeBuilder<E> {
+    file_ids: Vec<usize>,
+    _e: std::marker::PhantomData<E>,
+}
+
+impl<E: Extra> NodeBuilder<E> {
+    pub fn new() -> Self {
+        Self {
+            file_ids: vec![],
+            _e: std::marker::PhantomData::default(),
+        }
+    }
+
+    pub fn enter_file(&mut self, file_id: usize) {
+        self.file_ids.push(file_id);
+    }
+
+    pub fn exit_file(&mut self) {
+        self.file_ids.pop().unwrap();
+    }
+
+    pub fn current_file_id(&self) -> usize {
+        *self.file_ids.last().unwrap()
+    }
+
+    pub fn node(&self, ast: Ast<E>) -> AstNode<E> {
+        let begin = CodeLocation { line: 0, col: 0 };
+        let end = CodeLocation { line: 0, col: 0 };
+        ast.node(self.current_file_id(), begin, end)
+    }
+
+    pub fn extra(&self) -> E {
+        let begin = CodeLocation { line: 0, col: 0 };
+        let end = CodeLocation { line: 0, col: 0 };
+        E::new(self.current_file_id(), begin, end)
+    }
+
+    pub fn definition(
+        &self,
+        name: &str,
+        params: &[(&str, AstType)],
+        return_type: AstType,
+        body: Option<AstNode<E>>,
+    ) -> AstNode<E> {
+        let params = params
+            .iter()
+            .map(|(name, ty)| ParameterNode {
+                node: Parameter::Normal(name.to_string(), ty.clone()),
+                extra: self.extra(),
+            })
+            .collect();
+        self.node(Ast::Definition(Definition {
+            name: name.to_string(),
+            params,
+            return_type: return_type.into(),
+            body: body.map(|b| b.into()),
+        }))
+    }
+
+    pub fn prelude(&self) -> Vec<AstNode<E>> {
+        vec![
+            self.definition("print_index", &[("a", AstType::Int)], AstType::Unit, None),
+            self.definition("print_float", &[("a", AstType::Float)], AstType::Unit, None),
+        ]
+    }
+
+    pub fn integer(&self, x: i64) -> AstNode<E> {
+        self.node(Ast::Literal(Literal::Int(x)))
+    }
+
+    pub fn index(&self, x: i64) -> AstNode<E> {
+        self.node(Ast::Literal(Literal::Index(x as usize)))
+    }
+
+    pub fn bool(&self, x: bool) -> AstNode<E> {
+        self.node(Ast::Literal(Literal::Bool(x)))
+    }
+
+    pub fn binop(&self, op: BinaryOperation, a: AstNode<E>, b: AstNode<E>) -> AstNode<E> {
+        self.node(Ast::BinaryOp(op, a.into(), b.into()))
+    }
+
+    pub fn seq(&self, nodes: Vec<AstNode<E>>) -> AstNode<E> {
+        self.node(Ast::Sequence(nodes))
+    }
+
+    pub fn ident(&self, name: &str) -> AstNode<E> {
+        self.node(Ast::Identifier(name.to_string()))
+    }
+
+    pub fn global(&self, name: &str, value: AstNode<E>) -> AstNode<E> {
+        self.node(Ast::Global(name.to_string(), value.into()))
+    }
+
+    pub fn test(&self, condition: AstNode<E>, body: AstNode<E>) -> AstNode<E> {
+        self.node(Ast::Test(condition.into(), body.into()))
+    }
+
+    pub fn while_loop(&self, condition: AstNode<E>, body: AstNode<E>) -> AstNode<E> {
+        self.node(Ast::While(condition.into(), body.into()))
+    }
+
+    pub fn ret(&self, node: Option<AstNode<E>>) -> AstNode<E> {
+        self.node(Ast::Return(node.map(|n| n.into())))
+    }
+
+    pub fn func(
+        &self,
+        name: &str,
+        params: &[(&str, AstType)],
+        return_type: AstType,
+        body: AstNode<E>,
+    ) -> AstNode<E> {
+        self.definition(name, params, return_type, Some(body))
+    }
+
+    pub fn main(&self, body: AstNode<E>) -> AstNode<E> {
+        self.func("main", &[], AstType::Int, body)
+    }
+
+    pub fn assign(&self, name: &str, rhs: AstNode<E>) -> AstNode<E> {
+        self.node(Ast::Assign(
+            AssignTarget::Identifier(name.to_string()),
+            rhs.into(),
+        ))
+    }
+}
+
 pub fn node<E: Extra>(file_id: usize, ast: Ast<E>) -> AstNode<E> {
     let begin = CodeLocation { line: 0, col: 0 };
     let end = CodeLocation { line: 0, col: 0 };
     ast.node(file_id, begin, end)
-}
-
-pub fn prelude<E: Extra>(file_id: usize) -> Vec<AstNode<E>> {
-    let ident = "fresh0".to_string();
-    let begin = CodeLocation { line: 0, col: 0 };
-    let end = CodeLocation { line: 0, col: 0 };
-    vec![
-        node(
-            file_id,
-            Ast::Definition(Definition {
-                name: "print_index".to_string(),
-                params: vec![ParameterNode {
-                    node: Parameter::Normal(ident.clone(), AstType::Int),
-                    extra: E::new(file_id, begin.clone(), end.clone()),
-                }],
-                return_type: AstType::Unit.into(),
-                body: None,
-            }),
-        ),
-        node(
-            file_id,
-            Ast::Definition(Definition {
-                name: "print_float".to_string(),
-                params: vec![ParameterNode {
-                    node: Parameter::Normal(ident, AstType::Float),
-                    extra: E::new(file_id, begin, end),
-                }],
-                return_type: AstType::Unit.into(),
-                body: None,
-            }),
-        ),
-    ]
 }
 
 #[cfg(test)]
@@ -981,152 +1077,57 @@ pub(crate) mod tests {
     use test_log::test;
 
     pub fn gen_test(file_id: usize) -> AstNode<SimpleExtra> {
-        let mut seq = prelude(file_id);
-        seq.push(node(
-            file_id,
-            Ast::Definition(Definition {
-                name: "main".into(),
-                params: vec![],
-                return_type: AstType::Int.into(),
-                body: Some(Box::new(node(
-                    file_id,
-                    Ast::Sequence(vec![
-                        node(
-                            file_id,
-                            Ast::Assign(
-                                AssignTarget::Identifier("x".to_string()),
-                                Box::new(node(file_id, Ast::Literal(Literal::Int(123)))),
-                            ),
-                        ),
-                        node(
-                            file_id,
-                            Ast::Test(
-                                Box::new(node(file_id, Ast::Literal(Literal::Bool(false)))),
-                                Box::new(node(
-                                    file_id,
-                                    Ast::Sequence(vec![
-                                        node(
-                                            file_id,
-                                            Ast::BinaryOp(
-                                                BinaryOperation::Subtract,
-                                                node(file_id, Ast::Literal(Literal::Int(2))).into(),
-                                                node(file_id, Ast::Literal(Literal::Int(1))).into(),
-                                            ),
-                                        ),
-                                        node(
-                                            file_id,
-                                            Ast::BinaryOp(
-                                                BinaryOperation::Subtract,
-                                                node(file_id, Ast::Identifier("x".to_string()))
-                                                    .into(),
-                                                node(file_id, Ast::Literal(Literal::Int(1))).into(),
-                                            ),
-                                        ),
-                                        node(file_id, Ast::Literal(Literal::Index(1))),
-                                    ]),
-                                )),
-                            ),
-                        ),
-                        node(
-                            file_id,
-                            Ast::Return(Some(Box::new(node(
-                                file_id,
-                                Ast::Literal(Literal::Int(0)),
-                            )))),
-                        ),
-                    ]),
-                ))),
-            }),
-        ));
+        let mut b: NodeBuilder<SimpleExtra> = NodeBuilder::new();
+        b.enter_file(file_id);
+        let mut seq = b.prelude();
+        seq.push(b.main(b.seq(vec![
+            b.assign("x", b.integer(123).into()),
+            b.test(
+                b.bool(false),
+                b.seq(vec![
+                    b.binop(
+                        BinaryOperation::Subtract,
+                        b.integer(2).into(),
+                        b.integer(1).into(),
+                    ),
+                    b.binop(
+                        BinaryOperation::Subtract,
+                        b.ident("x").into(),
+                        b.integer(1).into(),
+                    ),
+                    b.index(1).into(),
+                ]),
+            ),
+            b.ret(Some(b.integer(0))),
+        ])));
 
-        node(file_id, Ast::Sequence(seq))
+        b.seq(seq)
     }
 
     pub fn gen_while(file_id: usize) -> AstNode<SimpleExtra> {
-        let mut seq = prelude(file_id);
-        // global variable
-        seq.push(node(
-            file_id,
-            Ast::Global(
-                "z".into(),
-                Box::new(node(file_id, Ast::Literal(Literal::Int(122)))),
-            ),
-        ));
-        seq.push(node(
-            file_id,
-            Ast::Definition(Definition {
-                name: "main".into(),
-                params: vec![],
-                return_type: AstType::Int.into(),
-                body: Some(Box::new(node(
-                    file_id,
-                    Ast::Sequence(vec![
-                        // global variable x = 123
-                        node(
-                            file_id,
-                            Ast::Assign(
-                                AssignTarget::Identifier("x".to_string()),
-                                Box::new(node(file_id, Ast::Literal(Literal::Int(123)))),
-                            ),
-                        ),
-                        node(
-                            file_id,
-                            Ast::While(
-                                // condition
-                                Box::new(node(file_id, Ast::Literal(Literal::Bool(false)))),
-                                // body
-                                Box::new(node(
-                                    file_id,
-                                    Ast::Sequence(vec![
-                                        node(
-                                            file_id,
-                                            Ast::Assign(
-                                                AssignTarget::Identifier("y".to_string()),
-                                                Box::new(node(
-                                                    file_id,
-                                                    Ast::Literal(Literal::Int(1234)),
-                                                )),
-                                            ),
-                                        ),
-                                        node(
-                                            file_id,
-                                            Ast::Assign(
-                                                AssignTarget::Identifier("y".to_string()),
-                                                Box::new(node(
-                                                    file_id,
-                                                    Ast::BinaryOp(
-                                                        BinaryOperation::Subtract,
-                                                        node(
-                                                            file_id,
-                                                            Ast::Identifier("x".to_string()),
-                                                        )
-                                                        .into(),
-                                                        node(
-                                                            file_id,
-                                                            Ast::Identifier("x".to_string()),
-                                                        )
-                                                        .into(),
-                                                    ),
-                                                )),
-                                            ),
-                                        ),
-                                    ]),
-                                )),
-                            ),
-                        ),
-                        node(
-                            file_id,
-                            Ast::Return(Some(Box::new(node(
-                                file_id,
-                                Ast::Literal(Literal::Int(0)),
-                            )))),
-                        ),
-                    ]),
-                ))),
-            }),
-        ));
+        let mut b: NodeBuilder<SimpleExtra> = NodeBuilder::new();
+        b.enter_file(file_id);
+        let mut seq = b.prelude();
 
-        node(file_id, Ast::Sequence(seq))
+        // global variable
+        seq.push(b.global("z", b.integer(122)));
+        seq.push(b.main(b.seq(vec![
+            // global variable x = 123
+            b.assign("x", b.integer(123).into()),
+            b.while_loop(
+                b.bool(false),
+                b.seq(vec![
+                    b.assign("y", b.integer(1234).into()),
+                    b.assign(
+                        "y",
+                        b.binop(BinaryOperation::Subtract, b.ident("x"), b.ident("x")),
+                    ),
+                ]),
+            ),
+            b.ret(Some(b.integer(0))),
+        ])));
+
+        b.seq(seq)
     }
 
     #[test]
