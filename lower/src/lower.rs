@@ -831,19 +831,21 @@ impl<'c> Lower<'c> {
                     let location = self.location(&expr);
                     let mut index = self.lower_expr(*expr, env);
 
+                    // TODO: this only handles a single return value
+                    // Deref if necessary
                     let is_mem_ref = {
-                        let rs = env.values(index); //.last_values();
+                        let rs = env.values(index);
                         let r = rs[0];
                         r.r#type().is_mem_ref()
                     };
 
                     if is_mem_ref {
-                        let rs = env.values(index); //.last_values();
+                        let rs = env.values(index);
                         let op = memref::load(rs[0], &[], location);
                         index = env.push(op);
                     }
 
-                    let rs = env.values(index); //.last_values();
+                    let rs = env.values(index);
                     let ret_op = func::r#return(&rs, location);
 
                     env.push(ret_op);
