@@ -38,6 +38,8 @@ pub enum BinaryOperation {
     Multiply,
     Divide,
     Equal,
+    GT,
+    GTE,
 }
 
 #[derive(Debug)]

@@ -509,6 +509,52 @@ impl<'c> Lower<'c> {
                             unimplemented!()
                         }
                     }
+                    BinaryOperation::GTE => {
+                        if ty.is_index() {
+                            // unsigned
+                            arith::cmpi(
+                                self.context,
+                                arith::CmpiPredicate::Uge,
+                                r_lhs.into(),
+                                r_rhs.into(),
+                                location,
+                            )
+                        } else if ty.is_integer() {
+                            // signed
+                            arith::cmpi(
+                                self.context,
+                                arith::CmpiPredicate::Sge,
+                                r_lhs.into(),
+                                r_rhs.into(),
+                                location,
+                            )
+                        } else {
+                            unimplemented!();
+                        }
+                    }
+                    BinaryOperation::GT => {
+                        if ty.is_index() {
+                            // unsigned
+                            arith::cmpi(
+                                self.context,
+                                arith::CmpiPredicate::Ugt,
+                                r_lhs.into(),
+                                r_rhs.into(),
+                                location,
+                            )
+                        } else if ty.is_integer() {
+                            // signed
+                            arith::cmpi(
+                                self.context,
+                                arith::CmpiPredicate::Sgt,
+                                r_lhs.into(),
+                                r_rhs.into(),
+                                location,
+                            )
+                        } else {
+                            unimplemented!();
+                        }
+                    }
                     BinaryOperation::Equal => {
                         if ty.is_index() || ty.is_integer() {
                             arith::cmpi(
