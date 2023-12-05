@@ -26,6 +26,8 @@ pub fn run_ast<E: ast::Extra>(expected: i64, files: &lower::FileDB, ast: ast::As
     pass_manager.add_pass(pass::conversion::create_arith_to_llvm());
     pass_manager.add_pass(pass::conversion::create_complex_to_llvm());
     pass_manager.add_pass(pass::conversion::create_math_to_llvm());
+    pass_manager.add_pass(pass::conversion::create_bufferization_to_mem_ref());
+    //pass_manager.add_pass(pass::conversion::create_map_mem_ref_storage_class());
     pass_manager.add_pass(pass::conversion::create_finalize_mem_ref_to_llvm());
     pass_manager.add_pass(pass::conversion::create_reconcile_unrealized_casts());
 

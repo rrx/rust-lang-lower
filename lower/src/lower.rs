@@ -1,8 +1,8 @@
 use melior::{
     dialect::{arith, cf, func, llvm, memref, ods, scf},
     ir::{
-        attribute::{StringAttribute, TypeAttribute},
-        r#type::{FunctionType, IntegerType, MemRefType},
+        attribute::{DenseElementsAttribute, IntegerAttribute, StringAttribute, TypeAttribute},
+        r#type::{FunctionType, IntegerType, MemRefType, RankedTensorType},
         *,
     },
     Context,
@@ -385,6 +385,117 @@ impl<'c> Lower<'c> {
         expr.extra.location(self.context, self.files)
     }
 
+    pub fn build_global_int(
+        &self,
+        name: &str,
+        x: i64,
+        width: u32,
+        constant: bool,
+        location: Location<'c>,
+    ) -> Operation<'c> {
+        let integer_type = IntegerType::new(self.context, width).into();
+        let attribute = DenseElementsAttribute::new(
+            RankedTensorType::new(&[], integer_type, None).into(),
+            &[IntegerAttribute::new(x, integer_type).into()],
+        )
+        .unwrap();
+        let alignment = IntegerAttribute::new(8, integer_type);
+        let memspace = IntegerAttribute::new(0, integer_type).into();
+
+        memref::global(
+            self.context,
+            name,
+            Some("private"),
+            MemRefType::new(integer_type, &[], None, Some(memspace)),
+            Some(attribute.into()),
+            constant,
+            Some(alignment),
+            location,
+        )
+    }
+
+    pub fn lower_llvm_global_int<E: Extra>(
+        &self,
+        name: &str,
+        expr: AstNode<E>,
+        env: &mut Environment<'c>,
+    ) -> LayerIndex {
+        let location = self.location(&expr);
+        let block = Block::new(&[]);
+        let (ast_ty, op1) = self.lower_static(expr, env);
+        let r = op1.result(0).unwrap().into();
+        let op2 = llvm::r#return(Some(r), location);
+        block.append_operation(op1);
+        block.append_operation(op2);
+        let region = Region::new();
+        region.append_block(block);
+
+        let i64_type = IntegerType::new(self.context, 64);
+        let ty = TypeAttribute::new(i64_type.into());
+
+        let name_attr = StringAttribute::new(self.context, name);
+
+        let linkage = llvm::attributes::linkage(self.context, llvm::attributes::Linkage::External);
+        let op = ods::llvm::mlir_global(self.context, region, ty, name_attr, linkage, location);
+        let index = env.push(op.into());
+
+        env.name_index(index, name);
+        env.index_data(index, Data::new_static(ast_ty));
+        index
+    }
+
+    pub fn lower_llvm_load_global(
+        &self,
+        ident: &str,
+        ty: Type<'c>,
+        location: Location<'c>,
+        env: &mut Environment<'c>,
+    ) -> LayerIndex {
+        // load global variable
+        let opaque_ty = llvm::r#type::opaque_pointer(self.context);
+        let f = attribute::FlatSymbolRefAttribute::new(self.context, ident);
+        // get global
+        let op1: Operation<'c> =
+            ods::llvm::mlir_addressof(self.context, opaque_ty.into(), f, location).into();
+
+        let r = op1.result(0).unwrap().into();
+        let options = llvm::LoadStoreOptions::new();
+        let op2 = llvm::load(self.context, r, ty, location, options);
+        // maybe cast?
+        //let op3 = arith::index_cast(r, Type::index(self.context), location);
+        env.push(op1);
+        env.push(op2)
+    }
+
+    pub fn lower_llvm_store<E: Extra>(
+        &self,
+        ident: &str,
+        ast: AstNode<E>,
+        env: &mut Environment<'c>,
+    ) -> LayerIndex {
+        let location = self.location(&ast);
+        let value_index = self.lower_expr(ast, env);
+        let opaque_ty = llvm::r#type::opaque_pointer(self.context);
+        let f = attribute::FlatSymbolRefAttribute::new(self.context, ident);
+        // get global address
+        let op1: Operation<'c> =
+            ods::llvm::mlir_addressof(self.context, opaque_ty.into(), f, location).into();
+
+        let addr_index = env.push(op1);
+
+        let r_value = env.values(value_index)[0];
+        let r_addr = env.values(addr_index)[0];
+
+        let options = llvm::LoadStoreOptions::new();
+        env.push(llvm::store(
+            self.context,
+            r_value,
+            r_addr,
+            location,
+            options,
+        ))
+    }
+
     pub fn lower_expr<'a, E: Extra>(
         &self,
         expr: AstNode<E>,
@@ -394,25 +505,19 @@ impl<'c> Lower<'c> {
 
         match expr.node {
             Ast::Global(ident, expr) => {
-                let block = Block::new(&[]);
-                let (ast_ty, op1) = self.lower_static(*expr, env);
-                let r = op1.result(0).unwrap().into();
-                let op2 = llvm::r#return(Some(r), location);
-                block.append_operation(op1);
-                block.append_operation(op2);
-                let region = Region::new();
-                region.append_block(block);
-
-                let i64_type = IntegerType::new(self.context, 64);
-                let ty = TypeAttribute::new(i64_type.into());
-
-                let name = StringAttribute::new(self.context, &ident);
-
-                let linkage =
-                    llvm::attributes::linkage(self.context, llvm::attributes::Linkage::External);
-                let op = ods::llvm::mlir_global(self.context, region, ty, name, linkage, location);
-                let index = env.push(op.into());
-
+                let (ast_ty, op) = match expr.node {
+                    Ast::Literal(Literal::Bool(x)) => (
+                        AstType::Bool,
+                        self.build_global_int(&ident, if x { 1 } else { 0 }, 1, false, location),
+                    ),
+                    Ast::Literal(Literal::Int(x)) => (
+                        AstType::Int,
+                        self.build_global_int(&ident, x, 64, false, location),
+                    ),
+                    //Ast::Literal(Literal::Float(x)) => (AstType::Float, self.build_float_op(x, location)),
+                    _ => unreachable!("{:?}", expr.node),
+                };
+                let index = env.push(op);
                 env.name_index(index, &ident);
                 env.index_data(index, Data::new_static(ast_ty));
                 index
@@ -434,18 +539,18 @@ impl<'c> Lower<'c> {
                             let index_lhs = env.push(int_op);
                             let r = env.values(index_lhs)[0];
                             let r_rhs = env.values(index_rhs)[0];
-                            env.push(arith::muli(r.into(), r_rhs.into(), location));
+                            env.push(arith::muli(r.into(), r_rhs.into(), location))
                         } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
                             // arith has an op for negation
                             let r_rhs = env.values(index_rhs)[0];
-                            env.push(arith::negf(r_rhs.into(), location));
+                            env.push(arith::negf(r_rhs.into(), location))
                         } else {
                             unimplemented!()
                         }
                     }
                 }
-                env.last_index().unwrap()
             }
+
             Ast::BinaryOp(op, a, b) => {
                 log::debug!("binop: {:?}, {:?}, {:?}", op, a, b);
                 let mut index_lhs = self.lower_expr(*a, env);
@@ -473,21 +578,15 @@ impl<'c> Lower<'c> {
                         let op = memref::load(r_rhs, &[], location);
                         index_rhs = env.push(op);
                     }
-
-                    //log::debug!("r: {:?}, {:?}", &r_lhs, &r_rhs);
                 }
 
                 // types must be the same for binary operation, no implicit casting yet
-                {
-                    let a: Value<'c, '_> = env.values(index_lhs)[0].into();
-                    let b: Value<'c, '_> = env.values(index_rhs)[0].into(); //);//r_lhs.r#type(), r_rhs.r#type());
-                    log::debug!("bin: {:?}, {:?}", a, b); //env.values(index_lhs)[0], env.values(index_rhs)[0]);//r_lhs.r#type(), r_rhs.r#type());
-                                                          //assert!(r_lhs.r#type() == r_rhs.r#type());
-                    assert!(a.r#type() == b.r#type()); //r_lhs.r#type() == r_rhs.r#type());
-                }
+                let a: Value<'c, '_> = env.values(index_lhs)[0].into();
+                let b: Value<'c, '_> = env.values(index_rhs)[0].into();
+                log::debug!("bin: {:?}, {:?}", a, b);
+                assert!(a.r#type() == b.r#type());
 
                 let a: Value<'c, '_> = env.values(index_lhs)[0].into();
-                //let ty = r_lhs.r#type();
                 let ty = a.r#type();
                 let a: Value<'c, '_> = env.values(index_lhs)[0].into();
                 let b: Value<'c, '_> = env.values(index_rhs)[0].into();
@@ -581,7 +680,6 @@ impl<'c> Lower<'c> {
                 let data = Data::new(ast_ty);
                 env.index_data(index, data);
                 index
-                //env.last_index().unwrap()
             }
 
             Ast::Identifier(ident) => {
@@ -632,12 +730,17 @@ impl<'c> Lower<'c> {
                                 location,
                             )
                             .into();
-                            let r = op1.result(0).unwrap().into();
-                            let options = llvm::LoadStoreOptions::new();
-                            let op2 = llvm::load(self.context, r, ty.into(), location, options);
 
-                            // maybe cast?
-                            //let op3 = arith::index_cast(r, Type::index(self.context), location);
+                            let ty = MemRefType::new(
+                                IntegerType::new(self.context, 64).into(),
+                                &[],
+                                None,
+                                None,
+                            );
+                            let op1 = memref::get_global(self.context, &ident, ty, location);
+
+                            let r = op1.result(0).unwrap().into();
+                            let op2 = memref::load(r, &[], location);
 
                             env.push(op1);
                             let index = env.push(op2);
@@ -935,48 +1038,28 @@ impl<'c> Lower<'c> {
                         // do we enforce types here? or do we just overwrite with what ever new
                         // type
 
-                        //let source_data = env.data(&index).unwrap().clone();
-                        // create a new type, drop other information (static)
-                        //let data = Data::new(source_data.ty);
-
-                        //let ty = self.from_type(&data.ty);
-
+                        let value_index = self.lower_expr(*rhs, env);
                         if is_static {
-                            let opaque_ty = llvm::r#type::opaque_pointer(self.context);
-                            let f = attribute::FlatSymbolRefAttribute::new(self.context, &ident);
-                            // get global address
-                            let op1: Operation<'c> = ods::llvm::mlir_addressof(
-                                self.context,
-                                opaque_ty.into(),
-                                f,
-                                location,
-                            )
-                            .into();
+                            let ty = MemRefType::new(
+                                IntegerType::new(self.context, 64).into(),
+                                &[],
+                                None,
+                                None,
+                            );
+                            let op1 = memref::get_global(self.context, &ident, ty, location);
+
                             let addr_index = env.push(op1);
 
-                            let index = self.lower_expr(*rhs, env);
-
-                            let r_value = env.values(index)[0];
+                            let r_value = env.values(value_index)[0];
                             let r_addr = env.values(addr_index)[0];
 
-                            let options = llvm::LoadStoreOptions::new();
-                            env.push(llvm::store(
-                                self.context,
-                                r_value,
-                                r_addr,
-                                location,
-                                options,
-                            ))
+                            let op = memref::store(r_value, r_addr, &[], location);
+                            env.push(op)
                         } else {
-                            //let ty = self.from_type(&data.ty);
-                            let value_index = self.lower_expr(*rhs, env);
                             let r_value = env.values(value_index)[0];
                             let r_addr = env.values(index)[0];
-                            //let op = llvm::store(self.context, r_value, r_addr, location, llvm::LoadStoreOptions::new());
                             let op = memref::store(r_value, r_addr, &[], location);
-                            let index = env.push(op);
-                            index
-                            //unimplemented!();
+                            env.push(op)
                         }
                     }
                     _ => unimplemented!("{:?}", target),
@@ -988,29 +1071,16 @@ impl<'c> Lower<'c> {
                     AssignTarget::Alloca(ident) => {
                         let ty = env.current_layer_type();
                         assert_ne!(ty, LayerType::Static);
-                        let extra_options = llvm::AllocaOptions::new();
-
                         let ty = IntegerType::new(self.context, 64);
-                        //let ptr_type = llvm::r#type::pointer(ty.into(), 0);
-                        //let array_op = self.build_int_op(1, location);
-                        //env.push(array_op);
-                        //let array_size = env.last_values()[0];
-                        //let op = llvm::alloca(self.context, array_size, ptr_type, location, extra_options);
                         let memref_ty = MemRefType::new(ty.into(), &[], None, None);
                         let op = memref::alloca(self.context, memref_ty, &[], &[], None, location);
-
                         let ptr_index = env.push(op);
                         env.name_index(ptr_index, &ident);
-
                         let rhs_index = self.lower_expr(*rhs, env);
                         let data = env.data(&rhs_index).unwrap();
-
                         env.index_data(ptr_index, Data::new(data.ty.clone()));
-
                         let r_value = env.values(rhs_index)[0];
                         let r_addr = env.values(ptr_index)[0];
-                        //let op = llvm::store(self.context, r_value, r_addr, location, llvm::LoadStoreOptions::new());
-                        //let op = memref::store(self.context, r_value, r_addr, location, llvm::LoadStoreOptions::new());
                         let op = memref::store(r_value, r_addr, &[], location);
                         env.push(op)
                     }
@@ -1285,7 +1355,7 @@ pub(crate) mod tests {
             // allocate mutable var
             b.alloca("x2", b.integer(10)),
             b.while_loop(
-                b.binop(BinaryOperation::NE, b.ident("z"), b.integer(0)),
+                b.binop(BinaryOperation::NE, b.ident("x2"), b.integer(0)),
                 b.seq(vec![
                     // mutate global variable
                     b.replace(

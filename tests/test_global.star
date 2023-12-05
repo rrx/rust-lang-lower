@@ -6,4 +6,5 @@ def x1():
 def main():
   # test reference of global variable
   # test calling function with zero arguments
-  return z - 8 + x1()
+  z = z + 1
+  return z - 9 + x1()
