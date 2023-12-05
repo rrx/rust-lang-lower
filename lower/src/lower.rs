@@ -1255,23 +1255,15 @@ pub(crate) mod tests {
     pub fn gen_test(file_id: usize) -> AstNode<SimpleExtra> {
         let mut b: NodeBuilder<SimpleExtra> = NodeBuilder::new();
         b.enter_file(file_id);
-        let mut seq = b.prelude();
+        let mut seq = vec![];
         seq.push(b.main(b.seq(vec![
-            b.assign("x", b.integer(123).into()),
+            b.assign("x", b.integer(123)),
             b.test(
                 b.bool(false),
                 b.seq(vec![
-                    b.binop(
-                        BinaryOperation::Subtract,
-                        b.integer(2).into(),
-                        b.integer(1).into(),
-                    ),
-                    b.binop(
-                        BinaryOperation::Subtract,
-                        b.ident("x").into(),
-                        b.integer(1).into(),
-                    ),
-                    b.index(1).into(),
+                    b.binop(BinaryOperation::Subtract, b.integer(2), b.integer(1)),
+                    b.binop(BinaryOperation::Subtract, b.ident("x"), b.integer(1)),
+                    b.index(1),
                 ]),
             ),
             b.ret(Some(b.integer(0))),
@@ -1283,26 +1275,29 @@ pub(crate) mod tests {
     pub fn gen_while(file_id: usize) -> AstNode<SimpleExtra> {
         let mut b: NodeBuilder<SimpleExtra> = NodeBuilder::new();
         b.enter_file(file_id);
-        let mut seq = b.prelude();
+        let mut seq = vec![];
 
-        // global variable
+        // global variable x = 10
         seq.push(b.global("z", b.integer(10)));
         seq.push(b.main(b.seq(vec![
-            // global variable x = 123
-            b.assign("x", b.integer(123).into()),
-            b.alloca("x2", b.integer(10).into()),
+            // define local var
+            b.assign("x", b.integer(123)),
+            // allocate mutable var
+            b.alloca("x2", b.integer(10)),
             b.while_loop(
                 b.binop(BinaryOperation::NE, b.ident("z"), b.integer(0)),
                 b.seq(vec![
+                    // mutate global variable
                     b.replace(
                         "z",
                         b.binop(BinaryOperation::Subtract, b.ident("z"), b.integer(1)),
                     ),
+                    // mutate scoped variable
                     b.replace(
                         "x2",
                         b.binop(BinaryOperation::Subtract, b.ident("x2"), b.integer(1)),
                     ),
-                    b.assign("y", b.integer(1234).into()),
+                    // assign local
                     b.assign(
                         "y",
                         b.binop(BinaryOperation::Subtract, b.ident("x"), b.ident("x")),
