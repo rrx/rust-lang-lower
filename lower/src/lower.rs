@@ -537,19 +537,30 @@ impl<'c> Lower<'c> {
                 };
 
                 if env.current_layer_type() == LayerType::Static {
+                    // STATIC/GLOBAL VARIABLE
+
                     // global and local are the same
                     let index = env.push_with_name(op, &ident);
                     env.index_data(index, Data::new_static(ast_ty));
-                    //env.name_index(index, &ident);
                     index
                 } else {
+                    // STATIC VARIABLE IN FUNCTION CONTEXT
+
                     // we create a unique global name to prevent conflict
                     // and then we add ops to provide a local reference to the global name
+
+                    // create a unique static variable
                     let global_name = env.unique_static_name();
                     let index = env.push_static(op, &global_name);
                     let data = Data::new_static(ast_ty.clone());
                     env.index_data(index, data);
 
+                    // emit load of static variable, and put the name in scope
+                    // we don't actually need to do this unless the value is needed.
+                    // TODO: move this to where the global variable is referenced.
+                    // We can also check to see if the variable has been loaded already
+                    // and we can skip a second load as long as the global var hasn't been
+                    // modified.
                     let data = Data::new(ast_ty);
                     let ty = self.from_type(&data.ty);
 
@@ -559,12 +570,6 @@ impl<'c> Lower<'c> {
                     let r = op1.result(0).unwrap().into();
                     let op2 = memref::load(r, &[], location);
 
-                    //env.dump();
-                    //let rs = env.values(index);
-                    //println!("{:?}", (index, &rs));
-                    //let r = rs.unwrap()[0];
-
-                    //let op = memref::load(r, &[], location);
                     env.push(op1);
                     env.push_with_name(op2, &ident)
                 }
@@ -765,13 +770,7 @@ impl<'c> Lower<'c> {
 
                             let ty = self.from_type(&data.ty);
 
-                            let ty = MemRefType::new(
-                                //IntegerType::new(self.context, 64).into(),
-                                ty,
-                                &[],
-                                None,
-                                None,
-                            );
+                            let ty = MemRefType::new(ty, &[], None, None);
                             let op1 = memref::get_global(self.context, &ident, ty, location);
 
                             let r = op1.result(0).unwrap().into();
@@ -841,7 +840,6 @@ impl<'c> Lower<'c> {
                     let index = env.push(op);
                     env.index_data(index, Data::new(AstType::Float));
                     index
-                    //env.last_index().unwrap()
                 }
 
                 Literal::Int(x) => {
@@ -849,7 +847,6 @@ impl<'c> Lower<'c> {
                     let index = env.push(op);
                     env.index_data(index, Data::new(AstType::Int));
                     index
-                    //env.last_index().unwrap()
                 }
 
                 Literal::Index(x) => {
@@ -857,7 +854,6 @@ impl<'c> Lower<'c> {
                     let index = env.push(op);
                     env.index_data(index, Data::new(AstType::Index));
                     index
-                    //env.last_index().unwrap()
                 }
 
                 Literal::Bool(x) => {
@@ -865,7 +861,6 @@ impl<'c> Lower<'c> {
                     let index = env.push(op);
                     env.index_data(index, Data::new(AstType::Bool));
                     index
-                    //env.last_index().unwrap()
                 } //_ => unimplemented!("{:?}", lit)
             },
 
@@ -1193,7 +1188,6 @@ impl<'c> Lower<'c> {
                                 };
 
                                 let f = attribute::FlatSymbolRefAttribute::new(self.context, ident);
-                                //let index_type = Type::index(self.context);
                                 let op = func::call(
                                     self.context,
                                     f,
@@ -1367,7 +1361,7 @@ pub(crate) mod tests {
     use crate::compile::run_ast;
     use test_log::test;
 
-    pub fn gen_test<'c, E: Extra>(file_id: usize, env: &mut Environment<'c>) -> AstNode<E> {
+    pub fn gen_test<'c, E: Extra>(file_id: usize, _env: &mut Environment<'c>) -> AstNode<E> {
         let mut b: NodeBuilder<E> = NodeBuilder::new();
         b.enter_file(file_id);
         let mut seq = vec![];
@@ -1387,7 +1381,7 @@ pub(crate) mod tests {
         b.seq(seq)
     }
 
-    pub fn gen_while<'c, E: Extra>(file_id: usize, env: &mut Environment<'c>) -> AstNode<E> {
+    pub fn gen_while<'c, E: Extra>(file_id: usize, _env: &mut Environment<'c>) -> AstNode<E> {
         let mut b: NodeBuilder<E> = NodeBuilder::new();
         b.enter_file(file_id);
         let mut seq = vec![];
