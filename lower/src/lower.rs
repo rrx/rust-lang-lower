@@ -506,6 +506,18 @@ impl<'c> Lower<'c> {
 
         match expr.node {
             Ast::Global(ident, expr) => {
+                let global_name = if env.current_layer_type() == LayerType::Static {
+                    ident.clone()
+                } else {
+                    // we create a unique global name to prevent conflict
+                    // and then we add ops to provide a local reference to the global name
+                    let mut global_name = ident.clone();
+                    global_name.push_str(&env.unique_static_name());
+                    //let mut global_name = env.unique_static_name();
+                    //global_name.push_str(&ident);
+                    global_name
+                };
+
                 // evaluate expr at compile time
                 let (ast_ty, op) = match expr.node {
                     Ast::Literal(Literal::Bool(x)) => {
@@ -513,7 +525,7 @@ impl<'c> Lower<'c> {
                         let ty = self.from_type(&ast_ty);
                         let v = if x { 1 } else { 0 };
                         let value = IntegerAttribute::new(v, ty).into();
-                        let op = self.build_static(&ident, ty, value, false, location);
+                        let op = self.build_static(&global_name, ty, value, false, location);
                         (ast_ty, op)
                     }
 
@@ -521,7 +533,7 @@ impl<'c> Lower<'c> {
                         let ast_ty = AstType::Int;
                         let ty = self.from_type(&ast_ty);
                         let value = IntegerAttribute::new(x, ty).into();
-                        let op = self.build_static(&ident, ty, value, false, location);
+                        let op = self.build_static(&global_name, ty, value, false, location);
                         (ast_ty, op)
                     }
 
@@ -529,7 +541,7 @@ impl<'c> Lower<'c> {
                         let ast_ty = AstType::Float;
                         let ty = self.from_type(&ast_ty);
                         let value = FloatAttribute::new(self.context, x, ty).into();
-                        let op = self.build_static(&ident, ty, value, false, location);
+                        let op = self.build_static(&global_name, ty, value, false, location);
                         (ast_ty, op)
                     }
 
@@ -538,19 +550,13 @@ impl<'c> Lower<'c> {
 
                 if env.current_layer_type() == LayerType::Static {
                     // STATIC/GLOBAL VARIABLE
-
-                    // global and local are the same
-                    let index = env.push_with_name(op, &ident);
+                    let index = env.push_with_name(op, &global_name);
                     env.index_data(index, Data::new_static(ast_ty));
                     index
                 } else {
                     // STATIC VARIABLE IN FUNCTION CONTEXT
 
-                    // we create a unique global name to prevent conflict
-                    // and then we add ops to provide a local reference to the global name
-
-                    // create a unique static variable
-                    let global_name = env.unique_static_name();
+                    // static operation
                     let index = env.push_static(op, &global_name);
                     let data = Data::new_static(ast_ty.clone());
                     env.index_data(index, data);
@@ -565,13 +571,17 @@ impl<'c> Lower<'c> {
                     let ty = self.from_type(&data.ty);
 
                     let ty = MemRefType::new(ty, &[], None, None);
-                    let op1 = memref::get_global(self.context, &ident, ty, location);
+                    // load using global name
+                    let op1 = memref::get_global(self.context, &global_name, ty, location);
 
                     let r = op1.result(0).unwrap().into();
                     let op2 = memref::load(r, &[], location);
 
                     env.push(op1);
-                    env.push_with_name(op2, &ident)
+                    // name using locally scoped name
+                    let index = env.push_with_name(op2, &ident);
+                    env.index_data(index, data);
+                    index
                 }
             }
 
@@ -1396,6 +1406,7 @@ pub(crate) mod tests {
             b.while_loop(
                 b.binop(BinaryOperation::NE, b.ident("x2"), b.integer(0)),
                 b.seq(vec![
+                    // static variable with local scope
                     b.global("z_static", b.integer(0)),
                     // mutate global variable
                     b.replace(
@@ -1410,7 +1421,7 @@ pub(crate) mod tests {
                     // assign local
                     b.assign(
                         "y",
-                        b.binop(BinaryOperation::Subtract, b.ident("x"), b.ident("x")),
+                        b.binop(BinaryOperation::Subtract, b.ident("x"), b.ident("z_static")),
                     ),
                 ]),
             ),
