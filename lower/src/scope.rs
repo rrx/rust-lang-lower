@@ -329,27 +329,38 @@ impl<'c, D: std::fmt::Debug> ScopeStack<'c, D> {
         self.layers.last().map(|x| x.last_index())
     }
 
-    pub fn value_from_name(&self, name: &str) -> Option<Vec<Value<'c, '_>>> {
+    pub fn value0_from_name(&self, name: &str) -> Value<'c, '_> {
+        self.values_from_name(name)[0]
+    }
+
+    pub fn values_from_name(&self, name: &str) -> Vec<Value<'c, '_>> {
         for layer in self.layers.iter().rev() {
             if let Some(r) = layer.value_from_name(name) {
-                return Some(r);
+                return r;
             }
         }
-        None
+        unreachable!("Name not found: {:?}", name);
     }
 
-    pub fn values(&self, index: LayerIndex) -> Option<Vec<Value<'c, '_>>> {
+    pub fn value0(&self, index: LayerIndex) -> Value<'c, '_> {
         for layer in self.layers.iter().rev() {
-            //println!("layer: {:?}", layer.ty);
-            //println!("layer: {:?}", layer);
             if let Some(result) = layer.values(index) {
-                return Some(result);
+                return result[0];
             }
         }
-        None
+        unreachable!("Index not found: {:?}", index);
     }
 
-    pub fn last_values(&self) -> Option<Vec<Value<'c, '_>>> {
+    pub fn values(&self, index: LayerIndex) -> Vec<Value<'c, '_>> {
+        for layer in self.layers.iter().rev() {
+            if let Some(result) = layer.values(index) {
+                return result;
+            }
+        }
+        unreachable!("Index not found: {:?}", index);
+    }
+
+    pub fn last_values(&self) -> Vec<Value<'c, '_>> {
         self.values(self.last_index().unwrap())
     }
 
@@ -526,11 +537,7 @@ mod tests {
         a: LayerIndex,
         b: LayerIndex,
     ) -> LayerIndex {
-        scope.push(arith::addi(
-            scope.values(a).unwrap()[0],
-            scope.values(b).unwrap()[0],
-            location,
-        ))
+        scope.push(arith::addi(scope.value0(a), scope.value0(b), location))
     }
 
     fn test_fill<'c>(lower: &'c Lower, scope: &mut Environment<'c>, location: Location<'c>) {
@@ -545,8 +552,8 @@ mod tests {
         let op1 = lower.build_int_op(100, location);
         let r_op1 = scope.push(op1);
 
-        let rx = scope.values(r_x).unwrap()[0];
-        let ry = scope.value_from_name("y").unwrap()[0];
+        let rx = scope.value0(r_x);
+        let ry = scope.value0_from_name("y");
         let op2 = arith::addi(rx, ry, location);
         //println!("r: {:?}", rx);
         //println!("r: {:?}", ry);
@@ -567,7 +574,7 @@ mod tests {
         let r = test_add(scope, location, r, p0);
         scope.name_index(r, "result");
 
-        let ret = func::r#return(&scope.value_from_name("result").unwrap(), location);
+        let ret = func::r#return(&scope.values_from_name("result"), location);
         scope.push(ret);
     }
 
