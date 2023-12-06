@@ -46,8 +46,8 @@ pub struct Layer<'c> {
     pub(crate) ops: Vec<Operation<'c>>,
     args_count: usize,
     names: HashMap<String, LayerIndex>,
-    globals: Vec<Attribute<'c>>,
-    globals_index: HashMap<LayerIndex, usize>,
+    //globals: Vec<Attribute<'c>>,
+    //globals_index: HashMap<LayerIndex, usize>,
     index: HashMap<LayerIndex, usize>,
     pub(crate) block: Option<Block<'c>>,
     _last_index: Option<LayerIndex>,
@@ -60,8 +60,8 @@ impl<'c> Layer<'c> {
             ops: vec![],
             args_count: 0,
             names: HashMap::new(),
-            globals: vec![],
-            globals_index: HashMap::new(),
+            //globals: vec![],
+            //globals_index: HashMap::new(),
             index: HashMap::new(),
             block: None,
             _last_index: None,
@@ -95,14 +95,6 @@ impl<'c> Layer<'c> {
         self.names.insert(name.to_string(), index);
     }
 
-    /*
-    pub fn push_static(&mut self, value: Operation<'c>, index: LayerIndex) {
-        let offset = self.globals.len();
-        //self.globals.push(value);
-        self.globals_index.insert(index, offset);
-    }
-    */
-
     pub fn push(&mut self, op: Operation<'c>, index: LayerIndex) {
         let pos = self.ops.len();
         self.ops.push(op);
@@ -113,18 +105,17 @@ impl<'c> Layer<'c> {
     pub fn push_with_name(&mut self, op: Operation<'c>, index: LayerIndex, name: &str) {
         self.push(op, index);
         self.names.insert(name.to_string(), index);
-        self._last_index = Some(index);
     }
 
     pub fn last_index(&self) -> LayerIndex {
         self._last_index.unwrap()
     }
 
-    pub fn value_from_name(&self, name: &str) -> Vec<Value<'c, '_>> {
+    pub fn value_from_name(&self, name: &str) -> Option<Vec<Value<'c, '_>>> {
         match self.names.get(name) {
             Some(index) => {
                 let offset = self.index.get(index).unwrap();
-                match index {
+                Some(match index {
                     LayerIndex::Static(_) => vec![],
                     LayerIndex::Op(_) => self
                         .ops
@@ -142,9 +133,9 @@ impl<'c> Layer<'c> {
                             .unwrap()
                             .into()]
                     }
-                }
+                })
             }
-            _ => vec![],
+            _ => None,
         }
     }
 
@@ -152,10 +143,11 @@ impl<'c> Layer<'c> {
         self.names.get(name).cloned()
     }
 
-    pub fn values(&self, index: LayerIndex) -> Vec<Value<'c, '_>> {
+    pub fn values(&self, index: LayerIndex) -> Option<Vec<Value<'c, '_>>> {
         if let Some(offset) = self.index.get(&index) {
-            return match index {
-                LayerIndex::Static(_) => vec![],
+            //println!("found: {:?} - {}, {:?}", index, offset, self.ops.get(*offset).unwrap().results().collect::<Vec<_>>());
+            return Some(match index {
+                //LayerIndex::Static(_) => vec![],
                 LayerIndex::Op(_) => self
                     .ops
                     .get(*offset)
@@ -170,9 +162,10 @@ impl<'c> Layer<'c> {
                     .argument(*offset)
                     .unwrap()
                     .into()],
-            };
+                _ => unimplemented!(),
+            });
         }
-        vec![]
+        None
     }
 
     pub fn push_index(&mut self, index: LayerIndex) {
@@ -188,6 +181,7 @@ impl<'c> Layer<'c> {
 #[derive(Debug)]
 pub struct ScopeStack<'c, D> {
     op_count: usize,
+    static_count: usize,
     layers: Vec<Layer<'c>>,
     types: HashMap<LayerIndex, D>,
 }
@@ -197,6 +191,7 @@ impl<'c, D> Default for ScopeStack<'c, D> {
         let layer = Layer::new(LayerType::Static);
         Self {
             op_count: 0,
+            static_count: 0,
             layers: vec![layer],
             types: HashMap::new(),
         }
@@ -230,6 +225,12 @@ impl<'c, D: std::fmt::Debug> ScopeStack<'c, D> {
         LayerIndex::Argument(self.fresh_index())
     }
 
+    pub fn unique_static_name(&mut self) -> String {
+        let s = format!("__static_x{}", self.static_count);
+        self.static_count += 1;
+        s
+    }
+
     pub fn fresh_index(&mut self) -> usize {
         let index = self.op_count;
         self.op_count += 1;
@@ -256,8 +257,6 @@ impl<'c, D: std::fmt::Debug> ScopeStack<'c, D> {
         layer.args_count = arguments.len();
         for (i, a) in arguments.iter().enumerate() {
             let index = self.fresh_argument();
-            //let index = LayerIndex::Argument(self.arg_count);
-            //self.arg_count += 1;
             layer.names.insert(a.2.to_string(), index);
             layer.index.insert(index, i);
         }
@@ -298,8 +297,11 @@ impl<'c, D: std::fmt::Debug> ScopeStack<'c, D> {
     }
 
     pub fn push_static(&mut self, op: Operation<'c>, name: &str) -> LayerIndex {
-        let index = LayerIndex::Static(self.fresh_index());
-        self.last_mut().push_with_name(op, index, name);
+        let index = LayerIndex::Op(self.fresh_index());
+        self.layers
+            .first_mut()
+            .unwrap()
+            .push_with_name(op, index, name);
         index
     }
 
@@ -312,7 +314,7 @@ impl<'c, D: std::fmt::Debug> ScopeStack<'c, D> {
     pub fn push_with_name(&mut self, op: Operation<'c>, name: &str) -> LayerIndex {
         let index = match self.current_layer_type() {
             // naming ops in static context doesn't make sense
-            LayerType::Static => unreachable!("Unable to name op in static context"), //LayerIndex::Static(self.fresh_op()),
+            //LayerType::Static => unreachable!("Unable to name op in static context"), //LayerIndex::Static(self.fresh_op()),
             _ => LayerIndex::Op(self.fresh_index()),
         };
         self.last_mut().push_with_name(op, index, name);
@@ -327,27 +329,27 @@ impl<'c, D: std::fmt::Debug> ScopeStack<'c, D> {
         self.layers.last().map(|x| x.last_index())
     }
 
-    pub fn value_from_name(&self, name: &str) -> Vec<Value<'c, '_>> {
+    pub fn value_from_name(&self, name: &str) -> Option<Vec<Value<'c, '_>>> {
         for layer in self.layers.iter().rev() {
-            let r = layer.value_from_name(name);
-            if r.len() > 0 {
-                return r;
+            if let Some(r) = layer.value_from_name(name) {
+                return Some(r);
             }
         }
-        vec![]
+        None
     }
 
-    pub fn values(&self, index: LayerIndex) -> Vec<Value<'c, '_>> {
+    pub fn values(&self, index: LayerIndex) -> Option<Vec<Value<'c, '_>>> {
         for layer in self.layers.iter().rev() {
-            let result = layer.values(index);
-            if result.len() > 0 {
-                return result;
+            //println!("layer: {:?}", layer.ty);
+            //println!("layer: {:?}", layer);
+            if let Some(result) = layer.values(index) {
+                return Some(result);
             }
         }
-        vec![]
+        None
     }
 
-    pub fn last_values(&self) -> Vec<Value<'c, '_>> {
+    pub fn last_values(&self) -> Option<Vec<Value<'c, '_>>> {
         self.values(self.last_index().unwrap())
     }
 
@@ -525,8 +527,8 @@ mod tests {
         b: LayerIndex,
     ) -> LayerIndex {
         scope.push(arith::addi(
-            scope.values(a)[0],
-            scope.values(b)[0],
+            scope.values(a).unwrap()[0],
+            scope.values(b).unwrap()[0],
             location,
         ))
     }
@@ -543,11 +545,11 @@ mod tests {
         let op1 = lower.build_int_op(100, location);
         let r_op1 = scope.push(op1);
 
-        let rx = scope.values(r_x)[0];
-        let ry = scope.value_from_name("y")[0];
+        let rx = scope.values(r_x).unwrap()[0];
+        let ry = scope.value_from_name("y").unwrap()[0];
         let op2 = arith::addi(rx, ry, location);
-        println!("r: {:?}", rx);
-        println!("r: {:?}", ry);
+        //println!("r: {:?}", rx);
+        //println!("r: {:?}", ry);
         scope.push(op2);
 
         let a = lower.build_int_op(1, location);
@@ -565,7 +567,7 @@ mod tests {
         let r = test_add(scope, location, r, p0);
         scope.name_index(r, "result");
 
-        let ret = func::r#return(&scope.value_from_name("result"), location);
+        let ret = func::r#return(&scope.value_from_name("result").unwrap(), location);
         scope.push(ret);
     }
 

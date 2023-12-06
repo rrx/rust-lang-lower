@@ -398,11 +398,20 @@ pub(crate) mod tests {
     use lower::compile::run_ast;
 
     fn run_test(filename: &str, expected: i64) {
+        let context = melior::Context::new();
         let mut files = SimpleFiles::new();
+
+        // parse
         let mut parser = Parser::new();
         let ast: AstNode<ast::SimpleExtra> =
             parser.parse(Path::new(filename), None, &mut files).unwrap();
-        run_ast(expected, &mut files, ast);
+
+        // lower
+        let mut lower = lower::lower::Lower::new(&context, &files);
+        let mut env = lower::lower::Environment::default();
+
+        // run
+        run_ast(expected, ast, &mut lower, &mut env);
     }
 
     #[test]

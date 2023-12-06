@@ -97,7 +97,7 @@ impl<'c> Lower<'c> {
             },
             Ast::Identifier(name) => {
                 // infer type from the operation
-                let r = env.value_from_name(name);
+                let r = env.value_from_name(name).unwrap();
                 let ty = r[0].r#type();
                 if ty.is_index() {
                     AstType::Index
@@ -195,7 +195,7 @@ impl<'c> Lower<'c> {
         // before
         env.enter_block(&[]);
         self.lower_expr(condition, env);
-        let condition_rs = env.last_values();
+        let condition_rs = env.last_values().unwrap();
         // should be bool type
         assert!(condition_rs[0].r#type() == bool_type);
         let c = scf::condition(condition_rs[0].into(), &[], condition_location);
@@ -290,7 +290,7 @@ impl<'c> Lower<'c> {
             .into_iter()
             .map(|(arg_name, init_name)| {
                 let r = env.value_from_name(init_name);
-                (r[0].r#type(), condition_location, arg_name)
+                (r.unwrap()[0].r#type(), condition_location, arg_name)
             })
             .collect();
 
@@ -298,7 +298,7 @@ impl<'c> Lower<'c> {
 
         self.lower_expr(condition, env);
 
-        let condition_rs = env.last_values();
+        let condition_rs = env.last_values().unwrap();
         // should be bool type
         assert!(condition_rs[0].r#type() == bool_type);
 
@@ -308,7 +308,7 @@ impl<'c> Lower<'c> {
         //let b_index = env.index_from_name("arg1").unwrap();
         //let b = env.value_from_name("arg1");
         //let b = env.values(b_index);
-        let b: Value<'c, '_> = env.value_from_name("arg1")[0];
+        let b: Value<'c, '_> = env.value_from_name("arg1").unwrap()[0];
         let c = scf::condition(condition_rs[0].into(), &[b], condition_location);
 
         // exit block
@@ -330,8 +330,8 @@ impl<'c> Lower<'c> {
         let after_region = Region::new();
 
         let op = arith::addi(
-            env.value_from_name("arg0")[0],
-            env.value_from_name("test")[0],
+            env.value_from_name("arg0").unwrap()[0],
+            env.value_from_name("test").unwrap()[0],
             condition_location,
         );
         env.push(op);
@@ -342,8 +342,8 @@ impl<'c> Lower<'c> {
         self.lower_expr(body, env);
         let index2 = env.last_index().unwrap();
 
-        let mut rs = env.values(index1);
-        rs.extend(env.values(index2));
+        let mut rs = env.values(index1).unwrap();
+        rs.extend(env.values(index2).unwrap());
 
         // print types
         rs.iter().for_each(|r| {
@@ -366,8 +366,8 @@ impl<'c> Lower<'c> {
         // after complete
 
         let init_args = vec![
-            env.value_from_name("init_op")[0],
-            env.value_from_name("init_op2")[0],
+            env.value_from_name("init_op").unwrap()[0],
+            env.value_from_name("init_op2").unwrap()[0],
         ];
         env.push(scf::r#while(
             &init_args,
@@ -388,7 +388,7 @@ impl<'c> Lower<'c> {
         expr.extra.location(self.context, self.files)
     }
 
-    pub fn build_global(
+    pub fn build_static(
         &self,
         name: &str,
         ty: Type<'c>,
@@ -484,8 +484,8 @@ impl<'c> Lower<'c> {
 
         let addr_index = env.push(op1);
 
-        let r_value = env.values(value_index)[0];
-        let r_addr = env.values(addr_index)[0];
+        let r_value = env.values(value_index).unwrap()[0];
+        let r_addr = env.values(addr_index).unwrap()[0];
 
         let options = llvm::LoadStoreOptions::new();
         env.push(llvm::store(
@@ -500,7 +500,7 @@ impl<'c> Lower<'c> {
     pub fn lower_expr<'a, E: Extra>(
         &self,
         expr: AstNode<E>,
-        env: &mut Environment<'c>,
+        env: &mut ScopeStack<'c, Data>,
     ) -> LayerIndex {
         let location = self.location(&expr);
 
@@ -513,7 +513,7 @@ impl<'c> Lower<'c> {
                         let ty = self.from_type(&ast_ty);
                         let v = if x { 1 } else { 0 };
                         let value = IntegerAttribute::new(v, ty).into();
-                        let op = self.build_global(&ident, ty, value, false, location);
+                        let op = self.build_static(&ident, ty, value, false, location);
                         (ast_ty, op)
                     }
 
@@ -521,7 +521,7 @@ impl<'c> Lower<'c> {
                         let ast_ty = AstType::Int;
                         let ty = self.from_type(&ast_ty);
                         let value = IntegerAttribute::new(x, ty).into();
-                        let op = self.build_global(&ident, ty, value, false, location);
+                        let op = self.build_static(&ident, ty, value, false, location);
                         (ast_ty, op)
                     }
 
@@ -529,23 +529,52 @@ impl<'c> Lower<'c> {
                         let ast_ty = AstType::Float;
                         let ty = self.from_type(&ast_ty);
                         let value = FloatAttribute::new(self.context, x, ty).into();
-                        let op = self.build_global(&ident, ty, value, false, location);
+                        let op = self.build_static(&ident, ty, value, false, location);
                         (ast_ty, op)
                     }
 
                     _ => unreachable!("{:?}", expr.node),
                 };
-                let index = env.push(op);
-                env.name_index(index, &ident);
-                env.index_data(index, Data::new_static(ast_ty));
-                index
+
+                if env.current_layer_type() == LayerType::Static {
+                    // global and local are the same
+                    let index = env.push_with_name(op, &ident);
+                    env.index_data(index, Data::new_static(ast_ty));
+                    //env.name_index(index, &ident);
+                    index
+                } else {
+                    // we create a unique global name to prevent conflict
+                    // and then we add ops to provide a local reference to the global name
+                    let global_name = env.unique_static_name();
+                    let index = env.push_static(op, &global_name);
+                    let data = Data::new_static(ast_ty.clone());
+                    env.index_data(index, data);
+
+                    let data = Data::new(ast_ty);
+                    let ty = self.from_type(&data.ty);
+
+                    let ty = MemRefType::new(ty, &[], None, None);
+                    let op1 = memref::get_global(self.context, &ident, ty, location);
+
+                    let r = op1.result(0).unwrap().into();
+                    let op2 = memref::load(r, &[], location);
+
+                    //env.dump();
+                    //let rs = env.values(index);
+                    //println!("{:?}", (index, &rs));
+                    //let r = rs.unwrap()[0];
+
+                    //let op = memref::load(r, &[], location);
+                    env.push(op1);
+                    env.push_with_name(op2, &ident)
+                }
             }
 
             Ast::UnaryOp(op, a) => {
                 let index_rhs = self.lower_expr(*a, env);
 
                 // get the type of the RHS
-                let ty = env.values(index_rhs)[0].r#type();
+                let ty = env.values(index_rhs).unwrap()[0].r#type();
 
                 match op {
                     UnaryOperation::Minus => {
@@ -555,12 +584,12 @@ impl<'c> Lower<'c> {
                             // Multiply by -1
                             let int_op = self.build_int_op(-1, location);
                             let index_lhs = env.push(int_op);
-                            let r = env.values(index_lhs)[0];
-                            let r_rhs = env.values(index_rhs)[0];
+                            let r = env.values(index_lhs).unwrap()[0];
+                            let r_rhs = env.values(index_rhs).unwrap()[0];
                             env.push(arith::muli(r.into(), r_rhs.into(), location))
                         } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
                             // arith has an op for negation
-                            let r_rhs = env.values(index_rhs)[0];
+                            let r_rhs = env.values(index_rhs).unwrap()[0];
                             env.push(arith::negf(r_rhs.into(), location))
                         } else {
                             unimplemented!()
@@ -583,14 +612,14 @@ impl<'c> Lower<'c> {
 
                 log::debug!("inx: {:?}, {:?}", index_lhs, index_rhs);
                 {
-                    let r_lhs = env.values(index_lhs)[0];
+                    let r_lhs = env.values(index_lhs).unwrap()[0];
                     if r_lhs.r#type().is_mem_ref() {
                         // load
                         let op = memref::load(r_lhs, &[], location);
                         index_lhs = env.push(op);
                     }
 
-                    let r_rhs = env.values(index_rhs)[0];
+                    let r_rhs = env.values(index_rhs).unwrap()[0];
                     if r_rhs.r#type().is_mem_ref() {
                         // load
                         let op = memref::load(r_rhs, &[], location);
@@ -599,15 +628,15 @@ impl<'c> Lower<'c> {
                 }
 
                 // types must be the same for binary operation, no implicit casting yet
-                let a: Value<'c, '_> = env.values(index_lhs)[0].into();
-                let b: Value<'c, '_> = env.values(index_rhs)[0].into();
+                let a: Value<'c, '_> = env.values(index_lhs).unwrap()[0].into();
+                let b: Value<'c, '_> = env.values(index_rhs).unwrap()[0].into();
                 log::debug!("bin: {:?}, {:?}", a, b);
                 assert!(a.r#type() == b.r#type());
 
-                let a: Value<'c, '_> = env.values(index_lhs)[0].into();
+                let a: Value<'c, '_> = env.values(index_lhs).unwrap()[0].into();
                 let ty = a.r#type();
-                let a: Value<'c, '_> = env.values(index_lhs)[0].into();
-                let b: Value<'c, '_> = env.values(index_rhs)[0].into();
+                let a: Value<'c, '_> = env.values(index_lhs).unwrap()[0].into();
+                let b: Value<'c, '_> = env.values(index_rhs).unwrap()[0].into();
 
                 let binop = match op {
                     BinaryOperation::Divide => {
@@ -792,7 +821,7 @@ impl<'c> Lower<'c> {
 
                     let call_args = indices
                         .into_iter()
-                        .map(|index| env.values(index)[0])
+                        .map(|index| env.values(index).unwrap()[0])
                         .collect::<Vec<_>>();
 
                     let op = func::call(self.context, f, call_args.as_slice(), &[ret_ty], location);
@@ -847,8 +876,9 @@ impl<'c> Lower<'c> {
                 env.last_index().unwrap()
             }
 
-            Ast::Variable(def) => {
+            Ast::Variable(_def) => {
                 unimplemented!();
+                /*
                 let ident = def.name;
                 // TODO: handle global variables properly, currently assume function context
                 log::debug!("variable ident {:?}", ident);
@@ -861,6 +891,7 @@ impl<'c> Lower<'c> {
                 let op = memref::store(r[0], env.values(x)[0], &[], location);
                 env.push_with_name(op, &ident);
                 env.last_index().unwrap()
+                */
             }
 
             Ast::Definition(def) => {
@@ -943,17 +974,17 @@ impl<'c> Lower<'c> {
                     // Deref if necessary
                     let is_mem_ref = {
                         let rs = env.values(index);
-                        let r = rs[0];
+                        let r = rs.unwrap()[0];
                         r.r#type().is_mem_ref()
                     };
 
                     if is_mem_ref {
                         let rs = env.values(index);
-                        let op = memref::load(rs[0], &[], location);
+                        let op = memref::load(rs.unwrap()[0], &[], location);
                         index = env.push(op);
                     }
 
-                    let rs = env.values(index);
+                    let rs = env.values(index).unwrap();
                     let ret_op = func::r#return(&rs, location);
 
                     env.push(ret_op);
@@ -993,7 +1024,7 @@ impl<'c> Lower<'c> {
                         let else_region = Region::new();
                         else_region.append_block(false_block);
                         let if_op = scf::r#if(
-                            env.values(index_conditions)[0],
+                            env.values(index_conditions).unwrap()[0],
                             &[],
                             then_region,
                             else_region,
@@ -1007,7 +1038,7 @@ impl<'c> Lower<'c> {
                         then_region.append_block(true_block);
                         let else_region = Region::new();
                         let if_op = scf::r#if(
-                            env.values(index_conditions)[0],
+                            env.values(index_conditions).unwrap()[0],
                             &[],
                             then_region,
                             else_region,
@@ -1055,14 +1086,14 @@ impl<'c> Lower<'c> {
 
                             let addr_index = env.push(op1);
 
-                            let r_value = env.values(value_index)[0];
-                            let r_addr = env.values(addr_index)[0];
+                            let r_value = env.values(value_index).unwrap()[0];
+                            let r_addr = env.values(addr_index).unwrap()[0];
 
                             let op = memref::store(r_value, r_addr, &[], location);
                             env.push(op)
                         } else {
-                            let r_value = env.values(value_index)[0];
-                            let r_addr = env.values(index)[0];
+                            let r_value = env.values(value_index).unwrap()[0];
+                            let r_addr = env.values(index).unwrap()[0];
                             let op = memref::store(r_value, r_addr, &[], location);
                             env.push(op)
                         }
@@ -1084,8 +1115,8 @@ impl<'c> Lower<'c> {
                         let rhs_index = self.lower_expr(*rhs, env);
                         let data = env.data(&rhs_index).unwrap();
                         env.index_data(ptr_index, Data::new(data.ty.clone()));
-                        let r_value = env.values(rhs_index)[0];
-                        let r_addr = env.values(ptr_index)[0];
+                        let r_value = env.values(rhs_index).unwrap()[0];
+                        let r_addr = env.values(ptr_index).unwrap()[0];
                         let op = memref::store(r_value, r_addr, &[], location);
                         env.push(op)
                     }
@@ -1128,8 +1159,12 @@ impl<'c> Lower<'c> {
                             Argument::Positional(expr) => {
                                 let index = self.lower_expr(*expr, env);
                                 let msg = format!("assert at {}", location);
-                                let assert_op =
-                                    cf::assert(self.context, env.values(index)[0], &msg, location);
+                                let assert_op = cf::assert(
+                                    self.context,
+                                    env.values(index).unwrap()[0],
+                                    &msg,
+                                    location,
+                                );
                                 env.push(assert_op);
                                 env.last_index().unwrap()
                             }
@@ -1144,7 +1179,7 @@ impl<'c> Lower<'c> {
                                 // eval expr
                                 let index = self.lower_expr(*expr, env);
                                 let r = env.values(index);
-                                let ty = r[0].r#type();
+                                let ty = r.unwrap()[0].r#type();
 
                                 // Select the baked version based on parameters
                                 // TODO: A more dynamic way of doing this
@@ -1159,8 +1194,13 @@ impl<'c> Lower<'c> {
 
                                 let f = attribute::FlatSymbolRefAttribute::new(self.context, ident);
                                 //let index_type = Type::index(self.context);
-                                let op =
-                                    func::call(self.context, f, &env.values(index), &[], location);
+                                let op = func::call(
+                                    self.context,
+                                    f,
+                                    &env.values(index).unwrap(),
+                                    &[],
+                                    location,
+                                );
 
                                 env.push(op);
                                 env.last_index().unwrap()
@@ -1327,8 +1367,8 @@ pub(crate) mod tests {
     use crate::compile::run_ast;
     use test_log::test;
 
-    pub fn gen_test(file_id: usize) -> AstNode<SimpleExtra> {
-        let mut b: NodeBuilder<SimpleExtra> = NodeBuilder::new();
+    pub fn gen_test<'c, E: Extra>(file_id: usize, env: &mut Environment<'c>) -> AstNode<E> {
+        let mut b: NodeBuilder<E> = NodeBuilder::new();
         b.enter_file(file_id);
         let mut seq = vec![];
         seq.push(b.main(b.seq(vec![
@@ -1347,8 +1387,8 @@ pub(crate) mod tests {
         b.seq(seq)
     }
 
-    pub fn gen_while(file_id: usize) -> AstNode<SimpleExtra> {
-        let mut b: NodeBuilder<SimpleExtra> = NodeBuilder::new();
+    pub fn gen_while<'c, E: Extra>(file_id: usize, env: &mut Environment<'c>) -> AstNode<E> {
+        let mut b: NodeBuilder<E> = NodeBuilder::new();
         b.enter_file(file_id);
         let mut seq = vec![];
 
@@ -1362,6 +1402,7 @@ pub(crate) mod tests {
             b.while_loop(
                 b.binop(BinaryOperation::NE, b.ident("x2"), b.integer(0)),
                 b.seq(vec![
+                    b.global("z_static", b.integer(0)),
                     // mutate global variable
                     b.replace(
                         "z",
@@ -1387,17 +1428,23 @@ pub(crate) mod tests {
 
     #[test]
     fn test_while() {
+        let context = Context::new();
         let mut files = FileDB::new();
         let file_id = files.add("test.py".into(), "test".into());
-        let ast = gen_while(file_id);
-        run_ast(0, &mut files, ast);
+        let mut env = Environment::default();
+        let mut lower = Lower::new(&context, &files);
+        let ast: AstNode<SimpleExtra> = gen_while(file_id, &mut env);
+        run_ast(0, ast, &mut lower, &mut env);
     }
 
     #[test]
     fn test_loop() {
+        let context = Context::new();
         let mut files = FileDB::new();
         let file_id = files.add("test.py".into(), "test".into());
-        let ast = gen_test(file_id);
-        run_ast(0, &mut files, ast);
+        let mut env = Environment::default();
+        let mut lower = Lower::new(&context, &files);
+        let ast: AstNode<SimpleExtra> = gen_test(file_id, &mut env);
+        run_ast(0, ast, &mut lower, &mut env);
     }
 }

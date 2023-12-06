@@ -7,15 +7,20 @@ use melior::{
     dialect::DialectRegistry,
     ir, pass,
     utility::{register_all_dialects, register_all_llvm_translations},
-    Context,
 };
 
-pub fn run_ast<E: ast::Extra>(expected: i64, files: &lower::FileDB, ast: ast::AstNode<E>) {
-    let context = Context::new();
-    context.set_allow_unregistered_dialects(true);
+pub fn run_ast<'c, E: ast::Extra>(
+    expected: i64,
+    ast: ast::AstNode<E>,
+    lower: &mut lower::Lower<'c>,
+    env: &mut scope::ScopeStack<'c, lower::Data>,
+) {
+    //let context = Context::new();
+    //let c = &context;
+    lower.context.set_allow_unregistered_dialects(true);
 
     // passes
-    let pass_manager = pass::PassManager::new(&context);
+    let pass_manager = pass::PassManager::new(lower.context);
     pass_manager.enable_verifier(true);
     // lower to llvm
     pass_manager.add_pass(pass::conversion::create_scf_to_control_flow());
@@ -39,7 +44,7 @@ pub fn run_ast<E: ast::Extra>(expected: i64, files: &lower::FileDB, ast: ast::As
     pass_manager.add_pass(pass::transform::create_control_flow_sink());
     pass_manager.add_pass(pass::transform::create_symbol_privatize());
 
-    context.attach_diagnostic_handler(|diagnostic| {
+    lower.context.attach_diagnostic_handler(|diagnostic| {
         let location = diagnostic.location();
         log::error!("E: {}: {}", diagnostic, location);
         true
@@ -48,16 +53,15 @@ pub fn run_ast<E: ast::Extra>(expected: i64, files: &lower::FileDB, ast: ast::As
     // registry
     let registry = DialectRegistry::new();
     register_all_dialects(&registry);
-    context.append_dialect_registry(&registry);
-    context.load_all_available_dialects();
-    register_all_llvm_translations(&context);
+    lower.context.append_dialect_registry(&registry);
+    lower.context.load_all_available_dialects();
+    register_all_llvm_translations(lower.context);
 
-    let location = ir::Location::unknown(&context);
+    let location = ir::Location::unknown(lower.context);
     let mut module = ir::Module::new(location);
 
-    let lower = lower::Lower::new(&context, &files);
-    let mut env: crate::scope::ScopeStack<lower::Data> = scope::ScopeStack::default();
-    lower.lower_expr(ast, &mut env);
+    //let lower = lower::Lower::new(c, &files);
+    lower.lower_expr(ast, env);
     for op in env.take_ops() {
         module.body().append_operation(op);
     }
