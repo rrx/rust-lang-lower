@@ -13,7 +13,6 @@ use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
 
 use lower::ast;
 use lower::ast::{AssignTarget, Ast, AstNode, AstType, CodeLocation, Extra, Literal};
-use lower::lower::{FileDB, NodeBuilder};
 use std::collections::HashMap;
 
 #[derive(Error, Debug)]
@@ -165,7 +164,7 @@ impl Parser {
         }
     }
 
-    pub fn dump(&self, files: &FileDB) {
+    pub fn dump(&self, files: &lower::FileDB) {
         let writer = StandardStream::stderr(ColorChoice::Always);
         let config = codespan_reporting::term::Config::default();
         for d in self.diagnostics.iter() {
@@ -177,9 +176,9 @@ impl Parser {
         &mut self,
         path: &Path,
         content: Option<&str>,
-        files: &mut FileDB,
+        files: &mut lower::FileDB,
     ) -> Result<ast::AstNode<E>> {
-        let mut b = NodeBuilder::new();
+        let mut b = lower::NodeBuilder::new();
         let file_id = files.add(
             path.to_str().unwrap().to_string(),
             std::fs::read_to_string(path)?,

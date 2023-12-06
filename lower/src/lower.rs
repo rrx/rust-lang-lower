@@ -305,9 +305,6 @@ impl<'c> Lower<'c> {
         // to pass to after
 
         // condition passes result to region 1 if true, or terminates with result
-        //let b_index = env.index_from_name("arg1").unwrap();
-        //let b = env.value_from_name("arg1");
-        //let b = env.values(b_index);
         let b = env.value0_from_name("arg1");
         let c = scf::condition(condition_rs[0].into(), &[b], condition_location);
 
@@ -377,11 +374,6 @@ impl<'c> Lower<'c> {
             body_location,
         ));
         env.last_index().unwrap()
-
-        //if depth == 0 {
-        // function level, non-zero result means return immediately
-        //} else {
-        //}
     }
 
     pub fn location<E: Extra>(&self, expr: &AstNode<E>) -> Location<'c> {
@@ -513,8 +505,6 @@ impl<'c> Lower<'c> {
                     // and then we add ops to provide a local reference to the global name
                     let mut global_name = ident.clone();
                     global_name.push_str(&env.unique_static_name());
-                    //let mut global_name = env.unique_static_name();
-                    //global_name.push_str(&ident);
                     global_name
                 };
 
@@ -836,8 +826,6 @@ impl<'c> Lower<'c> {
                     let op = func::call(self.context, f, call_args.as_slice(), &[ret_ty], location);
                     let index = env.push(op);
                     env.index_data(index, data);
-
-                    //env.last_index().unwrap()
                     index
                 } else {
                     unimplemented!("calling non function type: {:?}", data);
@@ -1204,148 +1192,6 @@ impl<'c> Lower<'c> {
                 }
             } //_ => unimplemented!("{:?}", expr.node),
         }
-    }
-}
-
-pub struct NodeBuilder<E> {
-    file_ids: Vec<usize>,
-    _e: std::marker::PhantomData<E>,
-}
-
-impl<E: Extra> NodeBuilder<E> {
-    pub fn new() -> Self {
-        Self {
-            file_ids: vec![],
-            _e: std::marker::PhantomData::default(),
-        }
-    }
-
-    pub fn enter_file(&mut self, file_id: usize) {
-        self.file_ids.push(file_id);
-    }
-
-    pub fn exit_file(&mut self) {
-        self.file_ids.pop().unwrap();
-    }
-
-    pub fn current_file_id(&self) -> usize {
-        *self.file_ids.last().unwrap()
-    }
-
-    pub fn node(&self, ast: Ast<E>) -> AstNode<E> {
-        let begin = CodeLocation { line: 0, col: 0 };
-        let end = CodeLocation { line: 0, col: 0 };
-        ast.node(self.current_file_id(), begin, end)
-    }
-
-    pub fn extra(&self) -> E {
-        let begin = CodeLocation { line: 0, col: 0 };
-        let end = CodeLocation { line: 0, col: 0 };
-        E::new(self.current_file_id(), begin, end)
-    }
-
-    pub fn definition(
-        &self,
-        name: &str,
-        params: &[(&str, AstType)],
-        return_type: AstType,
-        body: Option<AstNode<E>>,
-    ) -> AstNode<E> {
-        let params = params
-            .iter()
-            .map(|(name, ty)| ParameterNode {
-                node: Parameter::Normal(name.to_string(), ty.clone()),
-                extra: self.extra(),
-            })
-            .collect();
-        self.node(Ast::Definition(Definition {
-            name: name.to_string(),
-            params,
-            return_type: return_type.into(),
-            body: body.map(|b| b.into()),
-        }))
-    }
-
-    pub fn prelude(&self) -> Vec<AstNode<E>> {
-        vec![
-            self.definition("print_index", &[("a", AstType::Int)], AstType::Unit, None),
-            self.definition("print_float", &[("a", AstType::Float)], AstType::Unit, None),
-        ]
-    }
-
-    pub fn integer(&self, x: i64) -> AstNode<E> {
-        self.node(Ast::Literal(Literal::Int(x)))
-    }
-
-    pub fn index(&self, x: i64) -> AstNode<E> {
-        self.node(Ast::Literal(Literal::Index(x as usize)))
-    }
-
-    pub fn bool(&self, x: bool) -> AstNode<E> {
-        self.node(Ast::Literal(Literal::Bool(x)))
-    }
-
-    pub fn binop(&self, op: BinaryOperation, a: AstNode<E>, b: AstNode<E>) -> AstNode<E> {
-        self.node(Ast::BinaryOp(op, a.into(), b.into()))
-    }
-
-    pub fn seq(&self, nodes: Vec<AstNode<E>>) -> AstNode<E> {
-        self.node(Ast::Sequence(nodes))
-    }
-
-    pub fn ident(&self, name: &str) -> AstNode<E> {
-        self.node(Ast::Identifier(name.to_string()))
-    }
-
-    pub fn global(&self, name: &str, value: AstNode<E>) -> AstNode<E> {
-        self.node(Ast::Global(name.to_string(), value.into()))
-    }
-
-    pub fn test(&self, condition: AstNode<E>, body: AstNode<E>) -> AstNode<E> {
-        self.node(Ast::Test(condition.into(), body.into()))
-    }
-
-    pub fn while_loop(&self, condition: AstNode<E>, body: AstNode<E>) -> AstNode<E> {
-        self.node(Ast::While(condition.into(), body.into()))
-    }
-
-    pub fn ret(&self, node: Option<AstNode<E>>) -> AstNode<E> {
-        self.node(Ast::Return(node.map(|n| n.into())))
-    }
-
-    pub fn func(
-        &self,
-        name: &str,
-        params: &[(&str, AstType)],
-        return_type: AstType,
-        body: AstNode<E>,
-    ) -> AstNode<E> {
-        self.definition(name, params, return_type, Some(body))
-    }
-
-    pub fn main(&self, body: AstNode<E>) -> AstNode<E> {
-        self.func("main", &[], AstType::Int, body)
-    }
-
-    pub fn replace(&self, name: &str, rhs: AstNode<E>) -> AstNode<E> {
-        self.node(Ast::Replace(
-            AssignTarget::Identifier(name.to_string()),
-            rhs.into(),
-        ))
-    }
-
-    pub fn assign(&self, name: &str, rhs: AstNode<E>) -> AstNode<E> {
-        self.node(Ast::Assign(
-            AssignTarget::Identifier(name.to_string()),
-            rhs.into(),
-        ))
-    }
-
-    pub fn alloca(&self, name: &str, rhs: AstNode<E>) -> AstNode<E> {
-        self.node(Ast::Assign(
-            AssignTarget::Alloca(name.to_string()),
-            rhs.into(),
-        ))
     }
 }
 
