@@ -12,7 +12,7 @@ use melior::{
 };
 
 use crate::ast::*;
-use crate::scope::{LayerIndex, LayerType, ScopeStack};
+use crate::scope::{Layer, LayerIndex, LayerType, ScopeStack};
 use codespan_reporting::files::SimpleFiles;
 
 #[derive(Debug, Clone)]
@@ -193,7 +193,9 @@ impl<'c> Lower<'c> {
         let body_location = self.location(&body);
 
         // before
-        env.enter_block(&[]);
+        let layer = self.build_block(&[], env);
+        env.enter(layer);
+        //env.enter_block(&[]);
         self.lower_expr(condition, env);
         let condition_rs = env.last_values();
         // should be bool type
@@ -212,7 +214,9 @@ impl<'c> Lower<'c> {
         before_region.append_block(before_block);
 
         // after
-        env.enter_block(&[]);
+        //env.enter_block(&[]);
+        let layer = self.build_block(&[], env);
+        env.enter(layer);
         let after_region = Region::new();
         self.lower_expr(body, env);
         // yield passes result to region 0
@@ -270,7 +274,7 @@ impl<'c> Lower<'c> {
          *    type is ()->()
          */
         let bool_type = self.from_type(&AstType::Bool);
-        let index_type = self.from_type(&AstType::Index);
+        //let index_type = self.from_type(&AstType::Index);
         let condition_location = self.location(&condition);
         let body_location = self.location(&body);
 
@@ -284,17 +288,25 @@ impl<'c> Lower<'c> {
         let init_op2 = self.build_index_op(10, condition_location);
         env.push_with_name(init_op2, "init_op2");
 
-        let init_args = vec![("arg0", "init_op"), ("arg1", "init_op2")];
+        let init_args = vec![
+            (AstType::Bool, "arg0", "init_op"),
+            (AstType::Index, "arg1", "init_op2"),
+        ];
 
-        let before_args: Vec<(Type, Location, &str)> = init_args
+        let before_args: Vec<(AstType, Location, String)> = init_args
             .into_iter()
-            .map(|(arg_name, init_name)| {
-                let r = env.value0_from_name(init_name);
-                (r.r#type(), condition_location, arg_name)
+            .map(|(ast_ty, arg_name, init_name)| {
+                let index = env.index_from_name(init_name).unwrap();
+                let data = Data::new(ast_ty); //env.data(&index).unwrap();
+                                              //let r = env.value0_from_name(init_name);
+                                              //(r.r#type(), condition_location, arg_name.to_string())
+                (data.ty.clone(), condition_location, arg_name.to_string())
             })
             .collect();
 
-        env.enter_block(&before_args);
+        //env.enter_block(&before_args);
+        let layer = self.build_block(&before_args, env);
+        env.enter(layer);
 
         self.lower_expr(condition, env);
 
@@ -322,8 +334,12 @@ impl<'c> Lower<'c> {
         // Before Complete
 
         // after
-        let after_args = &[(index_type, body_location, "arg0")];
-        env.enter_block(after_args);
+        let after_args = &[(AstType::Index, body_location, "arg0".to_string())];
+        //env.enter_block(after_args);
+        //env.enter(self.build_block(&before_args, env));
+        let layer = self.build_block(after_args, env);
+        env.enter(layer);
+
         let after_region = Region::new();
 
         let op = arith::addi(
@@ -368,7 +384,10 @@ impl<'c> Lower<'c> {
         ];
         env.push(scf::r#while(
             &init_args,
-            &after_args.iter().map(|x| x.0).collect::<Vec<Type<'_>>>(),
+            &after_args
+                .iter()
+                .map(|x| self.from_type(&x.0))
+                .collect::<Vec<Type<'_>>>(),
             before_region,
             after_region,
             body_location,
@@ -487,6 +506,30 @@ impl<'c> Lower<'c> {
             location,
             options,
         ))
+    }
+
+    pub fn build_block(
+        &self,
+        arguments: &[(AstType, Location<'c>, String)],
+        env: &mut ScopeStack<'c, Data>,
+    ) -> Layer<'c> {
+        // create a new layer, adding arguments as scoped variables
+        let mut layer = Layer::new(LayerType::Block);
+        for (offset, a) in arguments.iter().enumerate() {
+            let index = env.fresh_argument();
+            layer.name_index(index, &a.2);
+            let data = Data::new(a.0.clone());
+            env.index_data(index, data);
+            // record argument offset
+            layer.index.insert(index, offset);
+        }
+        let block_args = arguments
+            .iter()
+            .map(|a| (self.from_type(&a.0), a.1))
+            .collect::<Vec<_>>();
+        let block = Block::new(&block_args);
+        layer.block = Some(block);
+        layer
     }
 
     pub fn lower_expr<'a, E: Extra>(
@@ -749,12 +792,13 @@ impl<'c> Lower<'c> {
                         index
                     }
                     _ => {
+                        //env.dump();
                         let (index, data) = match env.index_from_name(ident.as_str()) {
                             Some(index) => {
                                 let data = env.data(&index).unwrap().clone();
                                 (index, data)
                             }
-                            _ => unimplemented!("Ident not found: {:?}", ident),
+                            _ => unreachable!("Ident not found: {:?}", ident),
                         };
 
                         let is_static = match index {
@@ -896,12 +940,12 @@ impl<'c> Lower<'c> {
 
                 for p in def.params {
                     match p.node {
-                        Parameter::Normal(ident, ty) => {
-                            log::debug!("params {:?}: {:?}", ident, ty);
+                        Parameter::Normal(ident, ast_ty) => {
+                            log::debug!("params {:?}: {:?}", ident, ast_ty);
                             let location = p.extra.location(self.context, self.files);
-                            let ir_ty = self.from_type(&ty);
-                            params.push((ir_ty, location, "x"));
-                            ast_types.push(ty);
+                            //let ir_ty = self.from_type(&ast_ty);
+                            params.push((ast_ty.clone(), location, ident));
+                            ast_types.push(ast_ty);
                         }
                         _ => {
                             unimplemented!("{:?}", p);
@@ -917,7 +961,9 @@ impl<'c> Lower<'c> {
                 )];
 
                 if let Some(body) = def.body {
-                    env.enter_block(params.as_slice());
+                    let layer = self.build_block(params.as_slice(), env);
+                    env.enter(layer);
+                    //env.enter_block(params.as_slice());
                     self.lower_expr(*body, env);
                     let mut layer = env.exit();
                     let block = layer.block.take().unwrap();
@@ -934,7 +980,10 @@ impl<'c> Lower<'c> {
                     ));
                 }
 
-                let types = params.iter().map(|x| x.0).collect::<Vec<Type>>();
+                let types = params
+                    .iter()
+                    .map(|x| self.from_type(&x.0))
+                    .collect::<Vec<Type>>();
 
                 let ret_type = if ty.is_none() { vec![] } else { vec![ty] };
 
@@ -991,7 +1040,9 @@ impl<'c> Lower<'c> {
 
             Ast::Conditional(condition, true_expr, maybe_false_expr) => {
                 let index_conditions = self.lower_expr(*condition, env);
-                env.enter_block(&[]);
+                //env.enter_block(&[]);
+                let layer = self.build_block(&[], env);
+                env.enter(layer);
                 self.lower_expr(*true_expr, env);
                 let mut layer = env.exit();
                 let true_block = layer.block.take().unwrap();
@@ -1003,7 +1054,9 @@ impl<'c> Lower<'c> {
 
                 match maybe_false_expr {
                     Some(false_expr) => {
-                        env.enter_block(&[]);
+                        //env.enter_block(&[]);
+                        let layer = self.build_block(&[], env);
+                        env.enter(layer);
                         self.lower_expr(*false_expr, env);
                         let mut layer = env.exit();
                         let false_block = layer.block.take().unwrap();
@@ -1205,6 +1258,7 @@ pub fn node<E: Extra>(file_id: usize, ast: Ast<E>) -> AstNode<E> {
 pub(crate) mod tests {
     use super::*;
     use crate::compile::run_ast;
+    use crate::NodeBuilder;
     use test_log::test;
 
     pub fn gen_test<'c, E: Extra>(file_id: usize, _env: &mut Environment<'c>) -> AstNode<E> {
@@ -1216,8 +1270,8 @@ pub(crate) mod tests {
             b.test(
                 b.bool(false),
                 b.seq(vec![
-                    b.binop(BinaryOperation::Subtract, b.integer(2), b.integer(1)),
-                    b.binop(BinaryOperation::Subtract, b.ident("x"), b.integer(1)),
+                    b.subtract(b.integer(2), b.integer(1)),
+                    b.subtract(b.ident("x"), b.integer(1)),
                     b.index(1),
                 ]),
             ),
@@ -1240,31 +1294,62 @@ pub(crate) mod tests {
             // allocate mutable var
             b.alloca("x2", b.integer(10)),
             b.while_loop(
-                b.binop(BinaryOperation::NE, b.ident("x2"), b.integer(0)),
+                b.ne(b.ident("x2"), b.integer(0)),
                 b.seq(vec![
                     // static variable with local scope
                     b.global("z_static", b.integer(0)),
                     // mutate global variable
-                    b.replace(
-                        "z",
-                        b.binop(BinaryOperation::Subtract, b.ident("z"), b.integer(1)),
-                    ),
+                    b.replace("z", b.subtract(b.ident("z"), b.integer(1))),
                     // mutate scoped variable
-                    b.replace(
-                        "x2",
-                        b.binop(BinaryOperation::Subtract, b.ident("x2"), b.integer(1)),
-                    ),
+                    b.replace("x2", b.subtract(b.ident("x2"), b.integer(1))),
                     // assign local
-                    b.assign(
-                        "y",
-                        b.binop(BinaryOperation::Subtract, b.ident("x"), b.ident("z_static")),
-                    ),
+                    b.assign("y", b.subtract(b.ident("x"), b.ident("z_static"))),
                 ]),
             ),
             b.ret(Some(b.ident("x2"))),
         ])));
 
         b.seq(seq)
+    }
+
+    pub fn gen_function_call<'c, E: Extra>(
+        file_id: usize,
+        _env: &mut Environment<'c>,
+    ) -> AstNode<E> {
+        let mut b: NodeBuilder<E> = NodeBuilder::new();
+        b.enter_file(file_id);
+        let mut seq = vec![];
+
+        seq.push(b.func(
+            "x1",
+            &[("arg0", AstType::Int)],
+            AstType::Int,
+            b.seq(vec![b.ret(Some(b.add(b.integer(0), b.ident("arg0"))))]),
+        ));
+
+        seq.push(b.main(b.seq(vec![
+            b.assign("x", b.apply("x1", vec![b.integer(0)])),
+            b.ret(Some(b.ident("x"))),
+        ])));
+        b.seq(seq)
+    }
+
+    pub fn gen_recursion<'c, E: Extra>(file_id: usize, _env: &mut Environment<'c>) -> AstNode<E> {
+        let mut b: NodeBuilder<E> = NodeBuilder::new();
+        b.enter_file(file_id);
+        let seq = vec![];
+        b.seq(seq)
+    }
+
+    #[test]
+    fn test_gen() {
+        let context = Context::new();
+        let mut files = FileDB::new();
+        let file_id = files.add("test.py".into(), "test".into());
+        let mut env = Environment::default();
+        let mut lower = Lower::new(&context, &files);
+        let ast: AstNode<SimpleExtra> = gen_function_call(file_id, &mut env);
+        run_ast(0, ast, &mut lower, &mut env);
     }
 
     #[test]

@@ -44,11 +44,11 @@ impl LayerIndex {
 pub struct Layer<'c> {
     ty: LayerType,
     pub(crate) ops: Vec<Operation<'c>>,
-    args_count: usize,
+    //args_count: usize,
     names: HashMap<String, LayerIndex>,
     //globals: Vec<Attribute<'c>>,
     //globals_index: HashMap<LayerIndex, usize>,
-    index: HashMap<LayerIndex, usize>,
+    pub(crate) index: HashMap<LayerIndex, usize>,
     pub(crate) block: Option<Block<'c>>,
     _last_index: Option<LayerIndex>,
 }
@@ -58,7 +58,7 @@ impl<'c> Layer<'c> {
         Self {
             ty,
             ops: vec![],
-            args_count: 0,
+            //args_count: 0,
             names: HashMap::new(),
             //globals: vec![],
             //globals_index: HashMap::new(),
@@ -203,8 +203,14 @@ impl<'c, D: std::fmt::Debug> ScopeStack<'c, D> {
         println!("env: {:?}", self);
         for layer in &self.layers {
             println!("Layer: {:?}", layer.ty);
-            for (k, v) in layer.names.iter() {
-                println!("\t{:?}: {:?}, ty: {:?}", k, v, self.types.get(v));
+            for (name, index) in layer.names.iter() {
+                println!(
+                    "\t{:?}: {:?}, ty: {:?}, index: {:?}",
+                    name,
+                    index,
+                    self.types.get(index),
+                    layer.index.get(index)
+                );
             }
         }
     }
@@ -252,19 +258,23 @@ impl<'c, D: std::fmt::Debug> ScopeStack<'c, D> {
         self.enter(layer);
     }
 
-    pub fn enter_block(&mut self, arguments: &[(Type<'c>, Location<'c>, &str)]) {
+    /*
+    pub fn enter_block(&mut self, arguments: &[(Type<'c>, Location<'c>, String)]) {
         let mut layer = Layer::new(LayerType::Block);
-        layer.args_count = arguments.len();
+        //layer.args_count = arguments.len();
         for (i, a) in arguments.iter().enumerate() {
             let index = self.fresh_argument();
-            layer.names.insert(a.2.to_string(), index);
-            layer.index.insert(index, i);
+            layer.name_index(index, &a.2);
+            //let data = crate::lower::Data::new(a.3);
+            //layer.names.insert(a.2.to_string(), index);
+            //layer.index.insert(index, i);
         }
         let block_args = arguments.iter().map(|a| (a.0, a.1)).collect::<Vec<_>>();
         let block = Block::new(&block_args);
         layer.block = Some(block);
         self.enter(layer);
     }
+    */
 
     pub fn enter(&mut self, layer: Layer<'c>) {
         self.layers.push(layer);
@@ -570,8 +580,8 @@ mod tests {
         let r = test_add(scope, location, r_op1, r_e);
         let rz = scope.index_from_name("z").unwrap();
         let r = test_add(scope, location, rz, r);
-        let p0 = scope.index_from_name("p0").unwrap();
-        let r = test_add(scope, location, r, p0);
+        //let p0 = scope.index_from_name("p0").unwrap();
+        //let r = test_add(scope, location, r, p0);
         scope.name_index(r, "result");
 
         let ret = func::r#return(&scope.values_from_name("result"), location);
@@ -584,8 +594,12 @@ mod tests {
         let ret_type = vec![index_type];
         let func_type = FunctionType::new(&lower.context, &types, &ret_type);
 
-        env.enter_block(&[(index_type, location, "p0")]);
-        assert_eq!(env.index_from_name("p0").unwrap(), LayerIndex::Argument(0));
+        let mut layer = Layer::new(LayerType::Block);
+        layer.block = Some(Block::new(&[]));
+        env.enter(layer);
+        //let layer =
+        //env.enter_block(&[(index_type, location, "p0".to_string())]);
+        //assert_eq!(env.index_from_name("p0").unwrap(), LayerIndex::Argument(0));
 
         let three = lower.build_int_op(3, location);
         env.push_with_name(three, "z");

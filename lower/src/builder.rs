@@ -82,6 +82,26 @@ impl<E: Extra> NodeBuilder<E> {
         self.node(Ast::BinaryOp(op, a.into(), b.into()))
     }
 
+    pub fn subtract(&self, a: AstNode<E>, b: AstNode<E>) -> AstNode<E> {
+        self.node(Ast::BinaryOp(BinaryOperation::Subtract, a.into(), b.into()))
+    }
+
+    pub fn add(&self, a: AstNode<E>, b: AstNode<E>) -> AstNode<E> {
+        self.node(Ast::BinaryOp(BinaryOperation::Add, a.into(), b.into()))
+    }
+
+    pub fn multiply(&self, a: AstNode<E>, b: AstNode<E>) -> AstNode<E> {
+        self.node(Ast::BinaryOp(BinaryOperation::Multiply, a.into(), b.into()))
+    }
+
+    pub fn ne(&self, a: AstNode<E>, b: AstNode<E>) -> AstNode<E> {
+        self.node(Ast::BinaryOp(BinaryOperation::NE, a.into(), b.into()))
+    }
+
+    pub fn eq(&self, a: AstNode<E>, b: AstNode<E>) -> AstNode<E> {
+        self.node(Ast::BinaryOp(BinaryOperation::EQ, a.into(), b.into()))
+    }
+
     pub fn seq(&self, nodes: Vec<AstNode<E>>) -> AstNode<E> {
         self.node(Ast::Sequence(nodes))
     }
@@ -102,10 +122,6 @@ impl<E: Extra> NodeBuilder<E> {
         self.node(Ast::While(condition.into(), body.into()))
     }
 
-    pub fn ret(&self, node: Option<AstNode<E>>) -> AstNode<E> {
-        self.node(Ast::Return(node.map(|n| n.into())))
-    }
-
     pub fn func(
         &self,
         name: &str,
@@ -114,6 +130,18 @@ impl<E: Extra> NodeBuilder<E> {
         body: AstNode<E>,
     ) -> AstNode<E> {
         self.definition(name, params, return_type, Some(body))
+    }
+
+    pub fn ret(&self, node: Option<AstNode<E>>) -> AstNode<E> {
+        self.node(Ast::Return(node.map(|n| n.into())))
+    }
+
+    pub fn apply(&self, name: &str, args: Vec<AstNode<E>>) -> AstNode<E> {
+        let args = args
+            .into_iter()
+            .map(|expr| Argument::Positional(expr.into()))
+            .collect::<Vec<_>>();
+        self.node(Ast::Call(self.ident(name).into(), args))
     }
 
     pub fn main(&self, body: AstNode<E>) -> AstNode<E> {
