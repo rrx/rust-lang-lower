@@ -19,10 +19,11 @@ impl From<usize> for OpIndex {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum LayerIndex {
     Op(usize),
     Argument(usize),
+    Ref(usize),
     Static(usize),
 }
 
@@ -44,10 +45,7 @@ impl LayerIndex {
 pub struct Layer<'c> {
     ty: LayerType,
     pub(crate) ops: Vec<Operation<'c>>,
-    //args_count: usize,
     names: HashMap<String, LayerIndex>,
-    //globals: Vec<Attribute<'c>>,
-    //globals_index: HashMap<LayerIndex, usize>,
     pub(crate) index: HashMap<LayerIndex, usize>,
     pub(crate) block: Option<Block<'c>>,
     _last_index: Option<LayerIndex>,
@@ -58,10 +56,7 @@ impl<'c> Layer<'c> {
         Self {
             ty,
             ops: vec![],
-            //args_count: 0,
             names: HashMap::new(),
-            //globals: vec![],
-            //globals_index: HashMap::new(),
             index: HashMap::new(),
             block: None,
             _last_index: None,
@@ -91,6 +86,10 @@ impl<'c> Layer<'c> {
         self._last_index = layer._last_index;
     }
 
+    pub fn index_name(&mut self, index: LayerIndex, name: &str) {
+        self.names.insert(name.to_string(), index);
+    }
+
     pub fn name_index(&mut self, index: LayerIndex, name: &str) {
         self.names.insert(name.to_string(), index);
     }
@@ -98,17 +97,17 @@ impl<'c> Layer<'c> {
     pub fn push(&mut self, op: Operation<'c>, index: LayerIndex) {
         let pos = self.ops.len();
         self.ops.push(op);
-        self.index.insert(index, pos);
+        self.index.insert(index.clone(), pos);
         self._last_index = Some(index);
     }
 
     pub fn push_with_name(&mut self, op: Operation<'c>, index: LayerIndex, name: &str) {
-        self.push(op, index);
+        self.push(op, index.clone());
         self.names.insert(name.to_string(), index);
     }
 
     pub fn last_index(&self) -> LayerIndex {
-        self._last_index.unwrap()
+        self._last_index.clone().unwrap()
     }
 
     pub fn value_from_name(&self, name: &str) -> Option<Vec<Value<'c, '_>>> {
@@ -117,6 +116,10 @@ impl<'c> Layer<'c> {
                 let offset = self.index.get(index).unwrap();
                 Some(match index {
                     LayerIndex::Static(_) => vec![],
+                    LayerIndex::Ref(source_index) => {
+                        //return self.values(source_index);
+                        unreachable!();
+                    }
                     LayerIndex::Op(_) => self
                         .ops
                         .get(*offset)
@@ -143,9 +146,9 @@ impl<'c> Layer<'c> {
         self.names.get(name).cloned()
     }
 
-    pub fn values(&self, index: LayerIndex) -> Option<Vec<Value<'c, '_>>> {
+    pub fn values(&self, index: &LayerIndex) -> Option<Vec<Value<'c, '_>>> {
         if let Some(offset) = self.index.get(&index) {
-            //println!("found: {:?} - {}, {:?}", index, offset, self.ops.get(*offset).unwrap().results().collect::<Vec<_>>());
+            println!("found: {:?} - {}, {:?}", index, offset, self.ops.len()); //self.ops.get(*offset).unwrap().results().collect::<Vec<_>>());
             return Some(match index {
                 //LayerIndex::Static(_) => vec![],
                 LayerIndex::Op(_) => self
@@ -162,7 +165,46 @@ impl<'c> Layer<'c> {
                     .argument(*offset)
                     .unwrap()
                     .into()],
-                _ => unimplemented!(),
+                _ => unimplemented!("{:?}", index),
+            });
+        }
+        None
+    }
+
+    pub fn values2(&self, index: &LayerIndex) -> Option<Vec<Value<'c, '_>>> {
+        log::debug!("self: {:?}", self);
+        let v = if let LayerIndex::Ref(op_index) = index {
+            return self.values(&LayerIndex::Op(*op_index));
+            //if let Some(offset) = self.index.get(&LayerIndex::Op(*op_index)) {
+            //Some((offset, &LayerIndex::Op(0)))
+            //} else {
+            //None
+            //}
+        } else if let Some(offset) = self.index.get(&index) {
+            Some((offset, index))
+        } else {
+            None
+        };
+
+        if let Some((offset, index)) = v {
+            println!("found: {:?} - {}, {:?}", index, offset, self.ops.len()); //self.ops.get(*offset).unwrap().results().collect::<Vec<_>>());
+            return Some(match index {
+                //LayerIndex::Static(_) => vec![],
+                LayerIndex::Op(_) => self
+                    .ops
+                    .get(*offset)
+                    .unwrap()
+                    .results()
+                    .map(|x| x.into())
+                    .collect(),
+                LayerIndex::Argument(_) => vec![self
+                    .block
+                    .as_ref()
+                    .unwrap()
+                    .argument(*offset)
+                    .unwrap()
+                    .into()],
+                _ => unimplemented!("{:?}", index),
             });
         }
         None
@@ -198,7 +240,7 @@ impl<'c, D> Default for ScopeStack<'c, D> {
     }
 }
 
-impl<'c, D: std::fmt::Debug> ScopeStack<'c, D> {
+impl<'c, D: std::fmt::Debug + Clone> ScopeStack<'c, D> {
     pub fn dump(&self) {
         println!("env: {:?}", self);
         for layer in &self.layers {
@@ -215,8 +257,25 @@ impl<'c, D: std::fmt::Debug> ScopeStack<'c, D> {
         }
     }
 
-    pub fn index_data(&mut self, index: LayerIndex, data: D) {
-        self.types.insert(index, data);
+    pub fn push_reference(&mut self, name: &str, index: LayerIndex) -> LayerIndex {
+        let data = self.data(&index).unwrap();
+        if let LayerIndex::Op(op_index) = index {
+            let refer = LayerIndex::Ref(op_index);
+            self.index_data(&refer, data.clone());
+            self.index_name(refer.clone(), name);
+            self.layers
+                .last_mut()
+                .unwrap()
+                .index
+                .insert(refer.clone(), op_index);
+            refer
+        } else {
+            unreachable!()
+        }
+    }
+
+    pub fn index_data(&mut self, index: &LayerIndex, data: D) {
+        self.types.insert(index.clone(), data);
     }
 
     pub fn data(&self, index: &LayerIndex) -> Option<&D> {
@@ -302,8 +361,12 @@ impl<'c, D: std::fmt::Debug> ScopeStack<'c, D> {
         }
     }
 
+    pub fn index_name(&mut self, index: LayerIndex, name: &str) {
+        self.last_mut().index_name(index, name);
+    }
+
     pub fn name_index(&mut self, index: LayerIndex, name: &str) {
-        self.last_mut().name_index(index, name);
+        self.last_mut().index_name(index, name);
     }
 
     pub fn push_static(&mut self, op: Operation<'c>, name: &str) -> LayerIndex {
@@ -311,13 +374,13 @@ impl<'c, D: std::fmt::Debug> ScopeStack<'c, D> {
         self.layers
             .first_mut()
             .unwrap()
-            .push_with_name(op, index, name);
+            .push_with_name(op, index.clone(), name);
         index
     }
 
     pub fn push(&mut self, op: Operation<'c>) -> LayerIndex {
         let index = LayerIndex::Op(self.fresh_index());
-        self.last_mut().push(op, index);
+        self.last_mut().push(op, index.clone());
         index
     }
 
@@ -327,7 +390,7 @@ impl<'c, D: std::fmt::Debug> ScopeStack<'c, D> {
             //LayerType::Static => unreachable!("Unable to name op in static context"), //LayerIndex::Static(self.fresh_op()),
             _ => LayerIndex::Op(self.fresh_index()),
         };
-        self.last_mut().push_with_name(op, index, name);
+        self.last_mut().push_with_name(op, index.clone(), name);
         index
     }
 
@@ -352,18 +415,18 @@ impl<'c, D: std::fmt::Debug> ScopeStack<'c, D> {
         unreachable!("Name not found: {:?}", name);
     }
 
-    pub fn value0(&self, index: LayerIndex) -> Value<'c, '_> {
+    pub fn value0(&self, index: &LayerIndex) -> Value<'c, '_> {
         for layer in self.layers.iter().rev() {
-            if let Some(result) = layer.values(index) {
+            if let Some(result) = layer.values(&index) {
                 return result[0];
             }
         }
         unreachable!("Index not found: {:?}", index);
     }
 
-    pub fn values(&self, index: LayerIndex) -> Vec<Value<'c, '_>> {
+    pub fn values(&self, index: &LayerIndex) -> Vec<Value<'c, '_>> {
         for layer in self.layers.iter().rev() {
-            if let Some(result) = layer.values(index) {
+            if let Some(result) = layer.values(&index) {
                 return result;
             }
         }
@@ -371,7 +434,7 @@ impl<'c, D: std::fmt::Debug> ScopeStack<'c, D> {
     }
 
     pub fn last_values(&self) -> Vec<Value<'c, '_>> {
-        self.values(self.last_index().unwrap())
+        self.values(&self.last_index().unwrap())
     }
 
     pub fn index_from_name(&self, name: &str) -> Option<LayerIndex> {
@@ -547,12 +610,12 @@ mod tests {
         a: LayerIndex,
         b: LayerIndex,
     ) -> LayerIndex {
-        scope.push(arith::addi(scope.value0(a), scope.value0(b), location))
+        scope.push(arith::addi(scope.value0(&a), scope.value0(&b), location))
     }
 
     fn test_fill<'c>(lower: &'c Lower, scope: &mut Environment<'c>, location: Location<'c>) {
         let x = test_int_name(lower, scope, location, 1, "x");
-        let y = test_add(scope, location, x, x);
+        let y = test_add(scope, location, x.clone(), x.clone());
 
         let one = lower.build_int_op(1, location);
         let two = lower.build_int_op(2, location);
@@ -562,7 +625,7 @@ mod tests {
         let op1 = lower.build_int_op(100, location);
         let r_op1 = scope.push(op1);
 
-        let rx = scope.value0(r_x);
+        let rx = scope.value0(&r_x);
         let ry = scope.value0_from_name("y");
         let op2 = arith::addi(rx, ry, location);
         //println!("r: {:?}", rx);

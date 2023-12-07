@@ -18,20 +18,21 @@ use codespan_reporting::files::SimpleFiles;
 #[derive(Debug, Clone)]
 pub struct Data {
     ty: AstType,
-    is_static: bool,
+    static_name: Option<String>,
 }
+
 impl Data {
-    pub fn new_static(ty: AstType) -> Self {
+    pub fn new_static(ty: AstType, name: &str) -> Self {
         Self {
             ty,
-            is_static: true,
+            static_name: Some(name.to_string()),
         }
     }
 
     pub fn new(ty: AstType) -> Self {
         Self {
             ty,
-            is_static: false,
+            static_name: None,
         }
     }
 }
@@ -114,7 +115,7 @@ impl<'c> Lower<'c> {
 
     pub fn from_type(&self, ty: &AstType) -> Type<'c> {
         match ty {
-            AstType::Ptr(v) => Type::index(self.context),
+            AstType::Ptr(_) => Type::index(self.context),
             AstType::Tuple(args) => {
                 let types = args.iter().map(|a| self.from_type(a)).collect::<Vec<_>>();
                 melior::ir::r#type::TupleType::new(self.context, &types).into()
@@ -296,7 +297,7 @@ impl<'c> Lower<'c> {
         let before_args: Vec<(AstType, Location, String)> = init_args
             .into_iter()
             .map(|(ast_ty, arg_name, init_name)| {
-                let index = env.index_from_name(init_name).unwrap();
+                let _index = env.index_from_name(init_name).unwrap();
                 let data = Data::new(ast_ty); //env.data(&index).unwrap();
                                               //let r = env.value0_from_name(init_name);
                                               //(r.r#type(), condition_location, arg_name.to_string())
@@ -355,8 +356,8 @@ impl<'c> Lower<'c> {
         self.lower_expr(body, env);
         let index2 = env.last_index().unwrap();
 
-        let mut rs = env.values(index1);
-        rs.extend(env.values(index2));
+        let mut rs = env.values(&index1);
+        rs.extend(env.values(&index2));
 
         // print types
         rs.iter().for_each(|r| {
@@ -451,8 +452,8 @@ impl<'c> Lower<'c> {
         let op = ods::llvm::mlir_global(self.context, region, ty, name_attr, linkage, location);
         let index = env.push(op.into());
 
-        env.name_index(index, name);
-        env.index_data(index, Data::new_static(ast_ty));
+        env.name_index(index.clone(), name);
+        env.index_data(&index, Data::new_static(ast_ty, name));
         index
     }
 
@@ -495,8 +496,8 @@ impl<'c> Lower<'c> {
 
         let addr_index = env.push(op1);
 
-        let r_value = env.value0(value_index);
-        let r_addr = env.value0(addr_index);
+        let r_value = env.value0(&value_index);
+        let r_addr = env.value0(&addr_index);
 
         let options = llvm::LoadStoreOptions::new();
         env.push(llvm::store(
@@ -517,9 +518,9 @@ impl<'c> Lower<'c> {
         let mut layer = Layer::new(LayerType::Block);
         for (offset, a) in arguments.iter().enumerate() {
             let index = env.fresh_argument();
-            layer.name_index(index, &a.2);
+            layer.name_index(index.clone(), &a.2);
             let data = Data::new(a.0.clone());
-            env.index_data(index, data);
+            env.index_data(&index, data);
             // record argument offset
             layer.index.insert(index, offset);
         }
@@ -589,18 +590,28 @@ impl<'c> Lower<'c> {
                     _ => unreachable!("{:?}", expr.node),
                 };
 
-                let ptr_data = Data::new_static(AstType::Ptr(ast_ty.clone().into()));
+                let ptr_data = Data::new_static(AstType::Ptr(ast_ty.clone().into()), &global_name);
                 if env.current_layer_type() == LayerType::Static {
                     // STATIC/GLOBAL VARIABLE
                     let index = env.push_with_name(op, &global_name);
-                    env.index_data(index, ptr_data);
+                    env.index_data(&index, ptr_data);
                     index
                 } else {
                     // STATIC VARIABLE IN FUNCTION CONTEXT
 
-                    // static operation
+                    // push static operation
                     let index = env.push_static(op, &global_name);
-                    env.index_data(index, ptr_data);
+                    env.index_data(&index, ptr_data.clone());
+                    env.name_index(index.clone(), &ident);
+
+                    // push name into current context
+                    //let ref_index = env.push_reference(&ident, index);
+                    //let index = env.fresh_argument();
+                    env.name_index(index.clone(), &ident);
+                    //env.index_data(index, ptr_data);
+                    //env.layer.index.insert(index, offset);
+                    //ref_index
+                    index
 
                     // emit load of static variable, and put the name in scope
                     // we don't actually need to do this unless the value is needed.
@@ -608,6 +619,7 @@ impl<'c> Lower<'c> {
                     // We can also check to see if the variable has been loaded already
                     // and we can skip a second load as long as the global var hasn't been
                     // modified.
+                    /*
                     let local_data = Data::new(ast_ty.clone());
                     let ty = self.from_type(&local_data.ty);
 
@@ -623,6 +635,7 @@ impl<'c> Lower<'c> {
                     let index = env.push_with_name(op2, &ident);
                     env.index_data(index, local_data);
                     index
+                    */
                 }
             }
 
@@ -630,7 +643,7 @@ impl<'c> Lower<'c> {
                 let index_rhs = self.lower_expr(*a, env);
 
                 // get the type of the RHS
-                let ty = env.value0(index_rhs).r#type();
+                let ty = env.value0(&index_rhs).r#type();
 
                 match op {
                     UnaryOperation::Minus => {
@@ -640,12 +653,12 @@ impl<'c> Lower<'c> {
                             // Multiply by -1
                             let int_op = self.build_int_op(-1, location);
                             let index_lhs = env.push(int_op);
-                            let r = env.value0(index_lhs);
-                            let r_rhs = env.value0(index_rhs);
+                            let r = env.value0(&index_lhs);
+                            let r_rhs = env.value0(&index_rhs);
                             env.push(arith::muli(r.into(), r_rhs.into(), location))
                         } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
                             // arith has an op for negation
-                            let r_rhs = env.value0(index_rhs);
+                            let r_rhs = env.value0(&index_rhs);
                             env.push(arith::negf(r_rhs.into(), location))
                         } else {
                             unimplemented!()
@@ -673,20 +686,20 @@ impl<'c> Lower<'c> {
                         ty_rhs = *ty;
                     }
 
-                    let r_lhs = env.value0(index_lhs);
+                    let r_lhs = env.value0(&index_lhs);
                     if r_lhs.r#type().is_mem_ref() {
                         // load
                         let op = memref::load(r_lhs, &[], location);
                         index_lhs = env.push(op);
-                        env.index_data(index_lhs, Data::new(ty_lhs.clone()));
+                        env.index_data(&index_lhs, Data::new(ty_lhs.clone()));
                     }
 
-                    let r_rhs = env.value0(index_rhs);
+                    let r_rhs = env.value0(&index_rhs);
                     if r_rhs.r#type().is_mem_ref() {
                         // load
                         let op = memref::load(r_rhs, &[], location);
                         index_rhs = env.push(op);
-                        env.index_data(index_rhs, Data::new(ty_rhs.clone()));
+                        env.index_data(&index_rhs, Data::new(ty_rhs.clone()));
                     }
                 }
 
@@ -694,17 +707,17 @@ impl<'c> Lower<'c> {
                 assert_eq!(ty_lhs, ty_rhs);
 
                 // types must be the same for binary operation, no implicit casting yet
-                let a = env.value0(index_lhs);
-                let b = env.value0(index_rhs);
+                let a = env.value0(&index_lhs);
+                let b = env.value0(&index_rhs);
                 //env.dump();
                 log::debug!("bin: {:?}, {:?}", a, b);
                 log::debug!("ty: {:?}, {:?}", a.r#type(), b.r#type());
                 //assert!(a.r#type() == b.r#type());
 
-                let a = env.value0(index_lhs);
+                let a = env.value0(&index_lhs);
                 let ty = a.r#type();
-                let a = env.value0(index_lhs);
-                let b = env.value0(index_rhs);
+                let a = env.value0(&index_lhs);
+                let b = env.value0(&index_rhs);
 
                 let binop = match op {
                     BinaryOperation::Divide => {
@@ -793,8 +806,40 @@ impl<'c> Lower<'c> {
 
                 let index = env.push(binop);
                 let data = Data::new(ast_ty);
-                env.index_data(index, data);
+                env.index_data(&index, data);
                 index
+            }
+
+            Ast::Deref(expr, target) => {
+                // we are expecting a memref here
+                log::debug!("deref: {:?}: {:?}", &expr, target);
+                let index = self.lower_expr(*expr, env);
+                env.dump();
+
+                let data = env.data(&index).unwrap();
+                log::debug!("data: {:?}", &data);
+                let deref_data = Data::new(data.ty.clone());
+
+                // ensure proper type
+                let ty = self.from_type(&data.ty);
+                log::debug!("ptr_ty: {:?}", &ty);
+
+                if let AstType::Ptr(ast_ty) = &data.ty {
+                    if let Some(static_name) = &data.static_name {
+                        let ty = self.from_type(ast_ty);
+                        log::debug!("ty: {:?}", &ty);
+                        //assert!(ty.is_mem_ref());
+                        let r = env.value0(&index);
+                        let op = memref::load(r, &[], location);
+                        let index = env.push(op);
+                        env.index_data(&index, deref_data);
+                        index
+                    } else {
+                        unimplemented!()
+                    }
+                } else {
+                    unreachable!("Trying to dereference a non-pointer")
+                }
             }
 
             Ast::Identifier(ident) => {
@@ -802,13 +847,13 @@ impl<'c> Lower<'c> {
                     "True" => {
                         let op = self.build_bool_op(true, location);
                         let index = env.push(op);
-                        env.index_data(index, Data::new(AstType::Bool));
+                        env.index_data(&index, Data::new(AstType::Bool));
                         index
                     }
                     "False" => {
                         let op = self.build_bool_op(false, location);
                         let index = env.push(op);
-                        env.index_data(index, Data::new(AstType::Bool));
+                        env.index_data(&index, Data::new(AstType::Bool));
                         index
                     }
                     _ => {
@@ -821,37 +866,39 @@ impl<'c> Lower<'c> {
                             _ => unreachable!("Ident not found: {:?}", ident),
                         };
 
-                        println!("data: {} - {:?}", ident, data);
-                        let is_static = match index {
-                            LayerIndex::Op(_) => data.is_static,
-                            LayerIndex::Static(_) => true,
-                            _ => false,
-                        };
+                        log::debug!("ident: {} - {:?}", ident, data);
+                        //let is_static = match index {
+                        //LayerIndex::Op(_) => data.is_static,
+                        //LayerIndex::Static(_) => true,
+                        //_ => false,
+                        //};
 
-                        if is_static {
-                            let source_data = env.data(&index).unwrap().clone();
+                        if let Some(static_name) = data.static_name {
+                            //let source_data = env.data(&index).unwrap().clone();
                             // create a new type, drop other information (static)
-                            let data = Data::new(source_data.ty);
+                            let data = Data::new_static(data.ty, &static_name);
+                            log::debug!("data2: {}, {:?}", ident, data);
 
                             // we should only be dealing with pointers in if we are static
                             if let AstType::Ptr(ty) = &data.ty {
                                 let ty = self.from_type(ty);
 
                                 let ty = MemRefType::new(ty, &[], None, None);
-                                let op1 = memref::get_global(self.context, &ident, ty, location);
+                                let op1 =
+                                    memref::get_global(self.context, &static_name, ty, location);
 
-                                let r = op1.result(0).unwrap().into();
-                                let op2 = memref::load(r, &[], location);
+                                //let r = op1.result(0).unwrap().into();
+                                //let op2 = memref::load(r, &[], location);
 
-                                env.push(op1);
-                                let index = env.push(op2);
-                                env.index_data(index, data);
+                                let index = env.push(op1);
+                                //let index = env.push(op2);
+                                env.index_data(&index, data);
                                 index
                             } else {
                                 unreachable!();
                             }
                         } else {
-                            env.push_index(index);
+                            env.push_index(index.clone());
                             index
                         }
                     }
@@ -890,12 +937,12 @@ impl<'c> Lower<'c> {
 
                     let call_args = indices
                         .into_iter()
-                        .map(|index| env.value0(index))
+                        .map(|index| env.value0(&index))
                         .collect::<Vec<_>>();
 
                     let op = func::call(self.context, f, call_args.as_slice(), &[ret_ty], location);
                     let index = env.push(op);
-                    env.index_data(index, data);
+                    env.index_data(&index, data);
                     index
                 } else {
                     unimplemented!("calling non function type: {:?}", data);
@@ -906,28 +953,28 @@ impl<'c> Lower<'c> {
                 Literal::Float(f) => {
                     let op = self.build_float_op(f, location);
                     let index = env.push(op);
-                    env.index_data(index, Data::new(AstType::Float));
+                    env.index_data(&index, Data::new(AstType::Float));
                     index
                 }
 
                 Literal::Int(x) => {
                     let op = self.build_int_op(x, location);
                     let index = env.push(op);
-                    env.index_data(index, Data::new(AstType::Int));
+                    env.index_data(&index, Data::new(AstType::Int));
                     index
                 }
 
                 Literal::Index(x) => {
                     let op = self.build_index_op(x as i64, location);
                     let index = env.push(op);
-                    env.index_data(index, Data::new(AstType::Index));
+                    env.index_data(&index, Data::new(AstType::Index));
                     index
                 }
 
                 Literal::Bool(x) => {
                     let op = self.build_bool_op(x, location);
                     let index = env.push(op);
-                    env.index_data(index, Data::new(AstType::Bool));
+                    env.index_data(&index, Data::new(AstType::Bool));
                     index
                 } //_ => unimplemented!("{:?}", lit)
             },
@@ -1025,11 +1072,11 @@ impl<'c> Lower<'c> {
                 );
 
                 let index = env.push(f);
-                env.name_index(index, &def.name);
+                env.name_index(index.clone(), &def.name);
                 let f_type = AstType::Func(ast_types, ast_ret_type);
-                let mut data = Data::new(f_type);
-                data.is_static = true;
-                env.index_data(index, data);
+                let data = Data::new_static(f_type, &def.name);
+                //data.is_static = true;
+                env.index_data(&index, data);
                 env.last_index().unwrap()
             }
 
@@ -1041,17 +1088,17 @@ impl<'c> Lower<'c> {
                     // TODO: this only handles a single return value
                     // Deref if necessary
                     let is_mem_ref = {
-                        let r = env.value0(index);
+                        let r = env.value0(&index);
                         r.r#type().is_mem_ref()
                     };
 
                     if is_mem_ref {
-                        let r = env.value0(index);
+                        let r = env.value0(&index);
                         let op = memref::load(r, &[], location);
                         index = env.push(op);
                     }
 
-                    let rs = env.values(index);
+                    let rs = env.values(&index);
                     let ret_op = func::r#return(&rs, location);
 
                     env.push(ret_op);
@@ -1095,7 +1142,7 @@ impl<'c> Lower<'c> {
                         let else_region = Region::new();
                         else_region.append_block(false_block);
                         let if_op = scf::r#if(
-                            env.value0(index_conditions),
+                            env.value0(&index_conditions),
                             &[],
                             then_region,
                             else_region,
@@ -1109,7 +1156,7 @@ impl<'c> Lower<'c> {
                         then_region.append_block(true_block);
                         let else_region = Region::new();
                         let if_op = scf::r#if(
-                            env.value0(index_conditions),
+                            env.value0(&index_conditions),
                             &[],
                             then_region,
                             else_region,
@@ -1136,35 +1183,35 @@ impl<'c> Lower<'c> {
                             _ => unimplemented!("Ident({:?})", ident),
                         };
 
-                        let is_static = match index {
-                            LayerIndex::Op(_) => data.is_static,
-                            LayerIndex::Static(_) => true,
-                            _ => false,
-                        };
+                        //let is_static = match index {
+                        //LayerIndex::Op(_) => data.is_static,
+                        //LayerIndex::Static(_) => true,
+                        //_ => false,
+                        //};
 
                         // do we enforce types here? or do we just overwrite with what ever new
                         // type
 
                         let value_index = self.lower_expr(*rhs, env);
-                        if is_static {
+                        if let Some(static_name) = data.static_name {
                             let ty = MemRefType::new(
                                 IntegerType::new(self.context, 64).into(),
                                 &[],
                                 None,
                                 None,
                             );
-                            let op1 = memref::get_global(self.context, &ident, ty, location);
+                            let op1 = memref::get_global(self.context, &static_name, ty, location);
 
                             let addr_index = env.push(op1);
 
-                            let r_value = env.value0(value_index);
-                            let r_addr = env.value0(addr_index);
+                            let r_value = env.value0(&value_index);
+                            let r_addr = env.value0(&addr_index);
 
                             let op = memref::store(r_value, r_addr, &[], location);
                             env.push(op)
                         } else {
-                            let r_value = env.value0(value_index);
-                            let r_addr = env.value0(index);
+                            let r_value = env.value0(&value_index);
+                            let r_addr = env.value0(&index);
                             let op = memref::store(r_value, r_addr, &[], location);
                             env.push(op)
                         }
@@ -1182,12 +1229,12 @@ impl<'c> Lower<'c> {
                         let memref_ty = MemRefType::new(ty.into(), &[], None, None);
                         let op = memref::alloca(self.context, memref_ty, &[], &[], None, location);
                         let ptr_index = env.push(op);
-                        env.name_index(ptr_index, &ident);
+                        env.name_index(ptr_index.clone(), &ident);
                         let rhs_index = self.lower_expr(*rhs, env);
                         let data = env.data(&rhs_index).unwrap();
-                        env.index_data(ptr_index, Data::new(data.ty.clone()));
-                        let r_value = env.value0(rhs_index);
-                        let r_addr = env.value0(ptr_index);
+                        env.index_data(&ptr_index, Data::new(data.ty.clone()));
+                        let r_value = env.value0(&rhs_index);
+                        let r_addr = env.value0(&ptr_index);
                         let op = memref::store(r_value, r_addr, &[], location);
                         env.push(op)
                     }
@@ -1202,7 +1249,7 @@ impl<'c> Lower<'c> {
                             }
                             _ => {
                                 let index = self.lower_expr(*rhs, env);
-                                env.name_index(index, &ident);
+                                env.name_index(index.clone(), &ident);
                                 index
                             }
                         }
@@ -1231,7 +1278,7 @@ impl<'c> Lower<'c> {
                                 let index = self.lower_expr(*expr, env);
                                 let msg = format!("assert at {}", location);
                                 let assert_op =
-                                    cf::assert(self.context, env.value0(index), &msg, location);
+                                    cf::assert(self.context, env.value0(&index), &msg, location);
                                 env.push(assert_op);
                                 env.last_index().unwrap()
                             }
@@ -1245,7 +1292,7 @@ impl<'c> Lower<'c> {
 
                                 // eval expr
                                 let index = self.lower_expr(*expr, env);
-                                let r = env.value0(index);
+                                let r = env.value0(&index);
                                 let ty = r.r#type();
 
                                 // Select the baked version based on parameters
@@ -1261,7 +1308,7 @@ impl<'c> Lower<'c> {
 
                                 let f = attribute::FlatSymbolRefAttribute::new(self.context, ident);
                                 let op =
-                                    func::call(self.context, f, &env.values(index), &[], location);
+                                    func::call(self.context, f, &env.values(&index), &[], location);
 
                                 env.push(op);
                                 env.last_index().unwrap()
@@ -1325,11 +1372,16 @@ pub(crate) mod tests {
                     // static variable with local scope
                     b.global("z_static", b.integer(0)),
                     // mutate global variable
-                    b.replace("z", b.subtract(b.ident("z"), b.integer(1))),
+                    //b.replace("z", b.subtract(b.ident("z"), b.integer(1))),
                     // mutate scoped variable
                     b.replace("x2", b.subtract(b.ident("x2"), b.integer(1))),
                     // assign local
-                    b.assign("y", b.subtract(b.ident("x"), b.ident("z_static"))),
+                    //b.deref_offset(b.ident("z_static"), 0),
+                    //b.ident("z_static"),
+                    b.assign(
+                        "y",
+                        b.subtract(b.ident("x"), b.deref_offset(b.ident("z_static"), 0)),
+                    ),
                 ]),
             ),
             b.ret(Some(b.ident("x2"))),

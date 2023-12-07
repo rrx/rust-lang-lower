@@ -110,6 +110,10 @@ impl<E: Extra> NodeBuilder<E> {
         self.node(Ast::Identifier(name.to_string()))
     }
 
+    pub fn deref_offset(&self, value: AstNode<E>, offset: usize) -> AstNode<E> {
+        self.node(Ast::Deref(value.into(), DerefTarget::Offset(offset)))
+    }
+
     pub fn global(&self, name: &str, value: AstNode<E>) -> AstNode<E> {
         self.node(Ast::Global(name.to_string(), value.into()))
     }

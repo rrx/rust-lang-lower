@@ -95,6 +95,12 @@ impl Builtin {
 }
 
 #[derive(Debug)]
+pub enum DerefTarget {
+    Offset(usize),
+    Field(String),
+}
+
+#[derive(Debug)]
 pub enum Ast<E> {
     BinaryOp(BinaryOperation, Box<AstNode<E>>, Box<AstNode<E>>),
     UnaryOp(UnaryOperation, Box<AstNode<E>>),
@@ -112,6 +118,7 @@ pub enum Ast<E> {
     Test(Box<AstNode<E>>, Box<AstNode<E>>),
     While(Box<AstNode<E>>, Box<AstNode<E>>),
     Builtin(Builtin, Vec<Argument<E>>),
+    Deref(Box<AstNode<E>>, DerefTarget),
 }
 
 impl<E: Extra> Ast<E> {
