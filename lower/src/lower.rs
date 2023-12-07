@@ -705,41 +705,12 @@ impl<'c, E: Extra> Lower<'c, E> {
 
             Ast::BinaryOp(op, a, b) => {
                 log::debug!("binop: {:?}, {:?}, {:?}", op, a, b);
-                let mut index_lhs = self.lower_expr(*a, env);
-                let mut index_rhs = self.lower_expr(*b, env);
+                let index_lhs = self.lower_expr(*a, env);
+                let index_rhs = self.lower_expr(*b, env);
 
-                let mut ty_lhs = env.data(&index_lhs).expect("LHS data missing").ty.clone();
-                let mut ty_rhs = env.data(&index_rhs).expect("RHS data missing").ty.clone();
+                let ty_lhs = env.data(&index_lhs).expect("LHS data missing").ty.clone();
+                let ty_rhs = env.data(&index_rhs).expect("RHS data missing").ty.clone();
                 log::debug!("ty: {:?}, {:?}", ty_lhs, ty_rhs);
-
-                /*
-                log::debug!("inx: {:?}, {:?}", index_lhs, index_rhs);
-                {
-                    if let AstType::Ptr(ty) = ty_lhs {
-                        ty_lhs = *ty;
-                    }
-
-                    if let AstType::Ptr(ty) = ty_rhs {
-                        ty_rhs = *ty;
-                    }
-
-                    let r_lhs = env.value0(&index_lhs);
-                    if r_lhs.r#type().is_mem_ref() {
-                        // load
-                        let op = memref::load(r_lhs, &[], location);
-                        index_lhs = env.push(op);
-                        env.index_data(&index_lhs, Data::new(ty_lhs.clone()));
-                    }
-
-                    let r_rhs = env.value0(&index_rhs);
-                    if r_rhs.r#type().is_mem_ref() {
-                        // load
-                        let op = memref::load(r_rhs, &[], location);
-                        index_rhs = env.push(op);
-                        env.index_data(&index_rhs, Data::new(ty_rhs.clone()));
-                    }
-                }
-                */
 
                 let ast_ty = ty_lhs.clone();
                 assert_eq!(ty_lhs, ty_rhs);
@@ -857,8 +828,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                 log::debug!("ptr_ty: {:?}", &ty);
 
                 if let AstType::Ptr(ast_ty) = &data.ty {
-                    let deref_data = Data::new(*ast_ty.clone()); //data.ty.clone());
-                                                                 //if let Some(static_name) = &data.static_name {
+                    let deref_data = Data::new(*ast_ty.clone());
                     let ty = self.from_type(ast_ty);
                     log::debug!("ty: {:?}", &ty);
                     let r = env.value0(&index);
@@ -866,10 +836,6 @@ impl<'c, E: Extra> Lower<'c, E> {
                     let index = env.push(op);
                     env.index_data(&index, deref_data);
                     index
-                    //} else {
-
-                    //unimplemented!()
-                    //}
                 } else {
                     unreachable!("Trying to dereference a non-pointer")
                 }

@@ -368,45 +368,9 @@ impl Parser {
                             node: ast,
                             extra: extra.clone(),
                         })
-
-                        /*
-                        if let Some(b) = ast::Builtin::from_name(&ident.node.ident) {
-                            assert_eq!(args.len(), b.arity());
-                            Ast::Builtin(b, args)
-                        } else {
-                            Ast::Call(Box::new(f), args)
-                        }
-                        if let Some(data) = env.resolve(&ident.node.ident) {
-
-                            let name = ident.node.ident;
-                            let ast = AstNode {
-                                node: Ast::Identifier(name),
-                                extra: extra.clone(),
-                            };
-                            ast
-                        } else {
-                            unreachable!("Not found");
-                        }
-                        */
                     }
                     _ => unimplemented!("{:?}", expr.node),
                 }
-
-                /*
-                //let f = self.from_expr(*expr, env)?;
-                let ast = match &f.node {
-                    Ast::Identifier(name) => {
-                        if let Some(b) = ast::Builtin::from_name(name) {
-                            assert_eq!(args.len(), b.arity());
-                            Ast::Builtin(b, args)
-                        } else {
-                            Ast::Call(Box::new(f), args)
-                        }
-                    }
-                    _ => Ast::Call(Box::new(f), args),
-                };
-                Ok(AstNode { node: ast, extra })
-                */
             }
 
             ExprP::Identifier(ident) => {
@@ -416,6 +380,8 @@ impl Parser {
                         node: Ast::Identifier(name),
                         extra: extra.clone(),
                     };
+
+                    // Global identifiers are dereferenced when accessed
                     if let DataType::Global = data.ty {
                         Ok(AstNode {
                             node: Ast::Deref(ast.into(), DerefTarget::Offset(0)),
