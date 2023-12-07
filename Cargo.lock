@@ -1331,10 +1331,13 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "codespan-reporting",
+ "criterion",
+ "env_logger",
  "log",
  "lower",
  "melior",
  "starlark_syntax",
+ "test-log",
  "thiserror",
 ]
 

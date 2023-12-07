@@ -712,6 +712,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                 let mut ty_rhs = env.data(&index_rhs).expect("RHS data missing").ty.clone();
                 log::debug!("ty: {:?}, {:?}", ty_lhs, ty_rhs);
 
+                /*
                 log::debug!("inx: {:?}, {:?}", index_lhs, index_rhs);
                 {
                     if let AstType::Ptr(ty) = ty_lhs {
@@ -738,6 +739,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                         env.index_data(&index_rhs, Data::new(ty_rhs.clone()));
                     }
                 }
+                */
 
                 let ast_ty = ty_lhs.clone();
                 assert_eq!(ty_lhs, ty_rhs);
@@ -745,14 +747,10 @@ impl<'c, E: Extra> Lower<'c, E> {
                 // types must be the same for binary operation, no implicit casting yet
                 let a = env.value0(&index_lhs);
                 let b = env.value0(&index_rhs);
+                let ty = a.r#type();
                 log::debug!("bin: {:?}, {:?}", a, b);
                 log::debug!("ty: {:?}, {:?}", a.r#type(), b.r#type());
                 assert!(a.r#type() == b.r#type());
-
-                let a = env.value0(&index_lhs);
-                let ty = a.r#type();
-                let a = env.value0(&index_lhs);
-                let b = env.value0(&index_rhs);
 
                 let binop = match op {
                     BinaryOperation::Divide => {
@@ -849,29 +847,29 @@ impl<'c, E: Extra> Lower<'c, E> {
                 // we are expecting a memref here
                 log::debug!("deref: {:?}: {:?}", &expr, target);
                 let index = self.lower_expr(*expr, env);
-                env.dump();
+                //env.dump();
 
                 let data = env.data(&index).unwrap();
                 log::debug!("data: {:?}", &data);
-                let deref_data = Data::new(data.ty.clone());
 
                 // ensure proper type
                 let ty = self.from_type(&data.ty);
                 log::debug!("ptr_ty: {:?}", &ty);
 
                 if let AstType::Ptr(ast_ty) = &data.ty {
-                    if let Some(static_name) = &data.static_name {
-                        let ty = self.from_type(ast_ty);
-                        log::debug!("ty: {:?}", &ty);
-                        //assert!(ty.is_mem_ref());
-                        let r = env.value0(&index);
-                        let op = memref::load(r, &[], location);
-                        let index = env.push(op);
-                        env.index_data(&index, deref_data);
-                        index
-                    } else {
-                        unimplemented!()
-                    }
+                    let deref_data = Data::new(*ast_ty.clone()); //data.ty.clone());
+                                                                 //if let Some(static_name) = &data.static_name {
+                    let ty = self.from_type(ast_ty);
+                    log::debug!("ty: {:?}", &ty);
+                    let r = env.value0(&index);
+                    let op = memref::load(r, &[], location);
+                    let index = env.push(op);
+                    env.index_data(&index, deref_data);
+                    index
+                    //} else {
+
+                    //unimplemented!()
+                    //}
                 } else {
                     unreachable!("Trying to dereference a non-pointer")
                 }
@@ -939,7 +937,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                         )
                     }
                     _ => {
-                        unimplemented!("not implemented: {:?}", expr.node);
+                        unimplemented!("{:?}", expr.node);
                     }
                 };
 
@@ -1217,7 +1215,8 @@ impl<'c, E: Extra> Lower<'c, E> {
                         env.name_index(ptr_index.clone(), &ident);
                         let rhs_index = self.lower_expr(*rhs, env);
                         let data = env.data(&rhs_index).unwrap();
-                        env.index_data(&ptr_index, Data::new(data.ty.clone()));
+                        let data = Data::new(AstType::Ptr(data.ty.clone().into()));
+                        env.index_data(&ptr_index, data); //Data::new(data.ty.clone()));
                         let r_value = env.value0(&rhs_index);
                         let r_addr = env.value0(&ptr_index);
                         let op = memref::store(r_value, r_addr, &[], location);
@@ -1352,15 +1351,21 @@ pub(crate) mod tests {
             // allocate mutable var
             b.alloca("x2", b.integer(10)),
             b.while_loop(
-                b.ne(b.ident("x2"), b.integer(0)),
+                b.ne(b.deref_offset(b.ident("x2"), 0), b.integer(0)),
                 b.seq(vec![
                     // static variable with local scope
                     b.global("z_static", b.integer(10)),
                     b.mutate(b.ident("z_static"), b.integer(10)),
                     // mutate global variable
-                    b.replace("z", b.subtract(b.ident("z"), b.integer(1))),
+                    b.replace(
+                        "z",
+                        b.subtract(b.deref_offset(b.ident("z"), 0), b.integer(1)),
+                    ),
                     // mutate scoped variable
-                    b.replace("x2", b.subtract(b.ident("x2"), b.integer(1))),
+                    b.replace(
+                        "x2",
+                        b.subtract(b.deref_offset(b.ident("x2"), 0), b.integer(1)),
+                    ),
                     b.replace(
                         "z_static",
                         b.subtract(b.deref_offset(b.ident("z_static"), 0), b.integer(1)),

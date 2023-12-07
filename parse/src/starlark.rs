@@ -12,7 +12,7 @@ use codespan_reporting::term;
 use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
 
 use lower::ast;
-use lower::ast::{AssignTarget, Ast, AstNode, AstType, CodeLocation, Extra, Literal};
+use lower::ast::{AssignTarget, Ast, AstNode, AstType, CodeLocation, DerefTarget, Extra, Literal};
 use std::collections::HashMap;
 
 #[derive(Error, Debug)]
@@ -21,9 +21,32 @@ pub enum ParseError {
     Invalid,
 }
 
+#[derive(Debug, Clone)]
+pub enum DataType {
+    Global,
+    Local,
+}
+
+#[derive(Debug, Clone)]
+pub struct Data {
+    ty: DataType,
+}
+impl Data {
+    pub fn new_global() -> Self {
+        Data {
+            ty: DataType::Global,
+        }
+    }
+    pub fn new_local() -> Self {
+        Data {
+            ty: DataType::Local,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Layer {
-    names: HashMap<String, usize>,
+    names: HashMap<String, Data>,
 }
 impl Default for Layer {
     fn default() -> Self {
@@ -72,14 +95,19 @@ impl<'a> Environment<'a> {
         assert_eq!(self.in_func, true);
         self.in_func = false;
     }
-    pub fn define(&mut self, name: &str, v: usize) {
+    pub fn define(&mut self, name: &str) {
+        let data = if self.in_func {
+            Data::new_local()
+        } else {
+            Data::new_global()
+        };
         self.layers
             .last_mut()
             .unwrap()
             .names
-            .insert(name.to_string(), v);
+            .insert(name.to_string(), data);
     }
-    pub fn resolve(&self, name: &str) -> Option<usize> {
+    pub fn resolve(&self, name: &str) -> Option<Data> {
         for layer in self.layers.iter().rev() {
             return layer.names.get(name).cloned();
         }
@@ -236,7 +264,7 @@ impl Parser {
                     params,
                 };
                 let ast = Ast::Definition(d);
-                env.define(&name, 0);
+                env.define(&name);
                 Ok(AstNode { node: ast, extra })
             }
 
@@ -273,7 +301,7 @@ impl Parser {
                 match assign.lhs.node {
                     AssignTargetP::Identifier(ident) => {
                         let name = ident.node.ident;
-                        env.define(&name, 0);
+                        env.define(&name);
                         if env.in_func {
                             let target = AssignTarget::Identifier(name);
                             Ok(AstNode {
@@ -320,7 +348,52 @@ impl Parser {
                 for arg in expr_args {
                     args.push(self.from_argument(arg, env)?);
                 }
-                let f = self.from_expr(*expr, env)?;
+
+                match expr.node {
+                    ExprP::Identifier(ident) => {
+                        let ast = if let Some(_data) = env.resolve(&ident.node.ident) {
+                            let ast = AstNode {
+                                node: Ast::Identifier(ident.node.ident),
+                                extra: extra.clone(),
+                            };
+                            Ast::Call(ast.into(), args)
+                        } else if let Some(b) = ast::Builtin::from_name(&ident.node.ident) {
+                            assert_eq!(args.len(), b.arity());
+                            Ast::Builtin(b, args)
+                        } else {
+                            unreachable!("Not found");
+                        };
+
+                        Ok(AstNode {
+                            node: ast,
+                            extra: extra.clone(),
+                        })
+
+                        /*
+                        if let Some(b) = ast::Builtin::from_name(&ident.node.ident) {
+                            assert_eq!(args.len(), b.arity());
+                            Ast::Builtin(b, args)
+                        } else {
+                            Ast::Call(Box::new(f), args)
+                        }
+                        if let Some(data) = env.resolve(&ident.node.ident) {
+
+                            let name = ident.node.ident;
+                            let ast = AstNode {
+                                node: Ast::Identifier(name),
+                                extra: extra.clone(),
+                            };
+                            ast
+                        } else {
+                            unreachable!("Not found");
+                        }
+                        */
+                    }
+                    _ => unimplemented!("{:?}", expr.node),
+                }
+
+                /*
+                //let f = self.from_expr(*expr, env)?;
                 let ast = match &f.node {
                     Ast::Identifier(name) => {
                         if let Some(b) = ast::Builtin::from_name(name) {
@@ -333,15 +406,24 @@ impl Parser {
                     _ => Ast::Call(Box::new(f), args),
                 };
                 Ok(AstNode { node: ast, extra })
+                */
             }
 
             ExprP::Identifier(ident) => {
-                if let Some(_index) = env.resolve(&ident.node.ident) {
+                if let Some(data) = env.resolve(&ident.node.ident) {
                     let name = ident.node.ident;
-                    Ok(AstNode {
+                    let ast = AstNode {
                         node: Ast::Identifier(name),
-                        extra,
-                    })
+                        extra: extra.clone(),
+                    };
+                    if let DataType::Global = data.ty {
+                        Ok(AstNode {
+                            node: Ast::Deref(ast.into(), DerefTarget::Offset(0)),
+                            extra,
+                        })
+                    } else {
+                        Ok(ast)
+                    }
                 } else {
                     let r = item.span.begin().get() as usize..item.span.end().get() as usize;
 
@@ -394,8 +476,9 @@ impl Parser {
 pub(crate) mod tests {
     use super::*;
     use codespan_reporting::files::SimpleFiles;
+    use test_log::test;
 
-    fn run_test(filename: &str, expected: i64) {
+    fn run_test(filename: &str, expected: i32) {
         let context = melior::Context::new();
         let mut files = SimpleFiles::new();
 
@@ -409,7 +492,7 @@ pub(crate) mod tests {
         let mut env = lower::lower::Environment::default();
 
         // run
-        assert_eq!(0, lower.run_ast(ast, &mut env));
+        assert_eq!(expected, lower.run_ast(ast, &mut env));
     }
 
     #[test]

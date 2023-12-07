@@ -149,7 +149,7 @@ pub struct CodeLocation {
     pub col: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SimpleExtra {
     span: Span,
 }
@@ -182,7 +182,7 @@ impl Extra for SimpleExtra {
     }
 }
 
-pub trait Extra: Debug {
+pub trait Extra: Debug + Clone {
     fn new(file_id: usize, begin: CodeLocation, end: CodeLocation) -> Self;
     fn location<'c>(
         &self,
@@ -191,7 +191,7 @@ pub trait Extra: Debug {
     ) -> ir::Location<'c>;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Span {
     pub file_id: usize,
     pub begin: CodeLocation,
