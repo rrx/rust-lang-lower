@@ -745,10 +745,9 @@ impl<'c, E: Extra> Lower<'c, E> {
                 // types must be the same for binary operation, no implicit casting yet
                 let a = env.value0(&index_lhs);
                 let b = env.value0(&index_rhs);
-                //env.dump();
                 log::debug!("bin: {:?}, {:?}", a, b);
                 log::debug!("ty: {:?}, {:?}", a.r#type(), b.r#type());
-                //assert!(a.r#type() == b.r#type());
+                assert!(a.r#type() == b.r#type());
 
                 let a = env.value0(&index_lhs);
                 let ty = a.r#type();
@@ -893,7 +892,6 @@ impl<'c, E: Extra> Lower<'c, E> {
                         index
                     }
                     _ => {
-                        //env.dump();
                         log::debug!("x: {:?}", env.last_mut().names);
 
                         let (index, data) = match env.index_from_name(ident.as_str()) {
@@ -905,35 +903,21 @@ impl<'c, E: Extra> Lower<'c, E> {
                         };
 
                         log::debug!("ident: {} - {:?}", ident, data);
-                        //let is_static = match index {
-                        //LayerIndex::Op(_) => data.is_static,
-                        //LayerIndex::Static(_) => true,
-                        //_ => false,
-                        //};
 
-                        if let Some(static_name) = data.static_name {
-                            //let source_data = env.data(&index).unwrap().clone();
-                            // create a new type, drop other information (static)
-                            let data = Data::new_static(data.ty, &static_name);
-                            log::debug!("data2: {}, {:?}", ident, data);
-
+                        if let Some(static_name) = &data.static_name {
                             // we should only be dealing with pointers in if we are static
                             if let AstType::Ptr(ty) = &data.ty {
                                 let ty = self.from_type(ty);
 
                                 let ty = MemRefType::new(ty, &[], None, None);
-                                let op1 =
+                                let op =
                                     memref::get_global(self.context, &static_name, ty, location);
 
-                                //let r = op1.result(0).unwrap().into();
-                                //let op2 = memref::load(r, &[], location);
-
-                                let index = env.push(op1);
-                                //let index = env.push(op2);
+                                let index = env.push(op);
                                 env.index_data(&index, data);
                                 index
                             } else {
-                                unreachable!();
+                                unreachable!("Identifier of static variable must be pointer");
                             }
                         } else {
                             env.push_index(index.clone());
@@ -1207,41 +1191,7 @@ impl<'c, E: Extra> Lower<'c, E> {
             }
 
             Ast::Mutate(lhs, rhs) => match lhs.node {
-                Ast::Identifier(ident) => {
-                    self.emit_mutate(&ident, *rhs, env)
-                    /*
-                    let (index, data) = match env.index_from_name(ident.as_str()) {
-                        Some(index) => {
-                            let data = env.data(&index).unwrap().clone();
-                            (index, data)
-                        }
-                        _ => unreachable!("Name not found: {}", ident),
-                    };
-                    let value_index = self.lower_expr(*rhs, env);
-                    if let Some(static_name) = data.static_name {
-                        let ty = MemRefType::new(
-                            IntegerType::new(self.context, 64).into(),
-                            &[],
-                            None,
-                            None,
-                        );
-                        let op1 = memref::get_global(self.context, &static_name, ty, location);
-
-                        let addr_index = env.push(op1);
-
-                        let r_value = env.value0(&value_index);
-                        let r_addr = env.value0(&addr_index);
-
-                        let op = memref::store(r_value, r_addr, &[], location);
-                        env.push(op)
-                    } else {
-                        let r_value = env.value0(&value_index);
-                        let r_addr = env.value0(&index);
-                        let op = memref::store(r_value, r_addr, &[], location);
-                        env.push(op)
-                    }
-                    */
-                }
+                Ast::Identifier(ident) => self.emit_mutate(&ident, *rhs, env),
                 _ => unimplemented!("{:?}", &lhs.node),
             },
 
@@ -1250,46 +1200,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                 // This requires that the variable has a place either on the stack or in memory
                 // global vars have a place, so start with those
                 match target {
-                    AssignTarget::Identifier(ident) => {
-                        self.emit_mutate(&ident, *rhs, env)
-                        /*
-                        log::debug!("replace ident {:?}", ident);
-                        let (index, data) = match env.index_from_name(ident.as_str()) {
-                            Some(index) => {
-                                let data = env.data(&index).unwrap().clone();
-                                (index, data)
-                            }
-                            _ => unimplemented!("Ident({:?})", ident),
-                        };
-
-                        // do we enforce types here? or do we just overwrite with what ever new
-                        // type
-
-                        let value_index = self.lower_expr(*rhs, env);
-                        if let Some(static_name) = data.static_name {
-                            let ty = MemRefType::new(
-                                IntegerType::new(self.context, 64).into(),
-                                &[],
-                                None,
-                                None,
-                            );
-                            let op1 = memref::get_global(self.context, &static_name, ty, location);
-
-                            let addr_index = env.push(op1);
-
-                            let r_value = env.value0(&value_index);
-                            let r_addr = env.value0(&addr_index);
-
-                            let op = memref::store(r_value, r_addr, &[], location);
-                            env.push(op)
-                        } else {
-                            let r_value = env.value0(&value_index);
-                            let r_addr = env.value0(&index);
-                            let op = memref::store(r_value, r_addr, &[], location);
-                            env.push(op)
-                        }
-                        */
-                    }
+                    AssignTarget::Identifier(ident) => self.emit_mutate(&ident, *rhs, env),
                     _ => unimplemented!("{:?}", target),
                 }
             }
