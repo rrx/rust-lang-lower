@@ -479,8 +479,6 @@ impl<'c, E: Extra> Lower<'c, E> {
         let r = op1.result(0).unwrap().into();
         let options = llvm::LoadStoreOptions::new();
         let op2 = llvm::load(self.context, r, ty, location, options);
-        // maybe cast?
-        //let op3 = arith::index_cast(r, Type::index(self.context), location);
         env.push(op1);
         env.push(op2)
     }
@@ -641,37 +639,8 @@ impl<'c, E: Extra> Lower<'c, E> {
                     env.name_index(index.clone(), &ident);
 
                     // push name into current context
-                    //let ref_index = env.push_reference(&ident, index);
-                    //let index = env.fresh_argument();
                     env.name_index(index.clone(), &ident);
-                    //env.index_data(index, ptr_data);
-                    //env.layer.index.insert(index, offset);
-                    //ref_index
                     index
-
-                    // emit load of static variable, and put the name in scope
-                    // we don't actually need to do this unless the value is needed.
-                    // TODO: move this to where the global variable is referenced.
-                    // We can also check to see if the variable has been loaded already
-                    // and we can skip a second load as long as the global var hasn't been
-                    // modified.
-                    /*
-                    let local_data = Data::new(ast_ty.clone());
-                    let ty = self.from_type(&local_data.ty);
-
-                    let ty = MemRefType::new(ty, &[], None, None);
-                    // load using global name
-                    let op1 = memref::get_global(self.context, &global_name, ty, location);
-
-                    let r = op1.result(0).unwrap().into();
-                    let op2 = memref::load(r, &[], location);
-
-                    env.push(op1);
-                    // name using locally scoped name
-                    let index = env.push_with_name(op2, &ident);
-                    env.index_data(index, local_data);
-                    index
-                    */
                 }
             }
 
