@@ -1208,6 +1208,8 @@ impl<'c, E: Extra> Lower<'c, E> {
 
             Ast::Mutate(lhs, rhs) => match lhs.node {
                 Ast::Identifier(ident) => {
+                    self.emit_mutate(&ident, *rhs, env)
+                    /*
                     let (index, data) = match env.index_from_name(ident.as_str()) {
                         Some(index) => {
                             let data = env.data(&index).unwrap().clone();
@@ -1238,6 +1240,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                         let op = memref::store(r_value, r_addr, &[], location);
                         env.push(op)
                     }
+                    */
                 }
                 _ => unimplemented!("{:?}", &lhs.node),
             },
@@ -1248,6 +1251,8 @@ impl<'c, E: Extra> Lower<'c, E> {
                 // global vars have a place, so start with those
                 match target {
                     AssignTarget::Identifier(ident) => {
+                        self.emit_mutate(&ident, *rhs, env)
+                        /*
                         log::debug!("replace ident {:?}", ident);
                         let (index, data) = match env.index_from_name(ident.as_str()) {
                             Some(index) => {
@@ -1283,6 +1288,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                             let op = memref::store(r_value, r_addr, &[], location);
                             env.push(op)
                         }
+                        */
                     }
                     _ => unimplemented!("{:?}", target),
                 }
