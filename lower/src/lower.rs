@@ -114,7 +114,7 @@ impl<'c> Lower<'c> {
 
     pub fn from_type(&self, ty: &AstType) -> Type<'c> {
         match ty {
-            AstType::Ptr => IntegerType::unsigned(self.context, 64).into(),
+            AstType::Ptr(v) => Type::index(self.context),
             AstType::Tuple(args) => {
                 let types = args.iter().map(|a| self.from_type(a)).collect::<Vec<_>>();
                 melior::ir::r#type::TupleType::new(self.context, &types).into()
@@ -570,6 +570,14 @@ impl<'c> Lower<'c> {
                         (ast_ty, op)
                     }
 
+                    Ast::Literal(Literal::Index(x)) => {
+                        let ast_ty = AstType::Int;
+                        let ty = self.from_type(&ast_ty);
+                        let value = IntegerAttribute::new(x as i64, ty).into();
+                        let op = self.build_static(&global_name, ty, value, false, location);
+                        (ast_ty, op)
+                    }
+
                     Ast::Literal(Literal::Float(x)) => {
                         let ast_ty = AstType::Float;
                         let ty = self.from_type(&ast_ty);
@@ -581,18 +589,18 @@ impl<'c> Lower<'c> {
                     _ => unreachable!("{:?}", expr.node),
                 };
 
+                let ptr_data = Data::new_static(AstType::Ptr(ast_ty.clone().into()));
                 if env.current_layer_type() == LayerType::Static {
                     // STATIC/GLOBAL VARIABLE
                     let index = env.push_with_name(op, &global_name);
-                    env.index_data(index, Data::new_static(ast_ty));
+                    env.index_data(index, ptr_data);
                     index
                 } else {
                     // STATIC VARIABLE IN FUNCTION CONTEXT
 
                     // static operation
                     let index = env.push_static(op, &global_name);
-                    let data = Data::new_static(ast_ty.clone());
-                    env.index_data(index, data);
+                    env.index_data(index, ptr_data);
 
                     // emit load of static variable, and put the name in scope
                     // we don't actually need to do this unless the value is needed.
@@ -600,8 +608,8 @@ impl<'c> Lower<'c> {
                     // We can also check to see if the variable has been loaded already
                     // and we can skip a second load as long as the global var hasn't been
                     // modified.
-                    let data = Data::new(ast_ty);
-                    let ty = self.from_type(&data.ty);
+                    let local_data = Data::new(ast_ty.clone());
+                    let ty = self.from_type(&local_data.ty);
 
                     let ty = MemRefType::new(ty, &[], None, None);
                     // load using global name
@@ -613,7 +621,7 @@ impl<'c> Lower<'c> {
                     env.push(op1);
                     // name using locally scoped name
                     let index = env.push_with_name(op2, &ident);
-                    env.index_data(index, data);
+                    env.index_data(index, local_data);
                     index
                 }
             }
@@ -651,20 +659,26 @@ impl<'c> Lower<'c> {
                 let mut index_lhs = self.lower_expr(*a, env);
                 let mut index_rhs = self.lower_expr(*b, env);
 
-                let data_lhs = env.data(&index_lhs).expect("LHS data missing");
-                let data_rhs = env.data(&index_rhs).expect("RHS data missing");
-                log::debug!("ty: {:?}, {:?}", data_lhs.ty, data_lhs.ty);
-                let ast_ty = data_lhs.ty.clone();
-
-                assert_eq!(data_lhs.ty, data_rhs.ty);
+                let mut ty_lhs = env.data(&index_lhs).expect("LHS data missing").ty.clone();
+                let mut ty_rhs = env.data(&index_rhs).expect("RHS data missing").ty.clone();
+                log::debug!("ty: {:?}, {:?}", ty_lhs, ty_rhs);
 
                 log::debug!("inx: {:?}, {:?}", index_lhs, index_rhs);
                 {
+                    if let AstType::Ptr(ty) = ty_lhs {
+                        ty_lhs = *ty;
+                    }
+
+                    if let AstType::Ptr(ty) = ty_rhs {
+                        ty_rhs = *ty;
+                    }
+
                     let r_lhs = env.value0(index_lhs);
                     if r_lhs.r#type().is_mem_ref() {
                         // load
                         let op = memref::load(r_lhs, &[], location);
                         index_lhs = env.push(op);
+                        env.index_data(index_lhs, Data::new(ty_lhs.clone()));
                     }
 
                     let r_rhs = env.value0(index_rhs);
@@ -672,14 +686,20 @@ impl<'c> Lower<'c> {
                         // load
                         let op = memref::load(r_rhs, &[], location);
                         index_rhs = env.push(op);
+                        env.index_data(index_rhs, Data::new(ty_rhs.clone()));
                     }
                 }
+
+                let ast_ty = ty_lhs.clone();
+                assert_eq!(ty_lhs, ty_rhs);
 
                 // types must be the same for binary operation, no implicit casting yet
                 let a = env.value0(index_lhs);
                 let b = env.value0(index_rhs);
+                //env.dump();
                 log::debug!("bin: {:?}, {:?}", a, b);
-                assert!(a.r#type() == b.r#type());
+                log::debug!("ty: {:?}, {:?}", a.r#type(), b.r#type());
+                //assert!(a.r#type() == b.r#type());
 
                 let a = env.value0(index_lhs);
                 let ty = a.r#type();
@@ -801,6 +821,7 @@ impl<'c> Lower<'c> {
                             _ => unreachable!("Ident not found: {:?}", ident),
                         };
 
+                        println!("data: {} - {:?}", ident, data);
                         let is_static = match index {
                             LayerIndex::Op(_) => data.is_static,
                             LayerIndex::Static(_) => true,
@@ -812,18 +833,23 @@ impl<'c> Lower<'c> {
                             // create a new type, drop other information (static)
                             let data = Data::new(source_data.ty);
 
-                            let ty = self.from_type(&data.ty);
+                            // we should only be dealing with pointers in if we are static
+                            if let AstType::Ptr(ty) = &data.ty {
+                                let ty = self.from_type(ty);
 
-                            let ty = MemRefType::new(ty, &[], None, None);
-                            let op1 = memref::get_global(self.context, &ident, ty, location);
+                                let ty = MemRefType::new(ty, &[], None, None);
+                                let op1 = memref::get_global(self.context, &ident, ty, location);
 
-                            let r = op1.result(0).unwrap().into();
-                            let op2 = memref::load(r, &[], location);
+                                let r = op1.result(0).unwrap().into();
+                                let op2 = memref::load(r, &[], location);
 
-                            env.push(op1);
-                            let index = env.push(op2);
-                            env.index_data(index, data);
-                            index
+                                env.push(op1);
+                                let index = env.push(op2);
+                                env.index_data(index, data);
+                                index
+                            } else {
+                                unreachable!();
+                            }
                         } else {
                             env.push_index(index);
                             index
