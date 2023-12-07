@@ -9,12 +9,21 @@ use melior::{
     utility::{register_all_dialects, register_all_llvm_translations},
 };
 
+impl<'c, E: ast::Extra> lower::Lower<'c, E> {
+    pub fn run_ast(
+        &mut self,
+        ast: ast::AstNode<E>,
+        env: &mut scope::ScopeStack<'c, lower::Data>,
+    ) -> i32 {
+        run_ast(ast, self, env)
+    }
+}
+
 pub fn run_ast<'c, E: ast::Extra>(
-    expected: i64,
     ast: ast::AstNode<E>,
-    lower: &mut lower::Lower<'c>,
+    lower: &mut lower::Lower<'c, E>,
     env: &mut scope::ScopeStack<'c, lower::Data>,
-) {
+) -> i32 {
     //let context = Context::new();
     //let c = &context;
     lower.context.set_allow_unregistered_dialects(true);
@@ -83,11 +92,11 @@ pub fn run_ast<'c, E: ast::Extra>(
             .unwrap()
     );
     let engine = ExecutionEngine::new(&module, 0, &[], true);
-    let mut result: i64 = -1;
+    let mut result: i32 = -1;
     unsafe {
         engine
-            .invoke_packed("main", &mut [&mut result as *mut i64 as *mut ()])
+            .invoke_packed("main", &mut [&mut result as *mut i32 as *mut ()])
             .unwrap();
-        assert_eq!(result, expected);
+        result
     }
 }

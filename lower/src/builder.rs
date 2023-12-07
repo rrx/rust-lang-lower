@@ -159,6 +159,10 @@ impl<E: Extra> NodeBuilder<E> {
         ))
     }
 
+    pub fn mutate(&self, lhs: AstNode<E>, rhs: AstNode<E>) -> AstNode<E> {
+        self.node(Ast::Mutate(lhs.into(), rhs.into()))
+    }
+
     pub fn assign(&self, name: &str, rhs: AstNode<E>) -> AstNode<E> {
         self.node(Ast::Assign(
             AssignTarget::Identifier(name.to_string()),

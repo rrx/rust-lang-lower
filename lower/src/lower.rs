@@ -78,17 +78,22 @@ pub type Environment<'c> = ScopeStack<'c, Data>;
 
 pub type FileDB = SimpleFiles<String, String>;
 
-pub struct Lower<'c> {
+pub struct Lower<'c, E> {
     pub(crate) context: &'c Context,
     files: &'c FileDB,
+    _e: std::marker::PhantomData<E>,
 }
 
-impl<'c> Lower<'c> {
+impl<'c, E: Extra> Lower<'c, E> {
     pub fn new(context: &'c Context, files: &'c FileDB) -> Self {
-        Self { context, files }
+        Self {
+            context,
+            files,
+            _e: std::marker::PhantomData::default(),
+        }
     }
 
-    pub fn type_from_expr<E: Extra>(&self, expr: &AstNode<E>, env: &Environment) -> AstType {
+    pub fn type_from_expr(&self, expr: &AstNode<E>, env: &Environment) -> AstType {
         match &expr.node {
             Ast::Literal(x) => match x {
                 Literal::Int(_) => AstType::Int,
@@ -168,7 +173,7 @@ impl<'c> Lower<'c> {
         )
     }
 
-    pub fn lower_static<E: Extra>(
+    pub fn lower_static(
         &self,
         expr: AstNode<E>,
         _env: &mut Environment<'c>,
@@ -182,7 +187,7 @@ impl<'c> Lower<'c> {
         }
     }
 
-    pub fn build_while<'a, E: Extra>(
+    pub fn build_while<'a>(
         &self,
         //init_args: &[Value<'c, 'a>],
         condition: AstNode<E>,
@@ -244,7 +249,7 @@ impl<'c> Lower<'c> {
         env.last_index().unwrap()
     }
 
-    pub fn build_loop<'a, E: Extra>(
+    pub fn build_loop<'a>(
         &self,
         //init_args: &[Value<'c, 'a>],
         condition: AstNode<E>,
@@ -396,7 +401,7 @@ impl<'c> Lower<'c> {
         env.last_index().unwrap()
     }
 
-    pub fn location<E: Extra>(&self, expr: &AstNode<E>) -> Location<'c> {
+    pub fn location(&self, expr: &AstNode<E>) -> Location<'c> {
         expr.extra.location(self.context, self.files)
     }
 
@@ -427,7 +432,7 @@ impl<'c> Lower<'c> {
         )
     }
 
-    pub fn lower_llvm_global_int<E: Extra>(
+    pub fn lower_llvm_global_int(
         &self,
         name: &str,
         expr: AstNode<E>,
@@ -480,7 +485,7 @@ impl<'c> Lower<'c> {
         env.push(op2)
     }
 
-    pub fn lower_llvm_store<E: Extra>(
+    pub fn lower_llvm_store(
         &self,
         ident: &str,
         ast: AstNode<E>,
@@ -509,6 +514,41 @@ impl<'c> Lower<'c> {
         ))
     }
 
+    pub fn emit_mutate(
+        &self,
+        ident: &str,
+        rhs: AstNode<E>,
+        env: &mut Environment<'c>,
+    ) -> LayerIndex {
+        //let location = Location::unknown(self.context);
+        let location = self.location(&rhs);
+        let (index, data) = match env.index_from_name(ident) {
+            Some(index) => {
+                let data = env.data(&index).unwrap().clone();
+                (index, data)
+            }
+            _ => unreachable!("Name not found: {}", ident),
+        };
+        let value_index = self.lower_expr(rhs, env);
+        if let Some(static_name) = data.static_name {
+            let ty = MemRefType::new(IntegerType::new(self.context, 64).into(), &[], None, None);
+            let op1 = memref::get_global(self.context, &static_name, ty, location);
+
+            let addr_index = env.push(op1);
+
+            let r_value = env.value0(&value_index);
+            let r_addr = env.value0(&addr_index);
+
+            let op = memref::store(r_value, r_addr, &[], location);
+            env.push(op)
+        } else {
+            let r_value = env.value0(&value_index);
+            let r_addr = env.value0(&index);
+            let op = memref::store(r_value, r_addr, &[], location);
+            env.push(op)
+        }
+    }
+
     pub fn build_block(
         &self,
         arguments: &[(AstType, Location<'c>, String)],
@@ -533,11 +573,7 @@ impl<'c> Lower<'c> {
         layer
     }
 
-    pub fn lower_expr<'a, E: Extra>(
-        &self,
-        expr: AstNode<E>,
-        env: &mut ScopeStack<'c, Data>,
-    ) -> LayerIndex {
+    pub fn lower_expr<'a>(&self, expr: AstNode<E>, env: &mut ScopeStack<'c, Data>) -> LayerIndex {
         let location = self.location(&expr);
 
         match expr.node {
@@ -1170,6 +1206,42 @@ impl<'c> Lower<'c> {
                 }
             }
 
+            Ast::Mutate(lhs, rhs) => match lhs.node {
+                Ast::Identifier(ident) => {
+                    let (index, data) = match env.index_from_name(ident.as_str()) {
+                        Some(index) => {
+                            let data = env.data(&index).unwrap().clone();
+                            (index, data)
+                        }
+                        _ => unreachable!("Name not found: {}", ident),
+                    };
+                    let value_index = self.lower_expr(*rhs, env);
+                    if let Some(static_name) = data.static_name {
+                        let ty = MemRefType::new(
+                            IntegerType::new(self.context, 64).into(),
+                            &[],
+                            None,
+                            None,
+                        );
+                        let op1 = memref::get_global(self.context, &static_name, ty, location);
+
+                        let addr_index = env.push(op1);
+
+                        let r_value = env.value0(&value_index);
+                        let r_addr = env.value0(&addr_index);
+
+                        let op = memref::store(r_value, r_addr, &[], location);
+                        env.push(op)
+                    } else {
+                        let r_value = env.value0(&value_index);
+                        let r_addr = env.value0(&index);
+                        let op = memref::store(r_value, r_addr, &[], location);
+                        env.push(op)
+                    }
+                }
+                _ => unimplemented!("{:?}", &lhs.node),
+            },
+
             Ast::Replace(target, rhs) => {
                 // mutate variable in place
                 // This requires that the variable has a place either on the stack or in memory
@@ -1184,12 +1256,6 @@ impl<'c> Lower<'c> {
                             }
                             _ => unimplemented!("Ident({:?})", ident),
                         };
-
-                        //let is_static = match index {
-                        //LayerIndex::Op(_) => data.is_static,
-                        //LayerIndex::Static(_) => true,
-                        //_ => false,
-                        //};
 
                         // do we enforce types here? or do we just overwrite with what ever new
                         // type
@@ -1332,7 +1398,7 @@ pub fn node<E: Extra>(file_id: usize, ast: Ast<E>) -> AstNode<E> {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::compile::run_ast;
+    //use crate::compile::run_ast;
     use crate::NodeBuilder;
     use test_log::test;
 
@@ -1373,6 +1439,7 @@ pub(crate) mod tests {
                 b.seq(vec![
                     // static variable with local scope
                     b.global("z_static", b.integer(10)),
+                    b.mutate(b.ident("z_static"), b.integer(10)),
                     // mutate global variable
                     b.replace("z", b.subtract(b.ident("z"), b.integer(1))),
                     // mutate scoped variable
@@ -1431,7 +1498,7 @@ pub(crate) mod tests {
         let mut env = Environment::default();
         let mut lower = Lower::new(&context, &files);
         let ast: AstNode<SimpleExtra> = gen_function_call(file_id, &mut env);
-        run_ast(0, ast, &mut lower, &mut env);
+        assert_eq!(0, lower.run_ast(ast, &mut env));
     }
 
     #[test]
@@ -1442,7 +1509,7 @@ pub(crate) mod tests {
         let mut env = Environment::default();
         let mut lower = Lower::new(&context, &files);
         let ast: AstNode<SimpleExtra> = gen_while(file_id, &mut env);
-        run_ast(0, ast, &mut lower, &mut env);
+        assert_eq!(0, lower.run_ast(ast, &mut env));
     }
 
     #[test]
@@ -1453,6 +1520,6 @@ pub(crate) mod tests {
         let mut env = Environment::default();
         let mut lower = Lower::new(&context, &files);
         let ast: AstNode<SimpleExtra> = gen_test(file_id, &mut env);
-        run_ast(0, ast, &mut lower, &mut env);
+        assert_eq!(0, lower.run_ast(ast, &mut env));
     }
 }

@@ -394,7 +394,6 @@ impl Parser {
 pub(crate) mod tests {
     use super::*;
     use codespan_reporting::files::SimpleFiles;
-    use lower::compile::run_ast;
 
     fn run_test(filename: &str, expected: i64) {
         let context = melior::Context::new();
@@ -410,7 +409,7 @@ pub(crate) mod tests {
         let mut env = lower::lower::Environment::default();
 
         // run
-        run_ast(expected, ast, &mut lower, &mut env);
+        assert_eq!(0, lower.run_ast(ast, &mut env));
     }
 
     #[test]

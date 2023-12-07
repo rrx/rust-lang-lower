@@ -464,7 +464,7 @@ impl<'c, D: std::fmt::Debug + Clone> ScopeStack<'c, D> {
 mod tests {
     use super::*;
     use crate::ast;
-    use crate::ast::Ast;
+    use crate::ast::{Ast, Extra, SimpleExtra};
     use crate::lower::Environment;
     use crate::lower::FileDB;
     use crate::lower::{node, Lower};
@@ -587,8 +587,8 @@ mod tests {
         assert!(s.index_from_name("z").is_none());
     }
 
-    fn test_int<'c>(
-        lower: &'c Lower,
+    fn test_int<'c, E: Extra>(
+        lower: &Lower<'c, E>,
         scope: &mut Environment<'c>,
         location: Location<'c>,
         v: i64,
@@ -597,8 +597,8 @@ mod tests {
         scope.push(op)
     }
 
-    fn test_int_name<'c>(
-        lower: &'c Lower,
+    fn test_int_name<'c, E: Extra>(
+        lower: &Lower<'c, E>,
         scope: &mut Environment<'c>,
         location: Location<'c>,
         v: i64,
@@ -617,7 +617,11 @@ mod tests {
         scope.push(arith::addi(scope.value0(&a), scope.value0(&b), location))
     }
 
-    fn test_fill<'c>(lower: &'c Lower, scope: &mut Environment<'c>, location: Location<'c>) {
+    fn test_fill<'c, E: Extra>(
+        lower: &Lower<'c, E>,
+        scope: &mut Environment<'c>,
+        location: Location<'c>,
+    ) {
         let x = test_int_name(lower, scope, location, 1, "x");
         let y = test_add(scope, location, x.clone(), x.clone());
 
@@ -655,7 +659,11 @@ mod tests {
         scope.push(ret);
     }
 
-    fn test_env3<'c>(lower: &'c Lower, env: &mut Environment<'c>, location: Location<'c>) {
+    fn test_env3<'c, E: Extra>(
+        lower: &Lower<'c, E>,
+        env: &mut Environment<'c>,
+        location: Location<'c>,
+    ) {
         let index_type = Type::index(lower.context);
         let types = vec![index_type];
         let ret_type = vec![index_type];
@@ -707,7 +715,7 @@ mod tests {
         let _file_id = files.add("test.py".into(), "test".into());
         let location = Location::unknown(&context);
         //let ast = crate::lower::tests::gen_test(file_id);
-        let lower = Lower::new(&context, &files);
+        let lower: Lower<SimpleExtra> = Lower::new(&context, &files);
         let mut env = ScopeStack::default();
         test_env3(&lower, &mut env, location);
         println!("layer: {:?}", env);

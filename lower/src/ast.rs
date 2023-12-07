@@ -113,6 +113,7 @@ pub enum Ast<E> {
     Global(String, Box<AstNode<E>>),
     Assign(AssignTarget, Box<AstNode<E>>),
     Replace(AssignTarget, Box<AstNode<E>>),
+    Mutate(Box<AstNode<E>>, Box<AstNode<E>>),
     Conditional(Box<AstNode<E>>, Box<AstNode<E>>, Option<Box<AstNode<E>>>),
     Return(Option<Box<AstNode<E>>>),
     Test(Box<AstNode<E>>, Box<AstNode<E>>),
