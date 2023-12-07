@@ -858,6 +858,8 @@ impl<'c> Lower<'c> {
                     }
                     _ => {
                         //env.dump();
+                        log::debug!("x: {:?}", env.last_mut().names);
+
                         let (index, data) = match env.index_from_name(ident.as_str()) {
                             Some(index) => {
                                 let data = env.data(&index).unwrap().clone();
@@ -1370,21 +1372,23 @@ pub(crate) mod tests {
                 b.ne(b.ident("x2"), b.integer(0)),
                 b.seq(vec![
                     // static variable with local scope
-                    b.global("z_static", b.integer(0)),
+                    b.global("z_static", b.integer(10)),
                     // mutate global variable
-                    //b.replace("z", b.subtract(b.ident("z"), b.integer(1))),
+                    b.replace("z", b.subtract(b.ident("z"), b.integer(1))),
                     // mutate scoped variable
                     b.replace("x2", b.subtract(b.ident("x2"), b.integer(1))),
+                    b.replace(
+                        "z_static",
+                        b.subtract(b.deref_offset(b.ident("z_static"), 0), b.integer(1)),
+                    ),
                     // assign local
-                    //b.deref_offset(b.ident("z_static"), 0),
-                    //b.ident("z_static"),
                     b.assign(
                         "y",
                         b.subtract(b.ident("x"), b.deref_offset(b.ident("z_static"), 0)),
                     ),
                 ]),
             ),
-            b.ret(Some(b.ident("x2"))),
+            b.ret(Some(b.ident("z"))),
         ])));
 
         b.seq(seq)
