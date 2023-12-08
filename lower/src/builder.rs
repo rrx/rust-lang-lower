@@ -1,4 +1,5 @@
 use crate::ast::*;
+use melior::ir;
 
 pub struct NodeBuilder<E> {
     file_ids: Vec<(usize, String)>,
@@ -34,6 +35,15 @@ impl<E: Extra> NodeBuilder<E> {
 
     pub fn current_file_id(&self) -> usize {
         self.file_ids.last().unwrap().0
+    }
+
+    pub fn get_location<'c>(&self, context: &'c melior::Context) -> ir::Location<'c> {
+        ir::Location::new(
+            context,
+            &self.file_ids.last().unwrap().1,
+            self.begin.line,
+            self.begin.col,
+        )
     }
 
     pub fn node(&self, ast: Ast<E>) -> AstNode<E> {

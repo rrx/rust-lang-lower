@@ -181,14 +181,16 @@ fn from_assign_target<P: syntax::ast::AstPayload>(
     }
 }
 
-pub struct Parser {
+pub struct Parser<E> {
     diagnostics: Vec<Diagnostic<usize>>,
+    b: lower::NodeBuilder<E>,
 }
 
-impl Parser {
+impl<E: Extra> Parser<E> {
     pub fn new() -> Self {
         Self {
             diagnostics: vec![],
+            b: lower::NodeBuilder::new(),
         }
     }
 
@@ -200,14 +202,13 @@ impl Parser {
         }
     }
 
-    pub fn parse<'a, E: Extra>(
+    pub fn parse<'a>(
         &mut self,
         path: &Path,
         content: Option<&str>,
         file_id: usize,
     ) -> Result<ast::AstNode<E>> {
-        let mut b = lower::NodeBuilder::new();
-        b.enter_file(file_id, path.to_str().unwrap());
+        self.b.enter_file(file_id, path.to_str().unwrap());
 
         let dialect = syntax::Dialect::Extended;
         let m = match content {
@@ -218,13 +219,13 @@ impl Parser {
         };
         let (codemap, stmt, _dialect, _typecheck) = m.into_parts();
         let mut env = Environment::new(&codemap, file_id);
-        let mut seq = b.prelude();
+        let mut seq = self.b.prelude();
         let ast: ast::AstNode<E> = self.from_stmt(stmt, &mut env)?;
         seq.push(ast);
-        Ok(b.seq(seq))
+        Ok(self.b.seq(seq))
     }
 
-    pub fn from_stmt<'a, E: Extra, P: syntax::ast::AstPayload>(
+    pub fn from_stmt<'a, P: syntax::ast::AstPayload>(
         &mut self,
         item: syntax::ast::AstStmtP<P>,
         env: &mut Environment<'a>,
@@ -321,7 +322,7 @@ impl Parser {
         }
     }
 
-    fn from_expr<E: Extra, P: syntax::ast::AstPayload>(
+    fn from_expr<P: syntax::ast::AstPayload>(
         &mut self,
         item: syntax::ast::AstExprP<P>,
         env: &mut Environment,
@@ -459,7 +460,7 @@ impl Parser {
         }
     }
 
-    fn from_argument<E: Extra, P: syntax::ast::AstPayload>(
+    fn from_argument<P: syntax::ast::AstPayload>(
         &mut self,
         item: syntax::ast::AstArgumentP<P>,
         env: &mut Environment,
