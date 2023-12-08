@@ -1270,6 +1270,8 @@ pub(crate) mod tests {
     use crate::NodeBuilder;
     use test_log::test;
 
+    use crate::compile::CompilerContext;
+
     pub fn gen_test<'c, E: Extra>(file_id: usize, _env: &mut Environment<'c>) -> AstNode<E> {
         let mut b: NodeBuilder<E> = NodeBuilder::new();
         b.enter_file(file_id);
@@ -1361,20 +1363,15 @@ pub(crate) mod tests {
                     ]),
                     None,
                 ),
-
                 // using args
                 b.cond(
                     b.ne(b.ident("arg0"), b.integer(0)),
                     b.seq(vec![b.replace(
                         "y",
-                        b.apply(
-                            "x1",
-                            vec![b.subtract(b.ident("arg0"), b.integer(1))],
-                        ),
+                        b.apply("x1", vec![b.subtract(b.ident("arg0"), b.integer(1))]),
                     )]),
                     None,
                 ),
-
                 b.ret(Some(b.deref_offset(b.ident("y"), 0))),
             ]),
         ));
@@ -1425,5 +1422,15 @@ pub(crate) mod tests {
         let mut lower = Lower::new(&context, &files);
         let ast: AstNode<SimpleExtra> = gen_test(file_id, &mut env);
         assert_eq!(0, lower.run_ast(ast, &mut env));
+    }
+
+    #[test]
+    fn test_compile() {
+        let mut context: CompilerContext<SimpleExtra> = CompilerContext::new();
+        let file_id = context.files.add("test.py".into(), "test".into());
+        let ast: AstNode<SimpleExtra> = gen_test(file_id, &mut context.env);
+        //let module = context.module();
+        //let mut c = context.compiler();
+        //c.module(&mut context, ast);
     }
 }

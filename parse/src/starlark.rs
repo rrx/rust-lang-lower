@@ -204,13 +204,9 @@ impl Parser {
         &mut self,
         path: &Path,
         content: Option<&str>,
-        files: &mut lower::FileDB,
+        file_id: usize,
     ) -> Result<ast::AstNode<E>> {
         let mut b = lower::NodeBuilder::new();
-        let file_id = files.add(
-            path.to_str().unwrap().to_string(),
-            std::fs::read_to_string(path)?,
-        );
         b.enter_file(file_id);
 
         let dialect = syntax::Dialect::Extended;
@@ -371,7 +367,7 @@ impl Parser {
                     }
 
                     ExprP::Dot(expr, name) => {
-                        let r = expr.span.begin().get() as usize .. expr.span.end().get() as usize;
+                        let r = expr.span.begin().get() as usize..expr.span.end().get() as usize;
                         if let ExprP::Identifier(ident) = &expr.node {
                             let ast = if let Some(_data) = env.resolve(&ident.node.ident) {
                                 let ast = AstNode {
@@ -384,20 +380,19 @@ impl Parser {
                                     assert_eq!(args.len(), b.arity());
                                     Ast::Builtin(b, args)
                                 } else {
-                                    let r = name.span.begin().get() as usize .. name.span.end().get() as usize;
+                                    let r = name.span.begin().get() as usize
+                                        ..name.span.end().get() as usize;
                                     let diagnostic: Diagnostic<usize> = Diagnostic::error()
-                                        .with_labels(vec![
-                                                     Label::primary(env.file_id, r).with_message("Builtin not found")
-                                        ])
+                                        .with_labels(vec![Label::primary(env.file_id, r)
+                                            .with_message("Builtin not found")])
                                         .with_message("error");
                                     self.diagnostics.push(diagnostic);
                                     return Err(anyhow::Error::new(ParseError::Invalid));
                                 }
                             } else {
                                 let diagnostic: Diagnostic<usize> = Diagnostic::error()
-                                    .with_labels(vec![
-                                        Label::primary(env.file_id, r).with_message("Variable not in scope")
-                                    ])
+                                    .with_labels(vec![Label::primary(env.file_id, r)
+                                        .with_message("Variable not in scope")])
                                     .with_message("error");
                                 self.diagnostics.push(diagnostic);
                                 return Err(anyhow::Error::new(ParseError::Invalid));
@@ -409,7 +404,6 @@ impl Parser {
                         } else {
                             unimplemented!("{:?}", (expr, name))
                         }
-
                     }
                     _ => unimplemented!("{:?}", expr.node),
                 }
@@ -489,11 +483,15 @@ pub(crate) mod tests {
     fn run_test(filename: &str, expected: i32) {
         let context = lower::Context::new();
         let mut files = SimpleFiles::new();
+        let file_id = files.add(
+            filename.to_string(),
+            std::fs::read_to_string(filename).unwrap(),
+        );
 
         // parse
         let mut parser = Parser::new();
         let ast: AstNode<ast::SimpleExtra> =
-            parser.parse(Path::new(filename), None, &mut files).unwrap();
+            parser.parse(Path::new(filename), None, file_id).unwrap();
 
         // lower
         let mut lower = lower::lower::Lower::new(&context, &files);

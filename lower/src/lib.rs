@@ -13,4 +13,3 @@ pub use lower::{FileDB, Lower};
 pub use melior::Context;
 
 pub type Environment<'c> = scope::ScopeStack<'c, lower::Data>;
-
