@@ -2,19 +2,30 @@ use crate::ast::*;
 
 pub struct NodeBuilder<E> {
     file_ids: Vec<usize>,
+    begin: CodeLocation,
+    end: CodeLocation,
     _e: std::marker::PhantomData<E>,
 }
 
 impl<E: Extra> NodeBuilder<E> {
     pub fn new() -> Self {
+        let begin = CodeLocation { line: 0, col: 0 };
+        let end = CodeLocation { line: 0, col: 0 };
         Self {
             file_ids: vec![],
+            begin,
+            end,
             _e: std::marker::PhantomData::default(),
         }
     }
 
     pub fn enter_file(&mut self, file_id: usize) {
         self.file_ids.push(file_id);
+    }
+
+    pub fn location(&mut self) {
+        self.begin = CodeLocation { line: 0, col: 0 };
+        self.end = CodeLocation { line: 0, col: 0 };
     }
 
     pub fn exit_file(&mut self) {
@@ -26,9 +37,10 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn node(&self, ast: Ast<E>) -> AstNode<E> {
-        let begin = CodeLocation { line: 0, col: 0 };
-        let end = CodeLocation { line: 0, col: 0 };
-        ast.node(self.current_file_id(), begin, end)
+        AstNode {
+            node: ast,
+            extra: E::new(self.current_file_id(), self.begin.clone(), self.end.clone()),
+        }
     }
 
     pub fn extra(&self) -> E {

@@ -123,12 +123,14 @@ pub enum Ast<E> {
 }
 
 impl<E: Extra> Ast<E> {
+    /*
     pub fn node(self, file_id: usize, begin: CodeLocation, end: CodeLocation) -> AstNode<E> {
         AstNode {
             node: self,
             extra: E::new(file_id, begin, end),
         }
     }
+    */
 
     pub fn global(name: &str, node: AstNode<E>) -> Self {
         Ast::Global(name.to_string(), Box::new(node))
@@ -153,6 +155,35 @@ pub struct CodeLocation {
 pub struct SimpleExtra {
     span: Span,
 }
+
+/*
+#[derive(Debug, Clone)]
+pub struct SimpleExtra2<'c> {
+    location: ir::Location<'c>,
+}
+
+impl<'c> Extra for SimpleExtra2<'c> {
+    fn new(location: ir::Location<'c>) -> Self {
+        Self { location }
+    }
+    fn location<'c>(
+        &self,
+        context: &'c Context,
+        files: &SimpleFiles<String, String>,
+    ) -> ir::Location<'c> {
+        if let Ok(name) = files.name(self.span.file_id) {
+            ir::Location::new(
+                context,
+                &name,
+                self.span.begin.line + 1,
+                self.span.begin.col + 1,
+            )
+        } else {
+            ir::Location::unknown(context)
+        }
+    }
+}
+*/
 
 impl Extra for SimpleExtra {
     fn new(file_id: usize, begin: CodeLocation, end: CodeLocation) -> Self {

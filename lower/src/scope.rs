@@ -454,9 +454,9 @@ mod tests {
     use super::*;
     use crate::ast;
     use crate::ast::{Ast, Extra, SimpleExtra};
-    use crate::lower::Environment;
     use crate::lower::FileDB;
-    use crate::lower::{node, Lower};
+    use crate::lower::Lower;
+    use crate::{Environment, NodeBuilder};
     use melior::dialect::{arith, func};
     use melior::ir::attribute::{StringAttribute, TypeAttribute};
     use melior::ir::r#type::FunctionType;
@@ -491,22 +491,30 @@ mod tests {
         let context = test_context();
         let mut files = FileDB::new();
         let file_id = files.add("test.py".into(), "test".into());
-        let lower = Lower::new(&context, &files);
+        let lower: Lower<SimpleExtra> = Lower::new(&context, &files);
         let mut s = Environment::default();
         let location = Location::unknown(&context);
 
         // 3 ops in static context
-        let expr: Node = node(file_id, ast::Ast::bool(false));
-        let ast = node(file_id, Ast::global("x", expr));
+        let mut b = NodeBuilder::new();
+        b.enter_file(file_id);
+        let expr = b.bool(false);
+        let ast = b.global("x", expr);
+        //let expr: Node = node(file_id, ast::Ast::bool(false));
+        //let ast = node(file_id, Ast::global("x", expr));
         lower.lower_expr(ast, &mut s);
 
-        let expr: Node = node(file_id, ast::Ast::bool(true));
-        let ast = node(file_id, Ast::global("x", expr));
+        let expr = b.bool(false);
+        let ast = b.global("x", expr);
+        //let expr: Node = node(file_id, ast::Ast::bool(true));
+        //let ast = node(file_id, Ast::global("x", expr));
         lower.lower_expr(ast, &mut s);
         let g_index_x = s.last_index().unwrap();
 
-        let expr: Node = node(file_id, ast::Ast::bool(true));
-        let ast = node(file_id, Ast::global("y", expr));
+        let expr = b.bool(true);
+        let ast = b.global("y", expr);
+        //let expr: Node = node(file_id, ast::Ast::bool(true));
+        //let ast = node(file_id, Ast::global("y", expr));
         lower.lower_expr(ast, &mut s);
         let g_index_y = s.last_index().unwrap();
 
@@ -522,21 +530,25 @@ mod tests {
         s.enter_func();
 
         // push y, should shadow static context
-        let expr: Node = node(file_id, ast::Ast::bool(true));
-        let ast = node(
-            file_id,
-            Ast::assign(ast::AssignTarget::Identifier("y".into()), expr),
-        );
+        let expr = b.bool(true);
+        let ast = b.assign("y", expr);
+        //let expr: Node = node(file_id, ast::Ast::bool(true));
+        //let ast = node(
+        //file_id,
+        //Ast::assign(ast::AssignTarget::Identifier("y".into()), expr),
+        //);
         lower.lower_expr(ast, &mut s);
         let y_index = s.last_index().unwrap();
         assert_op_index(&s, "y", y_index);
 
         // push x, should shadow static context
-        let expr: Node = node(file_id, ast::Ast::bool(false));
-        let ast = node(
-            file_id,
-            Ast::assign(ast::AssignTarget::Identifier("x".into()), expr),
-        );
+        let expr = b.bool(false);
+        //let expr: Node = node(file_id, ast::Ast::bool(false));
+        let ast = b.assign("x", expr);
+        //let ast = node(
+        //file_id,
+        //Ast::assign(ast::AssignTarget::Identifier("x".into()), expr),
+        //);
         lower.lower_expr(ast, &mut s);
         let x_index = s.last_index().unwrap();
         assert_op_index(&s, "x", x_index);
@@ -661,9 +673,6 @@ mod tests {
         let mut layer = Layer::new(LayerType::Block);
         layer.block = Some(Block::new(&[]));
         env.enter(layer);
-        //let layer =
-        //env.enter_block(&[(index_type, location, "p0".to_string())]);
-        //assert_eq!(env.index_from_name("p0").unwrap(), LayerIndex::Argument(0));
 
         let three = lower.build_int_op(3, location);
         env.push_with_name(three, "z");

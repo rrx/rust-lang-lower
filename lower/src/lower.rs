@@ -280,7 +280,6 @@ impl<'c, E: Extra> Lower<'c, E> {
          *    type is ()->()
          */
         let bool_type = self.from_type(&AstType::Bool);
-        //let index_type = self.from_type(&AstType::Index);
         let condition_location = self.location(&condition);
         let body_location = self.location(&body);
 
@@ -303,14 +302,11 @@ impl<'c, E: Extra> Lower<'c, E> {
             .into_iter()
             .map(|(ast_ty, arg_name, init_name)| {
                 let _index = env.index_from_name(init_name).unwrap();
-                let data = Data::new(ast_ty); //env.data(&index).unwrap();
-                                              //let r = env.value0_from_name(init_name);
-                                              //(r.r#type(), condition_location, arg_name.to_string())
+                let data = Data::new(ast_ty);
                 (data.ty.clone(), condition_location, arg_name.to_string())
             })
             .collect();
 
-        //env.enter_block(&before_args);
         let layer = self.build_block(&before_args, env);
         env.enter(layer);
 
@@ -341,8 +337,6 @@ impl<'c, E: Extra> Lower<'c, E> {
 
         // after
         let after_args = &[(AstType::Index, body_location, "arg0".to_string())];
-        //env.enter_block(after_args);
-        //env.enter(self.build_block(&before_args, env));
         let layer = self.build_block(after_args, env);
         env.enter(layer);
 
@@ -1257,11 +1251,13 @@ impl<'c, E: Extra> Lower<'c, E> {
     }
 }
 
+/*
 pub fn node<E: Extra>(file_id: usize, ast: Ast<E>) -> AstNode<E> {
     let begin = CodeLocation { line: 0, col: 0 };
     let end = CodeLocation { line: 0, col: 0 };
     ast.node(file_id, begin, end)
 }
+*/
 
 #[cfg(test)]
 pub(crate) mod tests {
