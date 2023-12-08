@@ -207,7 +207,7 @@ impl Parser {
         file_id: usize,
     ) -> Result<ast::AstNode<E>> {
         let mut b = lower::NodeBuilder::new();
-        b.enter_file(file_id);
+        b.enter_file(file_id, path.to_str().unwrap());
 
         let dialect = syntax::Dialect::Extended;
         let m = match content {

@@ -1,7 +1,7 @@
 use crate::ast::*;
 
 pub struct NodeBuilder<E> {
-    file_ids: Vec<usize>,
+    file_ids: Vec<(usize, String)>,
     begin: CodeLocation,
     end: CodeLocation,
     _e: std::marker::PhantomData<E>,
@@ -19,8 +19,8 @@ impl<E: Extra> NodeBuilder<E> {
         }
     }
 
-    pub fn enter_file(&mut self, file_id: usize) {
-        self.file_ids.push(file_id);
+    pub fn enter_file(&mut self, file_id: usize, filename: &str) {
+        self.file_ids.push((file_id, filename.to_string()));
     }
 
     pub fn location(&mut self) {
@@ -33,7 +33,7 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn current_file_id(&self) -> usize {
-        *self.file_ids.last().unwrap()
+        self.file_ids.last().unwrap().0
     }
 
     pub fn node(&self, ast: Ast<E>) -> AstNode<E> {

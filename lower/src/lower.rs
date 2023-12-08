@@ -968,7 +968,6 @@ impl<'c, E: Extra> Lower<'c, E> {
                         Parameter::Normal(ident, ast_ty) => {
                             log::debug!("params {:?}: {:?}", ident, ast_ty);
                             let location = p.extra.location(self.context, self.files);
-                            //let ir_ty = self.from_type(&ast_ty);
                             params.push((ast_ty.clone(), location, ident));
                             ast_types.push(ast_ty);
                         }
@@ -1251,18 +1250,9 @@ impl<'c, E: Extra> Lower<'c, E> {
     }
 }
 
-/*
-pub fn node<E: Extra>(file_id: usize, ast: Ast<E>) -> AstNode<E> {
-    let begin = CodeLocation { line: 0, col: 0 };
-    let end = CodeLocation { line: 0, col: 0 };
-    ast.node(file_id, begin, end)
-}
-*/
-
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    //use crate::compile::run_ast;
     use crate::NodeBuilder;
     use test_log::test;
 
@@ -1270,7 +1260,7 @@ pub(crate) mod tests {
 
     pub fn gen_test<'c, E: Extra>(file_id: usize, _env: &mut Environment<'c>) -> AstNode<E> {
         let mut b: NodeBuilder<E> = NodeBuilder::new();
-        b.enter_file(file_id);
+        b.enter_file(file_id, "test.py");
         let mut seq = vec![];
         seq.push(b.main(b.seq(vec![
             b.assign("x", b.integer(123)),
@@ -1290,7 +1280,7 @@ pub(crate) mod tests {
 
     pub fn gen_while<'c, E: Extra>(file_id: usize, _env: &mut Environment<'c>) -> AstNode<E> {
         let mut b: NodeBuilder<E> = NodeBuilder::new();
-        b.enter_file(file_id);
+        b.enter_file(file_id, "test.py");
         let mut seq = vec![];
 
         // global variable x = 10
@@ -1338,7 +1328,7 @@ pub(crate) mod tests {
         _env: &mut Environment<'c>,
     ) -> AstNode<E> {
         let mut b: NodeBuilder<E> = NodeBuilder::new();
-        b.enter_file(file_id);
+        b.enter_file(file_id, "test.py");
         let mut seq = vec![];
 
         seq.push(b.func(
@@ -1382,7 +1372,7 @@ pub(crate) mod tests {
 
     pub fn gen_recursion<'c, E: Extra>(file_id: usize, _env: &mut Environment<'c>) -> AstNode<E> {
         let mut b: NodeBuilder<E> = NodeBuilder::new();
-        b.enter_file(file_id);
+        b.enter_file(file_id, "test.py");
         let seq = vec![];
         b.seq(seq)
     }

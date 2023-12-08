@@ -453,7 +453,7 @@ impl<'c, D: std::fmt::Debug + Clone> ScopeStack<'c, D> {
 mod tests {
     use super::*;
     use crate::ast;
-    use crate::ast::{Ast, Extra, SimpleExtra};
+    use crate::ast::{Extra, SimpleExtra};
     use crate::lower::FileDB;
     use crate::lower::Lower;
     use crate::{Environment, NodeBuilder};
@@ -497,7 +497,7 @@ mod tests {
 
         // 3 ops in static context
         let mut b = NodeBuilder::new();
-        b.enter_file(file_id);
+        b.enter_file(file_id, "test.py");
         let expr = b.bool(false);
         let ast = b.global("x", expr);
         lower.lower_expr(ast, &mut s);
