@@ -500,21 +500,15 @@ mod tests {
         b.enter_file(file_id);
         let expr = b.bool(false);
         let ast = b.global("x", expr);
-        //let expr: Node = node(file_id, ast::Ast::bool(false));
-        //let ast = node(file_id, Ast::global("x", expr));
         lower.lower_expr(ast, &mut s);
 
         let expr = b.bool(false);
         let ast = b.global("x", expr);
-        //let expr: Node = node(file_id, ast::Ast::bool(true));
-        //let ast = node(file_id, Ast::global("x", expr));
         lower.lower_expr(ast, &mut s);
         let g_index_x = s.last_index().unwrap();
 
         let expr = b.bool(true);
         let ast = b.global("y", expr);
-        //let expr: Node = node(file_id, ast::Ast::bool(true));
-        //let ast = node(file_id, Ast::global("y", expr));
         lower.lower_expr(ast, &mut s);
         let g_index_y = s.last_index().unwrap();
 
@@ -532,23 +526,13 @@ mod tests {
         // push y, should shadow static context
         let expr = b.bool(true);
         let ast = b.assign("y", expr);
-        //let expr: Node = node(file_id, ast::Ast::bool(true));
-        //let ast = node(
-        //file_id,
-        //Ast::assign(ast::AssignTarget::Identifier("y".into()), expr),
-        //);
         lower.lower_expr(ast, &mut s);
         let y_index = s.last_index().unwrap();
         assert_op_index(&s, "y", y_index);
 
         // push x, should shadow static context
         let expr = b.bool(false);
-        //let expr: Node = node(file_id, ast::Ast::bool(false));
         let ast = b.assign("x", expr);
-        //let ast = node(
-        //file_id,
-        //Ast::assign(ast::AssignTarget::Identifier("x".into()), expr),
-        //);
         lower.lower_expr(ast, &mut s);
         let x_index = s.last_index().unwrap();
         assert_op_index(&s, "x", x_index);
@@ -637,8 +621,6 @@ mod tests {
         let rx = scope.value0(&r_x);
         let ry = scope.value0_from_name("y");
         let op2 = arith::addi(rx, ry, location);
-        //println!("r: {:?}", rx);
-        //println!("r: {:?}", ry);
         scope.push(op2);
 
         let a = lower.build_int_op(1, location);
@@ -712,7 +694,6 @@ mod tests {
         let mut files = FileDB::new();
         let _file_id = files.add("test.py".into(), "test".into());
         let location = Location::unknown(&context);
-        //let ast = crate::lower::tests::gen_test(file_id);
         let lower: Lower<SimpleExtra> = Lower::new(&context, &files);
         let mut env = ScopeStack::default();
         test_env3(&lower, &mut env, location);
