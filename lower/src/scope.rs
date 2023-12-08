@@ -259,25 +259,6 @@ impl<'c, D: std::fmt::Debug + Clone> ScopeStack<'c, D> {
         }
     }
 
-    /*
-    pub fn push_reference(&mut self, name: &str, index: LayerIndex) -> LayerIndex {
-        let data = self.data(&index).unwrap();
-        if let LayerIndex::Op(op_index) = index {
-            let refer = LayerIndex::Ref(op_index);
-            self.index_data(&refer, data.clone());
-            self.index_name(refer.clone(), name);
-            self.layers
-                .last_mut()
-                .unwrap()
-                .index
-                .insert(refer.clone(), op_index);
-            refer
-        } else {
-            unreachable!()
-        }
-    }
-    */
-
     pub fn index_data(&mut self, index: &LayerIndex, data: D) {
         self.types.insert(index.clone(), data);
     }
@@ -298,6 +279,10 @@ impl<'c, D: std::fmt::Debug + Clone> ScopeStack<'c, D> {
         let s = format!("__static_x{}", self.static_count);
         self.static_count += 1;
         s
+    }
+
+    pub fn fresh_op(&mut self) -> LayerIndex {
+        LayerIndex::Op(self.fresh_index())
     }
 
     pub fn fresh_index(&mut self) -> usize {
@@ -386,6 +371,10 @@ impl<'c, D: std::fmt::Debug + Clone> ScopeStack<'c, D> {
         let index = LayerIndex::Op(self.fresh_index());
         self.last_mut().push(op, index.clone());
         index
+    }
+
+    pub fn op_index(&mut self, index: LayerIndex, op: Operation<'c>) {
+        self.last_mut().push(op, index);
     }
 
     pub fn push_with_name(&mut self, op: Operation<'c>, name: &str) -> LayerIndex {

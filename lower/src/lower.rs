@@ -829,7 +829,10 @@ impl<'c, E: Extra> Lower<'c, E> {
 
                         let (index, data) = match env.index_from_name(ident.as_str()) {
                             Some(index) => {
-                                let data = env.data(&index).unwrap().clone();
+                                let data = env
+                                    .data(&index)
+                                    .expect(&format!("Missing data for {}", &ident))
+                                    .clone();
                                 (index, data)
                             }
                             _ => unreachable!("Ident not found: {:?}", ident),
@@ -981,13 +984,40 @@ impl<'c, E: Extra> Lower<'c, E> {
                     }
                 }
 
-                let region = Region::new();
-
                 let mut attributes = vec![(
                     Identifier::new(self.context, "sym_visibility"),
                     StringAttribute::new(self.context, "private").into(),
                 )];
 
+                let types = params
+                    .iter()
+                    .map(|x| self.from_type(&x.0))
+                    .collect::<Vec<Type>>();
+
+                let ret_type = if ty.is_none() { vec![] } else { vec![ty] };
+                let func_type = FunctionType::new(self.context, &types, &ret_type);
+                let f_type = AstType::Func(ast_types, ast_ret_type);
+                let data = Data::new_static(f_type, &def.name);
+                let index = env.fresh_op();
+                env.name_index(index.clone(), &def.name);
+                //let data = Data::new_static(f_type, &def.name);
+                env.index_data(&index, data);
+                //let region = Region::new();
+                /*
+                let f_declare = func::func(
+                    self.context,
+                    StringAttribute::new(self.context, &def.name),
+                    TypeAttribute::new(func_type.into()),
+                    region,
+                    &attributes,
+                    location,
+                );
+                let index = env.push(f_declare);
+                env.name_index(index.clone(), &def.name);
+                env.index_data(&index, data.clone());
+                */
+
+                let region = Region::new();
                 if let Some(body) = def.body {
                     let layer = self.build_block(params.as_slice(), env);
                     env.enter(layer);
@@ -1008,15 +1038,6 @@ impl<'c, E: Extra> Lower<'c, E> {
                     ));
                 }
 
-                let types = params
-                    .iter()
-                    .map(|x| self.from_type(&x.0))
-                    .collect::<Vec<Type>>();
-
-                let ret_type = if ty.is_none() { vec![] } else { vec![ty] };
-
-                let func_type = FunctionType::new(self.context, &types, &ret_type);
-
                 let f = func::func(
                     self.context,
                     StringAttribute::new(self.context, &def.name),
@@ -1026,13 +1047,9 @@ impl<'c, E: Extra> Lower<'c, E> {
                     location,
                 );
 
-                let index = env.push(f);
-                env.name_index(index.clone(), &def.name);
-                let f_type = AstType::Func(ast_types, ast_ret_type);
-                let data = Data::new_static(f_type, &def.name);
-                //data.is_static = true;
-                env.index_data(&index, data);
-                env.last_index().unwrap()
+                env.op_index(index.clone(), f);
+                //let index = env.push(f);
+                index
             }
 
             Ast::Return(maybe_expr) => match maybe_expr {
@@ -1330,10 +1347,25 @@ pub(crate) mod tests {
             "x1",
             &[("arg0", AstType::Int)],
             AstType::Int,
-            b.seq(vec![b.ret(Some(b.add(b.integer(0), b.ident("arg0"))))]),
+            b.seq(vec![
+                b.alloca("y", b.ident("arg0")),
+                b.cond(
+                    b.ne(b.deref_offset(b.ident("y"), 0), b.integer(0)),
+                    b.seq(vec![
+                        b.replace(
+                            "y",
+                            b.subtract(b.deref_offset(b.ident("y"), 0), b.integer(1)),
+                        ),
+                        b.replace("y", b.apply("x1", vec![b.deref_offset(b.ident("y"), 0)])),
+                    ]),
+                    None,
+                ),
+                b.ret(Some(b.deref_offset(b.ident("y"), 0))),
+            ]),
         ));
 
         seq.push(b.main(b.seq(vec![
+            b.assign("x", b.apply("x1", vec![b.integer(10)])),
             b.assign("x", b.apply("x1", vec![b.integer(0)])),
             b.ret(Some(b.ident("x"))),
         ])));

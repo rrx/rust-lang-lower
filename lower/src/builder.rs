@@ -176,4 +176,17 @@ impl<E: Extra> NodeBuilder<E> {
             rhs.into(),
         ))
     }
+
+    pub fn cond(
+        &self,
+        condition: AstNode<E>,
+        then: AstNode<E>,
+        else_block: Option<AstNode<E>>,
+    ) -> AstNode<E> {
+        self.node(Ast::Conditional(
+            condition.into(),
+            then.into(),
+            else_block.map(|x| x.into()),
+        ))
+    }
 }
