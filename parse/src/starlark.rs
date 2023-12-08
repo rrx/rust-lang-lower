@@ -369,6 +369,48 @@ impl Parser {
                             extra: extra.clone(),
                         })
                     }
+
+                    ExprP::Dot(expr, name) => {
+                        let r = expr.span.begin().get() as usize .. expr.span.end().get() as usize;
+                        if let ExprP::Identifier(ident) = &expr.node {
+                            let ast = if let Some(_data) = env.resolve(&ident.node.ident) {
+                                let ast = AstNode {
+                                    node: Ast::Identifier(ident.node.ident.clone()),
+                                    extra: extra.clone(),
+                                };
+                                Ast::Call(ast.into(), args)
+                            } else if &ident.node.ident == "b" {
+                                if let Some(b) = ast::Builtin::from_name(&name.node) {
+                                    assert_eq!(args.len(), b.arity());
+                                    Ast::Builtin(b, args)
+                                } else {
+                                    let r = name.span.begin().get() as usize .. name.span.end().get() as usize;
+                                    let diagnostic: Diagnostic<usize> = Diagnostic::error()
+                                        .with_labels(vec![
+                                                     Label::primary(env.file_id, r).with_message("Builtin not found")
+                                        ])
+                                        .with_message("error");
+                                    self.diagnostics.push(diagnostic);
+                                    return Err(anyhow::Error::new(ParseError::Invalid));
+                                }
+                            } else {
+                                let diagnostic: Diagnostic<usize> = Diagnostic::error()
+                                    .with_labels(vec![
+                                        Label::primary(env.file_id, r).with_message("Variable not in scope")
+                                    ])
+                                    .with_message("error");
+                                self.diagnostics.push(diagnostic);
+                                return Err(anyhow::Error::new(ParseError::Invalid));
+                            };
+                            Ok(AstNode {
+                                node: ast,
+                                extra: extra.clone(),
+                            })
+                        } else {
+                            unimplemented!("{:?}", (expr, name))
+                        }
+
+                    }
                     _ => unimplemented!("{:?}", expr.node),
                 }
             }
@@ -445,7 +487,7 @@ pub(crate) mod tests {
     use test_log::test;
 
     fn run_test(filename: &str, expected: i32) {
-        let context = melior::Context::new();
+        let context = lower::Context::new();
         let mut files = SimpleFiles::new();
 
         // parse

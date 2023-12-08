@@ -412,9 +412,9 @@ dependencies = [
 
 [[package]]
 name = "comrak"
-version = "0.19.0"
+version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "82c995deda3bfdebd07d0e2af79e9da13e4b1be652b21a746f3f5b24bf0a49ef"
+checksum = "9f18e72341e6cdc7489cffb76f993812a14a906db54dedb020044ccc211dcaae"
 dependencies = [
  "clap 4.4.8",
  "derive_builder",
@@ -1124,9 +1124,7 @@ dependencies = [
 
 [[package]]
 name = "melior"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ded989056570433e795e2499bdb495a65e0e3cb90129e584b8897f6b86415b65"
+version = "0.14.0"
 dependencies = [
  "dashmap",
  "melior-macro",
@@ -1136,9 +1134,7 @@ dependencies = [
 
 [[package]]
 name = "melior-macro"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c698b22dae02b9106a47ab2213abf7fc6a9746538d1a7200528b2dbacbf0845a"
+version = "0.8.0"
 dependencies = [
  "comrak",
  "convert_case 0.6.0",
@@ -1270,9 +1266,9 @@ dependencies = [
 
 [[package]]
 name = "once_cell"
-version = "1.18.0"
+version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd8b5dd2ae5ed71462c540258bedcb51965123ad7e7ccf4b9a8cafaa4a63576d"
+checksum = "3fdb12b2476b595f9358c5161aa467c2438859caa136dec86c26fdd2efe17b92"
 
 [[package]]
 name = "onig"
@@ -1335,7 +1331,6 @@ dependencies = [
  "env_logger",
  "log",
  "lower",
- "melior",
  "starlark_syntax",
  "test-log",
  "thiserror",

@@ -9,7 +9,7 @@ edition = "2021"
 parse = { path = "../parse" }
 lower = { path = "../lower" }
 codespan-reporting = "*"
-melior = "*"
+melior = { path = "../../melior/melior" }
 argh = "0.1.12"
 simple_logger = "^4.3.0"
 log = "*"

@@ -141,7 +141,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     write!(output, "{}", s)?;
 
     if config.exec {
-        let engine = ExecutionEngine::new(&module, 0, &[], true);
+        let mut path = "./target/debug/prelude.so".to_string();
+        path.push('\0');
+        let engine = ExecutionEngine::new(&module, 0, &[&path], true);
         //engine.dump_to_object_file("out.o");
         let mut result: i32 = -1;
         unsafe {

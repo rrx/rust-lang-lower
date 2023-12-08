@@ -1348,6 +1348,7 @@ pub(crate) mod tests {
             &[("arg0", AstType::Int)],
             AstType::Int,
             b.seq(vec![
+                // using an alloca
                 b.alloca("y", b.ident("arg0")),
                 b.cond(
                     b.ne(b.deref_offset(b.ident("y"), 0), b.integer(0)),
@@ -1360,6 +1361,20 @@ pub(crate) mod tests {
                     ]),
                     None,
                 ),
+
+                // using args
+                b.cond(
+                    b.ne(b.ident("arg0"), b.integer(0)),
+                    b.seq(vec![b.replace(
+                        "y",
+                        b.apply(
+                            "x1",
+                            vec![b.subtract(b.ident("arg0"), b.integer(1))],
+                        ),
+                    )]),
+                    None,
+                ),
+
                 b.ret(Some(b.deref_offset(b.ident("y"), 0))),
             ]),
         ));

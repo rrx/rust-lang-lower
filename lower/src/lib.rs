@@ -8,3 +8,9 @@ pub mod scope;
 
 pub use builder::NodeBuilder;
 pub use lower::{FileDB, Lower};
+
+// re-export melior structs
+pub use melior::Context;
+
+pub type Environment<'c> = scope::ScopeStack<'c, lower::Data>;
+
