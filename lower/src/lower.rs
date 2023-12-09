@@ -1,3 +1,4 @@
+use melior::ir::operation::OperationPrintingFlags;
 use melior::{
     dialect::{arith, cf, func, llvm, memref, ods, scf},
     ir::{
@@ -82,7 +83,7 @@ pub struct Lower<'c, E> {
     pub(crate) context: &'c Context,
     pub files: FileDB,
     env: ScopeStack<'c, Data>,
-    pass_manager: melior::pass::PassManager<'c>,
+    pub pass_manager: melior::pass::PassManager<'c>,
     _e: std::marker::PhantomData<E>,
 }
 
@@ -101,13 +102,35 @@ impl<'c, E: Extra> Lower<'c, E> {
         self.files.add(filename, content)
     }
 
-    pub fn module(&mut self, module: &mut Module<'c>, expr: AstNode<E>, env: &mut Environment<'c>) {
-        //self.env.enter(Layer::new(LayerType::Static));
+    pub fn module_lower(
+        &mut self,
+        module: &mut Module<'c>,
+        expr: AstNode<E>,
+        env: &mut Environment<'c>,
+    ) {
         self.lower_expr(expr, env);
         for op in env.take_ops() {
             module.body().append_operation(op);
         }
-        //self.env.exit();
+        log::debug!(
+            "lowered {}",
+            module
+                .as_operation()
+                .to_string_with_flags(OperationPrintingFlags::new())
+                .unwrap()
+        );
+    }
+
+    pub fn module_passes(&mut self, module: &mut Module<'c>) {
+        self.pass_manager.run(module).unwrap();
+        assert!(module.as_operation().verify());
+        log::debug!(
+            "after pass {}",
+            module
+                .as_operation()
+                .to_string_with_flags(OperationPrintingFlags::new())
+                .unwrap()
+        );
     }
 
     pub fn type_from_expr(&self, expr: &AstNode<E>, env: &Environment) -> AstType {

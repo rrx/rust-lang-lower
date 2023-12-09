@@ -160,30 +160,11 @@ pub fn run_ast<'c, E: ast::Extra>(
     lower: &mut lower::Lower<'c, E>,
     env: &mut scope::ScopeStack<'c, lower::Data>,
 ) -> i32 {
-    // passes
-    let pass_manager = default_pass_manager(lower.context);
-
     let location = ir::Location::unknown(lower.context);
     let mut module = ir::Module::new(location);
 
-    lower.module(&mut module, ast, env);
-
-    log::debug!(
-        "before {}",
-        module
-            .as_operation()
-            .to_string_with_flags(OperationPrintingFlags::new())
-            .unwrap()
-    );
-    pass_manager.run(&mut module).unwrap();
-    assert!(module.as_operation().verify());
-    log::debug!(
-        "after pass {}",
-        module
-            .as_operation()
-            .to_string_with_flags(OperationPrintingFlags::new())
-            .unwrap()
-    );
+    lower.module_lower(&mut module, ast, env);
+    lower.module_passes(&mut module);
 
     let mut path = "../target/debug/prelude.so".to_string();
     path.push('\0');

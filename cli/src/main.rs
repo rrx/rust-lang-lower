@@ -54,8 +54,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     log::debug!("config: {:?}", config);
     let context = default_context();
 
-    let pass_manager = default_pass_manager(&context);
-
     let location = ir::Location::unknown(&context);
     let mut module = ir::Module::new(location);
 
@@ -80,7 +78,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         let ast: AstNode<SimpleExtra> = result?;
 
-        lower.module(&mut module, ast, &mut env);
+        lower.module_lower(&mut module, ast, &mut env);
     }
     env.exit();
     assert_eq!(0, env.layer_count());
@@ -91,7 +89,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     assert!(module.as_operation().verify());
 
     if config.lower {
-        pass_manager.run(&mut module)?;
+        lower.module_passes(&mut module);
         if config.verbose {
             module.as_operation().dump();
         }
