@@ -152,10 +152,10 @@ fn from_parameter<'a, E: Extra, P: syntax::ast::AstPayload>(
     env: &Environment<'a>,
 ) -> ast::ParameterNode<E> {
     use syntax::ast::ParameterP;
-    let extra = env.extra(item.span);
 
     match item.node {
         ParameterP::Normal(ident, maybe_type) => {
+            let extra = env.extra(item.span);
             let ty = if let Some(_ty) = maybe_type {
                 ast::AstType::Int
             } else {
@@ -222,7 +222,6 @@ impl<E: Extra> Parser<E> {
         b: &NodeBuilder<E>,
     ) -> Result<ast::AstNode<E>> {
         use syntax::ast::StmtP;
-        let extra = env.extra(item.span);
 
         match item.node {
             StmtP::Statements(stmts) => {
@@ -231,6 +230,7 @@ impl<E: Extra> Parser<E> {
                     exprs.push(self.from_stmt(stmt, env, d, b)?);
                 }
 
+                let extra = env.extra(item.span);
                 let ast = Ast::Sequence(exprs);
                 Ok(AstNode { node: ast, extra })
             }
@@ -242,23 +242,25 @@ impl<E: Extra> Parser<E> {
                     .map(|p| from_parameter(p, env))
                     .collect();
                 env.enter_func();
-                let ast = self.from_stmt(*def.body, env, d, b)?;
+                let body = self.from_stmt(*def.body, env, d, b)?;
                 env.exit_func();
                 let name = &def.name.ident;
                 let d = ast::Definition {
                     name: name.clone(),
-                    body: Some(Box::new(ast)),
+                    body: Some(body.into()),
                     return_type: AstType::Int.into(),
                     params,
                 };
                 let ast = Ast::Definition(d);
                 env.define(&name);
+                let extra = env.extra(item.span);
                 Ok(AstNode { node: ast, extra })
             }
 
             StmtP::If(expr, truestmt) => {
                 let condition = self.from_expr(expr, env, d)?;
                 let truestmt = self.from_stmt(*truestmt, env, d, b)?;
+                let extra = env.extra(item.span);
                 Ok(AstNode {
                     node: Ast::Conditional(condition.into(), truestmt.into(), None),
                     extra,
@@ -269,6 +271,7 @@ impl<E: Extra> Parser<E> {
                 let condition = self.from_expr(expr, env, d)?;
                 let truestmt = self.from_stmt(options.0, env, d, b)?;
                 let elsestmt = Some(Box::new(self.from_stmt(options.1, env, d, b)?));
+                let extra = env.extra(item.span);
                 Ok(AstNode {
                     node: Ast::Conditional(condition.into(), truestmt.into(), elsestmt),
                     extra,
@@ -310,10 +313,10 @@ impl<E: Extra> Parser<E> {
         d: &mut Diagnostics,
     ) -> Result<AstNode<E>> {
         use syntax::ast::ExprP;
-        let extra = env.extra(item.span);
 
         match item.node {
             ExprP::Op(lhs, op, rhs) => {
+                let extra = env.extra(item.span);
                 let ast = Ast::BinaryOp(
                     from_binop(op),
                     Box::new(self.from_expr(*lhs, env, d)?),
@@ -331,9 +334,10 @@ impl<E: Extra> Parser<E> {
                 match expr.node {
                     ExprP::Identifier(ident) => {
                         let ast = if let Some(_data) = env.resolve(&ident.node.ident) {
+                            let extra = env.extra(item.span);
                             let ast = AstNode {
                                 node: Ast::Identifier(ident.node.ident),
-                                extra: extra.clone(),
+                                extra,
                             };
                             Ast::Call(ast.into(), args)
                         } else if let Some(b) = ast::Builtin::from_name(&ident.node.ident) {
@@ -343,9 +347,10 @@ impl<E: Extra> Parser<E> {
                             unreachable!("Not found");
                         };
 
+                        let extra = env.extra(item.span);
                         Ok(AstNode {
                             node: ast,
-                            extra: extra.clone(),
+                            extra
                         })
                     }
 
@@ -353,9 +358,10 @@ impl<E: Extra> Parser<E> {
                         let r = expr.span.begin().get() as usize..expr.span.end().get() as usize;
                         if let ExprP::Identifier(ident) = &expr.node {
                             let ast = if let Some(_data) = env.resolve(&ident.node.ident) {
+                                let extra = env.extra(item.span);
                                 let ast = AstNode {
                                     node: Ast::Identifier(ident.node.ident.clone()),
-                                    extra: extra.clone(),
+                                    extra,
                                 };
                                 Ast::Call(ast.into(), args)
                             } else if &ident.node.ident == "b" {
@@ -380,9 +386,10 @@ impl<E: Extra> Parser<E> {
                                 d.push_diagnostic(diagnostic);
                                 return Err(anyhow::Error::new(ParseError::Invalid));
                             };
+                            let extra = env.extra(item.span);
                             Ok(AstNode {
                                 node: ast,
-                                extra: extra.clone(),
+                                extra
                             })
                         } else {
                             unimplemented!("{:?}", (expr, name))
@@ -395,13 +402,15 @@ impl<E: Extra> Parser<E> {
             ExprP::Identifier(ident) => {
                 if let Some(data) = env.resolve(&ident.node.ident) {
                     let name = ident.node.ident;
+                    let extra = env.extra(item.span);
                     let ast = AstNode {
                         node: Ast::Identifier(name),
-                        extra: extra.clone(),
+                        extra
                     };
 
                     // Global identifiers are dereferenced when accessed
                     if let DataType::Global = data.ty {
+                        let extra = env.extra(item.span);
                         Ok(AstNode {
                             node: Ast::Deref(ast.into(), DerefTarget::Offset(0)),
                             extra,
@@ -423,6 +432,7 @@ impl<E: Extra> Parser<E> {
             }
 
             ExprP::Literal(lit) => {
+                let extra = env.extra(item.span);
                 let x: Literal = from_literal(lit);
                 Ok(AstNode {
                     node: Ast::Literal(x),
@@ -431,9 +441,10 @@ impl<E: Extra> Parser<E> {
             }
 
             ExprP::Minus(expr) => {
+                let extra = env.extra(item.span);
                 let ast = Ast::UnaryOp(
                     ast::UnaryOperation::Minus,
-                    Box::new(self.from_expr(*expr, env, d)?),
+                    self.from_expr(*expr, env, d)?.into(),
                 );
                 Ok(AstNode { node: ast, extra })
             }
@@ -450,9 +461,9 @@ impl<E: Extra> Parser<E> {
     ) -> Result<ast::Argument<E>> {
         use syntax::ast::ArgumentP;
         match item.node {
-            ArgumentP::Positional(expr) => Ok(ast::Argument::Positional(Box::new(
-                self.from_expr(expr, env, d)?,
-            ))),
+            ArgumentP::Positional(expr) => Ok(ast::Argument::Positional(
+                self.from_expr(expr, env, d)?.into(),
+            )),
             _ => unimplemented!(),
         }
     }

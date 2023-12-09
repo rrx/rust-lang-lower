@@ -144,8 +144,15 @@ impl<E: Extra> NodeBuilder<E> {
         self.node(Ast::Sequence(nodes))
     }
 
+    pub fn v(&self, name: &str) -> AstNode<E> {
+        self.ident(name)
+    }
+
     pub fn ident(&self, name: &str) -> AstNode<E> {
-        self.node(Ast::Identifier(name.to_string()))
+        AstNode {
+            extra: E::span(self.span.clone()),
+            node: Ast::Identifier(name.to_string()),
+        }
     }
 
     pub fn deref_offset(&self, value: AstNode<E>, offset: usize) -> AstNode<E> {
@@ -184,10 +191,14 @@ impl<E: Extra> NodeBuilder<E> {
         self.node(Ast::Return(node.map(|n| n.into())))
     }
 
+    pub fn arg(&self, node: AstNode<E>) -> Argument<E> {
+        Argument::Positional(node.into())
+    }
+
     pub fn apply(&self, name: &str, args: Vec<AstNode<E>>) -> AstNode<E> {
         let args = args
             .into_iter()
-            .map(|expr| Argument::Positional(expr.into()))
+            .map(|expr| self.arg(expr))
             .collect::<Vec<_>>();
         self.node(Ast::Call(self.ident(name).into(), args))
     }
