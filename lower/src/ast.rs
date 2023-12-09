@@ -1,5 +1,4 @@
 use crate::Diagnostics;
-use codespan_reporting::files::{Files, SimpleFiles};
 use melior::ir;
 use melior::Context;
 use std::fmt::Debug;

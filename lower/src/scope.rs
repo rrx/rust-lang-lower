@@ -492,7 +492,7 @@ mod tests {
     #[test]
     fn test_scope1() {
         let context = test_context();
-        let mut lower: Lower<SimpleExtra> = Lower::new(&context);
+        let lower: Lower<SimpleExtra> = Lower::new(&context);
         let mut d = Diagnostics::new();
         let file_id = d.add_source("test.py".into(), "test".into());
         let mut s = Environment::default();
@@ -500,7 +500,7 @@ mod tests {
         let location = Location::unknown(&context);
 
         // 3 ops in static context
-        let mut b = NodeBuilder::new(file_id, "test.py");
+        let b = NodeBuilder::new(file_id, "test.py");
         let expr = b.bool(false);
         let ast = b.global("x", expr);
         lower.lower_expr(ast, &mut s, &mut d);
