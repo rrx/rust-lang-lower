@@ -62,6 +62,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut parser = Parser::new();
 
     let mut lower = Lower::new(&context);
+    let mut env: lower::scope::ScopeStack<lower::lower::Data> = lower::scope::ScopeStack::default();
+    env.enter_static();
+
     for path in config.inputs {
         let path = Path::new(&path);
         log::debug!("parsing: {}", path.to_str().unwrap());
@@ -77,13 +80,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         let ast: AstNode<SimpleExtra> = result?;
 
-        let mut env: lower::scope::ScopeStack<lower::lower::Data> =
-            lower::scope::ScopeStack::default();
-        lower.lower_expr(ast, &mut env);
-        for op in env.take_ops() {
-            module.body().append_operation(op);
-        }
+        lower.module(&mut module, ast, &mut env);
     }
+    env.exit();
+    assert_eq!(0, env.layer_count());
 
     if config.verbose {
         module.as_operation().dump();

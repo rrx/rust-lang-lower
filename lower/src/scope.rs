@@ -232,17 +232,20 @@ pub struct ScopeStack<'c, D> {
 
 impl<'c, D> Default for ScopeStack<'c, D> {
     fn default() -> Self {
-        let layer = Layer::new(LayerType::Static);
         Self {
             op_count: 0,
             static_count: 0,
-            layers: vec![layer],
+            layers: vec![],
             types: HashMap::new(),
         }
     }
 }
 
 impl<'c, D: std::fmt::Debug + Clone> ScopeStack<'c, D> {
+    pub fn layer_count(&self) -> usize {
+        self.layers.len()
+    }
+
     pub fn dump(&self) {
         println!("env: {:?}", self);
         for layer in &self.layers {
@@ -489,10 +492,10 @@ mod tests {
     #[test]
     fn test_scope1() {
         let context = test_context();
-        let mut files = FileDB::new();
         let mut lower: Lower<SimpleExtra> = Lower::new(&context);
         let file_id = lower.add_source("test.py".into(), "test".into());
         let mut s = Environment::default();
+        s.enter_static();
         let location = Location::unknown(&context);
 
         // 3 ops in static context
@@ -570,6 +573,8 @@ mod tests {
 
         // z is not visible, out of scope
         assert!(s.index_from_name("z").is_none());
+        s.exit();
+        assert_eq!(0, s.layer_count());
     }
 
     fn test_int<'c, E: Extra>(
@@ -691,12 +696,15 @@ mod tests {
     #[test]
     fn test_scope3() {
         let context = test_context();
-        let mut files = FileDB::new();
-        let mut lower: Lower<SimpleExtra> = Lower::new(&context);
-        let file_id = lower.add_source("test.py".into(), "test".into());
+        //let mut files = FileDB::new();
+        let lower: Lower<SimpleExtra> = Lower::new(&context);
+        //let file_id = lower.add_source("test.py".into(), "test".into());
         let location = Location::unknown(&context);
         let mut env = ScopeStack::default();
+        env.enter_static();
         test_env3(&lower, &mut env, location);
         println!("layer: {:?}", env);
+        env.exit();
+        assert_eq!(0, env.layer_count());
     }
 }

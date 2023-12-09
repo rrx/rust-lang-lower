@@ -81,6 +81,7 @@ pub type FileDB = SimpleFiles<String, String>;
 pub struct Lower<'c, E> {
     pub(crate) context: &'c Context,
     pub files: FileDB,
+    env: ScopeStack<'c, Data>,
     _e: std::marker::PhantomData<E>,
 }
 
@@ -89,6 +90,7 @@ impl<'c, E: Extra> Lower<'c, E> {
         Self {
             context,
             files: FileDB::new(),
+            env: ScopeStack::default(),
             _e: std::marker::PhantomData::default(),
         }
     }
@@ -97,11 +99,13 @@ impl<'c, E: Extra> Lower<'c, E> {
         self.files.add(filename, content)
     }
 
-    pub fn module(&self, module: &mut Module<'c>, expr: AstNode<E>, env: &mut Environment<'c>) {
+    pub fn module(&mut self, module: &mut Module<'c>, expr: AstNode<E>, env: &mut Environment<'c>) {
+        //self.env.enter(Layer::new(LayerType::Static));
         self.lower_expr(expr, env);
         for op in env.take_ops() {
             module.body().append_operation(op);
         }
+        //self.env.exit();
     }
 
     pub fn type_from_expr(&self, expr: &AstNode<E>, env: &Environment) -> AstType {
@@ -1323,6 +1327,7 @@ pub(crate) mod tests {
         let mut b: NodeBuilder<E> = NodeBuilder::new();
         b.enter_file(file_id, "test.py");
         let mut seq = vec![];
+        seq.push(b.global("z", b.integer(10)));
 
         seq.push(b.func(
             "x1",
@@ -1376,8 +1381,10 @@ pub(crate) mod tests {
         let mut lower = Lower::new(&context);
         let file_id = lower.add_source("test.py".into(), "test".into());
         let mut env = Environment::default();
+        env.enter_static();
         let ast: AstNode<SimpleExtra> = gen_function_call(file_id, &mut env);
         assert_eq!(0, lower.run_ast(ast, &mut env));
+        env.exit();
     }
 
     #[test]
@@ -1386,8 +1393,10 @@ pub(crate) mod tests {
         let mut lower = Lower::new(&context);
         let file_id = lower.add_source("test.py".into(), "test".into());
         let mut env = Environment::default();
+        env.enter_static();
         let ast: AstNode<SimpleExtra> = gen_while(file_id, &mut env);
         assert_eq!(0, lower.run_ast(ast, &mut env));
+        env.exit();
     }
 
     #[test]
@@ -1396,8 +1405,10 @@ pub(crate) mod tests {
         let mut lower = Lower::new(&context);
         let file_id = lower.add_source("test.py".into(), "test".into());
         let mut env = Environment::default();
+        env.enter_static();
         let ast: AstNode<SimpleExtra> = gen_test(file_id, &mut env);
         assert_eq!(0, lower.run_ast(ast, &mut env));
+        env.exit();
     }
 
     #[test]

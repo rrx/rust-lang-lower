@@ -1,7 +1,6 @@
 use crate::ast;
 use crate::lower;
 use crate::scope;
-use codespan_reporting::files::SimpleFiles;
 use melior::ir::operation::OperationPrintingFlags;
 use melior::ExecutionEngine;
 use melior::{
