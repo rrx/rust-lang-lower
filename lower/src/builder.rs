@@ -2,7 +2,9 @@ use crate::ast::*;
 use melior::ir;
 
 pub struct NodeBuilder<E> {
-    file_ids: Vec<(usize, String)>,
+    //file_ids: Vec<(usize, String)>,
+    file_id: usize,
+    filename: String,
     begin: CodeLocation,
     end: CodeLocation,
     _e: std::marker::PhantomData<E>,
@@ -13,34 +15,40 @@ impl<E: Extra> NodeBuilder<E> {
         let begin = CodeLocation { line: 0, col: 0 };
         let end = CodeLocation { line: 0, col: 0 };
         Self {
-            file_ids: vec![(file_id, filename.to_string())],
+            //file_ids: vec![(file_id, filename.to_string())],
+            file_id,
+            filename: filename.to_string(),
             begin,
             end,
             _e: std::marker::PhantomData::default(),
         }
     }
 
+    /*
     pub fn enter_file(&mut self, file_id: usize, filename: &str) {
         self.file_ids.push((file_id, filename.to_string()));
     }
+    pub fn exit_file(&mut self) {
+        self.file_ids.pop().unwrap();
+    }
+
+    */
 
     pub fn location(&mut self) {
         self.begin = CodeLocation { line: 0, col: 0 };
         self.end = CodeLocation { line: 0, col: 0 };
     }
 
-    pub fn exit_file(&mut self) {
-        self.file_ids.pop().unwrap();
-    }
-
     pub fn current_file_id(&self) -> usize {
-        self.file_ids.last().unwrap().0
+        //self.file_ids.last().unwrap().0
+        self.file_id
     }
 
     pub fn get_location<'c>(&self, context: &'c melior::Context) -> ir::Location<'c> {
         ir::Location::new(
             context,
-            &self.file_ids.last().unwrap().1,
+            //&self.file_ids.last().unwrap().1,
+            &self.filename,
             self.begin.line,
             self.begin.col,
         )

@@ -1289,9 +1289,8 @@ pub(crate) mod tests {
     use test_log::test;
 
     pub fn gen_test<'c, E: Extra>(file_id: usize, _env: &mut Environment<'c>) -> AstNode<E> {
-        //let mut b: NodeBuilder<E> = NodeBuilder::new();
         let mut b = NodeBuilder::new(file_id, "test.py");
-        b.enter_file(file_id, "test.py");
+        //b.enter_file(file_id, "test.py");
         let mut seq = vec![];
         seq.push(b.main(b.seq(vec![
             b.assign("x", b.integer(123)),
@@ -1311,8 +1310,7 @@ pub(crate) mod tests {
 
     pub fn gen_while<'c, E: Extra>(file_id: usize, _env: &mut Environment<'c>) -> AstNode<E> {
         let mut b = NodeBuilder::new(file_id, "test.py");
-        //let mut b: NodeBuilder<E> = NodeBuilder::new();
-        b.enter_file(file_id, "test.py");
+        //b.enter_file(file_id, "test.py");
         let mut seq = vec![];
 
         // global variable x = 10
@@ -1360,8 +1358,7 @@ pub(crate) mod tests {
         _env: &mut Environment<'c>,
     ) -> AstNode<E> {
         let mut b = NodeBuilder::new(file_id, "test.py");
-        //let mut b: NodeBuilder<E> = NodeBuilder::new();
-        b.enter_file(file_id, "test.py");
+        //b.enter_file(file_id, "test.py");
         let mut seq = vec![];
         seq.push(b.global("z", b.integer(10)));
 

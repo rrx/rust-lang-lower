@@ -501,7 +501,6 @@ mod tests {
 
         // 3 ops in static context
         let mut b = NodeBuilder::new(file_id, "test.py");
-        //b.enter_file(file_id, "test.py");
         let expr = b.bool(false);
         let ast = b.global("x", expr);
         lower.lower_expr(ast, &mut s, &mut d);
