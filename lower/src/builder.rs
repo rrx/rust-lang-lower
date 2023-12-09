@@ -2,11 +2,9 @@ use crate::ast::*;
 use melior::ir;
 
 pub struct NodeBuilder<E> {
-    //file_ids: Vec<(usize, String)>,
+    span: Span,
     file_id: usize,
     filename: String,
-    begin: CodeLocation,
-    end: CodeLocation,
     _e: std::marker::PhantomData<E>,
 }
 
@@ -14,50 +12,46 @@ impl<E: Extra> NodeBuilder<E> {
     pub fn new(file_id: usize, filename: &str) -> Self {
         let begin = CodeLocation { line: 0, col: 0 };
         let end = CodeLocation { line: 0, col: 0 };
-        Self {
-            //file_ids: vec![(file_id, filename.to_string())],
+        let span = Span {
             file_id,
-            filename: filename.to_string(),
             begin,
             end,
+        };
+        Self {
+            span,
+            file_id,
+            filename: filename.to_string(),
             _e: std::marker::PhantomData::default(),
         }
     }
 
-    /*
-    pub fn enter_file(&mut self, file_id: usize, filename: &str) {
-        self.file_ids.push((file_id, filename.to_string()));
-    }
-    pub fn exit_file(&mut self) {
-        self.file_ids.pop().unwrap();
-    }
-
-    */
-
-    pub fn location(&mut self) {
-        self.begin = CodeLocation { line: 0, col: 0 };
-        self.end = CodeLocation { line: 0, col: 0 };
+    pub fn with_loc(mut self, span: Span) -> Self {
+        assert_eq!(span.file_id, self.file_id);
+        self.span = span;
+        self
     }
 
     pub fn current_file_id(&self) -> usize {
-        //self.file_ids.last().unwrap().0
         self.file_id
     }
 
     pub fn get_location<'c>(&self, context: &'c melior::Context) -> ir::Location<'c> {
         ir::Location::new(
             context,
-            //&self.file_ids.last().unwrap().1,
             &self.filename,
-            self.begin.line,
-            self.begin.col,
+            self.span.begin.line,
+            self.span.begin.col,
         )
     }
 
     pub fn node(&self, ast: Ast<E>) -> AstNode<E> {
         AstNode {
             node: ast,
-            extra: E::new(self.current_file_id(), self.begin.clone(), self.end.clone()),
+            extra: E::new(
+                self.current_file_id(),
+                self.span.begin.clone(),
+                self.span.end.clone(),
+            ),
         }
     }
 
