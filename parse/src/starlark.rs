@@ -349,10 +349,7 @@ impl<E: Extra> Parser<E> {
                         };
 
                         let extra = env.extra(item.span);
-                        Ok(AstNode {
-                            node: ast,
-                            extra
-                        })
+                        Ok(AstNode { node: ast, extra })
                     }
 
                     ExprP::Dot(expr, name) => {
@@ -388,10 +385,7 @@ impl<E: Extra> Parser<E> {
                                 return Err(anyhow::Error::new(ParseError::Invalid));
                             };
                             let extra = env.extra(item.span);
-                            Ok(AstNode {
-                                node: ast,
-                                extra
-                            })
+                            Ok(AstNode { node: ast, extra })
                         } else {
                             unimplemented!("{:?}", (expr, name))
                         }
@@ -406,7 +400,7 @@ impl<E: Extra> Parser<E> {
                     let extra = env.extra(item.span);
                     let ast = AstNode {
                         node: Ast::Identifier(name),
-                        extra
+                        extra,
                     };
 
                     // Global identifiers are dereferenced when accessed

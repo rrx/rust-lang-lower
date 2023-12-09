@@ -82,7 +82,6 @@ pub type FileDB = SimpleFiles<String, String>;
 
 pub struct Lower<'c, E> {
     pub(crate) context: &'c Context,
-    //env: ScopeStack<'c, Data>,
     pub pass_manager: melior::pass::PassManager<'c>,
     _e: std::marker::PhantomData<E>,
 }
@@ -91,7 +90,6 @@ impl<'c, E: Extra> Lower<'c, E> {
     pub fn new(context: &'c Context) -> Self {
         Self {
             context,
-            //env: ScopeStack::default(),
             pass_manager: crate::compile::default_pass_manager(context),
             _e: std::marker::PhantomData::default(),
         }
