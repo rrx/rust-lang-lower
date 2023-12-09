@@ -11,7 +11,7 @@ use codespan_reporting::diagnostic::{Diagnostic, Label};
 
 use lower::ast;
 use lower::ast::{AssignTarget, Ast, AstNode, AstType, CodeLocation, DerefTarget, Extra, Literal};
-use lower::Diagnostics;
+use lower::{Diagnostics, NodeBuilder};
 use std::collections::HashMap;
 
 #[derive(Error, Debug)]
@@ -181,29 +181,15 @@ fn from_assign_target<P: syntax::ast::AstPayload>(
 }
 
 pub struct Parser<E> {
-    //diagnostics: Vec<Diagnostic<usize>>,
-    //b: lower::NodeBuilder<E>,
     _e: std::marker::PhantomData<E>,
 }
 
 impl<E: Extra> Parser<E> {
     pub fn new() -> Self {
         Self {
-            //diagnostics: vec![],
-            //b: lower::NodeBuilder::new(),
             _e: std::marker::PhantomData::default(),
         }
     }
-
-    /*
-    pub fn dump(&self, files: &lower::FileDB) {
-        let writer = StandardStream::stderr(ColorChoice::Always);
-        let config = codespan_reporting::term::Config::default();
-        for d in self.diagnostics.iter() {
-            term::emit(&mut writer.lock(), &config, files, &d).unwrap();
-        }
-    }
-    */
 
     pub fn parse<'a>(
         &mut self,
@@ -213,8 +199,6 @@ impl<E: Extra> Parser<E> {
         d: &mut Diagnostics,
     ) -> Result<ast::AstNode<E>> {
         let b = lower::NodeBuilder::new(file_id, path.to_str().unwrap());
-        //self.b.enter_file(file_id, path.to_str().unwrap());
-
         let dialect = syntax::Dialect::Extended;
         let m = match content {
             Some(content) => {
@@ -225,7 +209,7 @@ impl<E: Extra> Parser<E> {
         let (codemap, stmt, _dialect, _typecheck) = m.into_parts();
         let mut env = Environment::new(&codemap, file_id);
         let mut seq = b.prelude();
-        let ast: ast::AstNode<E> = self.from_stmt(stmt, &mut env, d)?;
+        let ast: ast::AstNode<E> = self.from_stmt(stmt, &mut env, d, &b)?;
         seq.push(ast);
         Ok(b.seq(seq))
     }
@@ -235,6 +219,7 @@ impl<E: Extra> Parser<E> {
         item: syntax::ast::AstStmtP<P>,
         env: &mut Environment<'a>,
         d: &mut Diagnostics,
+        b: &NodeBuilder<E>,
     ) -> Result<ast::AstNode<E>> {
         use syntax::ast::StmtP;
         let extra = env.extra(item.span);
@@ -243,7 +228,7 @@ impl<E: Extra> Parser<E> {
             StmtP::Statements(stmts) => {
                 let mut exprs = vec![];
                 for stmt in stmts {
-                    exprs.push(self.from_stmt(stmt, env, d)?);
+                    exprs.push(self.from_stmt(stmt, env, d, b)?);
                 }
 
                 let ast = Ast::Sequence(exprs);
@@ -257,7 +242,7 @@ impl<E: Extra> Parser<E> {
                     .map(|p| from_parameter(p, env))
                     .collect();
                 env.enter_func();
-                let ast = self.from_stmt(*def.body, env, d)?;
+                let ast = self.from_stmt(*def.body, env, d, b)?;
                 env.exit_func();
                 let name = &def.name.ident;
                 let d = ast::Definition {
@@ -273,7 +258,7 @@ impl<E: Extra> Parser<E> {
 
             StmtP::If(expr, truestmt) => {
                 let condition = self.from_expr(expr, env, d)?;
-                let truestmt = self.from_stmt(*truestmt, env, d)?;
+                let truestmt = self.from_stmt(*truestmt, env, d, b)?;
                 Ok(AstNode {
                     node: Ast::Conditional(condition.into(), truestmt.into(), None),
                     extra,
@@ -282,8 +267,8 @@ impl<E: Extra> Parser<E> {
 
             StmtP::IfElse(expr, options) => {
                 let condition = self.from_expr(expr, env, d)?;
-                let truestmt = self.from_stmt(options.0, env, d)?;
-                let elsestmt = Some(Box::new(self.from_stmt(options.1, env, d)?));
+                let truestmt = self.from_stmt(options.0, env, d, b)?;
+                let elsestmt = Some(Box::new(self.from_stmt(options.1, env, d, b)?));
                 Ok(AstNode {
                     node: Ast::Conditional(condition.into(), truestmt.into(), elsestmt),
                     extra,
@@ -496,6 +481,7 @@ pub(crate) mod tests {
             filename.to_string(),
             std::fs::read_to_string(filename).unwrap(),
         );
+        //let b: NodeBuilder<ast::SimpleExtra> = NodeBuilder::new(file_id, filename);
 
         // parse
         let mut parser = Parser::new();
@@ -508,8 +494,8 @@ pub(crate) mod tests {
         env.enter_static();
 
         // run
-        assert_eq!(expected, lower.run_ast(ast, &mut env, &mut d));
-        env.exit();
+        assert_eq!(expected, lower.run_ast(ast, env, &mut d));
+        //env.exit();
     }
 
     #[test]

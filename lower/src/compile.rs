@@ -15,7 +15,7 @@ impl<'c, E: ast::Extra> lower::Lower<'c, E> {
     pub fn run_ast(
         &mut self,
         ast: ast::AstNode<E>,
-        env: &mut scope::ScopeStack<'c, lower::Data>,
+        env: scope::ScopeStack<'c, lower::Data>,
         d: &mut Diagnostics,
     ) -> i32 {
         run_ast(ast, self, env, d)
@@ -31,45 +31,9 @@ pub struct CompilerContext<'c, E> {
 
 impl<'c, E: ast::Extra> CompilerContext<'c, E> {
     pub fn new() -> Self {
-        let context = melior::Context::new();
-        context.attach_diagnostic_handler(|diagnostic| {
-            let location = diagnostic.location();
-            log::error!("E: {}: {}", diagnostic, location);
-            true
-        });
+        let context = default_context();
+        let pass_manager = default_pass_manager(&context);
         let env = scope::ScopeStack::default();
-
-        // registry
-        let registry = DialectRegistry::new();
-        register_all_dialects(&registry);
-        context.append_dialect_registry(&registry);
-        context.load_all_available_dialects();
-        register_all_llvm_translations(&context);
-
-        let pass_manager = pass::PassManager::new(&context);
-        pass_manager.enable_verifier(true);
-        //pass_manager.enable_ir_printing();
-
-        // lower to llvm
-        pass_manager.add_pass(pass::conversion::create_scf_to_control_flow());
-        pass_manager.add_pass(pass::conversion::create_control_flow_to_llvm());
-        pass_manager.add_pass(pass::conversion::create_index_to_llvm());
-        pass_manager.add_pass(pass::conversion::create_math_to_llvm());
-        pass_manager.add_pass(pass::conversion::create_func_to_llvm());
-        pass_manager.add_pass(pass::conversion::create_arith_to_llvm());
-        //pass_manager.add_pass(pass::conversion::create_async_to_llvm());
-        pass_manager.add_pass(pass::conversion::create_complex_to_llvm());
-        pass_manager.add_pass(pass::conversion::create_math_to_llvm());
-        pass_manager.add_pass(pass::conversion::create_finalize_mem_ref_to_llvm());
-        pass_manager.add_pass(pass::conversion::create_reconcile_unrealized_casts());
-
-        // some optimization passes
-        //pass_manager.add_pass(pass::transform::create_inliner());
-        pass_manager.add_pass(pass::transform::create_canonicalizer());
-        pass_manager.add_pass(pass::transform::create_cse());
-        pass_manager.add_pass(pass::transform::create_sccp());
-        pass_manager.add_pass(pass::transform::create_control_flow_sink());
-        pass_manager.add_pass(pass::transform::create_symbol_privatize());
         Self {
             context,
             env,
@@ -94,7 +58,7 @@ impl<'c, E: ast::Extra> CompilerContext<'c, E> {
         }
     }
 
-    pub fn merge(&mut self, module: &ir::Module<'c>, ast: ast::AstNode<E>) {
+    pub fn merge(&mut self, module: &ir::Module<'c>, _ast: ast::AstNode<E>) {
         //let lower = lower::Lower::new(&self.context, &self.files);
         //lower.lower_expr(ast, &mut self.env);
         for op in self.env.take_ops() {
@@ -162,7 +126,7 @@ impl<'c, E: ast::Extra> Compiler<'c, E> {
 pub fn run_ast<'c, E: ast::Extra>(
     ast: ast::AstNode<E>,
     lower: &mut lower::Lower<'c, E>,
-    env: &mut scope::ScopeStack<'c, lower::Data>,
+    env: scope::ScopeStack<'c, lower::Data>,
     d: &mut Diagnostics,
 ) -> i32 {
     let location = ir::Location::unknown(lower.context);
@@ -203,7 +167,7 @@ pub fn default_context() -> Context {
     context
 }
 
-pub fn default_pass_manager(context: &Context) -> pass::PassManager {
+pub fn default_pass_manager<'c>(context: &Context) -> pass::PassManager<'c> {
     let pass_manager = pass::PassManager::new(&context);
     pass_manager.enable_verifier(true);
     //pass_manager.enable_ir_printing();

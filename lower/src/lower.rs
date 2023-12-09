@@ -82,7 +82,7 @@ pub type FileDB = SimpleFiles<String, String>;
 
 pub struct Lower<'c, E> {
     pub(crate) context: &'c Context,
-    env: ScopeStack<'c, Data>,
+    //env: ScopeStack<'c, Data>,
     pub pass_manager: melior::pass::PassManager<'c>,
     _e: std::marker::PhantomData<E>,
 }
@@ -91,8 +91,7 @@ impl<'c, E: Extra> Lower<'c, E> {
     pub fn new(context: &'c Context) -> Self {
         Self {
             context,
-            //diagnostics: vec![],
-            env: ScopeStack::default(),
+            //env: ScopeStack::default(),
             pass_manager: crate::compile::default_pass_manager(context),
             _e: std::marker::PhantomData::default(),
         }
@@ -102,10 +101,10 @@ impl<'c, E: Extra> Lower<'c, E> {
         &mut self,
         module: &mut Module<'c>,
         expr: AstNode<E>,
-        env: &mut Environment<'c>,
+        mut env: Environment<'c>,
         d: &mut Diagnostics,
     ) {
-        self.lower_expr(expr, env, d);
+        self.lower_expr(expr, &mut env, d);
         for op in env.take_ops() {
             module.body().append_operation(op);
         }
@@ -1407,8 +1406,8 @@ pub(crate) mod tests {
         let mut env = Environment::default();
         env.enter_static();
         let ast: AstNode<SimpleExtra> = gen_function_call(file_id, &mut env);
-        assert_eq!(0, lower.run_ast(ast, &mut env, &mut d));
-        env.exit();
+        assert_eq!(0, lower.run_ast(ast, env, &mut d));
+        //env.exit();
     }
 
     #[test]
@@ -1420,8 +1419,8 @@ pub(crate) mod tests {
         let mut env = Environment::default();
         env.enter_static();
         let ast: AstNode<SimpleExtra> = gen_while(file_id, &mut env);
-        assert_eq!(0, lower.run_ast(ast, &mut env, &mut d));
-        env.exit();
+        assert_eq!(0, lower.run_ast(ast, env, &mut d));
+        //env.exit();
     }
 
     #[test]
@@ -1433,8 +1432,8 @@ pub(crate) mod tests {
         let mut env = Environment::default();
         env.enter_static();
         let ast: AstNode<SimpleExtra> = gen_test(file_id, &mut env);
-        assert_eq!(0, lower.run_ast(ast, &mut env, &mut d));
-        env.exit();
+        assert_eq!(0, lower.run_ast(ast, env, &mut d));
+        //env.exit();
     }
 
     #[test]

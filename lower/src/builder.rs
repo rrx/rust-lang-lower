@@ -3,7 +3,7 @@ use melior::ir;
 
 pub struct NodeBuilder<E> {
     span: Span,
-    file_id: usize,
+    //file_id: usize,
     filename: String,
     _e: std::marker::PhantomData<E>,
 }
@@ -19,20 +19,27 @@ impl<E: Extra> NodeBuilder<E> {
         };
         Self {
             span,
-            file_id,
+            //file_id,
             filename: filename.to_string(),
             _e: std::marker::PhantomData::default(),
         }
     }
 
-    pub fn with_loc(mut self, span: Span) -> Self {
-        assert_eq!(span.file_id, self.file_id);
+    pub fn with_span(span: Span, filename: &str) -> Self {
+        Self {
+            span,
+            filename: filename.to_string(),
+            _e: std::marker::PhantomData::default(),
+        }
+    }
+
+    pub fn with_loc(&mut self, span: Span) {
+        //assert_eq!(span.file_id, self.span.file_id);
         self.span = span;
-        self
     }
 
     pub fn current_file_id(&self) -> usize {
-        self.file_id
+        self.span.file_id
     }
 
     pub fn get_location<'c>(&self, context: &'c melior::Context) -> ir::Location<'c> {
