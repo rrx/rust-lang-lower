@@ -51,6 +51,13 @@ impl<E: Extra> NodeBuilder<E> {
         )
     }
 
+    pub fn node_span(&self, ast: AstNode<E>) -> AstNode<E> {
+        AstNode {
+            node: ast.node,
+            extra: ast.extra,
+        }
+    }
+
     pub fn node(&self, ast: Ast<E>) -> AstNode<E> {
         AstNode {
             node: ast,
@@ -146,11 +153,17 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn global(&self, name: &str, value: AstNode<E>) -> AstNode<E> {
-        self.node(Ast::Global(name.to_string(), value.into()))
+        AstNode {
+            extra: value.extra.clone(),
+            node: Ast::Global(name.to_string(), value.into()),
+        }
     }
 
     pub fn test(&self, condition: AstNode<E>, body: AstNode<E>) -> AstNode<E> {
-        self.node(Ast::Test(condition.into(), body.into()))
+        AstNode {
+            extra: body.extra.clone(),
+            node: Ast::Test(condition.into(), body.into()),
+        }
     }
 
     pub fn while_loop(&self, condition: AstNode<E>, body: AstNode<E>) -> AstNode<E> {

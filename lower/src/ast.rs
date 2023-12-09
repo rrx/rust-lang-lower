@@ -165,6 +165,9 @@ impl Extra for SimpleExtra {
             },
         }
     }
+    fn span(span: Span) -> Self {
+        Self { span }
+    }
     fn location<'c>(&self, context: &'c Context, d: &Diagnostics) -> ir::Location<'c> {
         d.location(context, &self.span)
     }
@@ -172,6 +175,7 @@ impl Extra for SimpleExtra {
 
 pub trait Extra: Debug + Clone {
     fn new(file_id: usize, begin: CodeLocation, end: CodeLocation) -> Self;
+    fn span(span: Span) -> Self;
     fn location<'c>(&self, context: &'c Context, d: &Diagnostics) -> ir::Location<'c>;
 }
 

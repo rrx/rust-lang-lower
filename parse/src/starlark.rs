@@ -275,13 +275,10 @@ impl<E: Extra> Parser<E> {
                 })
             }
 
-            StmtP::Return(maybe_expr) => {
-                let node = match maybe_expr {
-                    Some(expr) => Ast::Return(Some(Box::new(self.from_expr(expr, env, d)?))),
-                    None => Ast::Return(None),
-                };
-                Ok(AstNode { node, extra })
-            }
+            StmtP::Return(maybe_expr) => match maybe_expr {
+                Some(expr) => Ok(b.ret(Some(self.from_expr(expr, env, d)?))),
+                None => Ok(b.ret(None)),
+            },
 
             StmtP::Assign(assign) => {
                 use syntax::ast::AssignTargetP;
@@ -291,16 +288,9 @@ impl<E: Extra> Parser<E> {
                         let name = ident.node.ident;
                         env.define(&name);
                         if env.in_func {
-                            let target = AssignTarget::Identifier(name);
-                            Ok(AstNode {
-                                node: Ast::Assign(target, Box::new(rhs)),
-                                extra,
-                            })
+                            Ok(b.assign(&name, rhs))
                         } else {
-                            Ok(AstNode {
-                                node: Ast::Global(name, Box::new(rhs)),
-                                extra,
-                            })
+                            Ok(b.global(&name, rhs))
                         }
                     }
                     _ => unimplemented!(),
