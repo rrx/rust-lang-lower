@@ -258,7 +258,7 @@ impl<E: Extra> Parser<E> {
             }
 
             StmtP::If(expr, truestmt) => {
-                let condition = self.from_expr(expr, env, d)?;
+                let condition = self.from_expr(expr, env, d, b)?;
                 let truestmt = self.from_stmt(*truestmt, env, d, b)?;
                 let extra = env.extra(item.span);
                 Ok(AstNode {
@@ -268,7 +268,7 @@ impl<E: Extra> Parser<E> {
             }
 
             StmtP::IfElse(expr, options) => {
-                let condition = self.from_expr(expr, env, d)?;
+                let condition = self.from_expr(expr, env, d, b)?;
                 let truestmt = self.from_stmt(options.0, env, d, b)?;
                 let elsestmt = Some(Box::new(self.from_stmt(options.1, env, d, b)?));
                 let extra = env.extra(item.span);
@@ -279,13 +279,13 @@ impl<E: Extra> Parser<E> {
             }
 
             StmtP::Return(maybe_expr) => match maybe_expr {
-                Some(expr) => Ok(b.ret(Some(self.from_expr(expr, env, d)?))),
+                Some(expr) => Ok(b.ret(Some(self.from_expr(expr, env, d, b)?))),
                 None => Ok(b.ret(None)),
             },
 
             StmtP::Assign(assign) => {
                 use syntax::ast::AssignTargetP;
-                let rhs = self.from_expr(assign.rhs, env, d)?;
+                let rhs = self.from_expr(assign.rhs, env, d, b)?;
                 match assign.lhs.node {
                     AssignTargetP::Identifier(ident) => {
                         let name = ident.node.ident;
@@ -300,7 +300,7 @@ impl<E: Extra> Parser<E> {
                 }
             }
 
-            StmtP::Expression(expr) => self.from_expr(expr, env, d),
+            StmtP::Expression(expr) => self.from_expr(expr, env, d, b),
 
             _ => unimplemented!("{:?}", item),
         }
@@ -311,6 +311,7 @@ impl<E: Extra> Parser<E> {
         item: syntax::ast::AstExprP<P>,
         env: &mut Environment,
         d: &mut Diagnostics,
+        b: &NodeBuilder<E>,
     ) -> Result<AstNode<E>> {
         use syntax::ast::ExprP;
 
@@ -319,8 +320,8 @@ impl<E: Extra> Parser<E> {
                 let extra = env.extra(item.span);
                 let ast = Ast::BinaryOp(
                     from_binop(op),
-                    Box::new(self.from_expr(*lhs, env, d)?),
-                    Box::new(self.from_expr(*rhs, env, d)?),
+                    Box::new(self.from_expr(*lhs, env, d, b)?),
+                    Box::new(self.from_expr(*rhs, env, d, b)?),
                 );
                 Ok(AstNode { node: ast, extra })
             }
@@ -328,7 +329,7 @@ impl<E: Extra> Parser<E> {
             ExprP::Call(expr, expr_args) => {
                 let mut args = vec![];
                 for arg in expr_args {
-                    args.push(self.from_argument(arg, env, d)?);
+                    args.push(self.from_argument(arg, env, d, b)?);
                 }
 
                 match expr.node {
@@ -444,7 +445,7 @@ impl<E: Extra> Parser<E> {
                 let extra = env.extra(item.span);
                 let ast = Ast::UnaryOp(
                     ast::UnaryOperation::Minus,
-                    self.from_expr(*expr, env, d)?.into(),
+                    self.from_expr(*expr, env, d, b)?.into(),
                 );
                 Ok(AstNode { node: ast, extra })
             }
@@ -458,12 +459,11 @@ impl<E: Extra> Parser<E> {
         item: syntax::ast::AstArgumentP<P>,
         env: &mut Environment,
         d: &mut Diagnostics,
+        b: &NodeBuilder<E>,
     ) -> Result<ast::Argument<E>> {
         use syntax::ast::ArgumentP;
         match item.node {
-            ArgumentP::Positional(expr) => Ok(ast::Argument::Positional(
-                self.from_expr(expr, env, d)?.into(),
-            )),
+            ArgumentP::Positional(expr) => Ok(b.arg(self.from_expr(expr, env, d, b)?.into())),
             _ => unimplemented!(),
         }
     }
