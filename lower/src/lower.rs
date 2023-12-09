@@ -82,6 +82,7 @@ pub struct Lower<'c, E> {
     pub(crate) context: &'c Context,
     pub files: FileDB,
     env: ScopeStack<'c, Data>,
+    pass_manager: melior::pass::PassManager<'c>,
     _e: std::marker::PhantomData<E>,
 }
 
@@ -91,6 +92,7 @@ impl<'c, E: Extra> Lower<'c, E> {
             context,
             files: FileDB::new(),
             env: ScopeStack::default(),
+            pass_manager: crate::compile::default_pass_manager(context),
             _e: std::marker::PhantomData::default(),
         }
     }
@@ -1250,10 +1252,10 @@ impl<'c, E: Extra> Lower<'c, E> {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use crate::compile::CompilerContext;
+    use crate::default_context;
     use crate::NodeBuilder;
     use test_log::test;
-
-    use crate::compile::CompilerContext;
 
     pub fn gen_test<'c, E: Extra>(file_id: usize, _env: &mut Environment<'c>) -> AstNode<E> {
         let mut b: NodeBuilder<E> = NodeBuilder::new();
@@ -1377,7 +1379,7 @@ pub(crate) mod tests {
 
     #[test]
     fn test_gen() {
-        let context = Context::new();
+        let context = default_context();
         let mut lower = Lower::new(&context);
         let file_id = lower.add_source("test.py".into(), "test".into());
         let mut env = Environment::default();
@@ -1389,7 +1391,7 @@ pub(crate) mod tests {
 
     #[test]
     fn test_while() {
-        let context = Context::new();
+        let context = default_context();
         let mut lower = Lower::new(&context);
         let file_id = lower.add_source("test.py".into(), "test".into());
         let mut env = Environment::default();
@@ -1401,7 +1403,7 @@ pub(crate) mod tests {
 
     #[test]
     fn test_loop() {
-        let context = Context::new();
+        let context = default_context();
         let mut lower = Lower::new(&context);
         let file_id = lower.add_source("test.py".into(), "test".into());
         let mut env = Environment::default();

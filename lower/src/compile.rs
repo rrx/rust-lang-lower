@@ -163,21 +163,6 @@ pub fn run_ast<'c, E: ast::Extra>(
     // passes
     let pass_manager = default_pass_manager(lower.context);
 
-    lower.context.set_allow_unregistered_dialects(true);
-
-    lower.context.attach_diagnostic_handler(|diagnostic| {
-        let location = diagnostic.location();
-        log::error!("E: {}: {}", diagnostic, location);
-        true
-    });
-
-    // registry
-    let registry = DialectRegistry::new();
-    register_all_dialects(&registry);
-    lower.context.append_dialect_registry(&registry);
-    lower.context.load_all_available_dialects();
-    register_all_llvm_translations(lower.context);
-
     let location = ir::Location::unknown(lower.context);
     let mut module = ir::Module::new(location);
 

@@ -481,7 +481,7 @@ pub(crate) mod tests {
     use test_log::test;
 
     fn run_test(filename: &str, expected: i32) {
-        let context = lower::Context::new();
+        let context = lower::default_context();
         let mut lower = lower::lower::Lower::new(&context);
         let file_id = lower.add_source(
             filename.to_string(),

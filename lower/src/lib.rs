@@ -7,6 +7,7 @@ pub mod lower;
 pub mod scope;
 
 pub use builder::NodeBuilder;
+pub use compile::default_context;
 pub use lower::{FileDB, Lower};
 
 // re-export melior structs
