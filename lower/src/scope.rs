@@ -457,9 +457,9 @@ mod tests {
     use super::*;
     use crate::ast;
     use crate::ast::{Extra, SimpleExtra};
-    use crate::lower::FileDB;
+    //use crate::lower::FileDB;
     use crate::lower::Lower;
-    use crate::{Environment, NodeBuilder};
+    use crate::{Diagnostics, Environment, NodeBuilder};
     use melior::dialect::{arith, func};
     use melior::ir::attribute::{StringAttribute, TypeAttribute};
     use melior::ir::r#type::FunctionType;
@@ -493,26 +493,27 @@ mod tests {
     fn test_scope1() {
         let context = test_context();
         let mut lower: Lower<SimpleExtra> = Lower::new(&context);
-        let file_id = lower.add_source("test.py".into(), "test".into());
+        let mut d = Diagnostics::new();
+        let file_id = d.add_source("test.py".into(), "test".into());
         let mut s = Environment::default();
         s.enter_static();
         let location = Location::unknown(&context);
 
         // 3 ops in static context
-        let mut b = NodeBuilder::new();
-        b.enter_file(file_id, "test.py");
+        let mut b = NodeBuilder::new(file_id, "test.py");
+        //b.enter_file(file_id, "test.py");
         let expr = b.bool(false);
         let ast = b.global("x", expr);
-        lower.lower_expr(ast, &mut s);
+        lower.lower_expr(ast, &mut s, &mut d);
 
         let expr = b.bool(false);
         let ast = b.global("x", expr);
-        lower.lower_expr(ast, &mut s);
+        lower.lower_expr(ast, &mut s, &mut d);
         let g_index_x = s.last_index().unwrap();
 
         let expr = b.bool(true);
         let ast = b.global("y", expr);
-        lower.lower_expr(ast, &mut s);
+        lower.lower_expr(ast, &mut s, &mut d);
         let g_index_y = s.last_index().unwrap();
 
         // ensure x is shadowed
@@ -529,14 +530,14 @@ mod tests {
         // push y, should shadow static context
         let expr = b.bool(true);
         let ast = b.assign("y", expr);
-        lower.lower_expr(ast, &mut s);
+        lower.lower_expr(ast, &mut s, &mut d);
         let y_index = s.last_index().unwrap();
         assert_op_index(&s, "y", y_index);
 
         // push x, should shadow static context
         let expr = b.bool(false);
         let ast = b.assign("x", expr);
-        lower.lower_expr(ast, &mut s);
+        lower.lower_expr(ast, &mut s, &mut d);
         let x_index = s.last_index().unwrap();
         assert_op_index(&s, "x", x_index);
 

@@ -1,6 +1,7 @@
 use crate::ast;
 use crate::lower;
 use crate::scope;
+use crate::Diagnostics;
 use melior::ir::operation::OperationPrintingFlags;
 use melior::ExecutionEngine;
 use melior::{
@@ -15,8 +16,9 @@ impl<'c, E: ast::Extra> lower::Lower<'c, E> {
         &mut self,
         ast: ast::AstNode<E>,
         env: &mut scope::ScopeStack<'c, lower::Data>,
+        d: &mut Diagnostics,
     ) -> i32 {
-        run_ast(ast, self, env)
+        run_ast(ast, self, env, d)
     }
 }
 
@@ -116,6 +118,7 @@ impl<'c, E: ast::Extra> Compiler<'c, E> {
     }
     */
 
+    /*
     pub fn module(&mut self, context: &'c mut CompilerContext<'c, E>, ast: ast::AstNode<E>) {
         //let lower = lower::Lower::new(&context.context, &context.files);
         self.lower.lower_expr(ast, &mut context.env);
@@ -123,6 +126,7 @@ impl<'c, E: ast::Extra> Compiler<'c, E> {
             self.module.body().append_operation(op);
         }
     }
+    */
 
     pub fn run(&mut self, context: &mut CompilerContext<'c, E>) -> i32 {
         log::debug!(
@@ -159,11 +163,12 @@ pub fn run_ast<'c, E: ast::Extra>(
     ast: ast::AstNode<E>,
     lower: &mut lower::Lower<'c, E>,
     env: &mut scope::ScopeStack<'c, lower::Data>,
+    d: &mut Diagnostics,
 ) -> i32 {
     let location = ir::Location::unknown(lower.context);
     let mut module = ir::Module::new(location);
 
-    lower.module_lower(&mut module, ast, env);
+    lower.module_lower(&mut module, ast, env, d);
     lower.module_passes(&mut module);
 
     let mut path = "../target/debug/prelude.so".to_string();

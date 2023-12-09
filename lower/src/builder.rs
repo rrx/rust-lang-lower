@@ -9,11 +9,11 @@ pub struct NodeBuilder<E> {
 }
 
 impl<E: Extra> NodeBuilder<E> {
-    pub fn new() -> Self {
+    pub fn new(file_id: usize, filename: &str) -> Self {
         let begin = CodeLocation { line: 0, col: 0 };
         let end = CodeLocation { line: 0, col: 0 };
         Self {
-            file_ids: vec![],
+            file_ids: vec![(file_id, filename.to_string())],
             begin,
             end,
             _e: std::marker::PhantomData::default(),

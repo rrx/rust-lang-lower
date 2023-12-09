@@ -8,8 +8,8 @@ use melior::{ir, ExecutionEngine};
 use simple_logger::{set_up_color_terminal, SimpleLogger};
 
 use lower::ast::{AstNode, SimpleExtra};
-use lower::compile::{default_context, default_pass_manager};
-use lower::lower::Lower;
+use lower::compile::default_context;
+use lower::{Diagnostics, Lower};
 use parse::starlark::Parser;
 
 #[derive(FromArgs, Debug)]
@@ -56,9 +56,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let location = ir::Location::unknown(&context);
     let mut module = ir::Module::new(location);
-
     let mut parser = Parser::new();
-
+    let mut d = Diagnostics::new();
     let mut lower = Lower::new(&context);
     let mut env: lower::scope::ScopeStack<lower::lower::Data> = lower::scope::ScopeStack::default();
     env.enter_static();
@@ -67,18 +66,18 @@ fn main() -> Result<(), Box<dyn Error>> {
         let path = Path::new(&path);
         log::debug!("parsing: {}", path.to_str().unwrap());
 
-        let file_id = lower.add_source(
+        let file_id = d.add_source(
             path.to_str().unwrap().to_string(),
             std::fs::read_to_string(path)?,
         );
 
-        let result = parser.parse(&path, None, file_id);
+        let result = parser.parse(&path, None, file_id, &mut d);
         if config.verbose {
-            parser.dump(&lower.files);
+            d.dump();
         }
         let ast: AstNode<SimpleExtra> = result?;
 
-        lower.module_lower(&mut module, ast, &mut env);
+        lower.module_lower(&mut module, ast, &mut env, &mut d);
     }
     env.exit();
     assert_eq!(0, env.layer_count());

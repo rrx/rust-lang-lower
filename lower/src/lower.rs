@@ -14,6 +14,7 @@ use melior::{
 
 use crate::ast::*;
 use crate::scope::{Layer, LayerIndex, LayerType, ScopeStack};
+use crate::Diagnostics;
 use codespan_reporting::files::SimpleFiles;
 
 #[derive(Debug, Clone)]
@@ -81,7 +82,6 @@ pub type FileDB = SimpleFiles<String, String>;
 
 pub struct Lower<'c, E> {
     pub(crate) context: &'c Context,
-    pub files: FileDB,
     env: ScopeStack<'c, Data>,
     pub pass_manager: melior::pass::PassManager<'c>,
     _e: std::marker::PhantomData<E>,
@@ -91,15 +91,11 @@ impl<'c, E: Extra> Lower<'c, E> {
     pub fn new(context: &'c Context) -> Self {
         Self {
             context,
-            files: FileDB::new(),
+            //diagnostics: vec![],
             env: ScopeStack::default(),
             pass_manager: crate::compile::default_pass_manager(context),
             _e: std::marker::PhantomData::default(),
         }
-    }
-
-    pub fn add_source(&mut self, filename: String, content: String) -> usize {
-        self.files.add(filename, content)
     }
 
     pub fn module_lower(
@@ -107,8 +103,9 @@ impl<'c, E: Extra> Lower<'c, E> {
         module: &mut Module<'c>,
         expr: AstNode<E>,
         env: &mut Environment<'c>,
+        d: &mut Diagnostics,
     ) {
-        self.lower_expr(expr, env);
+        self.lower_expr(expr, env, d);
         for op in env.take_ops() {
             module.body().append_operation(op);
         }
@@ -217,8 +214,9 @@ impl<'c, E: Extra> Lower<'c, E> {
         &self,
         expr: AstNode<E>,
         _env: &mut Environment<'c>,
+        d: &mut Diagnostics,
     ) -> (AstType, Operation<'c>) {
-        let location = self.location(&expr);
+        let location = self.location(&expr, d);
         match expr.node {
             Ast::Literal(Literal::Bool(x)) => (AstType::Bool, self.build_bool_op(x, location)),
             Ast::Literal(Literal::Int(x)) => (AstType::Int, self.build_int_op(x, location)),
@@ -233,15 +231,16 @@ impl<'c, E: Extra> Lower<'c, E> {
         condition: AstNode<E>,
         body: AstNode<E>,
         env: &mut Environment<'c>,
+        d: &mut Diagnostics,
     ) -> LayerIndex {
         let bool_type = self.from_type(&AstType::Bool);
-        let condition_location = self.location(&condition);
-        let body_location = self.location(&body);
+        let condition_location = self.location(&condition, d);
+        let body_location = self.location(&body, d);
 
         // before
         let layer = self.build_block(&[], env);
         env.enter(layer);
-        self.lower_expr(condition, env);
+        self.lower_expr(condition, env, d);
         let condition_rs = env.last_values();
         // should be bool type
         assert!(condition_rs[0].r#type() == bool_type);
@@ -262,7 +261,7 @@ impl<'c, E: Extra> Lower<'c, E> {
         let layer = self.build_block(&[], env);
         env.enter(layer);
         let after_region = Region::new();
-        self.lower_expr(body, env);
+        self.lower_expr(body, env, d);
         // yield passes result to region 0
         let y = scf::r#yield(&[], body_location);
         env.push(y);
@@ -293,6 +292,7 @@ impl<'c, E: Extra> Lower<'c, E> {
         condition: AstNode<E>,
         body: AstNode<E>,
         env: &mut Environment<'c>,
+        d: &mut Diagnostics,
     ) -> LayerIndex {
         /*
          * while condition_expr, body_expr, bool init_op, int init_op2 -> (bool, int) -> int:
@@ -318,8 +318,8 @@ impl<'c, E: Extra> Lower<'c, E> {
          *    type is ()->()
          */
         let bool_type = self.from_type(&AstType::Bool);
-        let condition_location = self.location(&condition);
-        let body_location = self.location(&body);
+        let condition_location = self.location(&condition, d);
+        let body_location = self.location(&body, d);
 
         let x_op = self.build_index_op(1, condition_location);
         env.push_with_name(x_op, "test");
@@ -347,7 +347,7 @@ impl<'c, E: Extra> Lower<'c, E> {
         let layer = self.build_block(&before_args, env);
         env.enter(layer);
 
-        self.lower_expr(condition, env);
+        self.lower_expr(condition, env, d);
 
         let condition_rs = env.last_values();
         // should be bool type
@@ -389,7 +389,7 @@ impl<'c, E: Extra> Lower<'c, E> {
         let op = self.build_bool_op(false, condition_location);
         let index1 = env.push(op);
 
-        self.lower_expr(body, env);
+        self.lower_expr(body, env, d);
         let index2 = env.last_index().unwrap();
 
         let mut rs = env.values(&index1);
@@ -432,8 +432,8 @@ impl<'c, E: Extra> Lower<'c, E> {
         env.last_index().unwrap()
     }
 
-    pub fn location(&self, expr: &AstNode<E>) -> Location<'c> {
-        expr.extra.location(self.context, &self.files)
+    pub fn location(&self, expr: &AstNode<E>, d: &Diagnostics) -> Location<'c> {
+        expr.extra.location(self.context, d)
     }
 
     pub fn build_static(
@@ -468,10 +468,11 @@ impl<'c, E: Extra> Lower<'c, E> {
         name: &str,
         expr: AstNode<E>,
         env: &mut Environment<'c>,
+        d: &mut Diagnostics,
     ) -> LayerIndex {
-        let location = self.location(&expr);
+        let location = self.location(&expr, d);
         let block = Block::new(&[]);
-        let (ast_ty, op1) = self.lower_static(expr, env);
+        let (ast_ty, op1) = self.lower_static(expr, env, d);
         let r = op1.result(0).unwrap().into();
         let op2 = llvm::r#return(Some(r), location);
         block.append_operation(op1);
@@ -519,9 +520,10 @@ impl<'c, E: Extra> Lower<'c, E> {
         ident: &str,
         ast: AstNode<E>,
         env: &mut Environment<'c>,
+        d: &mut Diagnostics,
     ) -> LayerIndex {
-        let location = self.location(&ast);
-        let value_index = self.lower_expr(ast, env);
+        let location = self.location(&ast, d);
+        let value_index = self.lower_expr(ast, env, d);
         let opaque_ty = llvm::r#type::opaque_pointer(self.context);
         let f = attribute::FlatSymbolRefAttribute::new(self.context, ident);
         // get global address
@@ -548,8 +550,9 @@ impl<'c, E: Extra> Lower<'c, E> {
         ident: &str,
         rhs: AstNode<E>,
         env: &mut Environment<'c>,
+        d: &mut Diagnostics,
     ) -> LayerIndex {
-        let location = self.location(&rhs);
+        let location = self.location(&rhs, d);
         let (index, data) = match env.index_from_name(ident) {
             Some(index) => {
                 let data = env.data(&index).unwrap().clone();
@@ -557,7 +560,7 @@ impl<'c, E: Extra> Lower<'c, E> {
             }
             _ => unreachable!("Name not found: {}", ident),
         };
-        let value_index = self.lower_expr(rhs, env);
+        let value_index = self.lower_expr(rhs, env, d);
         if let Some(static_name) = data.static_name {
             let ty = MemRefType::new(IntegerType::new(self.context, 64).into(), &[], None, None);
             let op1 = memref::get_global(self.context, &static_name, ty, location);
@@ -601,8 +604,13 @@ impl<'c, E: Extra> Lower<'c, E> {
         layer
     }
 
-    pub fn lower_expr<'a>(&self, expr: AstNode<E>, env: &mut ScopeStack<'c, Data>) -> LayerIndex {
-        let location = self.location(&expr);
+    pub fn lower_expr<'a>(
+        &self,
+        expr: AstNode<E>,
+        env: &mut ScopeStack<'c, Data>,
+        d: &mut Diagnostics,
+    ) -> LayerIndex {
+        let location = self.location(&expr, d);
 
         match expr.node {
             Ast::Global(ident, expr) => {
@@ -675,7 +683,7 @@ impl<'c, E: Extra> Lower<'c, E> {
             }
 
             Ast::UnaryOp(op, a) => {
-                let index_rhs = self.lower_expr(*a, env);
+                let index_rhs = self.lower_expr(*a, env, d);
 
                 // get the type of the RHS
                 let ty = env.value0(&index_rhs).r#type();
@@ -704,8 +712,8 @@ impl<'c, E: Extra> Lower<'c, E> {
 
             Ast::BinaryOp(op, a, b) => {
                 log::debug!("binop: {:?}, {:?}, {:?}", op, a, b);
-                let index_lhs = self.lower_expr(*a, env);
-                let index_rhs = self.lower_expr(*b, env);
+                let index_lhs = self.lower_expr(*a, env, d);
+                let index_rhs = self.lower_expr(*b, env, d);
 
                 let ty_lhs = env.data(&index_lhs).expect("LHS data missing").ty.clone();
                 let ty_rhs = env.data(&index_rhs).expect("RHS data missing").ty.clone();
@@ -816,7 +824,7 @@ impl<'c, E: Extra> Lower<'c, E> {
             Ast::Deref(expr, target) => {
                 // we are expecting a memref here
                 log::debug!("deref: {:?}: {:?}", &expr, target);
-                let index = self.lower_expr(*expr, env);
+                let index = self.lower_expr(*expr, env, d);
 
                 let data = env.data(&index).unwrap();
                 log::debug!("data: {:?}", &data);
@@ -916,7 +924,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                     for a in args {
                         match a {
                             Argument::Positional(arg) => {
-                                let index = self.lower_expr(*arg, env);
+                                let index = self.lower_expr(*arg, env, d);
                                 indices.push(index);
                             } //_ => unimplemented!("{:?}", a)
                         };
@@ -968,7 +976,7 @@ impl<'c, E: Extra> Lower<'c, E> {
 
             Ast::Sequence(exprs) => {
                 exprs.into_iter().for_each(|expr| {
-                    self.lower_expr(expr, env);
+                    self.lower_expr(expr, env, d);
                 });
                 env.last_index().unwrap()
             }
@@ -1002,7 +1010,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                     match p.node {
                         Parameter::Normal(ident, ast_ty) => {
                             log::debug!("params {:?}: {:?}", ident, ast_ty);
-                            let location = p.extra.location(self.context, &self.files);
+                            let location = p.extra.location(self.context, d);
                             params.push((ast_ty.clone(), location, ident));
                             ast_types.push(ast_ty);
                         }
@@ -1039,7 +1047,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                     let layer = self.build_block(params.as_slice(), env);
                     env.enter(layer);
                     //env.enter_block(params.as_slice());
-                    self.lower_expr(*body, env);
+                    self.lower_expr(*body, env, d);
                     let mut layer = env.exit();
                     let block = layer.block.take().unwrap();
                     for op in layer.take_ops() {
@@ -1071,8 +1079,8 @@ impl<'c, E: Extra> Lower<'c, E> {
 
             Ast::Return(maybe_expr) => match maybe_expr {
                 Some(expr) => {
-                    let location = self.location(&expr);
-                    let mut index = self.lower_expr(*expr, env);
+                    let location = self.location(&expr, d);
+                    let mut index = self.lower_expr(*expr, env, d);
 
                     // TODO: this only handles a single return value
                     // Deref if necessary
@@ -1101,10 +1109,10 @@ impl<'c, E: Extra> Lower<'c, E> {
             },
 
             Ast::Conditional(condition, true_expr, maybe_false_expr) => {
-                let index_conditions = self.lower_expr(*condition, env);
+                let index_conditions = self.lower_expr(*condition, env, d);
                 let layer = self.build_block(&[], env);
                 env.enter(layer);
-                self.lower_expr(*true_expr, env);
+                self.lower_expr(*true_expr, env, d);
                 let mut layer = env.exit();
                 let true_block = layer.block.take().unwrap();
 
@@ -1117,7 +1125,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                     Some(false_expr) => {
                         let layer = self.build_block(&[], env);
                         env.enter(layer);
-                        self.lower_expr(*false_expr, env);
+                        self.lower_expr(*false_expr, env, d);
                         let mut layer = env.exit();
                         let false_block = layer.block.take().unwrap();
                         for op in layer.take_ops() {
@@ -1156,7 +1164,7 @@ impl<'c, E: Extra> Lower<'c, E> {
             }
 
             Ast::Mutate(lhs, rhs) => match lhs.node {
-                Ast::Identifier(ident) => self.emit_mutate(&ident, *rhs, env),
+                Ast::Identifier(ident) => self.emit_mutate(&ident, *rhs, env, d),
                 _ => unimplemented!("{:?}", &lhs.node),
             },
 
@@ -1165,7 +1173,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                 // This requires that the variable has a place either on the stack or in memory
                 // global vars have a place, so start with those
                 match target {
-                    AssignTarget::Identifier(ident) => self.emit_mutate(&ident, *rhs, env),
+                    AssignTarget::Identifier(ident) => self.emit_mutate(&ident, *rhs, env, d),
                     _ => unimplemented!("{:?}", target),
                 }
             }
@@ -1180,7 +1188,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                         let op = memref::alloca(self.context, memref_ty, &[], &[], None, location);
                         let ptr_index = env.push(op);
                         env.name_index(ptr_index.clone(), &ident);
-                        let rhs_index = self.lower_expr(*rhs, env);
+                        let rhs_index = self.lower_expr(*rhs, env, d);
                         let data = env.data(&rhs_index).unwrap();
                         let data = Data::new(AstType::Ptr(data.ty.clone().into()));
                         env.index_data(&ptr_index, data); //Data::new(data.ty.clone()));
@@ -1199,7 +1207,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                                 );
                             }
                             _ => {
-                                let index = self.lower_expr(*rhs, env);
+                                let index = self.lower_expr(*rhs, env, d);
                                 env.name_index(index.clone(), &ident);
                                 index
                             }
@@ -1209,12 +1217,12 @@ impl<'c, E: Extra> Lower<'c, E> {
             }
 
             Ast::While(condition, body) => {
-                self.build_while(*condition, *body, env);
+                self.build_while(*condition, *body, env, d);
                 env.last_index().unwrap()
             }
 
             Ast::Test(condition, body) => {
-                self.build_loop(*condition, *body, env);
+                self.build_loop(*condition, *body, env, d);
                 env.last_index().unwrap()
             }
 
@@ -1226,7 +1234,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                         let arg = args.pop().unwrap();
                         match arg {
                             Argument::Positional(expr) => {
-                                let index = self.lower_expr(*expr, env);
+                                let index = self.lower_expr(*expr, env, d);
                                 let msg = format!("assert at {}", location);
                                 let assert_op =
                                     cf::assert(self.context, env.value0(&index), &msg, location);
@@ -1242,7 +1250,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                                 let ast_ty = self.type_from_expr(&expr, env);
 
                                 // eval expr
-                                let index = self.lower_expr(*expr, env);
+                                let index = self.lower_expr(*expr, env, d);
                                 let r = env.value0(&index);
                                 let ty = r.r#type();
 
@@ -1275,13 +1283,14 @@ impl<'c, E: Extra> Lower<'c, E> {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::compile::CompilerContext;
+    //use crate::compile::CompilerContext;
     use crate::default_context;
     use crate::NodeBuilder;
     use test_log::test;
 
     pub fn gen_test<'c, E: Extra>(file_id: usize, _env: &mut Environment<'c>) -> AstNode<E> {
-        let mut b: NodeBuilder<E> = NodeBuilder::new();
+        //let mut b: NodeBuilder<E> = NodeBuilder::new();
+        let mut b = NodeBuilder::new(file_id, "test.py");
         b.enter_file(file_id, "test.py");
         let mut seq = vec![];
         seq.push(b.main(b.seq(vec![
@@ -1301,7 +1310,8 @@ pub(crate) mod tests {
     }
 
     pub fn gen_while<'c, E: Extra>(file_id: usize, _env: &mut Environment<'c>) -> AstNode<E> {
-        let mut b: NodeBuilder<E> = NodeBuilder::new();
+        let mut b = NodeBuilder::new(file_id, "test.py");
+        //let mut b: NodeBuilder<E> = NodeBuilder::new();
         b.enter_file(file_id, "test.py");
         let mut seq = vec![];
 
@@ -1349,7 +1359,8 @@ pub(crate) mod tests {
         file_id: usize,
         _env: &mut Environment<'c>,
     ) -> AstNode<E> {
-        let mut b: NodeBuilder<E> = NodeBuilder::new();
+        let mut b = NodeBuilder::new(file_id, "test.py");
+        //let mut b: NodeBuilder<E> = NodeBuilder::new();
         b.enter_file(file_id, "test.py");
         let mut seq = vec![];
         seq.push(b.global("z", b.integer(10)));
@@ -1393,22 +1404,16 @@ pub(crate) mod tests {
         b.seq(seq)
     }
 
-    pub fn gen_recursion<'c, E: Extra>(file_id: usize, _env: &mut Environment<'c>) -> AstNode<E> {
-        let mut b: NodeBuilder<E> = NodeBuilder::new();
-        b.enter_file(file_id, "test.py");
-        let seq = vec![];
-        b.seq(seq)
-    }
-
     #[test]
     fn test_gen() {
         let context = default_context();
         let mut lower = Lower::new(&context);
-        let file_id = lower.add_source("test.py".into(), "test".into());
+        let mut d = Diagnostics::new();
+        let file_id = d.add_source("test.py".into(), "test".into());
         let mut env = Environment::default();
         env.enter_static();
         let ast: AstNode<SimpleExtra> = gen_function_call(file_id, &mut env);
-        assert_eq!(0, lower.run_ast(ast, &mut env));
+        assert_eq!(0, lower.run_ast(ast, &mut env, &mut d));
         env.exit();
     }
 
@@ -1416,29 +1421,31 @@ pub(crate) mod tests {
     fn test_while() {
         let context = default_context();
         let mut lower = Lower::new(&context);
-        let file_id = lower.add_source("test.py".into(), "test".into());
+        let mut d = Diagnostics::new();
+        let file_id = d.add_source("test.py".into(), "test".into());
         let mut env = Environment::default();
         env.enter_static();
         let ast: AstNode<SimpleExtra> = gen_while(file_id, &mut env);
-        assert_eq!(0, lower.run_ast(ast, &mut env));
+        assert_eq!(0, lower.run_ast(ast, &mut env, &mut d));
         env.exit();
     }
 
     #[test]
     fn test_loop() {
         let context = default_context();
+        let mut d = Diagnostics::new();
         let mut lower = Lower::new(&context);
-        let file_id = lower.add_source("test.py".into(), "test".into());
+        let file_id = d.add_source("test.py".into(), "test".into());
         let mut env = Environment::default();
         env.enter_static();
         let ast: AstNode<SimpleExtra> = gen_test(file_id, &mut env);
-        assert_eq!(0, lower.run_ast(ast, &mut env));
+        assert_eq!(0, lower.run_ast(ast, &mut env, &mut d));
         env.exit();
     }
 
     #[test]
     fn test_compile() {
-        let mut context: CompilerContext<SimpleExtra> = CompilerContext::new();
+        //let mut context: CompilerContext<SimpleExtra> = CompilerContext::new();
         //let mut lower = Lower::new(&context.context);
         //let file_id = lower.add_source("test.py".into(), "test".into());
         //let ast: AstNode<SimpleExtra> = gen_test(file_id, &mut context.env);

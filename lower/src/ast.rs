@@ -1,8 +1,8 @@
+use crate::Diagnostics;
+use codespan_reporting::files::{Files, SimpleFiles};
 use melior::ir;
 use melior::Context;
 use std::fmt::Debug;
-
-use codespan_reporting::files::{Files, SimpleFiles};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum AstType {
@@ -195,31 +195,14 @@ impl Extra for SimpleExtra {
             },
         }
     }
-    fn location<'c>(
-        &self,
-        context: &'c Context,
-        files: &SimpleFiles<String, String>,
-    ) -> ir::Location<'c> {
-        if let Ok(name) = files.name(self.span.file_id) {
-            ir::Location::new(
-                context,
-                &name,
-                self.span.begin.line + 1,
-                self.span.begin.col + 1,
-            )
-        } else {
-            ir::Location::unknown(context)
-        }
+    fn location<'c>(&self, context: &'c Context, d: &Diagnostics) -> ir::Location<'c> {
+        d.location(context, &self.span)
     }
 }
 
 pub trait Extra: Debug + Clone {
     fn new(file_id: usize, begin: CodeLocation, end: CodeLocation) -> Self;
-    fn location<'c>(
-        &self,
-        context: &'c Context,
-        files: &SimpleFiles<String, String>,
-    ) -> ir::Location<'c>;
+    fn location<'c>(&self, context: &'c Context, d: &Diagnostics) -> ir::Location<'c>;
 }
 
 #[derive(Debug, Clone)]

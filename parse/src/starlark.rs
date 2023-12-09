@@ -8,11 +8,10 @@ use starlark_syntax::syntax;
 use starlark_syntax::syntax::module::AstModuleFields;
 
 use codespan_reporting::diagnostic::{Diagnostic, Label};
-use codespan_reporting::term;
-use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
 
 use lower::ast;
 use lower::ast::{AssignTarget, Ast, AstNode, AstType, CodeLocation, DerefTarget, Extra, Literal};
+use lower::Diagnostics;
 use std::collections::HashMap;
 
 #[derive(Error, Debug)]
@@ -182,18 +181,21 @@ fn from_assign_target<P: syntax::ast::AstPayload>(
 }
 
 pub struct Parser<E> {
-    diagnostics: Vec<Diagnostic<usize>>,
-    b: lower::NodeBuilder<E>,
+    //diagnostics: Vec<Diagnostic<usize>>,
+    //b: lower::NodeBuilder<E>,
+    _e: std::marker::PhantomData<E>,
 }
 
 impl<E: Extra> Parser<E> {
     pub fn new() -> Self {
         Self {
-            diagnostics: vec![],
-            b: lower::NodeBuilder::new(),
+            //diagnostics: vec![],
+            //b: lower::NodeBuilder::new(),
+            _e: std::marker::PhantomData::default(),
         }
     }
 
+    /*
     pub fn dump(&self, files: &lower::FileDB) {
         let writer = StandardStream::stderr(ColorChoice::Always);
         let config = codespan_reporting::term::Config::default();
@@ -201,14 +203,17 @@ impl<E: Extra> Parser<E> {
             term::emit(&mut writer.lock(), &config, files, &d).unwrap();
         }
     }
+    */
 
     pub fn parse<'a>(
         &mut self,
         path: &Path,
         content: Option<&str>,
         file_id: usize,
+        d: &mut Diagnostics,
     ) -> Result<ast::AstNode<E>> {
-        self.b.enter_file(file_id, path.to_str().unwrap());
+        let b = lower::NodeBuilder::new(file_id, path.to_str().unwrap());
+        //self.b.enter_file(file_id, path.to_str().unwrap());
 
         let dialect = syntax::Dialect::Extended;
         let m = match content {
@@ -219,16 +224,17 @@ impl<E: Extra> Parser<E> {
         };
         let (codemap, stmt, _dialect, _typecheck) = m.into_parts();
         let mut env = Environment::new(&codemap, file_id);
-        let mut seq = self.b.prelude();
-        let ast: ast::AstNode<E> = self.from_stmt(stmt, &mut env)?;
+        let mut seq = b.prelude();
+        let ast: ast::AstNode<E> = self.from_stmt(stmt, &mut env, d)?;
         seq.push(ast);
-        Ok(self.b.seq(seq))
+        Ok(b.seq(seq))
     }
 
     pub fn from_stmt<'a, P: syntax::ast::AstPayload>(
         &mut self,
         item: syntax::ast::AstStmtP<P>,
         env: &mut Environment<'a>,
+        d: &mut Diagnostics,
     ) -> Result<ast::AstNode<E>> {
         use syntax::ast::StmtP;
         let extra = env.extra(item.span);
@@ -237,7 +243,7 @@ impl<E: Extra> Parser<E> {
             StmtP::Statements(stmts) => {
                 let mut exprs = vec![];
                 for stmt in stmts {
-                    exprs.push(self.from_stmt(stmt, env)?);
+                    exprs.push(self.from_stmt(stmt, env, d)?);
                 }
 
                 let ast = Ast::Sequence(exprs);
@@ -251,7 +257,7 @@ impl<E: Extra> Parser<E> {
                     .map(|p| from_parameter(p, env))
                     .collect();
                 env.enter_func();
-                let ast = self.from_stmt(*def.body, env)?;
+                let ast = self.from_stmt(*def.body, env, d)?;
                 env.exit_func();
                 let name = &def.name.ident;
                 let d = ast::Definition {
@@ -266,8 +272,8 @@ impl<E: Extra> Parser<E> {
             }
 
             StmtP::If(expr, truestmt) => {
-                let condition = self.from_expr(expr, env)?;
-                let truestmt = self.from_stmt(*truestmt, env)?;
+                let condition = self.from_expr(expr, env, d)?;
+                let truestmt = self.from_stmt(*truestmt, env, d)?;
                 Ok(AstNode {
                     node: Ast::Conditional(condition.into(), truestmt.into(), None),
                     extra,
@@ -275,9 +281,9 @@ impl<E: Extra> Parser<E> {
             }
 
             StmtP::IfElse(expr, options) => {
-                let condition = self.from_expr(expr, env)?;
-                let truestmt = self.from_stmt(options.0, env)?;
-                let elsestmt = Some(Box::new(self.from_stmt(options.1, env)?));
+                let condition = self.from_expr(expr, env, d)?;
+                let truestmt = self.from_stmt(options.0, env, d)?;
+                let elsestmt = Some(Box::new(self.from_stmt(options.1, env, d)?));
                 Ok(AstNode {
                     node: Ast::Conditional(condition.into(), truestmt.into(), elsestmt),
                     extra,
@@ -286,7 +292,7 @@ impl<E: Extra> Parser<E> {
 
             StmtP::Return(maybe_expr) => {
                 let node = match maybe_expr {
-                    Some(expr) => Ast::Return(Some(Box::new(self.from_expr(expr, env)?))),
+                    Some(expr) => Ast::Return(Some(Box::new(self.from_expr(expr, env, d)?))),
                     None => Ast::Return(None),
                 };
                 Ok(AstNode { node, extra })
@@ -294,7 +300,7 @@ impl<E: Extra> Parser<E> {
 
             StmtP::Assign(assign) => {
                 use syntax::ast::AssignTargetP;
-                let rhs = self.from_expr(assign.rhs, env)?;
+                let rhs = self.from_expr(assign.rhs, env, d)?;
                 match assign.lhs.node {
                     AssignTargetP::Identifier(ident) => {
                         let name = ident.node.ident;
@@ -316,7 +322,7 @@ impl<E: Extra> Parser<E> {
                 }
             }
 
-            StmtP::Expression(expr) => self.from_expr(expr, env),
+            StmtP::Expression(expr) => self.from_expr(expr, env, d),
 
             _ => unimplemented!("{:?}", item),
         }
@@ -326,6 +332,7 @@ impl<E: Extra> Parser<E> {
         &mut self,
         item: syntax::ast::AstExprP<P>,
         env: &mut Environment,
+        d: &mut Diagnostics,
     ) -> Result<AstNode<E>> {
         use syntax::ast::ExprP;
         let extra = env.extra(item.span);
@@ -334,8 +341,8 @@ impl<E: Extra> Parser<E> {
             ExprP::Op(lhs, op, rhs) => {
                 let ast = Ast::BinaryOp(
                     from_binop(op),
-                    Box::new(self.from_expr(*lhs, env)?),
-                    Box::new(self.from_expr(*rhs, env)?),
+                    Box::new(self.from_expr(*lhs, env, d)?),
+                    Box::new(self.from_expr(*rhs, env, d)?),
                 );
                 Ok(AstNode { node: ast, extra })
             }
@@ -343,7 +350,7 @@ impl<E: Extra> Parser<E> {
             ExprP::Call(expr, expr_args) => {
                 let mut args = vec![];
                 for arg in expr_args {
-                    args.push(self.from_argument(arg, env)?);
+                    args.push(self.from_argument(arg, env, d)?);
                 }
 
                 match expr.node {
@@ -387,7 +394,7 @@ impl<E: Extra> Parser<E> {
                                         .with_labels(vec![Label::primary(env.file_id, r)
                                             .with_message("Builtin not found")])
                                         .with_message("error");
-                                    self.diagnostics.push(diagnostic);
+                                    d.push_diagnostic(diagnostic);
                                     return Err(anyhow::Error::new(ParseError::Invalid));
                                 }
                             } else {
@@ -395,7 +402,7 @@ impl<E: Extra> Parser<E> {
                                     .with_labels(vec![Label::primary(env.file_id, r)
                                         .with_message("Variable not in scope")])
                                     .with_message("error");
-                                self.diagnostics.push(diagnostic);
+                                d.push_diagnostic(diagnostic);
                                 return Err(anyhow::Error::new(ParseError::Invalid));
                             };
                             Ok(AstNode {
@@ -435,7 +442,7 @@ impl<E: Extra> Parser<E> {
                             Label::primary(env.file_id, r).with_message("Variable not in scope")
                         ])
                         .with_message("error");
-                    self.diagnostics.push(diagnostic);
+                    d.push_diagnostic(diagnostic);
                     Err(anyhow::Error::new(ParseError::Invalid))
                 }
             }
@@ -451,7 +458,7 @@ impl<E: Extra> Parser<E> {
             ExprP::Minus(expr) => {
                 let ast = Ast::UnaryOp(
                     ast::UnaryOperation::Minus,
-                    Box::new(self.from_expr(*expr, env)?),
+                    Box::new(self.from_expr(*expr, env, d)?),
                 );
                 Ok(AstNode { node: ast, extra })
             }
@@ -464,11 +471,12 @@ impl<E: Extra> Parser<E> {
         &mut self,
         item: syntax::ast::AstArgumentP<P>,
         env: &mut Environment,
+        d: &mut Diagnostics,
     ) -> Result<ast::Argument<E>> {
         use syntax::ast::ArgumentP;
         match item.node {
             ArgumentP::Positional(expr) => Ok(ast::Argument::Positional(Box::new(
-                self.from_expr(expr, env)?,
+                self.from_expr(expr, env, d)?,
             ))),
             _ => unimplemented!(),
         }
@@ -483,22 +491,24 @@ pub(crate) mod tests {
     fn run_test(filename: &str, expected: i32) {
         let context = lower::default_context();
         let mut lower = lower::lower::Lower::new(&context);
-        let file_id = lower.add_source(
+        let mut d = Diagnostics::new();
+        let file_id = d.add_source(
             filename.to_string(),
             std::fs::read_to_string(filename).unwrap(),
         );
 
         // parse
         let mut parser = Parser::new();
-        let ast: AstNode<ast::SimpleExtra> =
-            parser.parse(Path::new(filename), None, file_id).unwrap();
+        let ast: AstNode<ast::SimpleExtra> = parser
+            .parse(Path::new(filename), None, file_id, &mut d)
+            .unwrap();
 
         // lower
         let mut env = lower::lower::Environment::default();
         env.enter_static();
 
         // run
-        assert_eq!(expected, lower.run_ast(ast, &mut env));
+        assert_eq!(expected, lower.run_ast(ast, &mut env, &mut d));
         env.exit();
     }
 
