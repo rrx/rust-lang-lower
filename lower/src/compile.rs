@@ -24,7 +24,6 @@ impl<'c, E: ast::Extra> lower::Lower<'c, E> {
 pub struct CompilerContext<'c, E> {
     context: melior::Context,
     pub env: scope::ScopeStack<'c, lower::Data>,
-    pub files: SimpleFiles<String, String>,
     pass_manager: pass::PassManager<'c>,
     _e: std::marker::PhantomData<E>,
 }
@@ -38,7 +37,6 @@ impl<'c, E: ast::Extra> CompilerContext<'c, E> {
             true
         });
         let env = scope::ScopeStack::default();
-        let files = SimpleFiles::new();
 
         // registry
         let registry = DialectRegistry::new();
@@ -74,7 +72,6 @@ impl<'c, E: ast::Extra> CompilerContext<'c, E> {
         Self {
             context,
             env,
-            files,
             pass_manager,
             _e: std::marker::PhantomData::default(),
         }
@@ -88,7 +85,7 @@ impl<'c, E: ast::Extra> CompilerContext<'c, E> {
 
     pub fn compiler(&'c self) -> Compiler<'c, E> {
         let module = self.module();
-        let lower = lower::Lower::new(&self.context, &self.files);
+        let lower = lower::Lower::new(&self.context);
         Compiler {
             module,
             lower,
@@ -185,11 +182,7 @@ pub fn run_ast<'c, E: ast::Extra>(
     let location = ir::Location::unknown(lower.context);
     let mut module = ir::Module::new(location);
 
-    //let lower = lower::Lower::new(c, &files);
-    lower.lower_expr(ast, env);
-    for op in env.take_ops() {
-        module.body().append_operation(op);
-    }
+    lower.module(&mut module, ast, env);
 
     log::debug!(
         "before {}",

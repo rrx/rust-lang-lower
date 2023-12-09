@@ -373,7 +373,7 @@ impl<'c, D: std::fmt::Debug + Clone> ScopeStack<'c, D> {
         index
     }
 
-    pub fn op_index(&mut self, index: LayerIndex, op: Operation<'c>) {
+    pub fn push_op_index(&mut self, index: LayerIndex, op: Operation<'c>) {
         self.last_mut().push(op, index);
     }
 
@@ -490,8 +490,8 @@ mod tests {
     fn test_scope1() {
         let context = test_context();
         let mut files = FileDB::new();
-        let file_id = files.add("test.py".into(), "test".into());
-        let lower: Lower<SimpleExtra> = Lower::new(&context, &files);
+        let mut lower: Lower<SimpleExtra> = Lower::new(&context);
+        let file_id = lower.add_source("test.py".into(), "test".into());
         let mut s = Environment::default();
         let location = Location::unknown(&context);
 
@@ -692,9 +692,9 @@ mod tests {
     fn test_scope3() {
         let context = test_context();
         let mut files = FileDB::new();
-        let _file_id = files.add("test.py".into(), "test".into());
+        let mut lower: Lower<SimpleExtra> = Lower::new(&context);
+        let file_id = lower.add_source("test.py".into(), "test".into());
         let location = Location::unknown(&context);
-        let lower: Lower<SimpleExtra> = Lower::new(&context, &files);
         let mut env = ScopeStack::default();
         test_env3(&lower, &mut env, location);
         println!("layer: {:?}", env);

@@ -478,13 +478,12 @@ impl<E: Extra> Parser<E> {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use codespan_reporting::files::SimpleFiles;
     use test_log::test;
 
     fn run_test(filename: &str, expected: i32) {
         let context = lower::Context::new();
-        let mut files = SimpleFiles::new();
-        let file_id = files.add(
+        let mut lower = lower::lower::Lower::new(&context);
+        let file_id = lower.add_source(
             filename.to_string(),
             std::fs::read_to_string(filename).unwrap(),
         );
@@ -495,7 +494,6 @@ pub(crate) mod tests {
             parser.parse(Path::new(filename), None, file_id).unwrap();
 
         // lower
-        let mut lower = lower::lower::Lower::new(&context, &files);
         let mut env = lower::lower::Environment::default();
 
         // run

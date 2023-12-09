@@ -80,16 +80,27 @@ pub type FileDB = SimpleFiles<String, String>;
 
 pub struct Lower<'c, E> {
     pub(crate) context: &'c Context,
-    files: &'c FileDB,
+    pub files: FileDB,
     _e: std::marker::PhantomData<E>,
 }
 
 impl<'c, E: Extra> Lower<'c, E> {
-    pub fn new(context: &'c Context, files: &'c FileDB) -> Self {
+    pub fn new(context: &'c Context) -> Self {
         Self {
             context,
-            files,
+            files: FileDB::new(),
             _e: std::marker::PhantomData::default(),
+        }
+    }
+
+    pub fn add_source(&mut self, filename: String, content: String) -> usize {
+        self.files.add(filename, content)
+    }
+
+    pub fn module(&self, module: &mut Module<'c>, expr: AstNode<E>, env: &mut Environment<'c>) {
+        self.lower_expr(expr, env);
+        for op in env.take_ops() {
+            module.body().append_operation(op);
         }
     }
 
@@ -201,7 +212,6 @@ impl<'c, E: Extra> Lower<'c, E> {
         // before
         let layer = self.build_block(&[], env);
         env.enter(layer);
-        //env.enter_block(&[]);
         self.lower_expr(condition, env);
         let condition_rs = env.last_values();
         // should be bool type
@@ -220,7 +230,6 @@ impl<'c, E: Extra> Lower<'c, E> {
         before_region.append_block(before_block);
 
         // after
-        //env.enter_block(&[]);
         let layer = self.build_block(&[], env);
         env.enter(layer);
         let after_region = Region::new();
@@ -283,7 +292,6 @@ impl<'c, E: Extra> Lower<'c, E> {
         let condition_location = self.location(&condition);
         let body_location = self.location(&body);
 
-        //env.enter_closed();
         let x_op = self.build_index_op(1, condition_location);
         env.push_with_name(x_op, "test");
 
@@ -396,7 +404,7 @@ impl<'c, E: Extra> Lower<'c, E> {
     }
 
     pub fn location(&self, expr: &AstNode<E>) -> Location<'c> {
-        expr.extra.location(self.context, self.files)
+        expr.extra.location(self.context, &self.files)
     }
 
     pub fn build_static(
@@ -512,7 +520,6 @@ impl<'c, E: Extra> Lower<'c, E> {
         rhs: AstNode<E>,
         env: &mut Environment<'c>,
     ) -> LayerIndex {
-        //let location = Location::unknown(self.context);
         let location = self.location(&rhs);
         let (index, data) = match env.index_from_name(ident) {
             Some(index) => {
@@ -781,7 +788,6 @@ impl<'c, E: Extra> Lower<'c, E> {
                 // we are expecting a memref here
                 log::debug!("deref: {:?}: {:?}", &expr, target);
                 let index = self.lower_expr(*expr, env);
-                //env.dump();
 
                 let data = env.data(&index).unwrap();
                 log::debug!("data: {:?}", &data);
@@ -967,7 +973,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                     match p.node {
                         Parameter::Normal(ident, ast_ty) => {
                             log::debug!("params {:?}: {:?}", ident, ast_ty);
-                            let location = p.extra.location(self.context, self.files);
+                            let location = p.extra.location(self.context, &self.files);
                             params.push((ast_ty.clone(), location, ident));
                             ast_types.push(ast_ty);
                         }
@@ -991,24 +997,13 @@ impl<'c, E: Extra> Lower<'c, E> {
                 let func_type = FunctionType::new(self.context, &types, &ret_type);
                 let f_type = AstType::Func(ast_types, ast_ret_type);
                 let data = Data::new_static(f_type, &def.name);
+
+                // create a new index, but don't actually add it
+                // we just associate the function signature with it, so it can
+                // be called recursively
                 let index = env.fresh_op();
                 env.name_index(index.clone(), &def.name);
-                //let data = Data::new_static(f_type, &def.name);
                 env.index_data(&index, data);
-                //let region = Region::new();
-                /*
-                let f_declare = func::func(
-                    self.context,
-                    StringAttribute::new(self.context, &def.name),
-                    TypeAttribute::new(func_type.into()),
-                    region,
-                    &attributes,
-                    location,
-                );
-                let index = env.push(f_declare);
-                env.name_index(index.clone(), &def.name);
-                env.index_data(&index, data.clone());
-                */
 
                 let region = Region::new();
                 if let Some(body) = def.body {
@@ -1040,8 +1035,8 @@ impl<'c, E: Extra> Lower<'c, E> {
                     location,
                 );
 
-                env.op_index(index.clone(), f);
-                //let index = env.push(f);
+                // save and return created index
+                env.push_op_index(index.clone(), f);
                 index
             }
 
@@ -1078,7 +1073,6 @@ impl<'c, E: Extra> Lower<'c, E> {
 
             Ast::Conditional(condition, true_expr, maybe_false_expr) => {
                 let index_conditions = self.lower_expr(*condition, env);
-                //env.enter_block(&[]);
                 let layer = self.build_block(&[], env);
                 env.enter(layer);
                 self.lower_expr(*true_expr, env);
@@ -1092,7 +1086,6 @@ impl<'c, E: Extra> Lower<'c, E> {
 
                 match maybe_false_expr {
                     Some(false_expr) => {
-                        //env.enter_block(&[]);
                         let layer = self.build_block(&[], env);
                         env.enter(layer);
                         self.lower_expr(*false_expr, env);
@@ -1380,10 +1373,9 @@ pub(crate) mod tests {
     #[test]
     fn test_gen() {
         let context = Context::new();
-        let mut files = FileDB::new();
-        let file_id = files.add("test.py".into(), "test".into());
+        let mut lower = Lower::new(&context);
+        let file_id = lower.add_source("test.py".into(), "test".into());
         let mut env = Environment::default();
-        let mut lower = Lower::new(&context, &files);
         let ast: AstNode<SimpleExtra> = gen_function_call(file_id, &mut env);
         assert_eq!(0, lower.run_ast(ast, &mut env));
     }
@@ -1391,10 +1383,9 @@ pub(crate) mod tests {
     #[test]
     fn test_while() {
         let context = Context::new();
-        let mut files = FileDB::new();
-        let file_id = files.add("test.py".into(), "test".into());
+        let mut lower = Lower::new(&context);
+        let file_id = lower.add_source("test.py".into(), "test".into());
         let mut env = Environment::default();
-        let mut lower = Lower::new(&context, &files);
         let ast: AstNode<SimpleExtra> = gen_while(file_id, &mut env);
         assert_eq!(0, lower.run_ast(ast, &mut env));
     }
@@ -1402,10 +1393,9 @@ pub(crate) mod tests {
     #[test]
     fn test_loop() {
         let context = Context::new();
-        let mut files = FileDB::new();
-        let file_id = files.add("test.py".into(), "test".into());
+        let mut lower = Lower::new(&context);
+        let file_id = lower.add_source("test.py".into(), "test".into());
         let mut env = Environment::default();
-        let mut lower = Lower::new(&context, &files);
         let ast: AstNode<SimpleExtra> = gen_test(file_id, &mut env);
         assert_eq!(0, lower.run_ast(ast, &mut env));
     }
@@ -1413,8 +1403,9 @@ pub(crate) mod tests {
     #[test]
     fn test_compile() {
         let mut context: CompilerContext<SimpleExtra> = CompilerContext::new();
-        let file_id = context.files.add("test.py".into(), "test".into());
-        let ast: AstNode<SimpleExtra> = gen_test(file_id, &mut context.env);
+        //let mut lower = Lower::new(&context.context);
+        //let file_id = lower.add_source("test.py".into(), "test".into());
+        //let ast: AstNode<SimpleExtra> = gen_test(file_id, &mut context.env);
         //let module = context.module();
         //let mut c = context.compiler();
         //c.module(&mut context, ast);

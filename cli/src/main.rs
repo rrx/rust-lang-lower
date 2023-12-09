@@ -4,7 +4,6 @@ use std::io::Write;
 use std::path::Path;
 
 use argh::FromArgs;
-use codespan_reporting::files::SimpleFiles;
 use melior::{ir, ExecutionEngine};
 use simple_logger::{set_up_color_terminal, SimpleLogger};
 
@@ -60,25 +59,24 @@ fn main() -> Result<(), Box<dyn Error>> {
     let location = ir::Location::unknown(&context);
     let mut module = ir::Module::new(location);
 
-    let mut files = SimpleFiles::new();
     let mut parser = Parser::new();
 
+    let mut lower = Lower::new(&context);
     for path in config.inputs {
         let path = Path::new(&path);
         log::debug!("parsing: {}", path.to_str().unwrap());
 
-        let file_id = files.add(
+        let file_id = lower.add_source(
             path.to_str().unwrap().to_string(),
             std::fs::read_to_string(path)?,
         );
 
         let result = parser.parse(&path, None, file_id);
         if config.verbose {
-            parser.dump(&files);
+            parser.dump(&lower.files);
         }
         let ast: AstNode<SimpleExtra> = result?;
 
-        let lower = Lower::new(&context, &files);
         let mut env: lower::scope::ScopeStack<lower::lower::Data> =
             lower::scope::ScopeStack::default();
         lower.lower_expr(ast, &mut env);
