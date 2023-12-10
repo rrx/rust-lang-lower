@@ -156,6 +156,7 @@ impl<E: Extra> Ast<E> {
 
 #[derive(Debug, Clone)]
 pub struct CodeLocation {
+    pub pos: u32,
     pub line: usize,
     pub col: usize,
 }
@@ -183,7 +184,7 @@ impl Extra for SimpleExtra {
     }
 
     fn error(&self, msg: &str) -> Diagnostic<usize> {
-        let r = self.span.begin.col..self.span.end.col;
+        let r = self.span.begin.pos as usize..self.span.end.pos as usize;
         Diagnostic::error()
             .with_labels(vec![Label::primary(self.span.file_id, r).with_message(msg)])
             .with_message("error")

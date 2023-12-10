@@ -22,6 +22,8 @@ impl<'c, E: ast::Extra> lower::Lower<'c, E> {
         let location = ir::Location::unknown(self.context);
         let mut module = ir::Module::new(location);
         self.module_lower(&mut module, ast, env, d, b);
+        d.dump();
+        assert!(!d.has_errors);
         self.module_passes(&mut module);
         self.exec_main(&module, libpath)
     }

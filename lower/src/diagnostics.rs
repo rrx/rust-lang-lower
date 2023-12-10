@@ -32,10 +32,10 @@ impl Diagnostics {
         self.diagnostics.push(d);
     }
 
-    pub fn dump(&self) {
+    pub fn dump(&mut self) {
         let writer = StandardStream::stderr(ColorChoice::Always);
         let config = codespan_reporting::term::Config::default();
-        for d in self.diagnostics.iter() {
+        for d in self.diagnostics.drain(..) {
             term::emit(&mut writer.lock(), &config, &self.files, &d).unwrap();
         }
     }

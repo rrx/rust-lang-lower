@@ -3,15 +3,22 @@ use melior::ir;
 
 pub struct NodeBuilder<E> {
     span: Span,
-    //file_id: usize,
     filename: String,
     _e: std::marker::PhantomData<E>,
 }
 
 impl<E: Extra> NodeBuilder<E> {
     pub fn new(file_id: usize, filename: &str) -> Self {
-        let begin = CodeLocation { line: 0, col: 0 };
-        let end = CodeLocation { line: 0, col: 0 };
+        let begin = CodeLocation {
+            pos: 0,
+            line: 0,
+            col: 0,
+        };
+        let end = CodeLocation {
+            pos: 0,
+            line: 0,
+            col: 0,
+        };
         let span = Span {
             file_id,
             begin,
@@ -19,7 +26,6 @@ impl<E: Extra> NodeBuilder<E> {
         };
         Self {
             span,
-            //file_id,
             filename: filename.to_string(),
             _e: std::marker::PhantomData::default(),
         }
@@ -70,8 +76,16 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn extra(&self) -> E {
-        let begin = CodeLocation { line: 0, col: 0 };
-        let end = CodeLocation { line: 0, col: 0 };
+        let begin = CodeLocation {
+            pos: 0,
+            line: 0,
+            col: 0,
+        };
+        let end = CodeLocation {
+            pos: 0,
+            line: 0,
+            col: 0,
+        };
         E::new(self.current_file_id(), begin, end)
     }
 

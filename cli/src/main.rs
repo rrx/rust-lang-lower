@@ -81,6 +81,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         assert_eq!(1, env.layer_count());
         lower.module_lower(&mut module, result?, env, &mut d, &b);
+        if config.verbose {
+            d.dump();
+        }
+        if d.has_errors {
+            std::process::exit(1);
+        }
     }
 
     if config.verbose {

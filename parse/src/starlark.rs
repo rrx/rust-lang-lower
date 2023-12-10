@@ -79,10 +79,12 @@ impl<'a> Environment<'a> {
     pub fn extra<E: Extra>(&self, span: codemap::Span) -> E {
         let r = self.codemap.resolve_span(span);
         let begin = CodeLocation {
+            pos: span.begin().get(),
             line: r.begin.line,
             col: r.begin.column,
         };
         let end = CodeLocation {
+            pos: span.end().get(),
             line: r.end.line,
             col: r.end.column,
         };
@@ -535,8 +537,6 @@ pub(crate) mod tests {
         // lower
         let mut env = lower::lower::Environment::default();
         env.enter_static();
-        d.dump();
-        assert!(!d.has_errors);
 
         // run
         assert_eq!(
