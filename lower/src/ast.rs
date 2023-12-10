@@ -1,8 +1,8 @@
 use crate::Diagnostics;
+use codespan_reporting::diagnostic::{Diagnostic, Label};
 use melior::ir;
 use melior::Context;
 use std::fmt::Debug;
-use codespan_reporting::diagnostic::{Diagnostic, Label};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum AstType {
@@ -183,7 +183,7 @@ impl Extra for SimpleExtra {
     }
 
     fn error(&self, msg: &str) -> Diagnostic<usize> {
-        let r = self.span.begin.col .. self.span.end.col;
+        let r = self.span.begin.col..self.span.end.col;
         Diagnostic::error()
             .with_labels(vec![Label::primary(self.span.file_id, r).with_message(msg)])
             .with_message("error")
