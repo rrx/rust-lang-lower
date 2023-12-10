@@ -1,6 +1,6 @@
 use crate::ast::Span;
 use crate::lower::FileDB;
-use codespan_reporting::diagnostic::Diagnostic;
+use codespan_reporting::diagnostic::{Diagnostic, Severity};
 use codespan_reporting::files::Files;
 use codespan_reporting::term;
 use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
@@ -10,12 +10,14 @@ use melior::Context;
 pub struct Diagnostics {
     pub files: FileDB,
     diagnostics: Vec<Diagnostic<usize>>,
+    pub has_errors: bool,
 }
 impl Diagnostics {
     pub fn new() -> Self {
         Self {
             files: FileDB::new(),
             diagnostics: vec![],
+            has_errors: false,
         }
     }
 
@@ -24,6 +26,9 @@ impl Diagnostics {
     }
 
     pub fn push_diagnostic(&mut self, d: Diagnostic<usize>) {
+        if d.severity > Severity::Warning {
+            self.has_errors = true;
+        }
         self.diagnostics.push(d);
     }
 

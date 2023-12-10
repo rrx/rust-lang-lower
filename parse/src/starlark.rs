@@ -166,6 +166,7 @@ fn from_type<P: syntax::ast::AstPayload>(item: &syntax::ast::TypeExprP<P>) -> Op
 fn from_parameter<'a, E: Extra, P: syntax::ast::AstPayload>(
     item: syntax::ast::AstParameterP<P>,
     env: &Environment<'a>,
+    d: &mut Diagnostics,
 ) -> ast::ParameterNode<E> {
     use syntax::ast::ParameterP;
 
@@ -173,20 +174,21 @@ fn from_parameter<'a, E: Extra, P: syntax::ast::AstPayload>(
     match item.node {
         ParameterP::Normal(ident, maybe_type) => {
             let extra = env.extra(item.span);
-            let ty = if let Some(ty) = maybe_type {
-                if let Some(ty) = from_type(&ty.node) {
-                    ty
-                } else {
-                    unreachable!()
-                    //ast::AstType::Int
-                }
+            let ty = if let Some(ty) = maybe_type.map(|ty| from_type(&ty)) {
+                ty
             } else {
-                unreachable!()
-                //ast::AstType::Int
+                let r = item.span.begin().get() as usize..item.span.end().get() as usize;
+                let diagnostic: Diagnostic<usize> = Diagnostic::error()
+                    .with_labels(vec![
+                        Label::primary(env.file_id, r).with_message("Missing type")
+                    ])
+                    .with_message("error");
+                d.push_diagnostic(diagnostic);
+                Some(ast::AstType::Unit)
             };
             ast::ParameterNode {
                 name: ident.node.ident.to_string(),
-                ty,
+                ty: ty.unwrap(),
                 node: ast::Parameter::Normal,
                 extra,
             }
@@ -265,7 +267,7 @@ impl<E: Extra> Parser<E> {
                 let params = def
                     .params
                     .into_iter()
-                    .map(|p| from_parameter(p, env))
+                    .map(|p| from_parameter(p, env, d))
                     .collect::<Vec<_>>();
 
                 // push name to environment

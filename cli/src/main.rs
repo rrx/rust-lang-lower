@@ -76,6 +76,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         if config.verbose {
             d.dump();
         }
+        if d.has_errors {
+            std::process::exit(1);
+        }
         let ast: AstNode<SimpleExtra> = result?;
 
         assert_eq!(1, env.layer_count());
