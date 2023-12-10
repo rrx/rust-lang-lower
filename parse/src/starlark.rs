@@ -154,17 +154,13 @@ fn from_binop(item: syntax::ast::BinOp) -> ast::BinaryOperation {
 fn from_type<P: syntax::ast::AstPayload>(item: &syntax::ast::TypeExprP<P>) -> Option<AstType> {
     log::debug!("type: {:?}", item);
     match &item.expr.node {
-        syntax::ast::ExprP::Identifier(name) => {
-            match name.ident.as_str() {
-                "float" => Some(AstType::Float),
-                "int" => Some(AstType::Int),
-                //_ => unimplemented!("{:?}", name)
-                _ => None,
-            }
-        }
-        _ => None, //_ => unimplemented!("{:?}", item)
+        syntax::ast::ExprP::Identifier(name) => match name.ident.as_str() {
+            "float" => Some(AstType::Float),
+            "int" => Some(AstType::Int),
+            _ => None,
+        },
+        _ => None,
     }
-    //Some(AstType::Int)
 }
 
 fn from_parameter<'a, E: Extra, P: syntax::ast::AstPayload>(
@@ -181,10 +177,12 @@ fn from_parameter<'a, E: Extra, P: syntax::ast::AstPayload>(
                 if let Some(ty) = from_type(&ty.node) {
                     ty
                 } else {
-                    ast::AstType::Int
+                    unreachable!()
+                    //ast::AstType::Int
                 }
             } else {
-                ast::AstType::Int
+                unreachable!()
+                //ast::AstType::Int
             };
             ast::ParameterNode {
                 name: ident.node.ident.to_string(),
@@ -269,9 +267,12 @@ impl<E: Extra> Parser<E> {
                     .into_iter()
                     .map(|p| from_parameter(p, env))
                     .collect::<Vec<_>>();
+
+                // push name to environment
                 for p in params.iter() {
                     env.define(&p.name);
                 }
+
                 let body = self.from_stmt(*def.body, env, d, b)?;
                 env.exit_func();
                 let return_type = def
@@ -283,7 +284,6 @@ impl<E: Extra> Parser<E> {
                 let d = ast::Definition {
                     name: name.clone(),
                     body: Some(body.into()),
-                    //return_type: AstType::Int.into(),
                     return_type,
                     params,
                 };
