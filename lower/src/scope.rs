@@ -1,3 +1,5 @@
+use crate::ast::Span;
+use codespan_reporting::diagnostic::{Diagnostic, Label};
 use melior::ir::*;
 use melior::ir::{Operation, Value};
 use std::collections::HashMap;
@@ -23,7 +25,6 @@ impl From<usize> for OpIndex {
 pub enum LayerIndex {
     Op(usize),
     Argument(usize),
-    //Ref(usize),
     Static(usize),
 }
 
@@ -450,6 +451,14 @@ impl<'c, D: std::fmt::Debug + Clone> ScopeStack<'c, D> {
         }
         out
     }
+
+    pub fn error(&self, span: Span, msg: &str) -> Diagnostic<usize> {
+        //let r = span.begin. as usize..span.end().get() as usize;
+        let r = 0..1;
+        Diagnostic::error()
+            .with_labels(vec![Label::primary(span.file_id, r).with_message(msg)])
+            .with_message("error")
+    }
 }
 
 #[cfg(test)]
@@ -503,16 +512,16 @@ mod tests {
         let b = NodeBuilder::new(file_id, "test.py");
         let expr = b.bool(false);
         let ast = b.global("x", expr);
-        lower.lower_expr(ast, &mut s, &mut d);
+        lower.lower_expr(ast, &mut s, &mut d, &b);
 
         let expr = b.bool(false);
         let ast = b.global("x", expr);
-        lower.lower_expr(ast, &mut s, &mut d);
+        lower.lower_expr(ast, &mut s, &mut d, &b);
         let g_index_x = s.last_index().unwrap();
 
         let expr = b.bool(true);
         let ast = b.global("y", expr);
-        lower.lower_expr(ast, &mut s, &mut d);
+        lower.lower_expr(ast, &mut s, &mut d, &b);
         let g_index_y = s.last_index().unwrap();
 
         // ensure x is shadowed
@@ -529,14 +538,14 @@ mod tests {
         // push y, should shadow static context
         let expr = b.bool(true);
         let ast = b.assign("y", expr);
-        lower.lower_expr(ast, &mut s, &mut d);
+        lower.lower_expr(ast, &mut s, &mut d, &b);
         let y_index = s.last_index().unwrap();
         assert_op_index(&s, "y", y_index);
 
         // push x, should shadow static context
         let expr = b.bool(false);
         let ast = b.assign("x", expr);
-        lower.lower_expr(ast, &mut s, &mut d);
+        lower.lower_expr(ast, &mut s, &mut d, &b);
         let x_index = s.last_index().unwrap();
         assert_op_index(&s, "x", x_index);
 

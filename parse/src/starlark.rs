@@ -415,7 +415,7 @@ impl<E: Extra> Parser<E> {
                     }
 
                     ExprP::Dot(expr, name) => {
-                        let r = expr.span.begin().get() as usize..expr.span.end().get() as usize;
+                        //let r = expr.span.begin().get() as usize..expr.span.end().get() as usize;
                         if let ExprP::Identifier(ident) = &expr.node {
                             let ast = if let Some(_data) = env.resolve(&ident.node.ident) {
                                 let extra = env.extra(item.span);
@@ -525,7 +525,7 @@ pub(crate) mod tests {
             filename.to_string(),
             std::fs::read_to_string(filename).unwrap(),
         );
-
+        let b = NodeBuilder::new(file_id, filename);
         // parse
         let mut parser = Parser::new();
         let ast: AstNode<ast::SimpleExtra> = parser
@@ -539,7 +539,7 @@ pub(crate) mod tests {
         assert!(!d.has_errors);
 
         // run
-        assert_eq!(expected, lower.run_ast(ast, env, &mut d));
+        assert_eq!(expected, lower.run_ast(ast, env, &mut d, &b));
         //env.exit();
     }
 

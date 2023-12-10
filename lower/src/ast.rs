@@ -76,6 +76,7 @@ pub struct Definition<E> {
 pub enum Builtin {
     Assert,
     Print,
+    Import,
 }
 
 impl Builtin {
@@ -84,6 +85,8 @@ impl Builtin {
             Some(Builtin::Assert)
         } else if name == "print" {
             Some(Builtin::Print)
+        } else if name == "use" {
+            Some(Builtin::Import)
         } else {
             None
         }
@@ -93,6 +96,7 @@ impl Builtin {
         match self {
             Self::Assert => 1,
             Self::Print => 1,
+            Self::Import => 1,
         }
     }
 }

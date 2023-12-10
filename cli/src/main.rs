@@ -9,7 +9,7 @@ use simple_logger::{set_up_color_terminal, SimpleLogger};
 
 use lower::ast::{AstNode, SimpleExtra};
 use lower::compile::default_context;
-use lower::{Diagnostics, Lower};
+use lower::{Diagnostics, Lower, NodeBuilder};
 use parse::starlark::Parser;
 
 #[derive(FromArgs, Debug)]
@@ -67,10 +67,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         let path = Path::new(&path);
         log::debug!("parsing: {}", path.to_str().unwrap());
 
-        let file_id = d.add_source(
-            path.to_str().unwrap().to_string(),
-            std::fs::read_to_string(path)?,
-        );
+        let filename = path.to_str().unwrap().to_string();
+        let file_id = d.add_source(filename.clone(), std::fs::read_to_string(path)?);
+
+        let b = NodeBuilder::new(file_id, &filename);
 
         let result = parser.parse(&path, None, file_id, &mut d);
         if config.verbose {
@@ -82,7 +82,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let ast: AstNode<SimpleExtra> = result?;
 
         assert_eq!(1, env.layer_count());
-        lower.module_lower(&mut module, ast, env, &mut d);
+        lower.module_lower(&mut module, ast, env, &mut d, &b);
         //env.exit();
     }
 

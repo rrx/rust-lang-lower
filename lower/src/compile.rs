@@ -1,7 +1,7 @@
 use crate::ast;
 use crate::lower;
 use crate::scope;
-use crate::Diagnostics;
+use crate::{Diagnostics, NodeBuilder};
 use melior::ir::operation::OperationPrintingFlags;
 use melior::ExecutionEngine;
 use melior::{
@@ -17,8 +17,9 @@ impl<'c, E: ast::Extra> lower::Lower<'c, E> {
         ast: ast::AstNode<E>,
         env: scope::ScopeStack<'c, lower::Data>,
         d: &mut Diagnostics,
+        b: &NodeBuilder<E>,
     ) -> i32 {
-        run_ast(ast, self, env, d)
+        run_ast(ast, self, env, d, b)
     }
 }
 
@@ -128,11 +129,12 @@ pub fn run_ast<'c, E: ast::Extra>(
     lower: &mut lower::Lower<'c, E>,
     env: scope::ScopeStack<'c, lower::Data>,
     d: &mut Diagnostics,
+    b: &NodeBuilder<E>,
 ) -> i32 {
     let location = ir::Location::unknown(lower.context);
     let mut module = ir::Module::new(location);
 
-    lower.module_lower(&mut module, ast, env, d);
+    lower.module_lower(&mut module, ast, env, d, b);
     lower.module_passes(&mut module);
 
     let mut path = "../target/debug/prelude.so".to_string();

@@ -1,6 +1,8 @@
 z = 6
 zf = 1.2
 
+b.use("prelude")
+
 def x1(x: int) -> int:
   return 2 + x
 

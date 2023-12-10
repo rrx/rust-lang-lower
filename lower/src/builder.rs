@@ -252,4 +252,12 @@ impl<E: Extra> NodeBuilder<E> {
             else_block.map(|x| x.into()),
         ))
     }
+
+    pub fn try_string(&self, expr: &AstNode<E>) -> Option<String> {
+        if let Ast::Literal(Literal::String(s)) = &expr.node {
+            Some(s.clone())
+        } else {
+            None
+        }
+    }
 }
