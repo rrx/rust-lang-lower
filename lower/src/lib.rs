@@ -1,6 +1,5 @@
 pub mod ast;
 pub mod builder;
-pub mod code;
 pub mod compile;
 pub mod diagnostics;
 pub mod env;

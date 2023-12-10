@@ -1288,7 +1288,11 @@ impl<'c, E: Extra> Lower<'c, E> {
                         let arg = args.pop().unwrap();
                         log::debug!("import: {:?}", arg);
                         if let Argument::Positional(expr) = arg {
-                            b.try_string(&expr);
+                            if let Some(s) = b.try_string(&expr) {
+                                env.add_shared(&s);
+                            } else {
+                                d.push_diagnostic(expr.extra.error("Expected string"));
+                            }
                             //env.error(arg
                         } else {
                             unimplemented!()

@@ -2,6 +2,7 @@ use crate::Diagnostics;
 use melior::ir;
 use melior::Context;
 use std::fmt::Debug;
+use codespan_reporting::diagnostic::{Diagnostic, Label};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum AstType {
@@ -180,12 +181,20 @@ impl Extra for SimpleExtra {
     fn location<'c>(&self, context: &'c Context, d: &Diagnostics) -> ir::Location<'c> {
         d.location(context, &self.span)
     }
+
+    fn error(&self, msg: &str) -> Diagnostic<usize> {
+        let r = self.span.begin.col .. self.span.end.col;
+        Diagnostic::error()
+            .with_labels(vec![Label::primary(self.span.file_id, r).with_message(msg)])
+            .with_message("error")
+    }
 }
 
 pub trait Extra: Debug + Clone {
     fn new(file_id: usize, begin: CodeLocation, end: CodeLocation) -> Self;
     fn span(span: Span) -> Self;
     fn location<'c>(&self, context: &'c Context, d: &Diagnostics) -> ir::Location<'c>;
+    fn error(&self, msg: &str) -> Diagnostic<usize>;
 }
 
 #[derive(Debug, Clone)]

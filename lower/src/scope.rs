@@ -2,7 +2,7 @@ use crate::ast::Span;
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use melior::ir::*;
 use melior::ir::{Operation, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum LayerType {
@@ -229,6 +229,7 @@ pub struct ScopeStack<'c, D> {
     static_count: usize,
     layers: Vec<Layer<'c>>,
     types: HashMap<LayerIndex, D>,
+    shared: HashSet<String>,
 }
 
 impl<'c, D> Default for ScopeStack<'c, D> {
@@ -238,6 +239,7 @@ impl<'c, D> Default for ScopeStack<'c, D> {
             static_count: 0,
             layers: vec![],
             types: HashMap::new(),
+            shared: HashSet::new(),
         }
     }
 }
@@ -261,6 +263,10 @@ impl<'c, D: std::fmt::Debug + Clone> ScopeStack<'c, D> {
                 );
             }
         }
+    }
+
+    pub fn add_shared(&mut self, s: &str) {
+        self.shared.insert(s.to_string());
     }
 
     pub fn index_data(&mut self, index: &LayerIndex, data: D) {
@@ -450,14 +456,6 @@ impl<'c, D: std::fmt::Debug + Clone> ScopeStack<'c, D> {
             out.extend(layer.take_ops());
         }
         out
-    }
-
-    pub fn error(&self, span: Span, msg: &str) -> Diagnostic<usize> {
-        //let r = span.begin. as usize..span.end().get() as usize;
-        let r = 0..1;
-        Diagnostic::error()
-            .with_labels(vec![Label::primary(span.file_id, r).with_message(msg)])
-            .with_message("error")
     }
 }
 
