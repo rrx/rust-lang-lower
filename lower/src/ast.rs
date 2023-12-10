@@ -59,6 +59,7 @@ impl<E> From<AstNode<E>> for Argument<E> {
 #[derive(Debug)]
 pub enum Parameter<E> {
     Normal,
+    WithDefault(AstNode<E>),
     Dummy(AstNode<E>),
 }
 
@@ -118,7 +119,7 @@ pub enum DerefTarget {
 pub enum Ast<E> {
     BinaryOp(BinaryOperation, Box<AstNode<E>>, Box<AstNode<E>>),
     UnaryOp(UnaryOperation, Box<AstNode<E>>),
-    Call(Box<AstNode<E>>, Vec<Argument<E>>),
+    Call(Box<AstNode<E>>, Vec<Argument<E>>, AstType),
     Identifier(String),
     Literal(Literal),
     Sequence(Vec<AstNode<E>>),

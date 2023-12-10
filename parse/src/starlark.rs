@@ -12,7 +12,7 @@ use starlark_syntax::syntax::module::AstModuleFields;
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 
 use lower::ast;
-use lower::ast::{AssignTarget, Ast, AstNode, AstType, CodeLocation, DerefTarget, Extra, Literal};
+use lower::ast::{Ast, AstNode, AstType, CodeLocation, DerefTarget, Extra};
 use lower::{Diagnostics, NodeBuilder};
 use std::collections::HashMap;
 
@@ -195,34 +195,6 @@ fn from_type<P: syntax::ast::AstPayload>(item: &syntax::ast::TypeExprP<P>) -> Op
     }
 }
 
-fn from_parameter<'a, E: Extra, P: syntax::ast::AstPayload>(
-    item: syntax::ast::AstParameterP<P>,
-    env: &Environment<'a>,
-    d: &mut Diagnostics,
-) -> ast::ParameterNode<E> {
-    use syntax::ast::ParameterP;
-
-    log::debug!("p: {:?}", item);
-    match item.node {
-        ParameterP::Normal(ident, maybe_type) => {
-            let extra = env.extra(item.span);
-            let ty = if let Some(ty) = maybe_type.map(|ty| from_type(&ty)) {
-                ty
-            } else {
-                d.push_diagnostic(env.error(item.span, "Missing Type"));
-                Some(ast::AstType::Unit)
-            };
-            ast::ParameterNode {
-                name: ident.node.ident.to_string(),
-                ty: ty.unwrap(),
-                node: ast::Parameter::Normal,
-                extra,
-            }
-        }
-        _ => unimplemented!(),
-    }
-}
-
 fn from_assign_target<P: syntax::ast::AstPayload>(
     item: syntax::ast::AssignTargetP<P>,
 ) -> ast::AssignTarget {
@@ -268,6 +240,52 @@ impl<E: Extra> Parser<E> {
         Ok(b.seq(seq).set_extra(extra))
     }
 
+    fn from_parameter<'a, P: syntax::ast::AstPayload>(
+        &mut self,
+        item: syntax::ast::AstParameterP<P>,
+        env: &mut Environment<'a>,
+        d: &mut Diagnostics,
+        b: &NodeBuilder<E>,
+    ) -> ast::ParameterNode<E> {
+        use syntax::ast::ParameterP;
+
+        log::debug!("p: {:?}", item);
+        match item.node {
+            ParameterP::Normal(ident, maybe_type) => {
+                let extra = env.extra(item.span);
+                let ty = if let Some(ty) = maybe_type.map(|ty| from_type(&ty)) {
+                    ty
+                } else {
+                    d.push_diagnostic(env.error(item.span, "Missing Type"));
+                    Some(ast::AstType::Unit)
+                };
+                ast::ParameterNode {
+                    name: ident.node.ident.to_string(),
+                    ty: ty.unwrap(),
+                    node: ast::Parameter::Normal,
+                    extra,
+                }
+            }
+            ParameterP::WithDefaultValue(ident, maybe_type, expr) => {
+                let extra = env.extra(item.span);
+                let ty = if let Some(ty) = maybe_type.map(|ty| from_type(&ty)) {
+                    ty
+                } else {
+                    d.push_diagnostic(env.error(item.span, "Missing Type"));
+                    Some(ast::AstType::Unit)
+                };
+                let expr = self.from_expr(*expr, env, d, b).unwrap();
+                ast::ParameterNode {
+                    name: ident.node.ident.to_string(),
+                    ty: ty.unwrap(),
+                    node: ast::Parameter::WithDefault(expr.into()),
+                    extra,
+                }
+            }
+            _ => unimplemented!(),
+        }
+    }
+
     pub fn from_stmt<'a, P: syntax::ast::AstPayload>(
         &mut self,
         item: syntax::ast::AstStmtP<P>,
@@ -290,11 +308,16 @@ impl<E: Extra> Parser<E> {
             }
 
             StmtP::Def(def) => {
+                let name = &def.name.ident;
                 env.enter_func();
+
+                // push function name into scope
+                env.define(&name);
+
                 let params = def
                     .params
                     .into_iter()
-                    .map(|p| from_parameter(p, env, d))
+                    .map(|p| self.from_parameter(p, env, d, b))
                     .collect::<Vec<_>>();
 
                 // push name to environment
@@ -309,7 +332,6 @@ impl<E: Extra> Parser<E> {
                     .map(|ty| from_type(&ty).unwrap_or(AstType::Unit))
                     .unwrap_or(AstType::Unit)
                     .into();
-                let name = &def.name.ident;
                 let d = ast::Definition {
                     name: name.clone(),
                     body: Some(body.into()),
@@ -406,17 +428,15 @@ impl<E: Extra> Parser<E> {
                     ExprP::Identifier(ident) => {
                         if let Some(_data) = env.resolve(&ident.node.ident) {
                             let extra: E = env.extra(item.span);
-                            //let ast = AstNode {
-                            //node: Ast::Identifier(ident.node.ident.clone()),
-                            //extra: extra.clone(),
-                            //};
-                            Ok(b.apply(&ident.node.ident, args).set_extra(extra))
+                            Ok(b.apply(&ident.node.ident, args, AstType::Int)
+                                .set_extra(extra))
                         } else if let Some(b) = ast::Builtin::from_name(&ident.node.ident) {
                             let extra = env.extra(item.span);
                             assert_eq!(args.len(), b.arity());
                             Ok(AstNode::new(Ast::Builtin(b, args), extra))
                         } else {
-                            unreachable!("Not found");
+                            d.push_diagnostic(env.error(ident.span, "Not found"));
+                            Ok(b.error())
                         }
                     }
 
@@ -424,8 +444,8 @@ impl<E: Extra> Parser<E> {
                         if let ExprP::Identifier(ident) = &expr.node {
                             if let Some(_data) = env.resolve(&ident.node.ident) {
                                 let extra: E = env.extra(item.span);
-                                //let ast = b.ident(&ident.node.ident).set_extra(extra.clone());
-                                Ok(b.apply(&ident.node.ident, args).set_extra(extra))
+                                Ok(b.apply(&ident.node.ident, args, AstType::Int)
+                                    .set_extra(extra))
                             } else if &ident.node.ident == "b" {
                                 // builtin namespace
                                 if let Some(b) = ast::Builtin::from_name(&name.node) {
@@ -470,18 +490,11 @@ impl<E: Extra> Parser<E> {
                 } else {
                     d.push_diagnostic(env.error(ident.span, "Variable not in scope"));
                     Ok(b.error())
-                    //Err(anyhow::Error::new(ParseError::Invalid))
                 }
             }
 
             ExprP::Literal(lit) => Ok(from_literal(lit, item.span, env)),
-            //let extra = env.extra(item.span);
-            //let x: Literal = from_literal(lit);
-            //Ok(AstNode {
-            //node: Ast::Literal(x),
-            //extra,
-            //})
-            //}
+
             ExprP::Minus(expr) => {
                 let extra = env.extra(item.span);
                 let ast = Ast::UnaryOp(

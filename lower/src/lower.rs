@@ -11,7 +11,7 @@ use melior::{
     },
     Context,
 };
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use crate::ast::*;
 use crate::scope::{Layer, LayerIndex, LayerType, ScopeStack};
@@ -162,6 +162,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                     unreachable!("{:?}", ty);
                 }
             }
+            Ast::Call(_f, _args, ty) => ty.clone(),
 
             _ => unreachable!("{:?}", expr),
         }
@@ -910,16 +911,19 @@ impl<'c, E: Extra> Lower<'c, E> {
                 }
             }
 
-            Ast::Call(expr, args) => {
+            Ast::Call(expr, args, ret_ty) => {
                 // function to call
                 let (f, data) = match &expr.node {
                     Ast::Identifier(ident) => {
-                        let index = env.index_from_name(ident).unwrap();
-                        let data = env.data(&index).unwrap();
-                        (
-                            attribute::FlatSymbolRefAttribute::new(self.context, ident),
-                            data,
-                        )
+                        if let Some(index) = env.index_from_name(ident) {
+                            let data = env.data(&index).unwrap();
+                            (
+                                attribute::FlatSymbolRefAttribute::new(self.context, ident),
+                                data,
+                            )
+                        } else {
+                            unreachable!("not found: {:?}", ident);
+                        }
                     }
                     _ => {
                         unimplemented!("{:?}", expr.node);
@@ -1011,6 +1015,7 @@ impl<'c, E: Extra> Lower<'c, E> {
             }
 
             Ast::Definition(def) => {
+                log::debug!("def {:?}", def);
                 log::debug!("name {:?}", def.name);
                 let mut params = vec![];
                 let ty = self.from_type(&*def.return_type);
@@ -1019,16 +1024,13 @@ impl<'c, E: Extra> Lower<'c, E> {
 
                 for p in def.params {
                     match p.node {
-                        Parameter::Normal => {
-                            //(ident, ast_ty) => {
+                        Parameter::Normal | Parameter::WithDefault(_) => {
                             log::debug!("params {:?}: {:?}", p.name, p.ty);
                             let location = p.extra.location(self.context, d);
                             params.push((p.ty.clone(), location, p.name));
                             ast_types.push(p.ty);
                         }
-                        _ => {
-                            unimplemented!("{:?}", p);
-                        }
+                        _ => unimplemented!("{:?}", p),
                     }
                 }
 
@@ -1056,9 +1058,9 @@ impl<'c, E: Extra> Lower<'c, E> {
 
                 let region = Region::new();
                 if let Some(body) = def.body {
+                    log::debug!("params: {:?}", params);
                     let layer = self.build_block(params.as_slice(), env);
                     env.enter(layer);
-                    //env.enter_block(params.as_slice());
                     self.lower_expr(*body, env, d, b);
                     let mut layer = env.exit();
                     let block = layer.block.take().unwrap();
@@ -1404,7 +1406,11 @@ pub(crate) mod tests {
                         ),
                         b.mutate(
                             b.ident("y"),
-                            b.apply("x1", vec![b.deref_offset(b.ident("y"), 0).into()]),
+                            b.apply(
+                                "x1",
+                                vec![b.deref_offset(b.ident("y"), 0).into()],
+                                AstType::Int,
+                            ),
                         ),
                     ]),
                     None,
@@ -1417,6 +1423,7 @@ pub(crate) mod tests {
                         b.apply(
                             "x1",
                             vec![b.subtract(b.ident("arg0"), b.integer(1).into()).into()],
+                            AstType::Int,
                         ),
                     )]),
                     None,
@@ -1426,8 +1433,8 @@ pub(crate) mod tests {
         ));
 
         seq.push(b.main(b.seq(vec![
-            b.assign("x", b.apply("x1", vec![b.integer(10).into()])),
-            b.assign("x", b.apply("x1", vec![b.integer(0).into()])),
+            b.assign("x", b.apply("x1", vec![b.integer(10).into()], AstType::Int)),
+            b.assign("x", b.apply("x1", vec![b.integer(0).into()], AstType::Int)),
             b.ret(Some(b.ident("x"))),
         ])));
         b.seq(seq)
