@@ -67,11 +67,7 @@ impl<E: Extra> NodeBuilder<E> {
     pub fn node(&self, ast: Ast<E>) -> AstNode<E> {
         AstNode {
             node: ast,
-            extra: E::new(
-                self.current_file_id(),
-                self.span.begin.clone(),
-                self.span.end.clone(),
-            ),
+            extra: E::span(self.span.clone()),
         }
     }
 
@@ -95,6 +91,7 @@ impl<E: Extra> NodeBuilder<E> {
             extra: self.extra(),
         }
     }
+
     pub fn definition(
         &self,
         name: &str,
@@ -107,7 +104,7 @@ impl<E: Extra> NodeBuilder<E> {
             .map(|(name, ty)| ParameterNode {
                 name: name.to_string(),
                 ty: ty.clone(),
-                node: Parameter::Normal, //(name.to_string(), ty.clone()),
+                node: Parameter::Normal,
                 extra: self.extra(),
             })
             .collect();
@@ -183,7 +180,7 @@ impl<E: Extra> NodeBuilder<E> {
 
     pub fn ident(&self, name: &str) -> AstNode<E> {
         AstNode {
-            extra: E::span(self.span.clone()),
+            extra: self.extra(),
             node: Ast::Identifier(name.to_string()),
         }
     }
@@ -221,7 +218,7 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn ret(&self, node: Option<AstNode<E>>) -> AstNode<E> {
-        self.node(Ast::Return(node.map(|n| n.into())))
+        AstNode::new(Ast::Return(node.map(|n| n.into())), self.extra())
     }
 
     pub fn arg(&self, node: AstNode<E>) -> Argument<E> {
@@ -240,15 +237,9 @@ impl<E: Extra> NodeBuilder<E> {
         self.func("main", &[], AstType::Int, body)
     }
 
-    pub fn replace(&self, name: &str, rhs: AstNode<E>) -> AstNode<E> {
-        self.node(Ast::Replace(
-            AssignTarget::Identifier(name.to_string()),
-            rhs.into(),
-        ))
-    }
-
     pub fn mutate(&self, lhs: AstNode<E>, rhs: AstNode<E>) -> AstNode<E> {
-        self.node(Ast::Mutate(lhs.into(), rhs.into()))
+        let extra = lhs.extra.clone();
+        AstNode::new(Ast::Mutate(lhs.into(), rhs.into()), extra)
     }
 
     pub fn assign(&self, name: &str, rhs: AstNode<E>) -> AstNode<E> {

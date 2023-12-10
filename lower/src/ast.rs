@@ -210,6 +210,16 @@ pub struct AstNode<E> {
     pub node: Ast<E>,
     pub extra: E,
 }
+impl<E> AstNode<E> {
+    pub fn set_extra(mut self, extra: E) -> Self {
+        self.extra = extra;
+        self
+    }
+
+    pub fn new(node: Ast<E>, extra: E) -> Self {
+        Self { node, extra }
+    }
+}
 
 #[derive(Debug)]
 pub enum AssignTarget {

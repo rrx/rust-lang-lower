@@ -342,10 +342,15 @@ impl<E: Extra> Parser<E> {
                 })
             }
 
-            StmtP::Return(maybe_expr) => match maybe_expr {
-                Some(expr) => Ok(b.ret(Some(self.from_expr(expr, env, d, b)?))),
-                None => Ok(b.ret(None)),
-            },
+            StmtP::Return(maybe_expr) => {
+                let extra = env.extra(item.span);
+                Ok(match maybe_expr {
+                    Some(expr) => b
+                        .ret(Some(self.from_expr(expr, env, d, b)?))
+                        .set_extra(extra),
+                    None => b.ret(None),
+                })
+            }
 
             StmtP::Assign(assign) => {
                 use syntax::ast::AssignTargetP;

@@ -1354,17 +1354,17 @@ pub(crate) mod tests {
                     b.global("z_static", b.integer(10)),
                     b.mutate(b.ident("z_static"), b.integer(10)),
                     // mutate global variable
-                    b.replace(
-                        "z",
+                    b.mutate(
+                        b.ident("z"),
                         b.subtract(b.deref_offset(b.ident("z"), 0), b.integer(1)),
                     ),
                     // mutate scoped variable
-                    b.replace(
-                        "x2",
+                    b.mutate(
+                        b.ident("x2"),
                         b.subtract(b.deref_offset(b.ident("x2"), 0), b.integer(1)),
                     ),
-                    b.replace(
-                        "z_static",
+                    b.mutate(
+                        b.ident("z_static"),
                         b.subtract(b.deref_offset(b.ident("z_static"), 0), b.integer(1)),
                     ),
                     // assign local
@@ -1398,19 +1398,19 @@ pub(crate) mod tests {
                 b.cond(
                     b.ne(b.deref_offset(b.ident("y"), 0), b.integer(0)),
                     b.seq(vec![
-                        b.replace(
-                            "y",
+                        b.mutate(
+                            b.ident("y"),
                             b.subtract(b.deref_offset(b.ident("y"), 0), b.integer(1)),
                         ),
-                        b.replace("y", b.apply("x1", vec![b.deref_offset(b.ident("y"), 0)])),
+                        b.mutate(b.ident("y"), b.apply("x1", vec![b.deref_offset(b.ident("y"), 0)])),
                     ]),
                     None,
                 ),
                 // using args
                 b.cond(
                     b.ne(b.ident("arg0"), b.integer(0)),
-                    b.seq(vec![b.replace(
-                        "y",
+                    b.seq(vec![b.mutate(
+                        b.ident("y"),
                         b.apply("x1", vec![b.subtract(b.ident("arg0"), b.integer(1))]),
                     )]),
                     None,
