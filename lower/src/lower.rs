@@ -1402,7 +1402,10 @@ pub(crate) mod tests {
                             b.ident("y"),
                             b.subtract(b.deref_offset(b.ident("y"), 0), b.integer(1)),
                         ),
-                        b.mutate(b.ident("y"), b.apply("x1", vec![b.deref_offset(b.ident("y"), 0)])),
+                        b.mutate(
+                            b.ident("y"),
+                            b.apply("x1", vec![b.deref_offset(b.ident("y"), 0)]),
+                        ),
                     ]),
                     None,
                 ),

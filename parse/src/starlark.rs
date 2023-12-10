@@ -263,8 +263,9 @@ impl<E: Extra> Parser<E> {
         let mut env = Environment::new(&codemap, file_id);
         let mut seq = b.prelude();
         let ast: ast::AstNode<E> = self.from_stmt(stmt, &mut env, d, &b)?;
+        let extra = ast.extra.clone();
         seq.push(ast);
-        Ok(b.seq(seq))
+        Ok(b.seq(seq).set_extra(extra))
     }
 
     pub fn from_stmt<'a, P: syntax::ast::AstPayload>(
@@ -318,28 +319,28 @@ impl<E: Extra> Parser<E> {
                 let ast = Ast::Definition(d);
                 env.define(&name);
                 let extra = env.extra(item.span);
-                Ok(AstNode { node: ast, extra })
+                Ok(AstNode::new(ast, extra))
             }
 
             StmtP::If(expr, truestmt) => {
                 let condition = self.from_expr(expr, env, d, b)?;
                 let truestmt = self.from_stmt(*truestmt, env, d, b)?;
                 let extra = env.extra(item.span);
-                Ok(AstNode {
-                    node: Ast::Conditional(condition.into(), truestmt.into(), None),
+                Ok(AstNode::new(
+                    Ast::Conditional(condition.into(), truestmt.into(), None),
                     extra,
-                })
+                ))
             }
 
             StmtP::IfElse(expr, options) => {
                 let condition = self.from_expr(expr, env, d, b)?;
                 let truestmt = self.from_stmt(options.0, env, d, b)?;
-                let elsestmt = Some(Box::new(self.from_stmt(options.1, env, d, b)?));
+                let elsestmt = self.from_stmt(options.1, env, d, b)?;
                 let extra = env.extra(item.span);
-                Ok(AstNode {
-                    node: Ast::Conditional(condition.into(), truestmt.into(), elsestmt),
+                Ok(AstNode::new(
+                    Ast::Conditional(condition.into(), truestmt.into(), Some(elsestmt.into())),
                     extra,
-                })
+                ))
             }
 
             StmtP::Return(maybe_expr) => {
@@ -424,31 +425,26 @@ impl<E: Extra> Parser<E> {
                     ExprP::Dot(expr, name) => {
                         //let r = expr.span.begin().get() as usize..expr.span.end().get() as usize;
                         if let ExprP::Identifier(ident) = &expr.node {
-                            let ast = if let Some(_data) = env.resolve(&ident.node.ident) {
-                                let extra = env.extra(item.span);
-                                let ast = AstNode {
-                                    node: Ast::Identifier(ident.node.ident.clone()),
-                                    extra,
-                                };
-                                Ast::Call(ast.into(), args)
+                            if let Some(_data) = env.resolve(&ident.node.ident) {
+                                let extra: E = env.extra(item.span);
+                                let ast = AstNode::new(
+                                    Ast::Identifier(ident.node.ident.clone()),
+                                    extra.clone(),
+                                );
+                                Ok(AstNode::new(Ast::Call(ast.into(), args), extra))
                             } else if &ident.node.ident == "b" {
                                 if let Some(b) = ast::Builtin::from_name(&name.node) {
                                     assert_eq!(args.len(), b.arity());
-                                    Ast::Builtin(b, args)
+                                    let extra = env.extra(item.span);
+                                    Ok(AstNode::new(Ast::Builtin(b, args), extra))
                                 } else {
                                     d.push_diagnostic(env.error(name.span, "Builtin not found"));
-                                    return Ok(b.error());
-                                    //return Ok(Ast::Error);
-                                    //return Err(anyhow::Error::new(ParseError::Invalid));
+                                    Ok(b.error())
                                 }
                             } else {
                                 d.push_diagnostic(env.error(name.span, "Variable not in scope"));
-                                return Ok(b.error());
-                                //return Ok(ast::Error);
-                                //return Err(anyhow::Error::new(ParseError::Invalid));
-                            };
-                            let extra = env.extra(item.span);
-                            Ok(AstNode { node: ast, extra })
+                                Ok(b.error())
+                            }
                         } else {
                             unimplemented!("{:?}", (expr, name))
                         }
