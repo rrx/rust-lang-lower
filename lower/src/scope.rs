@@ -1,5 +1,3 @@
-use crate::ast::Span;
-use codespan_reporting::diagnostic::{Diagnostic, Label};
 use melior::ir::*;
 use melior::ir::{Operation, Value};
 use std::collections::{HashMap, HashSet};
@@ -24,6 +22,7 @@ impl From<usize> for OpIndex {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum LayerIndex {
     Op(usize),
+    Noop,
     Argument(usize),
     Static(usize),
 }
@@ -116,6 +115,7 @@ impl<'c> Layer<'c> {
             Some(index) => {
                 let offset = self.index.get(index).unwrap();
                 Some(match index {
+                    LayerIndex::Noop => vec![],
                     LayerIndex::Static(_) => vec![],
                     //LayerIndex::Ref(source_index) => {
                     //return self.values(source_index);
@@ -217,6 +217,11 @@ impl<'c> Layer<'c> {
         self._last_index = Some(index);
     }
 
+    pub fn push_noop(&mut self) -> LayerIndex {
+        self.push_index(LayerIndex::Noop);
+        LayerIndex::Noop
+    }
+
     pub fn take_ops(&mut self) -> Vec<Operation<'c>> {
         self.names.clear();
         self.ops.drain(..).collect()
@@ -229,7 +234,7 @@ pub struct ScopeStack<'c, D> {
     static_count: usize,
     layers: Vec<Layer<'c>>,
     types: HashMap<LayerIndex, D>,
-    shared: HashSet<String>,
+    pub shared: HashSet<String>,
 }
 
 impl<'c, D> Default for ScopeStack<'c, D> {
@@ -399,6 +404,10 @@ impl<'c, D: std::fmt::Debug + Clone> ScopeStack<'c, D> {
 
     pub fn push_index(&mut self, index: LayerIndex) {
         self.layers.last_mut().unwrap().push_index(index)
+    }
+
+    pub fn push_noop(&mut self) -> LayerIndex {
+        self.layers.last_mut().unwrap().push_noop()
     }
 
     pub fn last_index(&self) -> Option<LayerIndex> {

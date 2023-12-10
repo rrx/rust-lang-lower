@@ -2,7 +2,6 @@ use crate::ast;
 use crate::lower;
 use crate::scope;
 use crate::{Diagnostics, NodeBuilder};
-use melior::ir::operation::OperationPrintingFlags;
 use melior::ExecutionEngine;
 use melior::{
     dialect::DialectRegistry,
@@ -15,11 +14,39 @@ impl<'c, E: ast::Extra> lower::Lower<'c, E> {
     pub fn run_ast(
         &mut self,
         ast: ast::AstNode<E>,
+        libpath: &str,
         env: scope::ScopeStack<'c, lower::Data>,
         d: &mut Diagnostics,
         b: &NodeBuilder<E>,
     ) -> i32 {
-        run_ast(ast, self, env, d, b)
+        let location = ir::Location::unknown(self.context);
+        let mut module = ir::Module::new(location);
+        self.module_lower(&mut module, ast, env, d, b);
+        self.module_passes(&mut module);
+        self.exec_main(&module, libpath)
+    }
+
+    pub fn exec_main(&self, module: &ir::Module<'c>, libpath: &str) -> i32 {
+        let paths = self
+            .shared
+            .iter()
+            .map(|s| {
+                let mut path = format!("{}/{}.so", libpath, s);
+                path.push('\0');
+                path
+            })
+            .collect::<Vec<_>>();
+        let shared = paths.iter().map(|p| p.as_str()).collect::<Vec<_>>();
+
+        let engine = ExecutionEngine::new(&module, 0, &shared, true);
+        let mut result: i32 = -1;
+        unsafe {
+            engine
+                .invoke_packed("main", &mut [&mut result as *mut i32 as *mut ()])
+                .unwrap();
+            println!("exec: {}", result);
+            result
+        }
     }
 }
 
@@ -72,81 +99,6 @@ pub struct Compiler<'c, E> {
     module: ir::Module<'c>,
     lower: lower::Lower<'c, E>,
     _e: std::marker::PhantomData<E>,
-}
-
-impl<'c, E: ast::Extra> Compiler<'c, E> {
-    /*
-    pub fn new(context: &'c mut CompilerContext<'c, E>) -> Self {
-        let module = context.module();
-        let lower = lower::Lower::new(&context.context, &context.files);
-        Self { module, lower, _e: std::marker::PhantomData::default() }
-    }
-    */
-
-    /*
-    pub fn module(&mut self, context: &'c mut CompilerContext<'c, E>, ast: ast::AstNode<E>) {
-        //let lower = lower::Lower::new(&context.context, &context.files);
-        self.lower.lower_expr(ast, &mut context.env);
-        for op in context.env.take_ops() {
-            self.module.body().append_operation(op);
-        }
-    }
-    */
-
-    pub fn run(&mut self, context: &mut CompilerContext<'c, E>) -> i32 {
-        log::debug!(
-            "before {}",
-            self.module
-                .as_operation()
-                .to_string_with_flags(OperationPrintingFlags::new())
-                .unwrap()
-        );
-        context.pass_manager.run(&mut self.module).unwrap();
-        assert!(self.module.as_operation().verify());
-        log::debug!(
-            "after pass {}",
-            self.module
-                .as_operation()
-                .to_string_with_flags(OperationPrintingFlags::new())
-                .unwrap()
-        );
-
-        let mut path = "../target/debug/prelude.so".to_string();
-        path.push('\0');
-        let engine = ExecutionEngine::new(&self.module, 0, &[&path], true);
-        let mut result: i32 = -1;
-        unsafe {
-            engine
-                .invoke_packed("main", &mut [&mut result as *mut i32 as *mut ()])
-                .unwrap();
-            result
-        }
-    }
-}
-
-pub fn run_ast<'c, E: ast::Extra>(
-    ast: ast::AstNode<E>,
-    lower: &mut lower::Lower<'c, E>,
-    env: scope::ScopeStack<'c, lower::Data>,
-    d: &mut Diagnostics,
-    b: &NodeBuilder<E>,
-) -> i32 {
-    let location = ir::Location::unknown(lower.context);
-    let mut module = ir::Module::new(location);
-
-    lower.module_lower(&mut module, ast, env, d, b);
-    lower.module_passes(&mut module);
-
-    let mut path = "../target/debug/prelude.so".to_string();
-    path.push('\0');
-    let engine = ExecutionEngine::new(&module, 0, &[&path], true);
-    let mut result: i32 = -1;
-    unsafe {
-        engine
-            .invoke_packed("main", &mut [&mut result as *mut i32 as *mut ()])
-            .unwrap();
-        result
-    }
 }
 
 pub fn default_context() -> Context {

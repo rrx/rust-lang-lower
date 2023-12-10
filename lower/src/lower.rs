@@ -11,6 +11,7 @@ use melior::{
     },
     Context,
 };
+use std::collections::{HashMap, HashSet};
 
 use crate::ast::*;
 use crate::scope::{Layer, LayerIndex, LayerType, ScopeStack};
@@ -84,6 +85,7 @@ pub type FileDB = SimpleFiles<String, String>;
 pub struct Lower<'c, E> {
     pub(crate) context: &'c Context,
     pub pass_manager: melior::pass::PassManager<'c>,
+    pub shared: HashSet<String>,
     _e: std::marker::PhantomData<E>,
 }
 
@@ -92,8 +94,13 @@ impl<'c, E: Extra> Lower<'c, E> {
         Self {
             context,
             pass_manager: crate::compile::default_pass_manager(context),
+            shared: HashSet::new(),
             _e: std::marker::PhantomData::default(),
         }
+    }
+
+    pub fn add_shared(&mut self, s: &str) {
+        self.shared.insert(s.to_string());
     }
 
     pub fn module_lower(
@@ -108,6 +115,11 @@ impl<'c, E: Extra> Lower<'c, E> {
         for op in env.take_ops() {
             module.body().append_operation(op);
         }
+
+        for s in env.shared {
+            self.shared.insert(s);
+        }
+
         log::debug!(
             "lowered {}",
             module
@@ -719,13 +731,11 @@ impl<'c, E: Extra> Lower<'c, E> {
             }
 
             Ast::BinaryOp(op, x, y) => {
-                log::debug!("binop: {:?}, {:?}, {:?}", op, x, y);
                 let index_lhs = self.lower_expr(*x, env, d, b);
                 let index_rhs = self.lower_expr(*y, env, d, b);
 
                 let ty_lhs = env.data(&index_lhs).expect("LHS data missing").ty.clone();
                 let ty_rhs = env.data(&index_rhs).expect("RHS data missing").ty.clone();
-                log::debug!("ty: {:?}, {:?}", ty_lhs, ty_rhs);
 
                 let ast_ty = ty_lhs.clone();
                 assert_eq!(ty_lhs, ty_rhs);
@@ -734,8 +744,6 @@ impl<'c, E: Extra> Lower<'c, E> {
                 let a = env.value0(&index_lhs);
                 let b = env.value0(&index_rhs);
                 let ty = a.r#type();
-                log::debug!("bin: {:?}, {:?}", a, b);
-                log::debug!("ty: {:?}, {:?}", a.r#type(), b.r#type());
                 assert!(a.r#type() == b.r#type());
 
                 let binop = match op {
@@ -829,22 +837,16 @@ impl<'c, E: Extra> Lower<'c, E> {
                 index
             }
 
-            Ast::Deref(expr, target) => {
+            Ast::Deref(expr, _target) => {
                 // we are expecting a memref here
-                log::debug!("deref: {:?}: {:?}", &expr, target);
                 let index = self.lower_expr(*expr, env, d, b);
 
                 let data = env.data(&index).unwrap();
-                log::debug!("data: {:?}", &data);
 
                 // ensure proper type
-                let ty = self.from_type(&data.ty);
-                log::debug!("ptr_ty: {:?}", &ty);
-
                 if let AstType::Ptr(ast_ty) = &data.ty {
                     let deref_data = Data::new(*ast_ty.clone());
-                    let ty = self.from_type(ast_ty);
-                    log::debug!("ty: {:?}", &ty);
+                    //let ty = self.from_type(ast_ty);
                     let r = env.value0(&index);
                     let op = memref::load(r, &[], location);
                     let index = env.push(op);
@@ -1298,7 +1300,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                             unimplemented!()
                         }
                         // do nothing?
-                        env.last_index().unwrap()
+                        env.push_noop()
                     } //_ => unimplemented!("{:?}", b),
                       //
                 }
@@ -1317,7 +1319,7 @@ pub(crate) mod tests {
 
     pub fn gen_test<'c, E: Extra>(file_id: usize, _env: &mut Environment<'c>) -> AstNode<E> {
         let b = NodeBuilder::new(file_id, "test.py");
-        let mut seq = vec![];
+        let mut seq = vec![b.import_prelude()];
         seq.push(b.main(b.seq(vec![
             b.assign("x", b.integer(123)),
             b.test(
@@ -1336,7 +1338,7 @@ pub(crate) mod tests {
 
     pub fn gen_while<'c, E: Extra>(file_id: usize, _env: &mut Environment<'c>) -> AstNode<E> {
         let b = NodeBuilder::new(file_id, "test.py");
-        let mut seq = vec![];
+        let mut seq = vec![b.import_prelude()];
 
         // global variable x = 10
         seq.push(b.global("z", b.integer(10)));
@@ -1383,7 +1385,7 @@ pub(crate) mod tests {
         _env: &mut Environment<'c>,
     ) -> AstNode<E> {
         let b = NodeBuilder::new(file_id, "test.py");
-        let mut seq = vec![];
+        let mut seq = vec![b.import_prelude()];
         seq.push(b.global("z", b.integer(10)));
 
         seq.push(b.func(
@@ -1435,7 +1437,7 @@ pub(crate) mod tests {
         let mut env = Environment::default();
         env.enter_static();
         let ast: AstNode<SimpleExtra> = gen_function_call(file_id, &mut env);
-        assert_eq!(0, lower.run_ast(ast, env, &mut d, &b));
+        assert_eq!(0, lower.run_ast(ast, "../target/debug/", env, &mut d, &b));
         //env.exit();
     }
 
@@ -1449,8 +1451,7 @@ pub(crate) mod tests {
         let mut env = Environment::default();
         env.enter_static();
         let ast: AstNode<SimpleExtra> = gen_while(file_id, &mut env);
-        assert_eq!(0, lower.run_ast(ast, env, &mut d, &b));
-        //env.exit();
+        assert_eq!(0, lower.run_ast(ast, "../target/debug/", env, &mut d, &b));
     }
 
     #[test]
@@ -1463,18 +1464,6 @@ pub(crate) mod tests {
         let mut env = Environment::default();
         env.enter_static();
         let ast: AstNode<SimpleExtra> = gen_test(file_id, &mut env);
-        assert_eq!(0, lower.run_ast(ast, env, &mut d, &b));
-        //env.exit();
-    }
-
-    #[test]
-    fn test_compile() {
-        //let mut context: CompilerContext<SimpleExtra> = CompilerContext::new();
-        //let mut lower = Lower::new(&context.context);
-        //let file_id = lower.add_source("test.py".into(), "test".into());
-        //let ast: AstNode<SimpleExtra> = gen_test(file_id, &mut context.env);
-        //let module = context.module();
-        //let mut c = context.compiler();
-        //c.module(&mut context, ast);
+        assert_eq!(0, lower.run_ast(ast, "../target/debug", env, &mut d, &b));
     }
 }

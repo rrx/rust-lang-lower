@@ -105,11 +105,22 @@ impl<E: Extra> NodeBuilder<E> {
         }))
     }
 
+    pub fn import_prelude(&self) -> AstNode<E> {
+        self.node(Ast::Builtin(
+            Builtin::Import,
+            vec![self.arg(self.string("prelude"))],
+        ))
+    }
+
     pub fn prelude(&self) -> Vec<AstNode<E>> {
         vec![
             self.definition("print_index", &[("a", AstType::Int)], AstType::Unit, None),
             self.definition("print_float", &[("a", AstType::Float)], AstType::Unit, None),
         ]
+    }
+
+    pub fn string(&self, s: &str) -> AstNode<E> {
+        self.node(Ast::Literal(Literal::String(s.to_string())))
     }
 
     pub fn integer(&self, x: i64) -> AstNode<E> {

@@ -4,10 +4,10 @@ use std::io::Write;
 use std::path::Path;
 
 use argh::FromArgs;
-use melior::{ir, ExecutionEngine};
+use melior::ir;
 use simple_logger::{set_up_color_terminal, SimpleLogger};
 
-use lower::ast::{AstNode, SimpleExtra};
+use lower::ast::SimpleExtra;
 use lower::compile::default_context;
 use lower::{Diagnostics, Lower, NodeBuilder};
 use parse::starlark::Parser;
@@ -56,7 +56,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let location = ir::Location::unknown(&context);
     let mut module = ir::Module::new(location);
-    let mut parser = Parser::new();
+    let mut parser: Parser<SimpleExtra> = Parser::new();
     let mut d = Diagnostics::new();
     let mut lower = Lower::new(&context);
 
@@ -79,11 +79,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         if d.has_errors {
             std::process::exit(1);
         }
-        let ast: AstNode<SimpleExtra> = result?;
-
         assert_eq!(1, env.layer_count());
-        lower.module_lower(&mut module, ast, env, &mut d, &b);
-        //env.exit();
+        lower.module_lower(&mut module, result?, env, &mut d, &b);
     }
 
     if config.verbose {
@@ -105,17 +102,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     if config.exec {
-        let mut path = "./target/debug/prelude.so".to_string();
-        path.push('\0');
-        let engine = ExecutionEngine::new(&module, 0, &[&path], true);
-        let mut result: i32 = -1;
-        unsafe {
-            engine
-                .invoke_packed("main", &mut [&mut result as *mut i32 as *mut ()])
-                .unwrap();
-            println!("exec: {}", result);
-            std::process::exit(result);
-        }
+        let result = lower.exec_main(&module, "target/debug");
+        std::process::exit(result);
     }
 
     Ok(())
