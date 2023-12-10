@@ -7,6 +7,7 @@ use std::fmt::Debug;
 pub enum AstType {
     Int,
     Index,
+    String,
     Float,
     Bool,
     Unit,
@@ -22,6 +23,7 @@ pub enum Literal {
     Int(i64),
     Index(usize),
     Float(f64),
+    String(String),
     Bool(bool),
 }
 
@@ -121,6 +123,7 @@ pub enum Ast<E> {
     While(Box<AstNode<E>>, Box<AstNode<E>>),
     Builtin(Builtin, Vec<Argument<E>>),
     Deref(Box<AstNode<E>>, DerefTarget),
+    Error,
 }
 
 impl<E: Extra> Ast<E> {

@@ -2,7 +2,9 @@ use anyhow::Result;
 use std::path::Path;
 use thiserror::Error;
 
+use starlark_syntax::codemap;
 use starlark_syntax::codemap::CodeMap;
+
 use starlark_syntax::lexer;
 use starlark_syntax::syntax;
 use starlark_syntax::syntax::module::AstModuleFields;
@@ -74,7 +76,7 @@ impl<'a> Environment<'a> {
         }
     }
 
-    pub fn extra<E: Extra>(&self, span: starlark_syntax::codemap::Span) -> E {
+    pub fn extra<E: Extra>(&self, span: codemap::Span) -> E {
         let r = self.codemap.resolve_span(span);
         let begin = CodeLocation {
             line: r.begin.line,
@@ -119,20 +121,48 @@ impl<'a> Environment<'a> {
     pub fn dump(&self) {
         println!("{:?}", self);
     }
+
+    pub fn error(&self, span: codemap::Span, msg: &str) -> Diagnostic<usize> {
+        let r = span.begin().get() as usize..span.end().get() as usize;
+        Diagnostic::error()
+            .with_labels(vec![Label::primary(self.file_id, r).with_message(msg)])
+            .with_message("error")
+    }
+
+    pub fn unimplemented(&self, span: codemap::Span) -> Diagnostic<usize> {
+        let r = span.begin().get() as usize..span.end().get() as usize;
+        Diagnostic::error()
+            .with_labels(vec![
+                Label::primary(self.file_id, r).with_message("Unimplemented")
+            ])
+            .with_message("error")
+    }
 }
 
-fn from_literal(item: syntax::ast::AstLiteral) -> ast::Literal {
+fn from_literal<E: Extra>(
+    item: syntax::ast::AstLiteral,
+    span: codemap::Span,
+    env: &Environment,
+) -> ast::AstNode<E> {
     use syntax::ast::AstLiteral;
-    match item {
+    let lit = match &item {
         AstLiteral::Int(x) => {
             use lexer::TokenInt;
             match x.node {
                 TokenInt::I32(y) => ast::Literal::Int(y as i64),
-                _ => unimplemented!(),
+                //_ => env.unimplemented(span),
+                _ => unimplemented!("{:?}", item),
             }
         }
         AstLiteral::Float(x) => ast::Literal::Float(x.node),
-        _ => unimplemented!(),
+        AstLiteral::String(x) => ast::Literal::String(x.node.clone()),
+        //_ => env.unimplemented(span),
+        _ => unimplemented!("{:?}", item),
+    };
+    let extra = env.extra(span);
+    AstNode {
+        node: Ast::Literal(lit),
+        extra,
     }
 }
 
@@ -177,13 +207,7 @@ fn from_parameter<'a, E: Extra, P: syntax::ast::AstPayload>(
             let ty = if let Some(ty) = maybe_type.map(|ty| from_type(&ty)) {
                 ty
             } else {
-                let r = item.span.begin().get() as usize..item.span.end().get() as usize;
-                let diagnostic: Diagnostic<usize> = Diagnostic::error()
-                    .with_labels(vec![
-                        Label::primary(env.file_id, r).with_message("Missing type")
-                    ])
-                    .with_message("error");
-                d.push_diagnostic(diagnostic);
+                d.push_diagnostic(env.error(item.span, "Missing Type"));
                 Some(ast::AstType::Unit)
             };
             ast::ParameterNode {
@@ -405,22 +429,16 @@ impl<E: Extra> Parser<E> {
                                     assert_eq!(args.len(), b.arity());
                                     Ast::Builtin(b, args)
                                 } else {
-                                    let r = name.span.begin().get() as usize
-                                        ..name.span.end().get() as usize;
-                                    let diagnostic: Diagnostic<usize> = Diagnostic::error()
-                                        .with_labels(vec![Label::primary(env.file_id, r)
-                                            .with_message("Builtin not found")])
-                                        .with_message("error");
-                                    d.push_diagnostic(diagnostic);
-                                    return Err(anyhow::Error::new(ParseError::Invalid));
+                                    d.push_diagnostic(env.error(name.span, "Builtin not found"));
+                                    return Ok(b.error());
+                                    //return Ok(Ast::Error);
+                                    //return Err(anyhow::Error::new(ParseError::Invalid));
                                 }
                             } else {
-                                let diagnostic: Diagnostic<usize> = Diagnostic::error()
-                                    .with_labels(vec![Label::primary(env.file_id, r)
-                                        .with_message("Variable not in scope")])
-                                    .with_message("error");
-                                d.push_diagnostic(diagnostic);
-                                return Err(anyhow::Error::new(ParseError::Invalid));
+                                d.push_diagnostic(env.error(name.span, "Variable not in scope"));
+                                return Ok(b.error());
+                                //return Ok(ast::Error);
+                                //return Err(anyhow::Error::new(ParseError::Invalid));
                             };
                             let extra = env.extra(item.span);
                             Ok(AstNode { node: ast, extra })
@@ -452,27 +470,20 @@ impl<E: Extra> Parser<E> {
                         Ok(ast)
                     }
                 } else {
-                    let r = item.span.begin().get() as usize..item.span.end().get() as usize;
-
-                    let diagnostic: Diagnostic<usize> = Diagnostic::error()
-                        .with_labels(vec![
-                            Label::primary(env.file_id, r).with_message("Variable not in scope")
-                        ])
-                        .with_message("error");
-                    d.push_diagnostic(diagnostic);
-                    Err(anyhow::Error::new(ParseError::Invalid))
+                    d.push_diagnostic(env.error(ident.span, "Variable not in scope"));
+                    Ok(b.error())
+                    //Err(anyhow::Error::new(ParseError::Invalid))
                 }
             }
 
-            ExprP::Literal(lit) => {
-                let extra = env.extra(item.span);
-                let x: Literal = from_literal(lit);
-                Ok(AstNode {
-                    node: Ast::Literal(x),
-                    extra,
-                })
-            }
-
+            ExprP::Literal(lit) => Ok(from_literal(lit, item.span, env)),
+            //let extra = env.extra(item.span);
+            //let x: Literal = from_literal(lit);
+            //Ok(AstNode {
+            //node: Ast::Literal(x),
+            //extra,
+            //})
+            //}
             ExprP::Minus(expr) => {
                 let extra = env.extra(item.span);
                 let ast = Ast::UnaryOp(
@@ -514,7 +525,6 @@ pub(crate) mod tests {
             filename.to_string(),
             std::fs::read_to_string(filename).unwrap(),
         );
-        //let b: NodeBuilder<ast::SimpleExtra> = NodeBuilder::new(file_id, filename);
 
         // parse
         let mut parser = Parser::new();
@@ -525,6 +535,8 @@ pub(crate) mod tests {
         // lower
         let mut env = lower::lower::Environment::default();
         env.enter_static();
+        d.dump();
+        assert!(!d.has_errors);
 
         // run
         assert_eq!(expected, lower.run_ast(ast, env, &mut d));

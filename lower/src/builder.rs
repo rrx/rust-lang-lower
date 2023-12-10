@@ -75,6 +75,12 @@ impl<E: Extra> NodeBuilder<E> {
         E::new(self.current_file_id(), begin, end)
     }
 
+    pub fn error(&self) -> AstNode<E> {
+        AstNode {
+            node: Ast::Error,
+            extra: self.extra(),
+        }
+    }
     pub fn definition(
         &self,
         name: &str,

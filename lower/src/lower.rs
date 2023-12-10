@@ -134,6 +134,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                 Literal::Float(_) => AstType::Float,
                 Literal::Bool(_) => AstType::Bool,
                 Literal::Index(_) => AstType::Index,
+                Literal::String(_) => AstType::String,
             },
             Ast::Identifier(name) => {
                 // infer type from the operation
@@ -169,6 +170,8 @@ impl<'c, E: Extra> Lower<'c, E> {
             AstType::Float => Type::float64(self.context),
             AstType::Bool => IntegerType::new(self.context, 1).into(),
             AstType::Unit => Type::none(self.context),
+            //AstType::String => Type::none(self.context),
+            _ => unimplemented!("{:?}", ty),
         }
     }
 
@@ -610,6 +613,7 @@ impl<'c, E: Extra> Lower<'c, E> {
         let location = self.location(&expr, d);
 
         match expr.node {
+            Ast::Error => unreachable!(),
             Ast::Global(ident, expr) => {
                 let global_name = if env.current_layer_type() == LayerType::Static {
                     ident.clone()
@@ -968,7 +972,8 @@ impl<'c, E: Extra> Lower<'c, E> {
                     let index = env.push(op);
                     env.index_data(&index, Data::new(AstType::Bool));
                     index
-                } //_ => unimplemented!("{:?}", lit)
+                }
+                _ => unimplemented!("{:?}", lit),
             },
 
             Ast::Sequence(exprs) => {
