@@ -90,10 +90,12 @@ impl<'a> Environment<'a> {
     pub fn enter_func(&mut self) {
         self.in_func = true;
     }
+
     pub fn exit_func(&mut self) {
         assert_eq!(self.in_func, true);
         self.in_func = false;
     }
+
     pub fn define(&mut self, name: &str) {
         let data = if self.in_func {
             Data::new_local()
@@ -106,12 +108,14 @@ impl<'a> Environment<'a> {
             .names
             .insert(name.to_string(), data);
     }
+
     pub fn resolve(&self, name: &str) -> Option<Data> {
         for layer in self.layers.iter().rev() {
             return layer.names.get(name).cloned();
         }
         None
     }
+
     pub fn dump(&self) {
         println!("{:?}", self);
     }
@@ -147,22 +151,45 @@ fn from_binop(item: syntax::ast::BinOp) -> ast::BinaryOperation {
     }
 }
 
+fn from_type<P: syntax::ast::AstPayload>(item: &syntax::ast::TypeExprP<P>) -> Option<AstType> {
+    log::debug!("type: {:?}", item);
+    match &item.expr.node {
+        syntax::ast::ExprP::Identifier(name) => {
+            match name.ident.as_str() {
+                "float" => Some(AstType::Float),
+                "int" => Some(AstType::Int),
+                //_ => unimplemented!("{:?}", name)
+                _ => None,
+            }
+        }
+        _ => None, //_ => unimplemented!("{:?}", item)
+    }
+    //Some(AstType::Int)
+}
+
 fn from_parameter<'a, E: Extra, P: syntax::ast::AstPayload>(
     item: syntax::ast::AstParameterP<P>,
     env: &Environment<'a>,
 ) -> ast::ParameterNode<E> {
     use syntax::ast::ParameterP;
 
+    log::debug!("p: {:?}", item);
     match item.node {
         ParameterP::Normal(ident, maybe_type) => {
             let extra = env.extra(item.span);
-            let ty = if let Some(_ty) = maybe_type {
-                ast::AstType::Int
+            let ty = if let Some(ty) = maybe_type {
+                if let Some(ty) = from_type(&ty.node) {
+                    ty
+                } else {
+                    ast::AstType::Int
+                }
             } else {
                 ast::AstType::Int
             };
             ast::ParameterNode {
-                node: ast::Parameter::Normal(ident.node.ident, ty),
+                name: ident.node.ident.to_string(),
+                ty,
+                node: ast::Parameter::Normal,
                 extra,
             }
         }
@@ -236,19 +263,28 @@ impl<E: Extra> Parser<E> {
             }
 
             StmtP::Def(def) => {
+                env.enter_func();
                 let params = def
                     .params
                     .into_iter()
                     .map(|p| from_parameter(p, env))
-                    .collect();
-                env.enter_func();
+                    .collect::<Vec<_>>();
+                for p in params.iter() {
+                    env.define(&p.name);
+                }
                 let body = self.from_stmt(*def.body, env, d, b)?;
                 env.exit_func();
+                let return_type = def
+                    .return_type
+                    .map(|ty| from_type(&ty).unwrap_or(AstType::Unit))
+                    .unwrap_or(AstType::Unit)
+                    .into();
                 let name = &def.name.ident;
                 let d = ast::Definition {
                     name: name.clone(),
                     body: Some(body.into()),
-                    return_type: AstType::Int.into(),
+                    //return_type: AstType::Int.into(),
+                    return_type,
                     params,
                 };
                 let ast = Ast::Definition(d);

@@ -85,7 +85,9 @@ impl<E: Extra> NodeBuilder<E> {
         let params = params
             .iter()
             .map(|(name, ty)| ParameterNode {
-                node: Parameter::Normal(name.to_string(), ty.clone()),
+                name: name.to_string(),
+                ty: ty.clone(),
+                node: Parameter::Normal, //(name.to_string(), ty.clone()),
                 extra: self.extra(),
             })
             .collect();

@@ -49,12 +49,14 @@ pub enum Argument<E> {
 
 #[derive(Debug)]
 pub enum Parameter<E> {
-    Normal(String, AstType),
+    Normal,
     Dummy(AstNode<E>),
 }
 
 #[derive(Debug)]
 pub struct ParameterNode<E> {
+    pub name: String,
+    pub ty: AstType,
     pub node: Parameter<E>,
     pub extra: E,
 }

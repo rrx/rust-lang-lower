@@ -1005,11 +1005,12 @@ impl<'c, E: Extra> Lower<'c, E> {
 
                 for p in def.params {
                     match p.node {
-                        Parameter::Normal(ident, ast_ty) => {
-                            log::debug!("params {:?}: {:?}", ident, ast_ty);
+                        Parameter::Normal => {
+                            //(ident, ast_ty) => {
+                            log::debug!("params {:?}: {:?}", p.name, p.ty);
                             let location = p.extra.location(self.context, d);
-                            params.push((ast_ty.clone(), location, ident));
-                            ast_types.push(ast_ty);
+                            params.push((p.ty.clone(), location, p.name));
+                            ast_types.push(p.ty);
                         }
                         _ => {
                             unimplemented!("{:?}", p);
