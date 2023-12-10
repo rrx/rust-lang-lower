@@ -50,6 +50,12 @@ pub enum Argument<E> {
     Positional(Box<AstNode<E>>),
 }
 
+impl<E> From<AstNode<E>> for Argument<E> {
+    fn from(item: AstNode<E>) -> Self {
+        Argument::Positional(item.into())
+    }
+}
+
 #[derive(Debug)]
 pub enum Parameter<E> {
     Normal,
@@ -218,6 +224,14 @@ impl<E> AstNode<E> {
 
     pub fn new(node: Ast<E>, extra: E) -> Self {
         Self { node, extra }
+    }
+}
+
+impl<E> From<Argument<E>> for AstNode<E> {
+    fn from(item: Argument<E>) -> Self {
+        match item {
+            Argument::Positional(x) => *x,
+        }
     }
 }
 

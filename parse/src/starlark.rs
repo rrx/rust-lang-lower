@@ -399,40 +399,35 @@ impl<E: Extra> Parser<E> {
             ExprP::Call(expr, expr_args) => {
                 let mut args = vec![];
                 for arg in expr_args {
-                    args.push(self.from_argument(arg, env, d, b)?);
+                    args.push(self.from_argument(arg, env, d, b)?.into());
                 }
 
                 match expr.node {
                     ExprP::Identifier(ident) => {
-                        let ast = if let Some(_data) = env.resolve(&ident.node.ident) {
-                            let extra = env.extra(item.span);
-                            let ast = AstNode {
-                                node: Ast::Identifier(ident.node.ident),
-                                extra,
-                            };
-                            Ast::Call(ast.into(), args)
+                        if let Some(_data) = env.resolve(&ident.node.ident) {
+                            let extra: E = env.extra(item.span);
+                            //let ast = AstNode {
+                            //node: Ast::Identifier(ident.node.ident.clone()),
+                            //extra: extra.clone(),
+                            //};
+                            Ok(b.apply(&ident.node.ident, args).set_extra(extra))
                         } else if let Some(b) = ast::Builtin::from_name(&ident.node.ident) {
+                            let extra = env.extra(item.span);
                             assert_eq!(args.len(), b.arity());
-                            Ast::Builtin(b, args)
+                            Ok(AstNode::new(Ast::Builtin(b, args), extra))
                         } else {
                             unreachable!("Not found");
-                        };
-
-                        let extra = env.extra(item.span);
-                        Ok(AstNode { node: ast, extra })
+                        }
                     }
 
                     ExprP::Dot(expr, name) => {
-                        //let r = expr.span.begin().get() as usize..expr.span.end().get() as usize;
                         if let ExprP::Identifier(ident) = &expr.node {
                             if let Some(_data) = env.resolve(&ident.node.ident) {
                                 let extra: E = env.extra(item.span);
-                                let ast = AstNode::new(
-                                    Ast::Identifier(ident.node.ident.clone()),
-                                    extra.clone(),
-                                );
-                                Ok(AstNode::new(Ast::Call(ast.into(), args), extra))
+                                //let ast = b.ident(&ident.node.ident).set_extra(extra.clone());
+                                Ok(b.apply(&ident.node.ident, args).set_extra(extra))
                             } else if &ident.node.ident == "b" {
+                                // builtin namespace
                                 if let Some(b) = ast::Builtin::from_name(&name.node) {
                                     assert_eq!(args.len(), b.arity());
                                     let extra = env.extra(item.span);
@@ -509,7 +504,7 @@ impl<E: Extra> Parser<E> {
     ) -> Result<ast::Argument<E>> {
         use syntax::ast::ArgumentP;
         match item.node {
-            ArgumentP::Positional(expr) => Ok(b.arg(self.from_expr(expr, env, d, b)?.into())),
+            ArgumentP::Positional(expr) => Ok(self.from_expr(expr, env, d, b)?.into()),
             _ => unimplemented!(),
         }
     }

@@ -1404,7 +1404,7 @@ pub(crate) mod tests {
                         ),
                         b.mutate(
                             b.ident("y"),
-                            b.apply("x1", vec![b.deref_offset(b.ident("y"), 0)]),
+                            b.apply("x1", vec![b.deref_offset(b.ident("y"), 0).into()]),
                         ),
                     ]),
                     None,
@@ -1414,7 +1414,10 @@ pub(crate) mod tests {
                     b.ne(b.ident("arg0"), b.integer(0)),
                     b.seq(vec![b.mutate(
                         b.ident("y"),
-                        b.apply("x1", vec![b.subtract(b.ident("arg0"), b.integer(1))]),
+                        b.apply(
+                            "x1",
+                            vec![b.subtract(b.ident("arg0"), b.integer(1).into()).into()],
+                        ),
                     )]),
                     None,
                 ),
@@ -1423,8 +1426,8 @@ pub(crate) mod tests {
         ));
 
         seq.push(b.main(b.seq(vec![
-            b.assign("x", b.apply("x1", vec![b.integer(10)])),
-            b.assign("x", b.apply("x1", vec![b.integer(0)])),
+            b.assign("x", b.apply("x1", vec![b.integer(10).into()])),
+            b.assign("x", b.apply("x1", vec![b.integer(0).into()])),
             b.ret(Some(b.ident("x"))),
         ])));
         b.seq(seq)

@@ -222,15 +222,24 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn arg(&self, node: AstNode<E>) -> Argument<E> {
-        Argument::Positional(node.into())
+        node.into()
     }
 
-    pub fn apply(&self, name: &str, args: Vec<AstNode<E>>) -> AstNode<E> {
-        let args = args
-            .into_iter()
-            .map(|expr| self.arg(expr))
-            .collect::<Vec<_>>();
-        self.node(Ast::Call(self.ident(name).into(), args))
+    pub fn apply(&self, name: &str, args: Vec<Argument<E>>) -> AstNode<E> {
+        //let args = args
+        //.into_iter()
+        //.map(|expr| self.arg(expr))
+        //.collect::<Vec<_>>();
+        AstNode::new(Ast::Call(self.ident(name).into(), args), self.extra())
+    }
+
+    pub fn call(&self, f: AstNode<E>, args: Vec<Argument<E>>) -> AstNode<E> {
+        //let args = args
+        //.into_iter()
+        //.map(|expr| self.arg(expr))
+        //.collect::<Vec<_>>();
+        let extra = f.extra.clone();
+        AstNode::new(Ast::Call(f.into(), args), extra)
     }
 
     pub fn main(&self, body: AstNode<E>) -> AstNode<E> {
