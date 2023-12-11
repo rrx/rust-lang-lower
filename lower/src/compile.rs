@@ -2,6 +2,7 @@ use crate::ast;
 use crate::lower;
 use crate::scope;
 use crate::{Diagnostics, NodeBuilder};
+use melior::ir::operation::OperationPrintingFlags;
 use melior::ExecutionEngine;
 use melior::{
     dialect::DialectRegistry,
@@ -11,6 +12,48 @@ use melior::{
 };
 
 impl<'c, E: ast::Extra> lower::Lower<'c, E> {
+    pub fn add_shared(&mut self, s: &str) {
+        self.shared.insert(s.to_string());
+    }
+
+    pub fn module_lower(
+        &mut self,
+        module: &mut ir::Module<'c>,
+        expr: ast::AstNode<E>,
+        mut env: lower::Environment<'c>,
+        d: &mut Diagnostics,
+        b: &NodeBuilder<E>,
+    ) {
+        self.lower_expr(expr, &mut env, d, b);
+        for op in env.take_ops() {
+            module.body().append_operation(op);
+        }
+
+        for s in env.shared {
+            self.shared.insert(s);
+        }
+
+        log::debug!(
+            "lowered {}",
+            module
+                .as_operation()
+                .to_string_with_flags(OperationPrintingFlags::new())
+                .unwrap()
+        );
+    }
+
+    pub fn module_passes(&mut self, module: &mut ir::Module<'c>) {
+        self.pass_manager.run(module).unwrap();
+        assert!(module.as_operation().verify());
+        log::debug!(
+            "after pass {}",
+            module
+                .as_operation()
+                .to_string_with_flags(OperationPrintingFlags::new())
+                .unwrap()
+        );
+    }
+
     pub fn run_ast(
         &mut self,
         ast: ast::AstNode<E>,

@@ -48,6 +48,7 @@ pub struct Layer<'c> {
     pub(crate) names: HashMap<String, LayerIndex>,
     pub(crate) index: HashMap<LayerIndex, usize>,
     pub(crate) block: Option<Block<'c>>,
+    pub(crate) region: Option<Region<'c>>,
     _last_index: Option<LayerIndex>,
 }
 
@@ -59,8 +60,27 @@ impl<'c> Layer<'c> {
             names: HashMap::new(),
             index: HashMap::new(),
             block: None,
+            region: None,
             _last_index: None,
         }
+    }
+
+    pub fn enter_region(&mut self, region: Region<'c>) {
+        assert!(self.region.is_none());
+        self.region = Some(region);
+    }
+
+    pub fn exit_region(&mut self) -> Region<'c> {
+        self.region.take().unwrap()
+    }
+
+    pub fn enter_block(&mut self, block: Block<'c>) {
+        assert!(self.block.is_none());
+        self.block = Some(block);
+    }
+
+    pub fn exit_block(&mut self) -> Block<'c> {
+        self.block.take().unwrap()
     }
 
     pub fn merge(&mut self, mut layer: Layer<'c>) {
@@ -117,10 +137,6 @@ impl<'c> Layer<'c> {
                 Some(match index {
                     LayerIndex::Noop => vec![],
                     LayerIndex::Static(_) => vec![],
-                    //LayerIndex::Ref(source_index) => {
-                    //return self.values(source_index);
-                    //unreachable!();
-                    //}
                     LayerIndex::Op(_) => self
                         .ops
                         .get(*offset)
@@ -171,47 +187,6 @@ impl<'c> Layer<'c> {
         }
         None
     }
-
-    /*
-    pub fn values2(&self, index: &LayerIndex) -> Option<Vec<Value<'c, '_>>> {
-        log::debug!("self: {:?}", self);
-        let v = if let LayerIndex::Ref(op_index) = index {
-            return self.values(&LayerIndex::Op(*op_index));
-            //if let Some(offset) = self.index.get(&LayerIndex::Op(*op_index)) {
-            //Some((offset, &LayerIndex::Op(0)))
-            //} else {
-            //None
-            //}
-        } else if let Some(offset) = self.index.get(&index) {
-            Some((offset, index))
-        } else {
-            None
-        };
-
-        if let Some((offset, index)) = v {
-            println!("found: {:?} - {}, {:?}", index, offset, self.ops.len()); //self.ops.get(*offset).unwrap().results().collect::<Vec<_>>());
-            return Some(match index {
-                //LayerIndex::Static(_) => vec![],
-                LayerIndex::Op(_) => self
-                    .ops
-                    .get(*offset)
-                    .unwrap()
-                    .results()
-                    .map(|x| x.into())
-                    .collect(),
-                LayerIndex::Argument(_) => vec![self
-                    .block
-                    .as_ref()
-                    .unwrap()
-                    .argument(*offset)
-                    .unwrap()
-                    .into()],
-                _ => unimplemented!("{:?}", index),
-            });
-        }
-        None
-    }
-    */
 
     pub fn push_index(&mut self, index: LayerIndex) {
         self._last_index = Some(index);
@@ -320,24 +295,6 @@ impl<'c, D: std::fmt::Debug + Clone> ScopeStack<'c, D> {
         let layer = Layer::new(LayerType::Static);
         self.enter(layer);
     }
-
-    /*
-    pub fn enter_block(&mut self, arguments: &[(Type<'c>, Location<'c>, String)]) {
-        let mut layer = Layer::new(LayerType::Block);
-        //layer.args_count = arguments.len();
-        for (i, a) in arguments.iter().enumerate() {
-            let index = self.fresh_argument();
-            layer.name_index(index, &a.2);
-            //let data = crate::lower::Data::new(a.3);
-            //layer.names.insert(a.2.to_string(), index);
-            //layer.index.insert(index, i);
-        }
-        let block_args = arguments.iter().map(|a| (a.0, a.1)).collect::<Vec<_>>();
-        let block = Block::new(&block_args);
-        layer.block = Some(block);
-        self.enter(layer);
-    }
-    */
 
     pub fn enter(&mut self, layer: Layer<'c>) {
         self.layers.push(layer);

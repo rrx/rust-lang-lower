@@ -376,6 +376,29 @@ impl<E: Extra> Parser<E> {
             }
 
             StmtP::Assign(assign) => {
+                // if the name exists in scope, then mutate it,
+                // otherwise, we assign it
+                // variables can be assigned inside of conditionals and loops, but their existence
+                // is tracked in the function scope, which can be nested
+                // the existence of a variable is checked at runtime, not compile time
+                // we can do both.  We can do a static check and if it works, optimize, otherwise
+                // we fall back to runtime checks.
+                // global variables are also handled in particular ways:
+                // if the global variable name is not assigned in the function context, then it
+                // will have the global variable in scope.  If the variable is assigned in the
+                // scope after it is used, it will give a use before reference error
+                // if you assign before use, then it treats the varaible as local to the function
+                // and global is unchanged
+                // To modify the global var you need to specify global <name>
+                // If no global is set then you can read the variable, but if you attempt to modify
+                // it, then the name is considered local
+                // at runtime, variables are added to scope, which means you can reference things
+                // that haven't been added, if they were added conditionally.  This is almost
+                // always not what you want to do though, so a static check should flag it, but
+                // it's legal python code.  Vars in while and cond blocks are not considered local
+                // to those blocks, but to the function, so we have to check all coded paths.  We
+                // don't have to be super sophisticated here, just a conservative static check
+                // that's optional.
                 use syntax::ast::AssignTargetP;
                 let rhs = self.from_expr(assign.rhs, env, d, b)?;
                 match assign.lhs.node {

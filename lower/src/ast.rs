@@ -135,6 +135,12 @@ pub enum Ast<E> {
     While(Box<AstNode<E>>, Box<AstNode<E>>),
     Builtin(Builtin, Vec<Argument<E>>),
     Deref(Box<AstNode<E>>, DerefTarget),
+
+    Block(String, Box<AstNode<E>>),
+    Loop(String, Box<AstNode<E>>),
+    Break(String),
+    Continue(String),
+    Goto(String),
     Error,
 }
 

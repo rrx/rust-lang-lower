@@ -99,48 +99,6 @@ impl<'c, E: Extra> Lower<'c, E> {
         }
     }
 
-    pub fn add_shared(&mut self, s: &str) {
-        self.shared.insert(s.to_string());
-    }
-
-    pub fn module_lower(
-        &mut self,
-        module: &mut Module<'c>,
-        expr: AstNode<E>,
-        mut env: Environment<'c>,
-        d: &mut Diagnostics,
-        b: &NodeBuilder<E>,
-    ) {
-        self.lower_expr(expr, &mut env, d, b);
-        for op in env.take_ops() {
-            module.body().append_operation(op);
-        }
-
-        for s in env.shared {
-            self.shared.insert(s);
-        }
-
-        log::debug!(
-            "lowered {}",
-            module
-                .as_operation()
-                .to_string_with_flags(OperationPrintingFlags::new())
-                .unwrap()
-        );
-    }
-
-    pub fn module_passes(&mut self, module: &mut Module<'c>) {
-        self.pass_manager.run(module).unwrap();
-        assert!(module.as_operation().verify());
-        log::debug!(
-            "after pass {}",
-            module
-                .as_operation()
-                .to_string_with_flags(OperationPrintingFlags::new())
-                .unwrap()
-        );
-    }
-
     pub fn type_from_expr(&self, expr: &AstNode<E>, env: &Environment) -> AstType {
         match &expr.node {
             Ast::Literal(x) => match x {
@@ -634,6 +592,28 @@ impl<'c, E: Extra> Lower<'c, E> {
 
         match expr.node {
             Ast::Error => unreachable!(),
+
+            Ast::Loop(name, body) => {
+                unimplemented!()
+            }
+
+            Ast::Block(name, body) => {
+                let layer = self.build_block(&[], env);
+                env.enter(layer);
+                let index = self.lower_expr(*body, env, d, b);
+                env.exit();
+                index
+            }
+            Ast::Break(name) => {
+                unimplemented!()
+            }
+            Ast::Continue(name) => {
+                unimplemented!()
+            }
+            Ast::Goto(name) => {
+                unimplemented!()
+            }
+
             Ast::Global(ident, expr) => {
                 let global_name = if env.current_layer_type() == LayerType::Static {
                     ident.clone()
@@ -1056,18 +1036,21 @@ impl<'c, E: Extra> Lower<'c, E> {
                 env.name_index(index.clone(), &def.name);
                 env.index_data(&index, data);
 
-                let region = Region::new();
-                if let Some(body) = def.body {
+                let region = if let Some(body) = def.body {
                     log::debug!("params: {:?}", params);
+                    let region = Region::new();
                     let layer = self.build_block(params.as_slice(), env);
+
+                    // enter function context
                     env.enter(layer);
                     self.lower_expr(*body, env, d, b);
+
+                    // exit function context
                     let mut layer = env.exit();
                     let block = layer.block.take().unwrap();
                     for op in layer.take_ops() {
                         block.append_operation(op);
                     }
-                    region.append_block(block);
 
                     // declare as C interface only if body is defined
                     // function declarations represent functions that are already C interfaces
@@ -1075,7 +1058,15 @@ impl<'c, E: Extra> Lower<'c, E> {
                         Identifier::new(self.context, "llvm.emit_c_interface"),
                         Attribute::unit(self.context),
                     ));
-                }
+
+                    //let region = Region::new();
+                    //env.enter_region(region);
+                    //region.
+                    region.append_block(block);
+                    region
+                } else {
+                    Region::new()
+                };
 
                 let f = func::func(
                     self.context,

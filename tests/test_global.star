@@ -44,6 +44,13 @@ def cond(n: int) -> int:
     out = 3
   return out
 
+def test()->int:
+  out = 0
+  if out == 0:
+    out = 1
+  #b.check(out == 1)
+  return 0
+
 def main() -> int:
   # test reference of global variable
   # test calling function with zero arguments
@@ -57,4 +64,5 @@ def main() -> int:
   b.print(cond(0))
   b.print(cond(1))
   b.print(cond(2))
+  test()
   return z - 9 + x1(0)
