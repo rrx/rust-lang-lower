@@ -278,11 +278,71 @@ impl<E: Extra> NodeBuilder<E> {
         ))
     }
 
-    pub fn try_string(&self, expr: &AstNode<E>) -> Option<String> {
-        if let Ast::Literal(Literal::String(s)) = &expr.node {
-            Some(s.clone())
+    pub fn block(&self, name: &str, body: AstNode<E>) -> AstNode<E> {
+        let extra = body.extra.clone();
+        AstNode {
+            node: Ast::Block(name.to_string(), body.into()),
+            extra,
+        }
+    }
+}
+
+/*
+impl<'a, E: Extra> IntoIterator for &'a AstNode<E> {
+    type Item = &'a AstNode<E>;
+    type IntoIter = AstIterator<'a, E>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        AstIterator {
+            stack: vec![self],
+            blocks: vec![self],
+        }
+    }
+
+}
+*/
+
+pub struct AstSorter<E> {
+    pub stack: Vec<AstNode<E>>,
+    pub blocks: Vec<AstNode<E>>,
+}
+impl<E: Extra> AstSorter<E> {
+    pub fn new() -> Self {
+        Self {
+            stack: vec![],
+            blocks: vec![],
+        }
+    }
+    pub fn sort_children(&mut self, ast: AstNode<E>) {
+        match ast.node {
+            Ast::Sequence(exprs) => {
+                for e in exprs {
+                    self.sort_children(e);
+                }
+            }
+            Ast::Block(_, _) => {
+                self.blocks.push(ast);
+            }
+            _ => {
+                self.stack.push(ast);
+            }
+        }
+    }
+}
+
+/*
+impl<'a, E: Extra> Iterator for AstIterator<'a, E> {
+    type Item = &'a AstNode<E>;
+    fn next(&mut self) -> Option<&'a AstNode<E>> {
+        if let Some(node) = self.stack.pop() {
+            // push sequence onto the stack, in reverse
+            for c in self.children(node).iter().rev() {
+                self.stack.push(c);
+            }
+            self.stack.pop()
         } else {
             None
         }
     }
 }
+*/

@@ -67,6 +67,10 @@ impl<'c> Layer<'c> {
         }
     }
 
+    pub fn append_block(&mut self, block: Block<'c>) {
+        self.region.as_ref().unwrap().append_block(block);
+    }
+
     pub fn enter_region(&mut self, region: Region<'c>) {
         assert!(self.region.is_none());
         self.region = Some(region);
@@ -81,8 +85,12 @@ impl<'c> Layer<'c> {
         region
     }
 
-    pub fn enter_block(&mut self, block: Block<'c>) {
+    pub fn enter_block(&mut self, name: &str, block: Block<'c>) -> usize {
+        assert!(!self.block_names.contains_key(name));
+        let offset = self.blocks.len();
         self.blocks.push(block);
+        self.block_names.insert(name.to_string(), offset);
+        offset
     }
 
     pub fn exit_block(&mut self) -> Block<'c> {
@@ -434,6 +442,10 @@ impl<'c, D: std::fmt::Debug + Clone> ScopeStack<'c, D> {
         }
         out
     }
+
+    pub fn exit_block(&mut self) -> Block<'c> {
+        self.layers.last_mut().unwrap().exit_block()
+    }
 }
 
 #[cfg(test)]
@@ -642,7 +654,7 @@ mod tests {
         let func_type = FunctionType::new(&lower.context, &types, &ret_type);
 
         let mut layer = Layer::new(LayerType::Block);
-        layer.enter_block(Block::new(&[]));
+        layer.enter_block("test", Block::new(&[]));
         env.enter(layer);
 
         let three = lower.build_int_op(3, location);

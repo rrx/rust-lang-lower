@@ -213,7 +213,7 @@ impl<'c, E: Extra> Lower<'c, E> {
 
         // before
         let mut layer = Layer::new(LayerType::Block);
-        self.build_block(&mut layer, &[], env);
+        self.build_block(&mut layer, "conditional", &[], env);
         //let layer = self.build_block(&[], env);
         env.enter(layer);
         self.lower_expr(condition, env, d, b);
@@ -231,7 +231,7 @@ impl<'c, E: Extra> Lower<'c, E> {
 
         // after
         let mut layer = Layer::new(LayerType::Block);
-        self.build_block(&mut layer, &[], env);
+        self.build_block(&mut layer, "body", &[], env);
         //let layer = self.build_block(&[], env);
         env.enter(layer);
         let after_region = Region::new();
@@ -316,7 +316,7 @@ impl<'c, E: Extra> Lower<'c, E> {
             .collect();
 
         let mut layer = Layer::new(LayerType::Block);
-        self.build_block(&mut layer, &before_args, env);
+        self.build_block(&mut layer, "before", &before_args, env);
         //let layer = self.build_block(&before_args, env);
         env.enter(layer);
 
@@ -345,7 +345,7 @@ impl<'c, E: Extra> Lower<'c, E> {
         // after
         let after_args = &[(AstType::Index, body_location, "arg0".to_string())];
         let mut layer = Layer::new(LayerType::Block);
-        self.build_block(&mut layer, after_args, env);
+        self.build_block(&mut layer, "after", after_args, env);
         //let layer = self.build_block(after_args, env);
         env.enter(layer);
 
@@ -553,6 +553,7 @@ impl<'c, E: Extra> Lower<'c, E> {
     pub fn build_block(
         &self,
         layer: &mut Layer<'c>,
+        name: &str,
         arguments: &[(AstType, Location<'c>, String)],
         env: &mut ScopeStack<'c, Data>,
     ) {
@@ -571,7 +572,7 @@ impl<'c, E: Extra> Lower<'c, E> {
             .map(|a| (self.from_type(&a.0), a.1))
             .collect::<Vec<_>>();
         let block = Block::new(&block_args);
-        layer.enter_block(block);
+        layer.enter_block(name, block);
     }
 
     pub fn lower_expr<'a>(
@@ -591,12 +592,20 @@ impl<'c, E: Extra> Lower<'c, E> {
             }
 
             Ast::Block(name, body) => {
+                // create a block with arguments
                 let mut layer = Layer::new(LayerType::Block);
-                self.build_block(&mut layer, &[], env);
+                self.build_block(&mut layer, &name, &[], env);
+
+                // push layer into the env and then lower
                 env.enter(layer);
                 let index = self.lower_expr(*body, env, d, b);
-                env.exit();
-                index
+                let mut layer = env.exit();
+                //env.merge(layer);
+                let block = layer.exit_block();
+                println!("{:?}", block.terminator());
+                env.last_mut().append_block(block);
+                LayerIndex::Noop
+                //index
             }
             Ast::Break(name) => {
                 unimplemented!()
@@ -1032,18 +1041,50 @@ impl<'c, E: Extra> Lower<'c, E> {
 
                 let region = if let Some(body) = def.body {
                     log::debug!("params: {:?}", params);
+
+                    // sort body
                     let region = Region::new();
-                    let mut layer = Layer::new(LayerType::Block);
-                    self.build_block(&mut layer, params.as_slice(), env);
-                    //let layer = self.build_block(params.as_slice(), env);
+                    let mut s = crate::builder::AstSorter::new();
+                    s.sort_children(*body);
 
-                    // enter function context
-                    env.enter(layer);
-                    self.lower_expr(*body, env, d, b);
+                    // initial nodes form the entry block
+                    if s.stack.len() > 0 {
+                        let mut layer = Layer::new(LayerType::Block);
 
-                    // exit function context
-                    let mut layer = env.exit();
-                    let block = layer.exit_block();
+                        // enter block
+
+                        self.build_block(&mut layer, "entry", params.as_slice(), env);
+
+                        // enter function context
+                        env.enter(layer);
+                        for expr in s.stack.into_iter() {
+                            self.lower_expr(expr, env, d, b);
+                        }
+
+                        // exit function context
+                        let mut layer = env.exit();
+
+                        // exit block
+                        let block = layer.exit_block();
+                        region.append_block(block);
+                    }
+
+                    // subsequent blocks
+                    for expr in s.blocks.into_iter() {
+                        if let Ast::Block(name, ast) = expr.node {
+                            let mut layer = Layer::new(LayerType::Block);
+                            self.build_block(&mut layer, &name, &[], env);
+                            env.enter(layer);
+                            // enter block
+                            self.lower_expr(*ast, env, d, b);
+                            // exit block
+                            let mut layer = env.exit();
+                            let block = layer.exit_block();
+                            region.append_block(block);
+                        } else {
+                            unreachable!()
+                        }
+                    }
 
                     // declare as C interface only if body is defined
                     // function declarations represent functions that are already C interfaces
@@ -1052,10 +1093,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                         Attribute::unit(self.context),
                     ));
 
-                    //let region = Region::new();
-                    //env.enter_region(region);
-                    //region.
-                    region.append_block(block);
+                    //layer.exit_region()
                     region
                 } else {
                     Region::new()
@@ -1109,7 +1147,7 @@ impl<'c, E: Extra> Lower<'c, E> {
             Ast::Conditional(condition, true_expr, maybe_false_expr) => {
                 let index_conditions = self.lower_expr(*condition, env, d, b);
                 let mut layer = Layer::new(LayerType::Block);
-                self.build_block(&mut layer, &[], env);
+                self.build_block(&mut layer, "then", &[], env);
                 //let layer = self.build_block(&[], env);
                 env.enter(layer);
                 self.lower_expr(*true_expr, env, d, b);
@@ -1120,7 +1158,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                 match maybe_false_expr {
                     Some(false_expr) => {
                         let mut layer = Layer::new(LayerType::Block);
-                        self.build_block(&mut layer, &[], env);
+                        self.build_block(&mut layer, "else", &[], env);
                         //let layer = self.build_block(&[], env);
                         env.enter(layer);
                         self.lower_expr(*false_expr, env, d, b);
@@ -1273,7 +1311,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                         let arg = args.pop().unwrap();
                         log::debug!("import: {:?}", arg);
                         if let Argument::Positional(expr) = arg {
-                            if let Some(s) = b.try_string(&expr) {
+                            if let Some(s) = expr.try_string() {
                                 env.add_shared(&s);
                             } else {
                                 d.push_diagnostic(expr.extra.error("Expected string"));
@@ -1319,6 +1357,28 @@ pub(crate) mod tests {
         b.seq(seq)
     }
 
+    pub fn gen_block<'c, E: Extra>(file_id: usize, _env: &mut Environment<'c>) -> AstNode<E> {
+        let b = NodeBuilder::new(file_id, "test.py");
+        let mut seq = vec![b.import_prelude()];
+
+        // global variable x = 10
+        seq.push(b.global("z", b.integer(10)));
+        seq.push(b.main(b.seq(vec![
+            b.block(
+                "entry",
+                b.seq(vec![
+                    b.alloca("y", b.integer(999)),
+                    b.mutate(b.ident("y"), b.integer(998)),
+                    b.ret(Some(b.integer(0))),
+                ]),
+            ),
+            //b.block("asdf", b.seq(vec![b.mutate(b.ident("y"), b.integer(997))])),
+            //b.block("asdf2", b.seq(vec![b.mutate(b.ident("y"), b.integer(996))])),
+            //b.ret(Some(b.integer(0))),
+        ])));
+        b.seq(seq)
+    }
+
     pub fn gen_while<'c, E: Extra>(file_id: usize, _env: &mut Environment<'c>) -> AstNode<E> {
         let b = NodeBuilder::new(file_id, "test.py");
         let mut seq = vec![b.import_prelude()];
@@ -1327,8 +1387,8 @@ pub(crate) mod tests {
         seq.push(b.global("z", b.integer(10)));
         seq.push(b.main(b.seq(vec![
             // define local var
-            b.assign("x", b.integer(123)),
             // allocate mutable var
+            b.assign("x", b.integer(123)),
             b.alloca("x2", b.integer(10)),
             b.while_loop(
                 b.ne(b.deref_offset(b.ident("x2"), 0), b.integer(0)),
@@ -1419,6 +1479,19 @@ pub(crate) mod tests {
             b.ret(Some(b.ident("x"))),
         ])));
         b.seq(seq)
+    }
+
+    #[test]
+    fn test_block() {
+        let context = default_context();
+        let mut lower = Lower::new(&context);
+        let mut d = Diagnostics::new();
+        let file_id = d.add_source("test.py".into(), "test".into());
+        let b = NodeBuilder::new(file_id, "type.py");
+        let mut env = Environment::default();
+        env.enter_static();
+        let ast: AstNode<SimpleExtra> = gen_block(file_id, &mut env);
+        assert_eq!(0, lower.run_ast(ast, "../target/debug/", env, &mut d, &b));
     }
 
     #[test]

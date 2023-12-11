@@ -232,6 +232,38 @@ impl<E> AstNode<E> {
     pub fn new(node: Ast<E>, extra: E) -> Self {
         Self { node, extra }
     }
+
+    pub fn try_string(&self) -> Option<String> {
+        if let Ast::Literal(Literal::String(s)) = &self.node {
+            Some(s.clone())
+        } else {
+            None
+        }
+    }
+
+    pub fn is_block(&self) -> bool {
+        if let Ast::Block(_, _) = self.node {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn try_block(self) -> Option<AstNode<E>> {
+        if let Ast::Block(_, body) = self.node {
+            Some(*body)
+        } else {
+            None
+        }
+    }
+
+    pub fn is_seq(&self) -> bool {
+        if let Ast::Sequence(_) = self.node {
+            true
+        } else {
+            false
+        }
+    }
 }
 
 impl<E> From<Argument<E>> for AstNode<E> {
