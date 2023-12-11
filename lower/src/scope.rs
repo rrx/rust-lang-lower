@@ -47,9 +47,9 @@ pub struct Layer<'c> {
     pub(crate) ops: Vec<Operation<'c>>,
     pub(crate) names: HashMap<String, LayerIndex>,
     pub(crate) index: HashMap<LayerIndex, usize>,
-    pub(crate) blocks: Vec<Block<'c>>,
-    pub(crate) block_names: HashMap<String, usize>,
-    pub(crate) region: Option<Region<'c>>,
+    blocks: Vec<Block<'c>>,
+    block_names: HashMap<String, usize>,
+    region: Option<Region<'c>>,
     _last_index: Option<LayerIndex>,
 }
 
@@ -73,17 +73,25 @@ impl<'c> Layer<'c> {
     }
 
     pub fn exit_region(&mut self) -> Region<'c> {
-        self.region.take().unwrap()
+        let region = self.region.take().unwrap();
+        self.block_names.clear();
+        for block in self.blocks.drain(..) {
+            region.append_block(block);
+        }
+        region
     }
 
     pub fn enter_block(&mut self, block: Block<'c>) {
         self.blocks.push(block);
-        //assert!(self.block.is_none());
-        //self.block = Some(block);
     }
 
     pub fn exit_block(&mut self) -> Block<'c> {
-        self.blocks.pop().unwrap()
+        let block = self.blocks.pop().unwrap();
+        let ops = self.take_ops();
+        for op in ops {
+            block.append_operation(op);
+        }
+        block
     }
 
     pub fn merge(&mut self, mut layer: Layer<'c>) {

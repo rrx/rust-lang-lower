@@ -212,7 +212,9 @@ impl<'c, E: Extra> Lower<'c, E> {
         let body_location = self.location(&body, d);
 
         // before
-        let layer = self.build_block(&[], env);
+        let mut layer = Layer::new(LayerType::Block);
+        self.build_block(&mut layer, &[], env);
+        //let layer = self.build_block(&[], env);
         env.enter(layer);
         self.lower_expr(condition, env, d, b);
         let condition_rs = env.last_values();
@@ -223,16 +225,14 @@ impl<'c, E: Extra> Lower<'c, E> {
         // exit block
         let mut layer = env.exit();
         let before_block = layer.exit_block();
-        let ops = layer.take_ops();
-        for op in ops {
-            before_block.append_operation(op);
-        }
         before_block.append_operation(c);
         let before_region = Region::new();
         before_region.append_block(before_block);
 
         // after
-        let layer = self.build_block(&[], env);
+        let mut layer = Layer::new(LayerType::Block);
+        self.build_block(&mut layer, &[], env);
+        //let layer = self.build_block(&[], env);
         env.enter(layer);
         let after_region = Region::new();
         self.lower_expr(body, env, d, b);
@@ -242,10 +242,6 @@ impl<'c, E: Extra> Lower<'c, E> {
 
         let mut layer = env.exit();
         let after_block = layer.exit_block();
-        let ops = layer.take_ops();
-        for op in ops {
-            after_block.append_operation(op);
-        }
         after_region.append_block(after_block);
 
         // after complete
@@ -319,7 +315,9 @@ impl<'c, E: Extra> Lower<'c, E> {
             })
             .collect();
 
-        let layer = self.build_block(&before_args, env);
+        let mut layer = Layer::new(LayerType::Block);
+        self.build_block(&mut layer, &before_args, env);
+        //let layer = self.build_block(&before_args, env);
         env.enter(layer);
 
         self.lower_expr(condition, env, d, b);
@@ -330,6 +328,8 @@ impl<'c, E: Extra> Lower<'c, E> {
 
         // to pass to after
 
+        let before_region = Region::new();
+
         // condition passes result to region 1 if true, or terminates with result
         let arg1 = env.value0_from_name("arg1");
         let c = scf::condition(condition_rs[0].into(), &[arg1], condition_location);
@@ -337,19 +337,16 @@ impl<'c, E: Extra> Lower<'c, E> {
         // exit block
         let mut layer = env.exit();
         let before_block = layer.exit_block();
-        let ops = layer.take_ops();
-        for op in ops {
-            before_block.append_operation(op);
-        }
         before_block.append_operation(c);
-        let before_region = Region::new();
         before_region.append_block(before_block);
 
         // Before Complete
 
         // after
         let after_args = &[(AstType::Index, body_location, "arg0".to_string())];
-        let layer = self.build_block(after_args, env);
+        let mut layer = Layer::new(LayerType::Block);
+        self.build_block(&mut layer, after_args, env);
+        //let layer = self.build_block(after_args, env);
         env.enter(layer);
 
         let after_region = Region::new();
@@ -382,10 +379,6 @@ impl<'c, E: Extra> Lower<'c, E> {
 
         let mut layer = env.exit();
         let after_block = layer.exit_block();
-        let ops = layer.take_ops();
-        for op in ops {
-            after_block.append_operation(op);
-        }
         after_region.append_block(after_block);
 
         // after complete
@@ -559,11 +552,12 @@ impl<'c, E: Extra> Lower<'c, E> {
 
     pub fn build_block(
         &self,
+        layer: &mut Layer<'c>,
         arguments: &[(AstType, Location<'c>, String)],
         env: &mut ScopeStack<'c, Data>,
-    ) -> Layer<'c> {
+    ) {
         // create a new layer, adding arguments as scoped variables
-        let mut layer = Layer::new(LayerType::Block);
+        //let mut layer = Layer::new(LayerType::Block);
         for (offset, a) in arguments.iter().enumerate() {
             let index = env.fresh_argument();
             layer.name_index(index.clone(), &a.2);
@@ -578,7 +572,6 @@ impl<'c, E: Extra> Lower<'c, E> {
             .collect::<Vec<_>>();
         let block = Block::new(&block_args);
         layer.enter_block(block);
-        layer
     }
 
     pub fn lower_expr<'a>(
@@ -598,7 +591,8 @@ impl<'c, E: Extra> Lower<'c, E> {
             }
 
             Ast::Block(name, body) => {
-                let layer = self.build_block(&[], env);
+                let mut layer = Layer::new(LayerType::Block);
+                self.build_block(&mut layer, &[], env);
                 env.enter(layer);
                 let index = self.lower_expr(*body, env, d, b);
                 env.exit();
@@ -1039,7 +1033,9 @@ impl<'c, E: Extra> Lower<'c, E> {
                 let region = if let Some(body) = def.body {
                     log::debug!("params: {:?}", params);
                     let region = Region::new();
-                    let layer = self.build_block(params.as_slice(), env);
+                    let mut layer = Layer::new(LayerType::Block);
+                    self.build_block(&mut layer, params.as_slice(), env);
+                    //let layer = self.build_block(params.as_slice(), env);
 
                     // enter function context
                     env.enter(layer);
@@ -1048,10 +1044,6 @@ impl<'c, E: Extra> Lower<'c, E> {
                     // exit function context
                     let mut layer = env.exit();
                     let block = layer.exit_block();
-                    //let block = layer.blocks.pop().unwrap();
-                    for op in layer.take_ops() {
-                        block.append_operation(op);
-                    }
 
                     // declare as C interface only if body is defined
                     // function declarations represent functions that are already C interfaces
@@ -1116,27 +1108,24 @@ impl<'c, E: Extra> Lower<'c, E> {
 
             Ast::Conditional(condition, true_expr, maybe_false_expr) => {
                 let index_conditions = self.lower_expr(*condition, env, d, b);
-                let layer = self.build_block(&[], env);
+                let mut layer = Layer::new(LayerType::Block);
+                self.build_block(&mut layer, &[], env);
+                //let layer = self.build_block(&[], env);
                 env.enter(layer);
                 self.lower_expr(*true_expr, env, d, b);
                 let mut layer = env.exit();
                 let true_block = layer.exit_block();
-
-                for op in layer.take_ops() {
-                    true_block.append_operation(op);
-                }
                 true_block.append_operation(scf::r#yield(&[], location));
 
                 match maybe_false_expr {
                     Some(false_expr) => {
-                        let layer = self.build_block(&[], env);
+                        let mut layer = Layer::new(LayerType::Block);
+                        self.build_block(&mut layer, &[], env);
+                        //let layer = self.build_block(&[], env);
                         env.enter(layer);
                         self.lower_expr(*false_expr, env, d, b);
                         let mut layer = env.exit();
                         let false_block = layer.exit_block();
-                        for op in layer.take_ops() {
-                            false_block.append_operation(op);
-                        }
                         false_block.append_operation(scf::r#yield(&[], location));
                         let then_region = Region::new();
                         then_region.append_block(true_block);
