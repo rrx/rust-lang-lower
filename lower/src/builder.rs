@@ -278,10 +278,19 @@ impl<E: Extra> NodeBuilder<E> {
         ))
     }
 
-    pub fn block(&self, name: &str, body: AstNode<E>) -> AstNode<E> {
+    pub fn block(&self, name: &str, params: &[(&str, AstType)], body: AstNode<E>) -> AstNode<E> {
         let extra = body.extra.clone();
+        let params = params
+            .iter()
+            .map(|(name, ty)| ParameterNode {
+                name: name.to_string(),
+                ty: ty.clone(),
+                node: Parameter::Normal,
+                extra: self.extra(),
+            })
+            .collect();
         AstNode {
-            node: Ast::Block(name.to_string(), body.into()),
+            node: Ast::Block(name.to_string(), params, body.into()),
             extra,
         }
     }
@@ -320,7 +329,7 @@ impl<E: Extra> AstSorter<E> {
                     self.sort_children(e);
                 }
             }
-            Ast::Block(_, _) => {
+            Ast::Block(_, _, _) => {
                 self.blocks.push(ast);
             }
             _ => {

@@ -1,4 +1,3 @@
-use melior::ir::operation::OperationPrintingFlags;
 use melior::{
     dialect::{arith, cf, func, llvm, memref, ods, scf},
     ir::{
@@ -591,7 +590,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                 unimplemented!()
             }
 
-            Ast::Block(name, body) => {
+            Ast::Block(name, params, body) => {
                 // create a block with arguments
                 let mut layer = Layer::new(LayerType::Block);
                 self.build_block(&mut layer, &name, &[], env);
@@ -1071,7 +1070,7 @@ impl<'c, E: Extra> Lower<'c, E> {
 
                     // subsequent blocks
                     for expr in s.blocks.into_iter() {
-                        if let Ast::Block(name, ast) = expr.node {
+                        if let Ast::Block(name, params, ast) = expr.node {
                             let mut layer = Layer::new(LayerType::Block);
                             self.build_block(&mut layer, &name, &[], env);
                             env.enter(layer);
@@ -1366,6 +1365,7 @@ pub(crate) mod tests {
         seq.push(b.main(b.seq(vec![
             b.block(
                 "entry",
+                &[],
                 b.seq(vec![
                     b.alloca("y", b.integer(999)),
                     b.mutate(b.ident("y"), b.integer(998)),

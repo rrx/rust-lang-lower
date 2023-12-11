@@ -135,8 +135,7 @@ pub enum Ast<E> {
     While(Box<AstNode<E>>, Box<AstNode<E>>),
     Builtin(Builtin, Vec<Argument<E>>),
     Deref(Box<AstNode<E>>, DerefTarget),
-
-    Block(String, Box<AstNode<E>>),
+    Block(String, Vec<ParameterNode<E>>, Box<AstNode<E>>),
     Loop(String, Box<AstNode<E>>),
     Break(String),
     Continue(String),
@@ -242,7 +241,7 @@ impl<E> AstNode<E> {
     }
 
     pub fn is_block(&self) -> bool {
-        if let Ast::Block(_, _) = self.node {
+        if let Ast::Block(_, _, _) = self.node {
             true
         } else {
             false
@@ -250,7 +249,7 @@ impl<E> AstNode<E> {
     }
 
     pub fn try_block(self) -> Option<AstNode<E>> {
-        if let Ast::Block(_, body) = self.node {
+        if let Ast::Block(_, _, body) = self.node {
             Some(*body)
         } else {
             None
