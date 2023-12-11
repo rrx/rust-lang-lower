@@ -278,6 +278,13 @@ impl<E: Extra> NodeBuilder<E> {
         ))
     }
 
+    pub fn goto(&self, name: &str) -> AstNode<E> {
+        AstNode {
+            node: Ast::Goto(name.to_string()),
+            extra: self.extra(),
+        }
+    }
+
     pub fn block(&self, name: &str, params: &[(&str, AstType)], body: AstNode<E>) -> AstNode<E> {
         let extra = body.extra.clone();
         let params = params

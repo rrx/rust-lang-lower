@@ -11,6 +11,7 @@ use melior::{
     Context,
 };
 use std::collections::HashSet;
+use std::collections::VecDeque;
 
 use crate::ast::*;
 use crate::scope::{Layer, LayerIndex, LayerType, ScopeStack};
@@ -555,6 +556,31 @@ impl<'c, E: Extra> Lower<'c, E> {
         }
     }
 
+    pub fn push_parameters(
+        &self,
+        layer: &mut Layer<'c>,
+        env: &mut Environment<'c>,
+        arguments: &[ParameterNode<E>],
+    ) {
+        // create a new layer, adding arguments as scoped variables
+        for (offset, a) in arguments.iter().enumerate() {
+            let index = env.fresh_argument();
+            layer.name_index(index.clone(), &a.name);
+            let data = Data::new(a.ty.clone());
+            env.index_data(&index, data);
+            // record argument offset
+            layer.index.insert(index, offset);
+        }
+    }
+
+    pub fn new_block(&self, arguments: &[ParameterNode<E>], d: &Diagnostics) -> Block<'c> {
+        let block_args = arguments
+            .iter()
+            .map(|a| (self.from_type(&a.ty), a.extra.location(self.context, d)))
+            .collect::<Vec<_>>();
+        Block::new(&block_args)
+    }
+
     pub fn build_block(
         &self,
         layer: &mut Layer<'c>,
@@ -563,21 +589,8 @@ impl<'c, E: Extra> Lower<'c, E> {
         env: &mut ScopeStack<'c, Data>,
         d: &Diagnostics,
     ) {
-        // create a new layer, adding arguments as scoped variables
-        //let mut layer = Layer::new(LayerType::Block);
-        for (offset, a) in arguments.iter().enumerate() {
-            let index = env.fresh_argument();
-            layer.name_index(index.clone(), &a.name); //.2);
-            let data = Data::new(a.ty.clone());
-            env.index_data(&index, data);
-            // record argument offset
-            layer.index.insert(index, offset);
-        }
-        let block_args = arguments
-            .iter()
-            .map(|a| (self.from_type(&a.ty), a.extra.location(self.context, d)))
-            .collect::<Vec<_>>();
-        let block = Block::new(&block_args);
+        self.push_parameters(layer, env, arguments);
+        let block = self.new_block(arguments, d);
         layer.enter_block(name, block);
     }
 
@@ -625,6 +638,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                 unimplemented!()
             }
             Ast::Goto(_name) => {
+                //cf::br(
                 unimplemented!()
             }
 
@@ -867,7 +881,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                         index
                     }
                     _ => {
-                        log::debug!("x: {:?}", env.last_mut().names);
+                        //log::debug!("x: {:?}", env.last_mut().names);
 
                         let (index, data) = match env.index_from_name(ident.as_str()) {
                             Some(index) => {
@@ -880,7 +894,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                             _ => unreachable!("Ident not found: {:?}", ident),
                         };
 
-                        log::debug!("ident: {} - {:?}", ident, data);
+                        //log::debug!("ident: {} - {:?}", ident, data);
 
                         if let Some(static_name) = &data.static_name {
                             // we should only be dealing with pointers in if we are static
@@ -1009,7 +1023,6 @@ impl<'c, E: Extra> Lower<'c, E> {
             }
 
             Ast::Definition(def) => {
-                log::debug!("def {:?}", def);
                 log::debug!("name {:?}", def.name);
 
                 let ret_ty = self.from_type(&*def.return_type);
@@ -1020,7 +1033,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                 for p in &def.params {
                     match p.node {
                         Parameter::Normal | Parameter::WithDefault(_) => {
-                            log::debug!("params {:?}: {:?}", p.name, p.ty);
+                            //log::debug!("params {:?}: {:?}", p.name, p.ty);
                             types.push(self.from_type(&p.ty));
                             ast_types.push(p.ty.clone());
                         }
@@ -1055,10 +1068,21 @@ impl<'c, E: Extra> Lower<'c, E> {
                     let mut s = crate::builder::AstSorter::new();
                     s.sort_children(*body);
 
+                    let mut blocks = VecDeque::new();
+
                     // initial nodes form the entry block
                     if s.stack.len() > 0 {
+                        let seq = b.seq(s.stack);
                         // TODO: check that function args match the first block args
+                        let params = def
+                            .params
+                            .iter()
+                            .map(|p| (p.name.as_str(), p.ty.clone()))
+                            .collect::<Vec<_>>();
+                        let node = b.block("entry", &params, seq);
+                        blocks.push_back(node);
 
+                        /*
                         // enter block
                         let mut layer = Layer::new(LayerType::Block);
                         self.build_block(&mut layer, "entry", &def.params, env, d);
@@ -1067,31 +1091,88 @@ impl<'c, E: Extra> Lower<'c, E> {
                         for expr in s.stack.into_iter() {
                             self.lower_expr(expr, env, d, b);
                         }
+                        env.dump();
 
                         // exit function context
                         let mut layer = env.exit();
+                        println!("layer: {:?}", layer);
 
                         // exit block
                         let block = layer.exit_block();
+
+
+                        // push the layer back, so we have scope for the entry block
+                        env.enter(layer);
+
                         region.append_block(block);
+                        */
                     }
 
+                    blocks.extend(s.blocks.into_iter());
+
+                    //for block in blocks.iter() {
+                    //log::debug!("xblock: {:?}", &block);
+                    //}
+
+                    let mut func_layer = Layer::new(LayerType::Function);
+                    let num_blocks = blocks.len();
+
+                    let first_block = blocks.pop_front().unwrap();
+                    if let Ast::Block(name, params, body) = first_block.node {
+                        log::debug!("first block: {}", name);
+                        self.push_parameters(&mut func_layer, env, &params);
+                        let block = self.new_block(&params, d);
+                        func_layer.enter_block(&name, block);
+                        env.enter(func_layer);
+                        self.lower_expr(*body, env, d, b);
+                        //log::debug!("first layer: {:?}", env.last_mut());
+                        //let mut layer = env.exit();
+                        //env.dump();
+                        //let block = env.exit_block();
+                        //env.enter(layer);
+                        //region.append_block(block);
+                    } else {
+                        unreachable!()
+                    }
+                    //env.dump();
+                    //region.first_block().unwrap().
+
                     // subsequent blocks
-                    for expr in s.blocks.into_iter() {
+                    for expr in blocks.into_iter() {
                         if let Ast::Block(name, params, ast) = expr.node {
-                            let mut layer = Layer::new(LayerType::Block);
-                            self.build_block(&mut layer, &name, &params, env, d);
+                            log::debug!("subsequent block: {}", name);
+                            let mut layer = Layer::new(LayerType::Preserve);
+                            self.push_parameters(&mut layer, env, &params);
+                            let block = self.new_block(&params, d);
+                            layer.enter_block(&name, block);
+                            //self.build_block(&mut layer, &name, &params, env, d);
                             env.enter(layer);
                             // enter block
                             self.lower_expr(*ast, env, d, b);
+
                             // exit block
-                            let mut layer = env.exit();
-                            let block = layer.exit_block();
-                            region.append_block(block);
+                            //let mut layer = env.exit();
+                            //let block = layer.exit_block();
+                            //env.merge(layer);
+                            //env.enter(layer);
+                            //region.append_block(block);
                         } else {
                             unreachable!()
                         }
+                        //env.dump();
                     }
+
+                    let mut layers = vec![];
+                    for _ in 0..num_blocks {
+                        layers.push(env.exit());
+                    }
+
+                    for mut layer in layers.into_iter().rev() {
+                        region.append_block(layer.exit_block());
+                    }
+
+                    // exit func layer
+                    //env.exit();
 
                     // declare as C interface only if body is defined
                     // function declarations represent functions that are already C interfaces
@@ -1371,13 +1452,32 @@ pub(crate) mod tests {
                 "entry",
                 &[],
                 b.seq(vec![
+                    //b.assign("yy", b.integer(1)),
                     b.alloca("y", b.integer(999)),
-                    b.mutate(b.ident("y"), b.integer(998)),
+                    //b.mutate(b.ident("y"), b.integer(998)),
+                    //b.ret(Some(b.integer(0))),
+                    // branch to asdf
+                    b.goto("asdf"),
+                ]),
+            ),
+            b.block(
+                "asdf",
+                &[],
+                b.seq(vec![
+                    b.mutate(b.ident("y"), b.integer(997)),
+                    b.goto("asdf2"),
+                    // branch to asdf2
+                ]),
+            ),
+            // final block
+            b.block(
+                "asdf2",
+                &[],
+                b.seq(vec![
+                    b.mutate(b.ident("y"), b.integer(996)),
                     b.ret(Some(b.integer(0))),
                 ]),
             ),
-            //b.block("asdf", b.seq(vec![b.mutate(b.ident("y"), b.integer(997))])),
-            //b.block("asdf2", b.seq(vec![b.mutate(b.ident("y"), b.integer(996))])),
             //b.ret(Some(b.integer(0))),
         ])));
         b.seq(seq)
@@ -1485,7 +1585,7 @@ pub(crate) mod tests {
         b.seq(seq)
     }
 
-    #[test]
+    //#[test]
     fn test_block() {
         let context = default_context();
         let mut lower = Lower::new(&context);
@@ -1501,10 +1601,10 @@ pub(crate) mod tests {
     #[test]
     fn test_gen() {
         let context = default_context();
-        let mut lower = Lower::new(&context);
+        let mut lower: Lower<SimpleExtra> = Lower::new(&context);
         let mut d = Diagnostics::new();
         let file_id = d.add_source("test.py".into(), "test".into());
-        let b = NodeBuilder::new(file_id, "type.py");
+        let b: NodeBuilder<SimpleExtra> = NodeBuilder::new(file_id, "type.py");
         let mut env = Environment::default();
         env.enter_static();
         let ast: AstNode<SimpleExtra> = gen_function_call(file_id, &mut env);

@@ -8,6 +8,7 @@ pub enum LayerType {
     Function,
     Block,
     Closed,
+    Preserve,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -337,7 +338,7 @@ impl<'c, D: std::fmt::Debug + Clone> ScopeStack<'c, D> {
         if let Some(last) = self.layers.last_mut() {
             last
         } else {
-            unreachable!()
+            unreachable!("No more layers")
         }
     }
 

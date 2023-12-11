@@ -25,6 +25,7 @@ impl<'c, E: ast::Extra> lower::Lower<'c, E> {
         b: &NodeBuilder<E>,
     ) {
         self.lower_expr(expr, &mut env, d, b);
+        //env.dump();
         for op in env.take_ops() {
             module.body().append_operation(op);
         }
