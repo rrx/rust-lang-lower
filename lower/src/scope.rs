@@ -47,7 +47,8 @@ pub struct Layer<'c> {
     pub(crate) ops: Vec<Operation<'c>>,
     pub(crate) names: HashMap<String, LayerIndex>,
     pub(crate) index: HashMap<LayerIndex, usize>,
-    pub(crate) block: Option<Block<'c>>,
+    pub(crate) blocks: Vec<Block<'c>>,
+    pub(crate) block_names: HashMap<String, usize>,
     pub(crate) region: Option<Region<'c>>,
     _last_index: Option<LayerIndex>,
 }
@@ -59,7 +60,8 @@ impl<'c> Layer<'c> {
             ops: vec![],
             names: HashMap::new(),
             index: HashMap::new(),
-            block: None,
+            blocks: vec![],
+            block_names: HashMap::new(),
             region: None,
             _last_index: None,
         }
@@ -75,12 +77,13 @@ impl<'c> Layer<'c> {
     }
 
     pub fn enter_block(&mut self, block: Block<'c>) {
-        assert!(self.block.is_none());
-        self.block = Some(block);
+        self.blocks.push(block);
+        //assert!(self.block.is_none());
+        //self.block = Some(block);
     }
 
     pub fn exit_block(&mut self) -> Block<'c> {
-        self.block.take().unwrap()
+        self.blocks.pop().unwrap()
     }
 
     pub fn merge(&mut self, mut layer: Layer<'c>) {
@@ -146,8 +149,8 @@ impl<'c> Layer<'c> {
                         .collect(),
                     LayerIndex::Argument(_) => {
                         vec![self
-                            .block
-                            .as_ref()
+                            .blocks
+                            .last()
                             .unwrap()
                             .argument(*offset)
                             .unwrap()
@@ -176,8 +179,8 @@ impl<'c> Layer<'c> {
                     .map(|x| x.into())
                     .collect(),
                 LayerIndex::Argument(_) => vec![self
-                    .block
-                    .as_ref()
+                    .blocks
+                    .last()
                     .unwrap()
                     .argument(*offset)
                     .unwrap()
@@ -631,7 +634,7 @@ mod tests {
         let func_type = FunctionType::new(&lower.context, &types, &ret_type);
 
         let mut layer = Layer::new(LayerType::Block);
-        layer.block = Some(Block::new(&[]));
+        layer.enter_block(Block::new(&[]));
         env.enter(layer);
 
         let three = lower.build_int_op(3, location);
@@ -640,7 +643,7 @@ mod tests {
         let mut layer = env.exit();
 
         // append ops
-        let block = layer.block.take().unwrap();
+        let block = layer.blocks.pop().unwrap();
         for op in layer.ops {
             block.append_operation(op);
         }

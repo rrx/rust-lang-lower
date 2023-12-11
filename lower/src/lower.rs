@@ -222,7 +222,7 @@ impl<'c, E: Extra> Lower<'c, E> {
 
         // exit block
         let mut layer = env.exit();
-        let before_block = layer.block.take().unwrap();
+        let before_block = layer.exit_block();
         let ops = layer.take_ops();
         for op in ops {
             before_block.append_operation(op);
@@ -241,7 +241,7 @@ impl<'c, E: Extra> Lower<'c, E> {
         env.push(y);
 
         let mut layer = env.exit();
-        let after_block = layer.block.take().unwrap();
+        let after_block = layer.exit_block();
         let ops = layer.take_ops();
         for op in ops {
             after_block.append_operation(op);
@@ -336,7 +336,7 @@ impl<'c, E: Extra> Lower<'c, E> {
 
         // exit block
         let mut layer = env.exit();
-        let before_block = layer.block.take().unwrap();
+        let before_block = layer.exit_block();
         let ops = layer.take_ops();
         for op in ops {
             before_block.append_operation(op);
@@ -381,7 +381,7 @@ impl<'c, E: Extra> Lower<'c, E> {
         env.push(y);
 
         let mut layer = env.exit();
-        let after_block = layer.block.take().unwrap();
+        let after_block = layer.exit_block();
         let ops = layer.take_ops();
         for op in ops {
             after_block.append_operation(op);
@@ -577,7 +577,7 @@ impl<'c, E: Extra> Lower<'c, E> {
             .map(|a| (self.from_type(&a.0), a.1))
             .collect::<Vec<_>>();
         let block = Block::new(&block_args);
-        layer.block = Some(block);
+        layer.enter_block(block);
         layer
     }
 
@@ -1047,7 +1047,8 @@ impl<'c, E: Extra> Lower<'c, E> {
 
                     // exit function context
                     let mut layer = env.exit();
-                    let block = layer.block.take().unwrap();
+                    let block = layer.exit_block();
+                    //let block = layer.blocks.pop().unwrap();
                     for op in layer.take_ops() {
                         block.append_operation(op);
                     }
@@ -1119,7 +1120,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                 env.enter(layer);
                 self.lower_expr(*true_expr, env, d, b);
                 let mut layer = env.exit();
-                let true_block = layer.block.take().unwrap();
+                let true_block = layer.exit_block();
 
                 for op in layer.take_ops() {
                     true_block.append_operation(op);
@@ -1132,7 +1133,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                         env.enter(layer);
                         self.lower_expr(*false_expr, env, d, b);
                         let mut layer = env.exit();
-                        let false_block = layer.block.take().unwrap();
+                        let false_block = layer.exit_block();
                         for op in layer.take_ops() {
                             false_block.append_operation(op);
                         }
