@@ -1,11 +1,13 @@
 use crate::ast::Span;
-use crate::lower::FileDB;
 use codespan_reporting::diagnostic::{Diagnostic, Severity};
 use codespan_reporting::files::Files;
+use codespan_reporting::files::SimpleFiles;
 use codespan_reporting::term;
 use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
 use melior::ir;
 use melior::Context;
+
+pub type FileDB = SimpleFiles<String, String>;
 
 pub struct Diagnostics {
     pub files: FileDB,

@@ -16,7 +16,6 @@ use crate::ast::*;
 use crate::scope::{Layer, LayerIndex, LayerType, ScopeStack};
 use crate::Diagnostics;
 use crate::NodeBuilder;
-use codespan_reporting::files::SimpleFiles;
 
 #[derive(Debug, Clone)]
 pub struct Data {
@@ -78,8 +77,6 @@ pub type Environment<'c> = ScopeStack<'c, Data>;
  *         break a
  *
  */
-
-pub type FileDB = SimpleFiles<String, String>;
 
 pub struct Lower<'c, E> {
     pub(crate) context: &'c Context,
