@@ -586,14 +586,19 @@ impl<'c, E: Extra> Lower<'c, E> {
         match expr.node {
             Ast::Error => unreachable!(),
 
-            Ast::Loop(name, body) => {
+            Ast::Loop(_name, _body) => {
                 unimplemented!()
             }
 
             Ast::Block(name, params, body) => {
                 // create a block with arguments
                 let mut layer = Layer::new(LayerType::Block);
-                self.build_block(&mut layer, &name, &[], env);
+
+                let arguments = params.into_iter().map(|p| {
+                    (p.ty, p.extra.location(self.context, d), p.name)
+                }).collect::<Vec<_>>();
+
+                self.build_block(&mut layer, &name, &arguments, env);
 
                 // push layer into the env and then lower
                 env.enter(layer);
@@ -606,13 +611,13 @@ impl<'c, E: Extra> Lower<'c, E> {
                 LayerIndex::Noop
                 //index
             }
-            Ast::Break(name) => {
+            Ast::Break(_name) => {
                 unimplemented!()
             }
-            Ast::Continue(name) => {
+            Ast::Continue(_name) => {
                 unimplemented!()
             }
-            Ast::Goto(name) => {
+            Ast::Goto(_name) => {
                 unimplemented!()
             }
 
@@ -1071,8 +1076,12 @@ impl<'c, E: Extra> Lower<'c, E> {
                     // subsequent blocks
                     for expr in s.blocks.into_iter() {
                         if let Ast::Block(name, params, ast) = expr.node {
+                            let arguments = params.into_iter().map(|p| {
+                                (p.ty, p.extra.location(self.context, d), p.name)
+                            }).collect::<Vec<_>>();
+
                             let mut layer = Layer::new(LayerType::Block);
-                            self.build_block(&mut layer, &name, &[], env);
+                            self.build_block(&mut layer, &name, &arguments, env);
                             env.enter(layer);
                             // enter block
                             self.lower_expr(*ast, env, d, b);
