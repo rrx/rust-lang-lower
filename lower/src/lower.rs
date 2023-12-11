@@ -212,8 +212,7 @@ impl<'c, E: Extra> Lower<'c, E> {
 
         // before
         let mut layer = Layer::new(LayerType::Block);
-        self.build_block(&mut layer, "conditional", &[], env);
-        //let layer = self.build_block(&[], env);
+        self.build_block(&mut layer, "conditional", &[], env, d);
         env.enter(layer);
         self.lower_expr(condition, env, d, b);
         let condition_rs = env.last_values();
@@ -230,8 +229,7 @@ impl<'c, E: Extra> Lower<'c, E> {
 
         // after
         let mut layer = Layer::new(LayerType::Block);
-        self.build_block(&mut layer, "body", &[], env);
-        //let layer = self.build_block(&[], env);
+        self.build_block(&mut layer, "body", &[], env, d);
         env.enter(layer);
         let after_region = Region::new();
         self.lower_expr(body, env, d, b);
@@ -305,18 +303,24 @@ impl<'c, E: Extra> Lower<'c, E> {
             (AstType::Index, "arg1", "init_op2"),
         ];
 
-        let before_args: Vec<(AstType, Location, String)> = init_args
+        let before_args: Vec<ParameterNode<E>> = init_args
             .into_iter()
             .map(|(ast_ty, arg_name, init_name)| {
+                // ensure the name exists
                 let _index = env.index_from_name(init_name).unwrap();
                 let data = Data::new(ast_ty);
-                (data.ty.clone(), condition_location, arg_name.to_string())
+
+                ParameterNode {
+                    name: arg_name.to_string(),
+                    ty: data.ty.clone(),
+                    extra: condition.extra.clone(),
+                    node: Parameter::Normal,
+                }
             })
             .collect();
 
         let mut layer = Layer::new(LayerType::Block);
-        self.build_block(&mut layer, "before", &before_args, env);
-        //let layer = self.build_block(&before_args, env);
+        self.build_block(&mut layer, "before", &before_args, env, d);
         env.enter(layer);
 
         self.lower_expr(condition, env, d, b);
@@ -342,10 +346,15 @@ impl<'c, E: Extra> Lower<'c, E> {
         // Before Complete
 
         // after
-        let after_args = &[(AstType::Index, body_location, "arg0".to_string())];
+        let after_args = &[ParameterNode {
+            name: "arg0".to_string(),
+            ty: AstType::Index,
+            extra: b.extra(),
+            node: Parameter::Normal,
+        }];
+
         let mut layer = Layer::new(LayerType::Block);
-        self.build_block(&mut layer, "after", after_args, env);
-        //let layer = self.build_block(after_args, env);
+        self.build_block(&mut layer, "after", after_args, env, d);
         env.enter(layer);
 
         let after_region = Region::new();
@@ -369,7 +378,7 @@ impl<'c, E: Extra> Lower<'c, E> {
         // print types
         rs.iter().for_each(|r| {
             log::debug!("type: {:?}", r.r#type());
-            log::debug!("type: {:?}", before_args[0].0);
+            log::debug!("type: {:?}", before_args[0].ty);
         });
 
         // yield passes result to region 0
@@ -390,7 +399,7 @@ impl<'c, E: Extra> Lower<'c, E> {
             &init_args,
             &after_args
                 .iter()
-                .map(|x| self.from_type(&x.0))
+                .map(|x| self.from_type(&x.ty))
                 .collect::<Vec<Type<'_>>>(),
             before_region,
             after_region,
@@ -553,22 +562,23 @@ impl<'c, E: Extra> Lower<'c, E> {
         &self,
         layer: &mut Layer<'c>,
         name: &str,
-        arguments: &[(AstType, Location<'c>, String)],
+        arguments: &[ParameterNode<E>],
         env: &mut ScopeStack<'c, Data>,
+        d: &Diagnostics,
     ) {
         // create a new layer, adding arguments as scoped variables
         //let mut layer = Layer::new(LayerType::Block);
         for (offset, a) in arguments.iter().enumerate() {
             let index = env.fresh_argument();
-            layer.name_index(index.clone(), &a.2);
-            let data = Data::new(a.0.clone());
+            layer.name_index(index.clone(), &a.name); //.2);
+            let data = Data::new(a.ty.clone());
             env.index_data(&index, data);
             // record argument offset
             layer.index.insert(index, offset);
         }
         let block_args = arguments
             .iter()
-            .map(|a| (self.from_type(&a.0), a.1))
+            .map(|a| (self.from_type(&a.ty), a.extra.location(self.context, d)))
             .collect::<Vec<_>>();
         let block = Block::new(&block_args);
         layer.enter_block(name, block);
@@ -594,11 +604,11 @@ impl<'c, E: Extra> Lower<'c, E> {
                 // create a block with arguments
                 let mut layer = Layer::new(LayerType::Block);
 
-                let arguments = params.into_iter().map(|p| {
-                    (p.ty, p.extra.location(self.context, d), p.name)
-                }).collect::<Vec<_>>();
+                //let arguments = params.into_iter().map(|p| {
+                //(p.ty, p.extra.location(self.context, d), p.name)
+                //}).collect::<Vec<_>>();
 
-                self.build_block(&mut layer, &name, &arguments, env);
+                self.build_block(&mut layer, &name, &params, env, d);
 
                 // push layer into the env and then lower
                 env.enter(layer);
@@ -1004,18 +1014,18 @@ impl<'c, E: Extra> Lower<'c, E> {
             Ast::Definition(def) => {
                 log::debug!("def {:?}", def);
                 log::debug!("name {:?}", def.name);
-                let mut params = vec![];
-                let ty = self.from_type(&*def.return_type);
+
+                let ret_ty = self.from_type(&*def.return_type);
                 let mut ast_types = vec![];
+                let mut types = vec![];
                 let ast_ret_type = def.return_type;
 
-                for p in def.params {
+                for p in &def.params {
                     match p.node {
                         Parameter::Normal | Parameter::WithDefault(_) => {
                             log::debug!("params {:?}: {:?}", p.name, p.ty);
-                            let location = p.extra.location(self.context, d);
-                            params.push((p.ty.clone(), location, p.name));
-                            ast_types.push(p.ty);
+                            types.push(self.from_type(&p.ty));
+                            ast_types.push(p.ty.clone());
                         }
                         _ => unimplemented!("{:?}", p),
                     }
@@ -1026,12 +1036,11 @@ impl<'c, E: Extra> Lower<'c, E> {
                     StringAttribute::new(self.context, "private").into(),
                 )];
 
-                let types = params
-                    .iter()
-                    .map(|x| self.from_type(&x.0))
-                    .collect::<Vec<Type>>();
-
-                let ret_type = if ty.is_none() { vec![] } else { vec![ty] };
+                let ret_type = if ret_ty.is_none() {
+                    vec![]
+                } else {
+                    vec![ret_ty]
+                };
                 let func_type = FunctionType::new(self.context, &types, &ret_type);
                 let f_type = AstType::Func(ast_types, ast_ret_type);
                 let data = Data::new_static(f_type, &def.name);
@@ -1044,8 +1053,6 @@ impl<'c, E: Extra> Lower<'c, E> {
                 env.index_data(&index, data);
 
                 let region = if let Some(body) = def.body {
-                    log::debug!("params: {:?}", params);
-
                     // sort body
                     let region = Region::new();
                     let mut s = crate::builder::AstSorter::new();
@@ -1053,14 +1060,13 @@ impl<'c, E: Extra> Lower<'c, E> {
 
                     // initial nodes form the entry block
                     if s.stack.len() > 0 {
-                        let mut layer = Layer::new(LayerType::Block);
+                        // TODO: check that function args match the first block args
 
                         // enter block
-
-                        self.build_block(&mut layer, "entry", params.as_slice(), env);
-
-                        // enter function context
+                        let mut layer = Layer::new(LayerType::Block);
+                        self.build_block(&mut layer, "entry", &def.params, env, d);
                         env.enter(layer);
+
                         for expr in s.stack.into_iter() {
                             self.lower_expr(expr, env, d, b);
                         }
@@ -1076,12 +1082,8 @@ impl<'c, E: Extra> Lower<'c, E> {
                     // subsequent blocks
                     for expr in s.blocks.into_iter() {
                         if let Ast::Block(name, params, ast) = expr.node {
-                            let arguments = params.into_iter().map(|p| {
-                                (p.ty, p.extra.location(self.context, d), p.name)
-                            }).collect::<Vec<_>>();
-
                             let mut layer = Layer::new(LayerType::Block);
-                            self.build_block(&mut layer, &name, &arguments, env);
+                            self.build_block(&mut layer, &name, &params, env, d);
                             env.enter(layer);
                             // enter block
                             self.lower_expr(*ast, env, d, b);
@@ -1101,7 +1103,6 @@ impl<'c, E: Extra> Lower<'c, E> {
                         Attribute::unit(self.context),
                     ));
 
-                    //layer.exit_region()
                     region
                 } else {
                     Region::new()
@@ -1155,7 +1156,7 @@ impl<'c, E: Extra> Lower<'c, E> {
             Ast::Conditional(condition, true_expr, maybe_false_expr) => {
                 let index_conditions = self.lower_expr(*condition, env, d, b);
                 let mut layer = Layer::new(LayerType::Block);
-                self.build_block(&mut layer, "then", &[], env);
+                self.build_block(&mut layer, "then", &[], env, d);
                 //let layer = self.build_block(&[], env);
                 env.enter(layer);
                 self.lower_expr(*true_expr, env, d, b);
@@ -1166,8 +1167,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                 match maybe_false_expr {
                     Some(false_expr) => {
                         let mut layer = Layer::new(LayerType::Block);
-                        self.build_block(&mut layer, "else", &[], env);
-                        //let layer = self.build_block(&[], env);
+                        self.build_block(&mut layer, "else", &[], env, d);
                         env.enter(layer);
                         self.lower_expr(*false_expr, env, d, b);
                         let mut layer = env.exit();
@@ -1324,14 +1324,12 @@ impl<'c, E: Extra> Lower<'c, E> {
                             } else {
                                 d.push_diagnostic(expr.extra.error("Expected string"));
                             }
-                            //env.error(arg
                         } else {
                             unimplemented!()
                         }
                         // do nothing?
                         env.push_noop()
                     } //_ => unimplemented!("{:?}", b),
-                      //
                 }
             } //_ => unimplemented!("{:?}", expr.node),
         }
