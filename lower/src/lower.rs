@@ -86,6 +86,62 @@ pub struct Lower<'c, E> {
     _e: std::marker::PhantomData<E>,
 }
 
+pub fn new_block<'c, E: Extra>(
+    context: &'c Context,
+    arguments: &[ParameterNode<E>],
+    d: &Diagnostics,
+) -> Block<'c> {
+    let block_args = arguments
+        .iter()
+        .map(|a| (from_type(context, &a.ty), a.extra.location(context, d)))
+        .collect::<Vec<_>>();
+    Block::new(&block_args)
+}
+
+pub fn push_parameters<'c, E: Extra>(
+    layer: &mut Layer<'c>,
+    env: &mut Environment<'c>,
+    arguments: &[ParameterNode<E>],
+) {
+    // create a new layer, adding arguments as scoped variables
+    for (offset, a) in arguments.iter().enumerate() {
+        let index = env.fresh_argument();
+        layer.name_index(index.clone(), &a.name);
+        let data = Data::new(a.ty.clone());
+        env.index_data(&index, data);
+        // record argument offset
+        layer.index.insert(index, offset);
+    }
+}
+
+pub fn from_type<'c>(context: &'c Context, ty: &AstType) -> Type<'c> {
+    match ty {
+        AstType::Ptr(_) => Type::index(context),
+        AstType::Tuple(args) => {
+            let types = args
+                .iter()
+                .map(|a| from_type(context, a))
+                .collect::<Vec<_>>();
+            melior::ir::r#type::TupleType::new(context, &types).into()
+        }
+        AstType::Func(args, ret) => {
+            let inputs = args
+                .iter()
+                .map(|a| from_type(context, a))
+                .collect::<Vec<_>>();
+            let results = vec![from_type(context, ret)];
+            melior::ir::r#type::FunctionType::new(context, &inputs, &results).into()
+        }
+        AstType::Int => IntegerType::new(context, 64).into(),
+        AstType::Index => Type::index(context),
+        AstType::Float => Type::float64(context),
+        AstType::Bool => IntegerType::new(context, 1).into(),
+        AstType::Unit => Type::none(context),
+        //AstType::String => Type::none(self.context),
+        _ => unimplemented!("{:?}", ty),
+    }
+}
+
 impl<'c, E: Extra> Lower<'c, E> {
     pub fn new(context: &'c Context) -> Self {
         Self {
@@ -120,28 +176,6 @@ impl<'c, E: Extra> Lower<'c, E> {
             Ast::Call(_f, _args, ty) => ty.clone(),
 
             _ => unreachable!("{:?}", expr),
-        }
-    }
-
-    pub fn from_type(&self, ty: &AstType) -> Type<'c> {
-        match ty {
-            AstType::Ptr(_) => Type::index(self.context),
-            AstType::Tuple(args) => {
-                let types = args.iter().map(|a| self.from_type(a)).collect::<Vec<_>>();
-                melior::ir::r#type::TupleType::new(self.context, &types).into()
-            }
-            AstType::Func(args, ret) => {
-                let inputs = args.iter().map(|a| self.from_type(a)).collect::<Vec<_>>();
-                let results = vec![self.from_type(ret)];
-                melior::ir::r#type::FunctionType::new(self.context, &inputs, &results).into()
-            }
-            AstType::Int => IntegerType::new(self.context, 64).into(),
-            AstType::Index => Type::index(self.context),
-            AstType::Float => Type::float64(self.context),
-            AstType::Bool => IntegerType::new(self.context, 1).into(),
-            AstType::Unit => Type::none(self.context),
-            //AstType::String => Type::none(self.context),
-            _ => unimplemented!("{:?}", ty),
         }
     }
 
@@ -204,7 +238,7 @@ impl<'c, E: Extra> Lower<'c, E> {
         d: &mut Diagnostics,
         b: &NodeBuilder<E>,
     ) -> LayerIndex {
-        let bool_type = self.from_type(&AstType::Bool);
+        let bool_type = from_type(self.context, &AstType::Bool);
         let condition_location = self.location(&condition, d);
         let body_location = self.location(&body, d);
 
@@ -283,7 +317,7 @@ impl<'c, E: Extra> Lower<'c, E> {
          *    evaluated on each iteration.
          *    type is ()->()
          */
-        let bool_type = self.from_type(&AstType::Bool);
+        let bool_type = from_type(self.context, &AstType::Bool);
         let condition_location = self.location(&condition, d);
         let body_location = self.location(&body, d);
 
@@ -397,7 +431,7 @@ impl<'c, E: Extra> Lower<'c, E> {
             &init_args,
             &after_args
                 .iter()
-                .map(|x| self.from_type(&x.ty))
+                .map(|x| from_type(self.context, &x.ty))
                 .collect::<Vec<Type<'_>>>(),
             before_region,
             after_region,
@@ -556,31 +590,6 @@ impl<'c, E: Extra> Lower<'c, E> {
         }
     }
 
-    pub fn push_parameters(
-        &self,
-        layer: &mut Layer<'c>,
-        env: &mut Environment<'c>,
-        arguments: &[ParameterNode<E>],
-    ) {
-        // create a new layer, adding arguments as scoped variables
-        for (offset, a) in arguments.iter().enumerate() {
-            let index = env.fresh_argument();
-            layer.name_index(index.clone(), &a.name);
-            let data = Data::new(a.ty.clone());
-            env.index_data(&index, data);
-            // record argument offset
-            layer.index.insert(index, offset);
-        }
-    }
-
-    pub fn new_block(&self, arguments: &[ParameterNode<E>], d: &Diagnostics) -> Block<'c> {
-        let block_args = arguments
-            .iter()
-            .map(|a| (self.from_type(&a.ty), a.extra.location(self.context, d)))
-            .collect::<Vec<_>>();
-        Block::new(&block_args)
-    }
-
     pub fn build_block(
         &self,
         layer: &mut Layer<'c>,
@@ -589,8 +598,8 @@ impl<'c, E: Extra> Lower<'c, E> {
         env: &mut ScopeStack<'c, Data>,
         d: &Diagnostics,
     ) {
-        self.push_parameters(layer, env, arguments);
-        let block = self.new_block(arguments, d);
+        push_parameters(layer, env, arguments);
+        let block = new_block(self.context, arguments, d);
         layer.enter_block(name, block);
     }
 
@@ -660,7 +669,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                 let (ast_ty, op) = match expr.node {
                     Ast::Literal(Literal::Bool(x)) => {
                         let ast_ty = AstType::Bool;
-                        let ty = self.from_type(&ast_ty);
+                        let ty = from_type(self.context, &ast_ty);
                         let v = if x { 1 } else { 0 };
                         let value = IntegerAttribute::new(v, ty).into();
                         let op = self.build_static(&global_name, ty, value, false, location);
@@ -669,7 +678,7 @@ impl<'c, E: Extra> Lower<'c, E> {
 
                     Ast::Literal(Literal::Int(x)) => {
                         let ast_ty = AstType::Int;
-                        let ty = self.from_type(&ast_ty);
+                        let ty = from_type(self.context, &ast_ty);
                         let value = IntegerAttribute::new(x, ty).into();
                         let op = self.build_static(&global_name, ty, value, false, location);
                         (ast_ty, op)
@@ -677,7 +686,7 @@ impl<'c, E: Extra> Lower<'c, E> {
 
                     Ast::Literal(Literal::Index(x)) => {
                         let ast_ty = AstType::Int;
-                        let ty = self.from_type(&ast_ty);
+                        let ty = from_type(self.context, &ast_ty);
                         let value = IntegerAttribute::new(x as i64, ty).into();
                         let op = self.build_static(&global_name, ty, value, false, location);
                         (ast_ty, op)
@@ -685,7 +694,7 @@ impl<'c, E: Extra> Lower<'c, E> {
 
                     Ast::Literal(Literal::Float(x)) => {
                         let ast_ty = AstType::Float;
-                        let ty = self.from_type(&ast_ty);
+                        let ty = from_type(self.context, &ast_ty);
                         let value = FloatAttribute::new(self.context, x, ty).into();
                         let op = self.build_static(&global_name, ty, value, false, location);
                         (ast_ty, op)
@@ -902,7 +911,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                         if let Some(static_name) = &data.static_name {
                             // we should only be dealing with pointers in if we are static
                             if let AstType::Ptr(ty) = &data.ty {
-                                let ty = self.from_type(ty);
+                                let ty = from_type(self.context, ty);
 
                                 let ty = MemRefType::new(ty, &[], None, None);
                                 let op =
@@ -943,7 +952,7 @@ impl<'c, E: Extra> Lower<'c, E> {
 
                 if let AstType::Func(_func_arg_types, ret) = &data.ty {
                     let data = Data::new(*ret.clone());
-                    let ret_ty = self.from_type(ret);
+                    let ret_ty = from_type(self.context, ret);
                     // handle call arguments
                     let mut indices = vec![];
                     for a in args {
@@ -1026,9 +1035,12 @@ impl<'c, E: Extra> Lower<'c, E> {
             }
 
             Ast::Definition(def) => {
+                // normalize def to ensure it's in the expected format
+                let def = def.normalize(b);
+
                 log::debug!("name {:?}", def.name);
 
-                let ret_ty = self.from_type(&*def.return_type);
+                let ret_ty = from_type(self.context, &*def.return_type);
                 let mut ast_types = vec![];
                 let mut types = vec![];
                 let ast_ret_type = def.return_type;
@@ -1037,7 +1049,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                     match p.node {
                         Parameter::Normal | Parameter::WithDefault(_) => {
                             //log::debug!("params {:?}: {:?}", p.name, p.ty);
-                            types.push(self.from_type(&p.ty));
+                            types.push(from_type(self.context, &p.ty));
                             ast_types.push(p.ty.clone());
                         }
                         _ => unimplemented!("{:?}", p),
@@ -1068,56 +1080,20 @@ impl<'c, E: Extra> Lower<'c, E> {
                 let region = if let Some(body) = def.body {
                     // sort body
                     let region = Region::new();
-                    let mut s = crate::builder::AstSorter::new();
-                    s.sort_children(*body);
 
-                    let mut blocks = VecDeque::new();
+                    //let mut func_layer = Layer::new(LayerType::Function);
 
-                    // initial nodes form the entry block
-                    if s.stack.len() > 0 {
-                        let seq = b.seq(s.stack);
-                        // TODO: check that function args match the first block args
-                        let params = def
-                            .params
-                            .iter()
-                            .map(|p| (p.name.as_str(), p.ty.clone()))
-                            .collect::<Vec<_>>();
-                        let node = b.block("entry", &params, seq);
-                        blocks.push_back(node);
-                    }
+                    let blocks = body.try_seq().unwrap();
 
-                    blocks.extend(s.blocks.into_iter());
-
-                    let mut func_layer = Layer::new(LayerType::Function);
                     let num_blocks = blocks.len();
 
-                    let first_block = blocks.pop_front().unwrap();
-                    if let Ast::Block(name, params, body) = first_block.node {
-                        log::debug!("first block: {}", name);
-                        self.push_parameters(&mut func_layer, env, &params);
-                        let block = self.new_block(&params, d);
-                        func_layer.enter_block(&name, block);
-                        env.enter(func_layer);
-                        self.lower_expr(*body, env, d, b);
-                        //log::debug!("first layer: {:?}", env.last_mut());
-                        //let mut layer = env.exit();
-                        //env.dump();
-                        //let block = env.exit_block();
-                        //env.enter(layer);
-                        //region.append_block(block);
-                    } else {
-                        unreachable!()
-                    }
-                    //env.dump();
-                    //region.first_block().unwrap().
-
-                    // subsequent blocks
+                    // blocks
                     for expr in blocks.into_iter() {
                         if let Ast::Block(name, params, ast) = expr.node {
                             log::debug!("subsequent block: {}", name);
                             let mut layer = Layer::new(LayerType::Preserve);
-                            self.push_parameters(&mut layer, env, &params);
-                            let block = self.new_block(&params, d);
+                            push_parameters(&mut layer, env, &params);
+                            let block = new_block(self.context, &params, d);
                             layer.enter_block(&name, block);
                             //self.build_block(&mut layer, &name, &params, env, d);
                             env.enter(layer);
@@ -1386,6 +1362,189 @@ impl<'c, E: Extra> Lower<'c, E> {
             } //_ => unimplemented!("{:?}", expr.node),
         }
     }
+}
+
+impl<'c, E: Extra> Definition<E> {
+    pub fn normalize(mut self, b: &NodeBuilder<E>) -> Self {
+        // ensure that the function body is a sequence of named blocks
+        if let Some(body) = self.body {
+            // sort body
+            let region = Region::new();
+            let mut s = crate::builder::AstSorter::new();
+            s.sort_children(*body);
+
+            let mut blocks = VecDeque::new();
+
+            // initial nodes form the entry block
+            if s.stack.len() > 0 {
+                let seq = b.seq(s.stack);
+                // TODO: check that function args match the first block args
+                let params = self
+                    .params
+                    .iter()
+                    .map(|p| (p.name.as_str(), p.ty.clone()))
+                    .collect::<Vec<_>>();
+                let node = b.block("entry", &params, seq);
+                blocks.push_back(node.into());
+            }
+
+            blocks.extend(s.blocks.into_iter().map(|b| b.into()));
+
+            self.body = Some(b.seq(blocks.into_iter().collect()).into());
+        }
+        self
+    }
+
+    /*
+        pub fn lower(self, context: &Context, extra: E, env: &mut Environment<'c>, d: &mut Diagnostics, b: &NodeBuilder<E>) -> LayerIndex {
+            log::debug!("name {:?}", self.name);
+
+            let ret_ty = from_type(context, &*self.return_type);
+            let mut ast_types = vec![];
+            let mut types = vec![];
+            let ast_ret_type = self.return_type;
+
+            for p in &self.params {
+                match p.node {
+                    Parameter::Normal | Parameter::WithDefault(_) => {
+                        //log::debug!("params {:?}: {:?}", p.name, p.ty);
+                        types.push(from_type(context, &p.ty));
+                        ast_types.push(p.ty.clone());
+                    }
+                    _ => unimplemented!("{:?}", p),
+                }
+            }
+
+            let mut attributes = vec![(
+                Identifier::new(context, "sym_visibility"),
+                StringAttribute::new(context, "private").into(),
+                )];
+
+            let ret_type = if ret_ty.is_none() {
+                vec![]
+            } else {
+                vec![ret_ty]
+            };
+            let func_type = FunctionType::new(context, &types, &ret_type);
+            let f_type = AstType::Func(ast_types, ast_ret_type);
+            let data = Data::new_static(f_type, &self.name);
+
+            // create a new index, but don't actually add it
+            // we just associate the function signature with it, so it can
+            // be called recursively
+            let index = env.fresh_op();
+            env.name_index(index.clone(), &self.name);
+            env.index_data(&index, data);
+
+            let region = if let Some(body) = self.body {
+                // sort body
+                let region = Region::new();
+                let mut s = crate::builder::AstSorter::new();
+                s.sort_children(*body);
+
+                let mut blocks = VecDeque::new();
+
+                // initial nodes form the entry block
+                if s.stack.len() > 0 {
+                    let seq = b.seq(s.stack);
+                    // TODO: check that function args match the first block args
+                    let params = self
+                        .params
+                        .iter()
+                        .map(|p| (p.name.as_str(), p.ty.clone()))
+                        .collect::<Vec<_>>();
+                    let node = b.block("entry", &params, seq);
+                    blocks.push_back(node);
+                }
+
+                blocks.extend(s.blocks.into_iter());
+
+                let mut func_layer = Layer::new(LayerType::Function);
+                let num_blocks = blocks.len();
+
+                let first_block = blocks.pop_front().unwrap();
+                if let Ast::Block(name, params, body) = first_block.node {
+                    log::debug!("first block: {}", name);
+                    push_parameters(&mut func_layer, env, &params);
+                    let block = new_block(context, &params, d);
+                    //func_layer.enter_block(&name, block);
+                    env.enter(func_layer);
+                    //self.lower_expr(*body, env, d, b);
+                    //log::debug!("first layer: {:?}", env.last_mut());
+                    //let mut layer = env.exit();
+                    //env.dump();
+                    //let block = env.exit_block();
+                    //env.enter(layer);
+                    //region.append_block(block);
+                } else {
+                    unreachable!()
+                }
+                //env.dump();
+                //region.first_block().unwrap().
+
+                // subsequent blocks
+                for expr in blocks.into_iter() {
+                    if let Ast::Block(name, params, ast) = expr.node {
+                        log::debug!("subsequent block: {}", name);
+                        let mut layer = Layer::new(LayerType::Preserve);
+                        push_parameters(&mut layer, env, &params);
+                        let block = new_block(context, &params, d);
+                        //layer.enter_block(&name, block);
+                        //self.build_block(&mut layer, &name, &params, env, d);
+                        env.enter(layer);
+                        // enter block
+                        //self.lower_expr(*ast, env, d, b);
+
+                        // exit block
+                        //let mut layer = env.exit();
+                        //let block = layer.exit_block();
+                        //env.merge(layer);
+                        //env.enter(layer);
+                        //region.append_block(block);
+                    } else {
+                        unreachable!()
+                    }
+                    //env.dump();
+                }
+
+                let mut layers = vec![];
+                for _ in 0..num_blocks {
+                    layers.push(env.exit());
+                }
+
+                for mut layer in layers.into_iter().rev() {
+                    region.append_block(layer.exit_block());
+                }
+
+                // exit func layer
+                //env.exit();
+
+                // declare as C interface only if body is defined
+                // function declarations represent functions that are already C interfaces
+                attributes.push((
+                        Identifier::new(context, "llvm.emit_c_interface"),
+                        Attribute::unit(context),
+                        ));
+
+                region
+            } else {
+                Region::new()
+            };
+
+            let f = func::func(
+                context,
+                StringAttribute::new(context, &self.name),
+                TypeAttribute::new(func_type.into()),
+                region,
+                &attributes,
+                extra.location(context, d),
+                );
+
+            // save and return created index
+            //env.push_op_index(index.clone(), f);
+            index
+        }
+    */
 }
 
 #[cfg(test)]

@@ -263,6 +263,14 @@ impl<E> AstNode<E> {
             false
         }
     }
+
+    pub fn try_seq(self) -> Option<Vec<AstNode<E>>> {
+        if let Ast::Sequence(seq) = self.node {
+            Some(seq)
+        } else {
+            None
+        }
+    }
 }
 
 impl<E> From<Argument<E>> for AstNode<E> {
