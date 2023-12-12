@@ -98,12 +98,20 @@ impl<'c> Layer<'c> {
 
     pub fn exit_block(&mut self) -> Block<'c> {
         let block = self.blocks.pop().unwrap();
+        if self.blocks.len() == 0 {
+            self.block_names.clear();
+        }
         let ops = self.take_ops();
         for op in ops {
             block.append_operation(op);
         }
         block
     }
+
+    pub fn block(&self, name: &str) -> Option<&Block<'c>> {
+        self.block_names.get(name).map(|index| self.blocks.get(*index).unwrap())
+    }
+
 
     /*
     pub fn merge(&mut self, mut layer: Layer<'c>) {
@@ -189,20 +197,20 @@ impl<'c> Layer<'c> {
 
     pub fn values(&self, index: &LayerIndex) -> Option<Vec<Value<'c, '_>>> {
         if let Some(offset) = self.index.get(&index) {
-            //println!("found: {:?} - {}, {:?}", index, offset, self.ops.len()); //self.ops.get(*offset).unwrap().results().collect::<Vec<_>>());
+            log::debug!("found: {:?} - {}/{}", index, offset, self.ops.len());
             return Some(match index {
                 //LayerIndex::Static(_) => vec![],
                 LayerIndex::Op(_) => self
                     .ops
                     .get(*offset)
-                    .unwrap()
+                    .expect("Op missing")
                     .results()
                     .map(|x| x.into())
                     .collect(),
                 LayerIndex::Argument(_) => vec![self
                     .blocks
-                    .last()
-                    .unwrap()
+                    .first()
+                    .expect("Argument Missing")
                     .argument(*offset)
                     .unwrap()
                     .into()],
@@ -224,6 +232,22 @@ impl<'c> Layer<'c> {
     pub fn take_ops(&mut self) -> Vec<Operation<'c>> {
         self.names.clear();
         self.ops.drain(..).collect()
+    }
+
+    pub fn take_region(&mut self) -> Region<'c> {
+        let region = Region::new();
+        for block in self.blocks.drain(..) {
+            region.append_block(block);
+        }
+        region
+    }
+
+    pub fn select(&mut self, name: &str, mut layer: Layer<'c>) {
+        let ops = layer.take_ops();
+        let block = self.block(name).unwrap();
+        for op in ops {
+            block.append_operation(op);
+        }
     }
 }
 
@@ -265,6 +289,13 @@ impl<'c, D: std::fmt::Debug + Clone> ScopeStack<'c, D> {
                     self.types.get(index),
                     layer.index.get(index)
                 );
+            }
+            for (name, index) in layer.block_names.iter() {
+                println!("Block: {}, {}", index, name);
+                let block = layer.blocks.get(*index).unwrap();
+                for i in 0..block.argument_count() {
+                    println!("\tArg: {}, {:?}", i, block.argument(i).unwrap().r#type()); 
+                }
             }
         }
     }
@@ -411,6 +442,7 @@ impl<'c, D: std::fmt::Debug + Clone> ScopeStack<'c, D> {
     }
 
     pub fn value0(&self, index: &LayerIndex) -> Value<'c, '_> {
+        //self.dump();
         for layer in self.layers.iter().rev() {
             if let Some(result) = layer.values(&index) {
                 return result[0];
@@ -452,6 +484,24 @@ impl<'c, D: std::fmt::Debug + Clone> ScopeStack<'c, D> {
 
     pub fn exit_block(&mut self) -> Block<'c> {
         self.layers.last_mut().unwrap().exit_block()
+    }
+
+    pub fn block(&self, name: &str) -> Option<&Block<'c>> {
+        for layer in self.layers.iter().rev() {
+            let result = layer.block(name);
+            if result.is_some() {
+                return result;
+            }
+        }
+        None
+    }
+
+    pub fn select(&mut self, name: &str, mut layer: Layer<'c>) {
+        let ops = layer.take_ops();
+        let block = self.block(name).unwrap();
+        for op in ops {
+            block.append_operation(op);
+        }
     }
 }
 
