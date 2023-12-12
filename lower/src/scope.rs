@@ -109,9 +109,10 @@ impl<'c> Layer<'c> {
     }
 
     pub fn block(&self, name: &str) -> Option<&Block<'c>> {
-        self.block_names.get(name).map(|index| self.blocks.get(*index).unwrap())
+        self.block_names
+            .get(name)
+            .map(|index| self.blocks.get(*index).unwrap())
     }
-
 
     /*
     pub fn merge(&mut self, mut layer: Layer<'c>) {
@@ -294,7 +295,7 @@ impl<'c, D: std::fmt::Debug + Clone> ScopeStack<'c, D> {
                 println!("Block: {}, {}", index, name);
                 let block = layer.blocks.get(*index).unwrap();
                 for i in 0..block.argument_count() {
-                    println!("\tArg: {}, {:?}", i, block.argument(i).unwrap().r#type()); 
+                    println!("\tArg: {}, {:?}", i, block.argument(i).unwrap().r#type());
                 }
             }
         }
