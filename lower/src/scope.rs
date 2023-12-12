@@ -50,7 +50,7 @@ pub struct Layer<'c> {
     pub(crate) index: HashMap<LayerIndex, usize>,
     blocks: Vec<Block<'c>>,
     block_names: HashMap<String, usize>,
-    region: Option<Region<'c>>,
+    //region: Option<Region<'c>>,
     _last_index: Option<LayerIndex>,
 }
 
@@ -63,11 +63,12 @@ impl<'c> Layer<'c> {
             index: HashMap::new(),
             blocks: vec![],
             block_names: HashMap::new(),
-            region: None,
+            //region: None,
             _last_index: None,
         }
     }
 
+    /*
     pub fn append_block(&mut self, block: Block<'c>) {
         self.region.as_ref().unwrap().append_block(block);
     }
@@ -85,6 +86,7 @@ impl<'c> Layer<'c> {
         }
         region
     }
+    */
 
     pub fn enter_block(&mut self, name: &str, block: Block<'c>) -> usize {
         assert!(!self.block_names.contains_key(name));
@@ -103,6 +105,7 @@ impl<'c> Layer<'c> {
         block
     }
 
+    /*
     pub fn merge(&mut self, mut layer: Layer<'c>) {
         let preserve_names = match layer.ty {
             LayerType::Closed | LayerType::Function | LayerType::Block => false,
@@ -125,6 +128,7 @@ impl<'c> Layer<'c> {
         }
         self._last_index = layer._last_index;
     }
+    */
 
     pub fn index_name(&mut self, index: LayerIndex, name: &str) {
         self.names.insert(name.to_string(), index);
@@ -326,6 +330,7 @@ impl<'c, D: std::fmt::Debug + Clone> ScopeStack<'c, D> {
         layer
     }
 
+    /*
     pub fn merge(&mut self, layer: Layer<'c>) {
         if let Some(last) = self.layers.last_mut() {
             last.merge(layer);
@@ -333,6 +338,7 @@ impl<'c, D: std::fmt::Debug + Clone> ScopeStack<'c, D> {
             unreachable!()
         }
     }
+    */
 
     pub fn last_mut(&mut self) -> &mut Layer<'c> {
         if let Some(last) = self.layers.last_mut() {
@@ -555,11 +561,11 @@ mod tests {
 
         // exit closed
         let layer = s.exit();
-        s.merge(layer);
+        //s.merge(layer);
 
         // exit func
         let layer = s.exit();
-        s.merge(layer);
+        //s.merge(layer);
 
         // check that previous block is no longer visible
         // but we should have all of the ops

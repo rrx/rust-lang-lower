@@ -610,7 +610,9 @@ impl<'c, E: Extra> Lower<'c, E> {
                 unimplemented!()
             }
 
-            Ast::Block(name, params, body) => {
+            Ast::Block(_name, _params, _body) => {
+                unreachable!()
+                /*
                 // create a block with arguments
                 let mut layer = Layer::new(LayerType::Block);
 
@@ -627,9 +629,10 @@ impl<'c, E: Extra> Lower<'c, E> {
                 //env.merge(layer);
                 let block = layer.exit_block();
                 println!("{:?}", block.terminator());
-                env.last_mut().append_block(block);
+                //env.last_mut().append_block(block);
                 LayerIndex::Noop
                 //index
+                */
             }
             Ast::Break(_name) => {
                 unimplemented!()
@@ -919,7 +922,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                 }
             }
 
-            Ast::Call(expr, args, ret_ty) => {
+            Ast::Call(expr, args, _ret_ty) => {
                 // function to call
                 let (f, data) = match &expr.node {
                     Ast::Identifier(ident) => {
@@ -1081,38 +1084,9 @@ impl<'c, E: Extra> Lower<'c, E> {
                             .collect::<Vec<_>>();
                         let node = b.block("entry", &params, seq);
                         blocks.push_back(node);
-
-                        /*
-                        // enter block
-                        let mut layer = Layer::new(LayerType::Block);
-                        self.build_block(&mut layer, "entry", &def.params, env, d);
-                        env.enter(layer);
-
-                        for expr in s.stack.into_iter() {
-                            self.lower_expr(expr, env, d, b);
-                        }
-                        env.dump();
-
-                        // exit function context
-                        let mut layer = env.exit();
-                        println!("layer: {:?}", layer);
-
-                        // exit block
-                        let block = layer.exit_block();
-
-
-                        // push the layer back, so we have scope for the entry block
-                        env.enter(layer);
-
-                        region.append_block(block);
-                        */
                     }
 
                     blocks.extend(s.blocks.into_iter());
-
-                    //for block in blocks.iter() {
-                    //log::debug!("xblock: {:?}", &block);
-                    //}
 
                     let mut func_layer = Layer::new(LayerType::Function);
                     let num_blocks = blocks.len();
