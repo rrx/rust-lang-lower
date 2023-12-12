@@ -1,3 +1,5 @@
+use anyhow::Error;
+use anyhow::Result;
 use melior::{
     dialect::{arith, cf, func, llvm, memref, ods, scf},
     ir::{
@@ -10,13 +12,14 @@ use melior::{
     },
     Context,
 };
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::VecDeque;
 
 use crate::ast::*;
-use crate::scope::{Layer, LayerIndex, LayerType, ScopeStack};
-use crate::Diagnostics;
-use crate::NodeBuilder;
+use crate::scope::{Layer, LayerIndex, LayerType};
+use crate::{Diagnostics, ParseError};
+use crate::{Environment, NodeBuilder};
 
 #[derive(Debug, Clone)]
 pub struct Data {
@@ -40,7 +43,7 @@ impl Data {
     }
 }
 
-pub type Environment<'c> = ScopeStack<'c, Data>;
+//pub type Environment<'c, E> = ScopeStack<'c, Data, E>;
 
 /*
  * Environment
@@ -99,16 +102,16 @@ pub fn new_block<'c, E: Extra>(
 }
 
 pub fn push_parameters<'c, E: Extra>(
-    layer: &mut Layer<'c>,
-    env: &mut Environment<'c>,
+    layer: &mut Layer<'c, E>,
+    env: &mut Environment<'c, E>,
     arguments: &[ParameterNode<E>],
 ) {
     // create a new layer, adding arguments as scoped variables
     for (offset, a) in arguments.iter().enumerate() {
         let index = env.fresh_argument();
         layer.name_index(index.clone(), &a.name);
-        let data = Data::new(a.ty.clone());
-        env.index_data(&index, data);
+        //let data = Data::new(a.ty.clone());
+        env.index_data(&index, a.ty.clone());
         // record argument offset
         layer.index.insert(index, offset);
     }
@@ -152,7 +155,7 @@ impl<'c, E: Extra> Lower<'c, E> {
         }
     }
 
-    pub fn type_from_expr(&self, expr: &AstNode<E>, env: &Environment) -> AstType {
+    pub fn type_from_expr(&self, expr: &AstNode<E>, env: &Environment<'c, E>) -> AstType {
         match &expr.node {
             Ast::Literal(x) => match x {
                 Literal::Int(_) => AstType::Int,
@@ -163,6 +166,10 @@ impl<'c, E: Extra> Lower<'c, E> {
             },
             Ast::Identifier(name) => {
                 // infer type from the operation
+                let index = env.index_from_name(name).unwrap();
+                let ty = env.data(&index).unwrap();
+                ty
+                /*
                 let r = env.value0_from_name(name);
                 let ty = r.r#type();
                 if ty.is_index() {
@@ -172,6 +179,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                 } else {
                     unreachable!("{:?}", ty);
                 }
+                */
             }
             Ast::Call(_f, _args, ty) => ty.clone(),
 
@@ -217,7 +225,7 @@ impl<'c, E: Extra> Lower<'c, E> {
     pub fn lower_static(
         &self,
         expr: AstNode<E>,
-        _env: &mut Environment<'c>,
+        _env: &mut Environment<'c, E>,
         d: &mut Diagnostics,
     ) -> (AstType, Operation<'c>) {
         let location = self.location(&expr, d);
@@ -229,12 +237,95 @@ impl<'c, E: Extra> Lower<'c, E> {
         }
     }
 
+    pub fn build_region(
+        &self,
+        layer: Layer<'c, E>,
+        env: &mut Environment<'c, E>,
+        d: &mut Diagnostics,
+        b: &NodeBuilder<E>,
+    ) -> Result<Region<'c>> {
+        //use crate::lower::Data;
+        use crate::blocks::Index;
+
+        env.enter(layer);
+        let mut items = env.build_layers();
+        /*
+        // build graph edges
+        layer.build();
+        //g.as_mut().unwrap().build();
+
+
+        let s = layer.dfs_first();//layer.g.as_mut().unwrap().dfs_first();//(g.first().unwrap());
+
+        let mut items = HashMap::new();
+        // create layers with appropriate scoped variables
+        for (index, dominants) in s {
+            // for each block, we want to push valid arguments into the layer based on the graph
+            // there will be duplicates in each block, because we need to make visible all
+            // variables in it's dominants
+            //
+            // create a layer and add all of the dominant parameters
+            println!("push {:?}", index);
+            let mut layer: Layer<E> = Layer::new(LayerType::Block);
+
+            for d_index in dominants.iter() {
+                let params = layer.g.as_ref().unwrap().get_params(*d_index);
+                // create a new layer, adding arguments as scoped variables
+                for (offset, a) in params.iter().enumerate() {
+                    let arg = LayerIndex::BlockArg(d_index.get(), offset);
+                    layer.name_index(arg.clone(), &a.name);
+                    let data = Data::new(a.ty.clone());
+                    env.index_data(&arg, data.ty);
+                    // record argument offset
+                    layer.index.insert(arg, offset);
+                    println!("p: {:?}", (index, d_index, offset, &a.name, &a.ty));
+                }
+
+            }
+            items.insert(index, layer);
+        }
+        */
+
+        // take the nodes, and lower them
+        let region = Region::new();
+        let mut layers = vec![];
+        let asts = env.last_mut().g.take_ast();
+        for (offset, ast) in asts.into_iter().enumerate() {
+            let layer = items.remove(&Index::new(offset)).unwrap();
+            println!("layer {:?}", &layer);
+            env.enter(layer);
+
+            println!("enter {}", offset);
+            //println!("ast {:?}", &ast);
+            env.dump();
+            self.lower_expr(ast, env, d, b)?;
+            let layer = env.exit();
+            layers.push(layer);
+        }
+
+        // exit func layer
+        let mut layer = env.exit();
+
+        // turn blocks into region
+        let blocks = layer.g.take_blocks();
+        for (_offset, (mut layer, block)) in layers.into_iter().zip(blocks).enumerate() {
+            let ops = layer.take_ops();
+            println!("ops {}", ops.len());
+            for op in ops {
+                block.append_operation(op);
+            }
+            region.append_block(block);
+        }
+
+        Ok(region)
+    }
+
     pub fn build_while<'a>(
         &self,
         //init_args: &[Value<'c, 'a>],
         condition: AstNode<E>,
         body: AstNode<E>,
-        env: &mut Environment<'c>,
+        env: &mut Environment<'c, E>,
         d: &mut Diagnostics,
         b: &NodeBuilder<E>,
     ) -> LayerIndex {
@@ -290,7 +381,7 @@ impl<'c, E: Extra> Lower<'c, E> {
         //init_args: &[Value<'c, 'a>],
         condition: AstNode<E>,
         body: AstNode<E>,
-        env: &mut Environment<'c>,
+        env: &mut Environment<'c, E>,
         d: &mut Diagnostics,
         b: &NodeBuilder<E>,
     ) -> LayerIndex {
@@ -475,7 +566,7 @@ impl<'c, E: Extra> Lower<'c, E> {
         &self,
         name: &str,
         expr: AstNode<E>,
-        env: &mut Environment<'c>,
+        env: &mut Environment<'c, E>,
         d: &mut Diagnostics,
     ) -> LayerIndex {
         let location = self.location(&expr, d);
@@ -498,7 +589,7 @@ impl<'c, E: Extra> Lower<'c, E> {
         let index = env.push(op.into());
 
         env.name_index(index.clone(), name);
-        env.index_data(&index, Data::new_static(ast_ty, name));
+        env.index_data(&index, Data::new_static(ast_ty, name).ty);
         index
     }
 
@@ -507,7 +598,7 @@ impl<'c, E: Extra> Lower<'c, E> {
         ident: &str,
         ty: Type<'c>,
         location: Location<'c>,
-        env: &mut Environment<'c>,
+        env: &mut Environment<'c, E>,
     ) -> LayerIndex {
         // load global variable
         let opaque_ty = llvm::r#type::opaque_pointer(self.context);
@@ -527,12 +618,12 @@ impl<'c, E: Extra> Lower<'c, E> {
         &self,
         ident: &str,
         ast: AstNode<E>,
-        env: &mut Environment<'c>,
+        env: &mut Environment<'c, E>,
         d: &mut Diagnostics,
         b: &NodeBuilder<E>,
-    ) -> LayerIndex {
+    ) -> Result<LayerIndex> {
         let location = self.location(&ast, d);
-        let value_index = self.lower_expr(ast, env, d, b);
+        let value_index = self.lower_expr(ast, env, d, b)?;
         let opaque_ty = llvm::r#type::opaque_pointer(self.context);
         let f = attribute::FlatSymbolRefAttribute::new(self.context, ident);
         // get global address
@@ -545,33 +636,32 @@ impl<'c, E: Extra> Lower<'c, E> {
         let r_addr = env.value0(&addr_index);
 
         let options = llvm::LoadStoreOptions::new();
-        env.push(llvm::store(
+        Ok(env.push(llvm::store(
             self.context,
             r_value,
             r_addr,
             location,
             options,
-        ))
+        )))
     }
 
     pub fn emit_mutate(
         &self,
         ident: &str,
         rhs: AstNode<E>,
-        env: &mut Environment<'c>,
+        env: &mut Environment<'c, E>,
         d: &mut Diagnostics,
         b: &NodeBuilder<E>,
-    ) -> LayerIndex {
+    ) -> Result<LayerIndex> {
         let location = self.location(&rhs, d);
-        let (index, data) = match env.index_from_name(ident) {
-            Some(index) => {
-                let data = env.data(&index).unwrap().clone();
-                (index, data)
-            }
+        let (index, ty, maybe_static_name) = match env.data_from_name(ident) {
+            Some(index) => index,
             _ => unreachable!("Name not found: {}", ident),
         };
-        let value_index = self.lower_expr(rhs, env, d, b);
-        if let Some(static_name) = data.static_name {
+        let value_index = self.lower_expr(rhs, env, d, b)?;
+
+        if let Some(static_name) = env.static_name(&index) {
+            println!("static: {}", static_name);
             let ty = MemRefType::new(IntegerType::new(self.context, 64).into(), &[], None, None);
             let op1 = memref::get_global(self.context, &static_name, ty, location);
 
@@ -581,21 +671,21 @@ impl<'c, E: Extra> Lower<'c, E> {
             let r_addr = env.value0(&addr_index);
 
             let op = memref::store(r_value, r_addr, &[], location);
-            env.push(op)
+            Ok(env.push(op))
         } else {
             let r_value = env.value0(&value_index);
             let r_addr = env.value0(&index);
             let op = memref::store(r_value, r_addr, &[], location);
-            env.push(op)
+            Ok(env.push(op))
         }
     }
 
     pub fn build_block(
         &self,
-        layer: &mut Layer<'c>,
+        layer: &mut Layer<'c, E>,
         name: &str,
         arguments: &[ParameterNode<E>],
-        env: &mut ScopeStack<'c, Data>,
+        env: &mut Environment<'c, E>,
         d: &Diagnostics,
     ) {
         push_parameters(layer, env, arguments);
@@ -606,10 +696,10 @@ impl<'c, E: Extra> Lower<'c, E> {
     pub fn lower_expr<'a>(
         &self,
         expr: AstNode<E>,
-        env: &mut ScopeStack<'c, Data>,
+        env: &mut Environment<'c, E>,
         d: &mut Diagnostics,
         b: &NodeBuilder<E>,
-    ) -> LayerIndex {
+    ) -> Result<LayerIndex> {
         let location = self.location(&expr, d);
 
         match expr.node {
@@ -703,28 +793,32 @@ impl<'c, E: Extra> Lower<'c, E> {
                     _ => unreachable!("{:?}", expr.node),
                 };
 
-                let ptr_data = Data::new_static(AstType::Ptr(ast_ty.clone().into()), &global_name);
+                //let ptr_data = Data::new_static(AstType::Ptr(ast_ty.clone().into()), &global_name);
+                let ptr_ty = AstType::Ptr(ast_ty.clone().into());
                 if env.current_layer_type() == LayerType::Static {
                     // STATIC/GLOBAL VARIABLE
                     let index = env.push_with_name(op, &global_name);
-                    env.index_data(&index, ptr_data);
-                    index
+                    env.index_data(&index, ptr_ty);
+                    env.index_static_name(&index, &global_name);
+                    Ok(index)
                 } else {
                     // STATIC VARIABLE IN FUNCTION CONTEXT
 
                     // push static operation
                     let index = env.push_static(op, &global_name);
-                    env.index_data(&index, ptr_data.clone());
+                    env.index_data(&index, ptr_ty); //ptr_data.clone().ty);
+
+                    env.index_static_name(&index, &global_name);
                     env.name_index(index.clone(), &ident);
 
                     // push name into current context
                     env.name_index(index.clone(), &ident);
-                    index
+                    Ok(index)
                 }
             }
 
             Ast::UnaryOp(op, a) => {
-                let index_rhs = self.lower_expr(*a, env, d, b);
+                let index_rhs = self.lower_expr(*a, env, d, b)?;
 
                 // get the type of the RHS
                 let ty = env.value0(&index_rhs).r#type();
@@ -739,11 +833,11 @@ impl<'c, E: Extra> Lower<'c, E> {
                             let index_lhs = env.push(int_op);
                             let r = env.value0(&index_lhs);
                             let r_rhs = env.value0(&index_rhs);
-                            env.push(arith::muli(r.into(), r_rhs.into(), location))
+                            Ok(env.push(arith::muli(r.into(), r_rhs.into(), location)))
                         } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
                             // arith has an op for negation
                             let r_rhs = env.value0(&index_rhs);
-                            env.push(arith::negf(r_rhs.into(), location))
+                            Ok(env.push(arith::negf(r_rhs.into(), location)))
                         } else {
                             unimplemented!()
                         }
@@ -752,11 +846,11 @@ impl<'c, E: Extra> Lower<'c, E> {
             }
 
             Ast::BinaryOp(op, x, y) => {
-                let index_lhs = self.lower_expr(*x, env, d, b);
-                let index_rhs = self.lower_expr(*y, env, d, b);
+                let index_lhs = self.lower_expr(*x, env, d, b)?;
+                let index_rhs = self.lower_expr(*y, env, d, b)?;
 
-                let ty_lhs = env.data(&index_lhs).expect("LHS data missing").ty.clone();
-                let ty_rhs = env.data(&index_rhs).expect("RHS data missing").ty.clone();
+                let ty_lhs = env.data(&index_lhs).expect("LHS data missing").clone();
+                let ty_rhs = env.data(&index_rhs).expect("RHS data missing").clone();
 
                 let ast_ty = ty_lhs.clone();
                 assert_eq!(ty_lhs, ty_rhs);
@@ -854,25 +948,25 @@ impl<'c, E: Extra> Lower<'c, E> {
 
                 let index = env.push(binop);
                 let data = Data::new(ast_ty);
-                env.index_data(&index, data);
-                index
+                env.index_data(&index, data.ty);
+                Ok(index)
             }
 
             Ast::Deref(expr, _target) => {
                 // we are expecting a memref here
-                let index = self.lower_expr(*expr, env, d, b);
+                let index = self.lower_expr(*expr, env, d, b)?;
 
                 let data = env.data(&index).unwrap();
 
                 // ensure proper type
-                if let AstType::Ptr(ast_ty) = &data.ty {
+                if let AstType::Ptr(ast_ty) = &data {
                     let deref_data = Data::new(*ast_ty.clone());
                     //let ty = self.from_type(ast_ty);
                     let r = env.value0(&index);
                     let op = memref::load(r, &[], location);
                     let index = env.push(op);
-                    env.index_data(&index, deref_data);
-                    index
+                    env.index_data(&index, deref_data.ty);
+                    Ok(index)
                 } else {
                     unreachable!("Trying to dereference a non-pointer")
                 }
@@ -883,14 +977,14 @@ impl<'c, E: Extra> Lower<'c, E> {
                     "True" => {
                         let op = self.build_bool_op(true, location);
                         let index = env.push(op);
-                        env.index_data(&index, Data::new(AstType::Bool));
-                        index
+                        env.index_data(&index, Data::new(AstType::Bool).ty);
+                        Ok(index)
                     }
                     "False" => {
                         let op = self.build_bool_op(false, location);
                         let index = env.push(op);
-                        env.index_data(&index, Data::new(AstType::Bool));
-                        index
+                        env.index_data(&index, Data::new(AstType::Bool).ty);
+                        Ok(index)
                     }
                     _ => {
                         //log::debug!("x: {:?}", env.last_mut().names);
@@ -908,9 +1002,9 @@ impl<'c, E: Extra> Lower<'c, E> {
 
                         //log::debug!("ident: {} - {:?}", ident, data);
 
-                        if let Some(static_name) = &data.static_name {
+                        if let Some(static_name) = &env.static_name(&index) {
                             // we should only be dealing with pointers in if we are static
-                            if let AstType::Ptr(ty) = &data.ty {
+                            if let AstType::Ptr(ty) = &data {
                                 let ty = from_type(self.context, ty);
 
                                 let ty = MemRefType::new(ty, &[], None, None);
@@ -919,13 +1013,13 @@ impl<'c, E: Extra> Lower<'c, E> {
 
                                 let index = env.push(op);
                                 env.index_data(&index, data);
-                                index
+                                Ok(index)
                             } else {
                                 unreachable!("Identifier of static variable must be pointer");
                             }
                         } else {
                             env.push_index(index.clone());
-                            index
+                            Ok(index)
                         }
                     }
                 }
@@ -933,13 +1027,13 @@ impl<'c, E: Extra> Lower<'c, E> {
 
             Ast::Call(expr, args, _ret_ty) => {
                 // function to call
-                let (f, data) = match &expr.node {
+                let (f, ty) = match &expr.node {
                     Ast::Identifier(ident) => {
                         if let Some(index) = env.index_from_name(ident) {
-                            let data = env.data(&index).unwrap();
+                            let ty = env.data(&index).unwrap();
                             (
                                 attribute::FlatSymbolRefAttribute::new(self.context, ident),
-                                data,
+                                ty,
                             )
                         } else {
                             unreachable!("not found: {:?}", ident);
@@ -950,15 +1044,16 @@ impl<'c, E: Extra> Lower<'c, E> {
                     }
                 };
 
-                if let AstType::Func(_func_arg_types, ret) = &data.ty {
-                    let data = Data::new(*ret.clone());
-                    let ret_ty = from_type(self.context, ret);
+                if let AstType::Func(_func_arg_types, ret) = &ty {
+                    //let data = Data::new(*ret.clone());
+                    //let r = *ret;
+                    let ret_ty = from_type(self.context, &ret);
                     // handle call arguments
                     let mut indices = vec![];
                     for a in args {
                         match a {
                             Argument::Positional(arg) => {
-                                let index = self.lower_expr(*arg, env, d, b);
+                                let index = self.lower_expr(*arg, env, d, b)?;
                                 indices.push(index);
                             } //_ => unimplemented!("{:?}", a)
                         };
@@ -969,12 +1064,18 @@ impl<'c, E: Extra> Lower<'c, E> {
                         .map(|index| env.value0(&index))
                         .collect::<Vec<_>>();
 
-                    let op = func::call(self.context, f, call_args.as_slice(), &[ret_ty], location);
+                    let op = func::call(
+                        self.context,
+                        f,
+                        call_args.as_slice(),
+                        &[ret_ty.clone()],
+                        location,
+                    );
                     let index = env.push(op);
-                    env.index_data(&index, data);
-                    index
+                    env.index_data(&index, *ret.clone()); //&*ret);//.clone());
+                    Ok(index)
                 } else {
-                    unimplemented!("calling non function type: {:?}", data);
+                    unimplemented!("calling non function type: {:?}", ty);
                 }
             }
 
@@ -982,29 +1083,29 @@ impl<'c, E: Extra> Lower<'c, E> {
                 Literal::Float(f) => {
                     let op = self.build_float_op(f, location);
                     let index = env.push(op);
-                    env.index_data(&index, Data::new(AstType::Float));
-                    index
+                    env.index_data(&index, Data::new(AstType::Float).ty);
+                    Ok(index)
                 }
 
                 Literal::Int(x) => {
                     let op = self.build_int_op(x, location);
                     let index = env.push(op);
-                    env.index_data(&index, Data::new(AstType::Int));
-                    index
+                    env.index_data(&index, Data::new(AstType::Int).ty);
+                    Ok(index)
                 }
 
                 Literal::Index(x) => {
                     let op = self.build_index_op(x as i64, location);
                     let index = env.push(op);
-                    env.index_data(&index, Data::new(AstType::Index));
-                    index
+                    env.index_data(&index, Data::new(AstType::Index).ty);
+                    Ok(index)
                 }
 
                 Literal::Bool(x) => {
                     let op = self.build_bool_op(x, location);
                     let index = env.push(op);
-                    env.index_data(&index, Data::new(AstType::Bool));
-                    index
+                    env.index_data(&index, AstType::Bool); //Data::new(AstType::Bool));
+                    Ok(index)
                 }
                 _ => unimplemented!("{:?}", lit),
             },
@@ -1013,7 +1114,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                 exprs.into_iter().for_each(|expr| {
                     self.lower_expr(expr, env, d, b);
                 });
-                env.last_index().unwrap()
+                Ok(env.last_index().unwrap())
             }
 
             Ast::Variable(_def) => {
@@ -1035,6 +1136,8 @@ impl<'c, E: Extra> Lower<'c, E> {
             }
 
             Ast::Definition(def) => {
+                //use crate::blocks::BlockGraph;
+
                 // normalize def to ensure it's in the expected format
                 let def = def.normalize(b);
 
@@ -1075,30 +1178,44 @@ impl<'c, E: Extra> Lower<'c, E> {
                 // be called recursively
                 let index = env.fresh_op();
                 env.name_index(index.clone(), &def.name);
-                env.index_data(&index, data);
+                env.index_data(&index, data.ty);
 
                 let region = if let Some(body) = def.body {
-                    // sort body
-                    let region = Region::new();
-
-                    //let mut func_layer = Layer::new(LayerType::Function);
+                    let mut func_layer = Layer::new(LayerType::Function);
 
                     let blocks = body.try_seq().unwrap();
 
-                    let num_blocks = blocks.len();
-
-                    // blocks
+                    // load nodes
                     for expr in blocks.into_iter() {
                         if let Ast::Block(name, params, ast) = expr.node {
-                            log::debug!("subsequent block: {}", name);
-                            let mut layer = Layer::new(LayerType::Preserve);
-                            push_parameters(&mut layer, env, &params);
-                            let block = new_block(self.context, &params, d);
-                            layer.enter_block(&name, block);
+                            log::debug!("block block: {}", name);
+
+                            // ensure we have a terminator
+                            if ast.node.terminator().is_none() {
+                                d.push_diagnostic(ast.extra.error("Block does not terminate"));
+                                return Err(Error::new(ParseError::Invalid));
+                            }
+
+                            func_layer.push_block(self.context, &name, params, *ast, d);
+                            //let mut layer = Layer::new(LayerType::Preserve);
+                            //push_parameters(&mut layer, env, &params);
+                            //let block = new_block(self.context, &params, d);
+                            //if let Some(term) = ast.node.terminator() {
+                            //let index = func_layer.g.as_mut().unwrap().add_node(self.context, &name, params, *ast, d);
+                            //if entry_block.is_none() {
+                            //entry_block = Some(index);
+                            //}
+                            //items.insert(index, (name, term));
+                            //} else {
+                            //d.push_diagnostic(ast.extra.error("Block does not terminate"));
+                            //return Err(Error::new(ParseError::Invalid));
+                            //}
+
+                            //layer.enter_block(&name, block);
                             //self.build_block(&mut layer, &name, &params, env, d);
-                            env.enter(layer);
+                            //env.enter(layer);
                             // enter block
-                            self.lower_expr(*ast, env, d, b);
+                            //self.lower_expr(*ast, env, d, b);
 
                             // exit block
                             //let mut layer = env.exit();
@@ -1112,6 +1229,12 @@ impl<'c, E: Extra> Lower<'c, E> {
                         //env.dump();
                     }
 
+                    // build graph
+                    //env.enter(func_layer);
+                    //env.dump();
+                    let region = self.build_region(func_layer, env, d, b)?;
+
+                    /*
                     let mut layers = vec![];
                     for _ in 0..num_blocks {
                         layers.push(env.exit());
@@ -1120,6 +1243,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                     for mut layer in layers.into_iter().rev() {
                         region.append_block(layer.exit_block());
                     }
+                    */
 
                     // exit func layer
                     //env.exit();
@@ -1147,13 +1271,13 @@ impl<'c, E: Extra> Lower<'c, E> {
 
                 // save and return created index
                 env.push_op_index(index.clone(), f);
-                index
+                Ok(index)
             }
 
             Ast::Return(maybe_expr) => match maybe_expr {
                 Some(expr) => {
                     let location = self.location(&expr, d);
-                    let mut index = self.lower_expr(*expr, env, d, b);
+                    let mut index = self.lower_expr(*expr, env, d, b)?;
 
                     // TODO: this only handles a single return value
                     // Deref if necessary
@@ -1171,23 +1295,21 @@ impl<'c, E: Extra> Lower<'c, E> {
                     let rs = env.values(&index);
                     let ret_op = func::r#return(&rs, location);
 
-                    env.push(ret_op);
-                    env.last_index().unwrap()
+                    Ok(env.push(ret_op))
                 }
                 None => {
                     let op = func::r#return(&[], location);
-                    env.push(op);
-                    env.last_index().unwrap()
+                    Ok(env.push(op))
                 }
             },
 
             Ast::Conditional(condition, true_expr, maybe_false_expr) => {
-                let index_conditions = self.lower_expr(*condition, env, d, b);
+                let index_conditions = self.lower_expr(*condition, env, d, b)?;
                 let mut layer = Layer::new(LayerType::Block);
                 self.build_block(&mut layer, "then", &[], env, d);
                 //let layer = self.build_block(&[], env);
                 env.enter(layer);
-                self.lower_expr(*true_expr, env, d, b);
+                self.lower_expr(*true_expr, env, d, b)?;
                 let mut layer = env.exit();
                 let true_block = layer.exit_block();
                 true_block.append_operation(scf::r#yield(&[], location));
@@ -1197,7 +1319,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                         let mut layer = Layer::new(LayerType::Block);
                         self.build_block(&mut layer, "else", &[], env, d);
                         env.enter(layer);
-                        self.lower_expr(*false_expr, env, d, b);
+                        self.lower_expr(*false_expr, env, d, b)?;
                         let mut layer = env.exit();
                         let false_block = layer.exit_block();
                         false_block.append_operation(scf::r#yield(&[], location));
@@ -1212,8 +1334,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                             else_region,
                             location,
                         );
-                        env.push(if_op);
-                        env.last_index().unwrap()
+                        Ok(env.push(if_op))
                     }
                     None => {
                         let then_region = Region::new();
@@ -1226,8 +1347,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                             else_region,
                             location,
                         );
-                        env.push(if_op);
-                        env.last_index().unwrap()
+                        Ok(env.push(if_op))
                     }
                 }
             }
@@ -1248,6 +1368,7 @@ impl<'c, E: Extra> Lower<'c, E> {
             }
 
             Ast::Assign(target, rhs) => {
+                //env.dump();
                 match target {
                     AssignTarget::Alloca(ident) => {
                         let ty = env.current_layer_type();
@@ -1257,14 +1378,14 @@ impl<'c, E: Extra> Lower<'c, E> {
                         let op = memref::alloca(self.context, memref_ty, &[], &[], None, location);
                         let ptr_index = env.push(op);
                         env.name_index(ptr_index.clone(), &ident);
-                        let rhs_index = self.lower_expr(*rhs, env, d, b);
-                        let data = env.data(&rhs_index).unwrap();
-                        let data = Data::new(AstType::Ptr(data.ty.clone().into()));
-                        env.index_data(&ptr_index, data); //Data::new(data.ty.clone()));
+                        let rhs_index = self.lower_expr(*rhs, env, d, b)?;
+                        let ty = env.data(&rhs_index).unwrap();
+                        let data = Data::new(AstType::Ptr(ty.clone().into()));
+                        env.index_data(&ptr_index, data.ty);
                         let r_value = env.value0(&rhs_index);
                         let r_addr = env.value0(&ptr_index);
                         let op = memref::store(r_value, r_addr, &[], location);
-                        env.push(op)
+                        Ok(env.push(op))
                     }
                     AssignTarget::Identifier(ident) => {
                         let ty = env.current_layer_type();
@@ -1276,9 +1397,9 @@ impl<'c, E: Extra> Lower<'c, E> {
                                 );
                             }
                             _ => {
-                                let index = self.lower_expr(*rhs, env, d, b);
+                                let index = self.lower_expr(*rhs, env, d, b)?;
                                 env.name_index(index.clone(), &ident);
-                                index
+                                Ok(index)
                             }
                         }
                     } //_ => unimplemented!("{:?}", target),
@@ -1286,13 +1407,13 @@ impl<'c, E: Extra> Lower<'c, E> {
             }
 
             Ast::While(condition, body) => {
-                self.build_while(*condition, *body, env, d, b);
-                env.last_index().unwrap()
+                Ok(self.build_while(*condition, *body, env, d, b))
+                //env.last_index().unwrap()
             }
 
             Ast::Test(condition, body) => {
-                self.build_loop(*condition, *body, env, d, b);
-                env.last_index().unwrap()
+                Ok(self.build_loop(*condition, *body, env, d, b))
+                //env.last_index().unwrap()
             }
 
             Ast::Builtin(bi, mut args) => {
@@ -1303,12 +1424,12 @@ impl<'c, E: Extra> Lower<'c, E> {
                         let arg = args.pop().unwrap();
                         match arg {
                             Argument::Positional(expr) => {
-                                let index = self.lower_expr(*expr, env, d, b);
+                                let index = self.lower_expr(*expr, env, d, b)?;
                                 let msg = format!("assert at {}", location);
                                 let assert_op =
                                     cf::assert(self.context, env.value0(&index), &msg, location);
-                                env.push(assert_op);
-                                env.last_index().unwrap()
+                                Ok(env.push(assert_op))
+                                //env.last_index().unwrap()
                             }
                         }
                     }
@@ -1319,7 +1440,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                                 let ast_ty = self.type_from_expr(&expr, env);
 
                                 // eval expr
-                                let index = self.lower_expr(*expr, env, d, b);
+                                let index = self.lower_expr(*expr, env, d, b)?;
                                 let r = env.value0(&index);
                                 let ty = r.r#type();
 
@@ -1338,8 +1459,8 @@ impl<'c, E: Extra> Lower<'c, E> {
                                 let op =
                                     func::call(self.context, f, &env.values(&index), &[], location);
 
-                                env.push(op);
-                                env.last_index().unwrap()
+                                Ok(env.push(op))
+                                //env.last_index().unwrap()
                             }
                         }
                     }
@@ -1356,7 +1477,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                             unimplemented!()
                         }
                         // do nothing?
-                        env.push_noop()
+                        Ok(env.push_noop())
                     } //_ => unimplemented!("{:?}", b),
                 }
             } //_ => unimplemented!("{:?}", expr.node),
@@ -1555,7 +1676,7 @@ pub(crate) mod tests {
     use crate::NodeBuilder;
     use test_log::test;
 
-    pub fn gen_test<'c, E: Extra>(file_id: usize, _env: &mut Environment<'c>) -> AstNode<E> {
+    pub fn gen_test<'c, E: Extra>(file_id: usize, _env: &mut Environment<'c, E>) -> AstNode<E> {
         let b = NodeBuilder::new(file_id, "test.py");
         let mut seq = vec![b.import_prelude()];
         seq.push(b.main(b.seq(vec![
@@ -1574,7 +1695,7 @@ pub(crate) mod tests {
         b.seq(seq)
     }
 
-    pub fn gen_block<'c, E: Extra>(file_id: usize, _env: &mut Environment<'c>) -> AstNode<E> {
+    pub fn gen_block<'c, E: Extra>(file_id: usize, _env: &mut Environment<'c, E>) -> AstNode<E> {
         let b = NodeBuilder::new(file_id, "test.py");
         let mut seq = vec![b.import_prelude()];
 
@@ -1616,7 +1737,7 @@ pub(crate) mod tests {
         b.seq(seq)
     }
 
-    pub fn gen_while<'c, E: Extra>(file_id: usize, _env: &mut Environment<'c>) -> AstNode<E> {
+    pub fn gen_while<'c, E: Extra>(file_id: usize, _env: &mut Environment<'c, E>) -> AstNode<E> {
         let b = NodeBuilder::new(file_id, "test.py");
         let mut seq = vec![b.import_prelude()];
 
@@ -1662,7 +1783,7 @@ pub(crate) mod tests {
 
     pub fn gen_function_call<'c, E: Extra>(
         file_id: usize,
-        _env: &mut Environment<'c>,
+        _env: &mut Environment<'c, E>,
     ) -> AstNode<E> {
         let b = NodeBuilder::new(file_id, "test.py");
         let mut seq = vec![b.import_prelude()];

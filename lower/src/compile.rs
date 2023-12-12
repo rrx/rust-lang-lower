@@ -1,7 +1,7 @@
 use crate::ast;
 use crate::lower;
 use crate::scope;
-use crate::{Diagnostics, NodeBuilder};
+use crate::{Diagnostics, Environment, NodeBuilder};
 use melior::ir::operation::OperationPrintingFlags;
 use melior::ExecutionEngine;
 use melior::{
@@ -20,7 +20,7 @@ impl<'c, E: ast::Extra> lower::Lower<'c, E> {
         &mut self,
         module: &mut ir::Module<'c>,
         expr: ast::AstNode<E>,
-        mut env: lower::Environment<'c>,
+        mut env: Environment<'c, E>,
         d: &mut Diagnostics,
         b: &NodeBuilder<E>,
     ) {
@@ -59,7 +59,7 @@ impl<'c, E: ast::Extra> lower::Lower<'c, E> {
         &mut self,
         ast: ast::AstNode<E>,
         libpath: &str,
-        env: scope::ScopeStack<'c, lower::Data>,
+        env: Environment<'c, E>,
         d: &mut Diagnostics,
         b: &NodeBuilder<E>,
     ) -> i32 {
@@ -98,7 +98,7 @@ impl<'c, E: ast::Extra> lower::Lower<'c, E> {
 
 pub struct CompilerContext<'c, E> {
     context: melior::Context,
-    pub env: scope::ScopeStack<'c, lower::Data>,
+    pub env: Environment<'c, E>,
     pass_manager: pass::PassManager<'c>,
     _e: std::marker::PhantomData<E>,
 }

@@ -1,5 +1,9 @@
+use crate::ast::{AstNode, AstType, Extra, ParameterNode};
+use crate::blocks::{BlockGraph, Index};
+use crate::Diagnostics;
 use melior::ir::*;
 use melior::ir::{Operation, Value};
+use melior::Context;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -25,6 +29,7 @@ pub enum LayerIndex {
     Op(usize),
     Noop,
     Argument(usize),
+    BlockArg(usize, usize),
     Static(usize),
 }
 
@@ -43,27 +48,27 @@ impl LayerIndex {
 }
 
 #[derive(Debug)]
-pub struct Layer<'c> {
+pub struct Layer<'c, E> {
     ty: LayerType,
     pub(crate) ops: Vec<Operation<'c>>,
     pub(crate) names: HashMap<String, LayerIndex>,
     pub(crate) index: HashMap<LayerIndex, usize>,
     blocks: Vec<Block<'c>>,
+    pub(crate) g: BlockGraph<'c, E>,
     block_names: HashMap<String, usize>,
-    //region: Option<Region<'c>>,
     _last_index: Option<LayerIndex>,
 }
 
-impl<'c> Layer<'c> {
+impl<'c, E: Extra> Layer<'c, E> {
     pub fn new(ty: LayerType) -> Self {
         Self {
             ty,
             ops: vec![],
             names: HashMap::new(),
             index: HashMap::new(),
+            g: BlockGraph::new(),
             blocks: vec![],
             block_names: HashMap::new(),
-            //region: None,
             _last_index: None,
         }
     }
@@ -87,6 +92,18 @@ impl<'c> Layer<'c> {
         region
     }
     */
+
+    pub fn build(&mut self) {
+        self.g.build();
+    }
+
+    pub fn dfs_first(&mut self) -> Vec<(Index, Vec<Index>)> {
+        self.g.dfs_first()
+    }
+
+    pub fn get_params(&self, index: Index) -> &Vec<ParameterNode<E>> {
+        self.g.get_params(index)
+    }
 
     pub fn enter_block(&mut self, name: &str, block: Block<'c>) -> usize {
         assert!(!self.block_names.contains_key(name));
@@ -164,10 +181,18 @@ impl<'c> Layer<'c> {
     }
 
     pub fn value_from_name(&self, name: &str) -> Option<Vec<Value<'c, '_>>> {
-        match self.names.get(name) {
+        match self.index_from_name(name) {
+            //match self.names.get(name) {
             Some(index) => {
+                self.values(&index)
+                /*
                 let offset = self.index.get(index).unwrap();
                 Some(match index {
+                    LayerIndex::BlockArg(block_offset, arg_offset) => {
+                        use crate::blocks::Index;
+                        let block = self.g.as_ref().unwrap().get_block(Index::new(*block_offset));
+                        vec![block.argument(*arg_offset).unwrap().into()]
+                    }
                     LayerIndex::Noop => vec![],
                     LayerIndex::Static(_) => vec![],
                     LayerIndex::Op(_) => self
@@ -187,6 +212,7 @@ impl<'c> Layer<'c> {
                             .into()]
                     }
                 })
+                */
             }
             _ => None,
         }
@@ -197,28 +223,72 @@ impl<'c> Layer<'c> {
     }
 
     pub fn values(&self, index: &LayerIndex) -> Option<Vec<Value<'c, '_>>> {
+        println!("looking for {:?} in {:?}", index, self.ty);
+        if let LayerIndex::BlockArg(block_offset, arg_offset) = index {
+            //use crate::blocks::Index;
+            //if let Some(g) = &self.g {
+            let result = if self.g.blocks.len() > 0 {
+                let block = self.g.get_block(Index::new(*block_offset));
+                Some(vec![block.argument(*arg_offset).unwrap().into()])
+            } else {
+                None
+            };
+            println!(
+                "len blocks: {:?}, {}, result: {}",
+                self.ty,
+                self.g.blocks.len(),
+                result.is_some()
+            );
+            return result;
+            //}
+        }
+
         if let Some(offset) = self.index.get(&index) {
-            log::debug!("found: {:?} - {}/{}", index, offset, self.ops.len());
-            return Some(match index {
+            log::debug!(
+                "found: {:?} - {}/{}, {:?}",
+                index,
+                offset,
+                self.ops.len(),
+                self.ty
+            );
+            match index {
                 //LayerIndex::Static(_) => vec![],
-                LayerIndex::Op(_) => self
-                    .ops
-                    .get(*offset)
-                    .expect("Op missing")
-                    .results()
-                    .map(|x| x.into())
-                    .collect(),
-                LayerIndex::Argument(_) => vec![self
+                /*
+                LayerIndex::BlockArg(block_offset, arg_offset) => {
+                    use crate::blocks::Index;
+                    if let Some(g) = &self.g {
+                        println!("len blocks: {}", g.blocks.len());
+                        if g.blocks.len() > 0 {
+                            let block = g.get_block(Index::new(*block_offset));
+                            Some(vec![block.argument(*arg_offset).unwrap().into()])
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                }
+                */
+                LayerIndex::Op(_) => Some(
+                    self.ops
+                        .get(*offset)
+                        .expect("Op missing")
+                        .results()
+                        .map(|x| x.into())
+                        .collect(),
+                ),
+                LayerIndex::Argument(_) => Some(vec![self
                     .blocks
                     .first()
                     .expect("Argument Missing")
                     .argument(*offset)
                     .unwrap()
-                    .into()],
+                    .into()]),
                 _ => unimplemented!("{:?}", index),
-            });
+            }
+        } else {
+            None
         }
-        None
     }
 
     pub fn push_index(&mut self, index: LayerIndex) {
@@ -243,43 +313,58 @@ impl<'c> Layer<'c> {
         region
     }
 
-    pub fn select(&mut self, name: &str, mut layer: Layer<'c>) {
+    pub fn select(&mut self, name: &str, mut layer: Layer<'c, E>) {
         let ops = layer.take_ops();
         let block = self.block(name).unwrap();
         for op in ops {
             block.append_operation(op);
         }
     }
+
+    pub fn push_block(
+        &mut self,
+        context: &'c Context,
+        name: &str,
+        params: Vec<ParameterNode<E>>,
+        expr: AstNode<E>,
+        d: &Diagnostics,
+    ) {
+        //assert!(self.g.is_some());
+        log::debug!("block block: {}", name);
+        let _ = self.g.add_node(context, &name, params, expr, d);
+    }
 }
 
 #[derive(Debug)]
-pub struct ScopeStack<'c, D> {
+pub struct ScopeStack<'c, E> {
     op_count: usize,
     static_count: usize,
-    layers: Vec<Layer<'c>>,
-    types: HashMap<LayerIndex, D>,
+    layers: Vec<Layer<'c, E>>,
+    types: HashMap<LayerIndex, AstType>,
+    static_names: HashMap<LayerIndex, String>,
     pub shared: HashSet<String>,
 }
 
-impl<'c, D> Default for ScopeStack<'c, D> {
+impl<'c, E> Default for ScopeStack<'c, E> {
     fn default() -> Self {
         Self {
             op_count: 0,
             static_count: 0,
             layers: vec![],
             types: HashMap::new(),
+            static_names: HashMap::new(),
             shared: HashSet::new(),
         }
     }
 }
 
-impl<'c, D: std::fmt::Debug + Clone> ScopeStack<'c, D> {
+impl<'c, E: Extra> ScopeStack<'c, E> {
     pub fn layer_count(&self) -> usize {
         self.layers.len()
     }
 
     pub fn dump(&self) {
-        println!("env: {:?}", self);
+        //println!("env: {:?}", self);
         for layer in &self.layers {
             println!("Layer: {:?}", layer.ty);
             for (name, index) in layer.names.iter() {
@@ -298,6 +383,20 @@ impl<'c, D: std::fmt::Debug + Clone> ScopeStack<'c, D> {
                     println!("\tArg: {}, {:?}", i, block.argument(i).unwrap().r#type());
                 }
             }
+            //if let Some(g) = &layer.g {
+            for (block_index, block) in layer.g.blocks.iter().enumerate() {
+                println!("XBlock: {}", block_index);
+                for i in 0..block.argument_count() {
+                    println!(
+                        "\tXArg: {}, {}, {:?}",
+                        block_index,
+                        i,
+                        block.argument(i).unwrap().r#type()
+                    );
+                }
+            }
+            //println!("g: {:?}", g);
+            //}
         }
     }
 
@@ -305,12 +404,21 @@ impl<'c, D: std::fmt::Debug + Clone> ScopeStack<'c, D> {
         self.shared.insert(s.to_string());
     }
 
-    pub fn index_data(&mut self, index: &LayerIndex, data: D) {
-        self.types.insert(index.clone(), data);
+    pub fn index_data(&mut self, index: &LayerIndex, ty: AstType) {
+        self.types.insert(index.clone(), ty);
     }
 
-    pub fn data(&self, index: &LayerIndex) -> Option<&D> {
-        self.types.get(index)
+    pub fn index_static_name(&mut self, index: &LayerIndex, static_name: &str) {
+        self.static_names
+            .insert(index.clone(), static_name.to_string());
+    }
+
+    pub fn data(&self, index: &LayerIndex) -> Option<AstType> {
+        self.types.get(index).cloned()
+    }
+
+    pub fn static_name(&self, index: &LayerIndex) -> Option<&String> {
+        self.static_names.get(index)
     }
 
     pub fn current_layer_type(&self) -> LayerType {
@@ -352,11 +460,11 @@ impl<'c, D: std::fmt::Debug + Clone> ScopeStack<'c, D> {
         self.enter(layer);
     }
 
-    pub fn enter(&mut self, layer: Layer<'c>) {
+    pub fn enter(&mut self, layer: Layer<'c, E>) {
         self.layers.push(layer);
     }
 
-    pub fn exit(&mut self) -> Layer<'c> {
+    pub fn exit(&mut self) -> Layer<'c, E> {
         let layer = self.layers.pop().unwrap();
         //self.merge(layer);
         layer
@@ -372,7 +480,15 @@ impl<'c, D: std::fmt::Debug + Clone> ScopeStack<'c, D> {
     }
     */
 
-    pub fn last_mut(&mut self) -> &mut Layer<'c> {
+    pub fn last(&mut self) -> &Layer<'c, E> {
+        if let Some(last) = self.layers.last() {
+            last
+        } else {
+            unreachable!("No more layers")
+        }
+    }
+
+    pub fn last_mut(&mut self) -> &mut Layer<'c, E> {
         if let Some(last) = self.layers.last_mut() {
             last
         } else {
@@ -446,7 +562,11 @@ impl<'c, D: std::fmt::Debug + Clone> ScopeStack<'c, D> {
         //self.dump();
         for layer in self.layers.iter().rev() {
             if let Some(result) = layer.values(&index) {
-                return result[0];
+                if result.len() == 0 {
+                    println!("xlayer: {:?}", &layer);
+                    unreachable!("Lookup op without value: {:?}", index);
+                }
+                return result[0]; //.get(0).expect("Missing value");
             }
         }
         unreachable!("Index not found: {:?}", index);
@@ -463,6 +583,16 @@ impl<'c, D: std::fmt::Debug + Clone> ScopeStack<'c, D> {
 
     pub fn last_values(&self) -> Vec<Value<'c, '_>> {
         self.values(&self.last_index().unwrap())
+    }
+
+    pub fn data_from_name(&self, name: &str) -> Option<(LayerIndex, AstType, Option<String>)> {
+        if let Some(index) = self.index_from_name(name) {
+            let ty = self.types.get(&index).unwrap();
+            let static_name = self.static_name(&index).cloned();
+            Some((index, ty.clone(), static_name))
+        } else {
+            None
+        }
     }
 
     pub fn index_from_name(&self, name: &str) -> Option<LayerIndex> {
@@ -497,12 +627,67 @@ impl<'c, D: std::fmt::Debug + Clone> ScopeStack<'c, D> {
         None
     }
 
-    pub fn select(&mut self, name: &str, mut layer: Layer<'c>) {
+    pub fn select(&mut self, name: &str, mut layer: Layer<'c, E>) {
         let ops = layer.take_ops();
         let block = self.block(name).unwrap();
         for op in ops {
             block.append_operation(op);
         }
+    }
+
+    pub fn push_block(
+        &mut self,
+        context: &'c Context,
+        name: &str,
+        params: Vec<ParameterNode<E>>,
+        expr: AstNode<E>,
+        d: &Diagnostics,
+    ) {
+        self.layers
+            .last_mut()
+            .unwrap()
+            .push_block(context, name, params, expr, d);
+    }
+
+    pub fn build_layers(&mut self) -> HashMap<Index, Layer<'c, E>> {
+        self.last_mut().build();
+        let s = self.last_mut().dfs_first();
+
+        let mut items = HashMap::new();
+        // create layers with appropriate scoped variables
+        let mut out = vec![];
+        for (index, dominants) in s {
+            // for each block, we want to push valid arguments into the layer based on the graph
+            // there will be duplicates in each block, because we need to make visible all
+            // variables in it's dominants
+            //
+            // create a layer and add all of the dominant parameters
+            println!("push {:?}", index);
+            let mut layer: Layer<E> = Layer::new(LayerType::Block);
+
+            for d_index in dominants.iter() {
+                let params = self.last().get_params(*d_index);
+                // create a new layer, adding arguments as scoped variables
+                for (offset, a) in params.iter().enumerate() {
+                    let arg = LayerIndex::BlockArg(d_index.get(), offset);
+                    layer.name_index(arg.clone(), &a.name);
+                    layer.index.insert(arg.clone(), 0);
+                    out.push((arg, a.ty.clone()));
+                    //let data = Data::new(a.ty.clone());
+                    //self.index_data(&arg, a.ty);
+
+                    // record argument offset
+                    println!("p: {:?}", (index, d_index, offset, &a.name, &a.ty));
+                }
+            }
+            items.insert(index, layer);
+        }
+
+        for (arg, ty) in out {
+            self.index_data(&arg, ty);
+        }
+
+        items
     }
 }
 
@@ -525,7 +710,7 @@ mod tests {
     };
     use test_log::test;
 
-    fn assert_op_index(s: &Environment, name: &str, index: LayerIndex) {
+    fn assert_op_index<E: Extra>(s: &Environment<E>, name: &str, index: LayerIndex) {
         assert_eq!(s.index_from_name(name).unwrap(), index);
     }
 
@@ -557,16 +742,16 @@ mod tests {
         let b = NodeBuilder::new(file_id, "test.py");
         let expr = b.bool(false);
         let ast = b.global("x", expr);
-        lower.lower_expr(ast, &mut s, &mut d, &b);
+        lower.lower_expr(ast, &mut s, &mut d, &b).unwrap();
 
         let expr = b.bool(false);
         let ast = b.global("x", expr);
-        lower.lower_expr(ast, &mut s, &mut d, &b);
+        lower.lower_expr(ast, &mut s, &mut d, &b).unwrap();
         let g_index_x = s.last_index().unwrap();
 
         let expr = b.bool(true);
         let ast = b.global("y", expr);
-        lower.lower_expr(ast, &mut s, &mut d, &b);
+        lower.lower_expr(ast, &mut s, &mut d, &b).unwrap();
         let g_index_y = s.last_index().unwrap();
 
         // ensure x is shadowed
@@ -583,14 +768,14 @@ mod tests {
         // push y, should shadow static context
         let expr = b.bool(true);
         let ast = b.assign("y", expr);
-        lower.lower_expr(ast, &mut s, &mut d, &b);
+        lower.lower_expr(ast, &mut s, &mut d, &b).unwrap();
         let y_index = s.last_index().unwrap();
         assert_op_index(&s, "y", y_index);
 
         // push x, should shadow static context
         let expr = b.bool(false);
         let ast = b.assign("x", expr);
-        lower.lower_expr(ast, &mut s, &mut d, &b);
+        lower.lower_expr(ast, &mut s, &mut d, &b).unwrap();
         let x_index = s.last_index().unwrap();
         assert_op_index(&s, "x", x_index);
 
@@ -633,7 +818,7 @@ mod tests {
 
     fn test_int<'c, E: Extra>(
         lower: &Lower<'c, E>,
-        scope: &mut Environment<'c>,
+        scope: &mut Environment<'c, E>,
         location: Location<'c>,
         v: i64,
     ) -> LayerIndex {
@@ -643,7 +828,7 @@ mod tests {
 
     fn test_int_name<'c, E: Extra>(
         lower: &Lower<'c, E>,
-        scope: &mut Environment<'c>,
+        scope: &mut Environment<'c, E>,
         location: Location<'c>,
         v: i64,
         name: &str,
@@ -652,8 +837,8 @@ mod tests {
         scope.push_with_name(op, name)
     }
 
-    fn test_add<'c>(
-        scope: &mut Environment<'c>,
+    fn test_add<'c, E: Extra>(
+        scope: &mut Environment<'c, E>,
         location: Location<'c>,
         a: LayerIndex,
         b: LayerIndex,
@@ -663,7 +848,7 @@ mod tests {
 
     fn test_fill<'c, E: Extra>(
         lower: &Lower<'c, E>,
-        scope: &mut Environment<'c>,
+        scope: &mut Environment<'c, E>,
         location: Location<'c>,
     ) {
         let x = test_int_name(lower, scope, location, 1, "x");
@@ -703,7 +888,7 @@ mod tests {
 
     fn test_env3<'c, E: Extra>(
         lower: &Lower<'c, E>,
-        env: &mut Environment<'c>,
+        env: &mut Environment<'c, E>,
         location: Location<'c>,
     ) {
         let index_type = Type::index(lower.context);

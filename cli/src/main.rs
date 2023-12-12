@@ -61,8 +61,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut lower = Lower::new(&context);
 
     for path in config.inputs {
-        let mut env: lower::scope::ScopeStack<lower::lower::Data> =
-            lower::scope::ScopeStack::default();
+        let mut env: lower::Environment<SimpleExtra> = lower::Environment::default();
         env.enter_static();
         let path = Path::new(&path);
         log::debug!("parsing: {}", path.to_str().unwrap());

@@ -1,6 +1,5 @@
 use anyhow::Result;
 use std::path::Path;
-use thiserror::Error;
 
 use starlark_syntax::codemap;
 use starlark_syntax::codemap::CodeMap;
@@ -15,12 +14,6 @@ use lower::ast;
 use lower::ast::{Ast, AstNode, AstType, CodeLocation, DerefTarget, Extra};
 use lower::{Diagnostics, NodeBuilder};
 use std::collections::HashMap;
-
-#[derive(Error, Debug)]
-pub enum ParseError {
-    #[error("Invalid")]
-    Invalid,
-}
 
 #[derive(Debug, Clone)]
 pub enum DataType {
@@ -332,16 +325,17 @@ impl<E: Extra> Parser<E> {
                     .map(|ty| from_type(&ty).unwrap_or(AstType::Unit))
                     .unwrap_or(AstType::Unit)
                     .into();
-                let d = ast::Definition {
+
+                let def_ast = Ast::Definition(ast::Definition {
                     name: name.clone(),
                     body: Some(body.into()),
                     return_type,
                     params,
-                };
-                let ast = Ast::Definition(d);
+                });
+
                 env.define(&name);
                 let extra = env.extra(item.span);
-                Ok(AstNode::new(ast, extra))
+                Ok(AstNode::new(def_ast, extra))
             }
 
             StmtP::If(expr, truestmt) => {
@@ -567,7 +561,7 @@ pub(crate) mod tests {
             .unwrap();
 
         // lower
-        let mut env = lower::lower::Environment::default();
+        let mut env = lower::Environment::default();
         env.enter_static();
 
         // run

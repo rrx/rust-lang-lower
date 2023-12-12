@@ -285,6 +285,15 @@ impl<E: Extra> NodeBuilder<E> {
         }
     }
 
+    pub fn param(&self, name: &str, ty: AstType) -> ParameterNode<E> {
+        ParameterNode {
+            name: name.to_string(),
+            ty: ty.clone(),
+            node: Parameter::Normal,
+            extra: self.extra(),
+        }
+    }
+
     pub fn block(&self, name: &str, params: &[(&str, AstType)], body: AstNode<E>) -> AstNode<E> {
         let extra = body.extra.clone();
         let params = params

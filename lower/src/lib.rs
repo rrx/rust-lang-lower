@@ -1,4 +1,5 @@
 pub mod ast;
+mod blocks;
 pub mod builder;
 pub mod compile;
 pub mod diagnostics;
@@ -8,10 +9,10 @@ pub mod scope;
 
 pub use builder::NodeBuilder;
 pub use compile::default_context;
-pub use diagnostics::{Diagnostics, FileDB};
+pub use diagnostics::{Diagnostics, FileDB, ParseError};
 pub use lower::Lower;
 
 // re-export melior structs
 pub use melior::Context;
 
-pub type Environment<'c> = scope::ScopeStack<'c, lower::Data>;
+pub type Environment<'c, E> = scope::ScopeStack<'c, E>;

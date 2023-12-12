@@ -3,12 +3,6 @@ zf = 1.2
 
 b.use("prelude")
 
-def x1(x: int) -> int:
-  return 2 + x
-
-def xf(x: float) -> float:
-  return 2.2 + x
-
 def fibonacci_recursive(n: int, a:int, c:int) -> int:
   b.print(n)
   b.print(a)
@@ -22,6 +16,13 @@ def fibonacci_recursive(n: int, a:int, c:int) -> int:
     out = fibonacci_recursive(n - 1, c, a + c)
   b.print(out)
   return out
+
+def x1(x: int) -> int:
+  return 2 + x
+
+def xf(x: float) -> float:
+  return 2.2 + x
+
 
 def fibonacci(a:int, c:int, n:int)->int:
   out = 0

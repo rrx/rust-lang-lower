@@ -6,8 +6,15 @@ use codespan_reporting::term;
 use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
 use melior::ir;
 use melior::Context;
+use thiserror::Error;
 
 pub type FileDB = SimpleFiles<String, String>;
+
+#[derive(Error, Debug)]
+pub enum ParseError {
+    #[error("Invalid")]
+    Invalid,
+}
 
 pub struct Diagnostics {
     pub files: FileDB,

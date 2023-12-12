@@ -116,6 +116,12 @@ pub enum DerefTarget {
 }
 
 #[derive(Debug)]
+pub enum Terminator {
+    Jump(String),
+    Return,
+}
+
+#[derive(Debug)]
 pub enum Ast<E> {
     BinaryOp(BinaryOperation, Box<AstNode<E>>, Box<AstNode<E>>),
     UnaryOp(UnaryOperation, Box<AstNode<E>>),
@@ -163,6 +169,16 @@ impl<E: Extra> Ast<E> {
 
     pub fn bool(x: bool) -> Self {
         Ast::Literal(Literal::Bool(x))
+    }
+
+    pub fn terminator(&self) -> Option<Terminator> {
+        match self {
+            Self::Sequence(exprs) => exprs.last().unwrap().node.terminator(),
+            Self::Block(_, _, expr) => expr.node.terminator(),
+            Self::Goto(label) => Some(Terminator::Jump(label.clone())),
+            Self::Return(_) => Some(Terminator::Return),
+            _ => None,
+        }
     }
 }
 
