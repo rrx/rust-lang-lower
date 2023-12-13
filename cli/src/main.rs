@@ -79,13 +79,14 @@ fn main() -> Result<(), Box<dyn Error>> {
             std::process::exit(1);
         }
         assert_eq!(1, env.layer_count());
-        lower.module_lower(&mut module, result?, env, &mut d, &b);
+        let r = lower.module_lower(&mut module, result?, env, &mut d, &b);
         if config.verbose {
             d.dump();
         }
         if d.has_errors {
             std::process::exit(1);
         }
+        r.unwrap();
     }
 
     if config.verbose {

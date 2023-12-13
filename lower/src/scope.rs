@@ -1,8 +1,6 @@
-use crate::ast::{Ast, AstNode, AstType, Extra, ParameterNode};
+use crate::ast::{AstNode, AstType, Extra, ParameterNode};
 use crate::blocks::{BlockGraph, Index};
-use crate::{Diagnostics, NodeBuilder, ParseError};
-use anyhow::Error;
-use anyhow::Result;
+use crate::Diagnostics;
 use melior::ir::*;
 use melior::ir::{Operation, Value};
 use melior::Context;
@@ -44,9 +42,11 @@ impl LayerIndex {
     //Self::Argument(index)
     //}
 
+    /*
     pub fn static_index(index: usize) -> Self {
         Self::Static(index)
     }
+    */
 }
 
 #[derive(Debug)]
@@ -695,9 +695,9 @@ mod tests {
     use crate::lower::Lower;
     use crate::{Diagnostics, Environment, NodeBuilder};
     use melior::dialect::{arith, func};
-    use melior::ir::attribute::{StringAttribute, TypeAttribute};
-    use melior::ir::r#type::FunctionType;
-    use melior::ir::{Location, Type};
+    //use melior::ir::attribute::{StringAttribute, TypeAttribute};
+    //use melior::ir::r#type::FunctionType;
+    use melior::ir::Location;
     use melior::{
         dialect::DialectRegistry,
         utility::{register_all_dialects, register_all_llvm_translations},
@@ -791,11 +791,11 @@ mod tests {
         assert_eq!(s.last_index().unwrap(), s.index_from_name("z").unwrap());
 
         // exit closed
-        let layer = s.exit();
+        let _layer = s.exit();
         //s.merge(layer);
 
         // exit func
-        let layer = s.exit();
+        let _layer = s.exit();
         //s.merge(layer);
 
         // check that previous block is no longer visible
