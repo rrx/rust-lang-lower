@@ -1,7 +1,10 @@
 use crate::ast::{AstNode, Extra, ParameterNode, Terminator};
 use crate::lower;
 use crate::Diagnostics;
-use melior::{ir::Block, Context};
+use melior::{
+    ir::{block::BlockArgument, Block, ValueLike},
+    Context,
+};
 use std::collections::HashMap;
 use std::collections::HashSet;
 
@@ -15,15 +18,15 @@ impl Index {
         self.0
     }
 }
+
 #[derive(Default, Debug)]
 pub struct BlockGraph<'c, E> {
-    pub blocks: Vec<Block<'c>>,
+    blocks: Vec<Block<'c>>,
     params: Vec<Vec<ParameterNode<E>>>,
-    pub ast: Vec<AstNode<E>>,
+    ast: Vec<AstNode<E>>,
     names: HashMap<String, usize>,
     index: HashMap<Index, String>,
     adj: HashMap<Index, HashSet<Index>>,
-    //_e: std::marker::PhantomData<E>,
 }
 
 impl<'c, E: Extra> BlockGraph<'c, E> {
@@ -38,7 +41,34 @@ impl<'c, E: Extra> BlockGraph<'c, E> {
         }
     }
 
-    pub fn dump(&self) {}
+    pub fn dump(&self) {
+        for (block_index, block) in self.blocks.iter().enumerate() {
+            let index = Index(block_index);
+            let name = self.index.get(&index).unwrap();
+            println!("\tXBlock: {}, {}", block_index, name);
+            for i in 0..block.argument_count() {
+                println!(
+                    "\t\tXArg: {}, {}, {:?}",
+                    block_index,
+                    i,
+                    block.argument(i).unwrap().r#type(),
+                );
+            }
+        }
+    }
+
+    pub fn find_arg(
+        &self,
+        block_offset: usize,
+        arg_offset: usize,
+    ) -> Option<BlockArgument<'c, '_>> {
+        if self.blocks.len() > 0 {
+            let block = self.get_block(Index::new(block_offset));
+            Some(block.argument(arg_offset).unwrap())
+        } else {
+            None
+        }
+    }
 
     pub fn take_ast(&mut self) -> Vec<AstNode<E>> {
         self.ast.drain(..).collect()
@@ -63,6 +93,14 @@ impl<'c, E: Extra> BlockGraph<'c, E> {
     pub fn get_block(&self, index: Index) -> &Block<'c> {
         println!("blocks: {}/{}", index.0, self.blocks.len());
         self.blocks.get(index.0).unwrap()
+    }
+
+    pub fn get_block_by_name(&self, name: &str) -> Option<&Block<'c>> {
+        if let Some(index) = self.names.get(name) {
+            self.blocks.get(*index)
+        } else {
+            None
+        }
     }
 
     pub fn add_node(
@@ -110,7 +148,6 @@ impl<'c, E: Extra> BlockGraph<'c, E> {
             match t {
                 Terminator::Jump(name) => {
                     let offset = self.names.get(&name).unwrap();
-                    //self.add_edge(Index(index), Index(*offset));
                     out.push((Index(index), Index(*offset)));
                 }
                 Terminator::Return => (),
@@ -126,7 +163,6 @@ impl<'c, E: Extra> BlockGraph<'c, E> {
     }
 
     pub fn dfs(&self, start: Index) -> Vec<(Index, Vec<Index>)> {
-        //&'a ParameterNode<E>>)> {
         let mut stack = vec![];
         let mut dominant_nodes = HashSet::new();
         let mut visited = HashSet::new();
@@ -152,15 +188,9 @@ impl<'c, E: Extra> BlockGraph<'c, E> {
 
                 dominant_nodes.insert(current);
 
-                let dominant_params = dominant_nodes
-                    .iter()
-                    .map(|i| {
-                        //self.params.get(i.0).unwrap()
-                        *i
-                    })
-                    .collect::<Vec<_>>();
+                let dominant_params = dominant_nodes.iter().map(|i| *i).collect::<Vec<_>>();
 
-                out.push((current, dominant_params)); //dominant_nodes.clone()));
+                out.push((current, dominant_params));
             }
 
             for neighbor in self.adj.get(&current).unwrap_or(&HashSet::new()) {
@@ -169,9 +199,7 @@ impl<'c, E: Extra> BlockGraph<'c, E> {
                 }
             }
         }
-        //dominant_nodes.drain().collect::<Vec<_>>()
         out
-        //(self.params, out)
     }
 }
 
@@ -195,11 +223,11 @@ mod tests {
 
         let ast = b.goto("c");
         let params = vec![b.param("argB", AstType::Int)];
-        let ib = g.add_node(&context, "b", params, ast, &d);
+        let _ib = g.add_node(&context, "b", params, ast, &d);
 
         let ast = b.ret(None);
         let params = vec![b.param("argC", AstType::Int)];
-        let ic = g.add_node(&context, "c", params, ast, &d);
+        let _ic = g.add_node(&context, "c", params, ast, &d);
 
         g.build();
         //g.add_edge(ia, ib);

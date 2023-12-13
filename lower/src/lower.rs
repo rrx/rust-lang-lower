@@ -356,7 +356,7 @@ impl<'c, E: Extra> Lower<'c, E> {
         let asts = env.last_mut().g.take_ast();
         for (offset, ast) in asts.into_iter().enumerate() {
             let layer = items.remove(&Index::new(offset)).unwrap();
-            println!("layer {:?}", &layer);
+            println!("enter layer {:?}", &layer);
             env.enter(layer);
 
             println!("enter {}", offset);
@@ -403,7 +403,7 @@ impl<'c, E: Extra> Lower<'c, E> {
         let layer = Layer::new(layer_type);
         let block = Block::new(&[]);
         env.enter(layer);
-        let index = self.lower_expr(condition, env, d, b)?;
+        let _index = self.lower_expr(condition, env, d, b)?;
         let r: Value<'_, '_> = env.last_values()[0];
         // should be bool type
         assert!(r.r#type() == bool_type);
@@ -421,7 +421,7 @@ impl<'c, E: Extra> Lower<'c, E> {
         let layer = Layer::new(layer_type);
         let block = Block::new(&[]);
         env.enter(layer);
-        let index = self.lower_expr(body, env, d, b)?;
+        let _index = self.lower_expr(body, env, d, b)?;
         let c = scf::r#yield(&[], body_location);
         env.push(c);
         let mut layer = env.exit();
@@ -492,7 +492,7 @@ impl<'c, E: Extra> Lower<'c, E> {
             (AstType::Index, "arg1", "init_op2"),
         ];
 
-        let block_args: Vec<(&str, AstType)> = init_args
+        let _block_args: Vec<(&str, AstType)> = init_args
             .iter()
             .map(|(ast_ty, arg_name, _)| (*arg_name, ast_ty.clone()))
             .collect();
@@ -517,7 +517,7 @@ impl<'c, E: Extra> Lower<'c, E> {
             */
         let block_args: Vec<(Type<'c>, Location<'c>)> = init_args
             .iter()
-            .map(|(ast_ty, arg_name, _)| {
+            .map(|(ast_ty, _arg_name, _)| {
                 (
                     from_type(self.context, ast_ty),
                     self.location(&condition, d),
@@ -540,7 +540,7 @@ impl<'c, E: Extra> Lower<'c, E> {
         let layer = Layer::new(layer_type);
         let block = Block::new(block_args.as_slice());
         env.enter(layer);
-        let index = self.lower_expr(condition, env, d, b)?;
+        let _index = self.lower_expr(condition, env, d, b)?;
         let r: Value<'_, '_> = env.last_values()[0];
         // should be bool type
         assert!(r.r#type() == bool_type);
@@ -562,7 +562,7 @@ impl<'c, E: Extra> Lower<'c, E> {
         let after_args = &[ParameterNode {
             name: "arg0".to_string(),
             ty: AstType::Index,
-            extra: b.extra(),
+            extra: b.extra_unknown(),
             node: Parameter::Normal,
         }];
 
@@ -810,9 +810,14 @@ impl<'c, E: Extra> Lower<'c, E> {
             Ast::Continue(_name) => {
                 unimplemented!()
             }
-            Ast::Goto(_name) => {
-                //cf::br(
-                unimplemented!()
+            Ast::Goto(name) => {
+                env.dump();
+                if let Some(block) = env.get_block_by_name(&name) {
+                    Ok(env.push(cf::br(block, &[], location)))
+                } else {
+                    d.push_diagnostic(expr.extra.error(&format!("Missing block: {}", name)));
+                    Err(Error::new(ParseError::Invalid))
+                }
             }
 
             Ast::Global(ident, expr) => {
@@ -1111,8 +1116,6 @@ impl<'c, E: Extra> Lower<'c, E> {
                 };
 
                 if let AstType::Func(_func_arg_types, ret) = &ty {
-                    //let data = Data::new(*ret.clone());
-                    //let r = *ret;
                     let ret_ty = from_type(self.context, &ret);
                     // handle call arguments
                     let mut indices = vec![];
@@ -1138,7 +1141,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                         location,
                     );
                     let index = env.push(op);
-                    env.index_data(&index, *ret.clone()); //&*ret);//.clone());
+                    env.index_data(&index, *ret.clone());
                     Ok(index)
                 } else {
                     unimplemented!("calling non function type: {:?}", ty);
@@ -1270,8 +1273,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                 );
 
                 // save and return created index
-                env.push_op_index(index.clone(), f);
-                Ok(index)
+                Ok(env.push_op_index(index.clone(), f))
             }
 
             Ast::Return(maybe_expr) => match maybe_expr {
@@ -1532,8 +1534,7 @@ pub(crate) mod tests {
     use crate::NodeBuilder;
     use test_log::test;
 
-    pub fn gen_test<'c, E: Extra>(file_id: usize, _env: &mut Environment<'c, E>) -> AstNode<E> {
-        let b = NodeBuilder::new(file_id, "test.py");
+    pub fn gen_test<'c, E: Extra>(_env: &mut Environment<'c, E>, b: &NodeBuilder<E>) -> AstNode<E> {
         let mut seq = vec![b.import_prelude()];
         seq.push(b.main(b.seq(vec![
             b.assign("x", b.integer(123)),
@@ -1551,8 +1552,10 @@ pub(crate) mod tests {
         b.seq(seq)
     }
 
-    pub fn gen_block<'c, E: Extra>(file_id: usize, _env: &mut Environment<'c, E>) -> AstNode<E> {
-        let b = NodeBuilder::new(file_id, "test.py");
+    pub fn gen_block<'c, E: Extra>(
+        _env: &mut Environment<'c, E>,
+        b: &NodeBuilder<E>,
+    ) -> AstNode<E> {
         let mut seq = vec![b.import_prelude()];
 
         // global variable x = 10
@@ -1562,9 +1565,9 @@ pub(crate) mod tests {
                 "entry",
                 &[],
                 b.seq(vec![
-                    //b.assign("yy", b.integer(1)),
+                    b.assign("yy", b.integer(1)),
                     b.alloca("y", b.integer(999)),
-                    //b.mutate(b.ident("y"), b.integer(998)),
+                    b.mutate(b.ident("y"), b.integer(998)),
                     //b.ret(Some(b.integer(0))),
                     // branch to asdf
                     b.goto("asdf"),
@@ -1574,7 +1577,8 @@ pub(crate) mod tests {
                 "asdf",
                 &[],
                 b.seq(vec![
-                    b.mutate(b.ident("y"), b.integer(997)),
+                    b.assign("yy", b.integer(2)),
+                    //b.mutate(b.ident("y"), b.integer(997)),
                     b.goto("asdf2"),
                     // branch to asdf2
                 ]),
@@ -1584,7 +1588,8 @@ pub(crate) mod tests {
                 "asdf2",
                 &[],
                 b.seq(vec![
-                    b.mutate(b.ident("y"), b.integer(996)),
+                    b.assign("yy", b.integer(3)),
+                    //b.mutate(b.ident("y"), b.integer(996)),
                     b.ret(Some(b.integer(0))),
                 ]),
             ),
@@ -1593,8 +1598,10 @@ pub(crate) mod tests {
         b.seq(seq)
     }
 
-    pub fn gen_while<'c, E: Extra>(file_id: usize, _env: &mut Environment<'c, E>) -> AstNode<E> {
-        let b = NodeBuilder::new(file_id, "test.py");
+    pub fn gen_while<'c, E: Extra>(
+        _env: &mut Environment<'c, E>,
+        b: &NodeBuilder<E>,
+    ) -> AstNode<E> {
         let mut seq = vec![b.import_prelude()];
 
         // global variable x = 10
@@ -1638,10 +1645,9 @@ pub(crate) mod tests {
     }
 
     pub fn gen_function_call<'c, E: Extra>(
-        file_id: usize,
         _env: &mut Environment<'c, E>,
+        b: &NodeBuilder<E>,
     ) -> AstNode<E> {
-        let b = NodeBuilder::new(file_id, "test.py");
         let mut seq = vec![b.import_prelude()];
         seq.push(b.global("z", b.integer(10)));
 
@@ -1695,7 +1701,7 @@ pub(crate) mod tests {
         b.seq(seq)
     }
 
-    //#[test]
+    #[test]
     fn test_block() {
         let context = default_context();
         let mut lower = Lower::new(&context);
@@ -1704,13 +1710,11 @@ pub(crate) mod tests {
         let b = NodeBuilder::new(file_id, "type.py");
         let mut env = Environment::default();
         env.enter_static();
-        let ast: AstNode<SimpleExtra> = gen_block(file_id, &mut env);
-        assert_eq!(
-            0,
-            lower
-                .run_ast(ast, "../target/debug/", env, &mut d, &b)
-                .unwrap()
-        );
+        let ast: AstNode<SimpleExtra> = gen_block(&mut env, &b);
+        let r = lower
+            .run_ast(ast, "../target/debug/", env, &mut d, &b)
+            .unwrap();
+        assert_eq!(0, r);
     }
 
     #[test]
@@ -1722,14 +1726,11 @@ pub(crate) mod tests {
         let b: NodeBuilder<SimpleExtra> = NodeBuilder::new(file_id, "type.py");
         let mut env = Environment::default();
         env.enter_static();
-        let ast: AstNode<SimpleExtra> = gen_function_call(file_id, &mut env);
-        assert_eq!(
-            0,
-            lower
-                .run_ast(ast, "../target/debug/", env, &mut d, &b)
-                .unwrap()
-        );
-        //env.exit();
+        let ast: AstNode<SimpleExtra> = gen_function_call(&mut env, &b);
+        let r = lower
+            .run_ast(ast, "../target/debug/", env, &mut d, &b)
+            .unwrap();
+        assert_eq!(0, r);
     }
 
     #[test]
@@ -1741,13 +1742,11 @@ pub(crate) mod tests {
         let b = NodeBuilder::new(file_id, "type.py");
         let mut env = Environment::default();
         env.enter_static();
-        let ast: AstNode<SimpleExtra> = gen_while(file_id, &mut env);
-        assert_eq!(
-            0,
-            lower
-                .run_ast(ast, "../target/debug/", env, &mut d, &b)
-                .unwrap()
-        );
+        let ast: AstNode<SimpleExtra> = gen_while(&mut env, &b);
+        let r = lower
+            .run_ast(ast, "../target/debug/", env, &mut d, &b)
+            .unwrap();
+        assert_eq!(0, r);
     }
 
     #[test]
@@ -1759,12 +1758,10 @@ pub(crate) mod tests {
         let b = NodeBuilder::new(file_id, "type.py");
         let mut env = Environment::default();
         env.enter_static();
-        let ast: AstNode<SimpleExtra> = gen_test(file_id, &mut env);
-        assert_eq!(
-            0,
-            lower
-                .run_ast(ast, "../target/debug", env, &mut d, &b)
-                .unwrap()
-        );
+        let ast: AstNode<SimpleExtra> = gen_test(&mut env, &b);
+        let r = lower
+            .run_ast(ast, "../target/debug/", env, &mut d, &b)
+            .unwrap();
+        assert_eq!(0, r);
     }
 }

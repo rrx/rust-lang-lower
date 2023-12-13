@@ -1,5 +1,6 @@
 use crate::ast::*;
 use melior::ir;
+use melior::Context;
 
 pub struct NodeBuilder<E> {
     span: Span,
@@ -48,7 +49,7 @@ impl<E: Extra> NodeBuilder<E> {
         self.span.file_id
     }
 
-    pub fn get_location<'c>(&self, context: &'c melior::Context) -> ir::Location<'c> {
+    pub fn get_location<'c>(&self, context: &'c Context) -> ir::Location<'c> {
         ir::Location::new(
             context,
             &self.filename,
@@ -57,12 +58,13 @@ impl<E: Extra> NodeBuilder<E> {
         )
     }
 
-    pub fn node_span(&self, ast: AstNode<E>) -> AstNode<E> {
-        AstNode {
-            node: ast.node,
-            extra: ast.extra,
-        }
-    }
+    //pub fn node_span(&self, ast: AstNode<E>) -> AstNode<E> {
+    //ast
+    //AstNode {
+    //node: ast.node,
+    //extra: ast.extra,
+    //}
+    //}
 
     pub fn node(&self, ast: Ast<E>) -> AstNode<E> {
         AstNode {
@@ -71,7 +73,7 @@ impl<E: Extra> NodeBuilder<E> {
         }
     }
 
-    pub fn extra(&self) -> E {
+    pub fn extra_unknown(&self) -> E {
         let begin = CodeLocation {
             pos: 0,
             line: 0,
@@ -88,7 +90,7 @@ impl<E: Extra> NodeBuilder<E> {
     pub fn error(&self) -> AstNode<E> {
         AstNode {
             node: Ast::Error,
-            extra: self.extra(),
+            extra: self.extra_unknown(),
         }
     }
 
@@ -105,7 +107,7 @@ impl<E: Extra> NodeBuilder<E> {
                 name: name.to_string(),
                 ty: ty.clone(),
                 node: Parameter::Normal,
-                extra: self.extra(),
+                extra: self.extra_unknown(),
             })
             .collect();
         self.node(Ast::Definition(Definition {
@@ -180,7 +182,7 @@ impl<E: Extra> NodeBuilder<E> {
 
     pub fn ident(&self, name: &str) -> AstNode<E> {
         AstNode {
-            extra: self.extra(),
+            extra: self.extra_unknown(),
             node: Ast::Identifier(name.to_string()),
         }
     }
@@ -218,7 +220,7 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn ret(&self, node: Option<AstNode<E>>) -> AstNode<E> {
-        AstNode::new(Ast::Return(node.map(|n| n.into())), self.extra())
+        AstNode::new(Ast::Return(node.map(|n| n.into())), self.extra_unknown())
     }
 
     pub fn arg(&self, node: AstNode<E>) -> Argument<E> {
@@ -230,7 +232,10 @@ impl<E: Extra> NodeBuilder<E> {
         //.into_iter()
         //.map(|expr| self.arg(expr))
         //.collect::<Vec<_>>();
-        AstNode::new(Ast::Call(self.ident(name).into(), args, ty), self.extra())
+        AstNode::new(
+            Ast::Call(self.ident(name).into(), args, ty),
+            self.extra_unknown(),
+        )
     }
 
     pub fn call(&self, f: AstNode<E>, args: Vec<Argument<E>>, ty: AstType) -> AstNode<E> {
@@ -281,7 +286,7 @@ impl<E: Extra> NodeBuilder<E> {
     pub fn goto(&self, name: &str) -> AstNode<E> {
         AstNode {
             node: Ast::Goto(name.to_string()),
-            extra: self.extra(),
+            extra: self.extra_unknown(),
         }
     }
 
@@ -290,7 +295,7 @@ impl<E: Extra> NodeBuilder<E> {
             name: name.to_string(),
             ty: ty.clone(),
             node: Parameter::Normal,
-            extra: self.extra(),
+            extra: self.extra_unknown(),
         }
     }
 
@@ -302,7 +307,7 @@ impl<E: Extra> NodeBuilder<E> {
                 name: name.to_string(),
                 ty: ty.clone(),
                 node: Parameter::Normal,
-                extra: self.extra(),
+                extra: self.extra_unknown(),
             })
             .collect();
         AstNode {

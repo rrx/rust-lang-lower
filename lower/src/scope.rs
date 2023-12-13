@@ -107,6 +107,10 @@ impl<'c, E: Extra> Layer<'c, E> {
         self.g.get_params(index)
     }
 
+    pub fn get_block_by_name(&self, name: &str) -> Option<&Block<'c>> {
+        self.g.get_block_by_name(name)
+    }
+
     /*
     pub fn enter_block(&mut self, name: &str, block: Block<'c>) -> usize {
         assert!(!self.block_names.contains_key(name));
@@ -168,11 +172,12 @@ impl<'c, E: Extra> Layer<'c, E> {
         self.names.insert(name.to_string(), index);
     }
 
-    pub fn push(&mut self, op: Operation<'c>, index: LayerIndex) {
+    pub fn push(&mut self, op: Operation<'c>, index: LayerIndex) -> LayerIndex {
         let pos = self.ops.len();
         self.ops.push(op);
         self.index.insert(index.clone(), pos);
-        self._last_index = Some(index);
+        self._last_index = Some(index.clone());
+        index
     }
 
     pub fn push_with_name(&mut self, op: Operation<'c>, index: LayerIndex, name: &str) {
@@ -227,23 +232,28 @@ impl<'c, E: Extra> Layer<'c, E> {
     }
 
     pub fn values(&self, index: &LayerIndex) -> Option<Vec<Value<'c, '_>>> {
-        println!("looking for {:?} in {:?}", index, self.ty);
+        log::debug!("looking for {:?} in {:?}", index, self.ty);
         if let LayerIndex::BlockArg(block_offset, arg_offset) = index {
             //use crate::blocks::Index;
             //if let Some(g) = &self.g {
-            let result = if self.g.blocks.len() > 0 {
-                let block = self.g.get_block(Index::new(*block_offset));
-                Some(vec![block.argument(*arg_offset).unwrap().into()])
+            return if let Some(value) = self.g.find_arg(*block_offset, *arg_offset) {
+                Some(vec![value.into()])
             } else {
                 None
             };
-            println!(
-                "len blocks: {:?}, {}, result: {}",
-                self.ty,
-                self.g.blocks.len(),
-                result.is_some()
-            );
-            return result;
+            //let result = if self.g.blocks.len() > 0 {
+            //let block = self.g.get_block(Index::new(*block_offset));
+            //Some(vec![block.argument(*arg_offset).unwrap().into()])
+            //} else {
+            //None
+            //};
+            //log::debug!(
+            //"len blocks: {:?}, {}, result: {}",
+            //self.ty,
+            //self.g.blocks.len(),
+            //result.is_some()
+            //);
+            //return result;
             //}
         }
 
@@ -377,17 +387,20 @@ impl<'c, E: Extra> ScopeStack<'c, E> {
             }
             */
             //if let Some(g) = &layer.g {
+            layer.g.dump();
+            /*
             for (block_index, block) in layer.g.blocks.iter().enumerate() {
-                println!("XBlock: {}", block_index);
+                println!("\tXBlock: {}", block_index);
                 for i in 0..block.argument_count() {
                     println!(
-                        "\tXArg: {}, {}, {:?}",
+                        "\t\tXArg: {}, {}, {:?}",
                         block_index,
                         i,
                         block.argument(i).unwrap().r#type()
                     );
                 }
             }
+            */
             //println!("g: {:?}", g);
             //}
         }
@@ -473,7 +486,7 @@ impl<'c, E: Extra> ScopeStack<'c, E> {
     }
     */
 
-    pub fn last(&mut self) -> &Layer<'c, E> {
+    pub fn last(&self) -> &Layer<'c, E> {
         if let Some(last) = self.layers.last() {
             last
         } else {
@@ -512,8 +525,8 @@ impl<'c, E: Extra> ScopeStack<'c, E> {
         index
     }
 
-    pub fn push_op_index(&mut self, index: LayerIndex, op: Operation<'c>) {
-        self.last_mut().push(op, index);
+    pub fn push_op_index(&mut self, index: LayerIndex, op: Operation<'c>) -> LayerIndex {
+        self.last_mut().push(op, index)
     }
 
     pub fn push_with_name(&mut self, op: Operation<'c>, name: &str) -> LayerIndex {
@@ -556,7 +569,6 @@ impl<'c, E: Extra> ScopeStack<'c, E> {
         for layer in self.layers.iter().rev() {
             if let Some(result) = layer.values(&index) {
                 if result.len() == 0 {
-                    println!("xlayer: {:?}", &layer);
                     unreachable!("Lookup op without value: {:?}", index);
                 }
                 return result[0]; //.get(0).expect("Missing value");
@@ -604,6 +616,16 @@ impl<'c, E: Extra> ScopeStack<'c, E> {
             out.extend(layer.take_ops());
         }
         out
+    }
+
+    pub fn get_block_by_name(&self, name: &str) -> Option<&Block<'c>> {
+        for layer in self.layers.iter().rev() {
+            let result = layer.g.get_block_by_name(name);
+            if result.is_some() {
+                return result;
+            }
+        }
+        None
     }
 
     /*
@@ -657,7 +679,7 @@ impl<'c, E: Extra> ScopeStack<'c, E> {
             // variables in it's dominants
             //
             // create a layer and add all of the dominant parameters
-            println!("push {:?}", index);
+            //println!("push {:?}", index);
             let mut layer: Layer<E> = Layer::new(LayerType::Block);
 
             for d_index in dominants.iter() {
@@ -672,7 +694,7 @@ impl<'c, E: Extra> ScopeStack<'c, E> {
                     //self.index_data(&arg, a.ty);
 
                     // record argument offset
-                    println!("p: {:?}", (index, d_index, offset, &a.name, &a.ty));
+                    //println!("p: {:?}", (index, d_index, offset, &a.name, &a.ty));
                 }
             }
             items.insert(index, layer);
