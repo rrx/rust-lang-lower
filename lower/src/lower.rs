@@ -12,7 +12,7 @@ use melior::{
     },
     Context,
 };
-use std::collections::HashMap;
+//use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::VecDeque;
 
@@ -89,6 +89,41 @@ pub struct Lower<'c, E> {
     _e: std::marker::PhantomData<E>,
 }
 
+pub fn layer_in_scope<'c, E: Extra>(
+    context: &'c Context,
+    layer_type: LayerType,
+    body: AstNode<E>,
+    d: &mut Diagnostics,
+    _b: &NodeBuilder<E>,
+) -> Result<Layer<'c, E>> {
+    let mut layer = Layer::new(layer_type);
+
+    let blocks = if body.is_seq() {
+        body.try_seq().unwrap()
+    } else {
+        vec![body]
+    };
+
+    // load nodes
+    for expr in blocks.into_iter() {
+        if let Ast::Block(name, params, ast) = expr.node {
+            log::debug!("block block: {:?}", ast.node);
+            log::debug!("block block: {}: {:?}", name, ast.node.terminator());
+
+            // ensure we have a terminator
+            if ast.node.terminator().is_none() {
+                d.push_diagnostic(ast.extra.error("Block does not terminate"));
+                return Err(Error::new(ParseError::Invalid));
+            }
+
+            layer.push_block(context, &name, params, *ast, d);
+        } else {
+            unreachable!()
+        }
+    }
+    Ok(layer)
+}
+
 pub fn new_block<'c, E: Extra>(
     context: &'c Context,
     arguments: &[ParameterNode<E>],
@@ -101,6 +136,7 @@ pub fn new_block<'c, E: Extra>(
     Block::new(&block_args)
 }
 
+/*
 pub fn push_parameters<'c, E: Extra>(
     layer: &mut Layer<'c, E>,
     env: &mut Environment<'c, E>,
@@ -116,6 +152,7 @@ pub fn push_parameters<'c, E: Extra>(
         layer.index.insert(index, offset);
     }
 }
+*/
 
 pub fn from_type<'c>(context: &'c Context, ty: &AstType) -> Type<'c> {
     match ty {
@@ -237,6 +274,80 @@ impl<'c, E: Extra> Lower<'c, E> {
         }
     }
 
+    pub fn build_block(
+        &self,
+        layer_type: LayerType,
+        params: &[ParameterNode<E>],
+        body: AstNode<E>,
+        env: &mut Environment<'c, E>,
+        d: &mut Diagnostics,
+        b: &NodeBuilder<E>,
+    ) -> Result<(LayerIndex, Block<'c>)> {
+        let layer = Layer::new(layer_type);
+        let block = Block::new(&[]);
+        env.enter(layer);
+        let index = self.lower_expr(body, env, d, b)?;
+        let mut layer = env.exit();
+        for op in layer.take_ops() {
+            block.append_operation(op);
+        }
+        Ok((index, block))
+    }
+
+    pub fn build_ops(
+        &self,
+        layer: Layer<'c, E>,
+        env: &mut Environment<'c, E>,
+        d: &mut Diagnostics,
+        b: &NodeBuilder<E>,
+    ) -> Result<Block<'c>> {
+        use crate::blocks::Index;
+
+        env.enter(layer);
+        let mut items = env.build_layers();
+
+        // take the nodes, and lower them
+        let mut layers = vec![];
+        let asts = env.last_mut().g.take_ast();
+        // we should only have a single block
+        assert_eq!(asts.len(), 1);
+        for (offset, ast) in asts.into_iter().enumerate() {
+            let layer = items.remove(&Index::new(offset)).unwrap();
+            println!("layer {:?}", &layer);
+            env.enter(layer);
+
+            println!("enter {}", offset);
+            //println!("ast {:?}", &ast);
+            env.dump();
+            self.lower_expr(ast, env, d, b)?;
+            let layer = env.exit();
+            layers.push(layer);
+        }
+
+        // exit func layer
+        let mut layer = env.exit();
+
+        // drop blocks
+        let mut blocks = layer.g.take_blocks();
+        assert_eq!(blocks.len(), 1);
+        for op in layer.take_ops() {
+            blocks[0].append_operation(op);
+        }
+        Ok(blocks.pop().unwrap())
+
+        //self.build_block(&mut layer, "body", &[], env, d);
+        //env.enter(layer);
+        //let after_region = Region::new();
+        //self.lower_expr(body, env, d, b);
+        // yield passes result to region 0
+        //let y = scf::r#yield(&[], body_location);
+        //env.push(y);
+
+        //let mut layer = env.exit();
+        //let after_block = layer.exit_block();
+        //after_region.append_block(after_block);
+    }
+
     pub fn build_region(
         &self,
         layer: Layer<'c, E>,
@@ -244,47 +355,10 @@ impl<'c, E: Extra> Lower<'c, E> {
         d: &mut Diagnostics,
         b: &NodeBuilder<E>,
     ) -> Result<Region<'c>> {
-        //use crate::lower::Data;
         use crate::blocks::Index;
 
         env.enter(layer);
         let mut items = env.build_layers();
-        /*
-        // build graph edges
-        layer.build();
-        //g.as_mut().unwrap().build();
-
-
-        let s = layer.dfs_first();//layer.g.as_mut().unwrap().dfs_first();//(g.first().unwrap());
-
-        let mut items = HashMap::new();
-        // create layers with appropriate scoped variables
-        for (index, dominants) in s {
-            // for each block, we want to push valid arguments into the layer based on the graph
-            // there will be duplicates in each block, because we need to make visible all
-            // variables in it's dominants
-            //
-            // create a layer and add all of the dominant parameters
-            println!("push {:?}", index);
-            let mut layer: Layer<E> = Layer::new(LayerType::Block);
-
-            for d_index in dominants.iter() {
-                let params = layer.g.as_ref().unwrap().get_params(*d_index);
-                // create a new layer, adding arguments as scoped variables
-                for (offset, a) in params.iter().enumerate() {
-                    let arg = LayerIndex::BlockArg(d_index.get(), offset);
-                    layer.name_index(arg.clone(), &a.name);
-                    let data = Data::new(a.ty.clone());
-                    env.index_data(&arg, data.ty);
-                    // record argument offset
-                    layer.index.insert(arg, offset);
-                    println!("p: {:?}", (index, d_index, offset, &a.name, &a.ty));
-                }
-
-            }
-            items.insert(index, layer);
-        }
-        */
 
         // take the nodes, and lower them
         let region = Region::new();
@@ -328,52 +402,54 @@ impl<'c, E: Extra> Lower<'c, E> {
         env: &mut Environment<'c, E>,
         d: &mut Diagnostics,
         b: &NodeBuilder<E>,
-    ) -> LayerIndex {
+    ) -> Result<LayerIndex> {
         let bool_type = from_type(self.context, &AstType::Bool);
         let condition_location = self.location(&condition, d);
         let body_location = self.location(&body, d);
 
         // before
-        let mut layer = Layer::new(LayerType::Block);
-        self.build_block(&mut layer, "conditional", &[], env, d);
-        env.enter(layer);
-        self.lower_expr(condition, env, d, b);
-        let condition_rs = env.last_values();
-        // should be bool type
-        assert!(condition_rs[0].r#type() == bool_type);
-        let c = scf::condition(condition_rs[0].into(), &[], condition_location);
 
-        // exit block
+        let layer_type = LayerType::Block;
+        let layer = Layer::new(layer_type);
+        let block = Block::new(&[]);
+        env.enter(layer);
+        let index = self.lower_expr(condition, env, d, b)?;
+        let r: Value<'_, '_> = env.last_values()[0];
+        // should be bool type
+        assert!(r.r#type() == bool_type);
+        let c = scf::condition(r, &[], condition_location);
+        env.push(c);
         let mut layer = env.exit();
-        let before_block = layer.exit_block();
-        before_block.append_operation(c);
+        for op in layer.take_ops() {
+            block.append_operation(op);
+        }
         let before_region = Region::new();
-        before_region.append_block(before_block);
+        before_region.append_block(block);
 
         // after
-        let mut layer = Layer::new(LayerType::Block);
-        self.build_block(&mut layer, "body", &[], env, d);
+        let layer_type = LayerType::Block;
+        let layer = Layer::new(layer_type);
+        let block = Block::new(&[]);
         env.enter(layer);
-        let after_region = Region::new();
-        self.lower_expr(body, env, d, b);
-        // yield passes result to region 0
-        let y = scf::r#yield(&[], body_location);
-        env.push(y);
-
+        let index = self.lower_expr(body, env, d, b)?;
+        let c = scf::r#yield(&[], body_location);
+        env.push(c);
         let mut layer = env.exit();
-        let after_block = layer.exit_block();
-        after_region.append_block(after_block);
+        for op in layer.take_ops() {
+            block.append_operation(op);
+        }
+        let after_region = Region::new();
+        after_region.append_block(block);
 
         // after complete
 
-        env.push(scf::r#while(
+        Ok(env.push(scf::r#while(
             &[],
             &[],
             before_region,
             after_region,
             body_location,
-        ));
-        env.last_index().unwrap()
+        )))
     }
 
     pub fn build_loop<'a>(
@@ -384,7 +460,7 @@ impl<'c, E: Extra> Lower<'c, E> {
         env: &mut Environment<'c, E>,
         d: &mut Diagnostics,
         b: &NodeBuilder<E>,
-    ) -> LayerIndex {
+    ) -> Result<LayerIndex> {
         /*
          * while condition_expr, body_expr, bool init_op, int init_op2 -> (bool, int) -> int:
          *   region0:
@@ -426,6 +502,12 @@ impl<'c, E: Extra> Lower<'c, E> {
             (AstType::Index, "arg1", "init_op2"),
         ];
 
+        let block_args: Vec<(&str, AstType)> = init_args
+            .iter()
+            .map(|(ast_ty, arg_name, _)| (*arg_name, ast_ty.clone()))
+            .collect();
+
+        /*
         let before_args: Vec<ParameterNode<E>> = init_args
             .into_iter()
             .map(|(ast_ty, arg_name, init_name)| {
@@ -442,29 +524,47 @@ impl<'c, E: Extra> Lower<'c, E> {
             })
             .collect();
 
-        let mut layer = Layer::new(LayerType::Block);
-        self.build_block(&mut layer, "before", &before_args, env, d);
+            */
+        let block_args: Vec<(Type<'c>, Location<'c>)> = init_args
+            .iter()
+            .map(|(ast_ty, arg_name, _)| {
+                (
+                    from_type(self.context, ast_ty),
+                    self.location(&condition, d),
+                )
+            })
+            .collect();
+
+        /*
+        for (offset, a) in arguments.iter().enumerate() {
+            let index = env.fresh_argument();
+            layer.name_index(index.clone(), &a.name);
+            //let data = Data::new(a.ty.clone());
+            env.index_data(&index, a.ty.clone());
+            // record argument offset
+            layer.index.insert(index, offset);
+        }
+        */
+
+        let layer_type = LayerType::Block;
+        let layer = Layer::new(layer_type);
+        let block = Block::new(block_args.as_slice());
         env.enter(layer);
-
-        self.lower_expr(condition, env, d, b);
-
-        let condition_rs = env.last_values();
+        let index = self.lower_expr(condition, env, d, b)?;
+        let r: Value<'_, '_> = env.last_values()[0];
         // should be bool type
-        assert!(condition_rs[0].r#type() == bool_type);
-
-        // to pass to after
-
-        let before_region = Region::new();
-
-        // condition passes result to region 1 if true, or terminates with result
-        let arg1 = env.value0_from_name("arg1");
-        let c = scf::condition(condition_rs[0].into(), &[arg1], condition_location);
-
-        // exit block
+        assert!(r.r#type() == bool_type);
+        // return arg1
+        let arg1 = block.argument(1).unwrap().into();
+        //let arg1 = env.value0_from_name("arg1");
+        let c = scf::condition(r, &[arg1], condition_location);
+        env.push(c);
         let mut layer = env.exit();
-        let before_block = layer.exit_block();
-        before_block.append_operation(c);
-        before_region.append_block(before_block);
+        for op in layer.take_ops() {
+            block.append_operation(op);
+        }
+        let before_region = Region::new();
+        before_region.append_block(block);
 
         // Before Complete
 
@@ -476,41 +576,31 @@ impl<'c, E: Extra> Lower<'c, E> {
             node: Parameter::Normal,
         }];
 
-        let mut layer = Layer::new(LayerType::Block);
-        self.build_block(&mut layer, "after", after_args, env, d);
+        // after
+        let block_args = vec![(
+            from_type(self.context, &AstType::Index),
+            self.location(&body, d),
+        )];
+        let layer_type = LayerType::Block;
+        let layer = Layer::new(layer_type);
+        let block = Block::new(block_args.as_slice());
         env.enter(layer);
-
-        let after_region = Region::new();
-
-        let op = arith::addi(
-            env.value0_from_name("arg0"),
-            env.value0_from_name("test"),
-            condition_location,
-        );
-        env.push(op);
 
         let op = self.build_bool_op(false, condition_location);
         let index1 = env.push(op);
 
-        self.lower_expr(body, env, d, b);
-        let index2 = env.last_index().unwrap();
-
+        let index2 = self.lower_expr(body, env, d, b)?;
         let mut rs = env.values(&index1);
         rs.extend(env.values(&index2));
 
-        // print types
-        rs.iter().for_each(|r| {
-            log::debug!("type: {:?}", r.r#type());
-            log::debug!("type: {:?}", before_args[0].ty);
-        });
-
-        // yield passes result to region 0
-        let y = scf::r#yield(&rs, body_location);
-        env.push(y);
-
+        let c = scf::r#yield(&rs, body_location);
+        env.push(c);
         let mut layer = env.exit();
-        let after_block = layer.exit_block();
-        after_region.append_block(after_block);
+        for op in layer.take_ops() {
+            block.append_operation(op);
+        }
+        let after_region = Region::new();
+        after_region.append_block(block);
 
         // after complete
 
@@ -518,7 +608,7 @@ impl<'c, E: Extra> Lower<'c, E> {
             env.value0_from_name("init_op"),
             env.value0_from_name("init_op2"),
         ];
-        env.push(scf::r#while(
+        Ok(env.push(scf::r#while(
             &init_args,
             &after_args
                 .iter()
@@ -527,8 +617,8 @@ impl<'c, E: Extra> Lower<'c, E> {
             before_region,
             after_region,
             body_location,
-        ));
-        env.last_index().unwrap()
+        )))
+        //env.last_index().unwrap()
     }
 
     pub fn location(&self, expr: &AstNode<E>, d: &Diagnostics) -> Location<'c> {
@@ -654,7 +744,7 @@ impl<'c, E: Extra> Lower<'c, E> {
         b: &NodeBuilder<E>,
     ) -> Result<LayerIndex> {
         let location = self.location(&rhs, d);
-        let (index, ty, maybe_static_name) = match env.data_from_name(ident) {
+        let (index, _ty, _maybe_static_name) = match env.data_from_name(ident) {
             Some(index) => index,
             _ => unreachable!("Name not found: {}", ident),
         };
@@ -680,6 +770,7 @@ impl<'c, E: Extra> Lower<'c, E> {
         }
     }
 
+    /*
     pub fn build_block(
         &self,
         layer: &mut Layer<'c, E>,
@@ -688,10 +779,20 @@ impl<'c, E: Extra> Lower<'c, E> {
         env: &mut Environment<'c, E>,
         d: &Diagnostics,
     ) {
-        push_parameters(layer, env, arguments);
+        // create a new layer, adding arguments as scoped variables
+        for (offset, a) in arguments.iter().enumerate() {
+            let index = env.fresh_argument();
+            layer.name_index(index.clone(), &a.name);
+            //let data = Data::new(a.ty.clone());
+            env.index_data(&index, a.ty.clone());
+            // record argument offset
+            layer.index.insert(index, offset);
+        }
+
         let block = new_block(self.context, arguments, d);
         layer.enter_block(name, block);
     }
+    */
 
     pub fn lower_expr<'a>(
         &self,
@@ -711,28 +812,8 @@ impl<'c, E: Extra> Lower<'c, E> {
 
             Ast::Block(_name, _params, _body) => {
                 unreachable!()
-                /*
-                // create a block with arguments
-                let mut layer = Layer::new(LayerType::Block);
-
-                //let arguments = params.into_iter().map(|p| {
-                //(p.ty, p.extra.location(self.context, d), p.name)
-                //}).collect::<Vec<_>>();
-
-                self.build_block(&mut layer, &name, &params, env, d);
-
-                // push layer into the env and then lower
-                env.enter(layer);
-                let index = self.lower_expr(*body, env, d, b);
-                let mut layer = env.exit();
-                //env.merge(layer);
-                let block = layer.exit_block();
-                println!("{:?}", block.terminator());
-                //env.last_mut().append_block(block);
-                LayerIndex::Noop
-                //index
-                */
             }
+
             Ast::Break(_name) => {
                 unimplemented!()
             }
@@ -1104,16 +1185,19 @@ impl<'c, E: Extra> Lower<'c, E> {
                 Literal::Bool(x) => {
                     let op = self.build_bool_op(x, location);
                     let index = env.push(op);
-                    env.index_data(&index, AstType::Bool); //Data::new(AstType::Bool));
+                    env.index_data(&index, AstType::Bool);
                     Ok(index)
                 }
                 _ => unimplemented!("{:?}", lit),
             },
 
             Ast::Sequence(exprs) => {
-                exprs.into_iter().for_each(|expr| {
-                    self.lower_expr(expr, env, d, b);
-                });
+                for expr in exprs {
+                    self.lower_expr(expr, env, d, b)?;
+                }
+                //exprs.into_iter().for_each(|expr| {
+                //self.lower_expr(expr, env, d, b)?;
+                //});
                 Ok(env.last_index().unwrap())
             }
 
@@ -1136,8 +1220,6 @@ impl<'c, E: Extra> Lower<'c, E> {
             }
 
             Ast::Definition(def) => {
-                //use crate::blocks::BlockGraph;
-
                 // normalize def to ensure it's in the expected format
                 let def = def.normalize(b);
 
@@ -1181,6 +1263,11 @@ impl<'c, E: Extra> Lower<'c, E> {
                 env.index_data(&index, data.ty);
 
                 let region = if let Some(body) = def.body {
+                    let layer = layer_in_scope(self.context, LayerType::Function, *body, d, b)?;
+                    let region = self.build_region(layer, env, d, b)?;
+                    //region
+
+                    /*
                     let mut func_layer = Layer::new(LayerType::Function);
 
                     let blocks = body.try_seq().unwrap();
@@ -1197,56 +1284,13 @@ impl<'c, E: Extra> Lower<'c, E> {
                             }
 
                             func_layer.push_block(self.context, &name, params, *ast, d);
-                            //let mut layer = Layer::new(LayerType::Preserve);
-                            //push_parameters(&mut layer, env, &params);
-                            //let block = new_block(self.context, &params, d);
-                            //if let Some(term) = ast.node.terminator() {
-                            //let index = func_layer.g.as_mut().unwrap().add_node(self.context, &name, params, *ast, d);
-                            //if entry_block.is_none() {
-                            //entry_block = Some(index);
-                            //}
-                            //items.insert(index, (name, term));
-                            //} else {
-                            //d.push_diagnostic(ast.extra.error("Block does not terminate"));
-                            //return Err(Error::new(ParseError::Invalid));
-                            //}
-
-                            //layer.enter_block(&name, block);
-                            //self.build_block(&mut layer, &name, &params, env, d);
-                            //env.enter(layer);
-                            // enter block
-                            //self.lower_expr(*ast, env, d, b);
-
-                            // exit block
-                            //let mut layer = env.exit();
-                            //let block = layer.exit_block();
-                            //env.merge(layer);
-                            //env.enter(layer);
-                            //region.append_block(block);
                         } else {
                             unreachable!()
                         }
-                        //env.dump();
                     }
 
-                    // build graph
-                    //env.enter(func_layer);
-                    //env.dump();
                     let region = self.build_region(func_layer, env, d, b)?;
-
-                    /*
-                    let mut layers = vec![];
-                    for _ in 0..num_blocks {
-                        layers.push(env.exit());
-                    }
-
-                    for mut layer in layers.into_iter().rev() {
-                        region.append_block(layer.exit_block());
-                    }
                     */
-
-                    // exit func layer
-                    //env.exit();
 
                     // declare as C interface only if body is defined
                     // function declarations represent functions that are already C interfaces
@@ -1303,53 +1347,108 @@ impl<'c, E: Extra> Lower<'c, E> {
                 }
             },
 
-            Ast::Conditional(condition, true_expr, maybe_false_expr) => {
-                let index_conditions = self.lower_expr(*condition, env, d, b)?;
-                let mut layer = Layer::new(LayerType::Block);
-                self.build_block(&mut layer, "then", &[], env, d);
-                //let layer = self.build_block(&[], env);
-                env.enter(layer);
-                self.lower_expr(*true_expr, env, d, b)?;
-                let mut layer = env.exit();
-                let true_block = layer.exit_block();
-                true_block.append_operation(scf::r#yield(&[], location));
+            Ast::Conditional(condition, then_expr, maybe_else_expr) => {
+                let bool_type = from_type(self.context, &AstType::Bool);
+                let condition_location = self.location(&condition, d);
+                let then_location = self.location(&then_expr, d);
 
-                match maybe_false_expr {
-                    Some(false_expr) => {
-                        let mut layer = Layer::new(LayerType::Block);
-                        self.build_block(&mut layer, "else", &[], env, d);
+                // condition (outside of blocks)
+                let index_conditions = self.lower_expr(*condition, env, d, b)?;
+                let r: Value<'_, '_> = env.last_values()[0];
+                // should be bool type
+                assert!(r.r#type() == bool_type);
+
+                // then block
+
+                let layer_type = LayerType::Block;
+                let layer = Layer::new(layer_type);
+                let block = Block::new(&[]);
+                env.enter(layer);
+                let index = self.lower_expr(*then_expr, env, d, b)?;
+                env.push(scf::r#yield(&[], then_location));
+                //let r: Value<'_, '_> = env.last_values()[0];
+                // should be bool type
+                //assert!(r.r#type() == bool_type);
+                //let c = scf::condition(r, &[], condition_location);
+                //env.push(c);
+                let mut layer = env.exit();
+                for op in layer.take_ops() {
+                    block.append_operation(op);
+                }
+                let then_region = Region::new();
+                then_region.append_block(block);
+
+                //b.seq(vec![true_expr,
+                //let layer = layer_in_scope(self.context, LayerType::Block, *true_expr, d, b)?;
+                //let then_region = self.build_region(layer, env, d, b)?;
+
+                //let mut layer = Layer::new(LayerType::Block);
+                //self.build_block(&mut layer, "then", &[], env, d);
+                //let layer = self.build_block(&[], env);
+                //env.enter(layer);
+                //self.lower_expr(*true_expr, env, d, b)?;
+                //let mut layer = env.exit();
+                //let true_block = layer.exit_block();
+                //true_block.append_operation(scf::r#yield(&[], location));
+
+                // else block
+                //
+                let else_region = match maybe_else_expr {
+                    Some(else_expr) => {
+                        let else_location = self.location(&else_expr, d);
+
+                        let layer_type = LayerType::Block;
+                        let layer = Layer::new(layer_type);
+                        let block = Block::new(&[]);
                         env.enter(layer);
-                        self.lower_expr(*false_expr, env, d, b)?;
+                        let index = self.lower_expr(*else_expr, env, d, b)?;
+                        env.push(scf::r#yield(&[], else_location));
                         let mut layer = env.exit();
-                        let false_block = layer.exit_block();
-                        false_block.append_operation(scf::r#yield(&[], location));
-                        let then_region = Region::new();
-                        then_region.append_block(true_block);
+                        for op in layer.take_ops() {
+                            block.append_operation(op);
+                        }
                         let else_region = Region::new();
-                        else_region.append_block(false_block);
-                        let if_op = scf::r#if(
-                            env.value0(&index_conditions),
-                            &[],
-                            then_region,
-                            else_region,
-                            location,
-                        );
-                        Ok(env.push(if_op))
+                        else_region.append_block(block);
+                        else_region
+
+                        //let layer = layer_in_scope(self.context, LayerType::Block, *false_expr, d, b)?;
+                        //let else_region = self.build_region(layer, env, d, b)?;
+
+                        //let mut layer = Layer::new(LayerType::Block);
+                        //self.build_block(&mut layer, "else", &[], env, d);
+                        //env.enter(layer);
+                        //self.lower_expr(*false_expr, env, d, b)?;
+                        //let mut layer = env.exit();
+                        //let false_block = layer.exit_block();
+                        //false_block.append_operation(scf::r#yield(&[], location));
+                        //let then_region = Region::new();
+                        //then_region.append_block(true_block);
+                        //let else_region = Region::new();
+                        //else_region.append_block(false_block);
                     }
                     None => {
-                        let then_region = Region::new();
-                        then_region.append_block(true_block);
-                        let else_region = Region::new();
-                        let if_op = scf::r#if(
-                            env.value0(&index_conditions),
-                            &[],
-                            then_region,
-                            else_region,
-                            location,
-                        );
-                        Ok(env.push(if_op))
+                        //let then_region = Region::new();
+                        //then_region.append_block(true_block);
+                        Region::new()
+                        //let else_region = Region::new();
+                        //let if_op = scf::r#if(
+                        //env.value0(&index_conditions),
+                        //&[],
+                        //then_region,
+                        //else_region,
+                        //location,
+                        //);
+                        //Ok(env.push(if_op))
                     }
-                }
+                };
+                let if_op = scf::r#if(
+                    env.value0(&index_conditions),
+                    &[],
+                    then_region,
+                    else_region,
+                    location,
+                );
+                Ok(env.push(if_op))
             }
 
             Ast::Mutate(lhs, rhs) => match lhs.node {
@@ -1407,12 +1506,12 @@ impl<'c, E: Extra> Lower<'c, E> {
             }
 
             Ast::While(condition, body) => {
-                Ok(self.build_while(*condition, *body, env, d, b))
+                self.build_while(*condition, *body, env, d, b)
                 //env.last_index().unwrap()
             }
 
             Ast::Test(condition, body) => {
-                Ok(self.build_loop(*condition, *body, env, d, b))
+                self.build_loop(*condition, *body, env, d, b)
                 //env.last_index().unwrap()
             }
 
@@ -1490,7 +1589,7 @@ impl<'c, E: Extra> Definition<E> {
         // ensure that the function body is a sequence of named blocks
         if let Some(body) = self.body {
             // sort body
-            let region = Region::new();
+            //let region = Region::new();
             let mut s = crate::builder::AstSorter::new();
             s.sort_children(*body);
 
@@ -1515,163 +1614,11 @@ impl<'c, E: Extra> Definition<E> {
         }
         self
     }
-
-    /*
-        pub fn lower(self, context: &Context, extra: E, env: &mut Environment<'c>, d: &mut Diagnostics, b: &NodeBuilder<E>) -> LayerIndex {
-            log::debug!("name {:?}", self.name);
-
-            let ret_ty = from_type(context, &*self.return_type);
-            let mut ast_types = vec![];
-            let mut types = vec![];
-            let ast_ret_type = self.return_type;
-
-            for p in &self.params {
-                match p.node {
-                    Parameter::Normal | Parameter::WithDefault(_) => {
-                        //log::debug!("params {:?}: {:?}", p.name, p.ty);
-                        types.push(from_type(context, &p.ty));
-                        ast_types.push(p.ty.clone());
-                    }
-                    _ => unimplemented!("{:?}", p),
-                }
-            }
-
-            let mut attributes = vec![(
-                Identifier::new(context, "sym_visibility"),
-                StringAttribute::new(context, "private").into(),
-                )];
-
-            let ret_type = if ret_ty.is_none() {
-                vec![]
-            } else {
-                vec![ret_ty]
-            };
-            let func_type = FunctionType::new(context, &types, &ret_type);
-            let f_type = AstType::Func(ast_types, ast_ret_type);
-            let data = Data::new_static(f_type, &self.name);
-
-            // create a new index, but don't actually add it
-            // we just associate the function signature with it, so it can
-            // be called recursively
-            let index = env.fresh_op();
-            env.name_index(index.clone(), &self.name);
-            env.index_data(&index, data);
-
-            let region = if let Some(body) = self.body {
-                // sort body
-                let region = Region::new();
-                let mut s = crate::builder::AstSorter::new();
-                s.sort_children(*body);
-
-                let mut blocks = VecDeque::new();
-
-                // initial nodes form the entry block
-                if s.stack.len() > 0 {
-                    let seq = b.seq(s.stack);
-                    // TODO: check that function args match the first block args
-                    let params = self
-                        .params
-                        .iter()
-                        .map(|p| (p.name.as_str(), p.ty.clone()))
-                        .collect::<Vec<_>>();
-                    let node = b.block("entry", &params, seq);
-                    blocks.push_back(node);
-                }
-
-                blocks.extend(s.blocks.into_iter());
-
-                let mut func_layer = Layer::new(LayerType::Function);
-                let num_blocks = blocks.len();
-
-                let first_block = blocks.pop_front().unwrap();
-                if let Ast::Block(name, params, body) = first_block.node {
-                    log::debug!("first block: {}", name);
-                    push_parameters(&mut func_layer, env, &params);
-                    let block = new_block(context, &params, d);
-                    //func_layer.enter_block(&name, block);
-                    env.enter(func_layer);
-                    //self.lower_expr(*body, env, d, b);
-                    //log::debug!("first layer: {:?}", env.last_mut());
-                    //let mut layer = env.exit();
-                    //env.dump();
-                    //let block = env.exit_block();
-                    //env.enter(layer);
-                    //region.append_block(block);
-                } else {
-                    unreachable!()
-                }
-                //env.dump();
-                //region.first_block().unwrap().
-
-                // subsequent blocks
-                for expr in blocks.into_iter() {
-                    if let Ast::Block(name, params, ast) = expr.node {
-                        log::debug!("subsequent block: {}", name);
-                        let mut layer = Layer::new(LayerType::Preserve);
-                        push_parameters(&mut layer, env, &params);
-                        let block = new_block(context, &params, d);
-                        //layer.enter_block(&name, block);
-                        //self.build_block(&mut layer, &name, &params, env, d);
-                        env.enter(layer);
-                        // enter block
-                        //self.lower_expr(*ast, env, d, b);
-
-                        // exit block
-                        //let mut layer = env.exit();
-                        //let block = layer.exit_block();
-                        //env.merge(layer);
-                        //env.enter(layer);
-                        //region.append_block(block);
-                    } else {
-                        unreachable!()
-                    }
-                    //env.dump();
-                }
-
-                let mut layers = vec![];
-                for _ in 0..num_blocks {
-                    layers.push(env.exit());
-                }
-
-                for mut layer in layers.into_iter().rev() {
-                    region.append_block(layer.exit_block());
-                }
-
-                // exit func layer
-                //env.exit();
-
-                // declare as C interface only if body is defined
-                // function declarations represent functions that are already C interfaces
-                attributes.push((
-                        Identifier::new(context, "llvm.emit_c_interface"),
-                        Attribute::unit(context),
-                        ));
-
-                region
-            } else {
-                Region::new()
-            };
-
-            let f = func::func(
-                context,
-                StringAttribute::new(context, &self.name),
-                TypeAttribute::new(func_type.into()),
-                region,
-                &attributes,
-                extra.location(context, d),
-                );
-
-            // save and return created index
-            //env.push_op_index(index.clone(), f);
-            index
-        }
-    */
 }
 
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    //use crate::compile::CompilerContext;
     use crate::default_context;
     use crate::NodeBuilder;
     use test_log::test;
@@ -1849,7 +1796,12 @@ pub(crate) mod tests {
         let mut env = Environment::default();
         env.enter_static();
         let ast: AstNode<SimpleExtra> = gen_block(file_id, &mut env);
-        assert_eq!(0, lower.run_ast(ast, "../target/debug/", env, &mut d, &b));
+        assert_eq!(
+            0,
+            lower
+                .run_ast(ast, "../target/debug/", env, &mut d, &b)
+                .unwrap()
+        );
     }
 
     #[test]
@@ -1862,7 +1814,12 @@ pub(crate) mod tests {
         let mut env = Environment::default();
         env.enter_static();
         let ast: AstNode<SimpleExtra> = gen_function_call(file_id, &mut env);
-        assert_eq!(0, lower.run_ast(ast, "../target/debug/", env, &mut d, &b));
+        assert_eq!(
+            0,
+            lower
+                .run_ast(ast, "../target/debug/", env, &mut d, &b)
+                .unwrap()
+        );
         //env.exit();
     }
 
@@ -1876,7 +1833,12 @@ pub(crate) mod tests {
         let mut env = Environment::default();
         env.enter_static();
         let ast: AstNode<SimpleExtra> = gen_while(file_id, &mut env);
-        assert_eq!(0, lower.run_ast(ast, "../target/debug/", env, &mut d, &b));
+        assert_eq!(
+            0,
+            lower
+                .run_ast(ast, "../target/debug/", env, &mut d, &b)
+                .unwrap()
+        );
     }
 
     #[test]
@@ -1889,6 +1851,11 @@ pub(crate) mod tests {
         let mut env = Environment::default();
         env.enter_static();
         let ast: AstNode<SimpleExtra> = gen_test(file_id, &mut env);
-        assert_eq!(0, lower.run_ast(ast, "../target/debug", env, &mut d, &b));
+        assert_eq!(
+            0,
+            lower
+                .run_ast(ast, "../target/debug", env, &mut d, &b)
+                .unwrap()
+        );
     }
 }

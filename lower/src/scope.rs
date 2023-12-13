@@ -1,6 +1,8 @@
-use crate::ast::{AstNode, AstType, Extra, ParameterNode};
+use crate::ast::{Ast, AstNode, AstType, Extra, ParameterNode};
 use crate::blocks::{BlockGraph, Index};
-use crate::Diagnostics;
+use crate::{Diagnostics, NodeBuilder, ParseError};
+use anyhow::Error;
+use anyhow::Result;
 use melior::ir::*;
 use melior::ir::{Operation, Value};
 use melior::Context;
@@ -28,7 +30,7 @@ impl From<usize> for OpIndex {
 pub enum LayerIndex {
     Op(usize),
     Noop,
-    Argument(usize),
+    //Argument(usize),
     BlockArg(usize, usize),
     Static(usize),
 }
@@ -38,9 +40,9 @@ impl LayerIndex {
         Self::Op(index.0)
     }
 
-    pub fn arg(index: usize) -> Self {
-        Self::Argument(index)
-    }
+    //pub fn arg(index: usize) -> Self {
+    //Self::Argument(index)
+    //}
 
     pub fn static_index(index: usize) -> Self {
         Self::Static(index)
@@ -277,13 +279,14 @@ impl<'c, E: Extra> Layer<'c, E> {
                         .map(|x| x.into())
                         .collect(),
                 ),
-                LayerIndex::Argument(_) => Some(vec![self
-                    .blocks
-                    .first()
-                    .expect("Argument Missing")
-                    .argument(*offset)
-                    .unwrap()
-                    .into()]),
+
+                //LayerIndex::Argument(_) => Some(vec![self
+                //.blocks
+                //.first()
+                //.expect("Argument Missing")
+                //.argument(*offset)
+                //.unwrap()
+                //.into()]),
                 _ => unimplemented!("{:?}", index),
             }
         } else {
@@ -425,9 +428,9 @@ impl<'c, E: Extra> ScopeStack<'c, E> {
         self.layers.last().unwrap().ty
     }
 
-    pub fn fresh_argument(&mut self) -> LayerIndex {
-        LayerIndex::Argument(self.fresh_index())
-    }
+    //pub fn fresh_argument(&mut self) -> LayerIndex {
+    //LayerIndex::Argument(self.fresh_index())
+    //}
 
     pub fn unique_static_name(&mut self) -> String {
         let s = format!("__static_x{}", self.static_count);

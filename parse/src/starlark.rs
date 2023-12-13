@@ -567,7 +567,9 @@ pub(crate) mod tests {
         // run
         assert_eq!(
             expected,
-            lower.run_ast(ast, "../target/debug", env, &mut d, &b)
+            lower
+                .run_ast(ast, "../target/debug", env, &mut d, &b)
+                .unwrap()
         );
         //env.exit();
     }

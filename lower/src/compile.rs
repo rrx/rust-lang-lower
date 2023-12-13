@@ -2,6 +2,7 @@ use crate::ast;
 use crate::lower;
 use crate::scope;
 use crate::{Diagnostics, Environment, NodeBuilder};
+use anyhow::Result;
 use melior::ir::operation::OperationPrintingFlags;
 use melior::ExecutionEngine;
 use melior::{
@@ -23,8 +24,8 @@ impl<'c, E: ast::Extra> lower::Lower<'c, E> {
         mut env: Environment<'c, E>,
         d: &mut Diagnostics,
         b: &NodeBuilder<E>,
-    ) {
-        self.lower_expr(expr, &mut env, d, b);
+    ) -> Result<()> {
+        self.lower_expr(expr, &mut env, d, b)?;
         //env.dump();
         for op in env.take_ops() {
             module.body().append_operation(op);
@@ -41,6 +42,7 @@ impl<'c, E: ast::Extra> lower::Lower<'c, E> {
                 .to_string_with_flags(OperationPrintingFlags::new())
                 .unwrap()
         );
+        Ok(())
     }
 
     pub fn module_passes(&mut self, module: &mut ir::Module<'c>) {
@@ -62,14 +64,15 @@ impl<'c, E: ast::Extra> lower::Lower<'c, E> {
         env: Environment<'c, E>,
         d: &mut Diagnostics,
         b: &NodeBuilder<E>,
-    ) -> i32 {
+    ) -> Result<i32> {
         let location = ir::Location::unknown(self.context);
         let mut module = ir::Module::new(location);
-        self.module_lower(&mut module, ast, env, d, b);
+        let r = self.module_lower(&mut module, ast, env, d, b);
         d.dump();
         assert!(!d.has_errors);
+        r.unwrap();
         self.module_passes(&mut module);
-        self.exec_main(&module, libpath)
+        Ok(self.exec_main(&module, libpath))
     }
 
     pub fn exec_main(&self, module: &ir::Module<'c>, libpath: &str) -> i32 {
