@@ -274,6 +274,7 @@ impl<'c, E: Extra> Lower<'c, E> {
         }
     }
 
+    /*
     pub fn build_block(
         &self,
         layer_type: LayerType,
@@ -293,6 +294,7 @@ impl<'c, E: Extra> Lower<'c, E> {
         }
         Ok((index, block))
     }
+    */
 
     pub fn build_ops(
         &self,
@@ -334,18 +336,6 @@ impl<'c, E: Extra> Lower<'c, E> {
             blocks[0].append_operation(op);
         }
         Ok(blocks.pop().unwrap())
-
-        //self.build_block(&mut layer, "body", &[], env, d);
-        //env.enter(layer);
-        //let after_region = Region::new();
-        //self.lower_expr(body, env, d, b);
-        // yield passes result to region 0
-        //let y = scf::r#yield(&[], body_location);
-        //env.push(y);
-
-        //let mut layer = env.exit();
-        //let after_block = layer.exit_block();
-        //after_region.append_block(after_block);
     }
 
     pub fn build_region(
@@ -874,7 +864,6 @@ impl<'c, E: Extra> Lower<'c, E> {
                     _ => unreachable!("{:?}", expr.node),
                 };
 
-                //let ptr_data = Data::new_static(AstType::Ptr(ast_ty.clone().into()), &global_name);
                 let ptr_ty = AstType::Ptr(ast_ty.clone().into());
                 if env.current_layer_type() == LayerType::Static {
                     // STATIC/GLOBAL VARIABLE
@@ -887,7 +876,7 @@ impl<'c, E: Extra> Lower<'c, E> {
 
                     // push static operation
                     let index = env.push_static(op, &global_name);
-                    env.index_data(&index, ptr_ty); //ptr_data.clone().ty);
+                    env.index_data(&index, ptr_ty);
 
                     env.index_static_name(&index, &global_name);
                     env.name_index(index.clone(), &ident);
@@ -1068,8 +1057,6 @@ impl<'c, E: Extra> Lower<'c, E> {
                         Ok(index)
                     }
                     _ => {
-                        //log::debug!("x: {:?}", env.last_mut().names);
-
                         let (index, data) = match env.index_from_name(ident.as_str()) {
                             Some(index) => {
                                 let data = env
@@ -1080,8 +1067,6 @@ impl<'c, E: Extra> Lower<'c, E> {
                             }
                             _ => unreachable!("Ident not found: {:?}", ident),
                         };
-
-                        //log::debug!("ident: {} - {:?}", ident, data);
 
                         if let Some(static_name) = &env.static_name(&index) {
                             // we should only be dealing with pointers in if we are static
@@ -1195,9 +1180,6 @@ impl<'c, E: Extra> Lower<'c, E> {
                 for expr in exprs {
                     self.lower_expr(expr, env, d, b)?;
                 }
-                //exprs.into_iter().for_each(|expr| {
-                //self.lower_expr(expr, env, d, b)?;
-                //});
                 Ok(env.last_index().unwrap())
             }
 
@@ -1265,32 +1247,6 @@ impl<'c, E: Extra> Lower<'c, E> {
                 let region = if let Some(body) = def.body {
                     let layer = layer_in_scope(self.context, LayerType::Function, *body, d, b)?;
                     let region = self.build_region(layer, env, d, b)?;
-                    //region
-
-                    /*
-                    let mut func_layer = Layer::new(LayerType::Function);
-
-                    let blocks = body.try_seq().unwrap();
-
-                    // load nodes
-                    for expr in blocks.into_iter() {
-                        if let Ast::Block(name, params, ast) = expr.node {
-                            log::debug!("block block: {}", name);
-
-                            // ensure we have a terminator
-                            if ast.node.terminator().is_none() {
-                                d.push_diagnostic(ast.extra.error("Block does not terminate"));
-                                return Err(Error::new(ParseError::Invalid));
-                            }
-
-                            func_layer.push_block(self.context, &name, params, *ast, d);
-                        } else {
-                            unreachable!()
-                        }
-                    }
-
-                    let region = self.build_region(func_layer, env, d, b)?;
-                    */
 
                     // declare as C interface only if body is defined
                     // function declarations represent functions that are already C interfaces
@@ -1349,7 +1305,6 @@ impl<'c, E: Extra> Lower<'c, E> {
 
             Ast::Conditional(condition, then_expr, maybe_else_expr) => {
                 let bool_type = from_type(self.context, &AstType::Bool);
-                let condition_location = self.location(&condition, d);
                 let then_location = self.location(&then_expr, d);
 
                 // condition (outside of blocks)
@@ -1364,13 +1319,8 @@ impl<'c, E: Extra> Lower<'c, E> {
                 let layer = Layer::new(layer_type);
                 let block = Block::new(&[]);
                 env.enter(layer);
-                let index = self.lower_expr(*then_expr, env, d, b)?;
+                let _index = self.lower_expr(*then_expr, env, d, b)?;
                 env.push(scf::r#yield(&[], then_location));
-                //let r: Value<'_, '_> = env.last_values()[0];
-                // should be bool type
-                //assert!(r.r#type() == bool_type);
-                //let c = scf::condition(r, &[], condition_location);
-                //env.push(c);
                 let mut layer = env.exit();
                 for op in layer.take_ops() {
                     block.append_operation(op);
@@ -1378,21 +1328,8 @@ impl<'c, E: Extra> Lower<'c, E> {
                 let then_region = Region::new();
                 then_region.append_block(block);
 
-                //b.seq(vec![true_expr,
-                //let layer = layer_in_scope(self.context, LayerType::Block, *true_expr, d, b)?;
-                //let then_region = self.build_region(layer, env, d, b)?;
-
-                //let mut layer = Layer::new(LayerType::Block);
-                //self.build_block(&mut layer, "then", &[], env, d);
-                //let layer = self.build_block(&[], env);
-                //env.enter(layer);
-                //self.lower_expr(*true_expr, env, d, b)?;
-                //let mut layer = env.exit();
-                //let true_block = layer.exit_block();
-                //true_block.append_operation(scf::r#yield(&[], location));
-
                 // else block
-                //
+
                 let else_region = match maybe_else_expr {
                     Some(else_expr) => {
                         let else_location = self.location(&else_expr, d);
@@ -1401,7 +1338,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                         let layer = Layer::new(layer_type);
                         let block = Block::new(&[]);
                         env.enter(layer);
-                        let index = self.lower_expr(*else_expr, env, d, b)?;
+                        let _index = self.lower_expr(*else_expr, env, d, b)?;
                         env.push(scf::r#yield(&[], else_location));
                         let mut layer = env.exit();
                         for op in layer.take_ops() {
@@ -1410,36 +1347,8 @@ impl<'c, E: Extra> Lower<'c, E> {
                         let else_region = Region::new();
                         else_region.append_block(block);
                         else_region
-
-                        //let layer = layer_in_scope(self.context, LayerType::Block, *false_expr, d, b)?;
-                        //let else_region = self.build_region(layer, env, d, b)?;
-
-                        //let mut layer = Layer::new(LayerType::Block);
-                        //self.build_block(&mut layer, "else", &[], env, d);
-                        //env.enter(layer);
-                        //self.lower_expr(*false_expr, env, d, b)?;
-                        //let mut layer = env.exit();
-                        //let false_block = layer.exit_block();
-                        //false_block.append_operation(scf::r#yield(&[], location));
-                        //let then_region = Region::new();
-                        //then_region.append_block(true_block);
-                        //let else_region = Region::new();
-                        //else_region.append_block(false_block);
                     }
-                    None => {
-                        //let then_region = Region::new();
-                        //then_region.append_block(true_block);
-                        Region::new()
-                        //let else_region = Region::new();
-                        //let if_op = scf::r#if(
-                        //env.value0(&index_conditions),
-                        //&[],
-                        //then_region,
-                        //else_region,
-                        //location,
-                        //);
-                        //Ok(env.push(if_op))
-                    }
+                    None => Region::new(),
                 };
                 let if_op = scf::r#if(
                     env.value0(&index_conditions),

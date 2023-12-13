@@ -55,9 +55,9 @@ pub struct Layer<'c, E> {
     pub(crate) ops: Vec<Operation<'c>>,
     pub(crate) names: HashMap<String, LayerIndex>,
     pub(crate) index: HashMap<LayerIndex, usize>,
-    blocks: Vec<Block<'c>>,
+    //blocks: Vec<Block<'c>>,
     pub(crate) g: BlockGraph<'c, E>,
-    block_names: HashMap<String, usize>,
+    //block_names: HashMap<String, usize>,
     _last_index: Option<LayerIndex>,
 }
 
@@ -69,8 +69,8 @@ impl<'c, E: Extra> Layer<'c, E> {
             names: HashMap::new(),
             index: HashMap::new(),
             g: BlockGraph::new(),
-            blocks: vec![],
-            block_names: HashMap::new(),
+            //blocks: vec![],
+            //block_names: HashMap::new(),
             _last_index: None,
         }
     }
@@ -107,6 +107,7 @@ impl<'c, E: Extra> Layer<'c, E> {
         self.g.get_params(index)
     }
 
+    /*
     pub fn enter_block(&mut self, name: &str, block: Block<'c>) -> usize {
         assert!(!self.block_names.contains_key(name));
         let offset = self.blocks.len();
@@ -132,6 +133,7 @@ impl<'c, E: Extra> Layer<'c, E> {
             .get(name)
             .map(|index| self.blocks.get(*index).unwrap())
     }
+    */
 
     /*
     pub fn merge(&mut self, mut layer: Layer<'c>) {
@@ -255,22 +257,6 @@ impl<'c, E: Extra> Layer<'c, E> {
             );
             match index {
                 //LayerIndex::Static(_) => vec![],
-                /*
-                LayerIndex::BlockArg(block_offset, arg_offset) => {
-                    use crate::blocks::Index;
-                    if let Some(g) = &self.g {
-                        println!("len blocks: {}", g.blocks.len());
-                        if g.blocks.len() > 0 {
-                            let block = g.get_block(Index::new(*block_offset));
-                            Some(vec![block.argument(*arg_offset).unwrap().into()])
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    }
-                }
-                */
                 LayerIndex::Op(_) => Some(
                     self.ops
                         .get(*offset)
@@ -308,6 +294,7 @@ impl<'c, E: Extra> Layer<'c, E> {
         self.ops.drain(..).collect()
     }
 
+    /*
     pub fn take_region(&mut self) -> Region<'c> {
         let region = Region::new();
         for block in self.blocks.drain(..) {
@@ -323,6 +310,7 @@ impl<'c, E: Extra> Layer<'c, E> {
             block.append_operation(op);
         }
     }
+    */
 
     pub fn push_block(
         &mut self,
@@ -379,6 +367,7 @@ impl<'c, E: Extra> ScopeStack<'c, E> {
                     layer.index.get(index)
                 );
             }
+            /*
             for (name, index) in layer.block_names.iter() {
                 println!("Block: {}, {}", index, name);
                 let block = layer.blocks.get(*index).unwrap();
@@ -386,6 +375,7 @@ impl<'c, E: Extra> ScopeStack<'c, E> {
                     println!("\tArg: {}, {:?}", i, block.argument(i).unwrap().r#type());
                 }
             }
+            */
             //if let Some(g) = &layer.g {
             for (block_index, block) in layer.g.blocks.iter().enumerate() {
                 println!("XBlock: {}", block_index);
@@ -616,6 +606,7 @@ impl<'c, E: Extra> ScopeStack<'c, E> {
         out
     }
 
+    /*
     pub fn exit_block(&mut self) -> Block<'c> {
         self.layers.last_mut().unwrap().exit_block()
     }
@@ -651,6 +642,7 @@ impl<'c, E: Extra> ScopeStack<'c, E> {
             .unwrap()
             .push_block(context, name, params, expr, d);
     }
+    */
 
     pub fn build_layers(&mut self) -> HashMap<Index, Layer<'c, E>> {
         self.last_mut().build();
@@ -889,6 +881,7 @@ mod tests {
         scope.push(ret);
     }
 
+    /*
     fn test_env3<'c, E: Extra>(
         lower: &Lower<'c, E>,
         env: &mut Environment<'c, E>,
@@ -949,4 +942,5 @@ mod tests {
         env.exit();
         assert_eq!(0, env.layer_count());
     }
+    */
 }
