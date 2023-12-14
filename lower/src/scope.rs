@@ -29,7 +29,7 @@ pub enum LayerIndex {
     Op(usize),
     Noop,
     BlockArg(usize, usize),
-    Static(usize),
+    //Static(usize),
 }
 
 impl LayerIndex {
