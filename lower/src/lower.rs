@@ -107,8 +107,8 @@ pub fn layer_in_scope<'c, E: Extra>(
     // load nodes
     for expr in blocks.into_iter() {
         if let Ast::Block(name, params, ast) = expr.node {
-            log::debug!("block block: {:?}", ast.node);
-            log::debug!("block block: {}: {:?}", name, ast.node.terminator());
+            log::debug!("block node: {:?}", ast.node);
+            log::debug!("block terminator: {}: {:?}", name, ast.node.terminator());
 
             // ensure we have a terminator
             if ast.node.terminator().is_none() {
@@ -204,19 +204,7 @@ impl<'c, E: Extra> Lower<'c, E> {
             Ast::Identifier(name) => {
                 // infer type from the operation
                 let index = env.index_from_name(name).unwrap();
-                let ty = env.data(&index).unwrap();
-                ty
-                /*
-                let r = env.value0_from_name(name);
-                let ty = r.r#type();
-                if ty.is_index() {
-                    AstType::Index
-                } else if ty.is_integer() {
-                    AstType::Int
-                } else {
-                    unreachable!("{:?}", ty);
-                }
-                */
+                env.data(&index).unwrap()
             }
             Ast::Call(_f, _args, ty) => ty.clone(),
 
@@ -354,6 +342,10 @@ impl<'c, E: Extra> Lower<'c, E> {
         let region = Region::new();
         let mut layers = vec![];
         let asts = env.last_mut().g.take_ast();
+
+        // TODO: we enter the layer, but layers don't know about other layers
+        // we can look up block args, but not arguments that are defined in the layer
+        // everything should be visible that is dominant
         for (offset, ast) in asts.into_iter().enumerate() {
             let layer = items.remove(&Index::new(offset)).unwrap();
             println!("enter layer {:?}", &layer);
@@ -546,7 +538,6 @@ impl<'c, E: Extra> Lower<'c, E> {
         assert!(r.r#type() == bool_type);
         // return arg1
         let arg1 = block.argument(1).unwrap().into();
-        //let arg1 = env.value0_from_name("arg1");
         let c = scf::condition(r, &[arg1], condition_location);
         env.push(c);
         let mut layer = env.exit();
@@ -608,7 +599,6 @@ impl<'c, E: Extra> Lower<'c, E> {
             after_region,
             body_location,
         )))
-        //env.last_index().unwrap()
     }
 
     pub fn location(&self, expr: &AstNode<E>, d: &Diagnostics) -> Location<'c> {
@@ -1035,12 +1025,10 @@ impl<'c, E: Extra> Lower<'c, E> {
 
                 // ensure proper type
                 if let AstType::Ptr(ast_ty) = &data {
-                    let deref_data = Data::new(*ast_ty.clone());
-                    //let ty = self.from_type(ast_ty);
                     let r = env.value0(&index);
                     let op = memref::load(r, &[], location);
                     let index = env.push(op);
-                    env.index_data(&index, deref_data.ty);
+                    env.index_data(&index, *ast_ty.clone());
                     Ok(index)
                 } else {
                     unreachable!("Trying to dereference a non-pointer")
@@ -1378,7 +1366,6 @@ impl<'c, E: Extra> Lower<'c, E> {
             }
 
             Ast::Assign(target, rhs) => {
-                //env.dump();
                 match target {
                     AssignTarget::Alloca(ident) => {
                         let ty = env.current_layer_type();
@@ -1418,12 +1405,10 @@ impl<'c, E: Extra> Lower<'c, E> {
 
             Ast::While(condition, body) => {
                 self.build_while(*condition, *body, env, d, b)
-                //env.last_index().unwrap()
             }
 
             Ast::Test(condition, body) => {
                 self.build_loop(*condition, *body, env, d, b)
-                //env.last_index().unwrap()
             }
 
             Ast::Builtin(bi, mut args) => {
@@ -1439,7 +1424,6 @@ impl<'c, E: Extra> Lower<'c, E> {
                                 let assert_op =
                                     cf::assert(self.context, env.value0(&index), &msg, location);
                                 Ok(env.push(assert_op))
-                                //env.last_index().unwrap()
                             }
                         }
                     }
@@ -1470,7 +1454,6 @@ impl<'c, E: Extra> Lower<'c, E> {
                                     func::call(self.context, f, &env.values(&index), &[], location);
 
                                 Ok(env.push(op))
-                                //env.last_index().unwrap()
                             }
                         }
                     }
@@ -1500,7 +1483,6 @@ impl<'c, E: Extra> Definition<E> {
         // ensure that the function body is a sequence of named blocks
         if let Some(body) = self.body {
             // sort body
-            //let region = Region::new();
             let mut s = crate::builder::AstSorter::new();
             s.sort_children(*body);
 
@@ -1578,7 +1560,12 @@ pub(crate) mod tests {
                 &[],
                 b.seq(vec![
                     b.assign("yy", b.integer(2)),
+                    b.mutate(b.ident("z"), b.integer(997)),
+
+                    // entry dominates "asdf", so y should be visible
                     //b.mutate(b.ident("y"), b.integer(997)),
+                    //b.mutate(b.ident("z_static"), b.integer(10)),
+                    //b.subtract(b.deref_offset(b.ident("y"), 0), b.integer(1)),
                     b.goto("asdf2"),
                     // branch to asdf2
                 ]),
