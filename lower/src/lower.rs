@@ -317,9 +317,6 @@ impl<'c, E: Extra> Lower<'c, E> {
         let mut blocks = layer.g.take_blocks();
         assert_eq!(blocks.len(), 1);
         layer.append_ops(blocks.get(0).unwrap());
-        //for op in layer.take_ops() {
-        //blocks[0].append_operation(op);
-        //}
         Ok(blocks.pop().unwrap())
     }
 
@@ -366,11 +363,6 @@ impl<'c, E: Extra> Lower<'c, E> {
         let blocks = layer.g.take_blocks();
         for (mut layer, block) in layers.into_iter().zip(blocks) {
             layer.append_ops(&block);
-            //let ops = layer.take_ops();
-            //println!("ops {}", ops.len());
-            //for op in ops {
-            //block.append_operation(op);
-            //}
             region.append_block(block);
         }
 
@@ -404,9 +396,6 @@ impl<'c, E: Extra> Lower<'c, E> {
         env.push(c);
         let mut layer = env.exit();
         layer.append_ops(&block);
-        //for op in layer.take_ops() {
-        //block.append_operation(op);
-        //}
         let before_region = Region::new();
         before_region.append_block(block);
 
@@ -420,9 +409,6 @@ impl<'c, E: Extra> Lower<'c, E> {
         env.push(c);
         let mut layer = env.exit();
         layer.append_ops(&block);
-        //for op in layer.take_ops() {
-        //block.append_operation(op);
-        //}
         let after_region = Region::new();
         after_region.append_block(block);
 
@@ -547,9 +533,6 @@ impl<'c, E: Extra> Lower<'c, E> {
         env.push(c);
         let mut layer = env.exit();
         layer.append_ops(&block);
-        //for op in layer.take_ops() {
-        //block.append_operation(op);
-        //}
         let before_region = Region::new();
         before_region.append_block(block);
 
@@ -584,9 +567,6 @@ impl<'c, E: Extra> Lower<'c, E> {
         env.push(c);
         let mut layer = env.exit();
         layer.append_ops(&block);
-        //for op in layer.take_ops() {
-        //block.append_operation(op);
-        //}
         let after_region = Region::new();
         after_region.append_block(block);
 
@@ -1321,9 +1301,6 @@ impl<'c, E: Extra> Lower<'c, E> {
                 env.push(scf::r#yield(&[], then_location));
                 let mut layer = env.exit();
                 layer.append_ops(&block);
-                //for op in layer.take_ops() {
-                //block.append_operation(op);
-                //}
                 let then_region = Region::new();
                 then_region.append_block(block);
 
@@ -1341,9 +1318,6 @@ impl<'c, E: Extra> Lower<'c, E> {
                         env.push(scf::r#yield(&[], else_location));
                         let mut layer = env.exit();
                         layer.append_ops(&block);
-                        //for op in layer.take_ops() {
-                        //block.append_operation(op);
-                        //}
                         let else_region = Region::new();
                         else_region.append_block(block);
                         else_region
