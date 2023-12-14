@@ -150,15 +150,6 @@ pub enum Ast<E> {
 }
 
 impl<E: Extra> Ast<E> {
-    /*
-    pub fn node(self, file_id: usize, begin: CodeLocation, end: CodeLocation) -> AstNode<E> {
-        AstNode {
-            node: self,
-            extra: E::new(file_id, begin, end),
-        }
-    }
-    */
-
     pub fn global(name: &str, node: AstNode<E>) -> Self {
         Ast::Global(name.to_string(), Box::new(node))
     }

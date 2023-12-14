@@ -28,7 +28,6 @@ impl From<usize> for OpIndex {
 pub enum LayerIndex {
     Op(usize),
     Noop,
-    //Argument(usize),
     BlockArg(usize, usize),
     Static(usize),
 }
@@ -353,7 +352,6 @@ impl<'c, E: Extra> ScopeStack<'c, E> {
     pub fn push_with_name(&mut self, op: Operation<'c>, name: &str) -> LayerIndex {
         let index = match self.current_layer_type() {
             // naming ops in static context doesn't make sense
-            //LayerType::Static => unreachable!("Unable to name op in static context"), //LayerIndex::Static(self.fresh_op()),
             _ => LayerIndex::Op(self.fresh_index()),
         };
         self.last_mut().push_with_name(op, index.clone(), name);

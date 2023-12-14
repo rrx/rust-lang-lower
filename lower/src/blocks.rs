@@ -230,10 +230,7 @@ mod tests {
         let _ic = g.add_node(&context, "c", params, ast, &d);
 
         g.build();
-        //g.add_edge(ia, ib);
-        //g.add_edge(ia, ic);
-        //g.add_edge(ib, ic);
-        //g.add_edge(ic, ia);
+
         let s = g.dfs(ia);
         for (index, dominants) in s {
             let block = g.blocks.get(index.0).unwrap();
@@ -242,7 +239,6 @@ mod tests {
                 .map(|d| g.params.get(d.0).unwrap())
                 .flatten()
                 .collect::<Vec<_>>();
-            //g.params.get(index.0).unwrap();
             println!(
                 "{:?}",
                 (
@@ -253,7 +249,5 @@ mod tests {
                 )
             );
         }
-        //g.dfs(b);
-        //g.dfs(c);
     }
 }
