@@ -1,3 +1,7 @@
+use crate::ast::*;
+use crate::scope::{Layer, LayerIndex, LayerType};
+use crate::{Diagnostics, ParseError};
+use crate::{Environment, NodeBuilder};
 use anyhow::Error;
 use anyhow::Result;
 use melior::{
@@ -12,14 +16,8 @@ use melior::{
     },
     Context,
 };
-//use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::VecDeque;
-
-use crate::ast::*;
-use crate::scope::{Layer, LayerIndex, LayerType};
-use crate::{Diagnostics, ParseError};
-use crate::{Environment, NodeBuilder};
 
 #[derive(Debug, Clone)]
 pub struct Data {
@@ -1403,13 +1401,9 @@ impl<'c, E: Extra> Lower<'c, E> {
                 }
             }
 
-            Ast::While(condition, body) => {
-                self.build_while(*condition, *body, env, d, b)
-            }
+            Ast::While(condition, body) => self.build_while(*condition, *body, env, d, b),
 
-            Ast::Test(condition, body) => {
-                self.build_loop(*condition, *body, env, d, b)
-            }
+            Ast::Test(condition, body) => self.build_loop(*condition, *body, env, d, b),
 
             Ast::Builtin(bi, mut args) => {
                 let arity = bi.arity();
@@ -1561,7 +1555,6 @@ pub(crate) mod tests {
                 b.seq(vec![
                     b.assign("yy", b.integer(2)),
                     b.mutate(b.ident("z"), b.integer(997)),
-
                     // entry dominates "asdf", so y should be visible
                     //b.mutate(b.ident("y"), b.integer(997)),
                     //b.mutate(b.ident("z_static"), b.integer(10)),
@@ -1580,7 +1573,6 @@ pub(crate) mod tests {
                     b.ret(Some(b.integer(0))),
                 ]),
             ),
-            //b.ret(Some(b.integer(0))),
         ])));
         b.seq(seq)
     }
