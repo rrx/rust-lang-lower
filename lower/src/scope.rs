@@ -37,16 +37,6 @@ impl LayerIndex {
     pub fn op(index: OpIndex) -> Self {
         Self::Op(index.0)
     }
-
-    //pub fn arg(index: usize) -> Self {
-    //Self::Argument(index)
-    //}
-
-    /*
-    pub fn static_index(index: usize) -> Self {
-        Self::Static(index)
-    }
-    */
 }
 
 #[derive(Debug)]
@@ -55,9 +45,7 @@ pub struct Layer<'c, E> {
     pub(crate) ops: Vec<Operation<'c>>,
     pub(crate) names: HashMap<String, LayerIndex>,
     pub(crate) index: HashMap<LayerIndex, usize>,
-    //blocks: Vec<Block<'c>>,
     pub(crate) g: BlockGraph<'c, E>,
-    //block_names: HashMap<String, usize>,
     _last_index: Option<LayerIndex>,
 }
 
@@ -69,31 +57,9 @@ impl<'c, E: Extra> Layer<'c, E> {
             names: HashMap::new(),
             index: HashMap::new(),
             g: BlockGraph::new(),
-            //blocks: vec![],
-            //block_names: HashMap::new(),
             _last_index: None,
         }
     }
-
-    /*
-    pub fn append_block(&mut self, block: Block<'c>) {
-        self.region.as_ref().unwrap().append_block(block);
-    }
-
-    pub fn enter_region(&mut self, region: Region<'c>) {
-        assert!(self.region.is_none());
-        self.region = Some(region);
-    }
-
-    pub fn exit_region(&mut self) -> Region<'c> {
-        let region = self.region.take().unwrap();
-        self.block_names.clear();
-        for block in self.blocks.drain(..) {
-            region.append_block(block);
-        }
-        region
-    }
-    */
 
     pub fn build(&mut self) {
         self.g.build();
@@ -110,59 +76,6 @@ impl<'c, E: Extra> Layer<'c, E> {
     pub fn get_block_by_name(&self, name: &str) -> Option<&Block<'c>> {
         self.g.get_block_by_name(name)
     }
-
-    /*
-    pub fn enter_block(&mut self, name: &str, block: Block<'c>) -> usize {
-        assert!(!self.block_names.contains_key(name));
-        let offset = self.blocks.len();
-        self.blocks.push(block);
-        self.block_names.insert(name.to_string(), offset);
-        offset
-    }
-
-    pub fn exit_block(&mut self) -> Block<'c> {
-        let block = self.blocks.pop().unwrap();
-        if self.blocks.len() == 0 {
-            self.block_names.clear();
-        }
-        let ops = self.take_ops();
-        for op in ops {
-            block.append_operation(op);
-        }
-        block
-    }
-
-    pub fn block(&self, name: &str) -> Option<&Block<'c>> {
-        self.block_names
-            .get(name)
-            .map(|index| self.blocks.get(*index).unwrap())
-    }
-    */
-
-    /*
-    pub fn merge(&mut self, mut layer: Layer<'c>) {
-        let preserve_names = match layer.ty {
-            LayerType::Closed | LayerType::Function | LayerType::Block => false,
-            _ => true,
-        };
-
-        // optionally preserve names
-        // overwrite existing names, thus shadowing
-        if preserve_names {
-            for (k, v) in layer.names {
-                // only do ops, not args
-                if let LayerIndex::Op(_) = v {
-                    self.names.insert(k, v);
-                }
-            }
-        }
-
-        for op in layer.ops.drain(..) {
-            self.ops.push(op);
-        }
-        self._last_index = layer._last_index;
-    }
-    */
 
     pub fn index_name(&mut self, index: LayerIndex, name: &str) {
         self.names.insert(name.to_string(), index);
@@ -191,38 +104,7 @@ impl<'c, E: Extra> Layer<'c, E> {
 
     pub fn value_from_name(&self, name: &str) -> Option<Vec<Value<'c, '_>>> {
         match self.index_from_name(name) {
-            //match self.names.get(name) {
-            Some(index) => {
-                self.values(&index)
-                /*
-                let offset = self.index.get(index).unwrap();
-                Some(match index {
-                    LayerIndex::BlockArg(block_offset, arg_offset) => {
-                        use crate::blocks::Index;
-                        let block = self.g.as_ref().unwrap().get_block(Index::new(*block_offset));
-                        vec![block.argument(*arg_offset).unwrap().into()]
-                    }
-                    LayerIndex::Noop => vec![],
-                    LayerIndex::Static(_) => vec![],
-                    LayerIndex::Op(_) => self
-                        .ops
-                        .get(*offset)
-                        .unwrap()
-                        .results()
-                        .map(|x| x.into())
-                        .collect(),
-                    LayerIndex::Argument(_) => {
-                        vec![self
-                            .blocks
-                            .last()
-                            .unwrap()
-                            .argument(*offset)
-                            .unwrap()
-                            .into()]
-                    }
-                })
-                */
-            }
+            Some(index) => self.values(&index),
             _ => None,
         }
     }
@@ -234,27 +116,11 @@ impl<'c, E: Extra> Layer<'c, E> {
     pub fn values(&self, index: &LayerIndex) -> Option<Vec<Value<'c, '_>>> {
         log::debug!("looking for {:?} in {:?}", index, self.ty);
         if let LayerIndex::BlockArg(block_offset, arg_offset) = index {
-            //use crate::blocks::Index;
-            //if let Some(g) = &self.g {
             return if let Some(value) = self.g.find_arg(*block_offset, *arg_offset) {
                 Some(vec![value.into()])
             } else {
                 None
             };
-            //let result = if self.g.blocks.len() > 0 {
-            //let block = self.g.get_block(Index::new(*block_offset));
-            //Some(vec![block.argument(*arg_offset).unwrap().into()])
-            //} else {
-            //None
-            //};
-            //log::debug!(
-            //"len blocks: {:?}, {}, result: {}",
-            //self.ty,
-            //self.g.blocks.len(),
-            //result.is_some()
-            //);
-            //return result;
-            //}
         }
 
         if let Some(offset) = self.index.get(&index) {
@@ -266,7 +132,6 @@ impl<'c, E: Extra> Layer<'c, E> {
                 self.ty
             );
             match index {
-                //LayerIndex::Static(_) => vec![],
                 LayerIndex::Op(_) => Some(
                     self.ops
                         .get(*offset)
@@ -275,14 +140,6 @@ impl<'c, E: Extra> Layer<'c, E> {
                         .map(|x| x.into())
                         .collect(),
                 ),
-
-                //LayerIndex::Argument(_) => Some(vec![self
-                //.blocks
-                //.first()
-                //.expect("Argument Missing")
-                //.argument(*offset)
-                //.unwrap()
-                //.into()]),
                 _ => unimplemented!("{:?}", index),
             }
         } else {
@@ -304,24 +161,6 @@ impl<'c, E: Extra> Layer<'c, E> {
         self.ops.drain(..).collect()
     }
 
-    /*
-    pub fn take_region(&mut self) -> Region<'c> {
-        let region = Region::new();
-        for block in self.blocks.drain(..) {
-            region.append_block(block);
-        }
-        region
-    }
-
-    pub fn select(&mut self, name: &str, mut layer: Layer<'c, E>) {
-        let ops = layer.take_ops();
-        let block = self.block(name).unwrap();
-        for op in ops {
-            block.append_operation(op);
-        }
-    }
-    */
-
     pub fn push_block(
         &mut self,
         context: &'c Context,
@@ -330,7 +169,6 @@ impl<'c, E: Extra> Layer<'c, E> {
         expr: AstNode<E>,
         d: &Diagnostics,
     ) {
-        //assert!(self.g.is_some());
         log::debug!("block block: {}", name);
         let _ = self.g.add_node(context, &name, params, expr, d);
     }
@@ -365,7 +203,6 @@ impl<'c, E: Extra> ScopeStack<'c, E> {
     }
 
     pub fn dump(&self) {
-        //println!("env: {:?}", self);
         for layer in &self.layers {
             println!("Layer: {:?}", layer.ty);
             for (name, index) in layer.names.iter() {
@@ -431,10 +268,6 @@ impl<'c, E: Extra> ScopeStack<'c, E> {
         self.layers.last().unwrap().ty
     }
 
-    //pub fn fresh_argument(&mut self) -> LayerIndex {
-    //LayerIndex::Argument(self.fresh_index())
-    //}
-
     pub fn unique_static_name(&mut self) -> String {
         let s = format!("__static_x{}", self.static_count);
         self.static_count += 1;
@@ -471,20 +304,8 @@ impl<'c, E: Extra> ScopeStack<'c, E> {
     }
 
     pub fn exit(&mut self) -> Layer<'c, E> {
-        let layer = self.layers.pop().unwrap();
-        //self.merge(layer);
-        layer
+        self.layers.pop().unwrap()
     }
-
-    /*
-    pub fn merge(&mut self, layer: Layer<'c>) {
-        if let Some(last) = self.layers.last_mut() {
-            last.merge(layer);
-        } else {
-            unreachable!()
-        }
-    }
-    */
 
     pub fn last(&self) -> &Layer<'c, E> {
         if let Some(last) = self.layers.last() {
@@ -565,13 +386,12 @@ impl<'c, E: Extra> ScopeStack<'c, E> {
     }
 
     pub fn value0(&self, index: &LayerIndex) -> Value<'c, '_> {
-        //self.dump();
         for layer in self.layers.iter().rev() {
             if let Some(result) = layer.values(&index) {
                 if result.len() == 0 {
                     unreachable!("Lookup op without value: {:?}", index);
                 }
-                return result[0]; //.get(0).expect("Missing value");
+                return result[0];
             }
         }
         unreachable!("Index not found: {:?}", index);
@@ -628,45 +448,8 @@ impl<'c, E: Extra> ScopeStack<'c, E> {
         None
     }
 
-    /*
-    pub fn exit_block(&mut self) -> Block<'c> {
-        self.layers.last_mut().unwrap().exit_block()
-    }
-
-    pub fn block(&self, name: &str) -> Option<&Block<'c>> {
-        for layer in self.layers.iter().rev() {
-            let result = layer.block(name);
-            if result.is_some() {
-                return result;
-            }
-        }
-        None
-    }
-
-    pub fn select(&mut self, name: &str, mut layer: Layer<'c, E>) {
-        let ops = layer.take_ops();
-        let block = self.block(name).unwrap();
-        for op in ops {
-            block.append_operation(op);
-        }
-    }
-
-    pub fn push_block(
-        &mut self,
-        context: &'c Context,
-        name: &str,
-        params: Vec<ParameterNode<E>>,
-        expr: AstNode<E>,
-        d: &Diagnostics,
-    ) {
-        self.layers
-            .last_mut()
-            .unwrap()
-            .push_block(context, name, params, expr, d);
-    }
-    */
-
     pub fn build_layers(&mut self) -> HashMap<Index, Layer<'c, E>> {
+        // just build the layers with scope
         self.last_mut().build();
         let s = self.last_mut().dfs_first();
 
@@ -679,9 +462,7 @@ impl<'c, E: Extra> ScopeStack<'c, E> {
             // variables in it's dominants
             //
             // create a layer and add all of the dominant parameters
-            //println!("push {:?}", index);
             let mut layer: Layer<E> = Layer::new(LayerType::Block);
-
             for d_index in dominants.iter() {
                 let params = self.last().get_params(*d_index);
                 // create a new layer, adding arguments as scoped variables
@@ -690,13 +471,11 @@ impl<'c, E: Extra> ScopeStack<'c, E> {
                     layer.name_index(arg.clone(), &a.name);
                     layer.index.insert(arg.clone(), 0);
                     out.push((arg, a.ty.clone()));
-                    //let data = Data::new(a.ty.clone());
-                    //self.index_data(&arg, a.ty);
-
-                    // record argument offset
-                    //println!("p: {:?}", (index, d_index, offset, &a.name, &a.ty));
                 }
             }
+
+            println!("layer: {:?}, {:?}, {:?}", index, dominants, layer.names);
+
             items.insert(index, layer);
         }
 
@@ -713,12 +492,9 @@ mod tests {
     use super::*;
     use crate::ast;
     use crate::ast::{Extra, SimpleExtra};
-    //use crate::lower::FileDB;
     use crate::lower::Lower;
     use crate::{Diagnostics, Environment, NodeBuilder};
     use melior::dialect::{arith, func};
-    //use melior::ir::attribute::{StringAttribute, TypeAttribute};
-    //use melior::ir::r#type::FunctionType;
     use melior::ir::Location;
     use melior::{
         dialect::DialectRegistry,

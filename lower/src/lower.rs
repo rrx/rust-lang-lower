@@ -41,8 +41,6 @@ impl Data {
     }
 }
 
-//pub type Environment<'c, E> = ScopeStack<'c, Data, E>;
-
 /*
  * Environment
  * - is this in a function context?
@@ -346,7 +344,9 @@ impl<'c, E: Extra> Lower<'c, E> {
         // everything should be visible that is dominant
         for (offset, ast) in asts.into_iter().enumerate() {
             let layer = items.remove(&Index::new(offset)).unwrap();
-            println!("enter layer {:?}", &layer);
+            //println!("enter layer {:?}", &layer);
+            println!("layer names {:?}", &layer.names);
+
             env.enter(layer);
 
             println!("enter {}", offset);
@@ -482,12 +482,12 @@ impl<'c, E: Extra> Lower<'c, E> {
             (AstType::Index, "arg1", "init_op2"),
         ];
 
+        /*
         let _block_args: Vec<(&str, AstType)> = init_args
             .iter()
             .map(|(ast_ty, arg_name, _)| (*arg_name, ast_ty.clone()))
             .collect();
 
-        /*
         let before_args: Vec<ParameterNode<E>> = init_args
             .into_iter()
             .map(|(ast_ty, arg_name, init_name)| {
@@ -505,6 +505,8 @@ impl<'c, E: Extra> Lower<'c, E> {
             .collect();
 
             */
+
+        // condtion
         let block_args: Vec<(Type<'c>, Location<'c>)> = init_args
             .iter()
             .map(|(ast_ty, _arg_name, _)| {
@@ -1222,6 +1224,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                 } else {
                     vec![ret_ty]
                 };
+
                 let func_type = FunctionType::new(self.context, &types, &ret_type);
                 let f_type = AstType::Func(ast_types, ast_ret_type);
                 let data = Data::new_static(f_type, &def.name);
@@ -1556,7 +1559,7 @@ pub(crate) mod tests {
                     b.assign("yy", b.integer(2)),
                     b.mutate(b.ident("z"), b.integer(997)),
                     // entry dominates "asdf", so y should be visible
-                    //b.mutate(b.ident("y"), b.integer(997)),
+                    b.mutate(b.ident("y"), b.integer(997)),
                     //b.mutate(b.ident("z_static"), b.integer(10)),
                     //b.subtract(b.deref_offset(b.ident("y"), 0), b.integer(1)),
                     b.goto("asdf2"),
