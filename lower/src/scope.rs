@@ -157,6 +157,12 @@ impl<'c, E: Extra> Layer<'c, E> {
         LayerIndex::Noop
     }
 
+    pub fn append_ops(&mut self, block_ref: &Block<'c>) {
+        for op in self.take_ops() {
+            block_ref.append_operation(op);
+        }
+    }
+
     pub fn take_ops(&mut self) -> Vec<Operation<'c>> {
         self.names.clear();
         self.ops.drain(..).collect()
@@ -428,6 +434,12 @@ impl<'c, E: Extra> ScopeStack<'c, E> {
             }
         }
         None
+    }
+
+    pub fn append_ops(&mut self, block_ref: &Block<'c>) {
+        for layer in self.layers.iter_mut() {
+            layer.append_ops(block_ref);
+        }
     }
 
     pub fn take_ops(&mut self) -> Vec<Operation<'c>> {
