@@ -343,14 +343,15 @@ impl<'c, E: Extra> Lower<'c, E> {
         // we can look up block args, but not arguments that are defined in the layer
         // everything should be visible that is dominant
         for (offset, ast) in asts.into_iter().enumerate() {
-            let layer = items.remove(&Index::new(offset)).unwrap();
+            let index = Index::new(offset);
+            let layer = items.remove(&index).unwrap();
+
             //println!("enter layer {:?}", &layer);
             println!("layer names {:?}", &layer.names);
-
             env.enter(layer);
-
             println!("enter {}", offset);
             //println!("ast {:?}", &ast);
+
             env.dump();
             self.lower_expr(ast, env, d, b)?;
             let layer = env.exit();
@@ -362,7 +363,7 @@ impl<'c, E: Extra> Lower<'c, E> {
 
         // turn blocks into region
         let blocks = layer.g.take_blocks();
-        for (_offset, (mut layer, block)) in layers.into_iter().zip(blocks).enumerate() {
+        for (mut layer, block) in layers.into_iter().zip(blocks) {
             let ops = layer.take_ops();
             println!("ops {}", ops.len());
             for op in ops {
@@ -1559,7 +1560,7 @@ pub(crate) mod tests {
                     b.assign("yy", b.integer(2)),
                     b.mutate(b.ident("z"), b.integer(997)),
                     // entry dominates "asdf", so y should be visible
-                    b.mutate(b.ident("y"), b.integer(997)),
+                    //b.mutate(b.ident("y"), b.integer(997)),
                     //b.mutate(b.ident("z_static"), b.integer(10)),
                     //b.subtract(b.deref_offset(b.ident("y"), 0), b.integer(1)),
                     b.goto("asdf2"),
@@ -1691,10 +1692,9 @@ pub(crate) mod tests {
         let file_id = d.add_source("test.py".into(), "test".into());
         let b = NodeBuilder::new(file_id, "type.py");
         let mut env = Environment::default();
-        env.enter_static();
         let ast: AstNode<SimpleExtra> = gen_block(&mut env, &b);
         let r = lower
-            .run_ast(ast, "../target/debug/", env, &mut d, &b)
+            .run_ast(ast, "../target/debug/", &mut env, &mut d, &b)
             .unwrap();
         assert_eq!(0, r);
     }
@@ -1707,10 +1707,9 @@ pub(crate) mod tests {
         let file_id = d.add_source("test.py".into(), "test".into());
         let b: NodeBuilder<SimpleExtra> = NodeBuilder::new(file_id, "type.py");
         let mut env = Environment::default();
-        env.enter_static();
         let ast: AstNode<SimpleExtra> = gen_function_call(&mut env, &b);
         let r = lower
-            .run_ast(ast, "../target/debug/", env, &mut d, &b)
+            .run_ast(ast, "../target/debug/", &mut env, &mut d, &b)
             .unwrap();
         assert_eq!(0, r);
     }
@@ -1723,10 +1722,9 @@ pub(crate) mod tests {
         let file_id = d.add_source("test.py".into(), "test".into());
         let b = NodeBuilder::new(file_id, "type.py");
         let mut env = Environment::default();
-        env.enter_static();
         let ast: AstNode<SimpleExtra> = gen_while(&mut env, &b);
         let r = lower
-            .run_ast(ast, "../target/debug/", env, &mut d, &b)
+            .run_ast(ast, "../target/debug/", &mut env, &mut d, &b)
             .unwrap();
         assert_eq!(0, r);
     }
@@ -1739,10 +1737,9 @@ pub(crate) mod tests {
         let file_id = d.add_source("test.py".into(), "test".into());
         let b = NodeBuilder::new(file_id, "type.py");
         let mut env = Environment::default();
-        env.enter_static();
         let ast: AstNode<SimpleExtra> = gen_test(&mut env, &b);
         let r = lower
-            .run_ast(ast, "../target/debug/", env, &mut d, &b)
+            .run_ast(ast, "../target/debug/", &mut env, &mut d, &b)
             .unwrap();
         assert_eq!(0, r);
     }

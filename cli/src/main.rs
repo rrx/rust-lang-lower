@@ -62,7 +62,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     for path in config.inputs {
         let mut env: lower::Environment<SimpleExtra> = lower::Environment::default();
-        env.enter_static();
         let path = Path::new(&path);
         log::debug!("parsing: {}", path.to_str().unwrap());
 
@@ -78,11 +77,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         if d.has_errors {
             std::process::exit(1);
         }
-        assert_eq!(1, env.layer_count());
-        let r = lower.module_lower(&mut module, result?, env, &mut d, &b);
+        assert_eq!(0, env.layer_count());
+        let r = lower.module_lower(&mut module, result?, &mut env, &mut d, &b);
         if config.verbose {
             d.dump();
         }
+        assert_eq!(0, env.layer_count());
         if d.has_errors {
             std::process::exit(1);
         }

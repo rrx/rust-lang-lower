@@ -21,18 +21,22 @@ impl<'c, E: ast::Extra> lower::Lower<'c, E> {
         &mut self,
         module: &mut ir::Module<'c>,
         expr: ast::AstNode<E>,
-        mut env: Environment<'c, E>,
+        env: &mut Environment<'c, E>,
         d: &mut Diagnostics,
         b: &NodeBuilder<E>,
     ) -> Result<()> {
-        self.lower_expr(expr, &mut env, d, b)?;
-        //env.dump();
-        for op in env.take_ops() {
+        assert_eq!(0, env.layer_count());
+        env.enter_static();
+        self.lower_expr(expr, env, d, b)?;
+        env.dump();
+        let mut layer = env.exit();
+        assert_eq!(0, env.layer_count());
+        for op in layer.take_ops() {
             module.body().append_operation(op);
         }
 
-        for s in env.shared {
-            self.shared.insert(s);
+        for s in &env.shared {
+            self.shared.insert(s.clone());
         }
 
         log::debug!(
@@ -61,7 +65,7 @@ impl<'c, E: ast::Extra> lower::Lower<'c, E> {
         &mut self,
         ast: ast::AstNode<E>,
         libpath: &str,
-        env: Environment<'c, E>,
+        env: &mut Environment<'c, E>,
         d: &mut Diagnostics,
         b: &NodeBuilder<E>,
     ) -> Result<i32> {
@@ -135,6 +139,7 @@ impl<'c, E: ast::Extra> CompilerContext<'c, E> {
         }
     }
 
+    /*
     pub fn merge(&mut self, module: &ir::Module<'c>, _ast: ast::AstNode<E>) {
         //let lower = lower::Lower::new(&self.context, &self.files);
         //lower.lower_expr(ast, &mut self.env);
@@ -142,6 +147,7 @@ impl<'c, E: ast::Extra> CompilerContext<'c, E> {
             module.body().append_operation(op);
         }
     }
+    */
 }
 
 pub struct Compiler<'c, E> {

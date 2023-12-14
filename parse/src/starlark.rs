@@ -562,16 +562,14 @@ pub(crate) mod tests {
 
         // lower
         let mut env = lower::Environment::default();
-        env.enter_static();
 
         // run
         assert_eq!(
             expected,
             lower
-                .run_ast(ast, "../target/debug", env, &mut d, &b)
+                .run_ast(ast, "../target/debug", &mut env, &mut d, &b)
                 .unwrap()
         );
-        //env.exit();
     }
 
     #[test]

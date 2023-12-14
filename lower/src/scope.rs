@@ -60,6 +60,7 @@ impl<'c, E: Extra> Layer<'c, E> {
         }
     }
 
+    /*
     pub fn build(&mut self) {
         self.g.build();
     }
@@ -71,6 +72,7 @@ impl<'c, E: Extra> Layer<'c, E> {
     pub fn get_params(&self, index: Index) -> &Vec<ParameterNode<E>> {
         self.g.get_params(index)
     }
+    */
 
     pub fn get_block_by_name(&self, name: &str) -> Option<&Block<'c>> {
         self.g.get_block_by_name(name)
@@ -448,8 +450,8 @@ impl<'c, E: Extra> ScopeStack<'c, E> {
 
     pub fn build_layers(&mut self) -> HashMap<Index, Layer<'c, E>> {
         // just build the layers with scope
-        self.last_mut().build();
-        let s = self.last_mut().dfs_first();
+        self.last_mut().g.build();
+        let s = self.last_mut().g.dfs_first();
 
         let mut items = HashMap::new();
         // create layers with appropriate scoped variables
@@ -462,7 +464,7 @@ impl<'c, E: Extra> ScopeStack<'c, E> {
             // create a layer and add all of the dominant parameters
             let mut layer: Layer<E> = Layer::new(LayerType::Block);
             for d_index in dominants.iter() {
-                let params = self.last().get_params(*d_index);
+                let params = self.last().g.get_params(*d_index);
                 // create a new layer, adding arguments as scoped variables
                 for (offset, a) in params.iter().enumerate() {
                     let arg = LayerIndex::BlockArg(d_index.get(), offset);
