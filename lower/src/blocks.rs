@@ -150,6 +150,12 @@ impl<'c, E: Extra> BlockGraph<'c, E> {
                     let offset = self.names.get(&name).unwrap();
                     out.push((Index(index), Index(*offset)));
                 }
+                Terminator::Branch(j1, j2) => {
+                    let offset = self.names.get(&j1).unwrap();
+                    out.push((Index(index), Index(*offset)));
+                    let offset = self.names.get(&j2).unwrap();
+                    out.push((Index(index), Index(*offset)));
+                }
                 Terminator::Return => (),
             };
         }

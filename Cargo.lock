@@ -1105,6 +1105,7 @@ dependencies = [
  "log",
  "melior",
  "miette",
+ "petgraph",
  "test-log",
  "thiserror",
 ]

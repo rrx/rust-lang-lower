@@ -118,6 +118,7 @@ pub enum DerefTarget {
 #[derive(Debug)]
 pub enum Terminator {
     Jump(String),
+    Branch(String, String),
     Return,
 }
 

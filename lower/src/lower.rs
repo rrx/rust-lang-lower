@@ -1181,7 +1181,7 @@ impl<'c, E: Extra> Lower<'c, E> {
 
             Ast::Definition(def) => {
                 // normalize def to ensure it's in the expected format
-                let def = def.normalize(b);
+                let def = def.normalize();
 
                 log::debug!("name {:?}", def.name);
 
@@ -1459,9 +1459,10 @@ impl<'c, E: Extra> Lower<'c, E> {
 }
 
 impl<'c, E: Extra> Definition<E> {
-    pub fn normalize(mut self, b: &NodeBuilder<E>) -> Self {
+    pub fn normalize(mut self) -> Self {
         // ensure that the function body is a sequence of named blocks
         if let Some(body) = self.body {
+            let extra = body.extra.clone();
             // sort body
             let mut s = crate::builder::AstSorter::new();
             s.sort_children(*body);
@@ -1470,20 +1471,36 @@ impl<'c, E: Extra> Definition<E> {
 
             // initial nodes form the entry block
             if s.stack.len() > 0 {
-                let seq = b.seq(s.stack);
+                let seq = AstNode::new(Ast::Sequence(s.stack), extra.clone());
                 // TODO: check that function args match the first block args
                 let params = self
                     .params
                     .iter()
-                    .map(|p| (p.name.as_str(), p.ty.clone()))
+                    .map(|p| {
+                        if let Parameter::Normal = p.node {
+                            ParameterNode {
+                                name: p.name.clone(),
+                                ty: p.ty.clone(),
+                                node: Parameter::Normal,
+                                extra: p.extra.clone(),
+                            }
+                        } else {
+                            unreachable!()
+                        }
+                    })
                     .collect::<Vec<_>>();
-                let node = b.block("entry", &params, seq);
+                let node = AstNode::new(
+                    Ast::Block("entry".to_string(), params, seq.into()),
+                    extra.clone(),
+                );
                 blocks.push_back(node.into());
             }
 
             blocks.extend(s.blocks.into_iter().map(|b| b.into()));
 
-            self.body = Some(b.seq(blocks.into_iter().collect()).into());
+            self.body = Some(
+                AstNode::new(Ast::Sequence(blocks.into_iter().collect()), extra.clone()).into(),
+            );
         }
         self
     }
@@ -1514,10 +1531,7 @@ pub(crate) mod tests {
         b.seq(seq)
     }
 
-    pub fn gen_block<'c, E: Extra>(
-        _env: &mut Environment<'c, E>,
-        b: &NodeBuilder<E>,
-    ) -> AstNode<E> {
+    pub fn gen_block<'c, E: Extra>(b: &NodeBuilder<E>) -> AstNode<E> {
         let mut seq = vec![b.import_prelude()];
 
         // global variable x = 10
@@ -1674,7 +1688,7 @@ pub(crate) mod tests {
         let file_id = d.add_source("test.py".into(), "test".into());
         let b = NodeBuilder::new(file_id, "type.py");
         let mut env = Environment::default();
-        let ast: AstNode<SimpleExtra> = gen_block(&mut env, &b);
+        let ast: AstNode<SimpleExtra> = gen_block(&b);
         let r = lower
             .run_ast(ast, "../target/debug/", &mut env, &mut d, &b)
             .unwrap();
