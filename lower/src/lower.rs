@@ -1,7 +1,7 @@
 use crate::ast::*;
 use crate::scope::{Layer, LayerIndex, LayerType};
+use crate::{op, Environment, NodeBuilder};
 use crate::{Diagnostics, ParseError};
-use crate::{Environment, NodeBuilder};
 use anyhow::Error;
 use anyhow::Result;
 use melior::{
@@ -190,13 +190,7 @@ impl<'c, E: Extra> Lower<'c, E> {
 
     pub fn type_from_expr(&self, expr: &AstNode<E>, env: &Environment<'c, E>) -> AstType {
         match &expr.node {
-            Ast::Literal(x) => match x {
-                Literal::Int(_) => AstType::Int,
-                Literal::Float(_) => AstType::Float,
-                Literal::Bool(_) => AstType::Bool,
-                Literal::Index(_) => AstType::Index,
-                Literal::String(_) => AstType::String,
-            },
+            Ast::Literal(x) => x.into(),
             Ast::Identifier(name) => {
                 // infer type from the operation
                 let index = env.index_from_name(name).unwrap();
@@ -209,38 +203,19 @@ impl<'c, E: Extra> Lower<'c, E> {
     }
 
     pub fn build_bool_op(&self, value: bool, location: Location<'c>) -> Operation<'c> {
-        let bool_type = IntegerType::new(self.context, 1);
-        arith::constant(
-            self.context,
-            attribute::IntegerAttribute::new(if value { 1 } else { 0 }, bool_type.into()).into(),
-            location,
-        )
+        op::build_bool_op(self.context, value, location)
     }
 
     pub fn build_int_op(&self, value: i64, location: Location<'c>) -> Operation<'c> {
-        let ty = IntegerType::new(self.context, 64);
-        arith::constant(
-            self.context,
-            attribute::IntegerAttribute::new(value, ty.into()).into(),
-            location,
-        )
+        op::build_int_op(self.context, value, location)
     }
 
     pub fn build_index_op(&self, value: i64, location: Location<'c>) -> Operation<'c> {
-        let ty = Type::index(self.context);
-        arith::constant(
-            self.context,
-            attribute::IntegerAttribute::new(value, ty.into()).into(),
-            location,
-        )
+        op::build_index_op(self.context, value, location)
     }
 
     pub fn build_float_op(&self, value: f64, location: Location<'c>) -> Operation<'c> {
-        arith::constant(
-            self.context,
-            attribute::FloatAttribute::new(self.context, value, Type::float64(self.context)).into(),
-            location,
-        )
+        op::build_float_op(self.context, value, location)
     }
 
     pub fn lower_static(

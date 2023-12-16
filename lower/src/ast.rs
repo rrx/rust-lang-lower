@@ -21,6 +21,30 @@ pub enum AstType {
     //Unknown,
 }
 
+impl From<Literal> for AstType {
+    fn from(item: Literal) -> Self {
+        match item {
+            Literal::Int(_) => AstType::Int,
+            Literal::Float(_) => AstType::Float,
+            Literal::Bool(_) => AstType::Bool,
+            Literal::Index(_) => AstType::Index,
+            Literal::String(_) => AstType::String,
+        }
+    }
+}
+
+impl From<&Literal> for AstType {
+    fn from(item: &Literal) -> Self {
+        match item {
+            Literal::Int(_) => AstType::Int,
+            Literal::Float(_) => AstType::Float,
+            Literal::Bool(_) => AstType::Bool,
+            Literal::Index(_) => AstType::Index,
+            Literal::String(_) => AstType::String,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum Literal {
     Int(i64),

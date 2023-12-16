@@ -6,14 +6,14 @@ use crate::lower::from_type;
 use melior::ir::operation::OperationPrintingFlags;
 //use crate::scope::LayerIndex;
 use crate::default_pass_manager;
-
+use crate::op;
 use crate::{Diagnostics, ParseError};
 use anyhow::Error;
 use anyhow::Result;
 use melior::ir::Location;
 use melior::{
     dialect::{
-        arith,
+        //arith,
         cf,
         func,
         //llvm,
@@ -24,8 +24,8 @@ use melior::{
         attribute::{
             //DenseElementsAttribute,
             FlatSymbolRefAttribute,
-            FloatAttribute,
-            IntegerAttribute,
+            //FloatAttribute,
+            //IntegerAttribute,
             StringAttribute,
             TypeAttribute,
         },
@@ -35,7 +35,16 @@ use melior::{
             MemRefType,
             //RankedTensorType,
         },
-        Attribute, Block, Identifier, Module, Operation, Region, Type, TypeLike, Value, ValueLike,
+        Attribute,
+        Block,
+        Identifier,
+        Module,
+        Operation,
+        Region,
+        //Type,
+        TypeLike,
+        Value,
+        ValueLike,
     },
     Context, ExecutionEngine,
 };
@@ -331,13 +340,7 @@ impl<'c, E: Extra> CFG<'c, E> {
 
     pub fn type_from_expr(&self, index: NodeIndex, expr: &AstNode<E>) -> AstType {
         match &expr.node {
-            Ast::Literal(x) => match x {
-                Literal::Int(_) => AstType::Int,
-                Literal::Float(_) => AstType::Float,
-                Literal::Bool(_) => AstType::Bool,
-                Literal::Index(_) => AstType::Index,
-                Literal::String(_) => AstType::String,
-            },
+            Ast::Literal(x) => x.into(),
             Ast::Identifier(name) => {
                 // infer type from the operation
                 let index = self.name_in_scope(index, name).unwrap();
@@ -537,11 +540,13 @@ impl<E: Extra> AstNode<E> {
     ) -> Result<SymIndex> {
         let location = self.location(context, d);
         match self.node {
+            /*
             Ast::Builtin(_, _) => {
                 let current_block = stack.last().unwrap();
                 let sym_index = cfg.fresh_sym_index(*current_block);
                 Ok(sym_index)
             }
+            */
             Ast::Sequence(exprs) => {
                 let mut out = vec![];
                 for expr in exprs {
@@ -570,8 +575,6 @@ impl<E: Extra> AstNode<E> {
                 let sym_index = cfg.fresh_sym_index(*current_block);
                 let op = if let Some(index) = cfg.block_index(&label) {
                     cfg.g.add_edge(*current_block, index, ());
-                    //let data = cfg.data_by_index(index).unwrap();
-                    //let data = cfg.g.node_weight(index).unwrap();
                     let block = cfg.blocks.get(&index).unwrap();
                     cf::br(block, &[], location)
                 } else {
@@ -609,17 +612,14 @@ impl<E: Extra> AstNode<E> {
                         let r_addr = current.value0(ptr_index).unwrap();
                         let op = memref::store(r_value, r_addr, &[], location);
                         current.push(op, op_index);
+                        current.add_symbol(&name, op_index);
                         op_index
                     }
                     AssignTarget::Identifier(name) => {
-                        //let ty = cfg.type_from_expr(*block_index, &expr);
-                        //let data = cfg.data_mut_by_index(*stack.last().unwrap()).unwrap();
-                        //let symbol_data = SymbolData::new(ty);
                         let current_block = stack.last().unwrap().clone();
                         let index = expr.lower(context, d, cfg, stack)?;
                         let current = cfg.data_mut_by_index(current_block).unwrap();
                         current.add_symbol(&name, index);
-                        //cfg.symbols.insert(index, symbol_data);
                         index
                     }
                 };
@@ -639,7 +639,7 @@ impl<E: Extra> AstNode<E> {
                 let ret_ty = from_type(context, &*def.return_type);
                 let mut ast_types = vec![];
                 let mut types = vec![];
-                let ast_ret_type = def.return_type;
+                //let ast_ret_type = def.return_type;
 
                 for p in &def.params {
                     match p.node {
@@ -727,25 +727,25 @@ impl<E: Extra> AstNode<E> {
                 let current = cfg.data_mut_by_index(current_block).unwrap();
                 match lit {
                     Literal::Float(f) => {
-                        let op = build_float_op(context, f, location);
+                        let op = op::build_float_op(context, f, location);
                         current.push(op, sym_index);
                         Ok(sym_index)
                     }
 
                     Literal::Int(x) => {
-                        let op = build_int_op(context, x, location);
+                        let op = op::build_int_op(context, x, location);
                         current.push(op, sym_index);
                         Ok(sym_index)
                     }
 
                     Literal::Index(x) => {
-                        let op = build_index_op(context, x as i64, location);
+                        let op = op::build_index_op(context, x as i64, location);
                         current.push(op, sym_index);
                         Ok(sym_index)
                     }
 
                     Literal::Bool(x) => {
-                        let op = build_bool_op(context, x, location);
+                        let op = op::build_bool_op(context, x, location);
                         current.push(op, sym_index);
                         Ok(sym_index)
                     }
@@ -823,7 +823,7 @@ impl<E: Extra> AstNode<E> {
                         log::debug!("import: {:?}", arg);
                         if let Argument::Positional(expr) = arg {
                             if let Some(s) = expr.try_string() {
-                                cfg.shared.insert(s); //.add_shared(&s);
+                                cfg.shared.insert(s);
                             } else {
                                 d.push_diagnostic(expr.extra.error("Expected string"));
                             }
@@ -832,9 +832,7 @@ impl<E: Extra> AstNode<E> {
                         }
                         // do nothing?
                         let sym_index = cfg.fresh_sym_index(current_block);
-                        //current.push(op, sym_index);
                         Ok(sym_index)
-                        //Ok(env.push_noop())
                     } //_ => unimplemented!("{:?}", b),
                 }
             }
@@ -901,53 +899,6 @@ impl<E: Extra> AstNode<E> {
     }
 }
 
-pub fn build_float_op<'c>(
-    context: &'c Context,
-    value: f64,
-    location: Location<'c>,
-) -> Operation<'c> {
-    arith::constant(
-        context,
-        FloatAttribute::new(context, value, Type::float64(context)).into(),
-        location,
-    )
-}
-
-pub fn build_int_op<'c>(context: &'c Context, value: i64, location: Location<'c>) -> Operation<'c> {
-    let ty = IntegerType::new(context, 64);
-    arith::constant(
-        context,
-        IntegerAttribute::new(value, ty.into()).into(),
-        location,
-    )
-}
-
-pub fn build_index_op<'c>(
-    context: &'c Context,
-    value: i64,
-    location: Location<'c>,
-) -> Operation<'c> {
-    let ty = Type::index(context);
-    arith::constant(
-        context,
-        IntegerAttribute::new(value, ty.into()).into(),
-        location,
-    )
-}
-
-pub fn build_bool_op<'c>(
-    context: &'c Context,
-    value: bool,
-    location: Location<'c>,
-) -> Operation<'c> {
-    let bool_type = IntegerType::new(context, 1);
-    arith::constant(
-        context,
-        IntegerAttribute::new(if value { 1 } else { 0 }, bool_type.into()).into(),
-        location,
-    )
-}
-
 pub fn exec_main<'c, E>(cfg: &CFG<'c, E>, module: &Module<'c>, libpath: &str) -> i32 {
     let paths = cfg
         .shared
@@ -976,7 +927,7 @@ mod tests {
     use super::*;
     use crate::ast::{AstType, SimpleExtra};
     use crate::lower::tests::gen_block;
-    use crate::{default_context, default_pass_manager, Diagnostics, NodeBuilder};
+    use crate::{default_context, Diagnostics, NodeBuilder};
     use test_log::test;
 
     #[test]
@@ -1000,7 +951,7 @@ mod tests {
     }
 
     #[test]
-    fn test_cfg_block() {
+    fn test_cfg_block2() {
         let mut cfg: CFG<SimpleExtra> = CFG::new("module");
         let mut d = Diagnostics::new();
         let file_id = d.add_source("test.py".into(), "test".into());

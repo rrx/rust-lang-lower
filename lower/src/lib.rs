@@ -6,6 +6,7 @@ pub mod compile;
 pub mod diagnostics;
 pub mod env;
 pub mod lower;
+pub mod op;
 pub mod scope;
 
 pub use builder::NodeBuilder;
