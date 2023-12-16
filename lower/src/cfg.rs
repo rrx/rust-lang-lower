@@ -1,8 +1,15 @@
 use crate::ast::{AssignTarget, Ast, AstNode, AstType, Extra, Literal, ParameterNode, Terminator};
 use crate::lower::from_type;
 use crate::scope::LayerIndex;
+use crate::{Diagnostics, ParseError};
+use anyhow::Error;
 use anyhow::Result;
-use melior::ir::{Block, Operation};
+use melior::ir::Location;
+use melior::{
+    dialect::{arith, cf, func, llvm, memref, ods, scf},
+    ir::{Block, Operation, Region},
+    Context,
+};
 use petgraph::algo::dominators::simple_fast;
 use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
@@ -19,6 +26,7 @@ pub enum NodeType {
 
 #[derive(Debug)]
 pub struct GData<'c, E> {
+    block: Block<'c>,
     ops: Vec<Operation<'c>>,
     name: String,
     node_type: NodeType,
@@ -26,8 +34,14 @@ pub struct GData<'c, E> {
     names: HashMap<String, CFGIndex>,
 }
 impl<'c, E: Extra> GData<'c, E> {
-    pub fn new(name: &str, node_type: NodeType, params: Vec<ParameterNode<E>>) -> Self {
+    pub fn new(
+        name: &str,
+        block: Block<'c>,
+        node_type: NodeType,
+        params: Vec<ParameterNode<E>>,
+    ) -> Self {
         Self {
+            block,
             ops: vec![],
             name: name.to_string(),
             node_type,
@@ -91,21 +105,22 @@ pub struct CFG<'c, E> {
     root: NodeIndex,
     index_count: usize,
     g: DiGraph<GData<'c, E>, ()>,
-    names: HashMap<String, NodeIndex>,
+    block_names: HashMap<String, NodeIndex>,
     symbols: HashMap<CFGIndex, SymbolData>,
 }
 
 impl<'c, E: Extra> CFG<'c, E> {
     pub fn new(module_name: &str) -> Self {
         let g = DiGraph::new();
-        let data = GData::new(module_name, NodeType::Module, vec![]);
+        let block = Block::new(&[]);
+        let data = GData::new(module_name, block, NodeType::Module, vec![]);
 
         let mut cfg = Self {
             // dummy
             root: NodeIndex::new(0),
             index_count: 0,
             g,
-            names: HashMap::new(),
+            block_names: HashMap::new(),
             symbols: HashMap::new(),
         };
         cfg.add_block(data);
@@ -125,19 +140,19 @@ impl<'c, E: Extra> CFG<'c, E> {
     pub fn add_block(&mut self, data: GData<'c, E>) -> NodeIndex {
         let name = data.name.clone();
         let index = self.g.add_node(data);
-        self.names.insert(name, index);
+        self.block_names.insert(name, index);
         index
     }
 
     pub fn add_edge(&mut self, a: &str, b: &str) {
         println!("adding {}, {}", a, b);
-        let index_a = self.names.get(a).unwrap();
-        let index_b = self.names.get(b).unwrap();
+        let index_a = self.block_names.get(a).unwrap();
+        let index_b = self.block_names.get(b).unwrap();
         self.g.add_edge(*index_a, *index_b, ());
     }
 
-    pub fn index(&self, name: &str) -> Option<NodeIndex> {
-        self.names.get(name).cloned()
+    pub fn block_index(&self, name: &str) -> Option<NodeIndex> {
+        self.block_names.get(name).cloned()
     }
 
     pub fn data_by_index(&self, index: NodeIndex) -> Option<&GData<E>> {
@@ -149,7 +164,7 @@ impl<'c, E: Extra> CFG<'c, E> {
     }
 
     pub fn data_mut_by_name(&mut self, name: &str) -> Option<&mut GData<'c, E>> {
-        if let Some(index) = self.names.get(name) {
+        if let Some(index) = self.block_names.get(name) {
             self.data_mut_by_index(*index)
         } else {
             None
@@ -215,12 +230,20 @@ impl<'c, E: Extra> CFG<'c, E> {
             }
             Ast::Block(name, params, body) => {
                 unreachable!();
+                /*
+                let block_args = params
+                    .iter()
+                    .map(|a| (from_type(context, &a.ty), a.extra.location(context, d)))
+                    .collect::<Vec<_>>();
+
+                let block = Block::new(args);
                 let current = stack.last().unwrap().clone();
                 let data = GData::new(&name, NodeType::Block, params);
                 let index = self.add_block(data);
                 self.g.add_edge(current, index, ());
                 let t = body.node.terminator().unwrap();
                 self.lower(*body, stack);
+                */
             }
             Ast::Builtin(_, _) => (),
             Ast::Literal(_) => (),
@@ -240,7 +263,7 @@ impl<'c, E: Extra> CFG<'c, E> {
             Ast::Goto(label) => {
                 //self.save_graph("out.dot");
                 let current = stack.last().unwrap();
-                let index = self.index(&label).unwrap();
+                let index = self.block_index(&label).unwrap();
                 self.g.add_edge(*current, index, ());
             }
             Ast::Mutate(target, expr) => match target.node {
@@ -271,7 +294,9 @@ impl<'c, E: Extra> CFG<'c, E> {
                 def = def.normalize();
                 let function_name = def.name.clone();
                 let current = stack.last().unwrap().clone();
-                let data = GData::new(&def.name, NodeType::Block, def.params);
+
+                let block = Block::new(&[]);
+                let data = GData::new(&def.name, block, NodeType::Block, def.params);
                 let index = self.add_block(data);
                 stack.push(index);
                 self.g.add_edge(current, index, ());
@@ -286,7 +311,13 @@ impl<'c, E: Extra> CFG<'c, E> {
                             if i == 0 {
                                 edges.push((function_name.clone(), name.clone()));
                             }
-                            let data = GData::new(&name, NodeType::Block, params);
+                            //let block_args = params
+                            //.iter()
+                            //.map(|a| (from_type(context, &a.ty), a.extra.location(context, d)))
+                            //.collect::<Vec<_>>();
+                            let block = Block::new(&[]);
+                            //let block = Block::new(&block_args);
+                            let data = GData::new(&name, block, NodeType::Block, params);
                             let index = self.add_block(data);
                             exprs.push((index, *expr));
                         } else {
@@ -307,7 +338,7 @@ impl<'c, E: Extra> CFG<'c, E> {
                 stack.pop().unwrap();
             }
             Ast::Global(name, body) => {
-                let block_index = self.index("module").unwrap();
+                let block_index = self.block_index("module").unwrap();
                 let index = self.fresh_index(block_index);
                 let ty = self.type_from_expr(block_index, &body);
                 let data = self.data_mut_by_index(block_index).unwrap();
@@ -333,14 +364,6 @@ impl<'c, E: Extra> CFG<'c, E> {
     }
 }
 
-use crate::Diagnostics;
-use melior::ir::Location;
-use melior::{
-    dialect::{arith, cf, func, llvm, memref, ods, scf},
-    ir::Region,
-    Context,
-};
-
 impl<E: Extra> AstNode<E> {
     pub fn location<'c>(&self, context: &'c Context, d: &Diagnostics) -> Location<'c> {
         self.extra.location(context, d)
@@ -349,12 +372,38 @@ impl<E: Extra> AstNode<E> {
     pub fn lower<'c>(
         self,
         context: &'c Context,
-        d: &Diagnostics,
-        cfg: &mut CFG<'c, E>,
+        d: &mut Diagnostics,
+        cfg: &'c mut CFG<'c, E>,
         current: &mut GData<'c, E>,
         stack: &mut Vec<NodeIndex>,
     ) -> Result<LayerIndex> {
+        let location = self.location(context, d);
         match self.node {
+            Ast::Goto(label) => {
+                let current_block = stack.last().unwrap();
+                if let Some(index) = cfg.block_index(&label) {
+                    cfg.g.add_edge(*current_block, index, ());
+                    let data = cfg.data_by_index(index).unwrap();
+                    current.push(cf::br(&data.block, &[], location));
+                    Ok(LayerIndex::Noop)
+                } else {
+                    d.push_diagnostic(self.extra.error(&format!("Missing block: {}", label)));
+                    Err(Error::new(ParseError::Invalid))
+                }
+            }
+            Ast::Identifier(name) => {
+                let current_block = stack.last().unwrap();
+                let dom = simple_fast(&cfg.g, cfg.root)
+                    .dominators(*current_block)
+                    .unwrap()
+                    .collect::<Vec<_>>();
+                println!("X: {:?}", dom);
+                let r = cfg.name_in_scope(*current_block, &name).unwrap();
+                let symbol_data = cfg.symbols.get(&r).unwrap();
+                println!("lookup identifier: {}, {:?}, {:?}", name, r, symbol_data.ty);
+                //self.dump_scope(*current);
+                Ok(LayerIndex::Noop)
+            }
             Ast::Assign(target, expr) => {
                 match target {
                     AssignTarget::Identifier(name) | AssignTarget::Alloca(name) => {
@@ -367,7 +416,8 @@ impl<E: Extra> AstNode<E> {
                         cfg.symbols.insert(index, symbol_data);
                     }
                 }
-                expr.lower(context, d, cfg, current, stack)
+                let index = expr.lower(context, d, cfg, current, stack)?;
+                Ok(LayerIndex::Noop)
             }
             /*
             Ast::Conditional(condition, then_expr, maybe_else_expr) => {
@@ -460,7 +510,8 @@ mod tests {
 
         (0..8).into_iter().for_each(|i| {
             let p = b.param(&format!("p{}", i), AstType::Int);
-            let mut data = GData::new(&format!("b{}", i), NodeType::Module, vec![p]);
+            let block = Block::new(&[]);
+            let mut data = GData::new(&format!("b{}", i), block, NodeType::Module, vec![p]);
             cfg.add_block(data);
             //data.add_symbol(&format!("scope{}", i), cfg.fresh_index());
         });
@@ -489,14 +540,14 @@ mod tests {
 
         (0..8).into_iter().for_each(|i| {
             let name = format!("b{}", i);
-            let index = cfg.index(&name).unwrap();
+            let index = cfg.block_index(&name).unwrap();
             let im = simple_fast(&cfg.g, cfg.root).immediate_dominator(index);
             let w = cfg.g.node_weight(index).unwrap();
             println!("node {} has immediate dominator {:?}", w.name, im);
         });
         (0..8).into_iter().for_each(|i| {
             let name = format!("b{}", i);
-            let index = cfg.index(&name).unwrap();
+            let index = cfg.block_index(&name).unwrap();
             let im = simple_fast(&cfg.g, cfg.root)
                 .immediately_dominated_by(index)
                 .collect::<Vec<_>>();
@@ -505,7 +556,7 @@ mod tests {
         });
         (0..8).into_iter().for_each(|i| {
             let name = format!("b{}", i);
-            let index = cfg.index(&name).unwrap();
+            let index = cfg.block_index(&name).unwrap();
             let im = simple_fast(&cfg.g, cfg.root)
                 .strict_dominators(index)
                 .unwrap()
@@ -515,7 +566,7 @@ mod tests {
         });
         (0..8).into_iter().for_each(|i| {
             let name = format!("b{}", i);
-            let index = cfg.index(&name).unwrap();
+            let index = cfg.block_index(&name).unwrap();
             let im = simple_fast(&cfg.g, cfg.root)
                 .dominators(index)
                 .unwrap()
