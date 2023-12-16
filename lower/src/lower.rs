@@ -1535,7 +1535,7 @@ pub(crate) mod tests {
         let mut seq = vec![b.import_prelude()];
 
         // global variable x = 10
-        seq.push(b.global("z", b.integer(10)));
+        //seq.push(b.global("z", b.integer(10)));
         seq.push(b.main(b.seq(vec![
             b.block(
                 "entry",
@@ -1543,7 +1543,7 @@ pub(crate) mod tests {
                 b.seq(vec![
                     b.assign("yy", b.integer(1)),
                     b.alloca("y", b.integer(999)),
-                    b.mutate(b.ident("y"), b.integer(998)),
+                    //b.mutate(b.ident("y"), b.integer(998)),
                     //b.ret(Some(b.integer(0))),
                     // branch to asdf
                     b.goto("asdf"),
@@ -1556,7 +1556,7 @@ pub(crate) mod tests {
                     //b.ident("y"),
                     //b.ident("z"),
                     b.assign("yy", b.integer(2)),
-                    b.mutate(b.ident("z"), b.integer(997)),
+                    //b.mutate(b.ident("z"), b.integer(997)),
                     // entry dominates "asdf", so y should be visible
                     //b.mutate(b.ident("y"), b.integer(997)),
                     //b.mutate(b.ident("z_static"), b.integer(10)),

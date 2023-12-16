@@ -1,13 +1,36 @@
-use crate::ast::{AssignTarget, Ast, AstNode, AstType, Extra, Literal, ParameterNode, Terminator};
+use crate::ast::{AssignTarget, Ast, AstNode, AstType, Extra, Literal, Parameter, ParameterNode};
 use crate::lower::from_type;
-use crate::scope::LayerIndex;
+use melior::ir::operation::OperationPrintingFlags;
+//use crate::scope::LayerIndex;
 use crate::{Diagnostics, ParseError};
 use anyhow::Error;
 use anyhow::Result;
 use melior::ir::Location;
 use melior::{
-    dialect::{arith, cf, func, llvm, memref, ods, scf},
-    ir::{Block, Operation, Region},
+    dialect::{
+        arith,
+        cf,
+        func,
+        //llvm,
+        memref,
+        //ods, scf,
+    },
+    ir::{
+        attribute::{
+            //DenseElementsAttribute,
+            FloatAttribute,
+            IntegerAttribute,
+            StringAttribute,
+            TypeAttribute,
+        },
+        r#type::{
+            FunctionType,
+            IntegerType,
+            MemRefType,
+            //RankedTensorType,
+        },
+        Attribute, Block, Identifier, Module, Operation, Region, Type, TypeLike, Value,
+    },
     Context,
 };
 use petgraph::algo::dominators::simple_fast;
@@ -16,50 +39,77 @@ use petgraph::graph::NodeIndex;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
-pub struct CFGIndex(NodeIndex, usize);
+pub struct BlockIndex(NodeIndex, usize);
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub struct SymIndex(NodeIndex, usize);
 
 #[derive(Debug, Clone, Copy)]
 pub enum NodeType {
     Module,
+    Function,
     Block,
 }
 
 #[derive(Debug)]
 pub struct GData<'c, E> {
-    block: Block<'c>,
+    //block: Block<'c>,
     ops: Vec<Operation<'c>>,
     name: String,
     node_type: NodeType,
     params: Vec<ParameterNode<E>>,
-    names: HashMap<String, CFGIndex>,
+    symbols: HashMap<String, SymIndex>,
+    index: HashMap<SymIndex, usize>,
 }
 impl<'c, E: Extra> GData<'c, E> {
-    pub fn new(
-        name: &str,
-        block: Block<'c>,
-        node_type: NodeType,
-        params: Vec<ParameterNode<E>>,
-    ) -> Self {
+    pub fn new(name: &str, node_type: NodeType, params: Vec<ParameterNode<E>>) -> Self {
         Self {
-            block,
+            //block,
             ops: vec![],
             name: name.to_string(),
             node_type,
             params,
-            names: HashMap::new(),
+            symbols: HashMap::new(),
+            index: HashMap::new(),
         }
     }
 
-    pub fn push(&mut self, op: Operation<'c>) {
+    pub fn push(&mut self, op: Operation<'c>, sym_index: SymIndex) {
+        let offset = self.ops.len();
         self.ops.push(op);
+        self.index.insert(sym_index, offset);
     }
 
-    pub fn lookup(&self, name: &str) -> Option<CFGIndex> {
-        self.names.get(name).cloned()
+    pub fn push_with_name(&mut self, op: Operation<'c>, sym_index: SymIndex, name: &str) {
+        self.push(op, sym_index);
+        self.symbols.insert(name.to_string(), sym_index);
     }
 
-    pub fn add_symbol(&mut self, name: &str, index: CFGIndex) {
-        self.names.insert(name.to_string(), index);
+    pub fn value0(&self, index: SymIndex) -> Option<Value<'c, '_>> {
+        self.values(index).map(|vs| vs[0])
+    }
+
+    pub fn values(&self, index: SymIndex) -> Option<Vec<Value<'c, '_>>> {
+        if let Some(offset) = self.index.get(&index) {
+            Some(
+                self.ops
+                    .get(*offset)
+                    .expect("Op missing")
+                    .results()
+                    .map(|x| x.into())
+                    .collect(),
+            )
+        } else {
+            None
+        }
+    }
+
+    pub fn lookup(&self, name: &str) -> Option<SymIndex> {
+        self.symbols.get(name).cloned()
+    }
+
+    pub fn add_symbol(&mut self, name: &str, index: SymIndex) {
+        self.symbols.insert(name.to_string(), index);
     }
 
     pub fn append_ops(&mut self, block_ref: &Block<'c>) {
@@ -82,10 +132,6 @@ impl<'c, E: Extra> GData<'c, E> {
         index
     }
 
-    pub fn push_with_name(&mut self, op: Operation<'c>, index: LayerIndex, name: &str) {
-        self.push(op, index.clone());
-        self.names.insert(name.to_string(), index);
-    }
     */
 }
 
@@ -106,14 +152,15 @@ pub struct CFG<'c, E> {
     index_count: usize,
     g: DiGraph<GData<'c, E>, ()>,
     block_names: HashMap<String, NodeIndex>,
-    symbols: HashMap<CFGIndex, SymbolData>,
+    symbols: HashMap<SymIndex, SymbolData>,
+    blocks: HashMap<NodeIndex, Block<'c>>,
 }
 
 impl<'c, E: Extra> CFG<'c, E> {
     pub fn new(module_name: &str) -> Self {
         let g = DiGraph::new();
         let block = Block::new(&[]);
-        let data = GData::new(module_name, block, NodeType::Module, vec![]);
+        let data = GData::new(module_name, NodeType::Module, vec![]);
 
         let mut cfg = Self {
             // dummy
@@ -122,25 +169,42 @@ impl<'c, E: Extra> CFG<'c, E> {
             g,
             block_names: HashMap::new(),
             symbols: HashMap::new(),
+            blocks: HashMap::new(),
         };
-        cfg.add_block(data);
+        cfg.add_block(data, block);
+
         cfg
     }
 
-    pub fn add_symbol(&mut self, index: CFGIndex, data: SymbolData) {
+    pub fn module(&mut self, module: &mut Module<'c>) {
+        let data = self.g.node_weight_mut(self.root).unwrap();
+        for op in data.ops.drain(..) {
+            module.body().append_operation(op);
+        }
+        log::debug!(
+            "lowered {}",
+            module
+                .as_operation()
+                .to_string_with_flags(OperationPrintingFlags::new())
+                .unwrap()
+        );
+    }
+
+    pub fn add_symbol(&mut self, index: SymIndex, data: SymbolData) {
         self.symbols.insert(index, data);
     }
 
-    pub fn fresh_index(&mut self, block_index: NodeIndex) -> CFGIndex {
-        let index = CFGIndex(block_index, self.index_count);
+    pub fn fresh_sym_index(&mut self, block_index: NodeIndex) -> SymIndex {
+        let index = SymIndex(block_index, self.index_count);
         self.index_count += 1;
         index
     }
 
-    pub fn add_block(&mut self, data: GData<'c, E>) -> NodeIndex {
+    pub fn add_block(&mut self, data: GData<'c, E>, block: Block<'c>) -> NodeIndex {
         let name = data.name.clone();
         let index = self.g.add_node(data);
         self.block_names.insert(name, index);
+        self.blocks.insert(index, block);
         index
     }
 
@@ -173,15 +237,73 @@ impl<'c, E: Extra> CFG<'c, E> {
 
     pub fn save_graph(&self, filename: &str) {
         use petgraph::dot::{Config, Dot};
+        #[derive(Debug)]
+        enum Shape {
+            Box,
+            Ellipsis,
+        }
+        impl Shape {
+            fn to_string(&self) -> &str {
+                match self {
+                    Self::Box => "box",
+                    Self::Ellipsis => "circle",
+                }
+            }
+        }
+        #[derive(Debug)]
+        struct Node {
+            ty: Shape,
+            name: String,
+        }
+        impl Node {
+            fn new_block(name: String) -> Self {
+                Self {
+                    ty: Shape::Box,
+                    name,
+                }
+            }
+            fn new_symbol(name: String) -> Self {
+                Self {
+                    ty: Shape::Ellipsis,
+                    name,
+                }
+            }
+        }
+        let mut g = DiGraph::new();
+        for node_index in self.g.node_indices() {
+            let data = self.g.node_weight(node_index).unwrap();
+            g.add_node(Node::new_block(data.name.clone()));
+        }
+        for node_index in self.g.node_indices() {
+            let data = self.g.node_weight(node_index).unwrap();
+            for name in data.symbols.keys() {
+                let index = g.add_node(Node::new_symbol(name.clone()));
+                g.add_edge(node_index, index, ());
+            }
+            for n in self
+                .g
+                .neighbors_directed(node_index, petgraph::Direction::Outgoing)
+            {
+                g.add_edge(node_index, n, ());
+            }
+        }
+
         let s = format!(
             "{:?}",
             Dot::with_attr_getters(
-                &self.g,
+                &g,
                 &[Config::EdgeNoLabel, Config::NodeNoLabel],
                 &|_, _er| String::new(),
-                &|_, (_index, data)| format!("label = \"{}\"", data.name),
+                &|_, (_index, data)| {
+                    format!(
+                        "label = \"{}\" shape={:?}",
+                        &data.name,
+                        &data.ty.to_string()
+                    )
+                }
             )
         );
+        println!("{}", s);
         std::fs::write(filename, s).unwrap();
     }
 
@@ -205,7 +327,26 @@ impl<'c, E: Extra> CFG<'c, E> {
         }
     }
 
-    pub fn name_in_scope(&self, index: NodeIndex, name: &str) -> Option<CFGIndex> {
+    pub fn values_in_scope(
+        &'c self,
+        block_index: NodeIndex,
+        sym_index: SymIndex,
+    ) -> Option<Vec<Value<'c, '_>>> {
+        let dom = simple_fast(&self.g, self.root)
+            .dominators(block_index)
+            .unwrap()
+            .collect::<Vec<_>>();
+        println!("dom: {:?} => {:?}", block_index, dom);
+        for i in dom.into_iter().rev() {
+            let data = self.data_by_index(i).unwrap();
+            if let Some(r) = data.values(sym_index) {
+                return Some(r);
+            }
+        }
+        None
+    }
+
+    pub fn name_in_scope(&self, index: NodeIndex, name: &str) -> Option<SymIndex> {
         let dom = simple_fast(&self.g, self.root)
             .dominators(index)
             .unwrap()
@@ -228,7 +369,7 @@ impl<'c, E: Extra> CFG<'c, E> {
                     self.lower(expr, stack);
                 }
             }
-            Ast::Block(name, params, body) => {
+            Ast::Block(_name, _params, _body) => {
                 unreachable!();
                 /*
                 let block_args = params
@@ -258,10 +399,8 @@ impl<'c, E: Extra> CFG<'c, E> {
                 let r = self.name_in_scope(*current, &name).unwrap();
                 let symbol_data = self.symbols.get(&r).unwrap();
                 println!("lookup identifier: {}, {:?}, {:?}", name, r, symbol_data.ty);
-                //self.dump_scope(*current);
             }
             Ast::Goto(label) => {
-                //self.save_graph("out.dot");
                 let current = stack.last().unwrap();
                 let index = self.block_index(&label).unwrap();
                 self.g.add_edge(*current, index, ());
@@ -280,7 +419,7 @@ impl<'c, E: Extra> CFG<'c, E> {
                 match target {
                     AssignTarget::Identifier(name) | AssignTarget::Alloca(name) => {
                         let block_index = stack.last().unwrap();
-                        let index = self.fresh_index(*block_index);
+                        let index = self.fresh_sym_index(*block_index);
                         let ty = self.type_from_expr(*block_index, &expr);
                         let data = self.data_mut_by_index(*stack.last().unwrap()).unwrap();
                         let symbol_data = SymbolData::new(ty);
@@ -292,14 +431,7 @@ impl<'c, E: Extra> CFG<'c, E> {
             }
             Ast::Definition(mut def) => {
                 def = def.normalize();
-                let function_name = def.name.clone();
                 let current = stack.last().unwrap().clone();
-
-                let block = Block::new(&[]);
-                let data = GData::new(&def.name, block, NodeType::Block, def.params);
-                let index = self.add_block(data);
-                stack.push(index);
-                self.g.add_edge(current, index, ());
 
                 if let Some(body) = def.body {
                     let mut edges = vec![];
@@ -308,24 +440,20 @@ impl<'c, E: Extra> CFG<'c, E> {
                     for (i, b) in blocks.into_iter().enumerate() {
                         if let Ast::Block(name, params, expr) = b.node {
                             // connect the first block to the function
-                            if i == 0 {
-                                edges.push((function_name.clone(), name.clone()));
-                            }
-                            //let block_args = params
-                            //.iter()
-                            //.map(|a| (from_type(context, &a.ty), a.extra.location(context, d)))
-                            //.collect::<Vec<_>>();
+                            let block_name = if i == 0 { def.name.clone() } else { name };
                             let block = Block::new(&[]);
-                            //let block = Block::new(&block_args);
-                            let data = GData::new(&name, block, NodeType::Block, params);
-                            let index = self.add_block(data);
+                            let data = GData::new(&block_name, NodeType::Block, params);
+                            let index = self.add_block(data, block);
+                            if i == 0 {
+                                edges.push((current, index));
+                            }
                             exprs.push((index, *expr));
                         } else {
                             unreachable!()
                         }
                     }
                     for (a, b) in edges {
-                        self.add_edge(&a, &b);
+                        self.g.add_edge(a, b, ());
                     }
 
                     for (index, expr) in exprs {
@@ -339,7 +467,7 @@ impl<'c, E: Extra> CFG<'c, E> {
             }
             Ast::Global(name, body) => {
                 let block_index = self.block_index("module").unwrap();
-                let index = self.fresh_index(block_index);
+                let index = self.fresh_sym_index(block_index);
                 let ty = self.type_from_expr(block_index, &body);
                 let data = self.data_mut_by_index(block_index).unwrap();
                 let symbol_data = SymbolData::new(ty);
@@ -359,8 +487,17 @@ impl<'c, E: Extra> CFG<'c, E> {
         println!("dom: {:?} => {:?}", index, dom);
         for i in dom.into_iter().rev() {
             let data = self.data_by_index(i).unwrap();
-            println!("\t{:?}: {}, {:?}", i, data.name, data.names.keys());
+            println!("\t{:?}: {}, {:?}", i, data.name, data.symbols.keys());
         }
+    }
+
+    pub fn take_block(&mut self, index: NodeIndex) -> Block<'c> {
+        let data = self.g.node_weight_mut(index).unwrap();
+        let block = self.blocks.remove(&index).unwrap();
+        for op in data.ops.drain(..) {
+            block.append_operation(op);
+        }
+        block
     }
 }
 
@@ -373,51 +510,222 @@ impl<E: Extra> AstNode<E> {
         self,
         context: &'c Context,
         d: &mut Diagnostics,
-        cfg: &'c mut CFG<'c, E>,
-        current: &mut GData<'c, E>,
+        cfg: &mut CFG<'c, E>,
         stack: &mut Vec<NodeIndex>,
-    ) -> Result<LayerIndex> {
+    ) -> Result<SymIndex> {
         let location = self.location(context, d);
         match self.node {
+            Ast::Builtin(_, _) => {
+                let current_block = stack.last().unwrap();
+                let sym_index = cfg.fresh_sym_index(*current_block);
+                Ok(sym_index)
+            }
+            Ast::Sequence(exprs) => {
+                let mut out = vec![];
+                for expr in exprs {
+                    out.push(expr.lower(context, d, cfg, stack)?);
+                }
+                Ok(out.last().cloned().unwrap())
+            }
+            Ast::Return(maybe_expr) => {
+                let current_block = stack.last().unwrap();
+                let sym_index = cfg.fresh_sym_index(*current_block);
+                let current = cfg.data_mut_by_index(*current_block).unwrap();
+                if let Some(expr) = maybe_expr {
+                    let rs = &[];
+                    current.push(func::r#return(rs, location), sym_index);
+                } else {
+                    current.push(func::r#return(&[], location), sym_index);
+                }
+                Ok(sym_index)
+            }
+
             Ast::Goto(label) => {
                 let current_block = stack.last().unwrap();
-                if let Some(index) = cfg.block_index(&label) {
+                let sym_index = cfg.fresh_sym_index(*current_block);
+                let op = if let Some(index) = cfg.block_index(&label) {
                     cfg.g.add_edge(*current_block, index, ());
-                    let data = cfg.data_by_index(index).unwrap();
-                    current.push(cf::br(&data.block, &[], location));
-                    Ok(LayerIndex::Noop)
+                    //let data = cfg.data_by_index(index).unwrap();
+                    //let data = cfg.g.node_weight(index).unwrap();
+                    let block = cfg.blocks.get(&index).unwrap();
+                    cf::br(block, &[], location)
                 } else {
                     d.push_diagnostic(self.extra.error(&format!("Missing block: {}", label)));
-                    Err(Error::new(ParseError::Invalid))
-                }
+                    return Err(Error::new(ParseError::Invalid));
+                };
+                let current = cfg.data_mut_by_index(*current_block).unwrap();
+                current.push(op, sym_index);
+                Ok(sym_index)
             }
+
             Ast::Identifier(name) => {
                 let current_block = stack.last().unwrap();
-                let dom = simple_fast(&cfg.g, cfg.root)
-                    .dominators(*current_block)
-                    .unwrap()
-                    .collect::<Vec<_>>();
-                println!("X: {:?}", dom);
-                let r = cfg.name_in_scope(*current_block, &name).unwrap();
-                let symbol_data = cfg.symbols.get(&r).unwrap();
-                println!("lookup identifier: {}, {:?}, {:?}", name, r, symbol_data.ty);
-                //self.dump_scope(*current);
-                Ok(LayerIndex::Noop)
+                if let Some(sym_index) = cfg.name_in_scope(*current_block, &name) {
+                    println!("lookup identifier: {}, {:?}", name, sym_index);
+                    return Ok(sym_index);
+                }
+                Err(Error::new(ParseError::Invalid))
             }
+
             Ast::Assign(target, expr) => {
-                match target {
-                    AssignTarget::Identifier(name) | AssignTarget::Alloca(name) => {
-                        let block_index = stack.last().unwrap();
-                        let index = cfg.fresh_index(*block_index);
-                        let ty = cfg.type_from_expr(*block_index, &expr);
+                let current_block = stack.last().unwrap().clone();
+                let sym_index = match target {
+                    AssignTarget::Alloca(name) => {
+                        let ty = IntegerType::new(context, 64);
+                        let memref_ty = MemRefType::new(ty.into(), &[], None, None);
+                        let op = memref::alloca(context, memref_ty, &[], &[], None, location);
+
+                        let ptr_index = cfg.fresh_sym_index(current_block);
+                        let op_index = cfg.fresh_sym_index(current_block);
+                        let rhs_index = expr.lower(context, d, cfg, stack)?;
+                        let current = cfg.g.node_weight_mut(current_block).unwrap();
+                        current.push(op, ptr_index);
+                        let r_value = current.value0(rhs_index).unwrap();
+                        let r_addr = current.value0(ptr_index).unwrap();
+                        let op = memref::store(r_value, r_addr, &[], location);
+                        current.push(op, op_index);
+                        op_index
+                    }
+                    AssignTarget::Identifier(name) => {
+                        //let ty = cfg.type_from_expr(*block_index, &expr);
                         //let data = cfg.data_mut_by_index(*stack.last().unwrap()).unwrap();
-                        let symbol_data = SymbolData::new(ty);
+                        //let symbol_data = SymbolData::new(ty);
+                        let current_block = stack.last().unwrap().clone();
+                        let index = expr.lower(context, d, cfg, stack)?;
+                        let current = cfg.data_mut_by_index(current_block).unwrap();
                         current.add_symbol(&name, index);
-                        cfg.symbols.insert(index, symbol_data);
+                        //cfg.symbols.insert(index, symbol_data);
+                        index
+                    }
+                };
+                Ok(sym_index)
+            }
+
+            Ast::Definition(mut def) => {
+                def = def.normalize();
+                let current_block = stack.last().unwrap().clone();
+                let sym_index = cfg.fresh_sym_index(current_block);
+
+                let mut attributes = vec![(
+                    Identifier::new(context, "sym_visibility"),
+                    StringAttribute::new(context, "private").into(),
+                )];
+
+                let ret_ty = from_type(context, &*def.return_type);
+                let mut ast_types = vec![];
+                let mut types = vec![];
+                let ast_ret_type = def.return_type;
+
+                for p in &def.params {
+                    match p.node {
+                        Parameter::Normal | Parameter::WithDefault(_) => {
+                            //log::debug!("params {:?}: {:?}", p.name, p.ty);
+                            types.push(from_type(context, &p.ty));
+                            ast_types.push(p.ty.clone());
+                        }
+                        _ => unimplemented!("{:?}", p),
                     }
                 }
-                let index = expr.lower(context, d, cfg, current, stack)?;
-                Ok(LayerIndex::Noop)
+                let ret_type = if ret_ty.is_none() {
+                    vec![]
+                } else {
+                    vec![ret_ty]
+                };
+                let func_type = FunctionType::new(context, &types, &ret_type);
+
+                let region = if let Some(body) = def.body {
+                    let mut edges = vec![];
+                    let blocks = body.try_seq().unwrap();
+                    let mut exprs = vec![];
+                    let mut block_indicies = vec![];
+                    for (i, b) in blocks.into_iter().enumerate() {
+                        if let Ast::Block(name, params, expr) = b.node {
+                            // connect the first block to the function
+                            let block_name = if i == 0 { def.name.clone() } else { name };
+                            let block = Block::new(&[]);
+                            let data = GData::new(&block_name, NodeType::Block, params);
+                            let index = cfg.add_block(data, block);
+                            block_indicies.push(index);
+                            if i == 0 {
+                                edges.push((current_block, index));
+                            }
+                            exprs.push((index, *expr));
+                        } else {
+                            unreachable!()
+                        }
+                    }
+                    for (a, b) in edges {
+                        cfg.g.add_edge(a, b, ());
+                    }
+
+                    for (index, expr) in exprs {
+                        stack.push(index);
+                        cfg.dump_scope(index);
+                        expr.lower(context, d, cfg, stack)?;
+                        stack.pop();
+                    }
+
+                    let region = Region::new();
+                    for index in block_indicies {
+                        let block = cfg.take_block(index);
+                        region.append_block(block);
+                    }
+
+                    // declare as C interface only if body is defined
+                    // function declarations represent functions that are already C interfaces
+                    attributes.push((
+                        Identifier::new(context, "llvm.emit_c_interface"),
+                        Attribute::unit(context),
+                    ));
+
+                    region
+                } else {
+                    Region::new()
+                };
+
+                let op = func::func(
+                    context,
+                    StringAttribute::new(context, &def.name),
+                    TypeAttribute::new(func_type.into()),
+                    region,
+                    &attributes,
+                    location,
+                );
+                let current = cfg.data_mut_by_index(current_block).unwrap();
+                current.push(op, sym_index);
+                Ok(sym_index)
+            }
+
+            Ast::Literal(lit) => {
+                let current_block = stack.last().unwrap().clone();
+                let sym_index = cfg.fresh_sym_index(current_block);
+                let current = cfg.data_mut_by_index(current_block).unwrap();
+                match lit {
+                    Literal::Float(f) => {
+                        let op = build_float_op(context, f, location);
+                        current.push(op, sym_index);
+                        Ok(sym_index)
+                    }
+
+                    Literal::Int(x) => {
+                        let op = build_int_op(context, x, location);
+                        current.push(op, sym_index);
+                        Ok(sym_index)
+                    }
+
+                    Literal::Index(x) => {
+                        let op = build_index_op(context, x as i64, location);
+                        current.push(op, sym_index);
+                        Ok(sym_index)
+                    }
+
+                    Literal::Bool(x) => {
+                        let op = build_bool_op(context, x, location);
+                        current.push(op, sym_index);
+                        Ok(sym_index)
+                    }
+                    _ => unimplemented!("{:?}", lit),
+                }
             }
             /*
             Ast::Conditional(condition, then_expr, maybe_else_expr) => {
@@ -476,9 +784,56 @@ impl<E: Extra> AstNode<E> {
                 Ok(current.push(if_op))
             }
             */
-            _ => unimplemented!(),
+            _ => unimplemented!("{:?}", self.node),
         }
     }
+}
+
+pub fn build_float_op<'c>(
+    context: &'c Context,
+    value: f64,
+    location: Location<'c>,
+) -> Operation<'c> {
+    arith::constant(
+        context,
+        FloatAttribute::new(context, value, Type::float64(context)).into(),
+        location,
+    )
+}
+
+pub fn build_int_op<'c>(context: &'c Context, value: i64, location: Location<'c>) -> Operation<'c> {
+    let ty = IntegerType::new(context, 64);
+    arith::constant(
+        context,
+        IntegerAttribute::new(value, ty.into()).into(),
+        location,
+    )
+}
+
+pub fn build_index_op<'c>(
+    context: &'c Context,
+    value: i64,
+    location: Location<'c>,
+) -> Operation<'c> {
+    let ty = Type::index(context);
+    arith::constant(
+        context,
+        IntegerAttribute::new(value, ty.into()).into(),
+        location,
+    )
+}
+
+pub fn build_bool_op<'c>(
+    context: &'c Context,
+    value: bool,
+    location: Location<'c>,
+) -> Operation<'c> {
+    let bool_type = IntegerType::new(context, 1);
+    arith::constant(
+        context,
+        IntegerAttribute::new(if value { 1 } else { 0 }, bool_type.into()).into(),
+        location,
+    )
 }
 
 #[cfg(test)]
@@ -486,7 +841,31 @@ mod tests {
     use super::*;
     use crate::ast::{AstType, SimpleExtra};
     use crate::lower::tests::gen_block;
-    use crate::{Diagnostics, NodeBuilder};
+    use crate::{default_context, Diagnostics, NodeBuilder};
+    use test_log::test;
+
+    #[test]
+    fn test_cfg_block_ast() {
+        let context = default_context();
+        let mut module = Module::new(Location::unknown(&context));
+        let mut cfg: CFG<SimpleExtra> = CFG::new("module");
+        let mut d = Diagnostics::new();
+        let file_id = d.add_source("test.py".into(), "test".into());
+        let b = NodeBuilder::new(file_id, "type.py");
+        let ast = gen_block(&b);
+        let mut stack = vec![cfg.root];
+        //let data = cfg.data_mut_by_index(cfg.root).unwrap();
+        let r = ast.lower(&context, &mut d, &mut cfg, &mut stack);
+        assert_eq!(1, stack.len());
+        d.dump();
+        assert!(!d.has_errors);
+        cfg.module(&mut module);
+        println!("module: {:?}", module);
+        r.unwrap();
+
+        //cfg.lower(ast, &mut stack);
+        cfg.save_graph("out.dot");
+    }
 
     #[test]
     fn test_cfg_block() {
@@ -497,8 +876,8 @@ mod tests {
         let ast = gen_block(&b);
         let mut stack = vec![cfg.root];
         cfg.lower(ast, &mut stack);
-        assert_eq!(1, stack.len());
         cfg.save_graph("out.dot");
+        assert_eq!(0, stack.len());
     }
 
     #[test]
@@ -511,8 +890,8 @@ mod tests {
         (0..8).into_iter().for_each(|i| {
             let p = b.param(&format!("p{}", i), AstType::Int);
             let block = Block::new(&[]);
-            let mut data = GData::new(&format!("b{}", i), block, NodeType::Module, vec![p]);
-            cfg.add_block(data);
+            let data = GData::new(&format!("b{}", i), NodeType::Module, vec![p]);
+            cfg.add_block(data, block);
             //data.add_symbol(&format!("scope{}", i), cfg.fresh_index());
         });
 
