@@ -567,33 +567,6 @@ impl<'c, E: Extra> Lower<'c, E> {
         expr.extra.location(self.context, d)
     }
 
-    pub fn build_static(
-        &self,
-        name: &str,
-        ty: Type<'c>,
-        value: Attribute<'c>,
-        constant: bool,
-        location: Location<'c>,
-    ) -> Operation<'c> {
-        let integer_type = IntegerType::new(self.context, 64).into();
-        let attribute =
-            DenseElementsAttribute::new(RankedTensorType::new(&[], ty, None).into(), &[value])
-                .unwrap();
-        let alignment = IntegerAttribute::new(8, integer_type);
-        let memspace = IntegerAttribute::new(0, integer_type).into();
-
-        memref::global(
-            self.context,
-            name,
-            Some("private"),
-            MemRefType::new(ty, &[], None, Some(memspace)),
-            Some(attribute.into()),
-            constant,
-            Some(alignment),
-            location,
-        )
-    }
-
     pub fn lower_llvm_global_int(
         &self,
         name: &str,
@@ -790,7 +763,14 @@ impl<'c, E: Extra> Lower<'c, E> {
                         let ty = from_type(self.context, &ast_ty);
                         let v = if x { 1 } else { 0 };
                         let value = IntegerAttribute::new(v, ty).into();
-                        let op = self.build_static(&global_name, ty, value, false, location);
+                        let op = op::build_static(
+                            self.context,
+                            &global_name,
+                            ty,
+                            value,
+                            false,
+                            location,
+                        );
                         (ast_ty, op)
                     }
 
@@ -798,7 +778,14 @@ impl<'c, E: Extra> Lower<'c, E> {
                         let ast_ty = AstType::Int;
                         let ty = from_type(self.context, &ast_ty);
                         let value = IntegerAttribute::new(x, ty).into();
-                        let op = self.build_static(&global_name, ty, value, false, location);
+                        let op = op::build_static(
+                            self.context,
+                            &global_name,
+                            ty,
+                            value,
+                            false,
+                            location,
+                        );
                         (ast_ty, op)
                     }
 
@@ -806,7 +793,14 @@ impl<'c, E: Extra> Lower<'c, E> {
                         let ast_ty = AstType::Int;
                         let ty = from_type(self.context, &ast_ty);
                         let value = IntegerAttribute::new(x as i64, ty).into();
-                        let op = self.build_static(&global_name, ty, value, false, location);
+                        let op = op::build_static(
+                            self.context,
+                            &global_name,
+                            ty,
+                            value,
+                            false,
+                            location,
+                        );
                         (ast_ty, op)
                     }
 
@@ -814,7 +808,14 @@ impl<'c, E: Extra> Lower<'c, E> {
                         let ast_ty = AstType::Float;
                         let ty = from_type(self.context, &ast_ty);
                         let value = FloatAttribute::new(self.context, x, ty).into();
-                        let op = self.build_static(&global_name, ty, value, false, location);
+                        let op = op::build_static(
+                            self.context,
+                            &global_name,
+                            ty,
+                            value,
+                            false,
+                            location,
+                        );
                         (ast_ty, op)
                     }
 
@@ -885,93 +886,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                 // types must be the same for binary operation, no implicit casting yet
                 let a = env.value0(&index_lhs);
                 let b = env.value0(&index_rhs);
-                let ty = a.r#type();
-                assert!(a.r#type() == b.r#type());
-
-                let binop = match op {
-                    BinaryOperation::Divide => {
-                        if ty.is_index() {
-                            // index type is unsigned
-                            arith::divui(a, b, location)
-                        } else if ty.is_integer() {
-                            // we assume all integers are signed for now
-                            arith::divsi(a, b, location)
-                        } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
-                            arith::divf(a, b, location)
-                        } else {
-                            unimplemented!()
-                        }
-                    }
-                    BinaryOperation::Multiply => {
-                        if ty.is_index() || ty.is_integer() {
-                            arith::muli(a, b, location)
-                        } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
-                            arith::mulf(a, b, location)
-                        } else {
-                            unimplemented!()
-                        }
-                    }
-                    BinaryOperation::Add => {
-                        if ty.is_index() || ty.is_integer() {
-                            arith::addi(a, b, location)
-                        } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
-                            arith::addf(a, b, location)
-                        } else {
-                            unimplemented!()
-                        }
-                    }
-                    BinaryOperation::Subtract => {
-                        if ty.is_index() || ty.is_integer() {
-                            arith::subi(a, b, location)
-                        } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
-                            arith::subf(a, b, location)
-                        } else {
-                            unimplemented!()
-                        }
-                    }
-                    BinaryOperation::GTE => {
-                        if ty.is_index() {
-                            // unsigned
-                            arith::cmpi(self.context, arith::CmpiPredicate::Uge, a, b, location)
-                        } else if ty.is_integer() {
-                            // signed
-                            arith::cmpi(self.context, arith::CmpiPredicate::Sge, a, b, location)
-                        } else {
-                            unimplemented!();
-                        }
-                    }
-                    BinaryOperation::GT => {
-                        if ty.is_index() {
-                            // unsigned
-                            arith::cmpi(self.context, arith::CmpiPredicate::Ugt, a, b, location)
-                        } else if ty.is_integer() {
-                            // signed
-                            arith::cmpi(self.context, arith::CmpiPredicate::Sgt, a, b, location)
-                        } else {
-                            unimplemented!();
-                        }
-                    }
-                    BinaryOperation::NE => {
-                        if ty.is_index() || ty.is_integer() {
-                            arith::cmpi(self.context, arith::CmpiPredicate::Ne, a, b, location)
-                        } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
-                            // ordered comparison
-                            arith::cmpf(self.context, arith::CmpfPredicate::One, a, b, location)
-                        } else {
-                            unimplemented!()
-                        }
-                    }
-                    BinaryOperation::EQ => {
-                        if ty.is_index() || ty.is_integer() {
-                            arith::cmpi(self.context, arith::CmpiPredicate::Eq, a, b, location)
-                        } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
-                            // ordered comparison
-                            arith::cmpf(self.context, arith::CmpfPredicate::Oeq, a, b, location)
-                        } else {
-                            unimplemented!()
-                        }
-                    } //_ => unimplemented!("{:?}", op)
-                };
+                let binop = op::build_binop(self.context, op, a, b, location);
 
                 let index = env.push(binop);
                 let data = Data::new(ast_ty);
@@ -1554,10 +1469,7 @@ pub(crate) mod tests {
         b.seq(seq)
     }
 
-    pub fn gen_while<'c, E: Extra>(
-        _env: &mut Environment<'c, E>,
-        b: &NodeBuilder<E>,
-    ) -> AstNode<E> {
+    pub fn gen_while<'c, E: Extra>(b: &NodeBuilder<E>) -> AstNode<E> {
         let mut seq = vec![b.import_prelude()];
 
         // global variable x = 10
@@ -1695,7 +1607,7 @@ pub(crate) mod tests {
         let file_id = d.add_source("test.py".into(), "test".into());
         let b = NodeBuilder::new(file_id, "type.py");
         let mut env = Environment::default();
-        let ast: AstNode<SimpleExtra> = gen_while(&mut env, &b);
+        let ast: AstNode<SimpleExtra> = gen_while(&b);
         let r = lower
             .run_ast(ast, "../target/debug/", &mut env, &mut d, &b)
             .unwrap();

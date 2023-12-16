@@ -24,8 +24,8 @@ use melior::{
         attribute::{
             //DenseElementsAttribute,
             FlatSymbolRefAttribute,
-            //FloatAttribute,
-            //IntegerAttribute,
+            FloatAttribute,
+            IntegerAttribute,
             StringAttribute,
             TypeAttribute,
         },
@@ -167,6 +167,7 @@ pub struct CFG<'c, E> {
     shared: HashSet<String>,
     root: NodeIndex,
     index_count: usize,
+    static_count: usize,
     g: DiGraph<GData<'c, E>, ()>,
     block_names: HashMap<String, NodeIndex>,
     symbols: HashMap<SymIndex, SymbolData>,
@@ -183,6 +184,7 @@ impl<'c, E: Extra> CFG<'c, E> {
             // dummy
             root: NodeIndex::new(0),
             index_count: 0,
+            static_count: 0,
             g,
             block_names: HashMap::new(),
             symbols: HashMap::new(),
@@ -219,6 +221,12 @@ impl<'c, E: Extra> CFG<'c, E> {
                 .to_string_with_flags(OperationPrintingFlags::new())
                 .unwrap()
         );
+    }
+
+    pub fn unique_static_name(&mut self) -> String {
+        let s = format!("__static_x{}", self.static_count);
+        self.static_count += 1;
+        s
     }
 
     pub fn add_symbol(&mut self, index: SymIndex, data: SymbolData) {
@@ -820,7 +828,6 @@ impl<E: Extra> AstNode<E> {
                     }
                     Builtin::Import => {
                         let arg = args.pop().unwrap();
-                        log::debug!("import: {:?}", arg);
                         if let Argument::Positional(expr) = arg {
                             if let Some(s) = expr.try_string() {
                                 cfg.shared.insert(s);
@@ -834,6 +841,93 @@ impl<E: Extra> AstNode<E> {
                         let sym_index = cfg.fresh_sym_index(current_block);
                         Ok(sym_index)
                     } //_ => unimplemented!("{:?}", b),
+                }
+            }
+
+            Ast::Global(ident, expr) => {
+                let current_block = stack.last().unwrap().clone();
+                let global_name = if cfg.root == current_block {
+                    ident.clone()
+                } else {
+                    // we create a unique global name to prevent conflict
+                    // and then we add ops to provide a local reference to the global name
+                    let mut global_name = ident.clone();
+                    global_name.push_str(&cfg.unique_static_name());
+                    global_name
+                };
+
+                // evaluate expr at compile time
+                let (ast_ty, op) = match expr.node {
+                    Ast::Literal(Literal::Bool(x)) => {
+                        let ast_ty = AstType::Bool;
+                        let ty = from_type(context, &ast_ty);
+                        let v = if x { 1 } else { 0 };
+                        let value = IntegerAttribute::new(v, ty).into();
+                        let op =
+                            op::build_static(context, &global_name, ty, value, false, location);
+                        (ast_ty, op)
+                    }
+
+                    Ast::Literal(Literal::Int(x)) => {
+                        let ast_ty = AstType::Int;
+                        let ty = from_type(context, &ast_ty);
+                        let value = IntegerAttribute::new(x, ty).into();
+                        let op =
+                            op::build_static(context, &global_name, ty, value, false, location);
+                        (ast_ty, op)
+                    }
+
+                    Ast::Literal(Literal::Index(x)) => {
+                        let ast_ty = AstType::Int;
+                        let ty = from_type(context, &ast_ty);
+                        let value = IntegerAttribute::new(x as i64, ty).into();
+                        let op =
+                            op::build_static(context, &global_name, ty, value, false, location);
+                        (ast_ty, op)
+                    }
+
+                    Ast::Literal(Literal::Float(x)) => {
+                        let ast_ty = AstType::Float;
+                        let ty = from_type(context, &ast_ty);
+                        let value = FloatAttribute::new(context, x, ty).into();
+                        let op =
+                            op::build_static(context, &global_name, ty, value, false, location);
+                        (ast_ty, op)
+                    }
+
+                    _ => unreachable!("{:?}", expr.node),
+                };
+
+                let ptr_ty = AstType::Ptr(ast_ty.clone().into());
+                if cfg.root == current_block {
+                    // STATIC/GLOBAL VARIABLE
+                    let index = cfg.fresh_sym_index(current_block);
+                    let current = cfg.g.node_weight_mut(current_block).unwrap();
+                    current.push_with_name(op, index, &global_name);
+                    Ok(index)
+                    //let index = env.push_with_name(op, &global_name);
+                    //env.index_data(&index, ptr_ty);
+                    //env.index_static_name(&index, &global_name);
+                    //Ok(index)
+                } else {
+                    // STATIC VARIABLE IN FUNCTION CONTEXT
+                    let index = cfg.fresh_sym_index(current_block);
+                    let current = cfg.g.node_weight_mut(current_block).unwrap();
+                    current.push_with_name(op, index, &global_name);
+                    Ok(index)
+
+                    /*
+                    // push static operation
+                    let index = env.push_static(op, &global_name);
+                    env.index_data(&index, ptr_ty);
+
+                    env.index_static_name(&index, &global_name);
+                    env.name_index(index.clone(), &ident);
+
+                    // push name into current context
+                    env.name_index(index.clone(), &ident);
+                    Ok(index)
+                    */
                 }
             }
 
@@ -894,7 +988,11 @@ impl<E: Extra> AstNode<E> {
                 Ok(current.push(if_op))
             }
             */
-            _ => unimplemented!("{:?}", self.node),
+            _ => {
+                //unimplemented!("{:?}", self.node),
+                d.push_diagnostic(self.extra.error(&format!("Unimplemented: {:?}", self.node)));
+                Err(Error::new(ParseError::Invalid))
+            }
         }
     }
 }
@@ -948,6 +1046,27 @@ mod tests {
         cfg.module(&context, &mut module);
         exec_main(&cfg, &module, "../target/debug/");
         cfg.save_graph("out.dot");
+    }
+
+    //#[test]
+    fn test_cfg_while() {
+        use crate::lower::tests::gen_while;
+        let context = default_context();
+        let mut module = Module::new(Location::unknown(&context));
+        let mut cfg: CFG<SimpleExtra> = CFG::new("module");
+        let mut d = Diagnostics::new();
+        let file_id = d.add_source("test.py".into(), "test".into());
+        let b = NodeBuilder::new(file_id, "type.py");
+        let ast = gen_while(&b);
+        let mut stack = vec![cfg.root];
+        let r = ast.lower(&context, &mut d, &mut cfg, &mut stack);
+        d.dump();
+        assert!(!d.has_errors);
+        r.unwrap();
+        cfg.module(&context, &mut module);
+        exec_main(&cfg, &module, "../target/debug/");
+        cfg.save_graph("out.dot");
+        assert_eq!(1, stack.len());
     }
 
     #[test]
