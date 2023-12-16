@@ -141,20 +141,20 @@ impl<'c> OpCollection<'c> {
 #[derive(Debug)]
 pub struct GData<'c, E> {
     ops: Vec<Operation<'c>>,
-    name: String,
-    node_type: NodeType,
+    //name: String,
+    //node_type: NodeType,
     //params: Vec<ParameterNode<E>>,
     symbols: HashMap<String, SymIndex>,
     index: HashMap<SymIndex, usize>,
     _e: std::marker::PhantomData<E>,
 }
 impl<'c, E: Extra> GData<'c, E> {
-    pub fn new(name: &str, node_type: NodeType) -> Self {
+    pub fn new() -> Self {
         //, params: Vec<ParameterNode<E>>) -> Self {
         Self {
             ops: vec![],
-            name: name.to_string(),
-            node_type,
+            //name: name.to_string(),
+            //node_type,
             //params,
             symbols: HashMap::new(),
             index: HashMap::new(),
@@ -242,6 +242,7 @@ pub struct CFG<'c, E> {
     static_count: usize,
     g: DiGraph<GData<'c, E>, ()>,
     block_names: HashMap<String, NodeIndex>,
+    block_names_index: HashMap<NodeIndex, String>,
     symbols: HashMap<SymIndex, SymbolData>,
     blocks: HashMap<NodeIndex, Block<'c>>,
 }
@@ -250,7 +251,7 @@ impl<'c, E: Extra> CFG<'c, E> {
     pub fn new(module_name: &str) -> Self {
         let g = DiGraph::new();
         let block = Block::new(&[]);
-        let data = GData::new(module_name, NodeType::Module); //, vec![]);
+        let data = GData::new();
 
         let mut cfg = Self {
             // dummy
@@ -259,11 +260,12 @@ impl<'c, E: Extra> CFG<'c, E> {
             static_count: 0,
             g,
             block_names: HashMap::new(),
+            block_names_index: HashMap::new(),
             symbols: HashMap::new(),
             blocks: HashMap::new(),
             shared: HashSet::new(),
         };
-        cfg.add_block(data, block);
+        cfg.add_block(module_name, data, block);
 
         cfg
     }
@@ -311,10 +313,11 @@ impl<'c, E: Extra> CFG<'c, E> {
         index
     }
 
-    pub fn add_block(&mut self, data: GData<'c, E>, block: Block<'c>) -> NodeIndex {
-        let name = data.name.clone();
+    pub fn add_block(&mut self, name: &str, data: GData<'c, E>, block: Block<'c>) -> NodeIndex {
+        //let name = data.name.clone();
         let index = self.g.add_node(data);
-        self.block_names.insert(name, index);
+        self.block_names.insert(name.to_string(), index);
+        self.block_names_index.insert(index, name.to_string());
         self.blocks.insert(index, block);
         index
     }
@@ -383,7 +386,8 @@ impl<'c, E: Extra> CFG<'c, E> {
         let mut g = DiGraph::new();
         for node_index in self.g.node_indices() {
             let data = self.g.node_weight(node_index).unwrap();
-            g.add_node(Node::new_block(data.name.clone()));
+            let block_name = self.block_names_index.get(&node_index).unwrap();
+            g.add_node(Node::new_block(block_name.clone()));
         }
         for node_index in self.g.node_indices() {
             let data = self.g.node_weight(node_index).unwrap();
@@ -547,8 +551,8 @@ impl<'c, E: Extra> CFG<'c, E> {
                             // connect the first block to the function
                             let block_name = if i == 0 { def.name.clone() } else { name };
                             let block = Block::new(&[]);
-                            let data = GData::new(&block_name, NodeType::Block); //, params);
-                            let index = self.add_block(data, block);
+                            let data = GData::new(); //&block_name); //, params);
+                            let index = self.add_block(&block_name, data, block);
                             if i == 0 {
                                 edges.push((current, index));
                             }
@@ -592,7 +596,8 @@ impl<'c, E: Extra> CFG<'c, E> {
         println!("dom: {:?} => {:?}", index, dom);
         for i in dom.into_iter().rev() {
             let data = self.data_by_index(i).unwrap();
-            println!("\t{:?}: {}, {:?}", i, data.name, data.symbols.keys());
+            let block_name = self.block_names_index.get(&i).unwrap();
+            println!("\t{:?}: {}, {:?}", i, block_name, data.symbols.keys());
         }
     }
 
@@ -748,8 +753,8 @@ impl<E: Extra> AstNode<E> {
                             // connect the first block to the function
                             let block_name = if i == 0 { def.name.clone() } else { name };
                             let block = Block::new(&[]);
-                            let data = GData::new(&block_name, NodeType::Block); //, params);
-                            let index = cfg.add_block(data, block);
+                            let data = GData::new(); //&block_name); //, params);
+                            let index = cfg.add_block(&block_name, data, block);
                             block_indicies.push(index);
                             if i == 0 {
                                 edges.push((current_block, index));
@@ -1164,8 +1169,9 @@ mod tests {
         (0..8).into_iter().for_each(|i| {
             let p = b.param(&format!("p{}", i), AstType::Int);
             let block = Block::new(&[]);
-            let data = GData::new(&format!("b{}", i), NodeType::Module); //, vec![p]);
-            cfg.add_block(data, block);
+            let block_name = format!("b{}", i);
+            let data = GData::new();
+            cfg.add_block(&block_name, data, block);
             //data.add_symbol(&format!("scope{}", i), cfg.fresh_index());
         });
 
@@ -1196,7 +1202,8 @@ mod tests {
             let index = cfg.block_index(&name).unwrap();
             let im = simple_fast(&cfg.g, cfg.root).immediate_dominator(index);
             let w = cfg.g.node_weight(index).unwrap();
-            println!("node {} has immediate dominator {:?}", w.name, im);
+            let block_name = cfg.block_names_index.get(&index).unwrap();
+            println!("node {} has immediate dominator {:?}", block_name, im);
         });
         (0..8).into_iter().for_each(|i| {
             let name = format!("b{}", i);
@@ -1205,7 +1212,8 @@ mod tests {
                 .immediately_dominated_by(index)
                 .collect::<Vec<_>>();
             let w = cfg.g.node_weight(index).unwrap();
-            println!("node {} is the immediate dominator of {:?}", w.name, im);
+            let block_name = cfg.block_names_index.get(&index).unwrap();
+            println!("node {} is the immediate dominator of {:?}", block_name, im);
         });
         (0..8).into_iter().for_each(|i| {
             let name = format!("b{}", i);
@@ -1215,7 +1223,8 @@ mod tests {
                 .unwrap()
                 .collect::<Vec<_>>();
             let w = cfg.g.node_weight(index).unwrap();
-            println!("node {} has strict dominators {:?}", w.name, im);
+            let block_name = cfg.block_names_index.get(&index).unwrap();
+            println!("node {} has strict dominators {:?}", block_name, im);
         });
         (0..8).into_iter().for_each(|i| {
             let name = format!("b{}", i);
@@ -1225,7 +1234,8 @@ mod tests {
                 .unwrap()
                 .collect::<Vec<_>>();
             let w = cfg.g.node_weight(index).unwrap();
-            println!("node {} has dominators {:?}", w.name, im);
+            let block_name = cfg.block_names_index.get(&index).unwrap();
+            println!("node {} has dominators {:?}", block_name, im);
         });
         cfg.save_graph("out.dot");
     }
