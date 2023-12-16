@@ -1,7 +1,12 @@
-use crate::ast::{AssignTarget, Ast, AstNode, AstType, Extra, Literal, Parameter, ParameterNode};
+use crate::ast::{
+    Argument, AssignTarget, Ast, AstNode, AstType, Builtin, Extra, Literal, Parameter,
+    ParameterNode,
+};
 use crate::lower::from_type;
 use melior::ir::operation::OperationPrintingFlags;
 //use crate::scope::LayerIndex;
+use crate::default_pass_manager;
+
 use crate::{Diagnostics, ParseError};
 use anyhow::Error;
 use anyhow::Result;
@@ -18,6 +23,7 @@ use melior::{
     ir::{
         attribute::{
             //DenseElementsAttribute,
+            FlatSymbolRefAttribute,
             FloatAttribute,
             IntegerAttribute,
             StringAttribute,
@@ -29,14 +35,15 @@ use melior::{
             MemRefType,
             //RankedTensorType,
         },
-        Attribute, Block, Identifier, Module, Operation, Region, Type, TypeLike, Value,
+        Attribute, Block, Identifier, Module, Operation, Region, Type, TypeLike, Value, ValueLike,
     },
-    Context,
+    Context, ExecutionEngine,
 };
 use petgraph::algo::dominators::simple_fast;
 use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
 use std::collections::HashMap;
+use std::collections::HashSet;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub struct BlockIndex(NodeIndex, usize);
@@ -148,6 +155,7 @@ impl SymbolData {
 
 #[derive(Default)]
 pub struct CFG<'c, E> {
+    shared: HashSet<String>,
     root: NodeIndex,
     index_count: usize,
     g: DiGraph<GData<'c, E>, ()>,
@@ -170,19 +178,33 @@ impl<'c, E: Extra> CFG<'c, E> {
             block_names: HashMap::new(),
             symbols: HashMap::new(),
             blocks: HashMap::new(),
+            shared: HashSet::new(),
         };
         cfg.add_block(data, block);
 
         cfg
     }
 
-    pub fn module(&mut self, module: &mut Module<'c>) {
+    pub fn module(&mut self, context: &Context, module: &mut Module<'c>) {
         let data = self.g.node_weight_mut(self.root).unwrap();
         for op in data.ops.drain(..) {
             module.body().append_operation(op);
         }
         log::debug!(
             "lowered {}",
+            module
+                .as_operation()
+                .to_string_with_flags(OperationPrintingFlags::new())
+                .unwrap()
+        );
+
+        println!("module: {:?}", module);
+        let pass_manager = default_pass_manager(context);
+        pass_manager.run(module).unwrap();
+        assert!(module.as_operation().verify());
+
+        log::debug!(
+            "after pass {}",
             module
                 .as_operation()
                 .to_string_with_flags(OperationPrintingFlags::new())
@@ -730,6 +752,93 @@ impl<E: Extra> AstNode<E> {
                     _ => unimplemented!("{:?}", lit),
                 }
             }
+
+            Ast::Builtin(bi, mut args) => {
+                let arity = bi.arity();
+                assert_eq!(arity, args.len());
+                let current_block = stack.last().unwrap().clone();
+                //let current = cfg.data_mut_by_index(current_block).unwrap();
+                match bi {
+                    Builtin::Assert => {
+                        let arg = args.pop().unwrap();
+                        match arg {
+                            Argument::Positional(expr) => {
+                                let index = expr.lower(context, d, cfg, stack)?;
+                                //let index = self.lower_expr(*expr, env, d, b)?;
+                                let msg = format!("assert at {}", location);
+                                let sym_index = cfg.fresh_sym_index(current_block);
+                                let current = cfg.g.node_weight_mut(current_block).unwrap();
+                                let r = current.value0(index).unwrap();
+                                let op = cf::assert(
+                                    context, r, //env.value0(&index),
+                                    &msg, location,
+                                );
+                                current.push(op, sym_index);
+                                Ok(sym_index)
+                            }
+                        }
+                    }
+                    Builtin::Print => {
+                        let arg = args.pop().unwrap();
+                        match arg {
+                            Argument::Positional(expr) => {
+                                let sym_index = cfg.fresh_sym_index(current_block);
+                                //let ast_ty = cfg.type_from_expr(current_block, &expr);
+
+                                // eval expr
+                                let index = expr.lower(context, d, cfg, stack)?; //(*expr, env, d, b)?;
+                                let current = cfg.g.node_weight_mut(current_block).unwrap();
+                                let rs = current.values(index).unwrap();
+                                //let r = env.value0(&index);
+                                let ty = rs[0].r#type();
+
+                                // Select the baked version based on parameters
+                                // TODO: A more dynamic way of doing this
+                                // TODO: We only want to import these if they are referenced
+                                let ident = if ty.is_index() || ty.is_integer() {
+                                    "print_index"
+                                } else if ty.is_f64() {
+                                    "print_float"
+                                } else {
+                                    unimplemented!("{:?}", &ty)
+                                };
+
+                                let f = FlatSymbolRefAttribute::new(context, ident);
+                                let op = func::call(
+                                    context,
+                                    f,
+                                    &rs,
+                                    //&env.values(&index),
+                                    &[],
+                                    location,
+                                );
+
+                                current.push(op, sym_index);
+                                Ok(sym_index)
+                            }
+                        }
+                    }
+                    Builtin::Import => {
+                        let arg = args.pop().unwrap();
+                        log::debug!("import: {:?}", arg);
+                        if let Argument::Positional(expr) = arg {
+                            if let Some(s) = expr.try_string() {
+                                cfg.shared.insert(s); //.add_shared(&s);
+                            } else {
+                                d.push_diagnostic(expr.extra.error("Expected string"));
+                            }
+                        } else {
+                            unimplemented!()
+                        }
+                        // do nothing?
+                        let sym_index = cfg.fresh_sym_index(current_block);
+                        //current.push(op, sym_index);
+                        Ok(sym_index)
+                        //Ok(env.push_noop())
+                    } //_ => unimplemented!("{:?}", b),
+                }
+            }
+
             /*
             Ast::Conditional(condition, then_expr, maybe_else_expr) => {
                 let bool_type = from_type(context, &AstType::Bool);
@@ -839,6 +948,29 @@ pub fn build_bool_op<'c>(
     )
 }
 
+pub fn exec_main<'c, E>(cfg: &CFG<'c, E>, module: &Module<'c>, libpath: &str) -> i32 {
+    let paths = cfg
+        .shared
+        .iter()
+        .map(|s| {
+            let mut path = format!("{}/{}.so", libpath, s);
+            path.push('\0');
+            path
+        })
+        .collect::<Vec<_>>();
+    let shared = paths.iter().map(|p| p.as_str()).collect::<Vec<_>>();
+
+    let engine = ExecutionEngine::new(&module, 0, &shared, true);
+    let mut result: i32 = -1;
+    unsafe {
+        engine
+            .invoke_packed("main", &mut [&mut result as *mut i32 as *mut ()])
+            .unwrap();
+        println!("exec: {}", result);
+        result
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -857,28 +989,13 @@ mod tests {
         let b = NodeBuilder::new(file_id, "type.py");
         let ast = gen_block(&b);
         let mut stack = vec![cfg.root];
-        //let data = cfg.data_mut_by_index(cfg.root).unwrap();
         let r = ast.lower(&context, &mut d, &mut cfg, &mut stack);
         assert_eq!(1, stack.len());
         d.dump();
         assert!(!d.has_errors);
-        cfg.module(&mut module);
-        println!("module: {:?}", module);
         r.unwrap();
-
-        let pass_manager = default_pass_manager(&context);
-        pass_manager.run(&mut module).unwrap();
-        assert!(module.as_operation().verify());
-
-        log::debug!(
-            "after pass {}",
-            module
-                .as_operation()
-                .to_string_with_flags(OperationPrintingFlags::new())
-                .unwrap()
-        );
-
-        //cfg.lower(ast, &mut stack);
+        cfg.module(&context, &mut module);
+        exec_main(&cfg, &module, "../target/debug/");
         cfg.save_graph("out.dot");
     }
 

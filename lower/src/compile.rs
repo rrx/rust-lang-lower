@@ -1,6 +1,6 @@
 use crate::ast;
 use crate::lower;
-use crate::scope;
+//use crate::scope;
 use crate::{Diagnostics, Environment, NodeBuilder};
 use anyhow::Result;
 use melior::ir::operation::OperationPrintingFlags;
@@ -102,7 +102,7 @@ impl<'c, E: ast::Extra> lower::Lower<'c, E> {
         }
     }
 }
-
+/*
 pub struct CompilerContext<'c, E> {
     context: melior::Context,
     pub env: Environment<'c, E>,
@@ -138,17 +138,17 @@ impl<'c, E: ast::Extra> CompilerContext<'c, E> {
             _e: std::marker::PhantomData::default(),
         }
     }
-
-    /*
-    pub fn merge(&mut self, module: &ir::Module<'c>, _ast: ast::AstNode<E>) {
-        //let lower = lower::Lower::new(&self.context, &self.files);
-        //lower.lower_expr(ast, &mut self.env);
-        for op in self.env.take_ops() {
-            module.body().append_operation(op);
-        }
+*/
+/*
+pub fn merge(&mut self, module: &ir::Module<'c>, _ast: ast::AstNode<E>) {
+    //let lower = lower::Lower::new(&self.context, &self.files);
+    //lower.lower_expr(ast, &mut self.env);
+    for op in self.env.take_ops() {
+        module.body().append_operation(op);
     }
-    */
 }
+*/
+//}
 
 pub struct Compiler<'c, E> {
     module: ir::Module<'c>,
