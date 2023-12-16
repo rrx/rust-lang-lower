@@ -1553,6 +1553,8 @@ pub(crate) mod tests {
                 "asdf",
                 &[],
                 b.seq(vec![
+                    //b.ident("y"),
+                    //b.ident("z"),
                     b.assign("yy", b.integer(2)),
                     b.mutate(b.ident("z"), b.integer(997)),
                     // entry dominates "asdf", so y should be visible

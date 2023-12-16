@@ -1,11 +1,11 @@
-use crate::ast::{AssignTarget, Ast, AstNode, Extra, ParameterNode, Terminator};
+use crate::ast::{AssignTarget, Ast, AstNode, AstType, Extra, Literal, ParameterNode, Terminator};
 use petgraph::algo::dominators::simple_fast;
 use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
 use std::collections::HashMap;
 
-#[derive(Debug)]
-pub struct CFGIndex(usize);
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub struct CFGIndex(NodeIndex, usize);
 
 #[derive(Debug, Clone, Copy)]
 pub enum NodeType {
@@ -29,44 +29,59 @@ impl<E: Extra> GData<E> {
             names: HashMap::new(),
         }
     }
-    pub fn add_name(&mut self, name: &str, index: CFGIndex) {
+    pub fn add_symbol(&mut self, name: &str, index: CFGIndex) {
         self.names.insert(name.to_string(), index);
+    }
+}
+
+#[derive(Debug)]
+pub struct SymbolData {
+    ty: AstType,
+}
+
+impl SymbolData {
+    pub fn new(ty: AstType) -> Self {
+        Self { ty }
     }
 }
 
 #[derive(Default)]
 pub struct CFG<E> {
     root: NodeIndex,
-    //stack: Vec<NodeIndex>,
     index_count: usize,
     g: DiGraph<GData<E>, ()>,
     names: HashMap<String, NodeIndex>,
+    symbols: HashMap<CFGIndex, SymbolData>,
 }
 
 impl<E: Extra> CFG<E> {
     pub fn new(module_name: &str) -> Self {
-        let mut g = DiGraph::new();
+        let g = DiGraph::new();
         let data = GData::new(module_name, NodeType::Module, vec![]);
-        let root = g.add_node(data);
-        let mut names = HashMap::new();
-        names.insert(module_name.to_string(), root);
 
-        Self {
-            root,
-            //stack: vec![root],
+        let mut cfg = Self {
+            // dummy
+            root: NodeIndex::new(0),
             index_count: 0,
             g,
-            names,
-        }
+            names: HashMap::new(),
+            symbols: HashMap::new(),
+        };
+        cfg.add_block(data);
+        cfg
     }
 
-    pub fn fresh_index(&mut self) -> CFGIndex {
-        let index = CFGIndex(self.index_count);
+    pub fn add_symbol(&mut self, index: CFGIndex, data: SymbolData) {
+        self.symbols.insert(index, data);
+    }
+
+    pub fn fresh_index(&mut self, block_index: NodeIndex) -> CFGIndex {
+        let index = CFGIndex(block_index, self.index_count);
         self.index_count += 1;
         index
     }
 
-    pub fn add_node(&mut self, data: GData<E>) -> NodeIndex {
+    pub fn add_block(&mut self, data: GData<E>) -> NodeIndex {
         let name = data.name.clone();
         let index = self.g.add_node(data);
         self.names.insert(name, index);
@@ -84,6 +99,10 @@ impl<E: Extra> CFG<E> {
         self.names.get(name).cloned()
     }
 
+    pub fn data_by_index(&self, index: NodeIndex) -> Option<&GData<E>> {
+        self.g.node_weight(index)
+    }
+
     pub fn data_mut_by_index(&mut self, index: NodeIndex) -> Option<&mut GData<E>> {
         self.g.node_weight_mut(index)
     }
@@ -95,25 +114,6 @@ impl<E: Extra> CFG<E> {
             None
         }
     }
-
-    /*
-    pub fn enter(&mut self, data: GData<E>) {
-        let name = data.name.clone();
-        let index = self.g.add_node(data);
-        self.names.insert(name, index);
-        self.stack.push(index);
-        self.g.add_edge(self.stack[self.stack.len()-1], self.stack[self.stack.len()-2], ());
-    }
-
-    pub fn link(&mut self, name: &str) {
-        let index = self.names.get(name).unwrap();
-        self.g.add_edge(*index, self.stack[self.stack.len()-1], ());
-    }
-
-    pub fn exit(&mut self) {
-        self.stack.pop();
-    }
-    */
 
     pub fn save_graph(&self, filename: &str) {
         use petgraph::dot::{Config, Dot};
@@ -129,7 +129,44 @@ impl<E: Extra> CFG<E> {
         std::fs::write(filename, s).unwrap();
     }
 
+    pub fn type_from_expr(&self, index: NodeIndex, expr: &AstNode<E>) -> AstType {
+        match &expr.node {
+            Ast::Literal(x) => match x {
+                Literal::Int(_) => AstType::Int,
+                Literal::Float(_) => AstType::Float,
+                Literal::Bool(_) => AstType::Bool,
+                Literal::Index(_) => AstType::Index,
+                Literal::String(_) => AstType::String,
+            },
+            Ast::Identifier(name) => {
+                // infer type from the operation
+                let index = self.name_in_scope(index, name).unwrap();
+                self.symbols.get(&index).unwrap().ty.clone()
+            }
+            Ast::Call(_f, _args, ty) => ty.clone(),
+
+            _ => unreachable!("{:?}", expr),
+        }
+    }
+
+    pub fn name_in_scope(&self, index: NodeIndex, name: &str) -> Option<CFGIndex> {
+        let dom = simple_fast(&self.g, self.root)
+            .dominators(index)
+            .unwrap()
+            .collect::<Vec<_>>();
+        println!("dom: {:?} => {:?}", index, dom);
+        for i in dom.into_iter().rev() {
+            let data = self.data_by_index(i).unwrap();
+            let result = data.names.get(name);
+            if let Some(r) = result {
+                return Some(*r);
+            }
+        }
+        None
+    }
+
     pub fn lower(&mut self, expr: AstNode<E>, stack: &mut Vec<NodeIndex>) {
+        println!("lower: {:?}, {:?}", expr.node, stack);
         match expr.node {
             Ast::Sequence(exprs) => {
                 for expr in exprs {
@@ -140,7 +177,7 @@ impl<E: Extra> CFG<E> {
                 unreachable!();
                 let current = stack.last().unwrap().clone();
                 let data = GData::new(&name, NodeType::Block, params);
-                let index = self.add_node(data);
+                let index = self.add_block(data);
                 self.g.add_edge(current, index, ());
                 let t = body.node.terminator().unwrap();
                 self.lower(*body, stack);
@@ -148,14 +185,30 @@ impl<E: Extra> CFG<E> {
             Ast::Builtin(_, _) => (),
             Ast::Literal(_) => (),
             Ast::Return(_) => {}
+            Ast::Identifier(name) => {
+                let current = stack.last().unwrap();
+                let dom = simple_fast(&self.g, self.root)
+                    .dominators(*current)
+                    .unwrap()
+                    .collect::<Vec<_>>();
+                println!("X: {:?}", dom);
+                let r = self.name_in_scope(*current, &name).unwrap();
+                let symbol_data = self.symbols.get(&r).unwrap();
+                println!("lookup identifier: {}, {:?}, {:?}", name, r, symbol_data.ty);
+                //self.dump_scope(*current);
+            }
             Ast::Goto(label) => {
                 //self.save_graph("out.dot");
-                //let current = stack.last().unwrap();
-                //let index = self.index(&label).unwrap();
-                //self.g.add_edge(*current, index, ());
+                let current = stack.last().unwrap();
+                let index = self.index(&label).unwrap();
+                self.g.add_edge(*current, index, ());
             }
             Ast::Mutate(target, expr) => match target.node {
                 Ast::Identifier(name) => {
+                    let current = stack.last().unwrap();
+                    let r = self.name_in_scope(*current, &name).unwrap();
+                    let symbol_data = self.symbols.get(&r).unwrap();
+                    println!("lookup identifier: {}, {:?}, {:?}", name, r, symbol_data.ty);
                     self.lower(*expr, stack);
                 }
                 _ => unimplemented!(),
@@ -163,9 +216,13 @@ impl<E: Extra> CFG<E> {
             Ast::Assign(target, expr) => {
                 match target {
                     AssignTarget::Identifier(name) | AssignTarget::Alloca(name) => {
-                        let index = self.fresh_index();
+                        let block_index = stack.last().unwrap();
+                        let index = self.fresh_index(*block_index);
+                        let ty = self.type_from_expr(*block_index, &expr);
                         let data = self.data_mut_by_index(*stack.last().unwrap()).unwrap();
-                        data.add_name(&name, index);
+                        let symbol_data = SymbolData::new(ty);
+                        data.add_symbol(&name, index);
+                        self.symbols.insert(index, symbol_data);
                     }
                 }
                 self.lower(*expr, stack);
@@ -175,51 +232,23 @@ impl<E: Extra> CFG<E> {
                 let function_name = def.name.clone();
                 let current = stack.last().unwrap().clone();
                 let data = GData::new(&def.name, NodeType::Block, def.params);
-                let index = self.add_node(data);
+                let index = self.add_block(data);
                 stack.push(index);
                 self.g.add_edge(current, index, ());
 
-                //let data = self.data_mut("module").unwrap();
-                //data.add_name(&def.name, index);
-                //let data
                 if let Some(body) = def.body {
                     let mut edges = vec![];
                     let blocks = body.try_seq().unwrap();
-                    for (i, b) in blocks.iter().enumerate() {
-                        if let Ast::Block(name, _params, expr) = &b.node {
+                    let mut exprs = vec![];
+                    for (i, b) in blocks.into_iter().enumerate() {
+                        if let Ast::Block(name, params, expr) = b.node {
                             // connect the first block to the function
                             if i == 0 {
                                 edges.push((function_name.clone(), name.clone()));
                             }
-
-                            let t = expr.node.terminator().unwrap();
-                            println!("term: {}, {:?}", name, t);
-                            match t {
-                                Terminator::Jump(jump_name) => {
-                                    edges.push((name.clone(), jump_name));
-                                }
-                                Terminator::Branch(j1, j2) => {
-                                    edges.push((name.clone(), j1));
-                                    edges.push((name.clone(), j2));
-                                }
-                                Terminator::Return => (),
-                            }
-                            /*
-                            self.lower(*expr, stack);
-                            */
-                        } else {
-                            unreachable!()
-                        }
-                    }
-                    for b in blocks {
-                        if let Ast::Block(name, params, expr) = b.node {
-                            //let current = stack.last().unwrap().clone();
                             let data = GData::new(&name, NodeType::Block, params);
-                            let index = self.add_node(data);
-                            //self.g.add_edge(current, index, ());
-                            //let t = body.node.terminator().unwrap();
-                            self.lower(*expr, stack);
-                            //self.lower(b, stack);
+                            let index = self.add_block(data);
+                            exprs.push((index, *expr));
                         } else {
                             unreachable!()
                         }
@@ -227,16 +256,39 @@ impl<E: Extra> CFG<E> {
                     for (a, b) in edges {
                         self.add_edge(&a, &b);
                     }
+
+                    for (index, expr) in exprs {
+                        stack.push(index);
+                        self.dump_scope(index);
+                        self.lower(expr, stack);
+                        stack.pop();
+                    }
                 }
                 stack.pop().unwrap();
             }
             Ast::Global(name, body) => {
-                let index = self.fresh_index();
-                let data = self.data_mut_by_name("module").unwrap();
-                data.add_name(&name, index);
+                let block_index = self.index("module").unwrap();
+                let index = self.fresh_index(block_index);
+                let ty = self.type_from_expr(block_index, &body);
+                let data = self.data_mut_by_index(block_index).unwrap();
+                let symbol_data = SymbolData::new(ty);
+                data.add_symbol(&name, index);
+                self.symbols.insert(index, symbol_data);
                 self.lower(*body, stack);
             }
             _ => unreachable!("{:?}", expr.node),
+        }
+    }
+
+    pub fn dump_scope(&self, index: NodeIndex) {
+        let dom = simple_fast(&self.g, self.root)
+            .dominators(index)
+            .unwrap()
+            .collect::<Vec<_>>();
+        println!("dom: {:?} => {:?}", index, dom);
+        for i in dom.into_iter().rev() {
+            let data = self.data_by_index(i).unwrap();
+            println!("\t{:?}: {}, {:?}", i, data.name, data.names.keys());
         }
     }
 }
@@ -271,8 +323,8 @@ mod tests {
         (0..8).into_iter().for_each(|i| {
             let p = b.param(&format!("p{}", i), AstType::Int);
             let mut data = GData::new(&format!("b{}", i), NodeType::Module, vec![p]);
-            data.add_name(&format!("scope{}", i), cfg.fresh_index());
-            cfg.add_node(data);
+            cfg.add_block(data);
+            //data.add_symbol(&format!("scope{}", i), cfg.fresh_index());
         });
 
         cfg.add_edge("module", "b0");

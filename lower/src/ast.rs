@@ -1,4 +1,5 @@
 use crate::Diagnostics;
+use anyhow::Error;
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use melior::ir;
 use melior::Context;
@@ -181,9 +182,22 @@ pub struct CodeLocation {
     pub col: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct SimpleExtra {
     span: Span,
+}
+
+impl std::fmt::Debug for SimpleExtra {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.span.begin.pos == 0 && self.span.end.pos == 0 {
+            f.write_str("extra")
+        } else {
+            f.debug_struct("span")
+                .field("begin", &self.span.begin.pos)
+                .field("end", &self.span.end.pos)
+                .finish()
+        }
+    }
 }
 
 impl Extra for SimpleExtra {
