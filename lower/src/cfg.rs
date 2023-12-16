@@ -68,25 +68,97 @@ pub enum NodeType {
 }
 
 #[derive(Debug)]
+pub struct OpCollection<'c> {
+    block_index: NodeIndex,
+    ops: Vec<Operation<'c>>,
+    symbols: HashMap<String, usize>,
+}
+
+impl<'c> OpCollection<'c> {
+    pub fn new(block_index: NodeIndex) -> Self {
+        Self {
+            block_index,
+            ops: vec![],
+            symbols: HashMap::new(),
+        }
+    }
+
+    pub fn push(&mut self, op: Operation<'c>) -> SymIndex {
+        let offset = self.ops.len();
+        self.ops.push(op);
+        SymIndex(self.block_index, offset)
+    }
+
+    pub fn push_with_name(&mut self, op: Operation<'c>, name: &str) -> SymIndex {
+        let index = self.push(op);
+        self.symbols.insert(name.to_string(), index.1);
+        index
+    }
+
+    pub fn value0(&self, index: SymIndex) -> Option<Value<'c, '_>> {
+        let rs = self.values(index);
+        if rs.len() > 0 {
+            Some(rs[0])
+        } else {
+            None
+        }
+    }
+
+    pub fn values(&self, index: SymIndex) -> Vec<Value<'c, '_>> {
+        assert_eq!(index.0, self.block_index);
+        assert!(index.1 < self.ops.len());
+        self.ops
+            .get(index.1)
+            .expect("Op missing")
+            .results()
+            .map(|x| x.into())
+            .collect()
+    }
+
+    pub fn lookup(&self, name: &str) -> Option<SymIndex> {
+        self.symbols
+            .get(name)
+            .map(|offset| SymIndex(self.block_index, *offset))
+    }
+
+    pub fn append_ops(&mut self, block_ref: &Block<'c>) {
+        for op in self.take_ops() {
+            block_ref.append_operation(op);
+        }
+    }
+
+    pub fn take_ops(&mut self) -> Vec<Operation<'c>> {
+        self.symbols.clear();
+        self.ops.drain(..).collect()
+    }
+
+    pub fn add_symbol(&mut self, name: &str, index: SymIndex) {
+        assert_eq!(index.0, self.block_index);
+        self.symbols.insert(name.to_string(), index.1);
+    }
+}
+
+#[derive(Debug)]
 pub struct GData<'c, E> {
-    //block: Block<'c>,
     ops: Vec<Operation<'c>>,
     name: String,
     node_type: NodeType,
-    params: Vec<ParameterNode<E>>,
+    //params: Vec<ParameterNode<E>>,
     symbols: HashMap<String, SymIndex>,
     index: HashMap<SymIndex, usize>,
+    _e: std::marker::PhantomData<E>,
 }
 impl<'c, E: Extra> GData<'c, E> {
-    pub fn new(name: &str, node_type: NodeType, params: Vec<ParameterNode<E>>) -> Self {
+    pub fn new(name: &str, node_type: NodeType) -> Self {
+        //, params: Vec<ParameterNode<E>>) -> Self {
         Self {
-            //block,
             ops: vec![],
             name: name.to_string(),
             node_type,
-            params,
+            //params,
             symbols: HashMap::new(),
             index: HashMap::new(),
+            _e: std::marker::PhantomData::default(),
         }
     }
 
@@ -178,7 +250,7 @@ impl<'c, E: Extra> CFG<'c, E> {
     pub fn new(module_name: &str) -> Self {
         let g = DiGraph::new();
         let block = Block::new(&[]);
-        let data = GData::new(module_name, NodeType::Module, vec![]);
+        let data = GData::new(module_name, NodeType::Module); //, vec![]);
 
         let mut cfg = Self {
             // dummy
@@ -475,7 +547,7 @@ impl<'c, E: Extra> CFG<'c, E> {
                             // connect the first block to the function
                             let block_name = if i == 0 { def.name.clone() } else { name };
                             let block = Block::new(&[]);
-                            let data = GData::new(&block_name, NodeType::Block, params);
+                            let data = GData::new(&block_name, NodeType::Block); //, params);
                             let index = self.add_block(data, block);
                             if i == 0 {
                                 edges.push((current, index));
@@ -676,7 +748,7 @@ impl<E: Extra> AstNode<E> {
                             // connect the first block to the function
                             let block_name = if i == 0 { def.name.clone() } else { name };
                             let block = Block::new(&[]);
-                            let data = GData::new(&block_name, NodeType::Block, params);
+                            let data = GData::new(&block_name, NodeType::Block); //, params);
                             let index = cfg.add_block(data, block);
                             block_indicies.push(index);
                             if i == 0 {
@@ -1087,12 +1159,12 @@ mod tests {
         let mut cfg: CFG<SimpleExtra> = CFG::new("module");
         let mut d = Diagnostics::new();
         let file_id = d.add_source("test.py".into(), "test".into());
-        let b = NodeBuilder::new(file_id, "type.py");
+        let b: NodeBuilder<SimpleExtra> = NodeBuilder::new(file_id, "type.py");
 
         (0..8).into_iter().for_each(|i| {
             let p = b.param(&format!("p{}", i), AstType::Int);
             let block = Block::new(&[]);
-            let data = GData::new(&format!("b{}", i), NodeType::Module, vec![p]);
+            let data = GData::new(&format!("b{}", i), NodeType::Module); //, vec![p]);
             cfg.add_block(data, block);
             //data.add_symbol(&format!("scope{}", i), cfg.fresh_index());
         });
