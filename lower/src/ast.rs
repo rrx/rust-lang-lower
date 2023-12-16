@@ -1,5 +1,6 @@
 use crate::Diagnostics;
 use anyhow::Error;
+use anyhow::Result;
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use melior::ir;
 use melior::Context;

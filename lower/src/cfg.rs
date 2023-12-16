@@ -1,4 +1,8 @@
 use crate::ast::{AssignTarget, Ast, AstNode, AstType, Extra, Literal, ParameterNode, Terminator};
+use crate::lower::from_type;
+use crate::scope::LayerIndex;
+use anyhow::Result;
+use melior::ir::{Block, Operation};
 use petgraph::algo::dominators::simple_fast;
 use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
@@ -14,24 +18,61 @@ pub enum NodeType {
 }
 
 #[derive(Debug)]
-pub struct GData<E> {
+pub struct GData<'c, E> {
+    ops: Vec<Operation<'c>>,
     name: String,
     node_type: NodeType,
     params: Vec<ParameterNode<E>>,
     names: HashMap<String, CFGIndex>,
 }
-impl<E: Extra> GData<E> {
+impl<'c, E: Extra> GData<'c, E> {
     pub fn new(name: &str, node_type: NodeType, params: Vec<ParameterNode<E>>) -> Self {
         Self {
+            ops: vec![],
             name: name.to_string(),
             node_type,
             params,
             names: HashMap::new(),
         }
     }
+
+    pub fn push(&mut self, op: Operation<'c>) {
+        self.ops.push(op);
+    }
+
+    pub fn lookup(&self, name: &str) -> Option<CFGIndex> {
+        self.names.get(name).cloned()
+    }
+
     pub fn add_symbol(&mut self, name: &str, index: CFGIndex) {
         self.names.insert(name.to_string(), index);
     }
+
+    pub fn append_ops(&mut self, block_ref: &Block<'c>) {
+        for op in self.take_ops() {
+            block_ref.append_operation(op);
+        }
+    }
+
+    pub fn take_ops(&mut self) -> Vec<Operation<'c>> {
+        //self.names.clear();
+        self.ops.drain(..).collect()
+    }
+
+    /*
+    pub fn push(&mut self, op: Operation<'c>, index: LayerIndex) -> LayerIndex {
+        let pos = self.ops.len();
+        self.ops.push(op);
+        self.index.insert(index.clone(), pos);
+        self._last_index = Some(index.clone());
+        index
+    }
+
+    pub fn push_with_name(&mut self, op: Operation<'c>, index: LayerIndex, name: &str) {
+        self.push(op, index.clone());
+        self.names.insert(name.to_string(), index);
+    }
+    */
 }
 
 #[derive(Debug)]
@@ -46,15 +87,15 @@ impl SymbolData {
 }
 
 #[derive(Default)]
-pub struct CFG<E> {
+pub struct CFG<'c, E> {
     root: NodeIndex,
     index_count: usize,
-    g: DiGraph<GData<E>, ()>,
+    g: DiGraph<GData<'c, E>, ()>,
     names: HashMap<String, NodeIndex>,
     symbols: HashMap<CFGIndex, SymbolData>,
 }
 
-impl<E: Extra> CFG<E> {
+impl<'c, E: Extra> CFG<'c, E> {
     pub fn new(module_name: &str) -> Self {
         let g = DiGraph::new();
         let data = GData::new(module_name, NodeType::Module, vec![]);
@@ -81,7 +122,7 @@ impl<E: Extra> CFG<E> {
         index
     }
 
-    pub fn add_block(&mut self, data: GData<E>) -> NodeIndex {
+    pub fn add_block(&mut self, data: GData<'c, E>) -> NodeIndex {
         let name = data.name.clone();
         let index = self.g.add_node(data);
         self.names.insert(name, index);
@@ -103,11 +144,11 @@ impl<E: Extra> CFG<E> {
         self.g.node_weight(index)
     }
 
-    pub fn data_mut_by_index(&mut self, index: NodeIndex) -> Option<&mut GData<E>> {
+    pub fn data_mut_by_index(&mut self, index: NodeIndex) -> Option<&mut GData<'c, E>> {
         self.g.node_weight_mut(index)
     }
 
-    pub fn data_mut_by_name(&mut self, name: &str) -> Option<&mut GData<E>> {
+    pub fn data_mut_by_name(&mut self, name: &str) -> Option<&mut GData<'c, E>> {
         if let Some(index) = self.names.get(name) {
             self.data_mut_by_index(*index)
         } else {
@@ -157,9 +198,8 @@ impl<E: Extra> CFG<E> {
         println!("dom: {:?} => {:?}", index, dom);
         for i in dom.into_iter().rev() {
             let data = self.data_by_index(i).unwrap();
-            let result = data.names.get(name);
-            if let Some(r) = result {
-                return Some(*r);
+            if let Some(r) = data.lookup(name) {
+                return Some(r);
             }
         }
         None
@@ -289,6 +329,104 @@ impl<E: Extra> CFG<E> {
         for i in dom.into_iter().rev() {
             let data = self.data_by_index(i).unwrap();
             println!("\t{:?}: {}, {:?}", i, data.name, data.names.keys());
+        }
+    }
+}
+
+use crate::Diagnostics;
+use melior::ir::Location;
+use melior::{
+    dialect::{arith, cf, func, llvm, memref, ods, scf},
+    ir::Region,
+    Context,
+};
+
+impl<E: Extra> AstNode<E> {
+    pub fn location<'c>(&self, context: &'c Context, d: &Diagnostics) -> Location<'c> {
+        self.extra.location(context, d)
+    }
+
+    pub fn lower<'c>(
+        self,
+        context: &'c Context,
+        d: &Diagnostics,
+        cfg: &mut CFG<'c, E>,
+        current: &mut GData<'c, E>,
+        stack: &mut Vec<NodeIndex>,
+    ) -> Result<LayerIndex> {
+        match self.node {
+            Ast::Assign(target, expr) => {
+                match target {
+                    AssignTarget::Identifier(name) | AssignTarget::Alloca(name) => {
+                        let block_index = stack.last().unwrap();
+                        let index = cfg.fresh_index(*block_index);
+                        let ty = cfg.type_from_expr(*block_index, &expr);
+                        //let data = cfg.data_mut_by_index(*stack.last().unwrap()).unwrap();
+                        let symbol_data = SymbolData::new(ty);
+                        current.add_symbol(&name, index);
+                        cfg.symbols.insert(index, symbol_data);
+                    }
+                }
+                expr.lower(context, d, cfg, current, stack)
+            }
+            /*
+            Ast::Conditional(condition, then_expr, maybe_else_expr) => {
+                let bool_type = from_type(context, &AstType::Bool);
+
+                let then_location = then_expr.location(context, d);
+
+                // condition (outside of blocks)
+                let index_conditions = condition.lower(context, d, cfg, current, stack)?;
+                let r: Value<'_, '_> = env.last_values()[0];
+                // should be bool type
+                assert!(r.r#type() == bool_type);
+
+                // then block
+
+                let mut data = GData::new("then", NodeType::Block, vec![]);
+                //let layer_type = LayerType::Block;
+                //let layer = Layer::new(layer_type);
+                let block = Block::new(&[]);
+                env.enter(layer);
+                let _index = then_expr.lower(context, d, cfg, &mut data, stack)?;
+                env.push(scf::r#yield(&[], then_location));
+                let mut layer = env.exit();
+                data.append_ops(&block);
+                let then_region = Region::new();
+                then_region.append_block(block);
+
+                // else block
+
+                let else_region = match maybe_else_expr {
+                    Some(else_expr) => {
+                        let else_location = else_expr.location(context, d);
+
+                        let mut data = GData::new("else", NodeType::Block, vec![]);
+                        //let layer_type = LayerType::Block;
+                        //let layer = Layer::new(layer_type);
+                        let block = Block::new(&[]);
+                        env.enter(layer);
+                        let _index = else_expr.lower(context, d, cfg, &mut data, stack)?;
+                        env.push(scf::r#yield(&[], else_location));
+                        let mut layer = env.exit();
+                        data.append_ops(&block);
+                        let else_region = Region::new();
+                        else_region.append_block(block);
+                        else_region
+                    }
+                    None => Region::new(),
+                };
+                let if_op = scf::r#if(
+                    env.value0(&index_conditions),
+                    &[],
+                    then_region,
+                    else_region,
+                    self.location(context, d),
+                    );
+                Ok(current.push(if_op))
+            }
+            */
+            _ => unimplemented!(),
         }
     }
 }
