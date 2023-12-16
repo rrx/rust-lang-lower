@@ -528,13 +528,16 @@ impl<E: Extra> AstNode<E> {
                 Ok(out.last().cloned().unwrap())
             }
             Ast::Return(maybe_expr) => {
-                let current_block = stack.last().unwrap();
-                let sym_index = cfg.fresh_sym_index(*current_block);
-                let current = cfg.data_mut_by_index(*current_block).unwrap();
+                let current_block = stack.last().unwrap().clone();
+                let sym_index = cfg.fresh_sym_index(current_block);
                 if let Some(expr) = maybe_expr {
-                    let rs = &[];
-                    current.push(func::r#return(rs, location), sym_index);
+                    let index = expr.lower(context, d, cfg, stack)?;
+                    //let rs = &[];
+                    let current = cfg.data_mut_by_index(current_block).unwrap();
+                    let rs = current.values(index).unwrap();
+                    current.push(func::r#return(&rs, location), sym_index);
                 } else {
+                    let current = cfg.data_mut_by_index(current_block).unwrap();
                     current.push(func::r#return(&[], location), sym_index);
                 }
                 Ok(sym_index)
@@ -841,7 +844,7 @@ mod tests {
     use super::*;
     use crate::ast::{AstType, SimpleExtra};
     use crate::lower::tests::gen_block;
-    use crate::{default_context, Diagnostics, NodeBuilder};
+    use crate::{default_context, default_pass_manager, Diagnostics, NodeBuilder};
     use test_log::test;
 
     #[test]
@@ -862,6 +865,18 @@ mod tests {
         cfg.module(&mut module);
         println!("module: {:?}", module);
         r.unwrap();
+
+        let pass_manager = default_pass_manager(&context);
+        pass_manager.run(&mut module).unwrap();
+        assert!(module.as_operation().verify());
+
+        log::debug!(
+            "after pass {}",
+            module
+                .as_operation()
+                .to_string_with_flags(OperationPrintingFlags::new())
+                .unwrap()
+        );
 
         //cfg.lower(ast, &mut stack);
         cfg.save_graph("out.dot");
