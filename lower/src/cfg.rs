@@ -474,28 +474,6 @@ impl<'c, E: Extra> CFG<'c, E> {
         }
     }
 
-    /*
-    pub fn values_in_scope<'a>(
-        &self,
-        current_block_index: NodeIndex,
-        sym_index: SymIndex,
-        g: &'a CFGGraph<'c>,
-    ) -> Option<Vec<Value<'c, 'a>>> {
-        let data = g.node_weight(sym_index.block()).unwrap();
-        //let dom = simple_fast(g, self.root)
-        //.dominators(block_index)
-        //.unwrap()
-        //.collect::<Vec<_>>();
-        //println!("dom: {:?} => {:?}", block_index, dom);
-        //for i in dom.into_iter().rev() {
-        //let data = g.node_weight(i).unwrap();
-        Some(data.values(sym_index))
-        //return Some(data.values(sym_index));
-        //}
-        //None
-    }
-    */
-
     pub fn name_in_scope(
         &self,
         index: NodeIndex,
@@ -598,7 +576,6 @@ impl<E: Extra> AstNode<E> {
                         let current = g.node_weight_mut(current_block).unwrap();
                         let index = current.push(op);
                         cfg.set_type(index, AstType::Bool);
-                        //env.index_data(&index, Data::new(AstType::Bool).ty);
                         Ok(index)
                     }
                     "False" => {
@@ -606,7 +583,6 @@ impl<E: Extra> AstNode<E> {
                         let current = g.node_weight_mut(current_block).unwrap();
                         let index = current.push(op);
                         cfg.set_type(index, AstType::Bool);
-                        //env.index_data(&index, Data::new(AstType::Bool).ty);
                         Ok(index)
                     }
                     _ => {
@@ -618,7 +594,7 @@ impl<E: Extra> AstNode<E> {
                                     let lower_ty = from_type(context, ty);
                                     let memref_ty = MemRefType::new(lower_ty, &[], None, None);
                                     let static_name =
-                                        cfg.static_names.get(&sym_index).unwrap().clone();
+                                        cfg.static_names.get(&sym_index).cloned().unwrap_or(name);
                                     let op = memref::get_global(
                                         context,
                                         &static_name,
@@ -704,7 +680,7 @@ impl<E: Extra> AstNode<E> {
                     for a in args {
                         match a {
                             Argument::Positional(arg) => {
-                                let index = arg.lower(context, d, cfg, stack, g)?; //(*arg, env, d, b)?;
+                                let index = arg.lower(context, d, cfg, stack, g)?;
                                 indices.push(index);
                             } //_ => unimplemented!("{:?}", a)
                         };
@@ -946,14 +922,15 @@ impl<E: Extra> AstNode<E> {
 
             Ast::Global(ident, expr) => {
                 let current_block = stack.last().unwrap().clone();
-                let global_name = if cfg.root == current_block {
+
+                let is_static = cfg.root == current_block;
+
+                let global_name = if is_static {
                     ident.clone()
                 } else {
                     // we create a unique global name to prevent conflict
                     // and then we add ops to provide a local reference to the global name
-                    let mut global_name = ident.clone();
-                    global_name.push_str(&cfg.unique_static_name());
-                    global_name
+                    format!("{}{}", ident.clone(), cfg.unique_static_name())
                 };
 
                 // evaluate expr at compile time
@@ -999,20 +976,15 @@ impl<E: Extra> AstNode<E> {
                 };
 
                 let ptr_ty = AstType::Ptr(ast_ty.clone().into());
-                if cfg.root == current_block {
+                if is_static {
                     // STATIC/GLOBAL VARIABLE
                     let current = g.node_weight_mut(current_block).unwrap();
                     let index = current.push_with_name(op, &global_name);
                     cfg.set_type(index, ptr_ty);
-                    cfg.static_names.insert(index, global_name);
+                    //cfg.static_names.insert(index, global_name);
                     Ok(index)
-                    //let index = env.push_with_name(op, &global_name);
-                    //env.index_data(&index, ptr_ty);
-                    //env.index_static_name(&index, &global_name);
-                    //Ok(index)
                 } else {
                     // STATIC VARIABLE IN FUNCTION CONTEXT
-                    //let index = cfg.fresh_sym_index(current_block);
                     let current = g.node_weight_mut(current_block).unwrap();
                     let index = current.push_with_name(op, &global_name);
                     cfg.set_type(index, ptr_ty);
