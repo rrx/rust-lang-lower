@@ -150,27 +150,29 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn binop(&self, op: BinaryOperation, a: AstNode<E>, b: AstNode<E>) -> AstNode<E> {
-        self.node(Ast::BinaryOp(op, a.into(), b.into()))
+        let op_node = BinOpNode::new(op, E::span(self.span.clone()));
+        let ast = Ast::BinaryOp(op_node, a.into(), b.into());
+        self.node(ast)
     }
 
     pub fn subtract(&self, a: AstNode<E>, b: AstNode<E>) -> AstNode<E> {
-        self.node(Ast::BinaryOp(BinaryOperation::Subtract, a.into(), b.into()))
+        self.binop(BinaryOperation::Subtract, a, b)
     }
 
     pub fn add(&self, a: AstNode<E>, b: AstNode<E>) -> AstNode<E> {
-        self.node(Ast::BinaryOp(BinaryOperation::Add, a.into(), b.into()))
+        self.binop(BinaryOperation::Add, a, b)
     }
 
     pub fn multiply(&self, a: AstNode<E>, b: AstNode<E>) -> AstNode<E> {
-        self.node(Ast::BinaryOp(BinaryOperation::Multiply, a.into(), b.into()))
+        self.binop(BinaryOperation::Multiply, a, b)
     }
 
     pub fn ne(&self, a: AstNode<E>, b: AstNode<E>) -> AstNode<E> {
-        self.node(Ast::BinaryOp(BinaryOperation::NE, a.into(), b.into()))
+        self.binop(BinaryOperation::NE, a, b)
     }
 
     pub fn eq(&self, a: AstNode<E>, b: AstNode<E>) -> AstNode<E> {
-        self.node(Ast::BinaryOp(BinaryOperation::EQ, a.into(), b.into()))
+        self.binop(BinaryOperation::EQ, a, b)
     }
 
     pub fn seq(&self, nodes: Vec<AstNode<E>>) -> AstNode<E> {

@@ -16,4 +16,3 @@ def main() -> int:
   b.print(cond(1))
   b.print(cond(2))
   return 0
-

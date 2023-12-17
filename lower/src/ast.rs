@@ -72,6 +72,17 @@ pub enum BinaryOperation {
 }
 
 #[derive(Debug)]
+pub struct BinOpNode<E> {
+    pub(crate) node: BinaryOperation,
+    extra: E,
+}
+impl<E> BinOpNode<E> {
+    pub fn new(node: BinaryOperation, extra: E) -> Self {
+        Self { node, extra }
+    }
+}
+
+#[derive(Debug)]
 pub enum Argument<E> {
     Positional(Box<AstNode<E>>),
 }
@@ -157,7 +168,7 @@ pub struct NodeBlock<E> {
 
 #[derive(Debug)]
 pub enum Ast<E> {
-    BinaryOp(BinaryOperation, Box<AstNode<E>>, Box<AstNode<E>>),
+    BinaryOp(BinOpNode<E>, Box<AstNode<E>>, Box<AstNode<E>>),
     UnaryOp(UnaryOperation, Box<AstNode<E>>),
     Call(Box<AstNode<E>>, Vec<Argument<E>>, AstType),
     Identifier(String),
@@ -256,6 +267,20 @@ impl Extra for SimpleExtra {
             .with_labels(vec![Label::primary(self.span.file_id, r).with_message(msg)])
             .with_message("error")
     }
+
+    fn range(&self) -> std::ops::Range<usize> {
+        self.span.begin.pos as usize..self.span.end.pos as usize
+    }
+
+    fn primary(&self, msg: &str) -> Label<usize> {
+        let r = self.span.begin.pos as usize..self.span.end.pos as usize;
+        Label::primary(self.span.file_id, r).with_message(msg)
+    }
+
+    fn secondary(&self, msg: &str) -> Label<usize> {
+        let r = self.span.begin.pos as usize..self.span.end.pos as usize;
+        Label::secondary(self.span.file_id, r).with_message(msg)
+    }
 }
 
 pub trait Extra: Debug + Clone {
@@ -263,6 +288,9 @@ pub trait Extra: Debug + Clone {
     fn span(span: Span) -> Self;
     fn location<'c>(&self, context: &'c Context, d: &Diagnostics) -> ir::Location<'c>;
     fn error(&self, msg: &str) -> Diagnostic<usize>;
+    fn range(&self) -> std::ops::Range<usize>;
+    fn primary(&self, msg: &str) -> Label<usize>;
+    fn secondary(&self, msg: &str) -> Label<usize>;
 }
 
 #[derive(Debug, Clone)]

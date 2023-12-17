@@ -1,34 +1,50 @@
 use crate::ast::{
-    Argument, AssignTarget, Ast, AstNode, AstType, BinaryOperation, Builtin, Extra, Literal,
-    Parameter, ParameterNode,
+    //Literal,
+    //Parameter, ParameterNode,
+    BinOpNode,
+    //Argument, AssignTarget, Ast, AstNode, AstType,
+    BinaryOperation,
+    //Builtin,
+    Extra,
 };
-use crate::lower::from_type;
-use melior::ir::operation::OperationPrintingFlags;
-//use crate::scope::LayerIndex;
-use crate::default_pass_manager;
-
 use crate::{Diagnostics, ParseError};
 use anyhow::Error;
 use anyhow::Result;
+use codespan_reporting::diagnostic::Diagnostic;
 use melior::ir::Location;
 use melior::{
     dialect::{
         arith,
-        cf,
-        func,
+        //cf,
+        //func,
         //llvm,
         memref,
         //ods, scf,
     },
     ir::{
         attribute::{
-            DenseElementsAttribute, FlatSymbolRefAttribute, FloatAttribute, IntegerAttribute,
-            StringAttribute, TypeAttribute,
+            DenseElementsAttribute,
+            //FlatSymbolRefAttribute,
+            FloatAttribute,
+            IntegerAttribute,
+            //StringAttribute, TypeAttribute,
         },
-        r#type::{FunctionType, IntegerType, MemRefType, RankedTensorType},
-        Attribute, Block, Identifier, Module, Operation, Region, Type, TypeLike, Value, ValueLike,
+        r#type::{
+            //FunctionType,
+            IntegerType,
+            MemRefType,
+            RankedTensorType,
+        },
+        Attribute,
+        //Block, Identifier, Module,
+        Operation,
+        //Region,
+        Type,
+        TypeLike,
+        Value,
+        ValueLike,
     },
-    Context, ExecutionEngine,
+    Context,
 };
 
 pub fn build_float_op<'c>(
@@ -104,17 +120,20 @@ pub fn build_static<'c>(
     )
 }
 
-pub fn build_binop<'c>(
+pub fn build_binop<'c, E: Extra>(
     context: &'c Context,
-    op: BinaryOperation,
+    op: BinOpNode<E>,
     a: Value<'c, '_>,
+    a_extra: &E,
     b: Value<'c, '_>,
+    b_extra: &E,
     location: Location<'c>,
-) -> Operation<'c> {
+    d: &mut Diagnostics,
+) -> Result<Operation<'c>> {
     let ty = a.r#type();
-    assert_eq!(ty, b.r#type());
+    //assert_eq!(ty, b.r#type());
 
-    match op {
+    let op = match op.node {
         BinaryOperation::Divide => {
             if ty.is_index() {
                 // index type is unsigned
@@ -125,7 +144,8 @@ pub fn build_binop<'c>(
             } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
                 arith::divf(a, b, location)
             } else {
-                unimplemented!()
+                d.push_diagnostic(a_extra.error(&format!("Invalid Type")));
+                return Err(Error::new(ParseError::Invalid));
             }
         }
         BinaryOperation::Multiply => {
@@ -134,7 +154,8 @@ pub fn build_binop<'c>(
             } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
                 arith::mulf(a, b, location)
             } else {
-                unimplemented!()
+                d.push_diagnostic(a_extra.error(&format!("Invalid Type")));
+                return Err(Error::new(ParseError::Invalid));
             }
         }
         BinaryOperation::Add => {
@@ -143,7 +164,8 @@ pub fn build_binop<'c>(
             } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
                 arith::addf(a, b, location)
             } else {
-                unimplemented!()
+                d.push_diagnostic(a_extra.error(&format!("Invalid Type")));
+                return Err(Error::new(ParseError::Invalid));
             }
         }
         BinaryOperation::Subtract => {
@@ -152,7 +174,16 @@ pub fn build_binop<'c>(
             } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
                 arith::subf(a, b, location)
             } else {
-                unimplemented!()
+                d.push_diagnostic(
+                    Diagnostic::error()
+                        .with_labels(vec![
+                            a_extra.primary(&format!("Type {:?}", a.r#type())),
+                            b_extra.secondary(&format!("Type: {:?}", b.r#type())),
+                        ])
+                        .with_message("Type Mispatch"),
+                );
+
+                return Err(Error::new(ParseError::Invalid));
             }
         }
         BinaryOperation::GTE => {
@@ -163,7 +194,8 @@ pub fn build_binop<'c>(
                 // signed
                 arith::cmpi(context, arith::CmpiPredicate::Sge, a, b, location)
             } else {
-                unimplemented!();
+                d.push_diagnostic(a_extra.error(&format!("Invalid Type")));
+                return Err(Error::new(ParseError::Invalid));
             }
         }
         BinaryOperation::GT => {
@@ -174,7 +206,8 @@ pub fn build_binop<'c>(
                 // signed
                 arith::cmpi(context, arith::CmpiPredicate::Sgt, a, b, location)
             } else {
-                unimplemented!();
+                d.push_diagnostic(a_extra.error(&format!("Invalid Type")));
+                return Err(Error::new(ParseError::Invalid));
             }
         }
         BinaryOperation::NE => {
@@ -184,7 +217,8 @@ pub fn build_binop<'c>(
                 // ordered comparison
                 arith::cmpf(context, arith::CmpfPredicate::One, a, b, location)
             } else {
-                unimplemented!()
+                d.push_diagnostic(a_extra.error(&format!("Invalid Type")));
+                return Err(Error::new(ParseError::Invalid));
             }
         }
         BinaryOperation::EQ => {
@@ -194,8 +228,11 @@ pub fn build_binop<'c>(
                 // ordered comparison
                 arith::cmpf(context, arith::CmpfPredicate::Oeq, a, b, location)
             } else {
-                unimplemented!()
+                d.push_diagnostic(a_extra.error(&format!("Invalid Type")));
+                return Err(Error::new(ParseError::Invalid));
             }
         } //_ => unimplemented!("{:?}", op)
-    }
+    };
+
+    Ok(op)
 }

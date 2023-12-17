@@ -1149,6 +1149,8 @@ impl<E: Extra> AstNode<E> {
             }
 
             Ast::BinaryOp(op, x, y) => {
+                let x_extra = x.extra.clone();
+                let y_extra = y.extra.clone();
                 let index_x = x.lower(context, d, cfg, stack, g)?;
                 let index_y = y.lower(context, d, cfg, stack, g)?;
 
@@ -1161,7 +1163,7 @@ impl<E: Extra> AstNode<E> {
                 // types must be the same for binary operation, no implicit casting yet
                 let a = values_in_scope(g, index_x)[0];
                 let b = values_in_scope(g, index_y)[0];
-                let op = op::build_binop(context, op, a, b, location);
+                let op = op::build_binop(context, op, a, &x_extra, b, &y_extra, location, d)?;
                 let current = g.node_weight_mut(current_block).unwrap();
                 let index = current.push(op);
                 Ok(index)

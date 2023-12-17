@@ -8,10 +8,18 @@ use melior::{
     dialect::{arith, cf, func, llvm, memref, ods, scf},
     ir::{
         attribute::{
-            DenseElementsAttribute, FloatAttribute, IntegerAttribute, StringAttribute,
+            //DenseElementsAttribute,
+            FloatAttribute,
+            IntegerAttribute,
+            StringAttribute,
             TypeAttribute,
         },
-        r#type::{FunctionType, IntegerType, MemRefType, RankedTensorType},
+        r#type::{
+            FunctionType,
+            IntegerType,
+            MemRefType,
+            //RankedTensorType
+        },
         *,
     },
     Context,
@@ -878,6 +886,8 @@ impl<'c, E: Extra> Lower<'c, E> {
             }
 
             Ast::BinaryOp(op, x, y) => {
+                let x_extra = x.extra.clone();
+                let y_extra = y.extra.clone();
                 let index_lhs = self.lower_expr(*x, env, d, b)?;
                 let index_rhs = self.lower_expr(*y, env, d, b)?;
 
@@ -890,7 +900,8 @@ impl<'c, E: Extra> Lower<'c, E> {
                 // types must be the same for binary operation, no implicit casting yet
                 let a = env.value0(&index_lhs);
                 let b = env.value0(&index_rhs);
-                let binop = op::build_binop(self.context, op, a, b, location);
+                let binop =
+                    op::build_binop(self.context, op, a, &x_extra, b, &y_extra, location, d)?;
 
                 let index = env.push(binop);
                 let data = Data::new(ast_ty);

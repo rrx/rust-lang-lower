@@ -425,15 +425,11 @@ impl<E: Extra> Parser<E> {
         use syntax::ast::ExprP;
 
         match item.node {
-            ExprP::Op(lhs, op, rhs) => {
-                let extra = env.extra(item.span);
-                let ast = Ast::BinaryOp(
-                    from_binop(op),
-                    Box::new(self.from_expr(*lhs, env, d, b)?),
-                    Box::new(self.from_expr(*rhs, env, d, b)?),
-                );
-                Ok(AstNode { node: ast, extra })
-            }
+            ExprP::Op(lhs, op, rhs) => Ok(b.binop(
+                from_binop(op),
+                self.from_expr(*lhs, env, d, b)?.into(),
+                self.from_expr(*rhs, env, d, b)?.into(),
+            )),
 
             ExprP::Call(expr, expr_args) => {
                 let mut args = vec![];
@@ -497,10 +493,11 @@ impl<E: Extra> Parser<E> {
                     // Global identifiers are dereferenced when accessed
                     if let DataType::Global = data.ty {
                         let extra = env.extra(item.span);
-                        Ok(AstNode {
-                            node: Ast::Deref(ast.into(), DerefTarget::Offset(0)),
-                            extra,
-                        })
+                        Ok(b.deref_offset(ast, 0).set_extra(extra))
+                        //Ok(AstNode {
+                        //node: Ast::Deref(ast.into(), DerefTarget::Offset(0)),
+                        //extra,
+                        //})
                     } else {
                         Ok(ast)
                     }
@@ -607,7 +604,7 @@ pub(crate) mod tests {
 
     #[test]
     fn test_global() {
-        run_test("../tests/test_global.star", 0);
+        run_test2("../tests/test_global.star", 0);
     }
 
     #[test]
