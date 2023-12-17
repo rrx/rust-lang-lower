@@ -77,9 +77,9 @@ pub struct OpCollection<'c> {
 }
 
 impl<'c> OpCollection<'c> {
-    pub fn new(block_index: NodeIndex) -> Self {
+    pub fn new() -> Self {
         Self {
-            block_index,
+            block_index: NodeIndex::new(0),
             ops: vec![],
             symbols: HashMap::new(),
         }
@@ -262,7 +262,6 @@ pub struct CFG<'c, E> {
 impl<'c, E: Extra> CFG<'c, E> {
     pub fn new(context: &'c Context, module_name: &str, g: &mut CFGGraph<'c>) -> Self {
         let block = Block::new(&[]);
-        let data = OpCollection::new(NodeIndex::new(0));
 
         let mut cfg = Self {
             // dummy
@@ -278,6 +277,7 @@ impl<'c, E: Extra> CFG<'c, E> {
             shared: HashSet::new(),
             _e: std::marker::PhantomData::default(),
         };
+        let data = OpCollection::new();
         cfg.add_block(module_name, data, block, g);
         cfg
     }
@@ -823,18 +823,17 @@ impl<E: Extra> AstNode<E> {
                     let mut exprs = vec![];
                     let mut block_indicies = vec![];
                     for (i, b) in blocks.into_iter().enumerate() {
-                        if let Ast::Block(name, _params, expr) = b.node {
+                        if let Ast::Block(nb) = b.node {
                             // connect the first block to the function
-                            let block_name = if i == 0 { def.name.clone() } else { name };
+                            let block_name = if i == 0 { def.name.clone() } else { nb.name };
                             let block = Block::new(&[]);
-                            //let data = GData::new(); //&block_name); //, params);
-                            let data = OpCollection::new(NodeIndex::new(0));
+                            let data = OpCollection::new();
                             let index = cfg.add_block(&block_name, data, block, g);
                             block_indicies.push(index);
                             if i == 0 {
                                 edges.push((current_block, index));
                             }
-                            exprs.push((index, *expr));
+                            exprs.push((index, *nb.body));
                         } else {
                             unreachable!()
                         }
@@ -1084,14 +1083,14 @@ impl<E: Extra> AstNode<E> {
 
                 // then block
 
-                let data = OpCollection::new(NodeIndex::new(0));
+                let data = OpCollection::new();
                 let block = Block::new(&[]);
                 let then_block_index = cfg.add_block("then", data, block, g);
 
                 // else
                 let (maybe_else_block_index, maybe_else_expr) = match maybe_else_expr {
                     Some(else_expr) => {
-                        let data = OpCollection::new(NodeIndex::new(0));
+                        let data = OpCollection::new();
                         let block = Block::new(&[]);
                         let block_index = cfg.add_block("else", data, block, g);
                         (Some(block_index), Some(else_expr))
@@ -1263,7 +1262,7 @@ mod tests {
             //let p = b.param(&format!("p{}", i), AstType::Int);
             let block = Block::new(&[]);
             let block_name = format!("b{}", i);
-            let data = OpCollection::new(NodeIndex::new(0));
+            let data = OpCollection::new();
             cfg.add_block(&block_name, data, block, &mut g);
         });
 

@@ -1,6 +1,6 @@
 use crate::Diagnostics;
-use anyhow::Error;
-use anyhow::Result;
+//use anyhow::Error;
+//use anyhow::Result;
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use melior::ir;
 use melior::Context;
@@ -149,6 +149,13 @@ pub enum Terminator {
 }
 
 #[derive(Debug)]
+pub struct NodeBlock<E> {
+    pub(crate) name: String,
+    pub(crate) params: Vec<ParameterNode<E>>,
+    pub(crate) body: Box<AstNode<E>>,
+}
+
+#[derive(Debug)]
 pub enum Ast<E> {
     BinaryOp(BinaryOperation, Box<AstNode<E>>, Box<AstNode<E>>),
     UnaryOp(UnaryOperation, Box<AstNode<E>>),
@@ -168,7 +175,7 @@ pub enum Ast<E> {
     While(Box<AstNode<E>>, Box<AstNode<E>>),
     Builtin(Builtin, Vec<Argument<E>>),
     Deref(Box<AstNode<E>>, DerefTarget),
-    Block(String, Vec<ParameterNode<E>>, Box<AstNode<E>>),
+    Block(NodeBlock<E>), //String, Vec<ParameterNode<E>>, Box<AstNode<E>>),
     Loop(String, Box<AstNode<E>>),
     Break(String),
     Continue(String),
@@ -192,7 +199,7 @@ impl<E: Extra> Ast<E> {
     pub fn terminator(&self) -> Option<Terminator> {
         match self {
             Self::Sequence(exprs) => exprs.last().unwrap().node.terminator(),
-            Self::Block(_, _, expr) => expr.node.terminator(),
+            Self::Block(nb) => nb.body.node.terminator(),
             Self::Goto(label) => Some(Terminator::Jump(label.clone())),
             Self::Return(_) => Some(Terminator::Return),
             _ => None,
@@ -288,7 +295,7 @@ impl<E> AstNode<E> {
     }
 
     pub fn is_block(&self) -> bool {
-        if let Ast::Block(_, _, _) = self.node {
+        if let Ast::Block(_nb) = &self.node {
             true
         } else {
             false
@@ -296,8 +303,8 @@ impl<E> AstNode<E> {
     }
 
     pub fn try_block(self) -> Option<AstNode<E>> {
-        if let Ast::Block(_, _, body) = self.node {
-            Some(*body)
+        if let Ast::Block(nb) = self.node {
+            Some(*nb.body)
         } else {
             None
         }

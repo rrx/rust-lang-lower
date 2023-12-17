@@ -310,8 +310,13 @@ impl<E: Extra> NodeBuilder<E> {
                 extra: self.extra_unknown(),
             })
             .collect();
+        let nb = NodeBlock {
+            name: name.to_string(),
+            params,
+            body: body.into(),
+        };
         AstNode {
-            node: Ast::Block(name.to_string(), params, body.into()),
+            node: Ast::Block(nb),
             extra,
         }
     }
@@ -350,7 +355,7 @@ impl<E: Extra> AstSorter<E> {
                     self.sort_children(e);
                 }
             }
-            Ast::Block(_, _, _) => {
+            Ast::Block(_) => {
                 self.blocks.push(ast);
             }
             _ => {

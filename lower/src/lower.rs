@@ -102,17 +102,21 @@ pub fn layer_in_scope<'c, E: Extra>(
 
     // load nodes
     for expr in blocks.into_iter() {
-        if let Ast::Block(name, params, ast) = expr.node {
-            log::debug!("block node: {:?}", ast.node);
-            log::debug!("block terminator: {}: {:?}", name, ast.node.terminator());
+        if let Ast::Block(nb) = expr.node {
+            log::debug!("block node: {:?}", nb.body.node);
+            log::debug!(
+                "block terminator: {}: {:?}",
+                nb.name,
+                nb.body.node.terminator()
+            );
 
             // ensure we have a terminator
-            if ast.node.terminator().is_none() {
-                d.push_diagnostic(ast.extra.error("Block does not terminate"));
+            if nb.body.node.terminator().is_none() {
+                d.push_diagnostic(nb.body.extra.error("Block does not terminate"));
                 return Err(Error::new(ParseError::Invalid));
             }
 
-            layer.push_block(context, &name, params, *ast, d);
+            layer.push_block(context, &nb.name, nb.params, *nb.body, d);
         } else {
             unreachable!()
         }
@@ -725,7 +729,7 @@ impl<'c, E: Extra> Lower<'c, E> {
                 unimplemented!()
             }
 
-            Ast::Block(_name, _params, _body) => {
+            Ast::Block(_nb) => {
                 unreachable!()
             }
 
@@ -1379,10 +1383,12 @@ impl<'c, E: Extra> Definition<E> {
                         }
                     })
                     .collect::<Vec<_>>();
-                let node = AstNode::new(
-                    Ast::Block("entry".to_string(), params, seq.into()),
-                    extra.clone(),
-                );
+                let nb = NodeBlock {
+                    name: "entry".to_string(),
+                    params,
+                    body: seq.into(),
+                };
+                let node = AstNode::new(Ast::Block(nb), extra.clone());
                 blocks.push_back(node.into());
             }
 
