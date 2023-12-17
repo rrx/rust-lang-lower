@@ -145,93 +145,6 @@ impl<'c> OpCollection<'c> {
     }
 }
 
-/*
-#[derive(Debug)]
-pub struct GData<'c, E> {
-    ops: Vec<Operation<'c>>,
-    //name: String,
-    //node_type: NodeType,
-    //params: Vec<ParameterNode<E>>,
-    symbols: HashMap<String, SymIndex>,
-    index: HashMap<SymIndex, usize>,
-    _e: std::marker::PhantomData<E>,
-}
-impl<'c, E: Extra> GData<'c, E> {
-    pub fn new() -> Self {
-        //, params: Vec<ParameterNode<E>>) -> Self {
-        Self {
-            ops: vec![],
-            //name: name.to_string(),
-            //node_type,
-            //params,
-            symbols: HashMap::new(),
-            index: HashMap::new(),
-            _e: std::marker::PhantomData::default(),
-        }
-    }
-
-    pub fn push(&mut self, op: Operation<'c>, sym_index: SymIndex) {
-        let offset = self.ops.len();
-        self.ops.push(op);
-        self.index.insert(sym_index, offset);
-    }
-
-    pub fn push_with_name(&mut self, op: Operation<'c>, sym_index: SymIndex, name: &str) {
-        self.push(op, sym_index);
-        self.symbols.insert(name.to_string(), sym_index);
-    }
-
-    pub fn value0(&self, index: SymIndex) -> Option<Value<'c, '_>> {
-        self.values(index).map(|vs| vs[0])
-    }
-
-    pub fn values(&self, index: SymIndex) -> Option<Vec<Value<'c, '_>>> {
-        if let Some(offset) = self.index.get(&index) {
-            Some(
-                self.ops
-                    .get(*offset)
-                    .expect("Op missing")
-                    .results()
-                    .map(|x| x.into())
-                    .collect(),
-            )
-        } else {
-            None
-        }
-    }
-
-    pub fn lookup(&self, name: &str) -> Option<SymIndex> {
-        self.symbols.get(name).cloned()
-    }
-
-    pub fn add_symbol(&mut self, name: &str, index: SymIndex) {
-        self.symbols.insert(name.to_string(), index);
-    }
-
-    pub fn append_ops(&mut self, block_ref: &Block<'c>) {
-        for op in self.take_ops() {
-            block_ref.append_operation(op);
-        }
-    }
-
-    pub fn take_ops(&mut self) -> Vec<Operation<'c>> {
-        //self.names.clear();
-        self.ops.drain(..).collect()
-    }
-
-    /*
-    pub fn push(&mut self, op: Operation<'c>, index: LayerIndex) -> LayerIndex {
-        let pos = self.ops.len();
-        self.ops.push(op);
-        self.index.insert(index.clone(), pos);
-        self._last_index = Some(index.clone());
-        index
-    }
-
-    */
-}
-*/
-
 #[derive(Debug)]
 pub struct SymbolData {
     ty: AstType,
@@ -251,7 +164,6 @@ pub struct CFG<'c, E> {
     root: NodeIndex,
     index_count: usize,
     static_count: usize,
-    //g: DiGraph<GData<'c, E>, ()>,
     block_names: HashMap<String, NodeIndex>,
     block_names_index: HashMap<NodeIndex, String>,
     symbols: HashMap<SymIndex, SymbolData>,
@@ -269,7 +181,6 @@ impl<'c, E: Extra> CFG<'c, E> {
             root: NodeIndex::new(0),
             index_count: 0,
             static_count: 0,
-            //g,
             block_names: HashMap::new(),
             block_names_index: HashMap::new(),
             symbols: HashMap::new(),
@@ -280,6 +191,15 @@ impl<'c, E: Extra> CFG<'c, E> {
         let data = OpCollection::new();
         cfg.add_block(module_name, data, block, g);
         cfg
+    }
+
+    pub fn root(&self) -> NodeIndex {
+        self.root
+    }
+
+    pub fn exec_main(&self, module: &Module<'c>, libpath: &str) -> i32 {
+        let shared = self.shared.iter().cloned().collect::<Vec<_>>();
+        exec_main(&shared, module, libpath)
     }
 
     pub fn block_is_static(&self, block_index: NodeIndex) -> bool {
@@ -324,14 +244,6 @@ impl<'c, E: Extra> CFG<'c, E> {
         self.symbols.insert(index, data);
     }
 
-    /*
-    pub fn fresh_sym_index(&mut self, block_index: NodeIndex) -> SymIndex {
-        let index = SymIndex(block_index, self.index_count);
-        self.index_count += 1;
-        index
-    }
-    */
-
     pub fn add_block(
         &mut self,
         name: &str,
@@ -339,7 +251,6 @@ impl<'c, E: Extra> CFG<'c, E> {
         block: Block<'c>,
         g: &mut CFGGraph<'c>,
     ) -> NodeIndex {
-        //let name = data.name.clone();
         let index = g.add_node(data);
         g.node_weight_mut(index).unwrap().block_index = index;
         self.block_names.insert(name.to_string(), index);
@@ -358,14 +269,6 @@ impl<'c, E: Extra> CFG<'c, E> {
     pub fn block_index(&self, name: &str) -> Option<NodeIndex> {
         self.block_names.get(name).cloned()
     }
-
-    //pub fn data_by_index(&self, index: NodeIndex, g: &CFGGraph<'c>) -> Option<&OpCollection<'c>> {
-    //g.node_weight(index)
-    //}
-
-    //pub fn data_mut_by_index(&mut self, index: NodeIndex, g: &mut CFGGraph<'c>) -> Option<&mut OpCollection<'c>> {
-    //g.node_weight_mut(index)
-    //}
 
     pub fn data_mut_by_name(
         &mut self,
@@ -415,7 +318,6 @@ impl<'c, E: Extra> CFG<'c, E> {
         }
         let mut g_out = DiGraph::new();
         for node_index in g.node_indices() {
-            //let data = g.node_weight(node_index).unwrap();
             let block_name = self.block_names_index.get(&node_index).unwrap();
             g_out.add_node(Node::new_block(block_name.clone()));
         }
@@ -445,8 +347,10 @@ impl<'c, E: Extra> CFG<'c, E> {
                 }
             )
         );
+        let path = std::fs::canonicalize(filename).unwrap();
+        println!("{}", path.clone().into_os_string().into_string().unwrap());
         println!("{}", s);
-        std::fs::write(filename, s).unwrap();
+        std::fs::write(path, s).unwrap();
     }
 
     pub fn type_from_expr(&self, index: NodeIndex, expr: &AstNode<E>, g: &CFGGraph<'c>) -> AstType {
@@ -499,161 +403,6 @@ impl<'c, E: Extra> CFG<'c, E> {
             }
         }
         None
-    }
-
-    pub fn lower(
-        &mut self,
-        expr: AstNode<E>,
-        stack: &mut Vec<NodeIndex>,
-        g: &mut CFGGraph<'c>,
-        d: &mut Diagnostics,
-    ) {
-        println!("lower: {:?}, {:?}", expr.node, stack);
-        let location = expr.location(self.context, d);
-        match expr.node {
-            /*
-                Ast::Sequence(exprs) => {
-                    for expr in exprs {
-                        self.lower(expr, stack, g, d);
-                    }
-                }
-                Ast::Block(_name, _params, _body) => {
-                    unreachable!();
-                    /*
-                    let block_args = params
-                        .iter()
-                        .map(|a| (from_type(context, &a.ty), a.extra.location(context, d)))
-                        .collect::<Vec<_>>();
-
-                    let block = Block::new(args);
-                    let current = stack.last().unwrap().clone();
-                    let data = GData::new(&name, NodeType::Block, params);
-                    let index = self.add_block(data);
-                    self.g.add_edge(current, index, ());
-                    let t = body.node.terminator().unwrap();
-                    self.lower(*body, stack);
-                    */
-                }
-            */
-                //Ast::Builtin(_, _) => (),
-                /*
-                Ast::Literal(lit) => {
-                    let current_block = stack.last().unwrap().clone();
-                    //let sym_index = cfg.fresh_sym_index(current_block);
-                    let current = g.node_weight_mut(current_block).unwrap();
-                    //let current = cfg.data_mut_by_index(current_block, g).unwrap();
-                    let op = match lit {
-                        Literal::Float(f) => op::build_float_op(self.context, f, location),
-
-                        Literal::Int(x) => op::build_int_op(self.context, x, location),
-
-                        Literal::Index(x) => op::build_index_op(self.context, x as i64, location),
-
-                        Literal::Bool(x) => op::build_bool_op(self.context, x, location),
-                        _ => unimplemented!("{:?}", lit),
-                    };
-                    //Ok(current.push(op))
-                }
-                */
-
-                //Ast::Return(_) => {}
-                /*
-                Ast::Identifier(name) => {
-                    let current = stack.last().unwrap();
-                    let dom = simple_fast(&*g, self.root)
-                        .dominators(*current)
-                        .unwrap()
-                        .collect::<Vec<_>>();
-                    println!("X: {:?}", dom);
-                    let r = self.name_in_scope(*current, &name, g).unwrap();
-                    let symbol_data = self.symbols.get(&r).unwrap();
-                    println!("lookup identifier: {}, {:?}, {:?}", name, r, symbol_data.ty);
-                }
-                Ast::Goto(label) => {
-                    let current = stack.last().unwrap();
-                    let index = self.block_index(&label).unwrap();
-                    g.add_edge(*current, index, ());
-                }
-                Ast::Mutate(target, expr) => match target.node {
-                    Ast::Identifier(name) => {
-                        let current = stack.last().unwrap();
-                        let r = self.name_in_scope(*current, &name, g).unwrap();
-                        let symbol_data = self.symbols.get(&r).unwrap();
-                        println!("lookup identifier: {}, {:?}, {:?}", name, r, symbol_data.ty);
-                        self.lower(*expr, stack, g, d);
-                    }
-                    _ => unimplemented!(),
-                },
-                Ast::Assign(target, expr) => {
-                    match target {
-                        AssignTarget::Identifier(name) | AssignTarget::Alloca(name) => {
-                            let block_index = stack.last().unwrap().clone();
-                            let ty = self.type_from_expr(block_index, &expr, g);
-                            self.lower(*expr, stack, g, d);
-                            //let index = self.fresh_sym_index(*block_index);
-                            let data = g.node_weight_mut(block_index).unwrap();
-                            //let data = self.data_mut_by_index(*stack.last().unwrap(), g).unwrap();
-                            let symbol_data = SymbolData::new(ty);
-                            let index = data.last();
-                            data.add_symbol(&name, index);
-                            self.symbols.insert(index, symbol_data);
-                        }
-                    }
-                }
-
-                Ast::Definition(mut def) => {
-                    def = def.normalize();
-                    let current = stack.last().unwrap().clone();
-
-                    if let Some(body) = def.body {
-                        let mut edges = vec![];
-                        let blocks = body.try_seq().unwrap();
-                        let mut exprs = vec![];
-                        for (i, b) in blocks.into_iter().enumerate() {
-                            if let Ast::Block(name, __params, expr) = b.node {
-                                // connect the first block to the function
-                                let block_name = if i == 0 { def.name.clone() } else { name };
-                                let block = Block::new(&[]);
-                                //let data = GData::new(); //&block_name); //, params);
-                                let data = OpCollection::new(NodeIndex::new(0));
-                                let index = self.add_block(&block_name, data, block, g);
-                                if i == 0 {
-                                    edges.push((current, index));
-                                }
-                                exprs.push((index, *expr));
-                            } else {
-                                unreachable!()
-                            }
-                        }
-                        for (a, b) in edges {
-                            g.add_edge(a, b, ());
-                        }
-
-                        for (index, expr) in exprs {
-                            stack.push(index);
-                            self.dump_scope(index, g);
-                            self.lower(expr, stack, g, d);
-                            stack.pop();
-                        }
-                    }
-                    stack.pop().unwrap();
-                }
-
-                Ast::Global(name, body) => {
-                    let block_index = self.block_index("module").unwrap();
-                    let ty = self.type_from_expr(block_index, &body, g);
-                    self.lower(*body, stack, g, d);
-                    //let index = self.fresh_sym_index(block_index);
-                    let data = g.node_weight_mut(block_index).unwrap();
-                    let index = data.last();
-                    //let data = self.data_mut_by_index(block_index, g).unwrap();
-                    let symbol_data = SymbolData::new(ty);
-                    data.add_symbol(&name, index);
-                    self.symbols.insert(index, symbol_data);
-                }
-               */
-            _ => unreachable!("{:?}", expr.node),
-        }
     }
 
     pub fn dump_scope(&self, index: NodeIndex, g: &CFGGraph<'c>) {
@@ -749,6 +498,7 @@ impl<E: Extra> AstNode<E> {
                     println!("lookup identifier: {}, {:?}", name, sym_index);
                     return Ok(sym_index);
                 }
+                d.push_diagnostic(self.extra.error(&format!("Name not found: {:?}", name)));
                 Err(Error::new(ParseError::Invalid))
             }
 
@@ -845,8 +595,12 @@ impl<E: Extra> AstNode<E> {
                     for (index, expr) in exprs {
                         stack.push(index);
                         cfg.dump_scope(index, g);
-                        expr.lower(context, d, cfg, stack, g)?;
-                        stack.pop();
+                        if let Ok(index) = expr.lower(context, d, cfg, stack, g) {
+                            stack.pop();
+                        } else {
+                            stack.pop();
+                            return Err(Error::new(ParseError::Invalid));
+                        }
                     }
 
                     let region = Region::new();
@@ -882,9 +636,7 @@ impl<E: Extra> AstNode<E> {
 
             Ast::Literal(lit) => {
                 let current_block = stack.last().unwrap().clone();
-                //let sym_index = cfg.fresh_sym_index(current_block);
                 let current = g.node_weight_mut(current_block).unwrap();
-                //let current = cfg.data_mut_by_index(current_block, g).unwrap();
                 let op = match lit {
                     Literal::Float(f) => op::build_float_op(context, f, location),
 
@@ -902,7 +654,6 @@ impl<E: Extra> AstNode<E> {
                 let arity = bi.arity();
                 assert_eq!(arity, args.len());
                 let current_block = stack.last().unwrap().clone();
-                //let current = cfg.data_mut_by_index(current_block).unwrap();
                 match bi {
                     Builtin::Assert => {
                         let arg = args.pop().unwrap();
@@ -926,9 +677,6 @@ impl<E: Extra> AstNode<E> {
                         let arg = args.pop().unwrap();
                         match arg {
                             Argument::Positional(expr) => {
-                                //let sym_index = cfg.fresh_sym_index(current_block);
-                                //let ast_ty = cfg.type_from_expr(current_block, &expr);
-
                                 // eval expr
                                 let index = expr.lower(context, d, cfg, stack, g)?;
                                 let current = g.node_weight_mut(current_block).unwrap();
@@ -948,14 +696,7 @@ impl<E: Extra> AstNode<E> {
                                 };
 
                                 let f = FlatSymbolRefAttribute::new(context, ident);
-                                let op = func::call(
-                                    context,
-                                    f,
-                                    &rs,
-                                    //&env.values(&index),
-                                    &[],
-                                    location,
-                                );
+                                let op = func::call(context, f, &rs, &[], location);
 
                                 Ok(current.push(op))
                             }
@@ -972,13 +713,10 @@ impl<E: Extra> AstNode<E> {
                         } else {
                             unimplemented!()
                         }
+                        // do nothing
                         let op = op::build_bool_op(context, true, location);
                         let current = g.node_weight_mut(current_block).unwrap();
                         Ok(current.push(op))
-
-                        // do nothing?
-                        //let sym_index = cfg.fresh_sym_index(current_block);
-                        //Ok(sym_index)
                     } //_ => unimplemented!("{:?}", b),
                 }
             }
@@ -1099,19 +837,27 @@ impl<E: Extra> AstNode<E> {
                 };
 
                 stack.push(then_block_index);
-                then_expr.lower(context, d, cfg, stack, g)?;
-                let data = g.node_weight_mut(then_block_index).unwrap();
-                data.push(scf::r#yield(&[], then_location));
-                stack.pop();
+                if let Ok(index) = then_expr.lower(context, d, cfg, stack, g) {
+                    let data = g.node_weight_mut(then_block_index).unwrap();
+                    data.push(scf::r#yield(&[], then_location));
+                    stack.pop();
+                } else {
+                    stack.pop();
+                    return Err(Error::new(ParseError::Invalid));
+                }
 
                 if let Some(else_block_index) = &maybe_else_block_index {
                     let else_expr = maybe_else_expr.unwrap();
                     let else_location = else_expr.location(context, d);
                     stack.push(*else_block_index);
-                    else_expr.lower(context, d, cfg, stack, g)?;
-                    let data = g.node_weight_mut(*else_block_index).unwrap();
-                    data.push(scf::r#yield(&[], else_location));
-                    stack.pop();
+                    if let Ok(index) = else_expr.lower(context, d, cfg, stack, g) {
+                        let data = g.node_weight_mut(*else_block_index).unwrap();
+                        data.push(scf::r#yield(&[], else_location));
+                        stack.pop();
+                    } else {
+                        stack.pop();
+                        return Err(Error::new(ParseError::Invalid));
+                    }
                 }
 
                 let block = cfg.take_block(then_block_index, g);
@@ -1136,6 +882,36 @@ impl<E: Extra> AstNode<E> {
                     location,
                 );
                 Ok(current.push(if_op))
+            }
+
+            Ast::BinaryOp(op, x, y) => {
+                let index_x = x.lower(context, d, cfg, stack, g)?;
+                let index_y = y.lower(context, d, cfg, stack, g)?;
+
+                let current_block = stack.last().unwrap().clone();
+                let current = g.node_weight_mut(current_block).unwrap();
+
+                //let index_lhs = self.lower_expr(*x, env, d, b)?;
+                //let index_rhs = self.lower_expr(*y, env, d, b)?;
+
+                //let ty_x =
+                //let ty_lhs = env.data(&index_lhs).expect("LHS data missing").clone();
+                //let ty_rhs = env.data(&index_rhs).expect("RHS data missing").clone();
+
+                //let ast_ty = ty_lhs.clone();
+                //assert_eq!(ty_lhs, ty_rhs);
+
+                // types must be the same for binary operation, no implicit casting yet
+                let a = current.value0(index_x).unwrap();
+                let b = current.value0(index_y).unwrap();
+                //let a = env.value0(&index_lhs);
+                //let b = env.value0(&index_rhs);
+                let op = op::build_binop(context, op, a, b, location);
+                let index = current.push(op);
+                //let index = env.push(binop);
+                //let data = Data::new(ast_ty);
+                //env.index_data(&index, data.ty);
+                Ok(index)
             }
 
             _ => {
@@ -1231,23 +1007,6 @@ mod tests {
         cfg.save_graph("out.dot", &g);
         assert_eq!(1, stack.len());
     }
-
-    /*
-    #[test]
-    fn test_cfg_block2() {
-        let context = default_context();
-        let mut g = CFGGraph::new();
-        let mut cfg: CFG<SimpleExtra> = CFG::new(&context, "module", &mut g);
-        let mut d = Diagnostics::new();
-        let file_id = d.add_source("test.py".into(), "test".into());
-        let b = NodeBuilder::new(file_id, "type.py");
-        let ast = gen_block(&b);
-        let mut stack = vec![cfg.root];
-        cfg.lower(ast, &mut stack, &mut g, &mut d);
-        cfg.save_graph("out.dot", &g);
-        assert_eq!(0, stack.len());
-    }
-    */
 
     #[test]
     fn test_cfg_graph() {

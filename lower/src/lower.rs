@@ -17,7 +17,6 @@ use melior::{
     Context,
 };
 use std::collections::HashSet;
-use std::collections::VecDeque;
 
 #[derive(Debug, Clone)]
 pub struct Data {
@@ -739,6 +738,7 @@ impl<'c, E: Extra> Lower<'c, E> {
             Ast::Continue(_name) => {
                 unimplemented!()
             }
+            Ast::Label(_) => unimplemented!(),
             Ast::Goto(name) => {
                 env.dump();
                 if let Some(block) = env.get_block_by_name(&name) {
@@ -1349,56 +1349,6 @@ impl<'c, E: Extra> Lower<'c, E> {
                 }
             } //_ => unimplemented!("{:?}", expr.node),
         }
-    }
-}
-
-impl<'c, E: Extra> Definition<E> {
-    pub fn normalize(mut self) -> Self {
-        // ensure that the function body is a sequence of named blocks
-        if let Some(body) = self.body {
-            let extra = body.extra.clone();
-            // sort body
-            let mut s = crate::builder::AstSorter::new();
-            s.sort_children(*body);
-
-            let mut blocks = VecDeque::new();
-
-            // initial nodes form the entry block
-            if s.stack.len() > 0 {
-                let seq = AstNode::new(Ast::Sequence(s.stack), extra.clone());
-                // TODO: check that function args match the first block args
-                let params = self
-                    .params
-                    .iter()
-                    .map(|p| {
-                        if let Parameter::Normal = p.node {
-                            ParameterNode {
-                                name: p.name.clone(),
-                                ty: p.ty.clone(),
-                                node: Parameter::Normal,
-                                extra: p.extra.clone(),
-                            }
-                        } else {
-                            unreachable!()
-                        }
-                    })
-                    .collect::<Vec<_>>();
-                let nb = NodeBlock {
-                    name: "entry".to_string(),
-                    params,
-                    body: seq.into(),
-                };
-                let node = AstNode::new(Ast::Block(nb), extra.clone());
-                blocks.push_back(node.into());
-            }
-
-            blocks.extend(s.blocks.into_iter().map(|b| b.into()));
-
-            self.body = Some(
-                AstNode::new(Ast::Sequence(blocks.into_iter().collect()), extra.clone()).into(),
-            );
-        }
-        self
     }
 }
 

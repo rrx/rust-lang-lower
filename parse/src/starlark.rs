@@ -572,6 +572,39 @@ pub(crate) mod tests {
         );
     }
 
+    fn run_test2(filename: &str, expected: i32) {
+        use lower::ast::SimpleExtra;
+        use lower::cfg::*;
+        use lower::{Location, Module};
+
+        let context = lower::default_context();
+        let mut d = Diagnostics::new();
+        let mut module = Module::new(Location::unknown(&context));
+        let mut g = CFGGraph::new();
+        let mut cfg: CFG<SimpleExtra> = CFG::new(&context, "module", &mut g);
+        let file_id = d.add_source(
+            filename.to_string(),
+            std::fs::read_to_string(filename).unwrap(),
+        );
+
+        // parse
+        let mut parser = Parser::new();
+        let ast: AstNode<ast::SimpleExtra> = parser
+            .parse(Path::new(filename), None, file_id, &mut d)
+            .unwrap();
+
+        let mut stack = vec![cfg.root()];
+        let r = ast.lower(&context, &mut d, &mut cfg, &mut stack, &mut g);
+        cfg.save_graph("out.dot", &g);
+        d.dump();
+        assert_eq!(1, stack.len());
+        assert!(!d.has_errors);
+        r.unwrap();
+        cfg.module(&context, &mut module, &mut g);
+        let r = cfg.exec_main(&module, "../target/debug/");
+        assert_eq!(expected, r);
+    }
+
     #[test]
     fn test_global() {
         run_test("../tests/test_global.star", 0);
@@ -580,5 +613,10 @@ pub(crate) mod tests {
     #[test]
     fn test_assign1() {
         run_test("../tests/test_assign1.star", 0);
+    }
+
+    //#[test]
+    fn test_cond() {
+        run_test2("../tests/test_cond.star", 0);
     }
 }

@@ -15,6 +15,9 @@ pub use diagnostics::{Diagnostics, FileDB, ParseError};
 pub use lower::Lower;
 
 // re-export melior structs
-pub use melior::Context;
+pub use melior::{
+    ir::{Location, Module},
+    Context,
+};
 
 pub type Environment<'c, E> = scope::ScopeStack<'c, E>;

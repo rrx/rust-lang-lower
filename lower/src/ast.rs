@@ -180,6 +180,7 @@ pub enum Ast<E> {
     Break(String),
     Continue(String),
     Goto(String),
+    Label(String),
     Error,
 }
 
@@ -324,6 +325,39 @@ impl<E> AstNode<E> {
         } else {
             None
         }
+    }
+
+    pub fn to_vec(self) -> Vec<AstNode<E>> {
+        match self.node {
+            Ast::Sequence(exprs) => exprs
+                .into_iter()
+                .map(|expr| expr.to_vec())
+                .flatten()
+                .collect(),
+            _ => vec![self],
+        }
+    }
+
+    pub fn to_blocks(self) -> Vec<NodeBlock<E>> {
+        //let mut out = vec![];
+        for expr in self.to_vec() {
+            match &expr.node {
+                // should be flattened already
+                Ast::Sequence(_) => unreachable!(),
+                Ast::Goto(_) => (),
+                Ast::Label(_) => (),
+                _ => unimplemented!(),
+            }
+        }
+        //let mut out = vec![];
+        //match self.node {
+        //Ast::Sequence(_exprs) => {
+        //}
+        //_ => ()
+        //}
+
+        //out
+        vec![]
     }
 }
 

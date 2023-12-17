@@ -1,6 +1,7 @@
 use crate::ast::*;
 use melior::ir;
 use melior::Context;
+use std::collections::VecDeque;
 
 pub struct NodeBuilder<E> {
     span: Span,
@@ -322,62 +323,130 @@ impl<E: Extra> NodeBuilder<E> {
     }
 }
 
-/*
-impl<'a, E: Extra> IntoIterator for &'a AstNode<E> {
-    type Item = &'a AstNode<E>;
-    type IntoIter = AstIterator<'a, E>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        AstIterator {
-            stack: vec![self],
-            blocks: vec![self],
-        }
-    }
-
-}
-*/
-
-pub struct AstSorter<E> {
+pub struct AstBlockSorter<E> {
     pub stack: Vec<AstNode<E>>,
     pub blocks: Vec<AstNode<E>>,
 }
-impl<E: Extra> AstSorter<E> {
+impl<E: Extra> AstBlockSorter<E> {
     pub fn new() -> Self {
         Self {
             stack: vec![],
             blocks: vec![],
         }
     }
-    pub fn sort_children(&mut self, ast: AstNode<E>) {
+    pub fn sort_children(&mut self, ast: AstNode<E>, entry_params: &[ParameterNode<E>]) {
         match ast.node {
             Ast::Sequence(exprs) => {
                 for e in exprs {
-                    self.sort_children(e);
+                    if self.blocks.len() == 0 {
+                        self.sort_children(e, entry_params);
+                    } else {
+                        self.sort_children(e, &[]);
+                    }
                 }
             }
-            Ast::Block(_) => {
+            Ast::Block(ref nb) => {
+                // check params match
+                if self.blocks.len() == 0 {
+                    assert_eq!(nb.params.len(), entry_params.len());
+                }
                 self.blocks.push(ast);
+            }
+            Ast::Goto(_) => {
+                self.stack.push(ast);
+                self.close_block();
+            }
+            Ast::Label(_) => {
+                self.close_block();
+                self.stack.push(ast);
             }
             _ => {
                 self.stack.push(ast);
             }
         }
     }
-}
 
-/*
-impl<'a, E: Extra> Iterator for AstIterator<'a, E> {
-    type Item = &'a AstNode<E>;
-    fn next(&mut self) -> Option<&'a AstNode<E>> {
-        if let Some(node) = self.stack.pop() {
-            // push sequence onto the stack, in reverse
-            for c in self.children(node).iter().rev() {
-                self.stack.push(c);
-            }
-            self.stack.pop()
-        } else {
-            None
+    pub fn close_block(&mut self) {
+        if self.stack.len() == 0 {
+            return;
         }
+
+        let extra = self.stack.first().unwrap().extra.clone();
+        // end of block
+        let offset = self.blocks.len();
+
+        let name = format!("_block{}", offset);
+        let seq = AstNode {
+            node: Ast::Sequence(self.stack.drain(..).collect()),
+            extra: extra.clone(),
+        };
+        let nb = NodeBlock {
+            name,
+            params: vec![],
+            body: seq.into(),
+        };
+        self.blocks.push(AstNode {
+            node: Ast::Block(nb),
+            extra: extra.clone(),
+        });
     }
 }
-*/
+
+impl<'c, E: Extra> Definition<E> {
+    pub fn normalize(mut self) -> Self {
+        // ensure that the function body is a sequence of named blocks
+        if let Some(body) = self.body {
+            let extra = body.extra.clone();
+            // sort body
+            let mut s = crate::builder::AstBlockSorter::new();
+            s.sort_children(*body, &self.params);
+
+            let mut blocks = VecDeque::new();
+
+            // initial nodes form the entry block
+            if s.stack.len() > 0 {
+                let seq = AstNode::new(Ast::Sequence(s.stack), extra.clone());
+                // TODO: check that function args match the first block args
+                let params = self
+                    .params
+                    .iter()
+                    .map(|p| {
+                        if let Parameter::Normal = p.node {
+                            ParameterNode {
+                                name: p.name.clone(),
+                                ty: p.ty.clone(),
+                                node: Parameter::Normal,
+                                extra: p.extra.clone(),
+                            }
+                        } else {
+                            unreachable!()
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                let nb = NodeBlock {
+                    name: "entry".to_string(),
+                    params,
+                    body: seq.into(),
+                };
+                let node = AstNode::new(Ast::Block(nb), extra.clone());
+                blocks.push_back(node.into());
+            }
+
+            blocks.extend(s.blocks.into_iter().map(|b| b.into()));
+
+            self.body = Some(
+                AstNode::new(Ast::Sequence(blocks.into_iter().collect()), extra.clone()).into(),
+            );
+        }
+        self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use test_log::test;
+
+    #[test]
+    fn test_builder() {}
+}
