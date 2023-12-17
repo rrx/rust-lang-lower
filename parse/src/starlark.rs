@@ -612,7 +612,7 @@ pub(crate) mod tests {
 
     #[test]
     fn test_assign1() {
-        run_test("../tests/test_assign1.star", 0);
+        run_test2("../tests/test_assign1.star", 0);
     }
 
     #[test]
