@@ -222,6 +222,11 @@ impl SymbolData {
 
 pub type CFGGraph<'c> = DiGraph<OpCollection<'c>, ()>;
 
+pub fn values_in_scope<'c, 'a>(g: &'a CFGGraph<'c>, sym_index: SymIndex) -> Vec<Value<'c, 'a>> {
+    let data = g.node_weight(sym_index.block()).unwrap();
+    data.values(sym_index)
+}
+
 pub struct CFG<'c, E> {
     context: &'c Context,
     shared: HashSet<String>,
@@ -471,6 +476,7 @@ impl<'c, E: Extra> CFG<'c, E> {
         }
     }
 
+    /*
     pub fn values_in_scope<'a>(
         &self,
         current_block_index: NodeIndex,
@@ -490,6 +496,7 @@ impl<'c, E: Extra> CFG<'c, E> {
         //}
         //None
     }
+    */
 
     pub fn name_in_scope(
         &self,
@@ -685,7 +692,7 @@ impl<E: Extra> AstNode<E> {
 
                     let call_args = indices
                         .into_iter()
-                        .map(|index| cfg.values_in_scope(current_block, index, g).unwrap()[0]) //env.value0(&index))
+                        .map(|index| values_in_scope(g, index)[0])
                         .collect::<Vec<_>>();
 
                     let op = func::call(
@@ -1096,8 +1103,8 @@ impl<E: Extra> AstNode<E> {
             }
 
             Ast::BinaryOp(op, x, y) => {
-                let x_extra = x.extra.clone();
-                let y_extra = y.extra.clone();
+                //let x_extra = x.extra.clone();
+                //let y_extra = y.extra.clone();
                 let index_x = x.lower(context, d, cfg, stack, g)?;
                 let index_y = y.lower(context, d, cfg, stack, g)?;
 
@@ -1118,14 +1125,9 @@ impl<E: Extra> AstNode<E> {
                 //assert_eq!(ty_lhs, ty_rhs);
 
                 // types must be the same for binary operation, no implicit casting yet
-                let a = if let Some(rs) = cfg.values_in_scope(current_block, index_x, g) {
-                    rs[0]
-                } else {
-                    d.push_diagnostic(x_extra.error(&format!("Value not found: {:?}", index_x)));
-                    return Err(Error::new(ParseError::Invalid));
-                };
-
-                let b = cfg.values_in_scope(current_block, index_y, g).unwrap()[0];
+                let a = values_in_scope(g, index_x)[0];
+                let b = values_in_scope(g, index_y)[0];
+                //let b = cfg.values_in_scope(current_block, index_y, g).unwrap()[0];
                 //let a = current.value0(index_x).unwrap();
                 //let b = current.value0(index_y).unwrap();
                 //let a = env.value0(&index_lhs);
