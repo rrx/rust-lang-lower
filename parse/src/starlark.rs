@@ -616,4 +616,9 @@ pub(crate) mod tests {
     fn test_cond() {
         run_test2("../tests/test_cond.star", 0);
     }
+
+    #[test]
+    fn test_float() {
+        run_test2("../tests/test_float.star", 0);
+    }
 }

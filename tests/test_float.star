@@ -10,7 +10,8 @@ def main() -> int:
   zz = zf + 1.5 + zz
   zz = zz + 1.0
 
-  y =(xf(zz))
+  y = xf(zz)
   b.print(y)
+  return 0
 
 
