@@ -581,7 +581,7 @@ pub(crate) mod tests {
         let mut d = Diagnostics::new();
         let mut module = Module::new(Location::unknown(&context));
         let mut g = CFGGraph::new();
-        let mut cfg: CFG<SimpleExtra> = CFG::new(&context, "module", &mut g);
+        let mut cfg: CFG<SimpleExtra> = CFG::new(&context, "module", &d, &mut g);
         let file_id = d.add_source(
             filename.to_string(),
             std::fs::read_to_string(filename).unwrap(),
@@ -615,7 +615,7 @@ pub(crate) mod tests {
         run_test("../tests/test_assign1.star", 0);
     }
 
-    //#[test]
+    #[test]
     fn test_cond() {
         run_test2("../tests/test_cond.star", 0);
     }

@@ -48,7 +48,7 @@ use melior::{
         Value,
         ValueLike,
     },
-    Context, ExecutionEngine,
+    Context,
 };
 use petgraph::algo::dominators::simple_fast;
 use petgraph::graph::DiGraph;
@@ -60,7 +60,45 @@ use std::collections::HashSet;
 pub struct BlockIndex(NodeIndex, usize);
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
-pub struct SymIndex(NodeIndex, usize);
+pub enum SymIndex {
+    Op(NodeIndex, usize),
+    Arg(NodeIndex, usize),
+}
+
+impl SymIndex {
+    pub fn block(&self) -> NodeIndex {
+        match self {
+            SymIndex::Op(block_index, _offset) | SymIndex::Arg(block_index, _offset) => {
+                *block_index
+            }
+        }
+    }
+
+    pub fn offset(&self) -> usize {
+        match self {
+            SymIndex::Op(_block_index, offset) | SymIndex::Arg(_block_index, offset) => *offset,
+        }
+    }
+
+    pub fn is_op(&self) -> bool {
+        if let SymIndex::Op(_, _) = self {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn is_arg(&self) -> bool {
+        if let SymIndex::Arg(_, _) = self {
+            true
+        } else {
+            false
+        }
+    }
+}
+
+//#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+//pub struct SymIndex(NodeIndex, usize);
 
 #[derive(Debug, Clone, Copy)]
 pub enum NodeType {
@@ -71,14 +109,18 @@ pub enum NodeType {
 
 #[derive(Debug)]
 pub struct OpCollection<'c> {
+    arg_count: usize,
+    block: Option<Block<'c>>,
     block_index: NodeIndex,
     ops: Vec<Operation<'c>>,
-    symbols: HashMap<String, usize>,
+    symbols: HashMap<String, SymIndex>,
 }
 
 impl<'c> OpCollection<'c> {
-    pub fn new() -> Self {
+    pub fn new(block: Block<'c>) -> Self {
         Self {
+            arg_count: 0,
+            block: Some(block),
             block_index: NodeIndex::new(0),
             ops: vec![],
             symbols: HashMap::new(),
@@ -88,12 +130,12 @@ impl<'c> OpCollection<'c> {
     pub fn push(&mut self, op: Operation<'c>) -> SymIndex {
         let offset = self.ops.len();
         self.ops.push(op);
-        SymIndex(self.block_index, offset)
+        SymIndex::Op(self.block_index, offset)
     }
 
     pub fn push_with_name(&mut self, op: Operation<'c>, name: &str) -> SymIndex {
         let index = self.push(op);
-        self.symbols.insert(name.to_string(), index.1);
+        self.symbols.insert(name.to_string(), index);
         index
     }
 
@@ -107,20 +149,32 @@ impl<'c> OpCollection<'c> {
     }
 
     pub fn values(&self, index: SymIndex) -> Vec<Value<'c, '_>> {
-        assert_eq!(index.0, self.block_index);
-        assert!(index.1 < self.ops.len());
-        self.ops
-            .get(index.1)
-            .expect("Op missing")
-            .results()
-            .map(|x| x.into())
-            .collect()
+        match index {
+            SymIndex::Op(block_index, offset) => {
+                assert_eq!(block_index, self.block_index);
+                assert!(offset < self.ops.len());
+                self.ops
+                    .get(offset)
+                    .expect("Op missing")
+                    .results()
+                    .map(|x| x.into())
+                    .collect()
+            }
+            SymIndex::Arg(block_index, offset) => {
+                assert_eq!(block_index, self.block_index);
+                vec![self
+                    .block
+                    .as_ref()
+                    .unwrap()
+                    .argument(offset)
+                    .unwrap()
+                    .into()]
+            }
+        }
     }
 
     pub fn lookup(&self, name: &str) -> Option<SymIndex> {
-        self.symbols
-            .get(name)
-            .map(|offset| SymIndex(self.block_index, *offset))
+        self.symbols.get(name).cloned()
     }
 
     pub fn append_ops(&mut self, block_ref: &Block<'c>) {
@@ -135,13 +189,20 @@ impl<'c> OpCollection<'c> {
     }
 
     pub fn add_symbol(&mut self, name: &str, index: SymIndex) {
-        assert_eq!(index.0, self.block_index);
-        self.symbols.insert(name.to_string(), index.1);
+        assert_eq!(index.block(), self.block_index);
+        self.symbols.insert(name.to_string(), index);
+    }
+
+    pub fn add_arg(&mut self, name: &str) {
+        assert!(self.arg_count < self.block.as_ref().unwrap().argument_count());
+        let index = SymIndex::Arg(self.block_index, self.arg_count);
+        self.symbols.insert(name.to_string(), index);
+        self.arg_count += 1;
     }
 
     pub fn last(&self) -> SymIndex {
         assert!(self.ops.len() > 0);
-        SymIndex(self.block_index, self.ops.len() - 1)
+        SymIndex::Op(self.block_index, self.ops.len() - 1)
     }
 }
 
@@ -167,14 +228,18 @@ pub struct CFG<'c, E> {
     block_names: HashMap<String, NodeIndex>,
     block_names_index: HashMap<NodeIndex, String>,
     symbols: HashMap<SymIndex, SymbolData>,
-    blocks: HashMap<NodeIndex, Block<'c>>,
+    types: HashMap<SymIndex, AstType>,
+    //blocks: HashMap<NodeIndex, Block<'c>>,
     _e: std::marker::PhantomData<E>,
 }
 
 impl<'c, E: Extra> CFG<'c, E> {
-    pub fn new(context: &'c Context, module_name: &str, g: &mut CFGGraph<'c>) -> Self {
-        let block = Block::new(&[]);
-
+    pub fn new(
+        context: &'c Context,
+        module_name: &str,
+        d: &Diagnostics,
+        g: &mut CFGGraph<'c>,
+    ) -> Self {
         let mut cfg = Self {
             // dummy
             context,
@@ -184,13 +249,24 @@ impl<'c, E: Extra> CFG<'c, E> {
             block_names: HashMap::new(),
             block_names_index: HashMap::new(),
             symbols: HashMap::new(),
-            blocks: HashMap::new(),
+            types: HashMap::new(),
+            //blocks: HashMap::new(),
             shared: HashSet::new(),
             _e: std::marker::PhantomData::default(),
         };
-        let data = OpCollection::new();
-        cfg.add_block(module_name, data, block, g);
+
+        //let block = Block::new(&[]);
+        //let data = OpCollection::new(block);
+        cfg.add_block(context, module_name, &[], d, g);
         cfg
+    }
+
+    pub fn lookup_type(&self, index: SymIndex) -> Option<AstType> {
+        self.types.get(&index).cloned()
+    }
+
+    pub fn set_type(&mut self, index: SymIndex, ty: AstType) {
+        self.types.insert(index, ty);
     }
 
     pub fn root(&self) -> NodeIndex {
@@ -246,16 +322,32 @@ impl<'c, E: Extra> CFG<'c, E> {
 
     pub fn add_block(
         &mut self,
+        context: &'c Context,
         name: &str,
-        data: OpCollection<'c>,
-        block: Block<'c>,
+        //data: OpCollection<'c>,
+        params: &[ParameterNode<E>],
+        //block: Block<'c>,
+        d: &Diagnostics,
         g: &mut CFGGraph<'c>,
     ) -> NodeIndex {
+        // build parameter list for block
+        let mut block_params = vec![];
+        for p in params {
+            match p.node {
+                Parameter::Normal | Parameter::WithDefault(_) => {
+                    block_params.push((from_type(context, &p.ty), p.extra.location(context, d)));
+                }
+                _ => unimplemented!("{:?}", p),
+            }
+        }
+
+        let block = Block::new(&block_params);
+        let mut data = OpCollection::new(block);
         let index = g.add_node(data);
         g.node_weight_mut(index).unwrap().block_index = index;
         self.block_names.insert(name.to_string(), index);
         self.block_names_index.insert(index, name.to_string());
-        self.blocks.insert(index, block);
+        //self.blocks.insert(index, block);
         index
     }
 
@@ -301,30 +393,33 @@ impl<'c, E: Extra> CFG<'c, E> {
         struct Node {
             ty: Shape,
             name: String,
+            block_index: NodeIndex,
         }
         impl Node {
-            fn new_block(name: String) -> Self {
+            fn new_block(name: String, block_index: NodeIndex) -> Self {
                 Self {
                     ty: Shape::Box,
                     name,
+                    block_index,
                 }
             }
-            fn new_symbol(name: String) -> Self {
+            fn new_symbol(name: String, block_index: NodeIndex) -> Self {
                 Self {
                     ty: Shape::Ellipsis,
                     name,
+                    block_index,
                 }
             }
         }
         let mut g_out = DiGraph::new();
         for node_index in g.node_indices() {
             let block_name = self.block_names_index.get(&node_index).unwrap();
-            g_out.add_node(Node::new_block(block_name.clone()));
+            g_out.add_node(Node::new_block(block_name.clone(), node_index));
         }
         for node_index in g.node_indices() {
             let data = g.node_weight(node_index).unwrap();
             for name in data.symbols.keys() {
-                let index = g_out.add_node(Node::new_symbol(name.clone()));
+                let index = g_out.add_node(Node::new_symbol(name.clone(), node_index));
                 g_out.add_edge(node_index, index, ());
             }
             for n in g.neighbors_directed(node_index, petgraph::Direction::Outgoing) {
@@ -340,7 +435,8 @@ impl<'c, E: Extra> CFG<'c, E> {
                 &|_, _er| String::new(),
                 &|_, (_index, data)| {
                     format!(
-                        "label = \"{}\" shape={:?}",
+                        "label = \"[{}]{}\" shape={:?}",
+                        data.block_index.index(),
                         &data.name,
                         &data.ty.to_string()
                     )
@@ -367,22 +463,24 @@ impl<'c, E: Extra> CFG<'c, E> {
         }
     }
 
-    pub fn values_in_scope(
-        &'c self,
-        block_index: NodeIndex,
+    pub fn values_in_scope<'a>(
+        &self,
+        current_block_index: NodeIndex,
         sym_index: SymIndex,
-        g: &'c CFGGraph<'c>,
-    ) -> Option<Vec<Value<'c, '_>>> {
-        let dom = simple_fast(g, self.root)
-            .dominators(block_index)
-            .unwrap()
-            .collect::<Vec<_>>();
-        println!("dom: {:?} => {:?}", block_index, dom);
-        for i in dom.into_iter().rev() {
-            let data = g.node_weight(i).unwrap();
-            return Some(data.values(sym_index));
-        }
-        None
+        g: &'a CFGGraph<'c>,
+    ) -> Option<Vec<Value<'c, 'a>>> {
+        let data = g.node_weight(sym_index.block()).unwrap();
+        //let dom = simple_fast(g, self.root)
+        //.dominators(block_index)
+        //.unwrap()
+        //.collect::<Vec<_>>();
+        //println!("dom: {:?} => {:?}", block_index, dom);
+        //for i in dom.into_iter().rev() {
+        //let data = g.node_weight(i).unwrap();
+        Some(data.values(sym_index))
+        //return Some(data.values(sym_index));
+        //}
+        //None
     }
 
     pub fn name_in_scope(
@@ -391,9 +489,10 @@ impl<'c, E: Extra> CFG<'c, E> {
         name: &str,
         g: &CFGGraph<'c>,
     ) -> Option<SymIndex> {
+        self.save_graph("out.dot", g);
         let dom = simple_fast(g, self.root)
             .dominators(index)
-            .unwrap()
+            .expect("Node not connected to root")
             .collect::<Vec<_>>();
         println!("dom: {:?} => {:?}", index, dom);
         for i in dom.into_iter().rev() {
@@ -420,7 +519,8 @@ impl<'c, E: Extra> CFG<'c, E> {
 
     pub fn take_block(&mut self, index: NodeIndex, g: &mut CFGGraph<'c>) -> Block<'c> {
         let data = g.node_weight_mut(index).unwrap();
-        let block = self.blocks.remove(&index).unwrap();
+        let block = data.block.take().unwrap();
+        //let block = self.blocks.remove(&index).unwrap();
         for op in data.ops.drain(..) {
             block.append_operation(op);
         }
@@ -479,17 +579,20 @@ impl<E: Extra> AstNode<E> {
             Ast::Goto(label) => {
                 let current_block = stack.last().unwrap().clone();
                 //let sym_index = cfg.fresh_sym_index(current_block);
-                let op = if let Some(index) = cfg.block_index(&label) {
+                if let Some(index) = cfg.block_index(&label) {
                     g.add_edge(current_block, index, ());
-                    let block = cfg.blocks.get(&index).unwrap();
-                    cf::br(block, &[], location)
+                    let target_block = g.node_weight_mut(index).unwrap();
+                    let block = target_block.block.as_ref().unwrap();
+                    //let block = cfg.blocks.get(&index).unwrap();
+                    let op = cf::br(block, &[], location);
+                    let current = g.node_weight_mut(current_block).unwrap();
+                    Ok(current.push(op))
                 } else {
                     d.push_diagnostic(self.extra.error(&format!("Missing block: {}", label)));
-                    return Err(Error::new(ParseError::Invalid));
-                };
-                let current = g.node_weight_mut(current_block).unwrap();
+                    Err(Error::new(ParseError::Invalid))
+                }
                 //let current = cfg.data_mut_by_index(*current_block, g).unwrap();
-                Ok(current.push(op))
+                //Ok(current.push(op))
             }
 
             Ast::Identifier(name) => {
@@ -535,9 +638,72 @@ impl<E: Extra> AstNode<E> {
                 Ok(sym_index)
             }
 
+            Ast::Call(expr, args, _ret_ty) => {
+                // function to call
+                let current_block = stack.last().unwrap().clone();
+                let (f, ty) = match &expr.node {
+                    Ast::Identifier(ident) => {
+                        if let Some(index) = cfg.name_in_scope(current_block, ident, g) {
+                            //if let Some(index) = env.index_from_name(ident) {
+                            //let ty = env.data(&index).unwrap();
+                            let ty = cfg.lookup_type(index).unwrap();
+                            (FlatSymbolRefAttribute::new(context, ident), ty)
+                        } else {
+                            d.push_diagnostic(
+                                self.extra.error(&format!("Name not found: {}", ident)),
+                            );
+                            return Err(Error::new(ParseError::Invalid));
+                        }
+                    }
+                    _ => {
+                        unimplemented!("{:?}", expr.node);
+                    }
+                };
+
+                if let AstType::Func(_func_arg_types, ret) = &ty {
+                    let ret_ty = from_type(context, &ret);
+                    // handle call arguments
+                    let mut indices = vec![];
+
+                    // lower call args
+                    for a in args {
+                        match a {
+                            Argument::Positional(arg) => {
+                                let index = arg.lower(context, d, cfg, stack, g)?; //(*arg, env, d, b)?;
+                                indices.push(index);
+                            } //_ => unimplemented!("{:?}", a)
+                        };
+                    }
+
+                    let call_args = indices
+                        .into_iter()
+                        .map(|index| cfg.values_in_scope(current_block, index, g).unwrap()[0]) //env.value0(&index))
+                        .collect::<Vec<_>>();
+
+                    let op = func::call(
+                        context,
+                        f,
+                        call_args.as_slice(),
+                        &[ret_ty.clone()],
+                        location,
+                    );
+                    let current = g.node_weight_mut(current_block).unwrap();
+                    Ok(current.push(op))
+
+                    //let index = env.push(op);
+                    //env.index_data(&index, *ret.clone());
+                    //Ok(index)
+                } else {
+                    unimplemented!("calling non function type: {:?}", ty);
+                }
+            }
+
             Ast::Definition(mut def) => {
                 def = def.normalize();
                 let current_block = stack.last().unwrap().clone();
+
+                assert!(cfg.block_is_static(current_block));
+
                 //let sym_index = cfg.fresh_sym_index(current_block);
 
                 let mut attributes = vec![(
@@ -566,24 +732,49 @@ impl<E: Extra> AstNode<E> {
                     vec![ret_ty]
                 };
                 let func_type = FunctionType::new(context, &types, &ret_type);
+                let ast_ret_type = def.return_type;
+                let f_type = AstType::Func(ast_types, ast_ret_type);
 
                 let region = if let Some(body) = def.body {
                     let mut edges = vec![];
                     let blocks = body.try_seq().unwrap();
                     let mut exprs = vec![];
                     let mut block_indicies = vec![];
+
+                    // build parameter list for block
+                    let mut entry_params = vec![];
+                    for p in &def.params {
+                        match p.node {
+                            Parameter::Normal | Parameter::WithDefault(_) => {
+                                entry_params.push((
+                                    from_type(context, &p.ty),
+                                    p.extra.location(context, d),
+                                ));
+                            }
+                            _ => unimplemented!("{:?}", p),
+                        }
+                    }
+
                     for (i, b) in blocks.into_iter().enumerate() {
                         if let Ast::Block(nb) = b.node {
                             // connect the first block to the function
                             let block_name = if i == 0 { def.name.clone() } else { nb.name };
-                            let block = Block::new(&[]);
-                            let data = OpCollection::new();
-                            let index = cfg.add_block(&block_name, data, block, g);
-                            block_indicies.push(index);
-                            if i == 0 {
-                                edges.push((current_block, index));
+
+                            //let block = Block::new(&entry_params);
+                            //let mut data = OpCollection::new(block);
+
+                            let block_index =
+                                cfg.add_block(context, &block_name, &def.params, d, g);
+                            let data = g.node_weight_mut(block_index).unwrap();
+                            for p in nb.params {
+                                data.add_arg(&p.name);
                             }
-                            exprs.push((index, *nb.body));
+
+                            block_indicies.push(block_index);
+                            if i == 0 {
+                                edges.push((current_block, block_index));
+                            }
+                            exprs.push((block_index, *nb.body));
                         } else {
                             unreachable!()
                         }
@@ -595,7 +786,7 @@ impl<E: Extra> AstNode<E> {
                     for (index, expr) in exprs {
                         stack.push(index);
                         cfg.dump_scope(index, g);
-                        if let Ok(index) = expr.lower(context, d, cfg, stack, g) {
+                        if let Ok(_index) = expr.lower(context, d, cfg, stack, g) {
                             stack.pop();
                         } else {
                             stack.pop();
@@ -631,7 +822,9 @@ impl<E: Extra> AstNode<E> {
                 );
                 let current = g.node_weight_mut(current_block).unwrap();
                 //let current = cfg.data_mut_by_index(current_block, g).unwrap();
-                Ok(current.push(op))
+                let index = current.push_with_name(op, &def.name);
+                cfg.set_type(index, f_type);
+                Ok(index)
             }
 
             Ast::Literal(lit) => {
@@ -821,23 +1014,27 @@ impl<E: Extra> AstNode<E> {
 
                 // then block
 
-                let data = OpCollection::new();
-                let block = Block::new(&[]);
-                let then_block_index = cfg.add_block("then", data, block, g);
+                //let block = Block::new(&[]);
+                //let data = OpCollection::new(block);
+
+                let then_block_index = cfg.add_block(context, "then", &[], d, g);
+                g.add_edge(current_block, then_block_index, ());
 
                 // else
                 let (maybe_else_block_index, maybe_else_expr) = match maybe_else_expr {
                     Some(else_expr) => {
-                        let data = OpCollection::new();
-                        let block = Block::new(&[]);
-                        let block_index = cfg.add_block("else", data, block, g);
+                        //let block = Block::new(&[]);
+                        //let data = OpCollection::new(block);
+                        let block_index = cfg.add_block(context, "else", &[], d, g);
+                        g.add_edge(current_block, block_index, ());
+
                         (Some(block_index), Some(else_expr))
                     }
                     None => (None, None),
                 };
 
                 stack.push(then_block_index);
-                if let Ok(index) = then_expr.lower(context, d, cfg, stack, g) {
+                if let Ok(_index) = then_expr.lower(context, d, cfg, stack, g) {
                     let data = g.node_weight_mut(then_block_index).unwrap();
                     data.push(scf::r#yield(&[], then_location));
                     stack.pop();
@@ -850,7 +1047,8 @@ impl<E: Extra> AstNode<E> {
                     let else_expr = maybe_else_expr.unwrap();
                     let else_location = else_expr.location(context, d);
                     stack.push(*else_block_index);
-                    if let Ok(index) = else_expr.lower(context, d, cfg, stack, g) {
+                    println!("else: {:?}", else_expr.node);
+                    if let Ok(_index) = else_expr.lower(context, d, cfg, stack, g) {
                         let data = g.node_weight_mut(*else_block_index).unwrap();
                         data.push(scf::r#yield(&[], else_location));
                         stack.pop();
@@ -885,11 +1083,16 @@ impl<E: Extra> AstNode<E> {
             }
 
             Ast::BinaryOp(op, x, y) => {
+                let x_extra = x.extra.clone();
+                let y_extra = y.extra.clone();
                 let index_x = x.lower(context, d, cfg, stack, g)?;
                 let index_y = y.lower(context, d, cfg, stack, g)?;
 
                 let current_block = stack.last().unwrap().clone();
-                let current = g.node_weight_mut(current_block).unwrap();
+                {
+                    let current = g.node_weight_mut(current_block).unwrap();
+                    println!("{:?}", current);
+                }
 
                 //let index_lhs = self.lower_expr(*x, env, d, b)?;
                 //let index_rhs = self.lower_expr(*y, env, d, b)?;
@@ -902,11 +1105,20 @@ impl<E: Extra> AstNode<E> {
                 //assert_eq!(ty_lhs, ty_rhs);
 
                 // types must be the same for binary operation, no implicit casting yet
-                let a = current.value0(index_x).unwrap();
-                let b = current.value0(index_y).unwrap();
+                let a = if let Some(rs) = cfg.values_in_scope(current_block, index_x, g) {
+                    rs[0]
+                } else {
+                    d.push_diagnostic(x_extra.error(&format!("Value not found: {:?}", index_x)));
+                    return Err(Error::new(ParseError::Invalid));
+                };
+
+                let b = cfg.values_in_scope(current_block, index_y, g).unwrap()[0];
+                //let a = current.value0(index_x).unwrap();
+                //let b = current.value0(index_y).unwrap();
                 //let a = env.value0(&index_lhs);
                 //let b = env.value0(&index_rhs);
                 let op = op::build_binop(context, op, a, b, location);
+                let current = g.node_weight_mut(current_block).unwrap();
                 let index = current.push(op);
                 //let index = env.push(binop);
                 //let data = Data::new(ast_ty);
@@ -914,6 +1126,10 @@ impl<E: Extra> AstNode<E> {
                 Ok(index)
             }
 
+            Ast::Error => {
+                d.push_diagnostic(self.extra.error(&format!("Error")));
+                Err(Error::new(ParseError::Invalid))
+            }
             _ => {
                 d.push_diagnostic(self.extra.error(&format!("Unimplemented: {:?}", self.node)));
                 Err(Error::new(ParseError::Invalid))
@@ -935,7 +1151,7 @@ pub fn emit_mutate<'c, E: Extra>(
     let current_block = stack.last().unwrap().clone();
 
     let index = cfg.name_in_scope(current_block, ident, g).unwrap();
-    let name_is_static = cfg.block_is_static(index.0);
+    let name_is_static = cfg.block_is_static(index.block());
     let value_index = rhs.lower(context, d, cfg, stack, g)?;
     let current = g.node_weight_mut(current_block).expect("Name not found");
 
@@ -968,8 +1184,9 @@ mod tests {
         let context = default_context();
         let mut module = Module::new(Location::unknown(&context));
         let mut g = CFGGraph::new();
-        let mut cfg: CFG<SimpleExtra> = CFG::new(&context, "module", &mut g);
         let mut d = Diagnostics::new();
+        let mut cfg: CFG<SimpleExtra> = CFG::new(&context, "module", &d, &mut g);
+
         let file_id = d.add_source("test.py".into(), "test".into());
         let b = NodeBuilder::new(file_id, "type.py");
         let ast = gen_block(&b);
@@ -991,10 +1208,12 @@ mod tests {
         let context = default_context();
         let mut module = Module::new(Location::unknown(&context));
         let mut g = CFGGraph::new();
-        let mut cfg: CFG<SimpleExtra> = CFG::new(&context, "module", &mut g);
         let mut d = Diagnostics::new();
+        let mut cfg: CFG<SimpleExtra> = CFG::new(&context, "module", &d, &mut g);
+
         let file_id = d.add_source("test.py".into(), "test".into());
         let b = NodeBuilder::new(file_id, "type.py");
+
         let ast = gen_while(&b);
         let mut stack = vec![cfg.root];
         let r = ast.lower(&context, &mut d, &mut cfg, &mut stack, &mut g);
@@ -1011,8 +1230,9 @@ mod tests {
     #[test]
     fn test_cfg_graph() {
         let context = default_context();
+        let mut d = Diagnostics::new();
         let mut g = CFGGraph::new();
-        let mut cfg: CFG<SimpleExtra> = CFG::new(&context, "module", &mut g);
+        let mut cfg: CFG<SimpleExtra> = CFG::new(&context, "module", &d, &mut g);
         //let mut d = Diagnostics::new();
         //let file_id = d.add_source("test.py".into(), "test".into());
         //let b: NodeBuilder<SimpleExtra> = NodeBuilder::new(file_id, "type.py");
@@ -1020,9 +1240,10 @@ mod tests {
         (0..8).into_iter().for_each(|i| {
             //let p = b.param(&format!("p{}", i), AstType::Int);
             let block = Block::new(&[]);
+            let data = OpCollection::new(block);
+
             let block_name = format!("b{}", i);
-            let data = OpCollection::new();
-            cfg.add_block(&block_name, data, block, &mut g);
+            cfg.add_block(&context, &block_name, &[], &d, &mut g);
         });
 
         cfg.add_edge("module", "b0", &mut g);

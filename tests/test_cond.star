@@ -1,3 +1,5 @@
+b.use("prelude")
+
 def cond(n: int) -> int:
   out = 0
   out = out - 1
@@ -14,3 +16,4 @@ def main() -> int:
   b.print(cond(1))
   b.print(cond(2))
   return 0
+
