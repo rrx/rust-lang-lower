@@ -611,8 +611,8 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn test_assign1() {
-        run_test2("../tests/test_assign1.star", 0);
+    fn test_static() {
+        run_test2("../tests/test_static.star", 0);
     }
 
     #[test]
