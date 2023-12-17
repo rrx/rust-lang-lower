@@ -97,9 +97,6 @@ impl SymIndex {
     }
 }
 
-//#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
-//pub struct SymIndex(NodeIndex, usize);
-
 #[derive(Debug, Clone, Copy)]
 pub enum NodeType {
     Module,
@@ -111,6 +108,7 @@ pub enum NodeType {
 pub struct OpCollection<'c> {
     arg_count: usize,
     block: Option<Block<'c>>,
+    parent_symbol: Option<SymIndex>,
     block_index: NodeIndex,
     ops: Vec<Operation<'c>>,
     symbols: HashMap<String, SymIndex>,
@@ -120,11 +118,16 @@ impl<'c> OpCollection<'c> {
     pub fn new(block: Block<'c>) -> Self {
         Self {
             arg_count: 0,
+            parent_symbol: None,
             block: Some(block),
             block_index: NodeIndex::new(0),
             ops: vec![],
             symbols: HashMap::new(),
         }
+    }
+
+    pub fn set_parent_symbol(&mut self, parent_symbol: SymIndex) {
+        self.parent_symbol = Some(parent_symbol);
     }
 
     pub fn push(&mut self, op: Operation<'c>) -> SymIndex {
@@ -229,7 +232,6 @@ pub struct CFG<'c, E> {
     block_names_index: HashMap<NodeIndex, String>,
     symbols: HashMap<SymIndex, SymbolData>,
     types: HashMap<SymIndex, AstType>,
-    //blocks: HashMap<NodeIndex, Block<'c>>,
     _e: std::marker::PhantomData<E>,
 }
 
@@ -250,13 +252,9 @@ impl<'c, E: Extra> CFG<'c, E> {
             block_names_index: HashMap::new(),
             symbols: HashMap::new(),
             types: HashMap::new(),
-            //blocks: HashMap::new(),
             shared: HashSet::new(),
             _e: std::marker::PhantomData::default(),
         };
-
-        //let block = Block::new(&[]);
-        //let data = OpCollection::new(block);
         cfg.add_block(context, module_name, &[], d, g);
         cfg
     }
@@ -416,14 +414,24 @@ impl<'c, E: Extra> CFG<'c, E> {
             let block_name = self.block_names_index.get(&node_index).unwrap();
             g_out.add_node(Node::new_block(block_name.clone(), node_index));
         }
-        for node_index in g.node_indices() {
-            let data = g.node_weight(node_index).unwrap();
-            for name in data.symbols.keys() {
-                let index = g_out.add_node(Node::new_symbol(name.clone(), node_index));
-                g_out.add_edge(node_index, index, ());
+        for block_node_index in g.node_indices() {
+            let data = g.node_weight(block_node_index).unwrap();
+
+            let mut x = HashMap::new();
+            for (name, symbol_index) in data.symbols.iter() {
+                let symbol_node_index =
+                    g_out.add_node(Node::new_symbol(name.clone(), block_node_index));
+                g_out.add_edge(block_node_index, symbol_node_index, ());
+                x.insert(symbol_index, symbol_node_index);
             }
-            for n in g.neighbors_directed(node_index, petgraph::Direction::Outgoing) {
-                g_out.add_edge(node_index, n, ());
+
+            for n in g.neighbors_directed(block_node_index, petgraph::Direction::Outgoing) {
+                if let Some(parent) = g.node_weight(n).unwrap().parent_symbol {
+                    let symbol_node_index = x.get(&parent).unwrap();
+                    g_out.add_edge(*symbol_node_index, n, ());
+                } else {
+                    g_out.add_edge(block_node_index, n, ());
+                }
             }
         }
 
@@ -735,6 +743,8 @@ impl<E: Extra> AstNode<E> {
                 let ast_ret_type = def.return_type;
                 let f_type = AstType::Func(ast_types, ast_ret_type);
 
+                let mut entry_block = None;
+
                 let region = if let Some(body) = def.body {
                     let mut edges = vec![];
                     let blocks = body.try_seq().unwrap();
@@ -766,6 +776,10 @@ impl<E: Extra> AstNode<E> {
                             let block_index =
                                 cfg.add_block(context, &block_name, &def.params, d, g);
                             let data = g.node_weight_mut(block_index).unwrap();
+
+                            if i == 0 {
+                                entry_block = Some(block_index);
+                            }
                             for p in nb.params {
                                 data.add_arg(&p.name);
                             }
@@ -821,9 +835,14 @@ impl<E: Extra> AstNode<E> {
                     location,
                 );
                 let current = g.node_weight_mut(current_block).unwrap();
-                //let current = cfg.data_mut_by_index(current_block, g).unwrap();
                 let index = current.push_with_name(op, &def.name);
                 cfg.set_type(index, f_type);
+
+                if let Some(entry_block) = entry_block {
+                    let data = g.node_weight_mut(entry_block).unwrap();
+                    data.set_parent_symbol(index);
+                }
+
                 Ok(index)
             }
 
@@ -853,15 +872,10 @@ impl<E: Extra> AstNode<E> {
                         match arg {
                             Argument::Positional(expr) => {
                                 let index = expr.lower(context, d, cfg, stack, g)?;
-                                //let index = self.lower_expr(*expr, env, d, b)?;
                                 let msg = format!("assert at {}", location);
-                                //let sym_index = cfg.fresh_sym_index(current_block);
                                 let current = g.node_weight_mut(current_block).unwrap();
                                 let r = current.value0(index).unwrap();
-                                let op = cf::assert(
-                                    context, r, //env.value0(&index),
-                                    &msg, location,
-                                );
+                                let op = cf::assert(context, r, &msg, location);
                                 Ok(current.push(op))
                             }
                         }
@@ -873,9 +887,8 @@ impl<E: Extra> AstNode<E> {
                                 // eval expr
                                 let index = expr.lower(context, d, cfg, stack, g)?;
                                 let current = g.node_weight_mut(current_block).unwrap();
-                                let rs = current.values(index);
-                                //let r = env.value0(&index);
-                                let ty = rs[0].r#type();
+                                let r = current.value0(index).unwrap();
+                                let ty = r.r#type();
 
                                 // Select the baked version based on parameters
                                 // TODO: A more dynamic way of doing this
@@ -889,7 +902,7 @@ impl<E: Extra> AstNode<E> {
                                 };
 
                                 let f = FlatSymbolRefAttribute::new(context, ident);
-                                let op = func::call(context, f, &rs, &[], location);
+                                let op = func::call(context, f, &[r], &[], location);
 
                                 Ok(current.push(op))
                             }
