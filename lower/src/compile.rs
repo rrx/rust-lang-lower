@@ -152,7 +152,6 @@ pub fn merge(&mut self, module: &ir::Module<'c>, _ast: ast::AstNode<E>) {
         module.body().append_operation(op);
     }
 }
-*/
 //}
 
 pub struct Compiler<'c, E> {
@@ -160,6 +159,7 @@ pub struct Compiler<'c, E> {
     lower: lower::Lower<'c, E>,
     _e: std::marker::PhantomData<E>,
 }
+*/
 
 pub fn default_context() -> Context {
     let context = Context::new();
