@@ -19,7 +19,8 @@ use melior::{
         func,
         //llvm,
         memref,
-        //ods, scf,
+        //ods,
+        scf,
     },
     ir::{
         attribute::{
@@ -1069,65 +1070,76 @@ impl<E: Extra> AstNode<E> {
                 }
             }
 
-            /*
             Ast::Conditional(condition, then_expr, maybe_else_expr) => {
+                let current_block = stack.last().unwrap().clone();
                 let bool_type = from_type(context, &AstType::Bool);
-
                 let then_location = then_expr.location(context, d);
 
                 // condition (outside of blocks)
-                let index_conditions = condition.lower(context, d, cfg, current, stack)?;
-                let r: Value<'_, '_> = env.last_values()[0];
+                let index_conditions = condition.lower(context, d, cfg, stack, g)?;
+                let current = g.node_weight_mut(current_block).unwrap();
+                let rs = current.values(current.last());
                 // should be bool type
-                assert!(r.r#type() == bool_type);
+                assert!(rs[0].r#type() == bool_type);
 
                 // then block
 
-                let mut data = GData::new("then", NodeType::Block, vec![]);
-                //let layer_type = LayerType::Block;
-                //let layer = Layer::new(layer_type);
+                let data = OpCollection::new(NodeIndex::new(0));
                 let block = Block::new(&[]);
-                env.enter(layer);
-                let _index = then_expr.lower(context, d, cfg, &mut data, stack)?;
-                env.push(scf::r#yield(&[], then_location));
-                let mut layer = env.exit();
-                data.append_ops(&block);
+                let then_block_index = cfg.add_block("then", data, block, g);
+
+                // else
+                let (maybe_else_block_index, maybe_else_expr) = match maybe_else_expr {
+                    Some(else_expr) => {
+                        let data = OpCollection::new(NodeIndex::new(0));
+                        let block = Block::new(&[]);
+                        let block_index = cfg.add_block("else", data, block, g);
+                        (Some(block_index), Some(else_expr))
+                    }
+                    None => (None, None),
+                };
+
+                stack.push(then_block_index);
+                then_expr.lower(context, d, cfg, stack, g)?;
+                let data = g.node_weight_mut(then_block_index).unwrap();
+                data.push(scf::r#yield(&[], then_location));
+                stack.pop();
+
+                if let Some(else_block_index) = &maybe_else_block_index {
+                    let else_expr = maybe_else_expr.unwrap();
+                    let else_location = else_expr.location(context, d);
+                    stack.push(*else_block_index);
+                    else_expr.lower(context, d, cfg, stack, g)?;
+                    let data = g.node_weight_mut(*else_block_index).unwrap();
+                    data.push(scf::r#yield(&[], else_location));
+                    stack.pop();
+                }
+
+                let block = cfg.take_block(then_block_index, g);
                 let then_region = Region::new();
                 then_region.append_block(block);
 
-                // else block
-
-                let else_region = match maybe_else_expr {
-                    Some(else_expr) => {
-                        let else_location = else_expr.location(context, d);
-
-                        let mut data = GData::new("else", NodeType::Block, vec![]);
-                        //let layer_type = LayerType::Block;
-                        //let layer = Layer::new(layer_type);
-                        let block = Block::new(&[]);
-                        env.enter(layer);
-                        let _index = else_expr.lower(context, d, cfg, &mut data, stack)?;
-                        env.push(scf::r#yield(&[], else_location));
-                        let mut layer = env.exit();
-                        data.append_ops(&block);
-                        let else_region = Region::new();
-                        else_region.append_block(block);
-                        else_region
-                    }
-                    None => Region::new(),
+                let else_region = if let Some(else_block_index) = maybe_else_block_index {
+                    let block = cfg.take_block(else_block_index, g);
+                    let region = Region::new();
+                    region.append_block(block);
+                    region
+                } else {
+                    Region::new()
                 };
+
+                let current = g.node_weight_mut(current_block).unwrap();
                 let if_op = scf::r#if(
-                    env.value0(&index_conditions),
+                    current.value0(index_conditions).unwrap(),
                     &[],
                     then_region,
                     else_region,
-                    self.location(context, d),
-                    );
+                    location,
+                );
                 Ok(current.push(if_op))
             }
-            */
+
             _ => {
-                //unimplemented!("{:?}", self.node),
                 d.push_diagnostic(self.extra.error(&format!("Unimplemented: {:?}", self.node)));
                 Err(Error::new(ParseError::Invalid))
             }
