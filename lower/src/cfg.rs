@@ -5,6 +5,7 @@ use crate::ast::{
 use crate::lower::from_type;
 use melior::ir::operation::OperationPrintingFlags;
 //use crate::scope::LayerIndex;
+use crate::compile::exec_main;
 use crate::default_pass_manager;
 use crate::op;
 use crate::{Diagnostics, ParseError};
@@ -143,6 +144,7 @@ impl<'c> OpCollection<'c> {
     }
 }
 
+/*
 #[derive(Debug)]
 pub struct GData<'c, E> {
     ops: Vec<Operation<'c>>,
@@ -227,6 +229,7 @@ impl<'c, E: Extra> GData<'c, E> {
 
     */
 }
+*/
 
 #[derive(Debug)]
 pub struct SymbolData {
@@ -1120,29 +1123,6 @@ impl<E: Extra> AstNode<E> {
     }
 }
 
-pub fn exec_main<'c, E>(cfg: &CFG<'c, E>, module: &Module<'c>, libpath: &str) -> i32 {
-    let paths = cfg
-        .shared
-        .iter()
-        .map(|s| {
-            let mut path = format!("{}/{}.so", libpath, s);
-            path.push('\0');
-            path
-        })
-        .collect::<Vec<_>>();
-    let shared = paths.iter().map(|p| p.as_str()).collect::<Vec<_>>();
-
-    let engine = ExecutionEngine::new(&module, 0, &shared, true);
-    let mut result: i32 = -1;
-    unsafe {
-        engine
-            .invoke_packed("main", &mut [&mut result as *mut i32 as *mut ()])
-            .unwrap();
-        println!("exec: {}", result);
-        result
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1168,7 +1148,8 @@ mod tests {
         assert!(!d.has_errors);
         r.unwrap();
         cfg.module(&context, &mut module, &mut g);
-        exec_main(&cfg, &module, "../target/debug/");
+        let shared = cfg.shared.iter().cloned().collect::<Vec<_>>();
+        exec_main(&shared, &module, "../target/debug/");
         cfg.save_graph("out.dot", &g);
     }
 
@@ -1189,7 +1170,8 @@ mod tests {
         assert!(!d.has_errors);
         r.unwrap();
         cfg.module(&context, &mut module, &mut g);
-        exec_main(&cfg, &module, "../target/debug/");
+        let shared = cfg.shared.iter().cloned().collect::<Vec<_>>();
+        exec_main(&shared, &module, "../target/debug/");
         cfg.save_graph("out.dot", &g);
         assert_eq!(1, stack.len());
     }

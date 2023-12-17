@@ -80,28 +80,33 @@ impl<'c, E: ast::Extra> lower::Lower<'c, E> {
     }
 
     pub fn exec_main(&self, module: &ir::Module<'c>, libpath: &str) -> i32 {
-        let paths = self
-            .shared
-            .iter()
-            .map(|s| {
-                let mut path = format!("{}/{}.so", libpath, s);
-                path.push('\0');
-                path
-            })
-            .collect::<Vec<_>>();
-        let shared = paths.iter().map(|p| p.as_str()).collect::<Vec<_>>();
-
-        let engine = ExecutionEngine::new(&module, 0, &shared, true);
-        let mut result: i32 = -1;
-        unsafe {
-            engine
-                .invoke_packed("main", &mut [&mut result as *mut i32 as *mut ()])
-                .unwrap();
-            println!("exec: {}", result);
-            result
-        }
+        let shared = self.shared.iter().cloned().collect::<Vec<_>>();
+        exec_main(&shared, module, libpath)
     }
 }
+
+pub fn exec_main<'c>(shared: &[String], module: &ir::Module<'c>, libpath: &str) -> i32 {
+    let paths = shared
+        .iter()
+        .map(|s| {
+            let mut path = format!("{}/{}.so", libpath, s);
+            path.push('\0');
+            path
+        })
+        .collect::<Vec<_>>();
+    let shared = paths.iter().map(|p| p.as_str()).collect::<Vec<_>>();
+
+    let engine = ExecutionEngine::new(&module, 0, &shared, true);
+    let mut result: i32 = -1;
+    unsafe {
+        engine
+            .invoke_packed("main", &mut [&mut result as *mut i32 as *mut ()])
+            .unwrap();
+        println!("exec: {}", result);
+        result
+    }
+}
+
 /*
 pub struct CompilerContext<'c, E> {
     context: melior::Context,
