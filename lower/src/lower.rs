@@ -1326,9 +1326,16 @@ impl<'c, E: Extra> Lower<'c, E> {
                                 let ast_ty = self.type_from_expr(&expr, env);
 
                                 // eval expr
-                                let index = self.lower_expr(*expr, env, d, b)?;
+                                let mut index = self.lower_expr(*expr, env, d, b)?;
+
+                                // deref
+                                if ast_ty.is_ptr() {
+                                    index = self.emit_deref(index, location, env, d, b)?;
+                                }
+
                                 let r = env.value0(&index);
                                 let ty = r.r#type();
+                                //let ast_ty = env.data(&index).unwrap();
 
                                 // Select the baked version based on parameters
                                 // TODO: A more dynamic way of doing this

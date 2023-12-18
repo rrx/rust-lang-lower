@@ -1,4 +1,4 @@
-#z = 10
+z = 10
 
 b.use("prelude")
 
@@ -8,10 +8,11 @@ def main() -> int:
   b.print(y)
 
   # this should mutate the global variable
-  #b.print(z)
+  b.print(z)
   #b.print(z + 1)
-  #z = z + 1
-  #b.check(z == 12)
+  z = z + 1
+  b.print(z)
+  b.check(z == 11)
 
   # unary integer
   #xi = -10

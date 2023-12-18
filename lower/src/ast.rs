@@ -25,6 +25,14 @@ impl AstType {
     pub fn to_ptr(self) -> Self {
         Self::Ptr(self.into())
     }
+
+    pub fn is_ptr(&self) -> bool {
+        if let Self::Ptr(_) = self {
+            true
+        } else {
+            false
+        }
+    }
 }
 
 impl From<Literal> for AstType {

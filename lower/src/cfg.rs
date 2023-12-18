@@ -956,7 +956,17 @@ impl<E: Extra> AstNode<E> {
                         match arg {
                             Argument::Positional(expr) => {
                                 // eval expr
-                                let index = expr.lower(context, d, cfg, stack, g)?;
+                                let mut index = expr.lower(context, d, cfg, stack, g)?;
+                                let ast_ty = cfg.lookup_type(index).unwrap();
+
+                                // deref
+                                if ast_ty.is_ptr() {
+                                    let target = DerefTarget::Offset(0);
+                                    index = emit_deref(
+                                        context, index, location, target, d, cfg, stack, g,
+                                    )?;
+                                }
+
                                 let current = g.node_weight_mut(current_block).unwrap();
                                 let r = current.value0(index).unwrap();
                                 let ty = r.r#type();
