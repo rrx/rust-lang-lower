@@ -10,7 +10,7 @@ use simple_logger::{set_up_color_terminal, SimpleLogger};
 use lower::ast::SimpleExtra;
 use lower::cfg::{CFGGraph, CFG};
 use lower::compile::default_context;
-use lower::{Diagnostics, Lower, NodeBuilder};
+use lower::Diagnostics;
 use parse::starlark::Parser;
 
 #[derive(FromArgs, Debug)]

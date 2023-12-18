@@ -4,7 +4,6 @@ use crate::ast::{
 };
 use crate::compile::exec_main;
 use crate::default_pass_manager;
-use crate::lower::from_type;
 use crate::op;
 use crate::{Diagnostics, ParseError};
 use anyhow::Error;
@@ -355,7 +354,8 @@ impl<'c, E: Extra> CFG<'c, E> {
         for p in params {
             match p.node {
                 Parameter::Normal | Parameter::WithDefault(_) => {
-                    block_params.push((from_type(context, &p.ty), p.extra.location(context, d)));
+                    block_params
+                        .push((op::from_type(context, &p.ty), p.extra.location(context, d)));
                 }
                 _ => unimplemented!("{:?}", p),
             }
@@ -614,7 +614,7 @@ impl<E: Extra> AstNode<E> {
                             if cfg.block_is_static(sym_index.block()) {
                                 let ast_ty = cfg.lookup_type(sym_index).unwrap();
                                 if let AstType::Ptr(ty) = &ast_ty {
-                                    let lower_ty = from_type(context, ty);
+                                    let lower_ty = op::from_type(context, ty);
                                     let memref_ty = MemRefType::new(lower_ty, &[], None, None);
                                     let static_name =
                                         cfg.static_names.get(&sym_index).cloned().unwrap_or(name);
@@ -731,7 +731,7 @@ impl<E: Extra> AstNode<E> {
                 };
 
                 if let AstType::Func(_func_arg_types, ret) = &ty {
-                    let ret_type = from_type(context, &ret);
+                    let ret_type = op::from_type(context, &ret);
                     // handle call arguments
                     let mut indices = vec![];
 
@@ -778,7 +778,7 @@ impl<E: Extra> AstNode<E> {
                     StringAttribute::new(context, "private").into(),
                 )];
 
-                let ret_ty = from_type(context, &*def.return_type);
+                let ret_ty = op::from_type(context, &*def.return_type);
                 let mut ast_types = vec![];
                 let mut types = vec![];
                 //let ast_ret_type = def.return_type;
@@ -786,7 +786,7 @@ impl<E: Extra> AstNode<E> {
                 for p in &def.params {
                     match p.node {
                         Parameter::Normal | Parameter::WithDefault(_) => {
-                            types.push(from_type(context, &p.ty));
+                            types.push(op::from_type(context, &p.ty));
                             ast_types.push(p.ty.clone());
                         }
                         _ => unimplemented!("{:?}", p),
@@ -820,7 +820,7 @@ impl<E: Extra> AstNode<E> {
                         match p.node {
                             Parameter::Normal | Parameter::WithDefault(_) => {
                                 entry_params.push((
-                                    from_type(context, &p.ty),
+                                    op::from_type(context, &p.ty),
                                     p.extra.location(context, d),
                                 ));
                             }
@@ -1025,7 +1025,7 @@ impl<E: Extra> AstNode<E> {
                 let (ast_ty, op) = match expr.node {
                     Ast::Literal(Literal::Bool(x)) => {
                         let ast_ty = AstType::Bool;
-                        let ty = from_type(context, &ast_ty);
+                        let ty = op::from_type(context, &ast_ty);
                         let v = if x { 1 } else { 0 };
                         let value = IntegerAttribute::new(v, ty).into();
                         let op =
@@ -1035,7 +1035,7 @@ impl<E: Extra> AstNode<E> {
 
                     Ast::Literal(Literal::Int(x)) => {
                         let ast_ty = AstType::Int;
-                        let ty = from_type(context, &ast_ty);
+                        let ty = op::from_type(context, &ast_ty);
                         let value = IntegerAttribute::new(x, ty).into();
                         let op =
                             op::build_static(context, &global_name, ty, value, false, location);
@@ -1044,7 +1044,7 @@ impl<E: Extra> AstNode<E> {
 
                     Ast::Literal(Literal::Index(x)) => {
                         let ast_ty = AstType::Int;
-                        let ty = from_type(context, &ast_ty);
+                        let ty = op::from_type(context, &ast_ty);
                         let value = IntegerAttribute::new(x as i64, ty).into();
                         let op =
                             op::build_static(context, &global_name, ty, value, false, location);
@@ -1053,7 +1053,7 @@ impl<E: Extra> AstNode<E> {
 
                     Ast::Literal(Literal::Float(x)) => {
                         let ast_ty = AstType::Float;
-                        let ty = from_type(context, &ast_ty);
+                        let ty = op::from_type(context, &ast_ty);
                         let value = FloatAttribute::new(context, x, ty).into();
                         let op =
                             op::build_static(context, &global_name, ty, value, false, location);
@@ -1096,7 +1096,7 @@ impl<E: Extra> AstNode<E> {
 
             Ast::Conditional(condition, then_expr, maybe_else_expr) => {
                 let current_block = stack.last().unwrap().clone();
-                let bool_type = from_type(context, &AstType::Bool);
+                let bool_type = op::from_type(context, &AstType::Bool);
                 let then_location = then_expr.location(context, d);
 
                 // condition (outside of blocks)
@@ -1403,7 +1403,7 @@ pub fn emit_mutate<'a, 'c, E: Extra>(
 mod tests {
     use super::*;
     use crate::ast::SimpleExtra;
-    use crate::lower::tests::gen_block;
+    use crate::tests::gen_block;
     use crate::{default_context, Diagnostics, NodeBuilder};
     use test_log::test;
 
@@ -1432,7 +1432,7 @@ mod tests {
 
     //#[test]
     fn test_cfg_while() {
-        use crate::lower::tests::gen_while;
+        use crate::tests::gen_while;
         let context = default_context();
         let mut module = Module::new(Location::unknown(&context));
         let mut g = CFGGraph::new();

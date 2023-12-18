@@ -267,3 +267,31 @@ pub fn build_binop<'c, E: Extra>(
 
     Ok((op, ast_ty))
 }
+
+pub fn from_type<'c>(context: &'c Context, ty: &AstType) -> Type<'c> {
+    match ty {
+        AstType::Ptr(_) => Type::index(context),
+        AstType::Tuple(args) => {
+            let types = args
+                .iter()
+                .map(|a| from_type(context, a))
+                .collect::<Vec<_>>();
+            melior::ir::r#type::TupleType::new(context, &types).into()
+        }
+        AstType::Func(args, ret) => {
+            let inputs = args
+                .iter()
+                .map(|a| from_type(context, a))
+                .collect::<Vec<_>>();
+            let results = vec![from_type(context, ret)];
+            melior::ir::r#type::FunctionType::new(context, &inputs, &results).into()
+        }
+        AstType::Int => IntegerType::new(context, 64).into(),
+        AstType::Index => Type::index(context),
+        AstType::Float => Type::float64(context),
+        AstType::Bool => IntegerType::new(context, 1).into(),
+        AstType::Unit => Type::none(context),
+        //AstType::String => Type::none(self.context),
+        _ => unimplemented!("{:?}", ty),
+    }
+}

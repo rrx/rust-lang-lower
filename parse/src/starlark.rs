@@ -566,6 +566,7 @@ pub(crate) mod tests {
     use super::*;
     use test_log::test;
 
+    /*
     fn run_test(filename: &str, expected: i32) {
         let context = lower::default_context();
         let mut lower = lower::lower::Lower::new(&context);
@@ -592,6 +593,7 @@ pub(crate) mod tests {
                 .unwrap()
         );
     }
+    */
 
     fn run_test2(filename: &str, expected: i32) {
         use lower::ast::SimpleExtra;
@@ -629,31 +631,31 @@ pub(crate) mod tests {
 
     #[test]
     fn test_global() {
-        run_test("../tests/test_global.star", 0);
+        //run_test("../tests/test_global.star", 0);
         run_test2("../tests/test_global.star", 0);
     }
 
     #[test]
     fn test_static() {
-        run_test("../tests/test_static.star", 0);
+        //run_test("../tests/test_static.star", 0);
         run_test2("../tests/test_static.star", 0);
     }
 
     #[test]
     fn test_cond() {
-        run_test("../tests/test_cond.star", 0);
+        //run_test("../tests/test_cond.star", 0);
         run_test2("../tests/test_cond.star", 0);
     }
 
     #[test]
     fn test_float() {
-        run_test("../tests/test_float.star", 0);
+        //run_test("../tests/test_float.star", 0);
         run_test2("../tests/test_float.star", 0);
     }
 
     #[test]
     fn test_recursive() {
-        run_test("../tests/test_recursive.star", 0);
+        //run_test("../tests/test_recursive.star", 0);
         run_test2("../tests/test_recursive.star", 0);
     }
 }

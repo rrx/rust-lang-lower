@@ -1,9 +1,3 @@
-use crate::ast;
-use crate::lower;
-//use crate::scope;
-use crate::{Diagnostics, Environment, NodeBuilder};
-use anyhow::Result;
-use melior::ir::operation::OperationPrintingFlags;
 use melior::ExecutionEngine;
 use melior::{
     dialect::DialectRegistry,

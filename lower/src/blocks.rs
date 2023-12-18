@@ -1,5 +1,5 @@
 use crate::ast::{AstNode, Extra, ParameterNode, Terminator};
-use crate::lower;
+use crate::op;
 use crate::Diagnostics;
 use melior::{
     ir::{block::BlockArgument, Block, ValueLike},
@@ -114,12 +114,7 @@ impl<'c, E: Extra> BlockGraph<'c, E> {
         let offset = self.blocks.len();
         let block_args = params
             .iter()
-            .map(|a| {
-                (
-                    lower::from_type(context, &a.ty),
-                    a.extra.location(context, d),
-                )
-            })
+            .map(|a| (op::from_type(context, &a.ty), a.extra.location(context, d)))
             .collect::<Vec<_>>();
         let block = Block::new(&block_args);
         self.blocks.push(block);
