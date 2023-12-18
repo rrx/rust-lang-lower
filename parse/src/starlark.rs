@@ -398,11 +398,34 @@ impl<E: Extra> Parser<E> {
                 match assign.lhs.node {
                     AssignTargetP::Identifier(ident) => {
                         let name = ident.node.ident;
-                        env.define(&name);
-                        if env.in_func {
-                            Ok(b.assign(&name, rhs))
+                        log::debug!("parse ident: {}", name);
+
+                        // lookup
+                        // Global identifiers are dereferenced when accessed
+                        if let Some(data) = env.resolve(&name) {
+                            if let DataType::Global = data.ty {
+                                //let extra: E = env.extra(item.span);
+                                //let ast = AstNode {
+                                //node: Ast::Identifier(name),
+                                //extra: extra.clone(),
+                                //};
+                                //Ok(b.deref_offset(ast, 0).set_extra(extra))
+                                Ok(b.mutate(b.ident(&name), rhs))
+                                //Ok(b.assign(&name, rhs))
+                            } else {
+                                //Ok(b.mutate(b.deref_offset(b.ident(&name), 0), rhs))
+                                //Ok(b.mutate(b.ident(&name), rhs))
+                                Ok(b.assign(&name, rhs))
+                            }
                         } else {
-                            Ok(b.global(&name, rhs))
+                            // name does not exist in scope
+                            // Either create a global or do local, depending on context
+                            env.define(&name);
+                            if env.in_func {
+                                Ok(b.assign(&name, rhs))
+                            } else {
+                                Ok(b.global(&name, rhs))
+                            }
                         }
                     }
                     _ => unimplemented!(),
@@ -470,7 +493,10 @@ impl<E: Extra> Parser<E> {
                                     Ok(b.error())
                                 }
                             } else {
-                                d.push_diagnostic(env.error(name.span, "Variable not in scope"));
+                                d.push_diagnostic(env.error(
+                                    name.span,
+                                    &format!("Variable not in scope: {}", ident.node.ident),
+                                ));
                                 Ok(b.error())
                             }
                         } else {
@@ -482,27 +508,25 @@ impl<E: Extra> Parser<E> {
             }
 
             ExprP::Identifier(ident) => {
+                env.dump();
                 if let Some(data) = env.resolve(&ident.node.ident) {
                     let name = ident.node.ident;
                     let extra = env.extra(item.span);
-                    let ast = AstNode {
-                        node: Ast::Identifier(name),
-                        extra,
-                    };
+                    let ast = b.ident(&name).set_extra(extra);
 
                     // Global identifiers are dereferenced when accessed
                     if let DataType::Global = data.ty {
-                        let extra = env.extra(item.span);
-                        Ok(b.deref_offset(ast, 0).set_extra(extra))
-                        //Ok(AstNode {
-                        //node: Ast::Deref(ast.into(), DerefTarget::Offset(0)),
-                        //extra,
-                        //})
+                        //let extra = env.extra(item.span);
+                        //Ok(b.deref_offset(ast, 0).set_extra(extra))
+                        Ok(ast)
                     } else {
                         Ok(ast)
                     }
                 } else {
-                    d.push_diagnostic(env.error(ident.span, "Variable not in scope"));
+                    d.push_diagnostic(env.error(
+                        ident.span,
+                        &format!("Variable not in scope: {}", ident.node.ident),
+                    ));
                     Ok(b.error())
                 }
             }
@@ -590,6 +614,7 @@ pub(crate) mod tests {
             .parse(Path::new(filename), None, file_id, &mut d)
             .unwrap();
 
+        println!("ast: {:#?}", ast);
         let mut stack = vec![cfg.root()];
         let r = ast.lower(&context, &mut d, &mut cfg, &mut stack, &mut g);
         cfg.save_graph("out.dot", &g);
@@ -604,21 +629,31 @@ pub(crate) mod tests {
 
     #[test]
     fn test_global() {
+        run_test("../tests/test_global.star", 0);
         run_test2("../tests/test_global.star", 0);
     }
 
     #[test]
     fn test_static() {
+        run_test("../tests/test_static.star", 0);
         run_test2("../tests/test_static.star", 0);
     }
 
     #[test]
     fn test_cond() {
+        run_test("../tests/test_cond.star", 0);
         run_test2("../tests/test_cond.star", 0);
     }
 
     #[test]
     fn test_float() {
+        run_test("../tests/test_float.star", 0);
         run_test2("../tests/test_float.star", 0);
+    }
+
+    #[test]
+    fn test_recursive() {
+        run_test("../tests/test_recursive.star", 0);
+        run_test2("../tests/test_recursive.star", 0);
     }
 }

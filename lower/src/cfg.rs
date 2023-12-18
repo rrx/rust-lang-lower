@@ -1,5 +1,5 @@
 use crate::ast::{
-    Argument, AssignTarget, Ast, AstNode, AstType, Builtin, Extra, Literal, Parameter,
+    Argument, AssignTarget, Ast, AstNode, AstType, Builtin, DerefTarget, Extra, Literal, Parameter,
     ParameterNode,
 };
 use crate::compile::exec_main;
@@ -105,6 +105,7 @@ pub enum NodeType {
 
 #[derive(Debug)]
 pub struct OpCollection<'c> {
+    op_count: usize,
     arg_count: usize,
     block: Option<Block<'c>>,
     parent_symbol: Option<SymIndex>,
@@ -116,6 +117,7 @@ pub struct OpCollection<'c> {
 impl<'c> OpCollection<'c> {
     pub fn new(block: Block<'c>) -> Self {
         Self {
+            op_count: 0,
             arg_count: 0,
             parent_symbol: None,
             block: Some(block),
@@ -125,13 +127,27 @@ impl<'c> OpCollection<'c> {
         }
     }
 
+    pub fn get_next_index(&mut self) -> SymIndex {
+        let offset = self.op_count;
+        self.op_count += 1;
+        SymIndex::Op(self.block_index, offset)
+    }
+
+    pub fn save_op(&mut self, index: SymIndex, op: Operation<'c>) {
+        assert_eq!(index.block(), self.block_index);
+        assert_eq!(index.offset(), self.ops.len());
+        self.ops.push(op);
+        assert!(self.ops.len() <= self.op_count);
+    }
+
     pub fn set_parent_symbol(&mut self, parent_symbol: SymIndex) {
         self.parent_symbol = Some(parent_symbol);
     }
 
     pub fn push(&mut self, op: Operation<'c>) -> SymIndex {
-        let offset = self.ops.len();
+        let offset = self.op_count;
         self.ops.push(op);
+        self.op_count += 1;
         SymIndex::Op(self.block_index, offset)
     }
 
@@ -141,7 +157,7 @@ impl<'c> OpCollection<'c> {
         index
     }
 
-    pub fn value0(&self, index: SymIndex) -> Option<Value<'c, '_>> {
+    pub fn value0<'a>(&'a self, index: SymIndex) -> Option<Value<'c, 'a>> {
         let rs = self.values(index);
         if rs.len() > 0 {
             Some(rs[0])
@@ -186,6 +202,7 @@ impl<'c> OpCollection<'c> {
     }
 
     pub fn take_ops(&mut self) -> Vec<Operation<'c>> {
+        assert_eq!(self.op_count, self.ops.len());
         self.symbols.clear();
         self.ops.drain(..).collect()
     }
@@ -195,11 +212,12 @@ impl<'c> OpCollection<'c> {
         self.symbols.insert(name.to_string(), index);
     }
 
-    pub fn add_arg(&mut self, name: &str) {
+    pub fn push_arg(&mut self, name: &str) -> SymIndex {
         assert!(self.arg_count < self.block.as_ref().unwrap().argument_count());
         let index = SymIndex::Arg(self.block_index, self.arg_count);
         self.symbols.insert(name.to_string(), index);
         self.arg_count += 1;
+        index
     }
 
     pub fn last(&self) -> SymIndex {
@@ -363,6 +381,7 @@ impl<'c, E: Extra> CFG<'c, E> {
         self.block_names.get(name).cloned()
     }
 
+    /*
     pub fn data_mut_by_name(
         &mut self,
         name: &str,
@@ -374,6 +393,7 @@ impl<'c, E: Extra> CFG<'c, E> {
             None
         }
     }
+    */
 
     pub fn save_graph(&self, filename: &str, g: &CFGGraph<'c>) {
         use petgraph::dot::{Config, Dot};
@@ -422,8 +442,10 @@ impl<'c, E: Extra> CFG<'c, E> {
 
             let mut x = HashMap::new();
             for (name, symbol_index) in data.symbols.iter() {
-                let symbol_node_index =
-                    g_out.add_node(Node::new_symbol(name.clone(), block_node_index));
+                let symbol_node_index = g_out.add_node(Node::new_symbol(
+                    format!("{}{:?}", name.clone(), symbol_index),
+                    block_node_index,
+                ));
                 g_out.add_edge(block_node_index, symbol_node_index, ());
                 x.insert(symbol_index, symbol_node_index);
             }
@@ -480,7 +502,7 @@ impl<'c, E: Extra> CFG<'c, E> {
         name: &str,
         g: &CFGGraph<'c>,
     ) -> Option<SymIndex> {
-        self.save_graph("out.dot", g);
+        //self.save_graph("out.dot", g);
         let dom = simple_fast(g, self.root)
             .dominators(index)
             .expect("Node not connected to root")
@@ -536,7 +558,8 @@ impl<E: Extra> AstNode<E> {
             Ast::Sequence(exprs) => {
                 let mut out = vec![];
                 for expr in exprs {
-                    out.push(expr.lower(context, d, cfg, stack, g)?);
+                    let index = expr.lower(context, d, cfg, stack, g)?;
+                    out.push(index);
                 }
                 Ok(out.last().cloned().unwrap())
             }
@@ -606,7 +629,12 @@ impl<E: Extra> AstNode<E> {
                                     cfg.set_type(index, ast_ty);
                                     return Ok(index);
                                 } else {
-                                    unreachable!("Identifier of static variable must be pointer");
+                                    //unreachable!("Identifier of static variable must be pointer");
+                                    d.push_diagnostic(
+                                        self.extra
+                                            .error(&format!("Expected pointer: {:?}", &ast_ty)),
+                                    );
+                                    return Err(Error::new(ParseError::Invalid));
                                 }
                             } else {
                                 return Ok(sym_index);
@@ -618,47 +646,78 @@ impl<E: Extra> AstNode<E> {
                 }
             }
 
-            Ast::Mutate(lhs, rhs) => match lhs.node {
-                Ast::Identifier(ident) => emit_mutate(context, &ident, *rhs, d, cfg, stack, g),
-                _ => unimplemented!("{:?}", &lhs.node),
-            },
+            Ast::Mutate(lhs, rhs) => {
+                match lhs.node {
+                    Ast::Identifier(ident) => emit_mutate(context, &ident, *rhs, d, cfg, stack, g),
+                    //Ast::Deref(expr, target) => {
+                    //let index = emit_deref(context, *expr, target, d, cfg, stack, g)?;
+                    //emit_mutate(context, &ident, *rhs, d, cfg, stack, g)
+                    //}
+                    _ => unimplemented!("{:?}", &lhs.node),
+                }
+            }
 
             Ast::Assign(target, expr) => {
                 let current_block = stack.last().unwrap().clone();
                 let sym_index = match target {
                     AssignTarget::Alloca(name) => {
+                        log::debug!("assign alloca: {}", name);
                         let ty = IntegerType::new(context, 64);
                         let memref_ty = MemRefType::new(ty.into(), &[], None, None);
                         let op = memref::alloca(context, memref_ty, &[], &[], None, location);
                         let rhs_index = expr.lower(context, d, cfg, stack, g)?;
                         let current = g.node_weight_mut(current_block).unwrap();
-                        let ptr_index = current.push(op);
+
+                        // name the pointer
+                        let ptr_index = current.push_with_name(op, &name);
+                        let ast_ty = cfg.lookup_type(rhs_index).unwrap().to_ptr();
+                        //let ptr_ty = AstType::Ptr(ast_ty.into());
+                        cfg.set_type(ptr_index, ast_ty);
+
                         let r_value = current.value0(rhs_index).unwrap();
                         let r_addr = current.value0(ptr_index).unwrap();
 
+                        // emit store
                         let op = memref::store(r_value, r_addr, &[], location);
-                        let index = current.push_with_name(op, &name);
-                        index
+                        let index = current.push(op);
+                        ptr_index
                     }
                     AssignTarget::Identifier(name) => {
+                        log::debug!("assign local: {}", name);
                         let current_block = stack.last().unwrap().clone();
+                        if cfg.block_is_static(current_block) {
+                            d.push_diagnostic(
+                                self.extra
+                                    .error(&format!("Assign static not possible: {:?}", name)),
+                            );
+                            return Err(Error::new(ParseError::Invalid));
+                        }
+
                         let index = expr.lower(context, d, cfg, stack, g)?;
-                        let current = g.node_weight_mut(current_block).unwrap();
+                        let current = g.node_weight_mut(index.block()).unwrap();
                         current.add_symbol(&name, index);
+                        //assert!(cfg.lookup_type(index).is_some());
                         index
                     }
                 };
                 Ok(sym_index)
             }
 
-            Ast::Call(expr, args, _ret_ty) => {
+            Ast::Call(expr, args, ret_ty) => {
                 // function to call
                 let current_block = stack.last().unwrap().clone();
                 let (f, ty) = match &expr.node {
                     Ast::Identifier(ident) => {
                         if let Some(index) = cfg.name_in_scope(current_block, ident, g) {
-                            let ty = cfg.lookup_type(index).unwrap();
-                            (FlatSymbolRefAttribute::new(context, ident), ty)
+                            if let Some(ty) = cfg.lookup_type(index) {
+                                (FlatSymbolRefAttribute::new(context, ident), ty)
+                            } else {
+                                d.push_diagnostic(
+                                    self.extra
+                                        .error(&format!("Type not found: {}, {:?}", ident, index)),
+                                );
+                                return Err(Error::new(ParseError::Invalid));
+                            }
                         } else {
                             d.push_diagnostic(
                                 self.extra.error(&format!("Name not found: {}", ident)),
@@ -672,7 +731,7 @@ impl<E: Extra> AstNode<E> {
                 };
 
                 if let AstType::Func(_func_arg_types, ret) = &ty {
-                    let ret_ty = from_type(context, &ret);
+                    let ret_type = from_type(context, &ret);
                     // handle call arguments
                     let mut indices = vec![];
 
@@ -695,11 +754,14 @@ impl<E: Extra> AstNode<E> {
                         context,
                         f,
                         call_args.as_slice(),
-                        &[ret_ty.clone()],
+                        &[ret_type.clone()],
                         location,
                     );
                     let current = g.node_weight_mut(current_block).unwrap();
-                    Ok(current.push(op))
+
+                    let index = current.push(op);
+                    cfg.set_type(index, ret_ty);
+                    Ok(index)
                 } else {
                     unimplemented!("calling non function type: {:?}", ty);
                 }
@@ -741,6 +803,11 @@ impl<E: Extra> AstNode<E> {
 
                 let mut entry_block = None;
 
+                let function_block = g.node_weight_mut(current_block).unwrap();
+                let func_index = function_block.get_next_index();
+                function_block.add_symbol(&def.name, func_index);
+                cfg.set_type(func_index, f_type);
+
                 let region = if let Some(body) = def.body {
                     let mut edges = vec![];
                     let blocks = body.try_seq().unwrap();
@@ -761,6 +828,8 @@ impl<E: Extra> AstNode<E> {
                         }
                     }
 
+                    //function_block.add_symbol();
+
                     for (i, b) in blocks.into_iter().enumerate() {
                         if let Ast::Block(nb) = b.node {
                             // connect the first block to the function
@@ -774,7 +843,8 @@ impl<E: Extra> AstNode<E> {
                                 entry_block = Some(block_index);
                             }
                             for p in nb.params {
-                                data.add_arg(&p.name);
+                                let index = data.push_arg(&p.name);
+                                cfg.set_type(index, p.ty);
                             }
 
                             block_indicies.push(block_index);
@@ -792,7 +862,7 @@ impl<E: Extra> AstNode<E> {
 
                     for (index, expr) in exprs {
                         stack.push(index);
-                        cfg.dump_scope(index, g);
+                        //cfg.dump_scope(index, g);
                         if let Ok(_index) = expr.lower(context, d, cfg, stack, g) {
                             stack.pop();
                         } else {
@@ -827,32 +897,40 @@ impl<E: Extra> AstNode<E> {
                     &attributes,
                     location,
                 );
-                let current = g.node_weight_mut(current_block).unwrap();
-                let index = current.push_with_name(op, &def.name);
-                cfg.set_type(index, f_type);
+
+                let function_block = g.node_weight_mut(current_block).unwrap();
+                //let current = g.node_weight_mut(current_block).unwrap();
+                function_block.save_op(func_index, op);
+                //let index = current.push_with_name(op, &def.name);
+                //cfg.set_type(func_index, f_type);
 
                 if let Some(entry_block) = entry_block {
                     let data = g.node_weight_mut(entry_block).unwrap();
-                    data.set_parent_symbol(index);
+                    data.set_parent_symbol(func_index);
                 }
 
-                Ok(index)
+                Ok(func_index)
             }
 
             Ast::Literal(lit) => {
                 let current_block = stack.last().unwrap().clone();
                 let current = g.node_weight_mut(current_block).unwrap();
-                let op = match lit {
-                    Literal::Float(f) => op::build_float_op(context, f, location),
+                let (op, ast_ty) = match lit {
+                    Literal::Float(f) => (op::build_float_op(context, f, location), AstType::Float),
 
-                    Literal::Int(x) => op::build_int_op(context, x, location),
+                    Literal::Int(x) => (op::build_int_op(context, x, location), AstType::Int),
 
-                    Literal::Index(x) => op::build_index_op(context, x as i64, location),
+                    Literal::Index(x) => (
+                        op::build_index_op(context, x as i64, location),
+                        AstType::Index,
+                    ),
 
-                    Literal::Bool(x) => op::build_bool_op(context, x, location),
+                    Literal::Bool(x) => (op::build_bool_op(context, x, location), AstType::Bool),
                     _ => unimplemented!("{:?}", lit),
                 };
-                Ok(current.push(op))
+                let index = current.push(op);
+                cfg.set_type(index, ast_ty);
+                Ok(index)
             }
 
             Ast::Builtin(bi, mut args) => {
@@ -1088,28 +1166,10 @@ impl<E: Extra> AstNode<E> {
                 Ok(current.push(if_op))
             }
 
-            Ast::Deref(expr, _target) => {
-                // we are expecting a memref here
+            Ast::Deref(expr, target) => {
+                let location = expr.extra.location(context, d);
                 let index = expr.lower(context, d, cfg, stack, g)?;
-                let current_block = stack.last().unwrap().clone();
-
-                println!("current {:?}", current_block);
-                println!("index {:?}", index);
-                let ty = cfg.lookup_type(index).unwrap();
-                println!("ty {:?}", ty);
-
-                // ensure proper type
-                if let AstType::Ptr(ast_ty) = &ty {
-                    let r = values_in_scope(g, index)[0];
-                    //let r = current.value0(index).unwrap();
-                    let op = memref::load(r, &[], location);
-                    let current = g.node_weight_mut(current_block).unwrap();
-                    let index = current.push(op);
-                    cfg.set_type(index, *ast_ty.clone());
-                    Ok(index)
-                } else {
-                    unreachable!("Trying to dereference a non-pointer")
-                }
+                emit_deref(context, index, location, target, d, cfg, stack, g)
             }
 
             Ast::UnaryOp(op, a) => {
@@ -1131,16 +1191,18 @@ impl<E: Extra> AstNode<E> {
                         } else if ty.is_integer() {
                             // Multiply by -1
                             let int_op = op::build_int_op(context, -1, location);
-                            //let current = g.node_weight_mut(current_block).unwrap();
                             let index_lhs = current.push(int_op);
                             let r = current.value0(index_lhs).unwrap();
                             let r_rhs = current.value0(index).unwrap();
-                            Ok(current.push(arith::muli(r, r_rhs, location)))
+                            let index = current.push(arith::muli(r, r_rhs, location));
+                            cfg.set_type(index, AstType::Int);
+                            Ok(index)
                         } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
                             // arith has an op for negation
-                            //let current = g.node_weight_mut(current_block).unwrap();
                             let r_rhs = current.value0(index).unwrap();
-                            Ok(current.push(arith::negf(r_rhs, location)))
+                            let index = current.push(arith::negf(r_rhs, location));
+                            cfg.set_type(index, AstType::Float);
+                            Ok(index)
                         } else {
                             unimplemented!()
                         }
@@ -1149,23 +1211,67 @@ impl<E: Extra> AstNode<E> {
             }
 
             Ast::BinaryOp(op, x, y) => {
+                let fx = format!("x: {:?}", x);
+                let fy = format!("y: {:?}", y);
                 let x_extra = x.extra.clone();
                 let y_extra = y.extra.clone();
                 let index_x = x.lower(context, d, cfg, stack, g)?;
                 let index_y = y.lower(context, d, cfg, stack, g)?;
-
+                cfg.save_graph("out.dot", g);
+                println!("ix: {:?}, {}", index_x, fx);
+                println!("iy: {:?}, {}", index_y, fy);
+                let ty_x = cfg
+                    .lookup_type(index_x)
+                    .expect(&format!("missing type for {:?}, {}", index_x, fx));
+                let ty_y = cfg
+                    .lookup_type(index_y)
+                    .expect(&format!("missing type for {:?}, {}", index_y, fy));
                 let current_block = stack.last().unwrap().clone();
-                {
-                    let current = g.node_weight_mut(current_block).unwrap();
-                    println!("{:?}", current);
-                }
+                let current = g.node_weight_mut(current_block).unwrap();
+                println!("{:?}", current);
+
+                let (ty_x, index_x) = if let AstType::Ptr(ty) = ty_x {
+                    let target = DerefTarget::Offset(0);
+                    let index = emit_deref(
+                        context,
+                        index_x,
+                        x_extra.location(context, d),
+                        target,
+                        d,
+                        cfg,
+                        stack,
+                        g,
+                    )?;
+                    (*ty, index)
+                } else {
+                    (ty_x, index_x)
+                };
+
+                let (ty_y, index_y) = if let AstType::Ptr(ty) = ty_y {
+                    let target = DerefTarget::Offset(0);
+                    let index = emit_deref(
+                        context,
+                        index_y,
+                        y_extra.location(context, d),
+                        target,
+                        d,
+                        cfg,
+                        stack,
+                        g,
+                    )?;
+                    (*ty, index)
+                } else {
+                    (ty_y, index_y)
+                };
 
                 // types must be the same for binary operation, no implicit casting yet
                 let a = values_in_scope(g, index_x)[0];
                 let b = values_in_scope(g, index_y)[0];
-                let op = op::build_binop(context, op, a, &x_extra, b, &y_extra, location, d)?;
+                let (op, ast_ty) =
+                    op::build_binop(context, op, a, &x_extra, b, &y_extra, location, d)?;
                 let current = g.node_weight_mut(current_block).unwrap();
                 let index = current.push(op);
+                cfg.set_type(index, ast_ty);
                 Ok(index)
             }
 
@@ -1181,36 +1287,105 @@ impl<E: Extra> AstNode<E> {
     }
 }
 
-pub fn emit_mutate<'c, E: Extra>(
+pub fn emit_deref<'c, E: Extra>(
     context: &'c Context,
-    ident: &str,
+    index: SymIndex,
+    location: Location<'c>,
+    _target: DerefTarget,
+    d: &mut Diagnostics,
+    cfg: &mut CFG<'c, E>,
+    stack: &mut Vec<NodeIndex>,
+    g: &mut CFGGraph<'c>,
+) -> Result<SymIndex> {
+    // we are expecting a memref here
+    //let location = expr.location(context, d);
+    //let index = expr.lower(context, d, cfg, stack, g)?;
+    let current_block = stack.last().unwrap().clone();
+    let ty = cfg.lookup_type(index).unwrap();
+
+    // ensure proper type
+    if let AstType::Ptr(ast_ty) = &ty {
+        let r = values_in_scope(g, index)[0];
+        let op = memref::load(r, &[], location);
+        let current = g.node_weight_mut(current_block).unwrap();
+        let index = current.push(op);
+        cfg.set_type(index, *ast_ty.clone());
+        Ok(index)
+    } else {
+        unreachable!("Trying to dereference a non-pointer")
+    }
+}
+
+pub fn emit_mutate<'a, 'c, E: Extra>(
+    context: &'c Context,
+    name: &str,
     rhs: AstNode<E>,
     d: &mut Diagnostics,
     cfg: &mut CFG<'c, E>,
     stack: &mut Vec<NodeIndex>,
     g: &mut CFGGraph<'c>,
 ) -> Result<SymIndex> {
+    log::debug!("mutate: {}", name);
+    cfg.save_graph("out.dot", g);
     let location = rhs.location(context, d);
     let current_block = stack.last().unwrap().clone();
 
-    let index = cfg.name_in_scope(current_block, ident, g).unwrap();
-    let name_is_static = cfg.block_is_static(index.block());
+    let index = cfg.name_in_scope(current_block, name, g).unwrap();
+    //let name_is_static = cfg.block_is_static(index.block());
     let value_index = rhs.lower(context, d, cfg, stack, g)?;
-    let current = g.node_weight_mut(current_block).expect("Name not found");
+    let ast_ty = cfg.lookup_type(index).unwrap();
+    log::debug!("mutate: {}, {:?}, {:?}", name, ast_ty, value_index);
 
-    if name_is_static {
+    if let AstType::Ptr(ty) = ast_ty {
+        //{
+        //let data = g.raw_nodes().get(value_index.block().index()).map(|n| &n.weight).unwrap();
+        //drop(data);
+        //}
+        //let data = g.node_weight_mut(value_index.block()).unwrap();
+
         let ty = MemRefType::new(IntegerType::new(context, 64).into(), &[], None, None);
-        let op1 = memref::get_global(context, &ident, ty, location);
+        let op1 = memref::get_global(context, &name, ty, location);
+        let current = g.node_weight_mut(current_block).expect("Name not found");
         let addr_index = current.push(op1);
-        let r_addr = current.value0(addr_index).unwrap();
-        let r_value = current.value0(value_index).unwrap();
+        let current = g.node_weight(current_block).expect("Name not found");
+        let r_addr = current
+            .ops
+            .get(addr_index.offset())
+            .unwrap()
+            .result(0)
+            .unwrap()
+            .into();
+        //let r_addr = current.value0(addr_index).unwrap().clone();
+
+        let data = g.node_weight(value_index.block()).expect("Name not found");
+        //let data = g.node_weight_mut(value_index.block()).unwrap();
+        println!("{:?}", data.ops.get(value_index.offset()));
+
+        let r_value = data
+            .ops
+            .get(value_index.offset())
+            .unwrap()
+            .result(0)
+            .unwrap()
+            .into();
+        //let r_value = data.value0(value_index).unwrap().clone();
+
+        //let r_value = values_in_scope(g, value_index)[0];
+        //let current = g.node_weight_mut(current_block).expect("Name not found");
+        //let r_value = data.value0(value_index).unwrap();
+        //let r_addr = current.value0(addr_index).unwrap();
         let op = memref::store(r_value, r_addr, &[], location);
-        Ok(current.push(op))
+        //op
+        let current = g.node_weight_mut(current_block).expect("Name not found");
+        let index = current.push(op);
+        Ok(addr_index)
     } else {
+        let current = g.node_weight_mut(current_block).expect("Name not found");
         let r_addr = current.value0(index).unwrap();
         let r_value = current.value0(value_index).unwrap();
         let op = memref::store(r_value, r_addr, &[], location);
-        Ok(current.push(op))
+        current.push(op);
+        Ok(index)
     }
 }
 

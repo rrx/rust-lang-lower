@@ -886,6 +886,8 @@ impl<'c, E: Extra> Lower<'c, E> {
             }
 
             Ast::BinaryOp(op, x, y) => {
+                println!("x: {:?}", x);
+                println!("y: {:?}", y);
                 let x_extra = x.extra.clone();
                 let y_extra = y.extra.clone();
                 let index_lhs = self.lower_expr(*x, env, d, b)?;
@@ -894,13 +896,29 @@ impl<'c, E: Extra> Lower<'c, E> {
                 let ty_lhs = env.data(&index_lhs).expect("LHS data missing").clone();
                 let ty_rhs = env.data(&index_rhs).expect("RHS data missing").clone();
 
+                let (ty_lhs, index_lhs) = if let AstType::Ptr(ty) = ty_lhs {
+                    let index =
+                        self.emit_deref(index_lhs, x_extra.location(self.context, d), env, d, b)?;
+                    (*ty, index)
+                } else {
+                    (ty_lhs, index_lhs)
+                };
+
+                let (ty_rhs, index_rhs) = if let AstType::Ptr(ty) = ty_rhs {
+                    let index =
+                        self.emit_deref(index_rhs, y_extra.location(self.context, d), env, d, b)?;
+                    (*ty, index)
+                } else {
+                    (ty_rhs, index_rhs)
+                };
+
                 let ast_ty = ty_lhs.clone();
                 assert_eq!(ty_lhs, ty_rhs);
 
                 // types must be the same for binary operation, no implicit casting yet
                 let a = env.value0(&index_lhs);
                 let b = env.value0(&index_rhs);
-                let binop =
+                let (binop, ast_ty) =
                     op::build_binop(self.context, op, a, &x_extra, b, &y_extra, location, d)?;
 
                 let index = env.push(binop);
@@ -910,21 +928,10 @@ impl<'c, E: Extra> Lower<'c, E> {
             }
 
             Ast::Deref(expr, _target) => {
+                let location = expr.location(self.context, d);
                 // we are expecting a memref here
                 let index = self.lower_expr(*expr, env, d, b)?;
-
-                let data = env.data(&index).unwrap();
-
-                // ensure proper type
-                if let AstType::Ptr(ast_ty) = &data {
-                    let r = env.value0(&index);
-                    let op = memref::load(r, &[], location);
-                    let index = env.push(op);
-                    env.index_data(&index, *ast_ty.clone());
-                    Ok(index)
-                } else {
-                    unreachable!("Trying to dereference a non-pointer")
-                }
+                self.emit_deref(index, location, env, d, b)
             }
 
             Ast::Identifier(ident) => {
@@ -1359,6 +1366,27 @@ impl<'c, E: Extra> Lower<'c, E> {
                     } //_ => unimplemented!("{:?}", b),
                 }
             } //_ => unimplemented!("{:?}", expr.node),
+        }
+    }
+    pub fn emit_deref(
+        &self,
+        index: LayerIndex,
+        location: Location<'c>,
+        env: &mut Environment<'c, E>,
+        d: &mut Diagnostics,
+        b: &NodeBuilder<E>,
+    ) -> Result<LayerIndex> {
+        let data = env.data(&index).unwrap();
+
+        // ensure proper type
+        if let AstType::Ptr(ast_ty) = &data {
+            let r = env.value0(&index);
+            let op = memref::load(r, &[], location);
+            let index = env.push(op);
+            env.index_data(&index, *ast_ty.clone());
+            Ok(index)
+        } else {
+            unreachable!("Trying to dereference a non-pointer")
         }
     }
 }

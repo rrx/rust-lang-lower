@@ -21,6 +21,12 @@ pub enum AstType {
     //Unknown,
 }
 
+impl AstType {
+    pub fn to_ptr(self) -> Self {
+        Self::Ptr(self.into())
+    }
+}
+
 impl From<Literal> for AstType {
     fn from(item: Literal) -> Self {
         match item {

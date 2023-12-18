@@ -1,8 +1,9 @@
 use crate::ast::{
+    //Argument, AssignTarget, Ast, AstNode,
+    AstType,
     //Literal,
     //Parameter, ParameterNode,
     BinOpNode,
-    //Argument, AssignTarget, Ast, AstNode, AstType,
     BinaryOperation,
     //Builtin,
     Extra,
@@ -129,50 +130,56 @@ pub fn build_binop<'c, E: Extra>(
     b_extra: &E,
     location: Location<'c>,
     d: &mut Diagnostics,
-) -> Result<Operation<'c>> {
+) -> Result<(Operation<'c>, AstType)> {
     let ty = a.r#type();
     //assert_eq!(ty, b.r#type());
 
-    let op = match op.node {
+    let (op, ast_ty) = match op.node {
         BinaryOperation::Divide => {
             if ty.is_index() {
                 // index type is unsigned
-                arith::divui(a, b, location)
+                (arith::divui(a, b, location), AstType::Index)
             } else if ty.is_integer() {
                 // we assume all integers are signed for now
-                arith::divsi(a, b, location)
+                (arith::divsi(a, b, location), AstType::Int)
             } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
-                arith::divf(a, b, location)
+                (arith::divf(a, b, location), AstType::Float)
             } else {
                 d.push_diagnostic(a_extra.error(&format!("Invalid Type")));
                 return Err(Error::new(ParseError::Invalid));
             }
         }
         BinaryOperation::Multiply => {
-            if ty.is_index() || ty.is_integer() {
-                arith::muli(a, b, location)
+            if ty.is_index() {
+                (arith::muli(a, b, location), AstType::Index)
+            } else if ty.is_integer() {
+                (arith::muli(a, b, location), AstType::Int)
             } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
-                arith::mulf(a, b, location)
+                (arith::mulf(a, b, location), AstType::Float)
             } else {
                 d.push_diagnostic(a_extra.error(&format!("Invalid Type")));
                 return Err(Error::new(ParseError::Invalid));
             }
         }
         BinaryOperation::Add => {
-            if ty.is_index() || ty.is_integer() {
-                arith::addi(a, b, location)
+            if ty.is_index() {
+                (arith::addi(a, b, location), AstType::Index)
+            } else if ty.is_integer() {
+                (arith::addi(a, b, location), AstType::Int)
             } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
-                arith::addf(a, b, location)
+                (arith::addf(a, b, location), AstType::Float)
             } else {
                 d.push_diagnostic(a_extra.error(&format!("Invalid Type")));
                 return Err(Error::new(ParseError::Invalid));
             }
         }
         BinaryOperation::Subtract => {
-            if ty.is_index() || ty.is_integer() {
-                arith::subi(a, b, location)
+            if ty.is_index() {
+                (arith::subi(a, b, location), AstType::Index)
+            } else if ty.is_integer() {
+                (arith::subi(a, b, location), AstType::Int)
             } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
-                arith::subf(a, b, location)
+                (arith::subf(a, b, location), AstType::Float)
             } else {
                 d.push_diagnostic(
                     Diagnostic::error()
@@ -189,10 +196,16 @@ pub fn build_binop<'c, E: Extra>(
         BinaryOperation::GTE => {
             if ty.is_index() {
                 // unsigned
-                arith::cmpi(context, arith::CmpiPredicate::Uge, a, b, location)
+                (
+                    arith::cmpi(context, arith::CmpiPredicate::Uge, a, b, location),
+                    AstType::Bool,
+                )
             } else if ty.is_integer() {
                 // signed
-                arith::cmpi(context, arith::CmpiPredicate::Sge, a, b, location)
+                (
+                    arith::cmpi(context, arith::CmpiPredicate::Sge, a, b, location),
+                    AstType::Bool,
+                )
             } else {
                 d.push_diagnostic(a_extra.error(&format!("Invalid Type")));
                 return Err(Error::new(ParseError::Invalid));
@@ -201,10 +214,16 @@ pub fn build_binop<'c, E: Extra>(
         BinaryOperation::GT => {
             if ty.is_index() {
                 // unsigned
-                arith::cmpi(context, arith::CmpiPredicate::Ugt, a, b, location)
+                (
+                    arith::cmpi(context, arith::CmpiPredicate::Ugt, a, b, location),
+                    AstType::Bool,
+                )
             } else if ty.is_integer() {
                 // signed
-                arith::cmpi(context, arith::CmpiPredicate::Sgt, a, b, location)
+                (
+                    arith::cmpi(context, arith::CmpiPredicate::Sgt, a, b, location),
+                    AstType::Bool,
+                )
             } else {
                 d.push_diagnostic(a_extra.error(&format!("Invalid Type")));
                 return Err(Error::new(ParseError::Invalid));
@@ -212,10 +231,16 @@ pub fn build_binop<'c, E: Extra>(
         }
         BinaryOperation::NE => {
             if ty.is_index() || ty.is_integer() {
-                arith::cmpi(context, arith::CmpiPredicate::Ne, a, b, location)
+                (
+                    arith::cmpi(context, arith::CmpiPredicate::Ne, a, b, location),
+                    AstType::Bool,
+                )
             } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
                 // ordered comparison
-                arith::cmpf(context, arith::CmpfPredicate::One, a, b, location)
+                (
+                    arith::cmpf(context, arith::CmpfPredicate::One, a, b, location),
+                    AstType::Bool,
+                )
             } else {
                 d.push_diagnostic(a_extra.error(&format!("Invalid Type")));
                 return Err(Error::new(ParseError::Invalid));
@@ -223,10 +248,16 @@ pub fn build_binop<'c, E: Extra>(
         }
         BinaryOperation::EQ => {
             if ty.is_index() || ty.is_integer() {
-                arith::cmpi(context, arith::CmpiPredicate::Eq, a, b, location)
+                (
+                    arith::cmpi(context, arith::CmpiPredicate::Eq, a, b, location),
+                    AstType::Bool,
+                )
             } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
                 // ordered comparison
-                arith::cmpf(context, arith::CmpfPredicate::Oeq, a, b, location)
+                (
+                    arith::cmpf(context, arith::CmpfPredicate::Oeq, a, b, location),
+                    AstType::Bool,
+                )
             } else {
                 d.push_diagnostic(a_extra.error(&format!("Invalid Type")));
                 return Err(Error::new(ParseError::Invalid));
@@ -234,5 +265,5 @@ pub fn build_binop<'c, E: Extra>(
         } //_ => unimplemented!("{:?}", op)
     };
 
-    Ok(op)
+    Ok((op, ast_ty))
 }
