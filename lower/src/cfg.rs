@@ -679,7 +679,7 @@ impl<E: Extra> AstNode<E> {
 
                         // emit store
                         let op = memref::store(r_value, r_addr, &[], location);
-                        let index = current.push(op);
+                        let _index = current.push(op);
                         ptr_index
                     }
                     AssignTarget::Identifier(name) => {
@@ -963,7 +963,14 @@ impl<E: Extra> AstNode<E> {
                                 if ast_ty.is_ptr() {
                                     let target = DerefTarget::Offset(0);
                                     index = emit_deref(
-                                        context, index, location, target, d, cfg, stack, g,
+                                        context,
+                                        index,
+                                        &self.extra,
+                                        target,
+                                        d,
+                                        cfg,
+                                        stack,
+                                        g,
                                     )?;
                                 }
 
@@ -1177,9 +1184,9 @@ impl<E: Extra> AstNode<E> {
             }
 
             Ast::Deref(expr, target) => {
-                let location = expr.extra.location(context, d);
+                let extra = expr.extra.clone();
                 let index = expr.lower(context, d, cfg, stack, g)?;
-                emit_deref(context, index, location, target, d, cfg, stack, g)
+                emit_deref(context, index, &extra, target, d, cfg, stack, g)
             }
 
             Ast::UnaryOp(op, a) => {
@@ -1227,7 +1234,7 @@ impl<E: Extra> AstNode<E> {
                 let y_extra = y.extra.clone();
                 let index_x = x.lower(context, d, cfg, stack, g)?;
                 let index_y = y.lower(context, d, cfg, stack, g)?;
-                cfg.save_graph("out.dot", g);
+                //cfg.save_graph("out.dot", g);
                 println!("ix: {:?}, {}", index_x, fx);
                 println!("iy: {:?}, {}", index_y, fy);
                 let ty_x = cfg
@@ -1240,35 +1247,17 @@ impl<E: Extra> AstNode<E> {
                 let current = g.node_weight_mut(current_block).unwrap();
                 println!("{:?}", current);
 
-                let (ty_x, index_x) = if let AstType::Ptr(ty) = ty_x {
+                let (_ty_x, index_x) = if let AstType::Ptr(ty) = ty_x {
                     let target = DerefTarget::Offset(0);
-                    let index = emit_deref(
-                        context,
-                        index_x,
-                        x_extra.location(context, d),
-                        target,
-                        d,
-                        cfg,
-                        stack,
-                        g,
-                    )?;
+                    let index = emit_deref(context, index_x, &x_extra, target, d, cfg, stack, g)?;
                     (*ty, index)
                 } else {
                     (ty_x, index_x)
                 };
 
-                let (ty_y, index_y) = if let AstType::Ptr(ty) = ty_y {
+                let (_ty_y, index_y) = if let AstType::Ptr(ty) = ty_y {
                     let target = DerefTarget::Offset(0);
-                    let index = emit_deref(
-                        context,
-                        index_y,
-                        y_extra.location(context, d),
-                        target,
-                        d,
-                        cfg,
-                        stack,
-                        g,
-                    )?;
+                    let index = emit_deref(context, index_y, &y_extra, target, d, cfg, stack, g)?;
                     (*ty, index)
                 } else {
                     (ty_y, index_y)
@@ -1300,7 +1289,7 @@ impl<E: Extra> AstNode<E> {
 pub fn emit_deref<'c, E: Extra>(
     context: &'c Context,
     index: SymIndex,
-    location: Location<'c>,
+    extra: &E,
     _target: DerefTarget,
     d: &mut Diagnostics,
     cfg: &mut CFG<'c, E>,
@@ -1315,6 +1304,7 @@ pub fn emit_deref<'c, E: Extra>(
 
     // ensure proper type
     if let AstType::Ptr(ast_ty) = &ty {
+        let location = extra.location(context, d);
         let r = values_in_scope(g, index)[0];
         let op = memref::load(r, &[], location);
         let current = g.node_weight_mut(current_block).unwrap();
@@ -1322,7 +1312,8 @@ pub fn emit_deref<'c, E: Extra>(
         cfg.set_type(index, *ast_ty.clone());
         Ok(index)
     } else {
-        unreachable!("Trying to dereference a non-pointer")
+        d.push_diagnostic(extra.error(&format!("Trying to dereference a non-pointer: {:?}", ty)));
+        Err(Error::new(ParseError::Invalid))
     }
 }
 
@@ -1346,7 +1337,7 @@ pub fn emit_mutate<'a, 'c, E: Extra>(
     let ast_ty = cfg.lookup_type(index).unwrap();
     log::debug!("mutate: {}, {:?}, {:?}", name, ast_ty, value_index);
 
-    if let AstType::Ptr(ty) = ast_ty {
+    if ast_ty.is_ptr() {
         //{
         //let data = g.raw_nodes().get(value_index.block().index()).map(|n| &n.weight).unwrap();
         //drop(data);
@@ -1387,7 +1378,7 @@ pub fn emit_mutate<'a, 'c, E: Extra>(
         let op = memref::store(r_value, r_addr, &[], location);
         //op
         let current = g.node_weight_mut(current_block).expect("Name not found");
-        let index = current.push(op);
+        let _index = current.push(op);
         Ok(addr_index)
     } else {
         let current = g.node_weight_mut(current_block).expect("Name not found");

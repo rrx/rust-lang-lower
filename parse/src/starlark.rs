@@ -11,7 +11,7 @@ use starlark_syntax::syntax::module::AstModuleFields;
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 
 use lower::ast;
-use lower::ast::{Ast, AstNode, AstType, CodeLocation, DerefTarget, Extra};
+use lower::ast::{Ast, AstNode, AstType, CodeLocation, Extra};
 use lower::{Diagnostics, NodeBuilder};
 use std::collections::HashMap;
 
