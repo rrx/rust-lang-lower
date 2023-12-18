@@ -12,6 +12,7 @@ use melior::{
     Context,
 };
 
+/*
 impl<'c, E: ast::Extra> lower::Lower<'c, E> {
     pub fn add_shared(&mut self, s: &str) {
         self.shared.insert(s.to_string());
@@ -84,6 +85,7 @@ impl<'c, E: ast::Extra> lower::Lower<'c, E> {
         exec_main(&shared, module, libpath)
     }
 }
+*/
 
 pub fn exec_main<'c>(shared: &[String], module: &ir::Module<'c>, libpath: &str) -> i32 {
     let paths = shared

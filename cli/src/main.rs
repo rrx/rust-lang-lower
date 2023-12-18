@@ -8,6 +8,7 @@ use melior::ir;
 use simple_logger::{set_up_color_terminal, SimpleLogger};
 
 use lower::ast::SimpleExtra;
+use lower::cfg::{CFGGraph, CFG};
 use lower::compile::default_context;
 use lower::{Diagnostics, Lower, NodeBuilder};
 use parse::starlark::Parser;
@@ -58,35 +59,41 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut module = ir::Module::new(location);
     let mut parser: Parser<SimpleExtra> = Parser::new();
     let mut d = Diagnostics::new();
-    let mut lower = Lower::new(&context);
+    let mut g = CFGGraph::new();
+    //let mut lower = Lower::new(&context);
+    let mut cfg: CFG<SimpleExtra> = CFG::new(&context, "module", &d, &mut g);
 
     for path in config.inputs {
-        let mut env: lower::Environment<SimpleExtra> = lower::Environment::default();
+        //let mut env: lower::Environment<SimpleExtra> = lower::Environment::default();
         let path = Path::new(&path);
         log::debug!("parsing: {}", path.to_str().unwrap());
 
         let filename = path.to_str().unwrap().to_string();
         let file_id = d.add_source(filename.clone(), std::fs::read_to_string(path)?);
 
-        let b = NodeBuilder::new(file_id, &filename);
+        //let b: NodeBuilder<SimpleExtra> = NodeBuilder::new(file_id, &filename);
 
         let result = parser.parse(&path, None, file_id, &mut d);
         if config.verbose {
             d.dump();
         }
         if d.has_errors {
+            println!("Errors in parsing");
             std::process::exit(1);
         }
-        assert_eq!(0, env.layer_count());
-        let r = lower.module_lower(&mut module, result?, &mut env, &mut d, &b);
+        let ast = result?;
+
+        let mut stack = vec![cfg.root()];
+        let r = ast.lower(&context, &mut d, &mut cfg, &mut stack, &mut g);
+        assert_eq!(1, stack.len());
         if config.verbose {
             d.dump();
         }
-        assert_eq!(0, env.layer_count());
-        if d.has_errors {
-            std::process::exit(1);
-        }
-        r.unwrap();
+        r?;
+    }
+    cfg.save_graph("out.dot", &g);
+    if d.has_errors {
+        std::process::exit(1);
     }
 
     if config.verbose {
@@ -95,7 +102,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     assert!(module.as_operation().verify());
 
     if config.lower {
-        lower.module_passes(&mut module);
+        cfg.module(&context, &mut module, &mut g);
         if config.verbose {
             module.as_operation().dump();
         }
@@ -108,8 +115,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     if config.exec {
-        let result = lower.exec_main(&module, "target/debug");
-        std::process::exit(result);
+        let exit_code = cfg.exec_main(&module, "target/debug/");
+        std::process::exit(exit_code);
     }
 
     Ok(())

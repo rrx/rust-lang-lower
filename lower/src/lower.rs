@@ -189,6 +189,7 @@ pub fn from_type<'c>(context: &'c Context, ty: &AstType) -> Type<'c> {
     }
 }
 
+/*
 impl<'c, E: Extra> Lower<'c, E> {
     pub fn new(context: &'c Context) -> Self {
         Self {
@@ -696,7 +697,6 @@ impl<'c, E: Extra> Lower<'c, E> {
         }
     }
 
-    /*
     pub fn build_block(
         &self,
         layer: &mut Layer<'c, E>,
@@ -720,6 +720,7 @@ impl<'c, E: Extra> Lower<'c, E> {
     }
     */
 
+/*
     pub fn lower_expr<'a>(
         &self,
         expr: AstNode<E>,
@@ -1397,6 +1398,7 @@ impl<'c, E: Extra> Lower<'c, E> {
         }
     }
 }
+            */
 
 #[cfg(test)]
 pub(crate) mod tests {
@@ -1571,6 +1573,7 @@ pub(crate) mod tests {
         b.seq(seq)
     }
 
+    /*
     #[test]
     fn test_block() {
         let context = default_context();
@@ -1630,4 +1633,5 @@ pub(crate) mod tests {
             .unwrap();
         assert_eq!(0, r);
     }
+    */
 }
