@@ -1,10 +1,10 @@
 use crate::ast::{
-    Argument, AssignTarget, Ast, AstNode, AstType, Builtin, DerefTarget, Extra, Literal, Parameter,
-    ParameterNode,
+    Argument, AssignTarget, Ast, AstNode, Builtin, DerefTarget, Literal, Parameter, ParameterNode,
 };
 use crate::compile::exec_main;
 use crate::default_pass_manager;
 use crate::op;
+use crate::{AstType, Extra};
 use crate::{Diagnostics, ParseError};
 use anyhow::Error;
 use anyhow::Result;

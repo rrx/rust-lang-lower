@@ -15,6 +15,7 @@ codespan-reporting = "*"
 anyhow = "*"
 thiserror = "*"
 petgraph = "0.6.4"
+ena = "*"
 
 [dev-dependencies]
 criterion = "0.3"

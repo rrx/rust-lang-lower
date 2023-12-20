@@ -11,8 +11,8 @@ use starlark_syntax::syntax::module::AstModuleFields;
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 
 use lower::ast;
-use lower::ast::{Ast, AstNode, AstType, CodeLocation, Extra};
-use lower::{Diagnostics, NodeBuilder};
+use lower::ast::{Ast, AstNode, CodeLocation, Extra};
+use lower::{AstType, Diagnostics, NodeBuilder};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
@@ -250,7 +250,7 @@ impl<E: Extra> Parser<E> {
                     ty
                 } else {
                     d.push_diagnostic(env.error(item.span, "Missing Type"));
-                    Some(ast::AstType::Unit)
+                    Some(AstType::Unit)
                 };
                 ast::ParameterNode {
                     name: ident.node.ident.to_string(),
@@ -265,7 +265,7 @@ impl<E: Extra> Parser<E> {
                     ty
                 } else {
                     d.push_diagnostic(env.error(item.span, "Missing Type"));
-                    Some(ast::AstType::Unit)
+                    Some(AstType::Unit)
                 };
                 let expr = self.from_expr(*expr, env, d, b).unwrap();
                 ast::ParameterNode {

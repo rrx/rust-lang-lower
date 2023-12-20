@@ -1,4 +1,5 @@
 use crate::ast::*;
+use crate::AstType;
 use melior::ir;
 use melior::Context;
 use std::collections::VecDeque;
@@ -42,7 +43,6 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn with_loc(&mut self, span: Span) {
-        //assert_eq!(span.file_id, self.span.file_id);
         self.span = span;
     }
 
@@ -58,14 +58,6 @@ impl<E: Extra> NodeBuilder<E> {
             self.span.begin.col,
         )
     }
-
-    //pub fn node_span(&self, ast: AstNode<E>) -> AstNode<E> {
-    //ast
-    //AstNode {
-    //node: ast.node,
-    //extra: ast.extra,
-    //}
-    //}
 
     pub fn node(&self, ast: Ast<E>) -> AstNode<E> {
         AstNode {
@@ -231,10 +223,6 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn apply(&self, name: &str, args: Vec<Argument<E>>, ty: AstType) -> AstNode<E> {
-        //let args = args
-        //.into_iter()
-        //.map(|expr| self.arg(expr))
-        //.collect::<Vec<_>>();
         AstNode::new(
             Ast::Call(self.ident(name).into(), args, ty),
             self.extra_unknown(),
@@ -242,10 +230,6 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn call(&self, f: AstNode<E>, args: Vec<Argument<E>>, ty: AstType) -> AstNode<E> {
-        //let args = args
-        //.into_iter()
-        //.map(|expr| self.arg(expr))
-        //.collect::<Vec<_>>();
         let extra = f.extra.clone();
         AstNode::new(Ast::Call(f.into(), args, ty), extra)
     }

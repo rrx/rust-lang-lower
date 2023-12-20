@@ -1,6 +1,7 @@
-use crate::ast::{AstNode, Extra, ParameterNode, Terminator};
+use crate::ast::{ParameterNode, Terminator};
 use crate::op;
 use crate::Diagnostics;
+use crate::{AstNode, Extra};
 use melior::{
     ir::{block::BlockArgument, Block, ValueLike},
     Context,
@@ -207,9 +208,7 @@ impl<'c, E: Extra> BlockGraph<'c, E> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{AstType, SimpleExtra};
-    use crate::Diagnostics;
-    use crate::NodeBuilder;
+    use crate::{AstType, Diagnostics, NodeBuilder, SimpleExtra};
     #[test]
     fn test_block1() {
         let mut d = Diagnostics::new();

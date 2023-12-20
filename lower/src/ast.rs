@@ -1,38 +1,19 @@
 use crate::Diagnostics;
 //use anyhow::Error;
 //use anyhow::Result;
+use crate::AstType;
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use melior::ir;
 use melior::Context;
 use std::fmt::Debug;
 
-#[derive(Debug, PartialEq, Clone)]
-pub enum AstType {
-    Int,
-    Index,
-    String,
-    Float,
-    Bool,
-    Unit,
-    Ptr(Box<AstType>),
-    Tuple(Vec<AstType>),
-    // Func(parameters, return type)
-    Func(Vec<AstType>, Box<AstType>),
-    //Unknown,
-}
-
-impl AstType {
-    pub fn to_ptr(self) -> Self {
-        Self::Ptr(self.into())
-    }
-
-    pub fn is_ptr(&self) -> bool {
-        if let Self::Ptr(_) = self {
-            true
-        } else {
-            false
-        }
-    }
+#[derive(Debug)]
+pub enum Literal {
+    Int(i64),
+    Index(usize),
+    Float(f64),
+    String(String),
+    Bool(bool),
 }
 
 impl From<Literal> for AstType {
@@ -57,15 +38,6 @@ impl From<&Literal> for AstType {
             Literal::String(_) => AstType::String,
         }
     }
-}
-
-#[derive(Debug)]
-pub enum Literal {
-    Int(i64),
-    Index(usize),
-    Float(f64),
-    String(String),
-    Bool(bool),
 }
 
 #[derive(Debug)]

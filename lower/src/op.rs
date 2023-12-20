@@ -1,14 +1,12 @@
 use crate::ast::{
     //Argument, AssignTarget, Ast, AstNode,
-    AstType,
     //Literal,
     //Parameter, ParameterNode,
     BinOpNode,
     BinaryOperation,
     //Builtin,
-    Extra,
 };
-use crate::{Diagnostics, ParseError};
+use crate::{AstType, Diagnostics, Extra, ParseError};
 use anyhow::Error;
 use anyhow::Result;
 use codespan_reporting::diagnostic::Diagnostic;
@@ -132,7 +130,7 @@ pub fn build_binop<'c, E: Extra>(
     d: &mut Diagnostics,
 ) -> Result<(Operation<'c>, AstType)> {
     let ty = a.r#type();
-    //assert_eq!(ty, b.r#type());
+    assert_eq!(ty, b.r#type());
 
     let (op, ast_ty) = match op.node {
         BinaryOperation::Divide => {

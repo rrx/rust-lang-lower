@@ -5,14 +5,14 @@ pub mod cfg;
 pub mod compile;
 pub mod diagnostics;
 pub mod env;
-//pub mod lower;
 pub mod op;
-//pub mod scope;
+pub mod types;
 
+pub use ast::{AstNode, Extra, SimpleExtra};
 pub use builder::NodeBuilder;
 pub use compile::{default_context, default_pass_manager};
 pub use diagnostics::{Diagnostics, FileDB, ParseError};
-//pub use lower::Lower;
+pub use types::AstType;
 
 // re-export melior structs
 pub use melior::{
@@ -20,12 +20,9 @@ pub use melior::{
     Context,
 };
 
-//pub type Environment<'c, E> = scope::ScopeStack<'c, E>;
-//
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::ast::{AstNode, AstType, Extra};
 
     pub fn gen_test<'c, E: Extra>(b: &NodeBuilder<E>) -> AstNode<E> {
         let mut seq = vec![b.import_prelude()];
