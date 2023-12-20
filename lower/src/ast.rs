@@ -14,6 +14,7 @@ pub enum Literal {
     Float(f64),
     String(String),
     Bool(bool),
+    Type(AstType),
 }
 
 impl From<Literal> for AstType {
@@ -24,6 +25,7 @@ impl From<Literal> for AstType {
             Literal::Bool(_) => AstType::Bool,
             Literal::Index(_) => AstType::Index,
             Literal::String(_) => AstType::String,
+            Literal::Type(_) => AstType::Type,
         }
     }
 }
@@ -36,6 +38,7 @@ impl From<&Literal> for AstType {
             Literal::Bool(_) => AstType::Bool,
             Literal::Index(_) => AstType::Index,
             Literal::String(_) => AstType::String,
+            Literal::Type(_) => AstType::Type,
         }
     }
 }

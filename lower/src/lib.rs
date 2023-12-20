@@ -12,7 +12,7 @@ pub use ast::{AstNode, Extra, SimpleExtra};
 pub use builder::NodeBuilder;
 pub use compile::{default_context, default_pass_manager};
 pub use diagnostics::{Diagnostics, FileDB, ParseError};
-pub use types::AstType;
+pub use types::{AstType, TypeUnify};
 
 // re-export melior structs
 pub use melior::{

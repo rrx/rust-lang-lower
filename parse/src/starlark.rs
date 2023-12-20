@@ -12,7 +12,7 @@ use codespan_reporting::diagnostic::{Diagnostic, Label};
 
 use lower::ast;
 use lower::ast::{Ast, AstNode, CodeLocation, Extra};
-use lower::{AstType, Diagnostics, NodeBuilder};
+use lower::{AstType, Diagnostics, NodeBuilder, TypeUnify};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
@@ -199,12 +199,14 @@ fn from_assign_target<P: syntax::ast::AstPayload>(
 }
 
 pub struct Parser<E> {
+    u: TypeUnify,
     _e: std::marker::PhantomData<E>,
 }
 
 impl<E: Extra> Parser<E> {
     pub fn new() -> Self {
         Self {
+            u: TypeUnify::new(),
             _e: std::marker::PhantomData::default(),
         }
     }
@@ -249,8 +251,9 @@ impl<E: Extra> Parser<E> {
                 let ty = if let Some(ty) = maybe_type.map(|ty| from_type(&ty)) {
                     ty
                 } else {
-                    d.push_diagnostic(env.error(item.span, "Missing Type"));
-                    Some(AstType::Unit)
+                    Some(self.u.fresh_unknown())
+                    //d.push_diagnostic(env.error(item.span, "Missing Type"));
+                    //Some(AstType::Unit)
                 };
                 ast::ParameterNode {
                     name: ident.node.ident.to_string(),
@@ -264,8 +267,9 @@ impl<E: Extra> Parser<E> {
                 let ty = if let Some(ty) = maybe_type.map(|ty| from_type(&ty)) {
                     ty
                 } else {
-                    d.push_diagnostic(env.error(item.span, "Missing Type"));
-                    Some(AstType::Unit)
+                    Some(self.u.fresh_unknown())
+                    //d.push_diagnostic(env.error(item.span, "Missing Type"));
+                    //Some(AstType::Unit)
                 };
                 let expr = self.from_expr(*expr, env, d, b).unwrap();
                 ast::ParameterNode {
