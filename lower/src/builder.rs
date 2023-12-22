@@ -286,6 +286,10 @@ impl<E: Extra> NodeBuilder<E> {
         }
     }
 
+    pub fn module(&self, name: &str, body: AstNode<E>) -> AstNode<E> {
+        self.block(name, &[], body)
+    }
+
     pub fn block(&self, name: &str, params: &[(&str, AstType)], body: AstNode<E>) -> AstNode<E> {
         let extra = body.extra.clone();
         let params = params

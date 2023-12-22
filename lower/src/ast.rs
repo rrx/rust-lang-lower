@@ -176,6 +176,7 @@ pub enum Ast<E> {
     Builtin(Builtin, Vec<Argument<E>>),
     Deref(Box<AstNode<E>>, DerefTarget),
     Block(NodeBlock<E>),
+    Module(NodeBlock<E>),
     Loop(String, Box<AstNode<E>>),
     Break(String),
     Continue(String),

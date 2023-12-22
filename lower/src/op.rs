@@ -119,6 +119,24 @@ pub fn build_static<'c>(
     )
 }
 
+pub fn build_reserved<'c>(
+    context: &'c Context,
+    name: &str,
+    location: Location<'c>,
+) -> Option<(Operation<'c>, AstType)> {
+    match name {
+        "True" => {
+            let op = build_bool_op(context, true, location);
+            Some((op, AstType::Bool))
+        }
+        "False" => {
+            let op = build_bool_op(context, false, location);
+            Some((op, AstType::Bool))
+        }
+        _ => None,
+    }
+}
+
 pub fn build_binop<'c, E: Extra>(
     context: &'c Context,
     op: BinOpNode<E>,

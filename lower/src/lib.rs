@@ -4,7 +4,7 @@ pub mod builder;
 pub mod cfg;
 pub mod compile;
 pub mod diagnostics;
-pub mod env;
+//pub mod env;
 pub mod op;
 pub mod types;
 

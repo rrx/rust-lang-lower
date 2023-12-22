@@ -545,6 +545,32 @@ impl<E: Extra> AstNode<E> {
         self.extra.location(context, d)
     }
 
+    pub fn build<'c>(
+        self,
+        context: &'c Context,
+        d: &mut Diagnostics,
+        cfg: &mut CFG<'c, E>,
+        stack: &mut Vec<NodeIndex>,
+        g: &mut CFGGraph<'c>,
+    ) -> Result<AstNode<E>> {
+        let location = self.location(context, d);
+        let extra = self.extra.clone();
+        match self.node {
+            Ast::Sequence(exprs) => {
+                let mut out = vec![];
+                for expr in exprs {
+                    for e in expr.to_vec() {
+                        out.push(e.build(context, d, cfg, stack, g)?);
+                    }
+                }
+                Ok(AstNode::new(Ast::Sequence(out), extra))
+            }
+            //Ast::Return(maybe_expr) => {
+            //}
+            _ => unimplemented!(),
+        }
+    }
+
     pub fn lower<'c>(
         self,
         context: &'c Context,
@@ -563,6 +589,7 @@ impl<E: Extra> AstNode<E> {
                 }
                 Ok(out.last().cloned().unwrap())
             }
+
             Ast::Return(maybe_expr) => {
                 let current_block = stack.last().unwrap().clone();
                 if let Some(expr) = maybe_expr {
@@ -593,56 +620,41 @@ impl<E: Extra> AstNode<E> {
 
             Ast::Identifier(name) => {
                 let current_block = stack.last().unwrap().clone();
-                match name.as_str() {
-                    "True" => {
-                        let op = op::build_bool_op(context, true, location);
-                        let current = g.node_weight_mut(current_block).unwrap();
-                        let index = current.push(op);
-                        cfg.set_type(index, AstType::Bool);
-                        Ok(index)
-                    }
-                    "False" => {
-                        let op = op::build_bool_op(context, false, location);
-                        let current = g.node_weight_mut(current_block).unwrap();
-                        let index = current.push(op);
-                        cfg.set_type(index, AstType::Bool);
-                        Ok(index)
-                    }
-                    _ => {
-                        if let Some(sym_index) = cfg.name_in_scope(current_block, &name, g) {
-                            println!("lookup identifier: {}, {:?}", name, sym_index);
-                            if cfg.block_is_static(sym_index.block()) {
-                                let ast_ty = cfg.lookup_type(sym_index).unwrap();
-                                if let AstType::Ptr(ty) = &ast_ty {
-                                    let lower_ty = op::from_type(context, ty);
-                                    let memref_ty = MemRefType::new(lower_ty, &[], None, None);
-                                    let static_name =
-                                        cfg.static_names.get(&sym_index).cloned().unwrap_or(name);
-                                    let op = memref::get_global(
-                                        context,
-                                        &static_name,
-                                        memref_ty,
-                                        location,
-                                    );
-                                    let current = g.node_weight_mut(current_block).unwrap();
-                                    let index = current.push(op);
-                                    cfg.set_type(index, ast_ty);
-                                    return Ok(index);
-                                } else {
-                                    //unreachable!("Identifier of static variable must be pointer");
-                                    d.push_diagnostic(
-                                        self.extra
-                                            .error(&format!("Expected pointer: {:?}", &ast_ty)),
-                                    );
-                                    return Err(Error::new(ParseError::Invalid));
-                                }
+                if let Some((op, ty)) = op::build_reserved(context, &name, location) {
+                    let current = g.node_weight_mut(current_block).unwrap();
+                    let index = current.push(op);
+                    cfg.set_type(index, ty);
+                    Ok(index)
+                } else {
+                    if let Some(sym_index) = cfg.name_in_scope(current_block, &name, g) {
+                        println!("lookup identifier: {}, {:?}", name, sym_index);
+                        if cfg.block_is_static(sym_index.block()) {
+                            let ast_ty = cfg.lookup_type(sym_index).unwrap();
+                            if let AstType::Ptr(ty) = &ast_ty {
+                                let lower_ty = op::from_type(context, ty);
+                                let memref_ty = MemRefType::new(lower_ty, &[], None, None);
+                                let static_name =
+                                    cfg.static_names.get(&sym_index).cloned().unwrap_or(name);
+                                let op =
+                                    memref::get_global(context, &static_name, memref_ty, location);
+                                let current = g.node_weight_mut(current_block).unwrap();
+                                let index = current.push(op);
+                                cfg.set_type(index, ast_ty);
+                                return Ok(index);
                             } else {
-                                return Ok(sym_index);
+                                //unreachable!("Identifier of static variable must be pointer");
+                                d.push_diagnostic(
+                                    self.extra
+                                        .error(&format!("Expected pointer: {:?}", &ast_ty)),
+                                );
+                                return Err(Error::new(ParseError::Invalid));
                             }
+                        } else {
+                            return Ok(sym_index);
                         }
-                        d.push_diagnostic(self.extra.error(&format!("Name not found: {:?}", name)));
-                        Err(Error::new(ParseError::Invalid))
                     }
+                    d.push_diagnostic(self.extra.error(&format!("Name not found: {:?}", name)));
+                    Err(Error::new(ParseError::Invalid))
                 }
             }
 
