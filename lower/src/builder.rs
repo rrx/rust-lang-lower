@@ -1,6 +1,7 @@
 use crate::ast::*;
 use crate::intern::{StringKey, StringPool};
 use crate::AstType;
+use crate::Diagnostics;
 use melior::ir;
 use melior::Context;
 use std::collections::VecDeque;
@@ -75,13 +76,13 @@ impl<E: Extra> NodeBuilder<E> {
     pub fn enter(&mut self, file_id: usize, filename: &str) {
         let begin = CodeLocation {
             pos: 0,
-            line: 0,
-            col: 0,
+            //line: 0,
+            //col: 0,
         };
         let end = CodeLocation {
             pos: 0,
-            line: 0,
-            col: 0,
+            //line: 0,
+            //col: 0,
         };
         let span = Span {
             file_id,
@@ -100,9 +101,9 @@ impl<E: Extra> NodeBuilder<E> {
         self.span.as_ref().map(|s| s.file_id).unwrap_or(0)
     }
 
-    pub fn get_location<'c>(&self, context: &'c Context) -> ir::Location<'c> {
+    pub fn get_location<'c>(&self, context: &'c Context, d: &Diagnostics) -> ir::Location<'c> {
         if let Some(span) = self.span.as_ref() {
-            ir::Location::new(context, &self.filename, span.begin.line, span.begin.col)
+            d.location(context, span)
         } else {
             ir::Location::unknown(context)
         }
@@ -110,7 +111,8 @@ impl<E: Extra> NodeBuilder<E> {
 
     pub fn extra(&self) -> E {
         if let Some(span) = self.span.as_ref() {
-            E::span(span.clone())
+            //E::span(span.clone())
+            E::new(0, CodeLocation::default(), CodeLocation::default())
         } else {
             E::new(0, CodeLocation::default(), CodeLocation::default())
         }
@@ -131,13 +133,13 @@ impl<E: Extra> NodeBuilder<E> {
     pub fn extra_unknown(&self) -> E {
         let begin = CodeLocation {
             pos: 0,
-            line: 0,
-            col: 0,
+            //line: 0,
+            //col: 0,
         };
         let end = CodeLocation {
             pos: 0,
-            line: 0,
-            col: 0,
+            //line: 0,
+            //col: 0,
         };
         E::new(self.current_file_id(), begin, end)
     }

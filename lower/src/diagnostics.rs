@@ -51,7 +51,11 @@ impl Diagnostics {
 
     pub fn location<'c>(&self, context: &'c Context, span: &Span) -> ir::Location<'c> {
         if let Ok(name) = self.files.name(span.file_id) {
-            ir::Location::new(context, &name, span.begin.line + 1, span.begin.col + 1)
+            let loc = self
+                .files
+                .location(span.file_id, span.begin.pos as usize)
+                .unwrap();
+            ir::Location::new(context, &name, loc.line_number, loc.column_number)
         } else {
             ir::Location::unknown(context)
         }
