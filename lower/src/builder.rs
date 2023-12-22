@@ -6,6 +6,11 @@ use std::collections::VecDeque;
 
 #[derive(Debug, Clone, Copy)]
 pub struct NodeID(Option<u32>);
+impl NodeID {
+    pub fn is_valid(&self) -> bool {
+        self.0.is_some()
+    }
+}
 
 pub struct NodeBuilder<E> {
     span: Option<Span>,
@@ -392,7 +397,7 @@ impl<E: Extra> AstBlockSorter<E> {
         }
     }
 
-    pub fn close_block(&mut self, b: &mut NodeBuilder<E>) {
+    fn close_block(&mut self, b: &mut NodeBuilder<E>) {
         if self.stack.len() == 0 {
             return;
         }
@@ -408,7 +413,8 @@ impl<E: Extra> AstBlockSorter<E> {
             params: vec![],
             body: seq.into(),
         };
-        self.blocks.push(b.build(Ast::Block(nb), extra.clone()));
+        let ast = b.build(Ast::Block(nb), extra.clone());
+        self.blocks.push(ast);
     }
 }
 
@@ -454,10 +460,9 @@ impl<'c, E: Extra> Definition<E> {
 
             blocks.extend(s.blocks.into_iter().map(|b| b.into()));
 
-            self.body = Some(
-                b.build(Ast::Sequence(blocks.into_iter().collect()), extra.clone())
-                    .into(),
-            );
+            let mut body = b.build(Ast::Sequence(blocks.into_iter().collect()), extra.clone());
+            body.analyze(b);
+            self.body = Some(body.into());
         }
         self
     }

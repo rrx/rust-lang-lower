@@ -82,7 +82,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             println!("Errors in parsing");
             std::process::exit(1);
         }
-        let ast = result?;
+        let mut ast = result?;
+        ast.preprocess(&mut cfg, &mut d, &mut b);
+        ast.analyze(&mut b);
 
         let mut stack = vec![cfg.root()];
         let r = ast.lower(&context, &mut d, &mut cfg, &mut stack, &mut g, &mut b);

@@ -571,36 +571,7 @@ pub(crate) mod tests {
     use super::*;
     use test_log::test;
 
-    /*
     fn run_test(filename: &str, expected: i32) {
-        let context = lower::default_context();
-        let mut lower = lower::lower::Lower::new(&context);
-        let mut d = Diagnostics::new();
-        let file_id = d.add_source(
-            filename.to_string(),
-            std::fs::read_to_string(filename).unwrap(),
-        );
-        let b = NodeBuilder::new(file_id, filename);
-        // parse
-        let mut parser = Parser::new();
-        let ast: AstNode<ast::SimpleExtra> = parser
-            .parse(Path::new(filename), None, file_id, &mut d)
-            .unwrap();
-
-        // lower
-        let mut env = lower::Environment::default();
-
-        // run
-        assert_eq!(
-            expected,
-            lower
-                .run_ast(ast, "../target/debug", &mut env, &mut d, &b)
-                .unwrap()
-        );
-    }
-    */
-
-    fn run_test2(filename: &str, expected: i32) {
         use lower::ast::SimpleExtra;
         use lower::cfg::*;
         use lower::{Location, Module};
@@ -617,9 +588,12 @@ pub(crate) mod tests {
 
         // parse
         let mut parser = Parser::new();
-        let ast: AstNode<ast::SimpleExtra> = parser
+        let mut ast: AstNode<ast::SimpleExtra> = parser
             .parse(Path::new(filename), None, file_id, &mut d)
             .unwrap();
+
+        ast.preprocess(&mut cfg, &mut d, &mut b);
+        ast.analyze(&mut b);
 
         println!("ast: {:#?}", ast);
         let mut stack = vec![cfg.root()];
@@ -636,31 +610,26 @@ pub(crate) mod tests {
 
     #[test]
     fn test_global() {
-        //run_test("../tests/test_global.star", 0);
-        run_test2("../tests/test_global.star", 0);
+        run_test("../tests/test_global.star", 0);
     }
 
     #[test]
     fn test_static() {
-        //run_test("../tests/test_static.star", 0);
-        run_test2("../tests/test_static.star", 0);
+        run_test("../tests/test_static.star", 0);
     }
 
     #[test]
     fn test_cond() {
-        //run_test("../tests/test_cond.star", 0);
-        run_test2("../tests/test_cond.star", 0);
+        run_test("../tests/test_cond.star", 0);
     }
 
     #[test]
     fn test_float() {
-        //run_test("../tests/test_float.star", 0);
-        run_test2("../tests/test_float.star", 0);
+        run_test("../tests/test_float.star", 0);
     }
 
     #[test]
     fn test_recursive() {
-        //run_test("../tests/test_recursive.star", 0);
-        run_test2("../tests/test_recursive.star", 0);
+        run_test("../tests/test_recursive.star", 0);
     }
 }

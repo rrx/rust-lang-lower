@@ -200,6 +200,7 @@ pub enum Ast<E> {
     Continue(String),
     Goto(String),
     Label(String),
+    Noop,
     Error,
 }
 
@@ -421,8 +422,13 @@ impl<E> AstNode<E> {
             | Ast::Loop(_, a) => {
                 values.push(a);
             }
-            Ast::Call(f, _args, _ty) => {
+            Ast::Call(f, args, _ty) => {
                 values.push(f);
+                for a in args {
+                    if let Argument::Positional(expr) = a {
+                        values.push(expr);
+                    }
+                }
             }
             Ast::Global(_, body) => {
                 values.push(body);
@@ -441,6 +447,13 @@ impl<E> AstNode<E> {
             }
             Ast::Block(ref mut nb) | Ast::Module(ref mut nb) => {
                 values.push(&mut nb.body);
+            }
+            Ast::Builtin(_, args) => {
+                for a in args {
+                    if let Argument::Positional(expr) = a {
+                        values.push(expr);
+                    }
+                }
             }
             _ => (),
         }

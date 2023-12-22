@@ -591,10 +591,45 @@ impl<E: Extra> AstNode<E> {
         }
     }
 
+    pub fn preprocess<'c>(
+        &mut self,
+        cfg: &mut CFG<'c, E>,
+        d: &mut Diagnostics,
+        b: &mut NodeBuilder<E>,
+    ) {
+        match &mut self.node {
+            Ast::Builtin(bi, ref mut args) => {
+                let arity = bi.arity();
+                assert_eq!(arity, args.len());
+                match bi {
+                    Builtin::Import => {
+                        let arg = args.pop().unwrap();
+                        if let Argument::Positional(expr) = arg {
+                            if let Some(s) = expr.try_string() {
+                                cfg.shared.insert(s);
+                            } else {
+                                d.push_diagnostic(expr.extra.error("Expected string"));
+                            }
+                        } else {
+                            unimplemented!()
+                        }
+                        // replace with noop
+                        self.node = Ast::Noop;
+                    }
+                    _ => (),
+                }
+            }
+            _ => (),
+        }
+        for child in self.children_mut() {
+            child.preprocess(cfg, d, b);
+        }
+    }
+
     pub fn analyze<'c>(&mut self, b: &mut NodeBuilder<E>) {
         b.identify_node(self);
         for child in self.children_mut() {
-            b.identify_node(child);
+            child.analyze(b);
         }
     }
 
@@ -607,8 +642,20 @@ impl<E: Extra> AstNode<E> {
         g: &mut CFGGraph<'c>,
         b: &mut NodeBuilder<E>,
     ) -> Result<SymIndex> {
+        if !self.node_id.is_valid() {
+            d.push_diagnostic(self.extra.error(&format!("Invalid NodeID: {:#?}", self)));
+            return Err(Error::new(ParseError::Invalid));
+        }
+
         let location = self.location(context, d);
         match self.node {
+            Ast::Noop => {
+                let current_block = stack.last().unwrap().clone();
+                let op = op::build_bool_op(context, false, location);
+                let current = g.node_weight_mut(current_block).unwrap();
+                Ok(current.push(op))
+            }
+
             Ast::Sequence(exprs) => {
                 let mut out = vec![];
                 for expr in exprs {
@@ -1035,22 +1082,7 @@ impl<E: Extra> AstNode<E> {
                             }
                         }
                     }
-                    Builtin::Import => {
-                        let arg = args.pop().unwrap();
-                        if let Argument::Positional(expr) = arg {
-                            if let Some(s) = expr.try_string() {
-                                cfg.shared.insert(s);
-                            } else {
-                                d.push_diagnostic(expr.extra.error("Expected string"));
-                            }
-                        } else {
-                            unimplemented!()
-                        }
-                        // do nothing
-                        let op = op::build_bool_op(context, true, location);
-                        let current = g.node_weight_mut(current_block).unwrap();
-                        Ok(current.push(op))
-                    } //_ => unimplemented!("{:?}", b),
+                    _ => unreachable!("{:?}", bi),
                 }
             }
 
@@ -1434,8 +1466,10 @@ mod tests {
         let file_id = d.add_source("test.py".into(), "test".into());
         let mut b = NodeBuilder::new();
         b.enter(file_id, "type.py");
-        let ast = gen_block(&b);
+        let mut ast = gen_block(&b);
         let mut stack = vec![cfg.root];
+        ast.preprocess(&mut cfg, &mut d, &mut b);
+        ast.analyze(&mut b);
         let r = ast.lower(&context, &mut d, &mut cfg, &mut stack, &mut g, &mut b);
         assert_eq!(1, stack.len());
         d.dump();
@@ -1460,8 +1494,10 @@ mod tests {
         let mut b = NodeBuilder::new();
         b.enter(file_id, "type.py");
 
-        let ast = gen_while(&b);
+        let mut ast = gen_while(&b);
         let mut stack = vec![cfg.root];
+        ast.preprocess(&mut cfg, &mut d, &mut b);
+        ast.analyze(&mut b);
         let r = ast.lower(&context, &mut d, &mut cfg, &mut stack, &mut g, &mut b);
         d.dump();
         assert!(!d.has_errors);
