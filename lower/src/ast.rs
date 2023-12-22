@@ -1,7 +1,5 @@
 use crate::Diagnostics;
-//use anyhow::Error;
-//use anyhow::Result;
-use crate::AstType;
+use crate::{AstType, NodeID};
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use melior::ir;
 use melior::Context;
@@ -209,7 +207,7 @@ impl<E: Extra> Ast<E> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct CodeLocation {
     pub pos: u32,
     pub line: usize,
@@ -292,6 +290,7 @@ pub struct Span {
 
 #[derive(Debug)]
 pub struct AstNode<E> {
+    pub node_id: NodeID,
     pub node: Ast<E>,
     pub extra: E,
 }
@@ -301,9 +300,9 @@ impl<E> AstNode<E> {
         self
     }
 
-    pub fn new(node: Ast<E>, extra: E) -> Self {
-        Self { node, extra }
-    }
+    //pub fn new(node: Ast<E>, extra: E) -> Self {
+    //Self { node, extra }
+    //}
 
     pub fn try_string(&self) -> Option<String> {
         if let Ast::Literal(Literal::String(s)) = &self.node {

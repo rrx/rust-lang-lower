@@ -4,14 +4,34 @@ use melior::ir;
 use melior::Context;
 use std::collections::VecDeque;
 
+#[derive(Debug, Clone, Copy)]
+pub struct NodeID(Option<u32>);
+
 pub struct NodeBuilder<E> {
-    span: Span,
+    span: Option<Span>,
     filename: String,
+    current_node_id: u32,
     _e: std::marker::PhantomData<E>,
 }
 
 impl<E: Extra> NodeBuilder<E> {
-    pub fn new(file_id: usize, filename: &str) -> Self {
+    pub fn new() -> Self {
+        let filename = "";
+        Self {
+            span: None,
+            filename: filename.to_string(),
+            current_node_id: 0,
+            _e: std::marker::PhantomData::default(),
+        }
+    }
+
+    fn fresh_node_id(&mut self) -> NodeID {
+        let node_id = NodeID(Some(self.current_node_id));
+        self.current_node_id += 1;
+        node_id
+    }
+
+    pub fn enter(&mut self, file_id: usize, filename: &str) {
         let begin = CodeLocation {
             pos: 0,
             line: 0,
@@ -27,43 +47,55 @@ impl<E: Extra> NodeBuilder<E> {
             begin,
             end,
         };
-        Self {
-            span,
-            filename: filename.to_string(),
-            _e: std::marker::PhantomData::default(),
-        }
+        self.span = Some(span);
+        self.filename = filename.to_string();
     }
 
+    /*
     pub fn with_span(span: Span, filename: &str) -> Self {
         Self {
-            span,
+            span: Some(span),
             filename: filename.to_string(),
+            current_node_id: 0,
             _e: std::marker::PhantomData::default(),
         }
     }
+    */
 
     pub fn with_loc(&mut self, span: Span) {
-        self.span = span;
+        self.span = Some(span);
     }
 
     pub fn current_file_id(&self) -> usize {
-        self.span.file_id
+        self.span.as_ref().map(|s| s.file_id).unwrap_or(0)
     }
 
     pub fn get_location<'c>(&self, context: &'c Context) -> ir::Location<'c> {
-        ir::Location::new(
-            context,
-            &self.filename,
-            self.span.begin.line,
-            self.span.begin.col,
-        )
+        if let Some(span) = self.span.as_ref() {
+            ir::Location::new(context, &self.filename, span.begin.line, span.begin.col)
+        } else {
+            ir::Location::unknown(context)
+        }
+    }
+
+    pub fn extra(&self) -> E {
+        if let Some(span) = self.span.as_ref() {
+            E::span(span.clone())
+        } else {
+            E::new(0, CodeLocation::default(), CodeLocation::default())
+        }
+    }
+
+    pub fn build(&self, node: Ast<E>, extra: E) -> AstNode<E> {
+        AstNode {
+            node,
+            extra,
+            node_id: NodeID(None),
+        }
     }
 
     pub fn node(&self, ast: Ast<E>) -> AstNode<E> {
-        AstNode {
-            node: ast,
-            extra: E::span(self.span.clone()),
-        }
+        self.build(ast, self.extra())
     }
 
     pub fn extra_unknown(&self) -> E {
@@ -81,10 +113,7 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn error(&self) -> AstNode<E> {
-        AstNode {
-            node: Ast::Error,
-            extra: self.extra_unknown(),
-        }
+        self.node(Ast::Error)
     }
 
     pub fn definition(
@@ -112,10 +141,9 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn import_prelude(&self) -> AstNode<E> {
-        self.node(Ast::Builtin(
-            Builtin::Import,
-            vec![self.arg(self.string("prelude"))],
-        ))
+        let s = self.string("prelude");
+        let arg = self.arg(s);
+        self.node(Ast::Builtin(Builtin::Import, vec![arg]))
     }
 
     pub fn prelude(&self) -> Vec<AstNode<E>> {
@@ -142,7 +170,7 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn binop(&self, op: BinaryOperation, a: AstNode<E>, b: AstNode<E>) -> AstNode<E> {
-        let op_node = BinOpNode::new(op, E::span(self.span.clone()));
+        let op_node = BinOpNode::new(op, self.extra());
         let ast = Ast::BinaryOp(op_node, a.into(), b.into());
         self.node(ast)
     }
@@ -176,10 +204,7 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn ident(&self, name: &str) -> AstNode<E> {
-        AstNode {
-            extra: self.extra_unknown(),
-            node: Ast::Identifier(name.to_string()),
-        }
+        self.build(Ast::Identifier(name.to_string()), self.extra_unknown())
     }
 
     pub fn deref_offset(&self, value: AstNode<E>, offset: usize) -> AstNode<E> {
@@ -187,17 +212,13 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn global(&self, name: &str, value: AstNode<E>) -> AstNode<E> {
-        AstNode {
-            extra: value.extra.clone(),
-            node: Ast::Global(name.to_string(), value.into()),
-        }
+        let extra = value.extra.clone();
+        self.build(Ast::Global(name.to_string(), value.into()), extra)
     }
 
     pub fn test(&self, condition: AstNode<E>, body: AstNode<E>) -> AstNode<E> {
-        AstNode {
-            extra: body.extra.clone(),
-            node: Ast::Test(condition.into(), body.into()),
-        }
+        let extra = body.extra.clone();
+        self.build(Ast::Test(condition.into(), body.into()), extra)
     }
 
     pub fn while_loop(&self, condition: AstNode<E>, body: AstNode<E>) -> AstNode<E> {
@@ -215,7 +236,7 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn ret(&self, node: Option<AstNode<E>>) -> AstNode<E> {
-        AstNode::new(Ast::Return(node.map(|n| n.into())), self.extra_unknown())
+        self.build(Ast::Return(node.map(|n| n.into())), self.extra_unknown())
     }
 
     pub fn arg(&self, node: AstNode<E>) -> Argument<E> {
@@ -223,15 +244,13 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn apply(&self, name: &str, args: Vec<Argument<E>>, ty: AstType) -> AstNode<E> {
-        AstNode::new(
-            Ast::Call(self.ident(name).into(), args, ty),
-            self.extra_unknown(),
-        )
+        let ident = self.ident(name);
+        self.build(Ast::Call(ident.into(), args, ty), self.extra_unknown())
     }
 
     pub fn call(&self, f: AstNode<E>, args: Vec<Argument<E>>, ty: AstType) -> AstNode<E> {
         let extra = f.extra.clone();
-        AstNode::new(Ast::Call(f.into(), args, ty), extra)
+        self.build(Ast::Call(f.into(), args, ty), extra)
     }
 
     pub fn main(&self, body: AstNode<E>) -> AstNode<E> {
@@ -240,7 +259,7 @@ impl<E: Extra> NodeBuilder<E> {
 
     pub fn mutate(&self, lhs: AstNode<E>, rhs: AstNode<E>) -> AstNode<E> {
         let extra = lhs.extra.clone();
-        AstNode::new(Ast::Mutate(lhs.into(), rhs.into()), extra)
+        self.build(Ast::Mutate(lhs.into(), rhs.into()), extra)
     }
 
     pub fn assign(&self, name: &str, rhs: AstNode<E>) -> AstNode<E> {
@@ -271,10 +290,7 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn goto(&self, name: &str) -> AstNode<E> {
-        AstNode {
-            node: Ast::Goto(name.to_string()),
-            extra: self.extra_unknown(),
-        }
+        self.build(Ast::Goto(name.to_string()), self.extra_unknown())
     }
 
     pub fn param(&self, name: &str, ty: AstType) -> ParameterNode<E> {
@@ -306,10 +322,7 @@ impl<E: Extra> NodeBuilder<E> {
             params,
             body: body.into(),
         };
-        AstNode {
-            node: Ast::Block(nb),
-            extra,
-        }
+        self.build(Ast::Block(nb), extra)
     }
 }
 
@@ -324,14 +337,19 @@ impl<E: Extra> AstBlockSorter<E> {
             blocks: vec![],
         }
     }
-    pub fn sort_children(&mut self, ast: AstNode<E>, entry_params: &[ParameterNode<E>]) {
+    pub fn sort_children(
+        &mut self,
+        ast: AstNode<E>,
+        entry_params: &[ParameterNode<E>],
+        b: &mut NodeBuilder<E>,
+    ) {
         match ast.node {
             Ast::Sequence(exprs) => {
                 for e in exprs {
                     if self.blocks.len() == 0 {
-                        self.sort_children(e, entry_params);
+                        self.sort_children(e, entry_params, b);
                     } else {
-                        self.sort_children(e, &[]);
+                        self.sort_children(e, &[], b);
                     }
                 }
             }
@@ -344,10 +362,10 @@ impl<E: Extra> AstBlockSorter<E> {
             }
             Ast::Goto(_) => {
                 self.stack.push(ast);
-                self.close_block();
+                self.close_block(b);
             }
             Ast::Label(_) => {
-                self.close_block();
+                self.close_block(b);
                 self.stack.push(ast);
             }
             _ => {
@@ -356,7 +374,7 @@ impl<E: Extra> AstBlockSorter<E> {
         }
     }
 
-    pub fn close_block(&mut self) {
+    pub fn close_block(&mut self, b: &mut NodeBuilder<E>) {
         if self.stack.len() == 0 {
             return;
         }
@@ -366,36 +384,30 @@ impl<E: Extra> AstBlockSorter<E> {
         let offset = self.blocks.len();
 
         let name = format!("_block{}", offset);
-        let seq = AstNode {
-            node: Ast::Sequence(self.stack.drain(..).collect()),
-            extra: extra.clone(),
-        };
+        let seq = b.build(Ast::Sequence(self.stack.drain(..).collect()), extra.clone());
         let nb = NodeBlock {
             name,
             params: vec![],
             body: seq.into(),
         };
-        self.blocks.push(AstNode {
-            node: Ast::Block(nb),
-            extra: extra.clone(),
-        });
+        self.blocks.push(b.build(Ast::Block(nb), extra.clone()));
     }
 }
 
 impl<'c, E: Extra> Definition<E> {
-    pub fn normalize(mut self) -> Self {
+    pub fn normalize(mut self, b: &mut NodeBuilder<E>) -> Self {
         // ensure that the function body is a sequence of named blocks
         if let Some(body) = self.body {
             let extra = body.extra.clone();
             // sort body
             let mut s = crate::builder::AstBlockSorter::new();
-            s.sort_children(*body, &self.params);
+            s.sort_children(*body, &self.params, b);
 
             let mut blocks = VecDeque::new();
 
             // initial nodes form the entry block
             if s.stack.len() > 0 {
-                let seq = AstNode::new(Ast::Sequence(s.stack), extra.clone());
+                let seq = b.build(Ast::Sequence(s.stack), extra.clone());
                 // TODO: check that function args match the first block args
                 let params = self
                     .params
@@ -418,14 +430,15 @@ impl<'c, E: Extra> Definition<E> {
                     params,
                     body: seq.into(),
                 };
-                let node = AstNode::new(Ast::Block(nb), extra.clone());
+                let node = b.build(Ast::Block(nb), extra.clone());
                 blocks.push_back(node.into());
             }
 
             blocks.extend(s.blocks.into_iter().map(|b| b.into()));
 
             self.body = Some(
-                AstNode::new(Ast::Sequence(blocks.into_iter().collect()), extra.clone()).into(),
+                b.build(Ast::Sequence(blocks.into_iter().collect()), extra.clone())
+                    .into(),
             );
         }
         self

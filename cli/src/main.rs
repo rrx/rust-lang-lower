@@ -10,7 +10,7 @@ use simple_logger::{set_up_color_terminal, SimpleLogger};
 use lower::ast::SimpleExtra;
 use lower::cfg::{CFGGraph, CFG};
 use lower::compile::default_context;
-use lower::Diagnostics;
+use lower::{Diagnostics, NodeBuilder};
 use parse::starlark::Parser;
 
 #[derive(FromArgs, Debug)]
@@ -71,7 +71,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         let filename = path.to_str().unwrap().to_string();
         let file_id = d.add_source(filename.clone(), std::fs::read_to_string(path)?);
 
-        //let b: NodeBuilder<SimpleExtra> = NodeBuilder::new(file_id, &filename);
+        let mut b: NodeBuilder<SimpleExtra> = NodeBuilder::new();
+        b.enter(file_id, &filename);
 
         let result = parser.parse(&path, None, file_id, &mut d);
         if config.verbose {
@@ -84,7 +85,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let ast = result?;
 
         let mut stack = vec![cfg.root()];
-        let r = ast.lower(&context, &mut d, &mut cfg, &mut stack, &mut g);
+        let r = ast.lower(&context, &mut d, &mut cfg, &mut stack, &mut g, &mut b);
         assert_eq!(1, stack.len());
         if config.verbose {
             d.dump();

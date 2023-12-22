@@ -4,7 +4,7 @@ use crate::ast::{
 use crate::compile::exec_main;
 use crate::default_pass_manager;
 use crate::op;
-use crate::{AstType, Extra};
+use crate::{AstType, Extra, NodeBuilder};
 use crate::{Diagnostics, ParseError};
 use anyhow::Error;
 use anyhow::Result;
@@ -552,6 +552,7 @@ impl<E: Extra> AstNode<E> {
         cfg: &mut CFG<'c, E>,
         stack: &mut Vec<NodeIndex>,
         g: &mut CFGGraph<'c>,
+        b: &mut NodeBuilder<E>,
     ) -> Result<AstNode<E>> {
         let location = self.location(context, d);
         let extra = self.extra.clone();
@@ -560,11 +561,59 @@ impl<E: Extra> AstNode<E> {
                 let mut out = vec![];
                 for expr in exprs {
                     for e in expr.to_vec() {
-                        out.push(e.build(context, d, cfg, stack, g)?);
+                        out.push(e.build(context, d, cfg, stack, g, b)?);
                     }
                 }
-                Ok(AstNode::new(Ast::Sequence(out), extra))
+                Ok(b.build(Ast::Sequence(out), extra))
             }
+
+            /*
+            Ast::Assign(target, expr) => {
+                let current_block = stack.last().unwrap().clone();
+                let sym_index = match target {
+                    AssignTarget::Alloca(name) => {
+                        log::debug!("assign alloca: {}", name);
+                        let ty = IntegerType::new(context, 64);
+                        let memref_ty = MemRefType::new(ty.into(), &[], None, None);
+                        let op = memref::alloca(context, memref_ty, &[], &[], None, location);
+                        let rhs_index = expr.lower(context, d, cfg, stack, g)?;
+                        let current = g.node_weight_mut(current_block).unwrap();
+
+                        // name the pointer
+                        let ptr_index = current.push_with_name(op, &name);
+                        let ast_ty = cfg.lookup_type(rhs_index).unwrap().to_ptr();
+                        //let ptr_ty = AstType::Ptr(ast_ty.into());
+                        cfg.set_type(ptr_index, ast_ty);
+
+                        let r_value = current.value0(rhs_index).unwrap();
+                        let r_addr = current.value0(ptr_index).unwrap();
+
+                        // emit store
+                        let op = memref::store(r_value, r_addr, &[], location);
+                        let _index = current.push(op);
+                        ptr_index
+                    }
+                    AssignTarget::Identifier(name) => {
+                        log::debug!("assign local: {}", name);
+                        let current_block = stack.last().unwrap().clone();
+                        if cfg.block_is_static(current_block) {
+                            d.push_diagnostic(
+                                self.extra
+                                    .error(&format!("Assign static not possible: {:?}", name)),
+                            );
+                            return Err(Error::new(ParseError::Invalid));
+                        }
+
+                        let index = expr.lower(context, d, cfg, stack, g)?;
+                        let current = g.node_weight_mut(index.block()).unwrap();
+                        current.add_symbol(&name, index);
+                        //assert!(cfg.lookup_type(index).is_some());
+                        index
+                    }
+                };
+                Ok(sym_index)
+            }
+            */
             //Ast::Return(maybe_expr) => {
             //}
             _ => unimplemented!(),
@@ -578,13 +627,14 @@ impl<E: Extra> AstNode<E> {
         cfg: &mut CFG<'c, E>,
         stack: &mut Vec<NodeIndex>,
         g: &mut CFGGraph<'c>,
+        b: &mut NodeBuilder<E>,
     ) -> Result<SymIndex> {
         let location = self.location(context, d);
         match self.node {
             Ast::Sequence(exprs) => {
                 let mut out = vec![];
                 for expr in exprs {
-                    let index = expr.lower(context, d, cfg, stack, g)?;
+                    let index = expr.lower(context, d, cfg, stack, g, b)?;
                     out.push(index);
                 }
                 Ok(out.last().cloned().unwrap())
@@ -593,7 +643,7 @@ impl<E: Extra> AstNode<E> {
             Ast::Return(maybe_expr) => {
                 let current_block = stack.last().unwrap().clone();
                 if let Some(expr) = maybe_expr {
-                    let index = expr.lower(context, d, cfg, stack, g)?;
+                    let index = expr.lower(context, d, cfg, stack, g, b)?;
                     let current = g.node_weight_mut(current_block).unwrap();
                     let rs = current.values(index);
                     Ok(current.push(func::r#return(&rs, location)))
@@ -660,7 +710,9 @@ impl<E: Extra> AstNode<E> {
 
             Ast::Mutate(lhs, rhs) => {
                 match lhs.node {
-                    Ast::Identifier(ident) => emit_mutate(context, &ident, *rhs, d, cfg, stack, g),
+                    Ast::Identifier(ident) => {
+                        emit_mutate(context, &ident, *rhs, d, cfg, stack, g, b)
+                    }
                     //Ast::Deref(expr, target) => {
                     //let index = emit_deref(context, *expr, target, d, cfg, stack, g)?;
                     //emit_mutate(context, &ident, *rhs, d, cfg, stack, g)
@@ -677,7 +729,7 @@ impl<E: Extra> AstNode<E> {
                         let ty = IntegerType::new(context, 64);
                         let memref_ty = MemRefType::new(ty.into(), &[], None, None);
                         let op = memref::alloca(context, memref_ty, &[], &[], None, location);
-                        let rhs_index = expr.lower(context, d, cfg, stack, g)?;
+                        let rhs_index = expr.lower(context, d, cfg, stack, g, b)?;
                         let current = g.node_weight_mut(current_block).unwrap();
 
                         // name the pointer
@@ -705,7 +757,7 @@ impl<E: Extra> AstNode<E> {
                             return Err(Error::new(ParseError::Invalid));
                         }
 
-                        let index = expr.lower(context, d, cfg, stack, g)?;
+                        let index = expr.lower(context, d, cfg, stack, g, b)?;
                         let current = g.node_weight_mut(index.block()).unwrap();
                         current.add_symbol(&name, index);
                         //assert!(cfg.lookup_type(index).is_some());
@@ -751,7 +803,7 @@ impl<E: Extra> AstNode<E> {
                     for a in args {
                         match a {
                             Argument::Positional(arg) => {
-                                let index = arg.lower(context, d, cfg, stack, g)?;
+                                let index = arg.lower(context, d, cfg, stack, g, b)?;
                                 indices.push(index);
                             } //_ => unimplemented!("{:?}", a)
                         };
@@ -780,7 +832,7 @@ impl<E: Extra> AstNode<E> {
             }
 
             Ast::Definition(mut def) => {
-                def = def.normalize();
+                def = def.normalize(b);
                 let current_block = stack.last().unwrap().clone();
 
                 assert!(cfg.block_is_static(current_block));
@@ -875,7 +927,7 @@ impl<E: Extra> AstNode<E> {
                     for (index, expr) in exprs {
                         stack.push(index);
                         //cfg.dump_scope(index, g);
-                        if let Ok(_index) = expr.lower(context, d, cfg, stack, g) {
+                        if let Ok(_index) = expr.lower(context, d, cfg, stack, g, b) {
                             stack.pop();
                         } else {
                             stack.pop();
@@ -954,7 +1006,7 @@ impl<E: Extra> AstNode<E> {
                         let arg = args.pop().unwrap();
                         match arg {
                             Argument::Positional(expr) => {
-                                let index = expr.lower(context, d, cfg, stack, g)?;
+                                let index = expr.lower(context, d, cfg, stack, g, b)?;
                                 let msg = format!("assert at {}", location);
                                 let current = g.node_weight_mut(current_block).unwrap();
                                 let r = current.value0(index).unwrap();
@@ -968,7 +1020,7 @@ impl<E: Extra> AstNode<E> {
                         match arg {
                             Argument::Positional(expr) => {
                                 // eval expr
-                                let mut index = expr.lower(context, d, cfg, stack, g)?;
+                                let mut index = expr.lower(context, d, cfg, stack, g, b)?;
                                 let ast_ty = cfg.lookup_type(index).unwrap();
 
                                 // deref
@@ -1119,7 +1171,7 @@ impl<E: Extra> AstNode<E> {
                 let then_location = then_expr.location(context, d);
 
                 // condition (outside of blocks)
-                let index_conditions = condition.lower(context, d, cfg, stack, g)?;
+                let index_conditions = condition.lower(context, d, cfg, stack, g, b)?;
                 let current = g.node_weight_mut(current_block).unwrap();
                 let rs = current.values(current.last());
                 // should be bool type
@@ -1147,7 +1199,7 @@ impl<E: Extra> AstNode<E> {
                 };
 
                 stack.push(then_block_index);
-                if let Ok(_index) = then_expr.lower(context, d, cfg, stack, g) {
+                if let Ok(_index) = then_expr.lower(context, d, cfg, stack, g, b) {
                     let data = g.node_weight_mut(then_block_index).unwrap();
                     data.push(scf::r#yield(&[], then_location));
                     stack.pop();
@@ -1161,7 +1213,7 @@ impl<E: Extra> AstNode<E> {
                     let else_location = else_expr.location(context, d);
                     stack.push(*else_block_index);
                     println!("else: {:?}", else_expr.node);
-                    if let Ok(_index) = else_expr.lower(context, d, cfg, stack, g) {
+                    if let Ok(_index) = else_expr.lower(context, d, cfg, stack, g, b) {
                         let data = g.node_weight_mut(*else_block_index).unwrap();
                         data.push(scf::r#yield(&[], else_location));
                         stack.pop();
@@ -1197,13 +1249,13 @@ impl<E: Extra> AstNode<E> {
 
             Ast::Deref(expr, target) => {
                 let extra = expr.extra.clone();
-                let index = expr.lower(context, d, cfg, stack, g)?;
+                let index = expr.lower(context, d, cfg, stack, g, b)?;
                 emit_deref(context, index, &extra, target, d, cfg, stack, g)
             }
 
             Ast::UnaryOp(op, a) => {
                 use crate::ast::UnaryOperation;
-                let index = a.lower(context, d, cfg, stack, g)?;
+                let index = a.lower(context, d, cfg, stack, g, b)?;
                 let current_block = stack.last().unwrap().clone();
                 let current = g.node_weight_mut(current_block).unwrap();
                 let ty = {
@@ -1244,8 +1296,8 @@ impl<E: Extra> AstNode<E> {
                 let fy = format!("y: {:?}", y);
                 let x_extra = x.extra.clone();
                 let y_extra = y.extra.clone();
-                let index_x = x.lower(context, d, cfg, stack, g)?;
-                let index_y = y.lower(context, d, cfg, stack, g)?;
+                let index_x = x.lower(context, d, cfg, stack, g, b)?;
+                let index_y = y.lower(context, d, cfg, stack, g, b)?;
                 //cfg.save_graph("out.dot", g);
                 println!("ix: {:?}, {}", index_x, fx);
                 println!("iy: {:?}, {}", index_y, fy);
@@ -1337,6 +1389,7 @@ pub fn emit_mutate<'a, 'c, E: Extra>(
     cfg: &mut CFG<'c, E>,
     stack: &mut Vec<NodeIndex>,
     g: &mut CFGGraph<'c>,
+    b: &mut NodeBuilder<E>,
 ) -> Result<SymIndex> {
     log::debug!("mutate: {}", name);
     cfg.save_graph("out.dot", g);
@@ -1345,7 +1398,7 @@ pub fn emit_mutate<'a, 'c, E: Extra>(
 
     let index = cfg.name_in_scope(current_block, name, g).unwrap();
     //let name_is_static = cfg.block_is_static(index.block());
-    let value_index = rhs.lower(context, d, cfg, stack, g)?;
+    let value_index = rhs.lower(context, d, cfg, stack, g, b)?;
     let ast_ty = cfg.lookup_type(index).unwrap();
     log::debug!("mutate: {}, {:?}, {:?}", name, ast_ty, value_index);
 
@@ -1419,10 +1472,11 @@ mod tests {
         let mut cfg: CFG<SimpleExtra> = CFG::new(&context, "module", &d, &mut g);
 
         let file_id = d.add_source("test.py".into(), "test".into());
-        let b = NodeBuilder::new(file_id, "type.py");
+        let mut b = NodeBuilder::new();
+        b.enter(file_id, "type.py");
         let ast = gen_block(&b);
         let mut stack = vec![cfg.root];
-        let r = ast.lower(&context, &mut d, &mut cfg, &mut stack, &mut g);
+        let r = ast.lower(&context, &mut d, &mut cfg, &mut stack, &mut g, &mut b);
         assert_eq!(1, stack.len());
         d.dump();
         assert!(!d.has_errors);
@@ -1443,11 +1497,12 @@ mod tests {
         let mut cfg: CFG<SimpleExtra> = CFG::new(&context, "module", &d, &mut g);
 
         let file_id = d.add_source("test.py".into(), "test".into());
-        let b = NodeBuilder::new(file_id, "type.py");
+        let mut b = NodeBuilder::new();
+        b.enter(file_id, "type.py");
 
         let ast = gen_while(&b);
         let mut stack = vec![cfg.root];
-        let r = ast.lower(&context, &mut d, &mut cfg, &mut stack, &mut g);
+        let r = ast.lower(&context, &mut d, &mut cfg, &mut stack, &mut g, &mut b);
         d.dump();
         assert!(!d.has_errors);
         r.unwrap();

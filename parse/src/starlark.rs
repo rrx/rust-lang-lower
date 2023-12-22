@@ -138,6 +138,7 @@ fn from_literal<E: Extra>(
     item: syntax::ast::AstLiteral,
     span: codemap::Span,
     env: &Environment,
+    b: &mut NodeBuilder<E>,
 ) -> ast::AstNode<E> {
     use syntax::ast::AstLiteral;
     let lit = match &item {
@@ -155,10 +156,7 @@ fn from_literal<E: Extra>(
         _ => unimplemented!("{:?}", item),
     };
     let extra = env.extra(span);
-    AstNode {
-        node: Ast::Literal(lit),
-        extra,
-    }
+    b.build(Ast::Literal(lit), extra)
 }
 
 fn from_binop(item: syntax::ast::BinOp) -> ast::BinaryOperation {
@@ -218,7 +216,8 @@ impl<E: Extra> Parser<E> {
         file_id: usize,
         d: &mut Diagnostics,
     ) -> Result<ast::AstNode<E>> {
-        let b = lower::NodeBuilder::new(file_id, path.to_str().unwrap());
+        let mut b = lower::NodeBuilder::new();
+        b.enter(file_id, path.to_str().unwrap());
         let dialect = syntax::Dialect::Extended;
         let m = match content {
             Some(content) => {
@@ -229,7 +228,7 @@ impl<E: Extra> Parser<E> {
         let (codemap, stmt, _dialect, _typecheck) = m.into_parts();
         let mut env = Environment::new(&codemap, file_id);
         let mut seq = b.prelude();
-        let ast: ast::AstNode<E> = self.from_stmt(stmt, &mut env, d, &b)?;
+        let ast: ast::AstNode<E> = self.from_stmt(stmt, &mut env, d, &mut b)?;
         let extra = ast.extra.clone();
         seq.push(ast);
         Ok(b.seq(seq).set_extra(extra))
@@ -240,7 +239,7 @@ impl<E: Extra> Parser<E> {
         item: syntax::ast::AstParameterP<P>,
         env: &mut Environment<'a>,
         d: &mut Diagnostics,
-        b: &NodeBuilder<E>,
+        b: &mut NodeBuilder<E>,
     ) -> ast::ParameterNode<E> {
         use syntax::ast::ParameterP;
 
@@ -288,7 +287,7 @@ impl<E: Extra> Parser<E> {
         item: syntax::ast::AstStmtP<P>,
         env: &mut Environment<'a>,
         d: &mut Diagnostics,
-        b: &NodeBuilder<E>,
+        b: &mut NodeBuilder<E>,
     ) -> Result<ast::AstNode<E>> {
         use syntax::ast::StmtP;
 
@@ -301,7 +300,7 @@ impl<E: Extra> Parser<E> {
 
                 let extra = env.extra(item.span);
                 let ast = Ast::Sequence(exprs);
-                Ok(AstNode { node: ast, extra })
+                Ok(b.build(ast, extra))
             }
 
             StmtP::Def(def) => {
@@ -339,14 +338,14 @@ impl<E: Extra> Parser<E> {
 
                 env.define(&name);
                 let extra = env.extra(item.span);
-                Ok(AstNode::new(def_ast, extra))
+                Ok(b.build(def_ast, extra))
             }
 
             StmtP::If(expr, truestmt) => {
                 let condition = self.from_expr(expr, env, d, b)?;
                 let truestmt = self.from_stmt(*truestmt, env, d, b)?;
                 let extra = env.extra(item.span);
-                Ok(AstNode::new(
+                Ok(b.build(
                     Ast::Conditional(condition.into(), truestmt.into(), None),
                     extra,
                 ))
@@ -357,7 +356,7 @@ impl<E: Extra> Parser<E> {
                 let truestmt = self.from_stmt(options.0, env, d, b)?;
                 let elsestmt = self.from_stmt(options.1, env, d, b)?;
                 let extra = env.extra(item.span);
-                Ok(AstNode::new(
+                Ok(b.build(
                     Ast::Conditional(condition.into(), truestmt.into(), Some(elsestmt.into())),
                     extra,
                 ))
@@ -366,9 +365,10 @@ impl<E: Extra> Parser<E> {
             StmtP::Return(maybe_expr) => {
                 let extra = env.extra(item.span);
                 Ok(match maybe_expr {
-                    Some(expr) => b
-                        .ret(Some(self.from_expr(expr, env, d, b)?))
-                        .set_extra(extra),
+                    Some(expr) => {
+                        let node = self.from_expr(expr, env, d, b)?;
+                        b.ret(Some(node)).set_extra(extra)
+                    }
                     None => b.ret(None),
                 })
             }
@@ -414,7 +414,8 @@ impl<E: Extra> Parser<E> {
                                 //extra: extra.clone(),
                                 //};
                                 //Ok(b.deref_offset(ast, 0).set_extra(extra))
-                                Ok(b.mutate(b.ident(&name), rhs))
+                                let node = b.ident(&name);
+                                Ok(b.mutate(node, rhs))
                                 //Ok(b.assign(&name, rhs))
                             } else {
                                 //Ok(b.mutate(b.deref_offset(b.ident(&name), 0), rhs))
@@ -447,16 +448,16 @@ impl<E: Extra> Parser<E> {
         item: syntax::ast::AstExprP<P>,
         env: &mut Environment,
         d: &mut Diagnostics,
-        b: &NodeBuilder<E>,
+        b: &mut NodeBuilder<E>,
     ) -> Result<AstNode<E>> {
         use syntax::ast::ExprP;
 
         match item.node {
-            ExprP::Op(lhs, op, rhs) => Ok(b.binop(
-                from_binop(op),
-                self.from_expr(*lhs, env, d, b)?.into(),
-                self.from_expr(*rhs, env, d, b)?.into(),
-            )),
+            ExprP::Op(lhs, op, rhs) => {
+                let node_a = self.from_expr(*lhs, env, d, b)?.into();
+                let node_b = self.from_expr(*rhs, env, d, b)?.into();
+                Ok(b.binop(from_binop(op), node_a, node_b))
+            }
 
             ExprP::Call(expr, expr_args) => {
                 let mut args = vec![];
@@ -470,10 +471,10 @@ impl<E: Extra> Parser<E> {
                             let extra: E = env.extra(item.span);
                             Ok(b.apply(&ident.node.ident, args, AstType::Int)
                                 .set_extra(extra))
-                        } else if let Some(b) = ast::Builtin::from_name(&ident.node.ident) {
+                        } else if let Some(bi) = ast::Builtin::from_name(&ident.node.ident) {
                             let extra = env.extra(item.span);
-                            assert_eq!(args.len(), b.arity());
-                            Ok(AstNode::new(Ast::Builtin(b, args), extra))
+                            assert_eq!(args.len(), bi.arity());
+                            Ok(b.build(Ast::Builtin(bi, args), extra))
                         } else {
                             d.push_diagnostic(env.error(ident.span, "Not found"));
                             Ok(b.error())
@@ -488,10 +489,10 @@ impl<E: Extra> Parser<E> {
                                     .set_extra(extra))
                             } else if &ident.node.ident == "b" {
                                 // builtin namespace
-                                if let Some(b) = ast::Builtin::from_name(&name.node) {
-                                    assert_eq!(args.len(), b.arity());
+                                if let Some(bi) = ast::Builtin::from_name(&name.node) {
+                                    assert_eq!(args.len(), bi.arity());
                                     let extra = env.extra(item.span);
-                                    Ok(AstNode::new(Ast::Builtin(b, args), extra))
+                                    Ok(b.build(Ast::Builtin(bi, args), extra))
                                 } else {
                                     d.push_diagnostic(env.error(name.span, "Builtin not found"));
                                     Ok(b.error())
@@ -535,7 +536,7 @@ impl<E: Extra> Parser<E> {
                 }
             }
 
-            ExprP::Literal(lit) => Ok(from_literal(lit, item.span, env)),
+            ExprP::Literal(lit) => Ok(from_literal(lit, item.span, env, b)),
 
             ExprP::Minus(expr) => {
                 let extra = env.extra(item.span);
@@ -543,7 +544,7 @@ impl<E: Extra> Parser<E> {
                     ast::UnaryOperation::Minus,
                     self.from_expr(*expr, env, d, b)?.into(),
                 );
-                Ok(AstNode { node: ast, extra })
+                Ok(b.build(ast, extra))
             }
 
             _ => unimplemented!("{:?}", item.node),
@@ -555,7 +556,7 @@ impl<E: Extra> Parser<E> {
         item: syntax::ast::AstArgumentP<P>,
         env: &mut Environment,
         d: &mut Diagnostics,
-        b: &NodeBuilder<E>,
+        b: &mut NodeBuilder<E>,
     ) -> Result<ast::Argument<E>> {
         use syntax::ast::ArgumentP;
         match item.node {
@@ -603,7 +604,7 @@ pub(crate) mod tests {
         use lower::ast::SimpleExtra;
         use lower::cfg::*;
         use lower::{Location, Module};
-
+        let mut b = NodeBuilder::new();
         let context = lower::default_context();
         let mut d = Diagnostics::new();
         let mut module = Module::new(Location::unknown(&context));
@@ -622,7 +623,7 @@ pub(crate) mod tests {
 
         println!("ast: {:#?}", ast);
         let mut stack = vec![cfg.root()];
-        let r = ast.lower(&context, &mut d, &mut cfg, &mut stack, &mut g);
+        let r = ast.lower(&context, &mut d, &mut cfg, &mut stack, &mut g, &mut b);
         cfg.save_graph("out.dot", &g);
         d.dump();
         assert_eq!(1, stack.len());

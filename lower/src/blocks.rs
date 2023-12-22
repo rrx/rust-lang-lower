@@ -213,7 +213,8 @@ mod tests {
     fn test_block1() {
         let mut d = Diagnostics::new();
         let file_id = d.add_source("test.py".into(), "test".into());
-        let b: NodeBuilder<SimpleExtra> = NodeBuilder::new(file_id, "type.py");
+        let mut b: NodeBuilder<SimpleExtra> = NodeBuilder::new();
+        b.enter(file_id, "type.py");
         let context = Context::new();
         let mut g: BlockGraph<SimpleExtra> = BlockGraph::new();
 

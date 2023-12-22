@@ -9,7 +9,7 @@ pub mod op;
 pub mod types;
 
 pub use ast::{AstNode, Extra, SimpleExtra};
-pub use builder::NodeBuilder;
+pub use builder::{NodeBuilder, NodeID};
 pub use compile::{default_context, default_pass_manager};
 pub use diagnostics::{Diagnostics, FileDB, ParseError};
 pub use types::{AstType, TypeUnify};
@@ -24,7 +24,7 @@ pub use melior::{
 pub(crate) mod tests {
     use super::*;
 
-    pub fn gen_test<'c, E: Extra>(b: &NodeBuilder<E>) -> AstNode<E> {
+    pub fn gen_test<'c, E: Extra>(b: &mut NodeBuilder<E>) -> AstNode<E> {
         let mut seq = vec![b.import_prelude()];
         seq.push(b.main(b.seq(vec![
             b.assign("x", b.integer(123)),
