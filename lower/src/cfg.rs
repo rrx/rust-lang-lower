@@ -619,15 +619,15 @@ impl<E: Extra> AstNode<E> {
                 match bi {
                     Builtin::Import => {
                         let arg = args.pop().unwrap();
-                        if let Argument::Positional(expr) = arg {
-                            if let Some(s) = expr.try_string() {
-                                cfg.shared.insert(s);
-                            } else {
-                                d.push_diagnostic(expr.extra.error("Expected string"));
-                            }
+                        let Argument::Positional(expr) = arg;
+                        if let Some(s) = expr.try_string() {
+                            cfg.shared.insert(s);
                         } else {
-                            unimplemented!()
+                            d.push_diagnostic(expr.extra.error("Expected string"));
                         }
+                        //} else {
+                            //unimplemented!()
+                        //}
                         // replace with noop
                         self.node = Ast::Noop;
                     }
