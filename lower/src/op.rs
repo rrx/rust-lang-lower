@@ -6,6 +6,7 @@ use crate::ast::{
     BinaryOperation,
     //Builtin,
 };
+use crate::intern::StringKey;
 use crate::{Ast, AstNode, AstType, Diagnostics, Extra, Literal, ParseError};
 use anyhow::Error;
 use anyhow::Result;
@@ -139,7 +140,7 @@ pub fn build_reserved<'c>(
 
 pub fn emit_static<'c, E: Extra>(
     context: &'c Context,
-    global_name: &str,
+    global_name: String,
     expr: AstNode<E>,
     location: Location<'c>,
 ) -> (Operation<'c>, AstType) {

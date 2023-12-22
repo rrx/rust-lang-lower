@@ -60,7 +60,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut parser: Parser<SimpleExtra> = Parser::new();
     let mut d = Diagnostics::new();
     let mut g = CFGGraph::new();
-    let mut cfg: CFG<SimpleExtra> = CFG::new(&context, "module", &d, &mut g);
+    let mut b: NodeBuilder<SimpleExtra> = NodeBuilder::new();
+    let mut cfg: CFG<SimpleExtra> = CFG::new(&context, b.s("module"), &d, &mut g);
 
     for path in config.inputs {
         //let mut env: lower::Environment<SimpleExtra> = lower::Environment::default();
@@ -70,10 +71,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         let filename = path.to_str().unwrap().to_string();
         let file_id = d.add_source(filename.clone(), std::fs::read_to_string(path)?);
 
-        let mut b: NodeBuilder<SimpleExtra> = NodeBuilder::new();
         b.enter(file_id, &filename);
 
-        let result = parser.parse(&path, None, file_id, &mut d);
+        let result = parser.parse(&path, None, file_id, &mut d, &mut b);
         if config.verbose {
             d.dump();
         }
@@ -92,7 +92,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         r?;
     }
-    cfg.save_graph("out.dot", &g);
+    cfg.save_graph("out.dot", &g, &b);
     if d.has_errors {
         std::process::exit(1);
     }

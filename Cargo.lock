@@ -1111,6 +1111,7 @@ dependencies = [
  "ena",
  "env_logger",
  "im",
+ "indexmap",
  "log",
  "melior",
  "miette",

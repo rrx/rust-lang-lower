@@ -2,6 +2,7 @@ use crate::ast::{ParameterNode, Terminator};
 use crate::op;
 use crate::Diagnostics;
 use crate::{AstNode, Extra};
+use crate::intern::StringKey;
 use melior::{
     ir::{block::BlockArgument, Block, ValueLike},
     Context,
@@ -25,8 +26,8 @@ pub struct BlockGraph<'c, E> {
     blocks: Vec<Block<'c>>,
     params: Vec<Vec<ParameterNode<E>>>,
     ast: Vec<AstNode<E>>,
-    names: HashMap<String, usize>,
-    index: HashMap<Index, String>,
+    names: HashMap<StringKey, usize>,
+    index: HashMap<Index, StringKey>,
     adj: HashMap<Index, HashSet<Index>>,
 }
 

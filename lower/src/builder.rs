@@ -1,4 +1,5 @@
 use crate::ast::*;
+use crate::intern::{StringKey, StringPool};
 use crate::AstType;
 use melior::ir;
 use melior::Context;
@@ -18,6 +19,7 @@ pub struct NodeBuilder<E> {
     current_node_id: u32,
     current_def_id: u32,
     static_count: usize,
+    pub strings: StringPool,
     _e: std::marker::PhantomData<E>,
 }
 
@@ -30,8 +32,13 @@ impl<E: Extra> NodeBuilder<E> {
             current_node_id: 0,
             current_def_id: 0,
             static_count: 0,
+            strings: StringPool::new(),
             _e: std::marker::PhantomData::default(),
         }
+    }
+
+    pub fn s(&mut self, s: &str) -> StringKey {
+        self.strings.intern(s.into())
     }
 
     fn fresh_def_arg(&mut self) -> DefinitionId {
@@ -141,22 +148,22 @@ impl<E: Extra> NodeBuilder<E> {
 
     pub fn definition(
         &self,
-        name: &str,
-        params: &[(&str, AstType)],
+        name: StringKey,
+        params: &[(StringKey, AstType)],
         return_type: AstType,
         body: Option<AstNode<E>>,
     ) -> AstNode<E> {
         let params = params
-            .iter()
+            .into_iter()
             .map(|(name, ty)| ParameterNode {
-                name: name.to_string(),
+                name: *name,
                 ty: ty.clone(),
                 node: Parameter::Normal,
                 extra: self.extra_unknown(),
             })
             .collect();
         self.node(Ast::Definition(Definition {
-            name: name.to_string(),
+            name, //: self.strings.intern(name.to_string()),
             params,
             return_type: return_type.into(),
             body: body.map(|b| b.into()),
@@ -169,10 +176,13 @@ impl<E: Extra> NodeBuilder<E> {
         self.node(Ast::Builtin(Builtin::Import, vec![arg]))
     }
 
-    pub fn prelude(&self) -> Vec<AstNode<E>> {
+    pub fn prelude(&mut self) -> Vec<AstNode<E>> {
+        let a = self.strings.intern("a".into());
+        let print_index = self.strings.intern("print_index".into());
+        let print_float = self.strings.intern("print_float".into());
         vec![
-            self.definition("print_index", &[("a", AstType::Int)], AstType::Unit, None),
-            self.definition("print_float", &[("a", AstType::Float)], AstType::Unit, None),
+            self.definition(print_index, &[(a, AstType::Int)], AstType::Unit, None),
+            self.definition(print_float, &[(a, AstType::Float)], AstType::Unit, None),
         ]
     }
 
@@ -228,21 +238,21 @@ impl<E: Extra> NodeBuilder<E> {
         self.node(Ast::Sequence(nodes))
     }
 
-    pub fn v(&self, name: &str) -> AstNode<E> {
+    pub fn v(&self, name: StringKey) -> AstNode<E> {
         self.ident(name)
     }
 
-    pub fn ident(&self, name: &str) -> AstNode<E> {
-        self.build(Ast::Identifier(name.to_string()), self.extra_unknown())
+    pub fn ident(&self, name: StringKey) -> AstNode<E> {
+        self.build(Ast::Identifier(name), self.extra_unknown())
     }
 
     pub fn deref_offset(&self, value: AstNode<E>, offset: usize) -> AstNode<E> {
         self.node(Ast::Deref(value.into(), DerefTarget::Offset(offset)))
     }
 
-    pub fn global(&self, name: &str, value: AstNode<E>) -> AstNode<E> {
+    pub fn global(&self, name: StringKey, value: AstNode<E>) -> AstNode<E> {
         let extra = value.extra.clone();
-        self.build(Ast::Global(name.to_string(), value.into()), extra)
+        self.build(Ast::Global(name, value.into()), extra)
     }
 
     pub fn test(&self, condition: AstNode<E>, body: AstNode<E>) -> AstNode<E> {
@@ -256,8 +266,8 @@ impl<E: Extra> NodeBuilder<E> {
 
     pub fn func(
         &self,
-        name: &str,
-        params: &[(&str, AstType)],
+        name: StringKey,
+        params: &[(StringKey, AstType)],
         return_type: AstType,
         body: AstNode<E>,
     ) -> AstNode<E> {
@@ -272,7 +282,7 @@ impl<E: Extra> NodeBuilder<E> {
         node.into()
     }
 
-    pub fn apply(&self, name: &str, args: Vec<Argument<E>>, ty: AstType) -> AstNode<E> {
+    pub fn apply(&self, name: StringKey, args: Vec<Argument<E>>, ty: AstType) -> AstNode<E> {
         let ident = self.ident(name);
         self.build(Ast::Call(ident.into(), args, ty), self.extra_unknown())
     }
@@ -282,8 +292,9 @@ impl<E: Extra> NodeBuilder<E> {
         self.build(Ast::Call(f.into(), args, ty), extra)
     }
 
-    pub fn main(&self, body: AstNode<E>) -> AstNode<E> {
-        self.func("main", &[], AstType::Int, body)
+    pub fn main(&mut self, body: AstNode<E>) -> AstNode<E> {
+        let key = self.strings.intern("main".into());
+        self.func(key, &[], AstType::Int, body)
     }
 
     pub fn mutate(&self, lhs: AstNode<E>, rhs: AstNode<E>) -> AstNode<E> {
@@ -291,18 +302,12 @@ impl<E: Extra> NodeBuilder<E> {
         self.build(Ast::Mutate(lhs.into(), rhs.into()), extra)
     }
 
-    pub fn assign(&self, name: &str, rhs: AstNode<E>) -> AstNode<E> {
-        self.node(Ast::Assign(
-            AssignTarget::Identifier(name.to_string()),
-            rhs.into(),
-        ))
+    pub fn assign(&self, name: StringKey, rhs: AstNode<E>) -> AstNode<E> {
+        self.node(Ast::Assign(AssignTarget::Identifier(name), rhs.into()))
     }
 
-    pub fn alloca(&self, name: &str, rhs: AstNode<E>) -> AstNode<E> {
-        self.node(Ast::Assign(
-            AssignTarget::Alloca(name.to_string()),
-            rhs.into(),
-        ))
+    pub fn alloca(&self, name: StringKey, rhs: AstNode<E>) -> AstNode<E> {
+        self.node(Ast::Assign(AssignTarget::Alloca(name), rhs.into()))
     }
 
     pub fn cond(
@@ -318,36 +323,41 @@ impl<E: Extra> NodeBuilder<E> {
         ))
     }
 
-    pub fn goto(&self, name: &str) -> AstNode<E> {
-        self.build(Ast::Goto(name.to_string()), self.extra_unknown())
+    pub fn goto(&self, name: StringKey) -> AstNode<E> {
+        self.build(Ast::Goto(name), self.extra_unknown())
     }
 
-    pub fn param(&self, name: &str, ty: AstType) -> ParameterNode<E> {
+    pub fn param(&self, name: StringKey, ty: AstType) -> ParameterNode<E> {
         ParameterNode {
-            name: name.to_string(),
+            name,
             ty: ty.clone(),
             node: Parameter::Normal,
             extra: self.extra_unknown(),
         }
     }
 
-    pub fn module(&self, name: &str, body: AstNode<E>) -> AstNode<E> {
+    pub fn module(&self, name: StringKey, body: AstNode<E>) -> AstNode<E> {
         self.block(name, &[], body)
     }
 
-    pub fn block(&self, name: &str, params: &[(&str, AstType)], body: AstNode<E>) -> AstNode<E> {
+    pub fn block(
+        &self,
+        name: StringKey,
+        params: &[(StringKey, AstType)],
+        body: AstNode<E>,
+    ) -> AstNode<E> {
         let extra = body.extra.clone();
         let params = params
             .iter()
             .map(|(name, ty)| ParameterNode {
-                name: name.to_string(),
+                name: *name,
                 ty: ty.clone(),
                 node: Parameter::Normal,
                 extra: self.extra_unknown(),
             })
             .collect();
         let nb = NodeBlock {
-            name: name.to_string(),
+            name,
             params,
             body: body.into(),
         };
@@ -412,7 +422,7 @@ impl<E: Extra> AstBlockSorter<E> {
         // end of block
         let offset = self.blocks.len();
 
-        let name = format!("_block{}", offset);
+        let name = b.strings.intern(format!("_block{}", offset));
         let seq = b
             .seq(self.stack.drain(..).collect())
             .set_extra(extra.clone());
@@ -458,7 +468,7 @@ impl<'c, E: Extra> Definition<E> {
                     })
                     .collect::<Vec<_>>();
                 let nb = NodeBlock {
-                    name: "entry".to_string(),
+                    name: b.strings.intern("entry".to_string()),
                     params,
                     body: seq.into(),
                 };

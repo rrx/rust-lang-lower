@@ -12,7 +12,10 @@ use codespan_reporting::diagnostic::{Diagnostic, Label};
 
 use lower::ast;
 use lower::ast::{Ast, AstNode, CodeLocation, Extra};
+use lower::intern::StringKey;
 use lower::{AstType, Diagnostics, NodeBuilder, TypeUnify};
+
+//use lower::cfg::CFG;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
@@ -40,7 +43,7 @@ impl Data {
 
 #[derive(Debug)]
 pub struct Layer {
-    names: HashMap<String, Data>,
+    names: HashMap<StringKey, Data>,
 }
 impl Default for Layer {
     fn default() -> Self {
@@ -93,22 +96,18 @@ impl<'a> Environment<'a> {
         self.in_func = false;
     }
 
-    pub fn define(&mut self, name: &str) {
+    pub fn define(&mut self, name: StringKey) {
         let data = if self.in_func {
             Data::new_local()
         } else {
             Data::new_global()
         };
-        self.layers
-            .last_mut()
-            .unwrap()
-            .names
-            .insert(name.to_string(), data);
+        self.layers.last_mut().unwrap().names.insert(name, data);
     }
 
-    pub fn resolve(&self, name: &str) -> Option<Data> {
+    pub fn resolve(&self, name: StringKey) -> Option<Data> {
         for layer in self.layers.iter().rev() {
-            return layer.names.get(name).cloned();
+            return layer.names.get(&name).cloned();
         }
         None
     }
@@ -186,12 +185,13 @@ fn from_type<P: syntax::ast::AstPayload>(item: &syntax::ast::TypeExprP<P>) -> Op
     }
 }
 
-fn from_assign_target<P: syntax::ast::AstPayload>(
+fn from_assign_target<E: Extra, P: syntax::ast::AstPayload>(
     item: syntax::ast::AssignTargetP<P>,
+    b: &mut NodeBuilder<E>,
 ) -> ast::AssignTarget {
     use syntax::ast::AssignTargetP;
     match item {
-        AssignTargetP::Identifier(ident) => ast::AssignTarget::Identifier(ident.node.ident),
+        AssignTargetP::Identifier(ident) => ast::AssignTarget::Identifier(b.s(&ident.node.ident)),
         _ => unimplemented!(),
     }
 }
@@ -215,8 +215,8 @@ impl<E: Extra> Parser<E> {
         content: Option<&str>,
         file_id: usize,
         d: &mut Diagnostics,
+        b: &mut NodeBuilder<E>,
     ) -> Result<ast::AstNode<E>> {
-        let mut b = lower::NodeBuilder::new();
         b.enter(file_id, path.to_str().unwrap());
         let dialect = syntax::Dialect::Extended;
         let m = match content {
@@ -228,7 +228,7 @@ impl<E: Extra> Parser<E> {
         let (codemap, stmt, _dialect, _typecheck) = m.into_parts();
         let mut env = Environment::new(&codemap, file_id);
         let mut seq = b.prelude();
-        let ast: ast::AstNode<E> = self.from_stmt(stmt, &mut env, d, &mut b)?;
+        let ast: ast::AstNode<E> = self.from_stmt(stmt, &mut env, d, b)?;
         let extra = ast.extra.clone();
         seq.push(ast);
         Ok(b.seq(seq).set_extra(extra))
@@ -255,7 +255,7 @@ impl<E: Extra> Parser<E> {
                     //Some(AstType::Unit)
                 };
                 ast::ParameterNode {
-                    name: ident.node.ident.to_string(),
+                    name: b.s(&ident.node.ident),
                     ty: ty.unwrap(),
                     node: ast::Parameter::Normal,
                     extra,
@@ -272,7 +272,7 @@ impl<E: Extra> Parser<E> {
                 };
                 let expr = self.from_expr(*expr, env, d, b).unwrap();
                 ast::ParameterNode {
-                    name: ident.node.ident.to_string(),
+                    name: b.s(&ident.node.ident),
                     ty: ty.unwrap(),
                     node: ast::Parameter::WithDefault(expr.into()),
                     extra,
@@ -303,11 +303,11 @@ impl<E: Extra> Parser<E> {
             }
 
             StmtP::Def(def) => {
-                let name = &def.name.ident;
+                let name = b.s(&def.name.ident);
                 env.enter_func();
 
                 // push function name into scope
-                env.define(&name);
+                env.define(name);
 
                 let params = def
                     .params
@@ -317,7 +317,7 @@ impl<E: Extra> Parser<E> {
 
                 // push name to environment
                 for p in params.iter() {
-                    env.define(&p.name);
+                    env.define(p.name);
                 }
 
                 let body = self.from_stmt(*def.body, env, d, b)?;
@@ -329,13 +329,13 @@ impl<E: Extra> Parser<E> {
                     .into();
 
                 let def_ast = Ast::Definition(ast::Definition {
-                    name: name.clone(),
+                    name,
                     body: Some(body.into()),
                     return_type,
                     params,
                 });
 
-                env.define(&name);
+                env.define(name);
                 let extra = env.extra(item.span);
                 Ok(b.build(def_ast, extra))
             }
@@ -400,12 +400,12 @@ impl<E: Extra> Parser<E> {
                 let rhs = self.from_expr(assign.rhs, env, d, b)?;
                 match assign.lhs.node {
                     AssignTargetP::Identifier(ident) => {
-                        let name = ident.node.ident;
-                        log::debug!("parse ident: {}", name);
+                        log::debug!("parse ident: {}", ident.node.ident);
+                        let name = b.s(&ident.node.ident);
 
                         // lookup
                         // Global identifiers are dereferenced when accessed
-                        if let Some(data) = env.resolve(&name) {
+                        if let Some(data) = env.resolve(name) {
                             if let DataType::Global = data.ty {
                                 //let extra: E = env.extra(item.span);
                                 //let ast = AstNode {
@@ -413,22 +413,22 @@ impl<E: Extra> Parser<E> {
                                 //extra: extra.clone(),
                                 //};
                                 //Ok(b.deref_offset(ast, 0).set_extra(extra))
-                                let node = b.ident(&name);
+                                let node = b.ident(name);
                                 Ok(b.mutate(node, rhs))
                                 //Ok(b.assign(&name, rhs))
                             } else {
                                 //Ok(b.mutate(b.deref_offset(b.ident(&name), 0), rhs))
                                 //Ok(b.mutate(b.ident(&name), rhs))
-                                Ok(b.assign(&name, rhs))
+                                Ok(b.assign(name, rhs))
                             }
                         } else {
                             // name does not exist in scope
                             // Either create a global or do local, depending on context
-                            env.define(&name);
+                            env.define(name);
                             if env.in_func {
-                                Ok(b.assign(&name, rhs))
+                                Ok(b.assign(name, rhs))
                             } else {
-                                Ok(b.global(&name, rhs))
+                                Ok(b.global(name, rhs))
                             }
                         }
                     }
@@ -466,10 +466,10 @@ impl<E: Extra> Parser<E> {
 
                 match expr.node {
                     ExprP::Identifier(ident) => {
-                        if let Some(_data) = env.resolve(&ident.node.ident) {
+                        let name = b.s(&ident.node.ident);
+                        if let Some(_data) = env.resolve(name) {
                             let extra: E = env.extra(item.span);
-                            Ok(b.apply(&ident.node.ident, args, AstType::Int)
-                                .set_extra(extra))
+                            Ok(b.apply(name, args, AstType::Int).set_extra(extra))
                         } else if let Some(bi) = ast::Builtin::from_name(&ident.node.ident) {
                             let extra = env.extra(item.span);
                             assert_eq!(args.len(), bi.arity());
@@ -482,10 +482,10 @@ impl<E: Extra> Parser<E> {
 
                     ExprP::Dot(expr, name) => {
                         if let ExprP::Identifier(ident) = &expr.node {
-                            if let Some(_data) = env.resolve(&ident.node.ident) {
+                            let key = b.s(&ident.node.ident);
+                            if let Some(_data) = env.resolve(key) {
                                 let extra: E = env.extra(item.span);
-                                Ok(b.apply(&ident.node.ident, args, AstType::Int)
-                                    .set_extra(extra))
+                                Ok(b.apply(key, args, AstType::Int).set_extra(extra))
                             } else if &ident.node.ident == "b" {
                                 // builtin namespace
                                 if let Some(bi) = ast::Builtin::from_name(&name.node) {
@@ -513,10 +513,10 @@ impl<E: Extra> Parser<E> {
 
             ExprP::Identifier(ident) => {
                 env.dump();
-                if let Some(data) = env.resolve(&ident.node.ident) {
-                    let name = ident.node.ident;
+                let name = b.s(&ident.node.ident);
+                if let Some(data) = env.resolve(name) {
                     let extra = env.extra(item.span);
-                    let ast = b.ident(&name).set_extra(extra);
+                    let ast = b.ident(name).set_extra(extra);
 
                     // Global identifiers are dereferenced when accessed
                     if let DataType::Global = data.ty {
@@ -579,7 +579,7 @@ pub(crate) mod tests {
         let mut d = Diagnostics::new();
         let mut module = Module::new(Location::unknown(&context));
         let mut g = CFGGraph::new();
-        let mut cfg: CFG<SimpleExtra> = CFG::new(&context, "module", &d, &mut g);
+        let mut cfg: CFG<SimpleExtra> = CFG::new(&context, b.s("module"), &d, &mut g);
         let file_id = d.add_source(
             filename.to_string(),
             std::fs::read_to_string(filename).unwrap(),
@@ -588,14 +588,14 @@ pub(crate) mod tests {
         // parse
         let mut parser = Parser::new();
         let ast: AstNode<ast::SimpleExtra> = parser
-            .parse(Path::new(filename), None, file_id, &mut d)
+            .parse(Path::new(filename), None, file_id, &mut d, &mut b)
             .unwrap()
             .normalize(&mut cfg, &mut d, &mut b);
 
         println!("ast: {:#?}", ast);
         let mut stack = vec![cfg.root()];
         let r = ast.lower(&context, &mut d, &mut cfg, &mut stack, &mut g, &mut b);
-        cfg.save_graph("out.dot", &g);
+        cfg.save_graph("out.dot", &g, &b);
         d.dump();
         assert_eq!(1, stack.len());
         assert!(!d.has_errors);

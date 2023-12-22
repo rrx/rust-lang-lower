@@ -1,3 +1,4 @@
+use crate::intern::StringKey;
 use crate::Diagnostics;
 use crate::{AstType, NodeID};
 use codespan_reporting::diagnostic::{Diagnostic, Label};
@@ -109,7 +110,7 @@ pub enum Parameter<E> {
 
 #[derive(Debug)]
 pub struct ParameterNode<E> {
-    pub name: String,
+    pub name: StringKey,
     pub ty: AstType,
     pub node: Parameter<E>,
     pub extra: E,
@@ -117,7 +118,7 @@ pub struct ParameterNode<E> {
 
 #[derive(Debug)]
 pub struct Definition<E> {
-    pub name: String,
+    pub name: StringKey,
     pub params: Vec<ParameterNode<E>>,
     pub return_type: Box<AstType>,
     pub body: Option<Box<AstNode<E>>>,
@@ -161,16 +162,36 @@ pub enum DerefTarget {
 
 #[derive(Debug)]
 pub enum Terminator {
-    Jump(String),
-    Branch(String, String),
+    Jump(StringKey),
+    Branch(StringKey, StringKey),
     Return,
 }
 
 #[derive(Debug)]
 pub struct NodeBlock<E> {
-    pub(crate) name: String,
+    pub(crate) name: StringKey,
     pub(crate) params: Vec<ParameterNode<E>>,
     pub(crate) body: Box<AstNode<E>>,
+}
+
+#[derive(Debug)]
+pub enum IRKind {
+    Declare,
+    Set,
+    Get,
+    Ret,
+    Cond,
+    Jump,
+    Call,
+    Op,
+}
+
+#[derive(Debug)]
+pub struct IRNode {
+    kind: IRKind,
+    args: Vec<usize>,
+    loc: usize,
+    ty: usize,
 }
 
 #[derive(Debug)]
@@ -178,12 +199,12 @@ pub enum Ast<E> {
     BinaryOp(BinOpNode<E>, Box<AstNode<E>>, Box<AstNode<E>>),
     UnaryOp(UnaryOperation, Box<AstNode<E>>),
     Call(Box<AstNode<E>>, Vec<Argument<E>>, AstType),
-    Identifier(String),
+    Identifier(StringKey),
     Literal(Literal),
     Sequence(Vec<AstNode<E>>),
     Definition(Definition<E>),
     Variable(Definition<E>),
-    Global(String, Box<AstNode<E>>),
+    Global(StringKey, Box<AstNode<E>>),
     Assign(AssignTarget, Box<AstNode<E>>),
     Replace(AssignTarget, Box<AstNode<E>>),
     Mutate(Box<AstNode<E>>, Box<AstNode<E>>),
@@ -195,18 +216,18 @@ pub enum Ast<E> {
     Deref(Box<AstNode<E>>, DerefTarget),
     Block(NodeBlock<E>),
     Module(NodeBlock<E>),
-    Loop(String, Box<AstNode<E>>),
-    Break(String),
-    Continue(String),
-    Goto(String),
-    Label(String),
+    Loop(StringKey, Box<AstNode<E>>),
+    Break(StringKey),
+    Continue(StringKey),
+    Goto(StringKey),
+    Label(StringKey),
     Noop,
     Error,
 }
 
 impl<E: Extra> Ast<E> {
-    pub fn global(name: &str, node: AstNode<E>) -> Self {
-        Ast::Global(name.to_string(), Box::new(node))
+    pub fn global(name: StringKey, node: AstNode<E>) -> Self {
+        Ast::Global(name, Box::new(node))
     }
 
     pub fn assign(target: AssignTarget, node: AstNode<E>) -> Self {
@@ -221,7 +242,7 @@ impl<E: Extra> Ast<E> {
         match self {
             Self::Sequence(exprs) => exprs.last().unwrap().node.terminator(),
             Self::Block(nb) => nb.body.node.terminator(),
-            Self::Goto(label) => Some(Terminator::Jump(label.clone())),
+            Self::Goto(key) => Some(Terminator::Jump(*key)),
             Self::Return(_) => Some(Terminator::Return),
             _ => None,
         }
@@ -482,6 +503,6 @@ impl<E> From<Argument<E>> for AstNode<E> {
 
 #[derive(Debug)]
 pub enum AssignTarget {
-    Identifier(String),
-    Alloca(String),
+    Identifier(StringKey),
+    Alloca(StringKey),
 }
