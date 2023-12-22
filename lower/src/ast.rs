@@ -252,8 +252,6 @@ impl<E: Extra> Ast<E> {
 #[derive(Debug, Clone, Default)]
 pub struct CodeLocation {
     pub pos: u32,
-    //pub line: usize,
-    //pub col: usize,
 }
 
 #[derive(Clone)]
@@ -284,9 +282,9 @@ impl Extra for SimpleExtra {
             },
         }
     }
-    //fn span(span: Span) -> Self {
-    //Self { span }
-    //}
+    fn span(span: Span) -> Self {
+        Self { span }
+    }
     fn location<'c>(&self, context: &'c Context, d: &Diagnostics) -> ir::Location<'c> {
         d.location(context, &self.span)
     }
@@ -315,7 +313,7 @@ impl Extra for SimpleExtra {
 
 pub trait Extra: Debug + Clone {
     fn new(file_id: usize, begin: CodeLocation, end: CodeLocation) -> Self;
-    //fn span(span: Span) -> Self;
+    fn span(span: Span) -> Self;
     fn location<'c>(&self, context: &'c Context, d: &Diagnostics) -> ir::Location<'c>;
     fn error(&self, msg: &str) -> Diagnostic<usize>;
     fn range(&self) -> std::ops::Range<usize>;

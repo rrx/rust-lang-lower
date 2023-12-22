@@ -74,16 +74,8 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn enter(&mut self, file_id: usize, filename: &str) {
-        let begin = CodeLocation {
-            pos: 0,
-            //line: 0,
-            //col: 0,
-        };
-        let end = CodeLocation {
-            pos: 0,
-            //line: 0,
-            //col: 0,
-        };
+        let begin = CodeLocation { pos: 0 };
+        let end = CodeLocation { pos: 0 };
         let span = Span {
             file_id,
             begin,
@@ -111,8 +103,8 @@ impl<E: Extra> NodeBuilder<E> {
 
     pub fn extra(&self) -> E {
         if let Some(span) = self.span.as_ref() {
-            //E::span(span.clone())
-            E::new(0, CodeLocation::default(), CodeLocation::default())
+            E::span(span.clone())
+            //E::new(0, CodeLocation::default(), CodeLocation::default())
         } else {
             E::new(0, CodeLocation::default(), CodeLocation::default())
         }

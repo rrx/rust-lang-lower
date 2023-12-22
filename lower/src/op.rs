@@ -6,7 +6,6 @@ use crate::ast::{
     BinaryOperation,
     //Builtin,
 };
-use crate::intern::StringKey;
 use crate::{Ast, AstNode, AstType, Diagnostics, Extra, Literal, ParseError};
 use anyhow::Error;
 use anyhow::Result;
