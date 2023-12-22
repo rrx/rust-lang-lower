@@ -1,12 +1,12 @@
 use std::fmt::Debug;
 use std::hash::Hash;
 
-pub trait InternKey: Debug {
+pub trait InternKey {
     fn index(&self) -> usize;
     fn new(index: usize) -> Self;
 }
 
-pub trait InternValue: Eq + PartialEq + Hash + Debug + Clone {}
+pub trait InternValue: Eq + PartialEq + Hash {}
 
 #[derive(Debug)]
 pub struct InternPool<K, V> {
@@ -26,17 +26,14 @@ impl<K: InternKey, V: InternValue> InternPool<K, V> {
         let offset = if let Some(offset) = self.h.get_index_of(&v) {
             K::new(offset)
         } else {
-            let (offset, _) = self.h.insert_full(v.clone());
+            let (offset, _) = self.h.insert_full(v);
             K::new(offset)
         };
-        println!("intern: {:?}, {:?}", v, offset);
-        println!("x {:?}", &self);
         offset
     }
 
     pub fn resolve(&self, k: &K) -> &V {
-        println!("{:?}", &self);
-        self.h.get_index(k.index()).expect(&format!("{:?}", k))
+        self.h.get_index(k.index()).unwrap()
     }
 }
 
