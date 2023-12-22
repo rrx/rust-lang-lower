@@ -6,7 +6,7 @@ use crate::ast::{
     BinaryOperation,
     //Builtin,
 };
-use crate::{AstType, Diagnostics, Extra, ParseError};
+use crate::{Ast, AstNode, AstType, Diagnostics, Extra, Literal, ParseError};
 use anyhow::Error;
 use anyhow::Result;
 use codespan_reporting::diagnostic::Diagnostic;
@@ -135,6 +135,52 @@ pub fn build_reserved<'c>(
         }
         _ => None,
     }
+}
+
+pub fn emit_static<'c, E: Extra>(
+    context: &'c Context,
+    global_name: &str,
+    expr: AstNode<E>,
+    location: Location<'c>,
+) -> (Operation<'c>, AstType) {
+    // evaluate expr at compile time
+    let (ast_ty, op) = match expr.node {
+        Ast::Literal(Literal::Bool(x)) => {
+            let ast_ty = AstType::Bool;
+            let ty = from_type(context, &ast_ty);
+            let v = if x { 1 } else { 0 };
+            let value = IntegerAttribute::new(v, ty).into();
+            let op = build_static(context, &global_name, ty, value, false, location);
+            (ast_ty, op)
+        }
+
+        Ast::Literal(Literal::Int(x)) => {
+            let ast_ty = AstType::Int;
+            let ty = from_type(context, &ast_ty);
+            let value = IntegerAttribute::new(x, ty).into();
+            let op = build_static(context, &global_name, ty, value, false, location);
+            (ast_ty, op)
+        }
+
+        Ast::Literal(Literal::Index(x)) => {
+            let ast_ty = AstType::Int;
+            let ty = from_type(context, &ast_ty);
+            let value = IntegerAttribute::new(x as i64, ty).into();
+            let op = build_static(context, &global_name, ty, value, false, location);
+            (ast_ty, op)
+        }
+
+        Ast::Literal(Literal::Float(x)) => {
+            let ast_ty = AstType::Float;
+            let ty = from_type(context, &ast_ty);
+            let value = FloatAttribute::new(context, x, ty).into();
+            let op = build_static(context, &global_name, ty, value, false, location);
+            (ast_ty, op)
+        }
+
+        _ => unreachable!("{:?}", expr.node),
+    };
+    (op, ast_ty)
 }
 
 pub fn build_binop<'c, E: Extra>(

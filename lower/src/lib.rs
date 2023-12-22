@@ -8,7 +8,7 @@ pub mod diagnostics;
 pub mod op;
 pub mod types;
 
-pub use ast::{AstNode, Extra, SimpleExtra};
+pub use ast::{Ast, AstNode, Extra, Literal, SimpleExtra};
 pub use builder::{NodeBuilder, NodeID};
 pub use compile::{default_context, default_pass_manager};
 pub use diagnostics::{Diagnostics, FileDB, ParseError};

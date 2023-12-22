@@ -60,7 +60,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut parser: Parser<SimpleExtra> = Parser::new();
     let mut d = Diagnostics::new();
     let mut g = CFGGraph::new();
-    //let mut lower = Lower::new(&context);
     let mut cfg: CFG<SimpleExtra> = CFG::new(&context, "module", &d, &mut g);
 
     for path in config.inputs {

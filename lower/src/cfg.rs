@@ -1100,46 +1100,7 @@ impl<E: Extra> AstNode<E> {
                 };
 
                 // evaluate expr at compile time
-                let (ast_ty, op) = match expr.node {
-                    Ast::Literal(Literal::Bool(x)) => {
-                        let ast_ty = AstType::Bool;
-                        let ty = op::from_type(context, &ast_ty);
-                        let v = if x { 1 } else { 0 };
-                        let value = IntegerAttribute::new(v, ty).into();
-                        let op =
-                            op::build_static(context, &global_name, ty, value, false, location);
-                        (ast_ty, op)
-                    }
-
-                    Ast::Literal(Literal::Int(x)) => {
-                        let ast_ty = AstType::Int;
-                        let ty = op::from_type(context, &ast_ty);
-                        let value = IntegerAttribute::new(x, ty).into();
-                        let op =
-                            op::build_static(context, &global_name, ty, value, false, location);
-                        (ast_ty, op)
-                    }
-
-                    Ast::Literal(Literal::Index(x)) => {
-                        let ast_ty = AstType::Int;
-                        let ty = op::from_type(context, &ast_ty);
-                        let value = IntegerAttribute::new(x as i64, ty).into();
-                        let op =
-                            op::build_static(context, &global_name, ty, value, false, location);
-                        (ast_ty, op)
-                    }
-
-                    Ast::Literal(Literal::Float(x)) => {
-                        let ast_ty = AstType::Float;
-                        let ty = op::from_type(context, &ast_ty);
-                        let value = FloatAttribute::new(context, x, ty).into();
-                        let op =
-                            op::build_static(context, &global_name, ty, value, false, location);
-                        (ast_ty, op)
-                    }
-
-                    _ => unreachable!("{:?}", expr.node),
-                };
+                let (op, ast_ty) = op::emit_static(context, &global_name, *expr, location);
 
                 let ptr_ty = AstType::Ptr(ast_ty.clone().into());
                 if is_static {
