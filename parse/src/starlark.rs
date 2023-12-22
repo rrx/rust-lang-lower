@@ -299,8 +299,7 @@ impl<E: Extra> Parser<E> {
                 }
 
                 let extra = env.extra(item.span);
-                let ast = Ast::Sequence(exprs);
-                Ok(b.build(ast, extra))
+                Ok(b.seq(exprs).set_extra(extra))
             }
 
             StmtP::Def(def) => {

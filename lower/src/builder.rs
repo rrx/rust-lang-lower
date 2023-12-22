@@ -413,7 +413,9 @@ impl<E: Extra> AstBlockSorter<E> {
         let offset = self.blocks.len();
 
         let name = format!("_block{}", offset);
-        let seq = b.build(Ast::Sequence(self.stack.drain(..).collect()), extra.clone());
+        let seq = b
+            .seq(self.stack.drain(..).collect())
+            .set_extra(extra.clone());
         let nb = NodeBlock {
             name,
             params: vec![],
@@ -437,7 +439,7 @@ impl<'c, E: Extra> Definition<E> {
 
             // initial nodes form the entry block
             if s.stack.len() > 0 {
-                let seq = b.build(Ast::Sequence(s.stack), extra.clone());
+                let seq = b.seq(s.stack).set_extra(extra.clone());
                 // TODO: check that function args match the first block args
                 let params = self
                     .params
@@ -466,7 +468,7 @@ impl<'c, E: Extra> Definition<E> {
 
             blocks.extend(s.blocks.into_iter().map(|b| b.into()));
 
-            let mut body = b.build(Ast::Sequence(blocks.into_iter().collect()), extra.clone());
+            let mut body = b.seq(blocks.into_iter().collect()).set_extra(extra.clone());
             body.analyze(b);
             self.body = Some(body.into());
         }

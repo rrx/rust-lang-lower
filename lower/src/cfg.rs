@@ -593,16 +593,6 @@ impl<E: Extra> AstNode<E> {
         d: &mut Diagnostics,
         b: &mut NodeBuilder<E>,
     ) -> Self {
-        if self.is_seq() {
-            if let Ast::Sequence(exprs) = self.node {
-                let nodes = exprs
-                    .into_iter()
-                    .map(|expr| expr.to_vec())
-                    .flatten()
-                    .collect();
-                self.node = Ast::Sequence(nodes);
-            }
-        }
         self.preprocess(cfg, d, b);
         self.analyze(b);
         self
