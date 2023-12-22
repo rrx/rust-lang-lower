@@ -591,6 +591,27 @@ impl<E: Extra> AstNode<E> {
         }
     }
 
+    pub fn normalize<'c>(
+        mut self,
+        cfg: &mut CFG<'c, E>,
+        d: &mut Diagnostics,
+        b: &mut NodeBuilder<E>,
+    ) -> Self {
+        if self.is_seq() {
+            if let Ast::Sequence(exprs) = self.node {
+                let nodes = exprs
+                    .into_iter()
+                    .map(|expr| expr.to_vec())
+                    .flatten()
+                    .collect();
+                self.node = Ast::Sequence(nodes);
+            }
+        }
+        self.preprocess(cfg, d, b);
+        self.analyze(b);
+        self
+    }
+
     pub fn preprocess<'c>(
         &mut self,
         cfg: &mut CFG<'c, E>,
@@ -1427,10 +1448,8 @@ mod tests {
         let file_id = d.add_source("test.py".into(), "test".into());
         let mut b = NodeBuilder::new();
         b.enter(file_id, "type.py");
-        let mut ast = gen_block(&b);
+        let ast = gen_block(&b).normalize(&mut cfg, &mut d, &mut b);
         let mut stack = vec![cfg.root];
-        ast.preprocess(&mut cfg, &mut d, &mut b);
-        ast.analyze(&mut b);
         let r = ast.lower(&context, &mut d, &mut cfg, &mut stack, &mut g, &mut b);
         assert_eq!(1, stack.len());
         d.dump();

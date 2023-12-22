@@ -588,12 +588,10 @@ pub(crate) mod tests {
 
         // parse
         let mut parser = Parser::new();
-        let mut ast: AstNode<ast::SimpleExtra> = parser
+        let ast: AstNode<ast::SimpleExtra> = parser
             .parse(Path::new(filename), None, file_id, &mut d)
-            .unwrap();
-
-        ast.preprocess(&mut cfg, &mut d, &mut b);
-        ast.analyze(&mut b);
+            .unwrap()
+            .normalize(&mut cfg, &mut d, &mut b);
 
         println!("ast: {:#?}", ast);
         let mut stack = vec![cfg.root()];
