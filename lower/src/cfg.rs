@@ -516,6 +516,7 @@ impl<E: Extra> AstNode<E> {
         self.extra.location(context, d)
     }
 
+    /*
     pub fn build<'c>(
         self,
         context: &'c Context,
@@ -526,16 +527,10 @@ impl<E: Extra> AstNode<E> {
         b: &mut NodeBuilder<E>,
     ) -> Result<AstNode<E>> {
         //let location = self.location(context, d);
-        let extra = self.extra.clone();
+        //let extra = self.extra.clone();
         match self.node {
             Ast::Sequence(exprs) => {
-                let mut out = vec![];
-                for expr in exprs {
-                    for e in expr.to_vec() {
-                        out.push(e.build(context, d, cfg, stack, g, b)?);
-                    }
-                }
-                Ok(b.build(Ast::Sequence(out), extra))
+                Ok(b.seq(exprs))
             }
 
             /*
@@ -590,6 +585,7 @@ impl<E: Extra> AstNode<E> {
             _ => unimplemented!(),
         }
     }
+    */
 
     pub fn normalize<'c>(
         mut self,

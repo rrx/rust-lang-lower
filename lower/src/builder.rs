@@ -219,6 +219,12 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn seq(&self, nodes: Vec<AstNode<E>>) -> AstNode<E> {
+        // flatten nodes
+        let nodes = nodes
+            .into_iter()
+            .map(|expr| expr.to_vec())
+            .flatten()
+            .collect();
         self.node(Ast::Sequence(nodes))
     }
 
