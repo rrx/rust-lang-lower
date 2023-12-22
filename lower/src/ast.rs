@@ -5,6 +5,26 @@ use melior::ir;
 use melior::Context;
 use std::fmt::Debug;
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub enum VarDefinitionSpace {
+    Reg,
+    Static,
+    Stack,
+    Heap,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct VarDefinition {
+    ty: AstType,
+    space: VarDefinitionSpace,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub enum DefinitionId {
+    Var(u32),
+    Arg(u32),
+}
+
 #[derive(Debug)]
 pub enum Literal {
     Int(i64),

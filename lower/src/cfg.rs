@@ -248,10 +248,8 @@ pub struct CFG<'c, E> {
     shared: HashSet<String>,
     root: NodeIndex,
     index_count: usize,
-    static_count: usize,
     block_names: HashMap<String, NodeIndex>,
     block_names_index: HashMap<NodeIndex, String>,
-    symbols: HashMap<SymIndex, SymbolData>,
     types: HashMap<SymIndex, AstType>,
     static_names: HashMap<SymIndex, String>,
     _e: std::marker::PhantomData<E>,
@@ -269,10 +267,8 @@ impl<'c, E: Extra> CFG<'c, E> {
             context,
             root: NodeIndex::new(0),
             index_count: 0,
-            static_count: 0,
             block_names: HashMap::new(),
             block_names_index: HashMap::new(),
-            symbols: HashMap::new(),
             types: HashMap::new(),
             static_names: HashMap::new(),
             shared: HashSet::new(),
@@ -329,16 +325,6 @@ impl<'c, E: Extra> CFG<'c, E> {
                 .to_string_with_flags(OperationPrintingFlags::new())
                 .unwrap()
         );
-    }
-
-    pub fn unique_static_name(&mut self) -> String {
-        let s = format!("__static_x{}", self.static_count);
-        self.static_count += 1;
-        s
-    }
-
-    pub fn add_symbol(&mut self, index: SymIndex, data: SymbolData) {
-        self.symbols.insert(index, data);
     }
 
     pub fn add_block(
@@ -482,27 +468,12 @@ impl<'c, E: Extra> CFG<'c, E> {
         std::fs::write(path, s).unwrap();
     }
 
-    pub fn type_from_expr(&self, index: NodeIndex, expr: &AstNode<E>, g: &CFGGraph<'c>) -> AstType {
-        match &expr.node {
-            Ast::Literal(x) => x.into(),
-            Ast::Identifier(name) => {
-                // infer type from the operation
-                let index = self.name_in_scope(index, name, g).unwrap();
-                self.symbols.get(&index).unwrap().ty.clone()
-            }
-            Ast::Call(_f, _args, ty) => ty.clone(),
-
-            _ => unreachable!("{:?}", expr),
-        }
-    }
-
     pub fn name_in_scope(
         &self,
         index: NodeIndex,
         name: &str,
         g: &CFGGraph<'c>,
     ) -> Option<SymIndex> {
-        //self.save_graph("out.dot", g);
         let dom = simple_fast(g, self.root)
             .dominators(index)
             .expect("Node not connected to root")
@@ -554,7 +525,7 @@ impl<E: Extra> AstNode<E> {
         g: &mut CFGGraph<'c>,
         b: &mut NodeBuilder<E>,
     ) -> Result<AstNode<E>> {
-        let location = self.location(context, d);
+        //let location = self.location(context, d);
         let extra = self.extra.clone();
         match self.node {
             Ast::Sequence(exprs) => {
@@ -963,10 +934,7 @@ impl<E: Extra> AstNode<E> {
                 );
 
                 let function_block = g.node_weight_mut(current_block).unwrap();
-                //let current = g.node_weight_mut(current_block).unwrap();
                 function_block.save_op(func_index, op);
-                //let index = current.push_with_name(op, &def.name);
-                //cfg.set_type(func_index, f_type);
 
                 if let Some(entry_block) = entry_block {
                     let data = g.node_weight_mut(entry_block).unwrap();
@@ -1089,7 +1057,7 @@ impl<E: Extra> AstNode<E> {
                 } else {
                     // we create a unique global name to prevent conflict
                     // and then we add ops to provide a local reference to the global name
-                    format!("{}{}", ident.clone(), cfg.unique_static_name())
+                    format!("{}{}", ident.clone(), b.unique_static_name())
                 };
 
                 // evaluate expr at compile time
@@ -1149,19 +1117,6 @@ impl<E: Extra> AstNode<E> {
                     cfg.set_type(index, ptr_ty);
                     cfg.static_names.insert(index, global_name);
                     Ok(index)
-
-                    /*
-                    // push static operation
-                    let index = env.push_static(op, &global_name);
-                    env.index_data(&index, ptr_ty);
-
-                    env.index_static_name(&index, &global_name);
-                    env.name_index(index.clone(), &ident);
-
-                    // push name into current context
-                    env.name_index(index.clone(), &ident);
-                    Ok(index)
-                    */
                 }
             }
 
@@ -1361,8 +1316,6 @@ pub fn emit_deref<'c, E: Extra>(
     g: &mut CFGGraph<'c>,
 ) -> Result<SymIndex> {
     // we are expecting a memref here
-    //let location = expr.location(context, d);
-    //let index = expr.lower(context, d, cfg, stack, g)?;
     let current_block = stack.last().unwrap().clone();
     let ty = cfg.lookup_type(index).unwrap();
 
@@ -1519,12 +1472,8 @@ mod tests {
         let d = Diagnostics::new();
         let mut g = CFGGraph::new();
         let mut cfg: CFG<SimpleExtra> = CFG::new(&context, "module", &d, &mut g);
-        //let mut d = Diagnostics::new();
-        //let file_id = d.add_source("test.py".into(), "test".into());
-        //let b: NodeBuilder<SimpleExtra> = NodeBuilder::new(file_id, "type.py");
 
         (0..8).into_iter().for_each(|i| {
-            //let p = b.param(&format!("p{}", i), AstType::Int);
             let block_name = format!("b{}", i);
             cfg.add_block(&context, &block_name, &[], &d, &mut g);
         });

@@ -11,6 +11,8 @@ pub struct NodeBuilder<E> {
     span: Option<Span>,
     filename: String,
     current_node_id: u32,
+    current_def_id: u32,
+    static_count: usize,
     _e: std::marker::PhantomData<E>,
 }
 
@@ -21,8 +23,28 @@ impl<E: Extra> NodeBuilder<E> {
             span: None,
             filename: filename.to_string(),
             current_node_id: 0,
+            current_def_id: 0,
+            static_count: 0,
             _e: std::marker::PhantomData::default(),
         }
+    }
+
+    fn fresh_def_arg(&mut self) -> DefinitionId {
+        let def_id = DefinitionId::Arg(self.current_def_id);
+        self.current_def_id += 1;
+        def_id
+    }
+
+    fn fresh_def_var(&mut self) -> DefinitionId {
+        let def_id = DefinitionId::Var(self.current_def_id);
+        self.current_def_id += 1;
+        def_id
+    }
+
+    pub fn unique_static_name(&mut self) -> String {
+        let s = format!("__static_x{}", self.static_count);
+        self.static_count += 1;
+        s
     }
 
     fn fresh_node_id(&mut self) -> NodeID {
@@ -50,17 +72,6 @@ impl<E: Extra> NodeBuilder<E> {
         self.span = Some(span);
         self.filename = filename.to_string();
     }
-
-    /*
-    pub fn with_span(span: Span, filename: &str) -> Self {
-        Self {
-            span: Some(span),
-            filename: filename.to_string(),
-            current_node_id: 0,
-            _e: std::marker::PhantomData::default(),
-        }
-    }
-    */
 
     pub fn with_loc(&mut self, span: Span) {
         self.span = Some(span);
