@@ -396,6 +396,67 @@ impl<E> AstNode<E> {
         //out
         vec![]
     }
+
+    pub fn children_mut<'a>(&'a mut self) -> AstNodeIterator<'a, E> {
+        let mut values = vec![];
+        match &mut self.node {
+            Ast::Sequence(ref mut exprs) => {
+                for e in exprs.iter_mut() {
+                    values.push(e);
+                }
+            }
+            Ast::Definition(def) => {
+                if let Some(ref mut body) = def.body {
+                    values.push(body);
+                }
+            }
+            Ast::BinaryOp(_, a, b) | Ast::Mutate(a, b) | Ast::Test(a, b) | Ast::While(a, b) => {
+                values.push(a);
+                values.push(b);
+            }
+            Ast::UnaryOp(_, a)
+            | Ast::Assign(_, a)
+            | Ast::Replace(_, a)
+            | Ast::Deref(a, _)
+            | Ast::Loop(_, a) => {
+                values.push(a);
+            }
+            Ast::Call(f, _args, _ty) => {
+                values.push(f);
+            }
+            Ast::Global(_, body) => {
+                values.push(body);
+            }
+            Ast::Conditional(a, b, c) => {
+                values.push(a);
+                values.push(b);
+                if let Some(c) = c {
+                    values.push(c);
+                }
+            }
+            Ast::Return(a) => {
+                if let Some(a) = a {
+                    values.push(a);
+                }
+            }
+            Ast::Block(ref mut nb) | Ast::Module(ref mut nb) => {
+                values.push(&mut nb.body);
+            }
+            _ => (),
+        }
+        AstNodeIterator { values }
+    }
+}
+
+pub struct AstNodeIterator<'a, E> {
+    values: Vec<&'a mut AstNode<E>>,
+}
+
+impl<'a, E> Iterator for AstNodeIterator<'a, E> {
+    type Item = &'a mut AstNode<E>;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.values.pop()
+    }
 }
 
 impl<E> From<Argument<E>> for AstNode<E> {

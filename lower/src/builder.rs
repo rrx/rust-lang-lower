@@ -47,6 +47,13 @@ impl<E: Extra> NodeBuilder<E> {
         s
     }
 
+    pub fn identify_node(&mut self, ast: &mut AstNode<E>) {
+        if let NodeID(Some(_)) = ast.node_id {
+        } else {
+            ast.node_id = self.fresh_node_id();
+        }
+    }
+
     fn fresh_node_id(&mut self) -> NodeID {
         let node_id = NodeID(Some(self.current_node_id));
         self.current_node_id += 1;

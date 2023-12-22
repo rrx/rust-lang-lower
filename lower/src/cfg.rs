@@ -591,6 +591,13 @@ impl<E: Extra> AstNode<E> {
         }
     }
 
+    pub fn analyze<'c>(&mut self, b: &mut NodeBuilder<E>) {
+        b.identify_node(self);
+        for child in self.children_mut() {
+            b.identify_node(child);
+        }
+    }
+
     pub fn lower<'c>(
         self,
         context: &'c Context,
