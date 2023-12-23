@@ -390,8 +390,8 @@ impl<E: Extra> NodeBuilder<E> {
         )
     }
 
-    pub fn ir_decl(&self, key: StringKey, ty: AstType) -> IRNode {
-        IRNode::new(IRKind::Decl(key, ty), self.span.clone().unwrap())
+    pub fn ir_decl(&self, key: StringKey, ty: AstType, mem: VarDefinitionSpace) -> IRNode {
+        IRNode::new(IRKind::Decl(key, ty, mem), self.span.clone().unwrap())
     }
 
     pub fn ir_call(&self, key: StringKey, args: Vec<IRNode>) -> IRNode {

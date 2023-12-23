@@ -11,6 +11,13 @@ pub enum VarDefinitionSpace {
     Static,
     Stack,
     Heap,
+    Default,
+}
+
+impl Default for VarDefinitionSpace {
+    fn default() -> Self {
+        Self::Default
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
