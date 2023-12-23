@@ -1,9 +1,11 @@
 use crate::ast::*;
-use crate::intern::{StringKey, StringPool};
-use crate::AstType;
+use crate::intern::StringPool;
 use crate::Diagnostics;
-use melior::ir;
-use melior::Context;
+use crate::{
+    ir::{IRKind, IRNode},
+    AstType, StringKey,
+};
+use melior::{ir::Location, Context};
 use std::collections::VecDeque;
 
 #[derive(Debug, Clone, Copy)]
@@ -93,11 +95,11 @@ impl<E: Extra> NodeBuilder<E> {
         self.span.as_ref().map(|s| s.file_id).unwrap_or(0)
     }
 
-    pub fn get_location<'c>(&self, context: &'c Context, d: &Diagnostics) -> ir::Location<'c> {
+    pub fn get_location<'c>(&self, context: &'c Context, d: &Diagnostics) -> Location<'c> {
         if let Some(span) = self.span.as_ref() {
             d.location(context, span)
         } else {
-            ir::Location::unknown(context)
+            Location::unknown(context)
         }
     }
 
@@ -356,6 +358,10 @@ impl<E: Extra> NodeBuilder<E> {
             body: body.into(),
         };
         self.build(Ast::Block(nb), extra)
+    }
+
+    pub fn ir_noop(&self) -> IRNode {
+        IRNode::new(IRKind::Noop)
     }
 }
 

@@ -1,11 +1,10 @@
 pub mod ast;
-//mod blocks;
 pub mod builder;
 pub mod cfg;
 pub mod compile;
 pub mod diagnostics;
 pub mod intern;
-//pub mod env;
+pub mod ir;
 pub mod op;
 pub mod types;
 
@@ -13,6 +12,7 @@ pub use ast::{Ast, AstNode, Extra, Literal, SimpleExtra};
 pub use builder::{NodeBuilder, NodeID};
 pub use compile::{default_context, default_pass_manager};
 pub use diagnostics::{Diagnostics, FileDB, ParseError};
+pub use intern::StringKey;
 pub use types::{AstType, TypeUnify};
 
 // re-export melior structs

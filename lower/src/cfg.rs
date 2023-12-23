@@ -626,7 +626,7 @@ impl<E: Extra> AstNode<E> {
                             d.push_diagnostic(expr.extra.error("Expected string"));
                         }
                         //} else {
-                            //unimplemented!()
+                        //unimplemented!()
                         //}
                         // replace with noop
                         self.node = Ast::Noop;

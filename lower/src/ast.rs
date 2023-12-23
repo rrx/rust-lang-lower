@@ -2,8 +2,7 @@ use crate::intern::StringKey;
 use crate::Diagnostics;
 use crate::{AstType, NodeID};
 use codespan_reporting::diagnostic::{Diagnostic, Label};
-use melior::ir;
-use melior::Context;
+use melior::{ir::Location, Context};
 use std::fmt::Debug;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
@@ -175,26 +174,6 @@ pub struct NodeBlock<E> {
 }
 
 #[derive(Debug)]
-pub enum IRKind {
-    Declare,
-    Set,
-    Get,
-    Ret,
-    Cond,
-    Jump,
-    Call,
-    Op,
-}
-
-#[derive(Debug)]
-pub struct IRNode {
-    kind: IRKind,
-    args: Vec<usize>,
-    loc: usize,
-    ty: usize,
-}
-
-#[derive(Debug)]
 pub enum Ast<E> {
     BinaryOp(BinOpNode<E>, Box<AstNode<E>>, Box<AstNode<E>>),
     UnaryOp(UnaryOperation, Box<AstNode<E>>),
@@ -285,7 +264,7 @@ impl Extra for SimpleExtra {
     fn span(span: Span) -> Self {
         Self { span }
     }
-    fn location<'c>(&self, context: &'c Context, d: &Diagnostics) -> ir::Location<'c> {
+    fn location<'c>(&self, context: &'c Context, d: &Diagnostics) -> Location<'c> {
         d.location(context, &self.span)
     }
 
@@ -314,7 +293,7 @@ impl Extra for SimpleExtra {
 pub trait Extra: Debug + Clone {
     fn new(file_id: usize, begin: CodeLocation, end: CodeLocation) -> Self;
     fn span(span: Span) -> Self;
-    fn location<'c>(&self, context: &'c Context, d: &Diagnostics) -> ir::Location<'c>;
+    fn location<'c>(&self, context: &'c Context, d: &Diagnostics) -> Location<'c>;
     fn error(&self, msg: &str) -> Diagnostic<usize>;
     fn range(&self) -> std::ops::Range<usize>;
     fn primary(&self, msg: &str) -> Label<usize>;
