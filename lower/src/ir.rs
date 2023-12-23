@@ -54,6 +54,7 @@ pub enum IRKind {
     Op1(UnaryOperation, Box<IRNode>),
     Op2(BinaryOperation, Box<IRNode>, Box<IRNode>),
     Block(StringKey, Vec<IRArg>, Vec<IRNode>),
+    Seq(Vec<IRNode>),
     Noop,
 }
 
@@ -66,6 +67,13 @@ pub struct IRNode {
 impl IRNode {
     pub fn new(kind: IRKind) -> Self {
         Self { kind, loc: 0 }
+    }
+    pub fn to_vec(self) -> Vec<Self> {
+        if let IRKind::Seq(exprs) = self.kind {
+            exprs
+        } else {
+            vec![self]
+        }
     }
 }
 
@@ -86,6 +94,13 @@ impl<E: Extra> AstNode<E> {
 
         match self.node {
             Ast::Noop => Ok(b.ir_noop()),
+            Ast::Sequence(exprs) => {
+                let mut out = vec![];
+                for expr in exprs {
+                    out.extend(expr.lower_ir(context, d, cfg, stack, g, b)?.to_vec());
+                }
+                Ok(b.ir_seq(out))
+            }
             _ => unimplemented!(),
         }
     }

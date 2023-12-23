@@ -363,6 +363,10 @@ impl<E: Extra> NodeBuilder<E> {
     pub fn ir_noop(&self) -> IRNode {
         IRNode::new(IRKind::Noop)
     }
+
+    pub fn ir_seq(&self, seq: Vec<IRNode>) -> IRNode {
+        IRNode::new(IRKind::Seq(seq))
+    }
 }
 
 pub struct AstBlockSorter<E> {
