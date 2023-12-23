@@ -13,6 +13,7 @@ pub use builder::{NodeBuilder, NodeID};
 pub use compile::{default_context, default_pass_manager};
 pub use diagnostics::{Diagnostics, FileDB, ParseError};
 pub use intern::StringKey;
+pub use ir::{IREnvironment, IRGraph};
 pub use types::{AstType, TypeUnify};
 
 // re-export melior structs

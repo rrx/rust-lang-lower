@@ -62,20 +62,23 @@ pub struct BlockIndex(NodeIndex, usize);
 pub enum SymIndex {
     Op(NodeIndex, usize),
     Arg(NodeIndex, usize),
+    Def(NodeIndex, usize),
 }
 
 impl SymIndex {
     pub fn block(&self) -> NodeIndex {
         match self {
-            SymIndex::Op(block_index, _offset) | SymIndex::Arg(block_index, _offset) => {
-                *block_index
-            }
+            SymIndex::Op(block_index, _)
+            | SymIndex::Arg(block_index, _)
+            | SymIndex::Def(block_index, _) => *block_index,
         }
     }
 
     pub fn offset(&self) -> usize {
         match self {
-            SymIndex::Op(_block_index, offset) | SymIndex::Arg(_block_index, offset) => *offset,
+            SymIndex::Op(_, offset) | SymIndex::Arg(_, offset) | SymIndex::Def(_, offset) => {
+                *offset
+            }
         }
     }
 
@@ -188,6 +191,7 @@ impl<'c> OpCollection<'c> {
                     .unwrap()
                     .into()]
             }
+            _ => unimplemented!(),
         }
     }
 
@@ -481,7 +485,7 @@ impl<'c, E: Extra> CFG<'c, E> {
             .dominators(index)
             .expect("Node not connected to root")
             .collect::<Vec<_>>();
-        println!("dom: {:?} => {:?}", index, dom);
+        //println!("dom: {:?} => {:?}", index, dom);
         for i in dom.into_iter().rev() {
             let data = g.node_weight(i).unwrap();
             if let Some(r) = data.lookup(name) {

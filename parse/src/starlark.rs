@@ -611,28 +611,72 @@ pub(crate) mod tests {
         assert_eq!(expected, r);
     }
 
+    fn run_test_ir(filename: &str, expected: i32) {
+        use lower::ast::SimpleExtra;
+        use lower::cfg::*;
+        use lower::{IREnvironment, IRGraph, Location, Module};
+        let mut b = NodeBuilder::new();
+        let context = lower::default_context();
+        let mut d = Diagnostics::new();
+        //let mut module = Module::new(Location::unknown(&context));
+        let mut cfg_g = CFGGraph::new();
+        let mut g = IRGraph::new();
+        let mut cfg: CFG<SimpleExtra> = CFG::new(&context, b.s("module"), &d, &mut cfg_g);
+        let mut env = IREnvironment::new();
+        let file_id = d.add_source(
+            filename.to_string(),
+            std::fs::read_to_string(filename).unwrap(),
+        );
+
+        // parse
+        let mut parser = Parser::new();
+        let ast: AstNode<ast::SimpleExtra> = parser
+            .parse(Path::new(filename), None, file_id, &mut d, &mut b)
+            .unwrap()
+            .normalize(&mut cfg, &mut d, &mut b);
+
+        println!("ast: {:#?}", ast);
+        //let mut stack = vec![cfg.root()];
+
+        let index = env.add_block(b.s("module"), vec![], &d, &mut g);
+        env.enter_block(index);
+
+        let r = ast.lower_ir_expr(&context, &mut d, &mut env, &mut g, &mut b);
+        d.dump();
+        assert!(!d.has_errors);
+        let ir = r.unwrap();
+        println!("ir: {:#?}", ir);
+        ir.dump(&b, 0);
+        assert_eq!(1, env.stack_size());
+    }
+
     #[test]
     fn test_global() {
         run_test("../tests/test_global.star", 0);
+        run_test_ir("../tests/test_global.star", 0);
     }
 
     #[test]
     fn test_static() {
         run_test("../tests/test_static.star", 0);
+        run_test_ir("../tests/test_static.star", 0);
     }
 
     #[test]
     fn test_cond() {
         run_test("../tests/test_cond.star", 0);
+        run_test_ir("../tests/test_cond.star", 0);
     }
 
     #[test]
     fn test_float() {
         run_test("../tests/test_float.star", 0);
+        run_test_ir("../tests/test_float.star", 0);
     }
 
     #[test]
     fn test_recursive() {
         run_test("../tests/test_recursive.star", 0);
+        run_test_ir("../tests/test_recursive.star", 0);
     }
 }
