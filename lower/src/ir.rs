@@ -54,6 +54,8 @@ pub enum IRKind {
     Op2(BinaryOperation, Box<IRNode>, Box<IRNode>),
     Block(StringKey, Vec<IRArg>, Vec<IRNode>),
     Seq(Vec<IRNode>),
+    Literal(Literal),
+    Builtin(Builtin, Vec<IRNode>),
     Noop,
 }
 
@@ -153,6 +155,29 @@ impl<E: Extra> AstNode<E> {
                 } else {
                     d.push_diagnostic(self.extra.error(&format!("Undefined variable: {:?}", name)));
                     Err(Error::new(ParseError::Invalid))
+                }
+            }
+
+            Ast::Global(ident, expr) => {
+                let current_block = stack.last().unwrap().clone();
+
+                let is_static = cfg.root() == current_block;
+
+                let (global_name_key, global_name) = if is_static {
+                    (ident, b.strings.resolve(&ident).clone())
+                } else {
+                    // we create a unique global name to prevent conflict
+                    // and then we add ops to provide a local reference to the global name
+                    let name = b.unique_static_name();
+                    let name = format!("{}{}", b.strings.resolve(&ident), name).clone();
+                    (b.strings.intern(name.clone()), name)
+                };
+
+                if let Ast::Literal(lit) = expr.node {
+                    let ty = lit.into();
+                    Ok(b.ir_decl(global_name_key, ty))
+                } else {
+                    unreachable!()
                 }
             }
 
@@ -324,7 +349,96 @@ impl<E: Extra> AstNode<E> {
                 }
             }
 
-            _ => unimplemented!(),
+            Ast::Definition(mut def) => {
+                def = def.normalize(b);
+                let current_block = stack.last().unwrap().clone();
+                assert!(cfg.block_is_static(current_block));
+
+                let mut ast_types = vec![];
+                for p in &def.params {
+                    match p.node {
+                        Parameter::Normal | Parameter::WithDefault(_) => {
+                            ast_types.push(p.ty.clone());
+                        }
+                        _ => unimplemented!("{:?}", p),
+                    }
+                }
+                let ast_ret_type = def.return_type;
+                let f_type = AstType::Func(ast_types, ast_ret_type);
+                let mut out = vec![b.ir_decl(def.name, f_type)];
+                let mut output_blocks = vec![];
+                if let Some(body) = def.body {
+                    let blocks = body.try_seq().unwrap();
+                    for (_i, block) in blocks.into_iter().enumerate() {
+                        if let Ast::Block(nb) = block.node {
+                            output_blocks.push(nb.body.lower_ir(context, d, cfg, stack, g, b)?);
+                        } else {
+                            unreachable!()
+                        }
+                    }
+                }
+
+                if output_blocks.len() > 0 {
+                    out.push(b.ir_seq(output_blocks));
+                }
+                Ok(b.ir_seq(out))
+            }
+
+            Ast::Literal(lit) => match lit {
+                Literal::Float(f) => Ok(b.ir_float(f)),
+                Literal::Int(f) => Ok(b.ir_integer(f)),
+                Literal::Index(f) => Ok(b.ir_index(f)),
+                Literal::Bool(f) => Ok(b.ir_bool(f)),
+                _ => unimplemented!("{:?}", lit),
+            },
+
+            Ast::Builtin(bi, args) => {
+                let mut ir_args = vec![];
+                for a in args {
+                    match a {
+                        Argument::Positional(expr) => {
+                            ir_args.push(expr.lower_ir(context, d, cfg, stack, g, b)?);
+                        }
+                    }
+                }
+                Ok(IRNode::new(IRKind::Builtin(bi, ir_args)))
+            }
+
+            Ast::Conditional(condition, then_expr, maybe_else_expr) => {
+                let ir_cond = condition.lower_ir(context, d, cfg, stack, g, b)?;
+                //let b_then = b.s("then");
+                //let b_next = b.s("next");
+                let then_block = then_expr.lower_ir(context, d, cfg, stack, g, b)?;
+
+                let else_block = if let Some(else_expr) = maybe_else_expr {
+                    //let b_else = b.s("else");
+                    Some(else_expr.lower_ir(context, d, cfg, stack, g, b)?)
+                } else {
+                    None
+                };
+
+                Ok(b.ir_cond(ir_cond, then_block, else_block))
+            }
+
+            Ast::UnaryOp(op, a) => {
+                let ir = a.lower_ir(context, d, cfg, stack, g, b)?;
+                Ok(b.ir_op1(op, ir))
+            }
+
+            Ast::BinaryOp(op_node, x, y) => {
+                let x = x.lower_ir(context, d, cfg, stack, g, b)?;
+                let y = y.lower_ir(context, d, cfg, stack, g, b)?;
+                Ok(b.ir_op2(op_node.node, x, y))
+            }
+
+            Ast::Error => {
+                d.push_diagnostic(self.extra.error(&format!("Error")));
+                Err(Error::new(ParseError::Invalid))
+            }
+            _ => {
+                d.push_diagnostic(self.extra.error(&format!("Unimplemented: {:?}", self.node)));
+                Err(Error::new(ParseError::Invalid))
+            }
         }
     }
 }

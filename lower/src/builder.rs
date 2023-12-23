@@ -391,6 +391,43 @@ impl<E: Extra> NodeBuilder<E> {
     pub fn ir_call(&self, key: StringKey, args: Vec<IRNode>) -> IRNode {
         IRNode::new(IRKind::Call(key, args))
     }
+
+    pub fn ir_float(&self, f: f64) -> IRNode {
+        IRNode::new(IRKind::Literal(Literal::Float(f)))
+    }
+
+    pub fn ir_integer(&self, f: i64) -> IRNode {
+        IRNode::new(IRKind::Literal(Literal::Int(f)))
+    }
+
+    pub fn ir_index(&self, f: usize) -> IRNode {
+        IRNode::new(IRKind::Literal(Literal::Index(f)))
+    }
+
+    pub fn ir_bool(&self, f: bool) -> IRNode {
+        IRNode::new(IRKind::Literal(Literal::Bool(f)))
+    }
+
+    pub fn ir_op1(&self, op: UnaryOperation, v: IRNode) -> IRNode {
+        IRNode::new(IRKind::Op1(op, v.into()))
+    }
+
+    pub fn ir_op2(&self, op: BinaryOperation, a: IRNode, b: IRNode) -> IRNode {
+        IRNode::new(IRKind::Op2(op, a.into(), b.into()))
+    }
+
+    pub fn ir_cond(
+        &self,
+        condition: IRNode,
+        then_expr: IRNode,
+        maybe_else_expr: Option<IRNode>,
+    ) -> IRNode {
+        IRNode::new(IRKind::Cond(
+            condition.into(),
+            then_expr.into(),
+            maybe_else_expr.map(|e| e.into()),
+        ))
+    }
 }
 
 pub struct AstBlockSorter<E> {
