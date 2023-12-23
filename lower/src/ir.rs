@@ -396,7 +396,6 @@ impl IRBlockSorter {
             }
             IRKind::Block(nb) => {
                 self.sort_block(nb, b);
-                //self.blocks.push(nb);
             }
             IRKind::Jump(_, _) => {
                 self.stack.push(ir);
