@@ -249,9 +249,9 @@ impl IRNode {
     pub fn dump<E: Extra>(&self, b: &NodeBuilder<E>, depth: usize) {
         match &self.kind {
             IRKind::Seq(exprs) => {
-                println!("{:width$}seq:", "", width = depth * 2);
+                //println!("{:width$}seq:", "", width = depth * 2);
                 for e in exprs {
-                    e.dump(b, depth + 1);
+                    e.dump(b, depth);
                 }
             }
             IRKind::Decl(key, ty) => {
@@ -317,8 +317,10 @@ impl IRNode {
                     b.strings.resolve(key),
                     width = depth * 2
                 );
-                for a in args {
-                    a.dump(b, depth + 1);
+                if args.len() > 0 {
+                    for a in args {
+                        a.dump(b, depth + 1);
+                    }
                 }
             }
 
@@ -334,7 +336,7 @@ impl IRNode {
             }
 
             IRKind::Literal(lit) => {
-                println!("{:width$}lit: {:?}", "", lit, width = depth * 2);
+                println!("{:width$}{:?}", "", lit, width = depth * 2);
             }
 
             IRKind::Builtin(bi, args) => {
