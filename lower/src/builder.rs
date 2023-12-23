@@ -2,7 +2,7 @@ use crate::ast::*;
 use crate::intern::StringPool;
 use crate::Diagnostics;
 use crate::{
-    ir::{IRKind, IRNode},
+    ir::{IRKind, IRNode, IRTypeSelect},
     AstType, StringKey,
 };
 use melior::{ir::Location, Context};
@@ -366,6 +366,30 @@ impl<E: Extra> NodeBuilder<E> {
 
     pub fn ir_seq(&self, seq: Vec<IRNode>) -> IRNode {
         IRNode::new(IRKind::Seq(seq))
+    }
+
+    pub fn ir_ret(&self, seq: Vec<IRNode>) -> IRNode {
+        IRNode::new(IRKind::Ret(seq))
+    }
+
+    pub fn ir_jump(&self, key: StringKey, args: Vec<IRNode>) -> IRNode {
+        IRNode::new(IRKind::Jump(key, args))
+    }
+
+    pub fn ir_get(&self, key: StringKey, select: IRTypeSelect) -> IRNode {
+        IRNode::new(IRKind::Get(key, select))
+    }
+
+    pub fn ir_set(&self, key: StringKey, expr: IRNode, select: IRTypeSelect) -> IRNode {
+        IRNode::new(IRKind::Set(key, expr.into(), select))
+    }
+
+    pub fn ir_decl(&self, key: StringKey, ty: AstType) -> IRNode {
+        IRNode::new(IRKind::Decl(key, ty))
+    }
+
+    pub fn ir_call(&self, key: StringKey, args: Vec<IRNode>) -> IRNode {
+        IRNode::new(IRKind::Call(key, args))
     }
 }
 

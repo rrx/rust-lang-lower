@@ -396,6 +396,17 @@ impl<E: Extra> Parser<E> {
                 match assign.lhs.node {
                     AssignTargetP::Identifier(ident) => {
                         log::debug!("parse ident: {}", ident.node.ident);
+                        let name = &ident.node.ident;
+                        match name.as_str() {
+                            "True" => {
+                                return Ok(b.bool(true));
+                            }
+                            "False" => {
+                                return Ok(b.bool(false));
+                            }
+                            _ => (),
+                        }
+
                         let name = b.s(&ident.node.ident);
 
                         // lookup
