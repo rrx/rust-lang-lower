@@ -349,7 +349,7 @@ pub fn error(msg: &str, span: Span) -> Diagnostic<usize> {
 
 pub struct IRBlockSorter {
     pub stack: Vec<IRNode>,
-    pub blocks: Vec<IRNode>,
+    pub blocks: Vec<IRBlock>,
 }
 
 impl IRBlockSorter {
@@ -360,11 +360,33 @@ impl IRBlockSorter {
         }
     }
 
+    pub fn blocks<E: Extra>(self, b: &mut NodeBuilder<E>) -> Vec<IRNode> {
+        self.blocks
+            .into_iter()
+            .map(|block| IRNode::new(IRKind::Block(block), b.extra().get_span()))
+            .collect()
+    }
+
     pub fn run<E: Extra>(ir: IRNode, b: &mut NodeBuilder<E>) -> Vec<IRNode> {
         let mut s = Self::new();
         s.sort(ir, b);
-        s.blocks
+        s.close_block(b);
+        s.blocks(b)
     }
+
+    pub fn sort_block<E: Extra>(&mut self, block: IRBlock, b: &mut NodeBuilder<E>) {
+        let mut s = Self::new();
+        for c in block.children {
+            s.sort(c, b);
+        }
+        s.close_block(b);
+        s.blocks.first_mut().unwrap().params = block.params;
+        s.blocks.first_mut().unwrap().name = block.name;
+        for block in s.blocks {
+            self.blocks.push(block);
+        }
+    }
+
     pub fn sort<E: Extra>(&mut self, ir: IRNode, b: &mut NodeBuilder<E>) {
         match ir.kind {
             IRKind::Seq(exprs) => {
@@ -372,12 +394,9 @@ impl IRBlockSorter {
                     self.sort(e, b);
                 }
             }
-            IRKind::Block(ref nb) => {
-                // check params match
-                //if self.blocks.len() == 0 {
-                //assert_eq!(nb.params.len(), entry_params.len());
-                //}
-                self.blocks.push(ir);
+            IRKind::Block(nb) => {
+                self.sort_block(nb, b);
+                //self.blocks.push(nb);
             }
             IRKind::Jump(_, _) => {
                 self.stack.push(ir);
@@ -413,8 +432,8 @@ impl IRBlockSorter {
             children: self.stack.drain(..).collect(),
         };
 
-        let ir = IRNode::new(IRKind::Block(nb), span);
-        self.blocks.push(ir);
+        //let ir = IRNode::new(IRKind::Block(nb), span);
+        self.blocks.push(nb);
     }
 }
 
@@ -1090,7 +1109,14 @@ impl<E: Extra> AstNode<E> {
                         blocks.push(block);
                         env.exit_block();
                     }
-                    let ir = IRNode::new(IRKind::Func(blocks, ast_ret_type), span);
+
+                    let mut s = IRBlockSorter::new();
+                    for (i, block) in blocks.into_iter().enumerate() {
+                        s.sort_block(block, b);
+                    }
+                    s.close_block(b);
+
+                    let ir = IRNode::new(IRKind::Func(s.blocks, ast_ret_type), span);
                     out.push(b.ir_set(def.name, ir, IRTypeSelect::default()));
                 }
                 Ok(())

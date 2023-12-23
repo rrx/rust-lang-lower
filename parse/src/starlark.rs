@@ -652,7 +652,7 @@ pub(crate) mod tests {
         //}
         let x = lower::ir::IRBlockSorter::run(ir, &mut b);
         for a in x {
-            println!("{:?}", a);
+            a.dump(&b, 0);
         }
         return;
 
