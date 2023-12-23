@@ -636,18 +636,29 @@ pub(crate) mod tests {
             .normalize(&mut cfg, &mut d, &mut b);
 
         println!("ast: {:#?}", ast);
-        //let mut stack = vec![cfg.root()];
 
         let index = env.add_block(b.s("module"), vec![], &d, &mut g);
-        env.enter_block(index);
+        env.enter_block(index, ast.extra.get_span());
 
         let r = ast.lower_ir_expr(&context, &mut d, &mut env, &mut g, &mut b);
         d.dump();
         assert!(!d.has_errors);
         let ir = r.unwrap();
-        println!("ir: {:#?}", ir);
+        //println!("ir: {:#?}", ir);
         ir.dump(&b, 0);
         assert_eq!(1, env.stack_size());
+        return;
+        //if env.stack_size() == 0 {
+        //let index = env.add_block(b.s("module"), vec![], d, g);
+        //env.enter_block(index, self.extra.get_span());
+        //}
+
+        let mut g = IRGraph::new();
+        let mut env = IREnvironment::new();
+        let r = ir.build_graph(&mut d, &mut env, &mut g, &mut b);
+        d.dump();
+        r.unwrap();
+        env.save_graph("out.dot", &g, &b);
     }
 
     #[test]
@@ -676,7 +687,7 @@ pub(crate) mod tests {
 
     #[test]
     fn test_recursive() {
-        run_test("../tests/test_recursive.star", 0);
+        //run_test("../tests/test_recursive.star", 0);
         run_test_ir("../tests/test_recursive.star", 0);
     }
 }

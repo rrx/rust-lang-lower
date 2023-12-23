@@ -25,7 +25,7 @@ pub enum DefinitionId {
     Arg(u32),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Literal {
     Int(i64),
     Index(usize),
@@ -261,6 +261,10 @@ impl Extra for SimpleExtra {
             },
         }
     }
+    fn get_span(&self) -> Span {
+        self.span.clone()
+    }
+
     fn span(span: Span) -> Self {
         Self { span }
     }
@@ -292,6 +296,7 @@ impl Extra for SimpleExtra {
 
 pub trait Extra: Debug + Clone {
     fn new(file_id: usize, begin: CodeLocation, end: CodeLocation) -> Self;
+    fn get_span(&self) -> Span;
     fn span(span: Span) -> Self;
     fn location<'c>(&self, context: &'c Context, d: &Diagnostics) -> Location<'c>;
     fn error(&self, msg: &str) -> Diagnostic<usize>;

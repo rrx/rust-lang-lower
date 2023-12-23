@@ -2,7 +2,7 @@ use crate::ast::*;
 use crate::intern::StringPool;
 use crate::Diagnostics;
 use crate::{
-    ir::{IRKind, IRNode, IRTypeSelect},
+    ir::{IRArg, IRKind, IRNode, IRTypeSelect},
     AstType, StringKey,
 };
 use melior::{ir::Location, Context};
@@ -361,59 +361,89 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn ir_noop(&self) -> IRNode {
-        IRNode::new(IRKind::Noop)
+        IRNode::new(IRKind::Noop, self.span.clone().unwrap())
     }
 
     pub fn ir_seq(&self, seq: Vec<IRNode>) -> IRNode {
-        IRNode::new(IRKind::Seq(seq))
+        IRNode::new(IRKind::Seq(seq), self.span.clone().unwrap())
     }
 
     pub fn ir_ret(&self, seq: Vec<IRNode>) -> IRNode {
-        IRNode::new(IRKind::Ret(seq))
+        IRNode::new(IRKind::Ret(seq), self.span.clone().unwrap())
     }
 
+    pub fn ir_label(&self, key: StringKey, args: Vec<IRArg>) -> IRNode {
+        IRNode::new(IRKind::Label(key, args), self.span.clone().unwrap())
+    }
     pub fn ir_jump(&self, key: StringKey, args: Vec<IRNode>) -> IRNode {
-        IRNode::new(IRKind::Jump(key, args))
+        IRNode::new(IRKind::Jump(key, args), self.span.clone().unwrap())
     }
 
     pub fn ir_get(&self, key: StringKey, select: IRTypeSelect) -> IRNode {
-        IRNode::new(IRKind::Get(key, select))
+        IRNode::new(IRKind::Get(key, select), self.span.clone().unwrap())
     }
 
     pub fn ir_set(&self, key: StringKey, expr: IRNode, select: IRTypeSelect) -> IRNode {
-        IRNode::new(IRKind::Set(key, expr.into(), select))
+        IRNode::new(
+            IRKind::Set(key, expr.into(), select),
+            self.span.clone().unwrap(),
+        )
     }
 
     pub fn ir_decl(&self, key: StringKey, ty: AstType) -> IRNode {
-        IRNode::new(IRKind::Decl(key, ty))
+        IRNode::new(IRKind::Decl(key, ty), self.span.clone().unwrap())
     }
 
     pub fn ir_call(&self, key: StringKey, args: Vec<IRNode>) -> IRNode {
-        IRNode::new(IRKind::Call(key, args))
+        IRNode::new(IRKind::Call(key, args), self.span.clone().unwrap())
     }
 
     pub fn ir_float(&self, f: f64) -> IRNode {
-        IRNode::new(IRKind::Literal(Literal::Float(f)))
+        IRNode::new(
+            IRKind::Literal(Literal::Float(f)),
+            self.span.clone().unwrap(),
+        )
     }
 
     pub fn ir_integer(&self, f: i64) -> IRNode {
-        IRNode::new(IRKind::Literal(Literal::Int(f)))
+        IRNode::new(IRKind::Literal(Literal::Int(f)), self.span.clone().unwrap())
     }
 
     pub fn ir_index(&self, f: usize) -> IRNode {
-        IRNode::new(IRKind::Literal(Literal::Index(f)))
+        IRNode::new(
+            IRKind::Literal(Literal::Index(f)),
+            self.span.clone().unwrap(),
+        )
     }
 
     pub fn ir_bool(&self, f: bool) -> IRNode {
-        IRNode::new(IRKind::Literal(Literal::Bool(f)))
+        IRNode::new(
+            IRKind::Literal(Literal::Bool(f)),
+            self.span.clone().unwrap(),
+        )
     }
 
     pub fn ir_op1(&self, op: UnaryOperation, v: IRNode) -> IRNode {
-        IRNode::new(IRKind::Op1(op, v.into()))
+        IRNode::new(IRKind::Op1(op, v.into()), self.span.clone().unwrap())
     }
 
     pub fn ir_op2(&self, op: BinaryOperation, a: IRNode, b: IRNode) -> IRNode {
-        IRNode::new(IRKind::Op2(op, a.into(), b.into()))
+        IRNode::new(
+            IRKind::Op2(op, a.into(), b.into()),
+            self.span.clone().unwrap(),
+        )
+    }
+
+    pub fn ir_branch(
+        &self,
+        condition: IRNode,
+        then_br: StringKey,
+        else_br: Option<StringKey>,
+    ) -> IRNode {
+        IRNode::new(
+            IRKind::Branch(condition.into(), then_br, else_br),
+            self.span.clone().unwrap(),
+        )
     }
 
     pub fn ir_cond(
@@ -422,11 +452,14 @@ impl<E: Extra> NodeBuilder<E> {
         then_expr: IRNode,
         maybe_else_expr: Option<IRNode>,
     ) -> IRNode {
-        IRNode::new(IRKind::Cond(
-            condition.into(),
-            then_expr.into(),
-            maybe_else_expr.map(|e| e.into()),
-        ))
+        IRNode::new(
+            IRKind::Cond(
+                condition.into(),
+                then_expr.into(),
+                maybe_else_expr.map(|e| e.into()),
+            ),
+            self.span.clone().unwrap(),
+        )
     }
 }
 

@@ -19,6 +19,7 @@ pub enum ParseError {
 pub struct Diagnostics {
     pub files: FileDB,
     diagnostics: Vec<Diagnostic<usize>>,
+    stack: Vec<Span>,
     pub has_errors: bool,
 }
 impl Diagnostics {
@@ -26,6 +27,7 @@ impl Diagnostics {
         Self {
             files: FileDB::new(),
             diagnostics: vec![],
+            stack: vec![],
             has_errors: false,
         }
     }
@@ -39,6 +41,14 @@ impl Diagnostics {
             self.has_errors = true;
         }
         self.diagnostics.push(d);
+    }
+
+    pub fn enter(&mut self, span: Span) {
+        self.stack.push(span);
+    }
+
+    pub fn exit(&mut self) {
+        self.stack.pop();
     }
 
     pub fn dump(&mut self) {
