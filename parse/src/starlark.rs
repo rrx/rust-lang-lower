@@ -233,7 +233,7 @@ impl<E: Extra> Parser<E> {
         &mut self,
         item: syntax::ast::AstParameterP<P>,
         env: &mut Environment<'a>,
-        d: &mut Diagnostics,
+        _d: &mut Diagnostics,
         b: &mut NodeBuilder<E>,
     ) -> ast::ParameterNode<E> {
         use syntax::ast::ParameterP;
@@ -618,11 +618,10 @@ pub(crate) mod tests {
     fn run_test_ir(filename: &str, expected: i32) {
         use lower::ast::SimpleExtra;
         use lower::cfg::*;
-        use lower::{IREnvironment, IRGraph, Location, Module};
+        use lower::{IREnvironment, IRGraph};
         let mut b = NodeBuilder::new();
         let context = lower::default_context();
         let mut d = Diagnostics::new();
-        //let mut module = Module::new(Location::unknown(&context));
         let mut cfg_g = CFGGraph::new();
         let mut g = IRGraph::new();
         let mut cfg: CFG<SimpleExtra> = CFG::new(&context, b.s("module"), &d, &mut cfg_g);
@@ -644,7 +643,7 @@ pub(crate) mod tests {
         let index = env.add_block(b.s("module"), vec![], &d, &mut g);
         env.enter_block(index, ast.extra.get_span());
 
-        let r = ast.lower_ir_expr(&context, &mut d, &mut env, &mut g, &mut b);
+        let r = ast.lower_ir_expr(&mut d, &mut env, &mut g, &mut b);
         d.dump();
         assert!(!d.has_errors);
         let ir = r.unwrap();
