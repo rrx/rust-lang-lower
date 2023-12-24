@@ -339,6 +339,7 @@ impl IRKind {
             Self::Seq(exprs) => exprs.last().unwrap().kind.terminator(),
             Self::Block(nb) => nb.terminator(),
             Self::Jump(key, _args) => Some(Terminator::Jump(*key)),
+            Self::Branch(_, then_key, maybe_else_key) => Some(Terminator::Jump(*then_key)),
             Self::Ret(_) => Some(Terminator::Return),
             _ => None,
         }
@@ -379,11 +380,12 @@ impl IRBlockSorter {
             .collect()
     }
 
-    pub fn run<E: Extra>(ir: IRNode, b: &mut NodeBuilder<E>) -> Vec<IRNode> {
+    pub fn run<E: Extra>(ir: IRNode, b: &mut NodeBuilder<E>) -> IRNode {
         let mut s = Self::new();
         s.sort(ir, b);
         s.close_block(b);
-        s.blocks(b)
+        let blocks = s.blocks(b);
+        b.ir_seq(blocks)
     }
 
     pub fn sort_block<E: Extra>(&mut self, block: IRBlock, b: &mut NodeBuilder<E>) {
@@ -461,6 +463,10 @@ impl IRBlockSorter {
 impl IRNode {
     pub fn new(kind: IRKind, span: Span) -> Self {
         Self { kind, span }
+    }
+
+    pub fn get_span(&self) -> Span {
+        self.span.clone()
     }
 
     pub fn to_vec(self) -> Vec<Self> {
@@ -672,6 +678,8 @@ impl IRNode {
         g: &mut IRGraph,
         b: &mut NodeBuilder<E>,
     ) -> Result<()> {
+        println!("build");
+        self.dump(b, 0);
         match &self.kind {
             IRKind::Noop => Ok(()),
 
@@ -680,6 +688,8 @@ impl IRNode {
                 //let data = g.node_weight(current_index).unwrap();
 
                 for expr in exprs {
+                    expr.build_graph(d, env, g, b)?;
+                    /*
                     if let IRKind::Block(block) = &expr.kind {
                         let block_index = env.add_block(block.name, block.params.clone(), d, g);
                         g.add_edge(current_index, block_index, ());
@@ -689,6 +699,7 @@ impl IRNode {
                     } else {
                         expr.build_graph(d, env, g, b)?;
                     }
+                    */
                 }
                 Ok(())
             }
@@ -700,12 +711,13 @@ impl IRNode {
                 Ok(())
             }
 
+            /*
             IRKind::Label(name, args) => {
                 let index = env.add_block(*name, args.clone(), d, g);
-                env.enter_block(index, self.span.clone());
+                //env.enter_block(index, self.span.clone());
                 Ok(())
             }
-
+            */
             IRKind::Jump(label, args) => {
                 let block_index = env.current_block();
                 let target_index = env.lookup_block(*label).unwrap();
@@ -732,6 +744,7 @@ impl IRNode {
 
             IRKind::Set(name, value, ref _select) => {
                 let current_index = env.current_block();
+                env.dump(g, b, current_index);
                 if let Some(_index) = env.name_in_scope(current_index, *name, g) {
                     //let data = g.node_weight_mut(index.block()).unwrap();
                     //data.add_symbol(name, index);
@@ -758,49 +771,90 @@ impl IRNode {
 
             IRKind::Func(blocks, _ret_type) => {
                 let current_block = env.current_block();
-                for (i, block) in blocks.iter().enumerate() {
+                let mut seq = vec![];
+                for (i, block) in blocks.into_iter().enumerate() {
                     let block_index = env.add_block(block.name, block.params.clone(), d, g);
                     if 0 == i {
                         g.add_edge(current_block, block_index, ());
                     }
-                    env.enter_block(block_index, self.span.clone());
+                    seq.push((block_index, block));
+                }
+
+                for (block_index, block) in seq {
+                    println!("b: {:?}", block);
+                    for n in &block.children {
+                        n.dump(b, 0);
+                    }
 
                     let data = g.node_weight_mut(block_index).unwrap();
                     for p in &block.params {
                         data.push_arg(p.name);
                     }
 
+                    let term = block.terminator().unwrap();
+                    /*
+                    match term {
+                        Terminator::Jump(key) => {
+                            let target_block = env.lookup_block(key).unwrap();
+                            //let data = g.node_weight_mut(block_index).unwrap();
+                            g.add_edge(block_index, target_block, ());
+                        }
+                        Terminator::Branch(then_key, else_key) => {
+                            for key in &[then_key, else_key] {
+                                let target_block = env.lookup_block(*key).unwrap();
+                                //let data = g.node_weight_mut(block_index).unwrap();
+                                g.add_edge(block_index, target_block, ());
+                            }
+                        }
+                        Terminator::Return => ()
+                    }
+                    */
+
+                    env.enter_block(block_index, self.span.clone());
                     for child in &block.children {
                         child.build_graph(d, env, g, b)?;
                     }
-
                     env.exit_block();
                 }
                 Ok(())
             }
 
-            /*
             IRKind::Block(block) => {
                 let mut edges = vec![];
                 let current_block = env.current_block();
-                let current = g.node_weight_mut(current_block).unwrap();
+                //let _current = g.node_weight_mut(current_block).unwrap();
                 let block_index = env.add_block(block.name, block.params.clone(), d, g);
-                let block_index = env.lookup_block(block.name).unwrap();
-                env.enter_block(block_index);
-                for (i, _child) in block.children.into_iter().enumerate() {
+                //let block_index = env.lookup_block(block.name).unwrap();
+                env.enter_block(block_index, self.get_span());
+                g.add_edge(current_block, block_index, ());
+                //env.enter_block(block_index, self.get_span());
+                for (i, child) in block.children.iter().enumerate() {
                     edges.push((current_block, block_index));
                     let mut data = g.node_weight_mut(block_index).unwrap();
                     for a in &block.params {
                         data.push_arg(a.name);
                     }
+                    child.build_graph(d, env, g, b)?;
                 }
-                env.exit_block9);
+                env.exit_block();
                 Ok(())
             }
-            */
+
             IRKind::Literal(_lit) => Ok(()),
 
             IRKind::Builtin(_bi, _args) => Ok(()),
+
+            IRKind::Branch(condition, then_key, maybe_else_key) => {
+                condition.build_graph(d, env, g, b)?;
+                let current_block = env.current_block();
+                let then_block = env.lookup_block(*then_key).unwrap();
+                g.add_edge(current_block, then_block, ());
+                if let Some(else_key) = maybe_else_key {
+                    let else_block = env.lookup_block(*else_key).unwrap();
+                    g.add_edge(current_block, else_block, ());
+                }
+                Ok(())
+            }
 
             IRKind::Cond(condition, then_expr, maybe_else_expr) => {
                 condition.build_graph(d, env, g, b)?;

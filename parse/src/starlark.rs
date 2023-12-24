@@ -653,15 +653,15 @@ pub(crate) mod tests {
         //if env.stack_size() == 0 {
         //env.enter_block(index, self.extra.get_span());
         //}
-        let x = lower::ir::IRBlockSorter::run(ir, &mut b);
-        for a in x {
-            a.dump(&b, 0);
-        }
-        return;
+        let ir = lower::ir::IRBlockSorter::run(ir, &mut b);
+        //for a in x {
+        //a.dump(&b, 0);
+        //}
 
         let mut g = IRGraph::new();
         let mut env = IREnvironment::new();
         let index = env.add_block(b.s("module"), vec![], &mut d, &mut g);
+        env.enter_block(index, ir.get_span());
         let r = ir.build_graph(&mut d, &mut env, &mut g, &mut b);
         d.dump();
         r.unwrap();
