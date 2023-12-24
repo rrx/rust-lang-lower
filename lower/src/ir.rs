@@ -164,12 +164,12 @@ impl IREnvironment {
 
     pub fn enter_block(&mut self, index: NodeIndex, span: Span) {
         self.stack.push((index, span));
-        println!("enter: {:?}", self.stack);
+        //println!("enter: {:?}", self.stack);
     }
 
     pub fn exit_block(&mut self) {
         self.stack.pop();
-        println!("exit: {:?}", self.stack);
+        //println!("exit: {:?}", self.stack);
     }
 
     pub fn stack_size(&self) -> usize {
@@ -382,6 +382,17 @@ impl IRBlockSorter {
 
     pub fn run<E: Extra>(ir: IRNode, b: &mut NodeBuilder<E>) -> IRNode {
         let mut s = Self::new();
+        let ir = match ir.kind {
+            IRKind::Seq(exprs) => {
+                let module = b.s("module");
+                let mut block = IRBlock::new(module, vec![], exprs);
+                block.children.insert(0, b.ir_label(module, vec![]));
+                IRNode::new(IRKind::Block(block), b.extra().get_span())
+            }
+            IRKind::Block(ref block) => ir,
+            _ => unreachable!(),
+        };
+
         s.sort(ir, b);
         s.close_block(b);
         let blocks = s.blocks(b);
@@ -406,6 +417,9 @@ impl IRBlockSorter {
                     self.sort(e, b);
                 }
             }
+            //IRKind::Set(_, v, _) => {
+            //self.sort(*v, b);
+            //}
             IRKind::Block(nb) => {
                 self.sort_block(nb, b);
             }
@@ -678,13 +692,13 @@ impl IRNode {
         g: &mut IRGraph,
         b: &mut NodeBuilder<E>,
     ) -> Result<()> {
-        println!("build");
-        self.dump(b, 0);
+        //println!("build");
+        //self.dump(b, 0);
         match &self.kind {
             IRKind::Noop => Ok(()),
 
             IRKind::Seq(exprs) => {
-                let current_index = env.current_block();
+                //let current_index = env.current_block();
                 //let data = g.node_weight(current_index).unwrap();
 
                 for expr in exprs {
@@ -711,13 +725,12 @@ impl IRNode {
                 Ok(())
             }
 
-            /*
             IRKind::Label(name, args) => {
-                let index = env.add_block(*name, args.clone(), d, g);
+                //let index = env.add_block(*name, args.clone(), d, g);
                 //env.enter_block(index, self.span.clone());
                 Ok(())
             }
-            */
+
             IRKind::Jump(label, args) => {
                 let block_index = env.current_block();
                 let target_index = env.lookup_block(*label).unwrap();
@@ -744,7 +757,7 @@ impl IRNode {
 
             IRKind::Set(name, value, ref _select) => {
                 let current_index = env.current_block();
-                env.dump(g, b, current_index);
+                //env.dump(g, b, current_index);
                 if let Some(_index) = env.name_in_scope(current_index, *name, g) {
                     //let data = g.node_weight_mut(index.block()).unwrap();
                     //data.add_symbol(name, index);
@@ -781,17 +794,17 @@ impl IRNode {
                 }
 
                 for (block_index, block) in seq {
-                    println!("b: {:?}", block);
-                    for n in &block.children {
-                        n.dump(b, 0);
-                    }
+                    //println!("b: {:?}", block);
+                    //for n in &block.children {
+                    //n.dump(b, 0);
+                    //}
 
                     let data = g.node_weight_mut(block_index).unwrap();
                     for p in &block.params {
                         data.push_arg(p.name);
                     }
 
-                    let term = block.terminator().unwrap();
+                    //let term = block.terminator().unwrap();
                     /*
                     match term {
                         Terminator::Jump(key) => {
@@ -820,16 +833,21 @@ impl IRNode {
             }
 
             IRKind::Block(block) => {
-                let mut edges = vec![];
-                let current_block = env.current_block();
+                //let mut edges = vec![];
+                //let current_block = env.current_block();
+
                 //let _current = g.node_weight_mut(current_block).unwrap();
                 let block_index = env.add_block(block.name, block.params.clone(), d, g);
                 //let block_index = env.lookup_block(block.name).unwrap();
                 env.enter_block(block_index, self.get_span());
-                g.add_edge(current_block, block_index, ());
+                if let Some(last_block) = env.stack.last() {
+                    if last_block.0 != block_index {
+                        g.add_edge(last_block.0, block_index, ());
+                    }
+                }
                 //env.enter_block(block_index, self.get_span());
                 for (i, child) in block.children.iter().enumerate() {
-                    edges.push((current_block, block_index));
+                    //edges.push((current_block, block_index));
                     let mut data = g.node_weight_mut(block_index).unwrap();
                     for a in &block.params {
                         data.push_arg(a.name);
@@ -891,7 +909,7 @@ impl IRNode {
 
             _ => {
                 d.push_diagnostic(error(
-                    &format!("Unimplemented: {:?}", self.kind,),
+                    &format!("Build Graph Unimplemented: {:?}", self.kind,),
                     self.span.clone(),
                 ));
                 Err(Error::new(ParseError::Invalid))
@@ -903,7 +921,6 @@ impl IRNode {
 impl<E: Extra> AstNode<E> {
     pub fn lower_ir_expr<'c>(
         self,
-        //context: &'c Context,
         d: &mut Diagnostics,
         env: &mut IREnvironment,
         g: &mut IRGraph,
@@ -922,7 +939,6 @@ impl<E: Extra> AstNode<E> {
 
     pub fn lower_ir<'c>(
         self,
-        //context: &'c Context,
         out: &mut Vec<IRNode>,
         d: &mut Diagnostics,
         env: &mut IREnvironment,
@@ -1055,7 +1071,6 @@ impl<E: Extra> AstNode<E> {
             Ast::Call(expr, args, _ret_ty) => {
                 // function to call
                 let current_block = env.current_block();
-                env.dump(g, b, current_block);
                 let (f, ty, f_args, name) = match &expr.node {
                     Ast::Identifier(ident) => {
                         let name = b.strings.resolve(ident);
@@ -1136,7 +1151,6 @@ impl<E: Extra> AstNode<E> {
                 let index = data.add_definition(def.name);
                 env.set_type(index, f_type.clone());
                 out.push(b.ir_decl(def.name, f_type, VarDefinitionSpace::default()));
-                println!("declare: {}", b.strings.resolve(&def.name));
 
                 let mut output_blocks = vec![];
                 let mut edges = vec![];
@@ -1207,8 +1221,16 @@ impl<E: Extra> AstNode<E> {
                         s.sort_block(block, b);
                     }
                     s.close_block(b);
+                    let blocks = s.blocks; //(b);
+                                           //let blocks = output_blocks.into_iter().map(|block| {
 
-                    let ir = IRNode::new(IRKind::Func(s.blocks, ast_ret_type), span);
+                    //}).collect();
+                    //let blocks = blocks
+                    //.into_iter()
+                    //.map(|block| IRNode::new(IRKind::Block(block), b.extra().get_span()))
+                    //.collect::<Vec<_>>();
+
+                    let ir = IRNode::new(IRKind::Func(blocks, ast_ret_type), span);
                     out.push(b.ir_set(def.name, ir, IRTypeSelect::default()));
                 }
                 Ok(())
@@ -1305,7 +1327,10 @@ impl<E: Extra> AstNode<E> {
                 Err(Error::new(ParseError::Invalid))
             }
             _ => {
-                d.push_diagnostic(self.extra.error(&format!("Unimplemented: {:?}", self.node)));
+                d.push_diagnostic(
+                    self.extra
+                        .error(&format!("Ast Unimplemented: {:?}", self.node)),
+                );
                 Err(Error::new(ParseError::Invalid))
             }
         }
