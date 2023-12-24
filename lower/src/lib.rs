@@ -63,7 +63,7 @@ pub(crate) mod tests {
                     //b.mutate(b.ident("y"), b.integer(998)),
                     //b.ret(Some(b.integer(0))),
                     // branch to asdf
-                    b.goto(asdf),
+                    b.goto(asdf, vec![]),
                 ]),
             ),
             b.block(
@@ -78,7 +78,7 @@ pub(crate) mod tests {
                     //b.mutate(b.ident("y"), b.integer(997)),
                     //b.mutate(b.ident("z_static"), b.integer(10)),
                     //b.subtract(b.deref_offset(b.ident("y"), 0), b.integer(1)),
-                    b.goto(asdf2),
+                    b.goto(asdf2, vec![]),
                     // branch to asdf2
                 ]),
             ),

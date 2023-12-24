@@ -344,7 +344,8 @@ impl<'c, E: Extra> CFG<'c, E> {
         let mut block_params = vec![];
         for p in params {
             match p.node {
-                Parameter::Normal | Parameter::WithDefault(_) => {
+                Parameter::Normal => {
+                    //| Parameter::WithDefault(_) => {
                     block_params
                         .push((op::from_type(context, &p.ty), p.extra.location(context, d)));
                 }
@@ -697,7 +698,14 @@ impl<E: Extra> AstNode<E> {
                 }
             }
 
-            Ast::Goto(label) => {
+            Ast::Label(label, args) => {
+                let current_block = stack.last().unwrap().clone();
+                let op = op::build_bool_op(context, false, location);
+                let current = g.node_weight_mut(current_block).unwrap();
+                Ok(current.push(op))
+            }
+
+            Ast::Goto(label, args) => {
                 let current_block = stack.last().unwrap().clone();
                 if let Some(index) = cfg.block_index(&label) {
                     g.add_edge(current_block, index, ());
@@ -903,7 +911,8 @@ impl<E: Extra> AstNode<E> {
 
                 for p in &def.params {
                     match p.node {
-                        Parameter::Normal | Parameter::WithDefault(_) => {
+                        Parameter::Normal => {
+                            //| Parameter::WithDefault(_) => {
                             types.push(op::from_type(context, &p.ty));
                             ast_types.push(p.ty.clone());
                         }
@@ -936,7 +945,8 @@ impl<E: Extra> AstNode<E> {
                     let mut entry_params = vec![];
                     for p in &def.params {
                         match p.node {
-                            Parameter::Normal | Parameter::WithDefault(_) => {
+                            Parameter::Normal => {
+                                //| Parameter::WithDefault(_) => {
                                 entry_params.push((
                                     op::from_type(context, &p.ty),
                                     p.extra.location(context, d),

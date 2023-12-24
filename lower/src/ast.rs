@@ -107,18 +107,18 @@ impl<E> From<AstNode<E>> for Argument<E> {
     }
 }
 
-#[derive(Debug)]
-pub enum Parameter<E> {
+#[derive(Debug, Clone)]
+pub enum Parameter {
     Normal,
-    WithDefault(AstNode<E>),
-    Dummy(AstNode<E>),
+    //WithDefault(AstNode<E>),
+    //Dummy<std::marker::PhantomData<E>//(AstNode<E>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ParameterNode<E> {
     pub name: StringKey,
     pub ty: AstType,
-    pub node: Parameter<E>,
+    pub node: Parameter,
     pub extra: E,
 }
 
@@ -205,8 +205,8 @@ pub enum Ast<E> {
     Loop(StringKey, Box<AstNode<E>>),
     Break(StringKey),
     Continue(StringKey),
-    Goto(StringKey),
-    Label(StringKey),
+    Goto(StringKey, Vec<Argument<E>>),
+    Label(StringKey, Vec<ParameterNode<E>>),
     Noop,
     Error,
 }
@@ -228,7 +228,7 @@ impl<E: Extra> Ast<E> {
         match self {
             Self::Sequence(exprs) => exprs.last().unwrap().node.terminator(),
             Self::Block(nb) => nb.body.node.terminator(),
-            Self::Goto(key) => Some(Terminator::Jump(*key)),
+            Self::Goto(key, _) => Some(Terminator::Jump(*key)),
             Self::Return(_) => Some(Terminator::Return),
             _ => None,
         }
@@ -392,8 +392,8 @@ impl<E> AstNode<E> {
             match &expr.node {
                 // should be flattened already
                 Ast::Sequence(_) => unreachable!(),
-                Ast::Goto(_) => (),
-                Ast::Label(_) => (),
+                Ast::Goto(_, _) => (),
+                Ast::Label(_, _) => (),
                 _ => unimplemented!(),
             }
         }

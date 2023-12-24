@@ -1,15 +1,27 @@
 use anyhow::Error;
 use anyhow::Result;
 
-use crate::cfg::{CFGGraph, SymIndex, CFG};
-use crate::{AstNode, AstType, Diagnostics, Extra, NodeBuilder, NodeID, ParseError, StringKey};
+use crate::cfg::SymIndex;
+use crate::{AstNode, AstType, Diagnostics, Extra, NodeBuilder, ParseError, StringKey};
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use melior::Context;
 use std::fmt::Debug;
 
 use crate::ast::{
-    Argument, AssignTarget, Ast, BinaryOperation, Builtin, DerefTarget, Literal, NodeBlock,
-    Parameter, ParameterNode, Span, Terminator, UnaryOperation, VarDefinitionSpace,
+    Argument,
+    AssignTarget,
+    Ast,
+    BinaryOperation,
+    Builtin,
+    //DerefTarget,
+    Literal,
+    //NodeBlock,
+    Parameter,
+    //ParameterNode,
+    Span,
+    Terminator,
+    UnaryOperation,
+    VarDefinitionSpace,
 };
 
 use petgraph::algo::dominators::simple_fast;
@@ -380,8 +392,8 @@ impl IRBlockSorter {
             s.sort(c, b);
         }
         s.close_block(b);
-        s.blocks.first_mut().unwrap().params = block.params;
-        s.blocks.first_mut().unwrap().name = block.name;
+        //s.blocks.first_mut().unwrap().params = block.params;
+        //s.blocks.first_mut().unwrap().name = block.name;
         for block in s.blocks {
             self.blocks.push(block);
         }
@@ -415,35 +427,35 @@ impl IRBlockSorter {
         if self.stack.len() == 0 {
             return;
         }
-
-        //let extra = self.stack.first().unwrap().extra.clone();
-        // end of block
-        let offset = self.blocks.len();
-
-        let name = b.strings.intern(format!("_block{}", offset));
-        //let seq = b
-        //.ir_seq(self.stack.drain(..).collect());
-        //.set_extra(extra.clone());
-        let span = self.stack.first().unwrap().span.clone();
-        let nb = IRBlock {
-            name,
-            params: vec![],
-            children: self.stack.drain(..).collect(),
+        let first = self.stack.first();
+        let span_first = first.as_ref().unwrap().span.clone();
+        let span_last = self.stack.last().unwrap().span.clone();
+        let span = Span {
+            file_id: span_first.file_id,
+            begin: span_last.begin,
+            end: span_last.end,
         };
 
-        //let ir = IRNode::new(IRKind::Block(nb), span);
+        let nb = if let IRKind::Label(name, args) = &first.as_ref().unwrap().kind {
+            IRBlock {
+                name: *name,
+                params: args.clone(),
+                children: self.stack.drain(..).collect(),
+            }
+        } else {
+            let offset = self.blocks.len();
+            let name = b.strings.intern(format!("_block{}", offset));
+            IRBlock {
+                name,
+                params: vec![],
+                children: self.stack.drain(..).collect(),
+            }
+        };
+        // end of block
+
         self.blocks.push(nb);
     }
 }
-
-/*
-pub fn order_nodes<'c, E: Extra>(nodes: Vec<IRNode>) -> Vec<IRBlock> {
-    let mut out = vec![];
-    for n in nodes {
-         fas
-    }
-}
-*/
 
 impl IRNode {
     pub fn new(kind: IRKind, span: Span) -> Self {
@@ -892,8 +904,15 @@ impl<E: Extra> AstNode<E> {
                 Ok(())
             }
 
-            Ast::Goto(label) => {
-                out.push(b.ir_jump(label, vec![]));
+            Ast::Goto(label, ast_args) => {
+                let mut args = vec![];
+                for a in ast_args.into_iter() {
+                    let Argument::Positional(expr) = a;
+                    let ir = expr.lower_ir_expr(context, d, env, g, b)?;
+                    args.push(ir);
+                }
+
+                out.push(b.ir_jump(label, args));
                 Ok(())
             }
 
@@ -1042,7 +1061,8 @@ impl<E: Extra> AstNode<E> {
                 let mut ast_types = vec![];
                 for p in &def.params {
                     match p.node {
-                        Parameter::Normal | Parameter::WithDefault(_) => {
+                        Parameter::Normal => {
+                            //| Parameter::WithDefault(_) => {
                             ast_types.push(p.ty.clone());
                         }
                         _ => unimplemented!("{:?}", p),
@@ -1062,14 +1082,19 @@ impl<E: Extra> AstNode<E> {
                 if let Some(body) = def.body {
                     let blocks = body.try_seq().unwrap();
 
-                    for block in blocks.into_iter() {
-                        if let Ast::Block(nb) = block.node {
+                    for (i, block) in blocks.into_iter().enumerate() {
+                        if let Ast::Block(mut nb) = block.node {
                             let mut args = vec![];
                             for a in &nb.params {
                                 args.push(IRArg {
                                     name: a.name,
                                     ty: a.ty.clone(),
                                 });
+                            }
+
+                            if 0 == i {
+                                nb.name = def.name;
+                                //nb.params = args;
                             }
 
                             let block_index = env.add_block(nb.name, args.clone(), d, g);
@@ -1094,9 +1119,9 @@ impl<E: Extra> AstNode<E> {
                 if output_blocks.len() > 0 {
                     let mut blocks = vec![];
                     let span = self.extra.get_span();
-                    for (nb, block_index) in output_blocks {
+                    for (i, (nb, block_index)) in output_blocks.into_iter().enumerate() {
                         env.enter_block(block_index, span.clone());
-                        let exprs = nb.body.lower_ir_expr(context, d, env, g, b)?.to_vec();
+
                         let mut args = vec![];
                         for a in nb.params {
                             args.push(IRArg {
@@ -1104,6 +1129,13 @@ impl<E: Extra> AstNode<E> {
                                 ty: a.ty,
                             });
                         }
+
+                        let mut exprs = vec![];
+                        if 0 == i {
+                            exprs.push(b.ir_label(def.name, args.clone()));
+                        }
+                        exprs.extend(nb.body.lower_ir_expr(context, d, env, g, b)?.to_vec());
+
                         let block = IRBlock::new(nb.name, args, exprs);
                         blocks.push(block);
                         env.exit_block();
@@ -1223,6 +1255,7 @@ impl<E: Extra> AstNode<E> {
 mod tests {
     use super::*;
     use crate::ast::SimpleExtra;
+    use crate::cfg::{CFGGraph, CFG};
     use crate::tests::gen_block;
     use crate::{default_context, Diagnostics, NodeBuilder};
     use test_log::test;

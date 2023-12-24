@@ -319,8 +319,11 @@ impl<E: Extra> NodeBuilder<E> {
         ))
     }
 
-    pub fn goto(&self, name: StringKey) -> AstNode<E> {
-        self.build(Ast::Goto(name), self.extra_unknown())
+    pub fn label(&self, name: StringKey, args: Vec<ParameterNode<E>>) -> AstNode<E> {
+        self.build(Ast::Label(name, args), self.extra_unknown())
+    }
+    pub fn goto(&self, name: StringKey, args: Vec<Argument<E>>) -> AstNode<E> {
+        self.build(Ast::Goto(name, args), self.extra_unknown())
     }
 
     pub fn param(&self, name: StringKey, ty: AstType) -> ParameterNode<E> {
@@ -497,11 +500,11 @@ impl<E: Extra> AstBlockSorter<E> {
                 }
                 self.blocks.push(ast);
             }
-            Ast::Goto(_) => {
+            Ast::Goto(_, _) => {
                 self.stack.push(ast);
                 self.close_block(b);
             }
-            Ast::Label(_) => {
+            Ast::Label(_, _) => {
                 self.close_block(b);
                 self.stack.push(ast);
             }

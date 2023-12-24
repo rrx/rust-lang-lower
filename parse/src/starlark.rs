@@ -256,6 +256,8 @@ impl<E: Extra> Parser<E> {
                     extra,
                 }
             }
+            /*
+
             ParameterP::WithDefaultValue(ident, maybe_type, expr) => {
                 let extra = env.extra(item.span);
                 let ty = if let Some(ty) = maybe_type.map(|ty| from_type(&ty)) {
@@ -273,6 +275,7 @@ impl<E: Extra> Parser<E> {
                     extra,
                 }
             }
+            */
             _ => unimplemented!(),
         }
     }
@@ -314,8 +317,11 @@ impl<E: Extra> Parser<E> {
                 for p in params.iter() {
                     env.define(p.name);
                 }
+                let mut body = vec![
+                    //b.label(name, params.clone())
+                ];
+                body.extend(self.from_stmt(*def.body, env, d, b)?.to_vec());
 
-                let body = self.from_stmt(*def.body, env, d, b)?;
                 env.exit_func();
                 let return_type = def
                     .return_type
@@ -325,7 +331,7 @@ impl<E: Extra> Parser<E> {
 
                 let def_ast = Ast::Definition(ast::Definition {
                     name,
-                    body: Some(body.into()),
+                    body: Some(b.seq(body).into()),
                     return_type,
                     params,
                 });
