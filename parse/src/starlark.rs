@@ -317,9 +317,7 @@ impl<E: Extra> Parser<E> {
                 for p in params.iter() {
                     env.define(p.name);
                 }
-                let mut body = vec![
-                    //b.label(name, params.clone())
-                ];
+                let mut body = vec![b.label(name, params.clone())];
                 body.extend(self.from_stmt(*def.body, env, d, b)?.to_vec());
 
                 env.exit_func();

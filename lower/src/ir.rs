@@ -392,8 +392,6 @@ impl IRBlockSorter {
             s.sort(c, b);
         }
         s.close_block(b);
-        //s.blocks.first_mut().unwrap().params = block.params;
-        //s.blocks.first_mut().unwrap().name = block.name;
         for block in s.blocks {
             self.blocks.push(block);
         }
@@ -427,7 +425,9 @@ impl IRBlockSorter {
         if self.stack.len() == 0 {
             return;
         }
+
         let first = self.stack.first();
+
         let span_first = first.as_ref().unwrap().span.clone();
         let span_last = self.stack.last().unwrap().span.clone();
         let span = Span {
@@ -440,7 +440,8 @@ impl IRBlockSorter {
             IRBlock {
                 name: *name,
                 params: args.clone(),
-                children: self.stack.drain(..).collect(),
+                // skip the first child which is a label, it's redundant now that we have a block
+                children: self.stack.drain(..).skip(1).collect(),
             }
         } else {
             let offset = self.blocks.len();
@@ -904,6 +905,17 @@ impl<E: Extra> AstNode<E> {
                 Ok(())
             }
 
+            Ast::Label(name, ast_args) => {
+                let mut args = vec![];
+                for a in &ast_args {
+                    args.push(IRArg {
+                        name: a.name,
+                        ty: a.ty.clone(),
+                    });
+                }
+                out.push(b.ir_label(name, args));
+                Ok(())
+            }
             Ast::Goto(label, ast_args) => {
                 let mut args = vec![];
                 for a in ast_args.into_iter() {
@@ -1131,9 +1143,9 @@ impl<E: Extra> AstNode<E> {
                         }
 
                         let mut exprs = vec![];
-                        if 0 == i {
-                            exprs.push(b.ir_label(def.name, args.clone()));
-                        }
+                        //if 0 == i {
+                        //exprs.push(b.ir_label(def.name, args.clone()));
+                        //}
                         exprs.extend(nb.body.lower_ir_expr(context, d, env, g, b)?.to_vec());
 
                         let block = IRBlock::new(nb.name, args, exprs);
