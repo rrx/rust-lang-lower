@@ -180,6 +180,37 @@ pub fn emit_set_alloca<'c, E: Extra>(
     Ok(sym_index)
 }
 
+pub fn emit_noop<'c>(
+    context: &'c Context,
+    location: Location<'c>,
+    block_index: NodeIndex,
+    cfg_g: &mut CFGGraph<'c>,
+) -> Result<SymIndex> {
+    let op = build_bool_op(context, false, location);
+    let current = cfg_g.node_weight_mut(block_index).unwrap();
+    Ok(current.push(op))
+}
+
+/*
+pub fn emit_set_function<'c, E: Extra>(
+    context: &'c Context,
+    sym_index: SymIndex,
+    name: StringKey,
+    expr: IRNode,
+    location: Location<'c>,
+    block_index: NodeIndex,
+    cfg: &mut CFG<'c, E>,
+    cfg_g: &mut CFGGraph<'c>,
+    d: &mut Diagnostics,
+    b: &mut NodeBuilder<E>,
+) -> Result<SymIndex> {
+    let current = cfg_g.node_weight_mut(block_index).unwrap();
+    let op = current.op_ref(sym_index);
+    op.region(0).unwrap().append_block(block);
+    Ok(sym_index)
+}
+*/
+
 pub fn emit_set_static<'c, E: Extra>(
     context: &'c Context,
     sym_index: SymIndex,
@@ -213,30 +244,21 @@ pub fn emit_set_static<'c, E: Extra>(
         name
     };
 
-    match expr.kind {
-        IRKind::Func(blocks, ast_ty) => {
-            unimplemented!();
-        }
-        _ => {
-            // evaluate expr at compile time
-            let (value, ast_ty) =
-                build_static_attribute(context, global_name.clone(), expr, location);
-            let ty = from_type(context, &ast_ty);
-            let attribute =
-                DenseElementsAttribute::new(RankedTensorType::new(&[], ty, None).into(), &[value])
-                    .unwrap();
+    // evaluate expr at compile time
+    let (value, ast_ty) = build_static_attribute(context, global_name.clone(), expr, location);
+    let ty = from_type(context, &ast_ty);
+    let attribute =
+        DenseElementsAttribute::new(RankedTensorType::new(&[], ty, None).into(), &[value]).unwrap();
 
-            let current = cfg_g.node_weight_mut(block_index).unwrap();
-            let op = current.op_ref(sym_index);
-            op.set_attribute("initial_value", &attribute.into());
-            if !is_current_static {
-                // STATIC VARIABLE IN FUNCTION CONTEXT
-                cfg.static_names
-                    .insert(sym_index, b.strings.intern(global_name.clone()));
-            }
-            Ok(sym_index)
-        }
+    let current = cfg_g.node_weight_mut(block_index).unwrap();
+    let op = current.op_ref(sym_index);
+    op.set_attribute("initial_value", &attribute.into());
+    if !is_current_static {
+        // STATIC VARIABLE IN FUNCTION CONTEXT
+        cfg.static_names
+            .insert(sym_index, b.strings.intern(global_name.clone()));
     }
+    Ok(sym_index)
 }
 
 pub fn emit_declare_static<'c, E: Extra>(

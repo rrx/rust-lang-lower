@@ -57,9 +57,7 @@ impl IRNode {
         match self.kind {
             IRKind::Noop => {
                 let current_block = stack.last().unwrap().clone();
-                let op = op::build_bool_op(context, false, location);
-                let current = cfg_g.node_weight_mut(current_block).unwrap();
-                Ok(current.push(op))
+                op::emit_noop(context, location, current_block, cfg_g)
             }
 
             IRKind::Block(block) => {
@@ -191,16 +189,66 @@ impl IRNode {
                     VarDefinitionSpace::Static => {
                         if is_current_static {
                             // STATIC/GLOBAL VARIABLE
-                            op::emit_declare_static(
-                                context,
-                                key,
-                                ast_ty,
-                                location,
-                                current_block,
-                                cfg,
-                                cfg_g,
-                                b,
-                            )
+                            match &ast_ty {
+                                AstType::Func(params, ast_ret_type) => {
+                                    //IRKind::Func(blocks, ast_ret_ty) => {
+                                    //let first = blocks.first().unwrap();
+                                    let mut types = vec![];
+                                    let mut ast_types = vec![];
+                                    //let ast_ret_type = def.return_type;
+
+                                    let attributes = vec![(
+                                        Identifier::new(context, "sym_visibility"),
+                                        StringAttribute::new(context, "private").into(),
+                                    )];
+
+                                    for ty in params {
+                                        types.push(op::from_type(context, &ty));
+                                        ast_types.push(ty.clone());
+                                    }
+
+                                    let region = Region::new();
+
+                                    let ret_type = if let AstType::Unit = **ast_ret_type {
+                                        vec![]
+                                    } else {
+                                        vec![op::from_type(context, &ast_ret_type)]
+                                    };
+
+                                    let func_type = FunctionType::new(context, &types, &ret_type);
+                                    let op = func::func(
+                                        context,
+                                        StringAttribute::new(context, b.strings.resolve(&key)),
+                                        TypeAttribute::new(func_type.into()),
+                                        region,
+                                        &attributes,
+                                        location,
+                                    );
+
+                                    let function_block =
+                                        cfg_g.node_weight_mut(current_block).unwrap();
+                                    let index = function_block.push(op);
+                                    function_block.add_symbol(key, index);
+                                    cfg.set_type(index, ast_ty);
+
+                                    //if let Some(entry_block) = entry_block {
+                                    //let data = g.node_weight_mut(entry_block).unwrap();
+                                    //data.set_parent_symbol(func_index);
+                                    //}
+
+                                    Ok(index)
+                                }
+                                _ => op::emit_declare_static(
+                                    context,
+                                    key,
+                                    ast_ty,
+                                    location,
+                                    current_block,
+                                    cfg,
+                                    cfg_g,
+                                    b,
+                                ),
+                            }
                         } else {
                             // STATIC VARIABLE IN FUNCTION CONTEXT
 
@@ -242,18 +290,68 @@ impl IRNode {
                 if let Some(sym_index) = cfg.name_in_scope(current_block, name, cfg_g) {
                     let is_symbol_static = sym_index.block() == cfg.root();
                     if is_symbol_static {
-                        op::emit_set_static(
-                            context,
-                            sym_index,
-                            name,
-                            *expr,
-                            location,
-                            current_block,
-                            cfg,
-                            cfg_g,
-                            d,
-                            b,
-                        )
+                        match expr.kind {
+                            IRKind::Func(blocks, ast_ty) => {
+                                let mut block_indicies = vec![];
+                                for (_i, block) in blocks.into_iter().enumerate() {
+                                    let block_index = cfg.add_block_ir(
+                                        context,
+                                        block.name,
+                                        &block.params,
+                                        d,
+                                        cfg_g,
+                                    );
+                                    //let _data = g.node_weight_mut(block_index).unwrap();
+                                    block_indicies.push(block_index);
+                                    for c in block.children.into_iter() {
+                                        stack.push(block_index);
+                                        if let Ok(_index) =
+                                            c.lower_mlir(context, d, cfg, stack, g, cfg_g, b)
+                                        {
+                                            stack.pop();
+                                        } else {
+                                            stack.pop();
+                                            return Err(Error::new(ParseError::Invalid));
+                                        }
+                                    }
+                                    //let region = Region::new();
+                                }
+                                for block_index in block_indicies {
+                                    let block = cfg.take_block(block_index, cfg_g);
+                                    let current = cfg_g.node_weight_mut(current_block).unwrap();
+                                    let op = current.op_ref(sym_index);
+                                    op.region(0).unwrap().append_block(block);
+                                    //region.append_block(block);
+                                }
+                                Ok(sym_index)
+                                /*
+                                op::emit_set_function(
+                                    context,
+                                    sym_index,
+                                    name,
+                                    *expr,
+                                    location,
+                                    current_block,
+                                    cfg,
+                                    cfg_g,
+                                    d,
+                                    b,
+                                    )
+                                    */
+                            }
+                            _ => op::emit_set_static(
+                                context,
+                                sym_index,
+                                name,
+                                *expr,
+                                location,
+                                current_block,
+                                cfg,
+                                cfg_g,
+                                d,
+                                b,
+                            ),
+                        }
                     } else {
                         op::emit_set_alloca(
                             context,

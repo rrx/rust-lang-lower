@@ -4,6 +4,7 @@ use crate::ast::{
 use crate::compile::exec_main;
 use crate::default_pass_manager;
 use crate::intern::StringKey;
+use crate::ir::IRArg;
 use crate::op;
 use crate::{AstType, Extra, NodeBuilder};
 use crate::{Diagnostics, ParseError};
@@ -345,6 +346,34 @@ impl<'c, E: Extra> CFG<'c, E> {
                 .to_string_with_flags(OperationPrintingFlags::new())
                 .unwrap()
         );
+    }
+
+    pub fn add_block_ir(
+        &mut self,
+        context: &'c Context,
+        name: StringKey,
+        params: &[IRArg],
+        d: &Diagnostics,
+        g: &mut CFGGraph<'c>,
+    ) -> NodeIndex {
+        // build parameter list for block
+        let mut block_params = vec![];
+        for p in params {
+            block_params.push((op::from_type(context, &p.ty), Location::unknown(context)));
+            //p..extra.location(context, d)));
+        }
+        let block = Block::new(&block_params);
+        let mut data = OpCollection::new(block);
+        let index = g.add_node(data);
+        let mut block_node = g.node_weight_mut(index).unwrap();
+        block_node.block_index = index;
+        for p in params {
+            let index = block_node.push_arg(p.name);
+            self.set_type(index, p.ty.clone());
+        }
+        self.block_names.insert(name, index);
+        self.block_names_index.insert(index, name);
+        index
     }
 
     pub fn add_block(
