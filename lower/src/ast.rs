@@ -21,6 +21,15 @@ impl Default for VarDefinitionSpace {
     }
 }
 
+impl VarDefinitionSpace {
+    pub fn requires_deref(&self) -> bool {
+        match self {
+            Self::Static | Self::Stack | Self::Heap => true,
+            _ => false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct VarDefinition {
     ty: AstType,

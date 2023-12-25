@@ -1450,18 +1450,22 @@ pub fn emit_deref<'c, E: Extra>(
     let (ty, mem) = cfg.lookup_type(index).unwrap();
 
     // ensure proper type
-    if let AstType::Ptr(ast_ty) = &ty {
+    if mem.requires_deref() {
+        //if let AstType::Ptr(ast_ty) = &ty {
         //let location = extra.location(context, d);
         let r = values_in_scope(g, index)[0];
         let op = memref::load(r, &[], location);
         let current = g.node_weight_mut(current_block).unwrap();
         let index = current.push(op);
-        cfg.set_type(index, *ast_ty.clone(), mem);
+        cfg.set_type(index, ty, mem);
         Ok(index)
     } else {
-        //d.push_diagnostic(extra.error(&format!("Trying to dereference a non-pointer: {:?}", ty)));
-        Err(Error::new(ParseError::Invalid))
+        Ok(index)
     }
+    //} else {
+    //d.push_diagnostic(extra.error(&format!("Trying to dereference a non-pointer: {:?}", ty)));
+    //Err(Error::new(ParseError::Invalid))
+    //}
 }
 
 pub fn emit_mutate<'a, 'c, E: Extra>(

@@ -123,7 +123,7 @@ pub struct IREnvironment {
     stack: Vec<(NodeIndex, Span)>,
     block_names: HashMap<StringKey, NodeIndex>,
     block_names_index: HashMap<NodeIndex, StringKey>,
-    types: HashMap<SymIndex, AstType>,
+    types: HashMap<SymIndex, (AstType, VarDefinitionSpace)>,
     label_count: usize,
 }
 
@@ -140,12 +140,12 @@ impl IREnvironment {
         s
     }
 
-    pub fn lookup_type(&self, index: SymIndex) -> Option<AstType> {
+    pub fn lookup_type(&self, index: SymIndex) -> Option<(AstType, VarDefinitionSpace)> {
         self.types.get(&index).cloned()
     }
 
-    pub fn set_type(&mut self, index: SymIndex, ty: AstType) {
-        self.types.insert(index, ty);
+    pub fn set_type(&mut self, index: SymIndex, ty: AstType, mem: VarDefinitionSpace) {
+        self.types.insert(index, (ty, mem));
     }
 
     pub fn error(&self, msg: &str, span: Span) -> Diagnostic<usize> {
@@ -192,7 +192,7 @@ impl IREnvironment {
         &mut self,
         name: StringKey,
         params: Vec<IRArg>,
-        d: &Diagnostics,
+        _d: &Diagnostics,
         g: &mut IRGraph,
     ) -> NodeIndex {
         let index = g.add_node(IRControlBlock::new(params));
@@ -339,7 +339,7 @@ impl IRKind {
             Self::Seq(exprs) => exprs.last().unwrap().kind.terminator(),
             Self::Block(nb) => nb.terminator(),
             Self::Jump(key, _args) => Some(Terminator::Jump(*key)),
-            Self::Branch(_, then_key, maybe_else_key) => Some(Terminator::Jump(*then_key)),
+            Self::Branch(_, then_key, else_key) => Some(Terminator::Branch(*then_key, *else_key)),
             Self::Ret(_) => Some(Terminator::Return),
             _ => None,
         }
@@ -389,7 +389,7 @@ impl IRBlockSorter {
                 block.children.insert(0, b.ir_label(module, vec![]));
                 IRNode::new(IRKind::Block(block), b.extra().get_span())
             }
-            IRKind::Block(ref block) => ir,
+            IRKind::Block(ref _block) => ir,
             _ => unreachable!(),
         };
 
@@ -725,7 +725,7 @@ impl IRNode {
                 Ok(())
             }
 
-            IRKind::Label(name, args) => {
+            IRKind::Label(_name, _args) => {
                 //let index = env.add_block(*name, args.clone(), d, g);
                 //env.enter_block(index, self.span.clone());
                 Ok(())
@@ -776,7 +776,7 @@ impl IRNode {
                 let current_block = env.current_block();
                 let data = g.node_weight_mut(current_block).unwrap();
                 let index = data.add_definition(*name);
-                env.set_type(index, ty.clone());
+                env.set_type(index, ty.clone(), VarDefinitionSpace::default());
                 Ok(())
             }
 
@@ -846,9 +846,9 @@ impl IRNode {
                     }
                 }
                 //env.enter_block(block_index, self.get_span());
-                for (i, child) in block.children.iter().enumerate() {
+                for (_i, child) in block.children.iter().enumerate() {
                     //edges.push((current_block, block_index));
-                    let mut data = g.node_weight_mut(block_index).unwrap();
+                    let data = g.node_weight_mut(block_index).unwrap();
                     for a in &block.params {
                         data.push_arg(a.name);
                     }
@@ -1006,7 +1006,7 @@ impl<E: Extra> AstNode<E> {
                     let current_block = env.current_block();
                     let data = g.node_weight_mut(current_block).unwrap();
                     let index = data.add_definition(ident);
-                    env.set_type(index, ty);
+                    env.set_type(index, ty, VarDefinitionSpace::Static);
 
                     /*
 
@@ -1043,15 +1043,17 @@ impl<E: Extra> AstNode<E> {
                     let mut seq = vec![];
                     expr.lower_ir(&mut seq, d, env, g, b)?;
                     let current_block = env.current_block();
-                    if let Some(_sym_index) = env.name_in_scope(current_block, name, g) {
+                    if let Some(sym_index) = env.name_in_scope(current_block, name, g) {
                         out.push(b.ir_set(name, b.ir_seq(seq), IRTypeSelect::Offset(0)));
+                        //let (ast_ty, mem) = env.lookup_type(sym_index).unwrap();
+                        //env.set_type(sym_index, ast_ty, mem);
                         Ok(())
                     } else {
                         let ty = AstType::Int;
-                        out.push(b.ir_decl(name, ty.clone(), VarDefinitionSpace::default()));
+                        out.push(b.ir_decl(name, ty.clone(), VarDefinitionSpace::Stack));
                         let data = g.node_weight_mut(current_block).unwrap();
                         let index = data.add_definition(name);
-                        env.set_type(index, ty);
+                        env.set_type(index, ty, VarDefinitionSpace::Stack);
                         Ok(())
                     }
                 }
@@ -1074,7 +1076,7 @@ impl<E: Extra> AstNode<E> {
                     Ast::Identifier(ident) => {
                         let name = b.strings.resolve(ident);
                         if let Some(index) = env.name_in_scope(current_block, *ident, g) {
-                            if let Some(ty) = env.lookup_type(index) {
+                            if let Some((ty, mem)) = env.lookup_type(index) {
                                 if let AstType::Func(f_args, _) = ty.clone() {
                                     (ident, ty, f_args, name)
                                 } else {
@@ -1148,7 +1150,7 @@ impl<E: Extra> AstNode<E> {
 
                 let data = g.node_weight_mut(current_block).unwrap();
                 let index = data.add_definition(def.name);
-                env.set_type(index, f_type.clone());
+                env.set_type(index, f_type.clone(), VarDefinitionSpace::Static);
                 out.push(b.ir_decl(def.name, f_type, VarDefinitionSpace::Static));
 
                 let mut output_blocks = vec![];
