@@ -7,6 +7,7 @@ use std::fmt::Debug;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum VarDefinitionSpace {
+    Arg,
     Reg,
     Static,
     Stack,

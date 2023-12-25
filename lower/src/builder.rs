@@ -44,6 +44,14 @@ impl<E: Extra> NodeBuilder<E> {
         self.strings.intern(s.into())
     }
 
+    pub fn build_literal_from_identifier(&self, name: &str) -> Option<AstNode<E>> {
+        match name {
+            "True" => Some(self.bool(true)),
+            "False" => Some(self.bool(false)),
+            _ => None,
+        }
+    }
+
     fn fresh_def_arg(&mut self) -> DefinitionId {
         let def_id = DefinitionId::Arg(self.current_def_id);
         self.current_def_id += 1;

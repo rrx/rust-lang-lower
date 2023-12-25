@@ -401,14 +401,8 @@ impl<E: Extra> Parser<E> {
                     AssignTargetP::Identifier(ident) => {
                         log::debug!("parse ident: {}", ident.node.ident);
                         let name = &ident.node.ident;
-                        match name.as_str() {
-                            "True" => {
-                                return Ok(b.bool(true));
-                            }
-                            "False" => {
-                                return Ok(b.bool(false));
-                            }
-                            _ => (),
+                        if let Some(node) = b.build_literal_from_identifier(name) {
+                            return Ok(node);
                         }
 
                         let name = b.s(&ident.node.ident);
@@ -523,6 +517,11 @@ impl<E: Extra> Parser<E> {
 
             ExprP::Identifier(ident) => {
                 env.dump();
+
+                if let Some(node) = b.build_literal_from_identifier(&ident.node.ident) {
+                    return Ok(node);
+                }
+
                 let name = b.s(&ident.node.ident);
                 if let Some(data) = env.resolve(name) {
                     let extra = env.extra(item.span);
@@ -666,6 +665,7 @@ pub(crate) mod tests {
         r.unwrap();
         env.save_graph("out.dot", &g, &b);
 
+        return;
         let mut stack = vec![cfg.root()];
         let r = ir.lower_mlir(
             &context, &mut d, &mut cfg, &mut stack, &mut g, &mut cfg_g, &mut b,

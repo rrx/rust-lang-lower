@@ -525,7 +525,7 @@ impl IRNode {
             }
             IRKind::Branch(cond, br_then, br_else) => {
                 println!(
-                    "{:width$}branch({}, {:?})",
+                    "{:width$}branch({}, {})",
                     "",
                     b.strings.resolve(br_then),
                     b.strings.resolve(br_else),
@@ -992,6 +992,7 @@ impl<E: Extra> AstNode<E> {
             }
 
             Ast::Identifier(name) => {
+                //let (ty, mem) = env.lookup_type(index);
                 out.push(b.ir_get(name, IRTypeSelect::default()));
                 Ok(())
             }
@@ -1281,14 +1282,17 @@ impl<E: Extra> AstNode<E> {
 
                 // else
                 let (b_else, else_seq) = if let Some(else_expr) = maybe_else_expr {
+                    //let else_index = env.add_block(b_then, vec![], d, g);
                     //let span = else_expr.extra.get_span();
                     let b_else = Some(env.fresh_label("else", b));
                     let mut else_seq = vec![b.ir_label(b_else.unwrap(), vec![])];
                     let else_block = else_expr.lower_ir_expr(d, env, g, b)?;
+                    //g.add_edge(current_block, else_block, ());
                     let term = else_block.kind.terminator();
                     else_seq.extend(else_block.to_vec());
                     if term.is_none() {
                         else_seq.push(b.ir_jump(b_next, vec![]));
+                        //g.add_edge(else_index, then_index, ());
                     }
                     (b_else, Some(else_seq))
                 } else {
