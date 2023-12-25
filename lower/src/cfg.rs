@@ -41,6 +41,7 @@ use melior::{
         Identifier,
         Module,
         Operation,
+        OperationRef,
         Region,
         //Type,
         TypeLike,
@@ -166,6 +167,20 @@ impl<'c> OpCollection<'c> {
             Some(rs[0])
         } else {
             None
+        }
+    }
+
+    pub fn op_ref(&mut self, index: SymIndex) -> &mut Operation<'c> {
+        match index {
+            SymIndex::Op(block_index, offset) => {
+                assert_eq!(block_index, self.block_index);
+                assert!(offset < self.ops.len());
+                self.ops.get_mut(offset).expect("Op missing")
+            }
+            SymIndex::Arg(_, _) => {
+                unreachable!()
+            }
+            _ => unimplemented!(),
         }
     }
 

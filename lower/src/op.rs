@@ -7,7 +7,8 @@ use crate::ast::{
     //Builtin,
 };
 use crate::cfg::{CFGGraph, SymIndex, CFG};
-use crate::ir::IRNode;
+use crate::ir;
+use crate::ir::{IRGraph, IRKind, IRNode};
 use crate::{
     Ast, AstNode, AstType, Diagnostics, Extra, Literal, NodeBuilder, NodeIndex, ParseError,
     StringKey,
@@ -143,7 +144,102 @@ pub fn build_reserved<'c>(
     }
 }
 
-pub fn emit_static_variable<'c, E: Extra>(
+pub fn emit_set_alloca<'c, E: Extra>(
+    context: &'c Context,
+    sym_index: SymIndex,
+    name: StringKey,
+    expr: IRNode,
+    location: Location<'c>,
+    block_index: NodeIndex,
+    cfg: &mut CFG<'c, E>,
+    stack: &mut Vec<NodeIndex>,
+    g: &mut IRGraph,
+    cfg_g: &mut CFGGraph<'c>,
+    d: &mut Diagnostics,
+    b: &mut NodeBuilder<E>,
+) -> Result<SymIndex> {
+    //log::debug!("assign alloca: {}", name);
+    let rhs_index = expr.lower_mlir(context, d, cfg, stack, g, cfg_g, b)?;
+    //let ty = IntegerType::new(context, 64);
+    //let memref_ty = MemRefType::new(ty.into(), &[], None, None);
+    //let op = memref::alloca(context, memref_ty, &[], &[], None, location);
+    let current = cfg_g.node_weight_mut(block_index).unwrap();
+
+    // name the pointer
+    //let ptr_index = current.push_with_name(op, name);
+    let ast_ty = cfg.lookup_type(rhs_index).unwrap().to_ptr();
+    //let ptr_ty = AstType::Ptr(ast_ty.into());
+    //cfg.set_type(ptr_index, ast_ty);
+
+    let r_value = current.value0(rhs_index).unwrap();
+    let r_addr = current.value0(sym_index).unwrap();
+
+    // emit store
+    let op = memref::store(r_value, r_addr, &[], location);
+    let _index = current.push(op);
+    Ok(sym_index)
+}
+
+pub fn emit_set_static<'c, E: Extra>(
+    context: &'c Context,
+    sym_index: SymIndex,
+    name: StringKey,
+    expr: IRNode,
+    location: Location<'c>,
+    block_index: NodeIndex,
+    cfg: &mut CFG<'c, E>,
+    cfg_g: &mut CFGGraph<'c>,
+    d: &mut Diagnostics,
+    b: &mut NodeBuilder<E>,
+) -> Result<SymIndex> {
+    let is_symbol_static = sym_index.block() == cfg.root();
+    assert!(is_symbol_static);
+    let is_current_static = block_index == cfg.root();
+
+    // we can emit a static variable in either static context, or in a function
+    // TODO: consider moving this logic into a transformation
+
+    // symbol in static context
+    let global_name = if is_current_static {
+        // emitting in static context
+        b.strings.resolve(&name).clone()
+    } else {
+        // emitting in non-static context (local static var)
+        // we create a unique global name to prevent conflict
+        // and then we add ops to provide a local reference to the global name
+        let base = b.strings.resolve(&name).clone();
+        let name = b.unique_static_name();
+        let name = format!("{}{}", base, name).clone();
+        name
+    };
+
+    match expr.kind {
+        IRKind::Func(blocks, ast_ty) => {
+            unimplemented!();
+        }
+        _ => {
+            // evaluate expr at compile time
+            let (value, ast_ty) =
+                build_static_attribute(context, global_name.clone(), expr, location);
+            let ty = from_type(context, &ast_ty);
+            let attribute =
+                DenseElementsAttribute::new(RankedTensorType::new(&[], ty, None).into(), &[value])
+                    .unwrap();
+
+            let current = cfg_g.node_weight_mut(block_index).unwrap();
+            let op = current.op_ref(sym_index);
+            op.set_attribute("initial_value", &attribute.into());
+            if !is_current_static {
+                // STATIC VARIABLE IN FUNCTION CONTEXT
+                cfg.static_names
+                    .insert(sym_index, b.strings.intern(global_name.clone()));
+            }
+            Ok(sym_index)
+        }
+    }
+}
+
+pub fn emit_declare_static<'c, E: Extra>(
     context: &'c Context,
     name: StringKey,
     ast_ty: AstType,
@@ -226,6 +322,54 @@ pub fn emit_static<'c, E: Extra>(
     (op, ast_ty)
 }
 
+pub fn build_static_attribute<'c>(
+    context: &'c Context,
+    global_name: String,
+    expr: IRNode,
+    location: Location<'c>,
+) -> (Attribute<'c>, AstType) {
+    // evaluate expr at compile time
+    match expr.kind {
+        IRKind::Literal(Literal::Bool(x)) => {
+            let ast_ty = AstType::Bool;
+            let ty = from_type(context, &ast_ty);
+            let v = if x { 1 } else { 0 };
+            let value = IntegerAttribute::new(v, ty).into();
+
+            //let op = build_static(context, &global_name, ty, value, false, location);
+            (value, ast_ty)
+        }
+
+        IRKind::Literal(Literal::Int(x)) => {
+            let ast_ty = AstType::Int;
+            let ty = from_type(context, &ast_ty);
+            let value = IntegerAttribute::new(x, ty).into();
+            let op = build_static(context, &global_name, ty, value, false, location);
+            (value, ast_ty)
+            //(ast_ty, op)
+        }
+
+        IRKind::Literal(Literal::Index(x)) => {
+            let ast_ty = AstType::Int;
+            let ty = from_type(context, &ast_ty);
+            let value = IntegerAttribute::new(x as i64, ty).into();
+            let op = build_static(context, &global_name, ty, value, false, location);
+            (value, ast_ty)
+            //(ast_ty, op)
+        }
+
+        IRKind::Literal(Literal::Float(x)) => {
+            let ast_ty = AstType::Float;
+            let ty = from_type(context, &ast_ty);
+            let value = FloatAttribute::new(context, x, ty).into();
+            let op = build_static(context, &global_name, ty, value, false, location);
+            (value, ast_ty)
+            //(ast_ty, op)
+        }
+        _ => unreachable!("{:?}", expr.kind),
+    }
+}
+
 pub fn emit_static_ir<'c>(
     context: &'c Context,
     global_name: String,
@@ -233,7 +377,6 @@ pub fn emit_static_ir<'c>(
     location: Location<'c>,
 ) -> (Operation<'c>, AstType) {
     // evaluate expr at compile time
-    use crate::ir::IRKind;
     let (ast_ty, op) = match expr.kind {
         IRKind::Literal(Literal::Bool(x)) => {
             let ast_ty = AstType::Bool;

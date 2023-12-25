@@ -1148,7 +1148,7 @@ impl<E: Extra> AstNode<E> {
                 let data = g.node_weight_mut(current_block).unwrap();
                 let index = data.add_definition(def.name);
                 env.set_type(index, f_type.clone());
-                out.push(b.ir_decl(def.name, f_type, VarDefinitionSpace::default()));
+                out.push(b.ir_decl(def.name, f_type, VarDefinitionSpace::Static));
 
                 let mut output_blocks = vec![];
                 let mut edges = vec![];

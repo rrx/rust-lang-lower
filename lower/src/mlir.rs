@@ -191,7 +191,7 @@ impl IRNode {
                     VarDefinitionSpace::Static => {
                         if is_current_static {
                             // STATIC/GLOBAL VARIABLE
-                            op::emit_static_variable(
+                            op::emit_declare_static(
                                 context,
                                 key,
                                 ast_ty,
@@ -223,6 +223,7 @@ impl IRNode {
                     }
 
                     VarDefinitionSpace::Default | VarDefinitionSpace::Stack => {
+                        unimplemented!("{:?}", mem);
                         let ty = op::from_type(context, &ast_ty);
                         //let ty = IntegerType::new(context, 64);
                         let memref_ty = MemRefType::new(ty.into(), &[], None, None);
@@ -240,67 +241,34 @@ impl IRNode {
                 let span = self.span.clone();
                 if let Some(sym_index) = cfg.name_in_scope(current_block, name, cfg_g) {
                     let is_symbol_static = sym_index.block() == cfg.root();
-                    let is_current_static = current_block == cfg.root();
-
                     if is_symbol_static {
-                        // symbol in static context
-                        let (global_name_key, global_name) = if is_current_static {
-                            // emitting in static context
-                            (name, b.strings.resolve(&name).clone())
-                        } else {
-                            // emitting in non-static context (local static var)
-                            // we create a unique global name to prevent conflict
-                            // and then we add ops to provide a local reference to the global name
-                            let base = b.strings.resolve(&name).clone();
-                            let name = b.unique_static_name();
-                            let name = format!("{}{}", base, name).clone();
-                            (b.strings.intern(name.clone()), name)
-                        };
-
-                        match expr.kind {
-                            IRKind::Func(blocks, ast_ty) => {
-                                unimplemented!();
-                            }
-                            _ => {
-                                // evaluate expr at compile time
-                                let (op, ast_ty) =
-                                    op::emit_static_ir(context, global_name, *expr, location);
-
-                                let ptr_ty = AstType::Ptr(ast_ty.clone().into());
-                                let current = cfg_g.node_weight_mut(current_block).unwrap();
-                                let index = current.push_with_name(op, global_name_key);
-                                cfg.set_type(index, ptr_ty);
-                                if is_current_static {
-                                    // STATIC/GLOBAL VARIABLE
-                                    //cfg.static_names.insert(index, global_name);
-                                } else {
-                                    // STATIC VARIABLE IN FUNCTION CONTEXT
-                                    cfg.static_names.insert(index, global_name_key);
-                                }
-                                Ok(index)
-                            }
-                        }
+                        op::emit_set_static(
+                            context,
+                            sym_index,
+                            name,
+                            *expr,
+                            location,
+                            current_block,
+                            cfg,
+                            cfg_g,
+                            d,
+                            b,
+                        )
                     } else {
-                        //log::debug!("assign alloca: {}", name);
-                        let rhs_index = expr.lower_mlir(context, d, cfg, stack, g, cfg_g, b)?;
-                        let ty = IntegerType::new(context, 64);
-                        let memref_ty = MemRefType::new(ty.into(), &[], None, None);
-                        let op = memref::alloca(context, memref_ty, &[], &[], None, location);
-                        let current = cfg_g.node_weight_mut(current_block).unwrap();
-
-                        // name the pointer
-                        let ptr_index = current.push_with_name(op, name);
-                        let ast_ty = cfg.lookup_type(rhs_index).unwrap().to_ptr();
-                        //let ptr_ty = AstType::Ptr(ast_ty.into());
-                        cfg.set_type(ptr_index, ast_ty);
-
-                        let r_value = current.value0(rhs_index).unwrap();
-                        let r_addr = current.value0(ptr_index).unwrap();
-
-                        // emit store
-                        let op = memref::store(r_value, r_addr, &[], location);
-                        let _index = current.push(op);
-                        Ok(ptr_index)
+                        op::emit_set_alloca(
+                            context,
+                            sym_index,
+                            name,
+                            *expr,
+                            location,
+                            current_block,
+                            cfg,
+                            stack,
+                            g,
+                            cfg_g,
+                            d,
+                            b,
+                        )
                     }
                 } else {
                     d.push_diagnostic(ir::error(&format!("Name not found: {:?}", name), span));

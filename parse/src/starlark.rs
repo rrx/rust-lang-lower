@@ -578,18 +578,19 @@ impl<E: Extra> Parser<E> {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use lower::ast::SimpleExtra;
+    use lower::cfg::*;
+    use lower::{IREnvironment, IRGraph};
+    use lower::{Location, Module};
     use test_log::test;
 
     fn run_test(filename: &str, expected: i32) {
-        use lower::ast::SimpleExtra;
-        use lower::cfg::*;
-        use lower::{Location, Module};
         let mut b = NodeBuilder::new();
         let context = lower::default_context();
         let mut d = Diagnostics::new();
         let mut module = Module::new(Location::unknown(&context));
-        let mut g = CFGGraph::new();
-        let mut cfg: CFG<SimpleExtra> = CFG::new(&context, b.s("module"), &d, &mut g);
+        let mut cfg_g = CFGGraph::new();
+        let mut cfg: CFG<SimpleExtra> = CFG::new(&context, b.s("module"), &d, &mut cfg_g);
         let file_id = d.add_source(
             filename.to_string(),
             std::fs::read_to_string(filename).unwrap(),
@@ -604,21 +605,18 @@ pub(crate) mod tests {
 
         println!("ast: {:#?}", ast);
         let mut stack = vec![cfg.root()];
-        let r = ast.lower(&context, &mut d, &mut cfg, &mut stack, &mut g, &mut b);
-        cfg.save_graph("out.dot", &g, &b);
+        let r = ast.lower(&context, &mut d, &mut cfg, &mut stack, &mut cfg_g, &mut b);
+        cfg.save_graph("out.dot", &cfg_g, &b);
         d.dump();
         assert_eq!(1, stack.len());
         assert!(!d.has_errors);
         r.unwrap();
-        cfg.module(&context, &mut module, &mut g);
+        cfg.module(&context, &mut module, &mut cfg_g);
         let r = cfg.exec_main(&module, "../target/debug/");
         assert_eq!(expected, r);
     }
 
     fn run_test_ir(filename: &str, expected: i32) {
-        use lower::ast::SimpleExtra;
-        use lower::cfg::*;
-        use lower::{IREnvironment, IRGraph};
         let mut b = NodeBuilder::new();
         let context = lower::default_context();
         let mut d = Diagnostics::new();
@@ -667,7 +665,7 @@ pub(crate) mod tests {
         d.dump();
         r.unwrap();
         env.save_graph("out.dot", &g, &b);
-        return;
+
         let mut stack = vec![cfg.root()];
         let r = ir.lower_mlir(
             &context, &mut d, &mut cfg, &mut stack, &mut g, &mut cfg_g, &mut b,
@@ -675,6 +673,8 @@ pub(crate) mod tests {
         d.dump();
         r.unwrap();
         env.save_graph("out.dot", &g, &b);
+        let mut module = Module::new(Location::unknown(&context));
+        cfg.module(&context, &mut module, &mut cfg_g);
     }
 
     #[test]
