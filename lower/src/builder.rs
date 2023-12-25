@@ -437,12 +437,7 @@ impl<E: Extra> NodeBuilder<E> {
         )
     }
 
-    pub fn ir_branch(
-        &self,
-        condition: IRNode,
-        then_br: StringKey,
-        else_br: Option<StringKey>,
-    ) -> IRNode {
+    pub fn ir_branch(&self, condition: IRNode, then_br: StringKey, else_br: StringKey) -> IRNode {
         IRNode::new(
             IRKind::Branch(condition.into(), then_br, else_br),
             self.span.clone().unwrap(),

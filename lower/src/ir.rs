@@ -49,15 +49,15 @@ impl Default for IRTypeSelect {
 
 #[derive(Debug, Clone)]
 pub struct IRArg {
-    name: StringKey,
-    ty: AstType,
+    pub(crate) name: StringKey,
+    pub(crate) ty: AstType,
 }
 
 #[derive(Debug)]
 pub struct IRBlock {
-    name: StringKey,
-    params: Vec<IRArg>,
-    children: Vec<IRNode>,
+    pub(crate) name: StringKey,
+    pub(crate) params: Vec<IRArg>,
+    pub(crate) children: Vec<IRNode>,
 }
 
 impl IRBlock {
@@ -315,7 +315,7 @@ pub enum IRKind {
     // ret(args)
     Ret(Vec<IRNode>),
     Cond(Box<IRNode>, Box<IRNode>, Option<Box<IRNode>>),
-    Branch(Box<IRNode>, StringKey, Option<StringKey>),
+    Branch(Box<IRNode>, StringKey, StringKey),
     // start block
     Label(StringKey, Vec<IRArg>),
     Jump(StringKey, Vec<IRNode>),
@@ -348,8 +348,8 @@ impl IRKind {
 
 #[derive(Debug)]
 pub struct IRNode {
-    kind: IRKind,
-    span: Span,
+    pub(crate) kind: IRKind,
+    pub(crate) span: Span,
 }
 
 pub fn error(msg: &str, span: Span) -> Diagnostic<usize> {
@@ -528,7 +528,7 @@ impl IRNode {
                     "{:width$}branch({}, {:?})",
                     "",
                     b.strings.resolve(br_then),
-                    br_else.map(|key| b.strings.resolve(&key)),
+                    b.strings.resolve(br_else),
                     width = depth * 2
                 );
                 cond.dump(b, depth + 1);
@@ -862,15 +862,13 @@ impl IRNode {
 
             IRKind::Builtin(_bi, _args) => Ok(()),
 
-            IRKind::Branch(condition, then_key, maybe_else_key) => {
+            IRKind::Branch(condition, then_key, else_key) => {
                 condition.build_graph(d, env, g, b)?;
                 let current_block = env.current_block();
                 let then_block = env.lookup_block(*then_key).unwrap();
                 g.add_edge(current_block, then_block, ());
-                if let Some(else_key) = maybe_else_key {
-                    let else_block = env.lookup_block(*else_key).unwrap();
-                    g.add_edge(current_block, else_block, ());
-                }
+                let else_block = env.lookup_block(*else_key).unwrap();
+                g.add_edge(current_block, else_block, ());
                 Ok(())
             }
 
@@ -1298,7 +1296,8 @@ impl<E: Extra> AstNode<E> {
                 };
 
                 let ir_cond = condition.lower_ir_expr(d, env, g, b)?;
-                out.push(b.ir_branch(ir_cond, b_then, b_else));
+
+                out.push(b.ir_branch(ir_cond, b_then, b_else.unwrap_or(b_next)));
                 out.extend(then_seq);
                 if let Some(seq) = else_seq {
                     out.extend(seq);

@@ -5,6 +5,7 @@ pub mod compile;
 pub mod diagnostics;
 pub mod intern;
 pub mod ir;
+pub mod mlir;
 pub mod op;
 pub mod types;
 

@@ -6,6 +6,7 @@ use crate::ast::{
     BinaryOperation,
     //Builtin,
 };
+use crate::ir::IRNode;
 use crate::{Ast, AstNode, AstType, Diagnostics, Extra, Literal, ParseError};
 use anyhow::Error;
 use anyhow::Result;
@@ -183,9 +184,56 @@ pub fn emit_static<'c, E: Extra>(
     (op, ast_ty)
 }
 
+pub fn emit_static_ir<'c>(
+    context: &'c Context,
+    global_name: String,
+    expr: IRNode,
+    location: Location<'c>,
+) -> (Operation<'c>, AstType) {
+    // evaluate expr at compile time
+    use crate::ir::IRKind;
+    let (ast_ty, op) = match expr.kind {
+        IRKind::Literal(Literal::Bool(x)) => {
+            let ast_ty = AstType::Bool;
+            let ty = from_type(context, &ast_ty);
+            let v = if x { 1 } else { 0 };
+            let value = IntegerAttribute::new(v, ty).into();
+            let op = build_static(context, &global_name, ty, value, false, location);
+            (ast_ty, op)
+        }
+
+        IRKind::Literal(Literal::Int(x)) => {
+            let ast_ty = AstType::Int;
+            let ty = from_type(context, &ast_ty);
+            let value = IntegerAttribute::new(x, ty).into();
+            let op = build_static(context, &global_name, ty, value, false, location);
+            (ast_ty, op)
+        }
+
+        IRKind::Literal(Literal::Index(x)) => {
+            let ast_ty = AstType::Int;
+            let ty = from_type(context, &ast_ty);
+            let value = IntegerAttribute::new(x as i64, ty).into();
+            let op = build_static(context, &global_name, ty, value, false, location);
+            (ast_ty, op)
+        }
+
+        IRKind::Literal(Literal::Float(x)) => {
+            let ast_ty = AstType::Float;
+            let ty = from_type(context, &ast_ty);
+            let value = FloatAttribute::new(context, x, ty).into();
+            let op = build_static(context, &global_name, ty, value, false, location);
+            (ast_ty, op)
+        }
+
+        _ => unreachable!("{:?}", expr.kind),
+    };
+    (op, ast_ty)
+}
+
 pub fn build_binop<'c, E: Extra>(
     context: &'c Context,
-    op: BinOpNode<E>,
+    op: BinaryOperation,
     a: Value<'c, '_>,
     a_extra: &E,
     b: Value<'c, '_>,
@@ -196,7 +244,7 @@ pub fn build_binop<'c, E: Extra>(
     let ty = a.r#type();
     assert_eq!(ty, b.r#type());
 
-    let (op, ast_ty) = match op.node {
+    let (op, ast_ty) = match op {
         BinaryOperation::Divide => {
             if ty.is_index() {
                 // index type is unsigned
