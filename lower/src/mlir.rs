@@ -394,7 +394,7 @@ impl IRNode {
                             //cfg.set_type(index, ty, mem);
                             //Ok(index)
 
-                            cfg.set_type(value_index, ast_ty, VarDefinitionSpace::Stack);
+                            cfg.set_type(value_index, ast_ty, VarDefinitionSpace::Reg);
                             return Ok(value_index);
                             //} else {
                             //unreachable!("Identifier of static variable must be pointer");
@@ -619,12 +619,11 @@ impl IRNode {
 
                 println!("ty_x: {:?}", (ty_x, mem_x));
                 println!("ty_y: {:?}", (ty_y, mem_y));
+
                 let current_block = stack.last().unwrap().clone();
-                let current = cfg_g.node_weight_mut(current_block).unwrap();
-                println!("{:?}", current);
+                println!("{:?}", op);
 
                 let index_x = if mem_x.requires_deref() {
-                    //let (_ty_x, index_x) = if let AstType::Ptr(ty) = ty_x {
                     let target = DerefTarget::Offset(0);
                     let index = crate::cfg::emit_deref(
                         context, index_x, x_location, target, d, cfg, stack, cfg_g,
@@ -635,7 +634,6 @@ impl IRNode {
                 };
 
                 let index_y = if mem_y.requires_deref() {
-                    //let (_ty_y, index_y) = if let AstType::Ptr(ty) = ty_y {
                     let target = DerefTarget::Offset(0);
                     let index = crate::cfg::emit_deref(
                         context, index_y, y_location, target, d, cfg, stack, cfg_g,
@@ -644,6 +642,9 @@ impl IRNode {
                 } else {
                     index_y
                 };
+
+                let current = cfg_g.node_weight_mut(current_block).unwrap();
+                println!("{:?}", current);
 
                 // types must be the same for binary operation, no implicit casting yet
                 let a = values_in_scope(cfg_g, index_x)[0];
