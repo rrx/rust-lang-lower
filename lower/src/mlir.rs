@@ -246,20 +246,55 @@ impl IRNode {
                 Ok(current.push(op))
             }
 
-            IRKind::Ret(args) => {
+            IRKind::Ret(mut args) => {
                 let current_block = stack.last().unwrap().clone();
-                let mut rs = vec![];
+
+                if args.len() > 0 {
+                    let expr = args.pop().unwrap();
+                    let mut index = expr.lower_mlir(context, d, cfg, stack, g, cfg_g, b)?;
+                    let (_ast_ty, mem) = cfg.lookup_type(index).unwrap();
+
+                    if mem.requires_deref() {
+                        // if it's in memory, we need to copy to return
+                        let target = DerefTarget::Offset(0);
+                        //unimplemented!();
+                        index = crate::cfg::emit_deref(
+                            context, index, location, target, d, cfg, stack, cfg_g,
+                        )?;
+                    }
+
+                    let rs = values_in_scope(cfg_g, index).clone();
+                    let op = func::r#return(&rs, location);
+                    let current = cfg_g.node_weight_mut(current_block).unwrap();
+                    Ok(current.push(op))
+                } else {
+                    let current = cfg_g.node_weight_mut(current_block).unwrap();
+                    Ok(current.push(func::r#return(&[], location)))
+                }
+
+                //let mut rs = vec![];
+                /*
                 for expr in args {
                     let index = expr.lower_mlir(context, d, cfg, stack, g, cfg_g, b)?;
+                    //let data = cfg_g.node_weight(index.block()).unwrap();
+                    //let r = data.value0(index).unwrap().into();
+                    //let r = values_in_scope(cfg_g, index)[0];
                     rs.push(index);
                 }
-                let current = cfg_g.node_weight_mut(current_block).unwrap();
                 let rs = rs
                     .into_iter()
-                    .map(|index| current.values(index))
-                    .flatten()
+                    .map(|index| {
+                        let data = cfg_g.node_weight(index.block()).unwrap();
+                        //values_in_scope(cfg_g, index)[0]
+                        //data.value0(index).unwrap().into()
+                        (data, index)
+                    })
+                    //.flatten()
                     .collect::<Vec<_>>();
+                let rs = rs.into_iter().map(|(data, index)| data.value0(index).unwrap()).collect::<Vec<_>>();
+                let current = cfg_g.node_weight_mut(current_block).unwrap();
                 Ok(current.push(func::r#return(&rs, location)))
+                */
             }
 
             IRKind::Label(_label, _args) => {
@@ -459,17 +494,12 @@ impl IRNode {
                         let (ast_ty, mem) = cfg.lookup_type(index).unwrap();
 
                         // deref
-                        match mem {
-                            VarDefinitionSpace::Static
-                            | VarDefinitionSpace::Stack
-                            | VarDefinitionSpace::Heap => {
-                                let target = DerefTarget::Offset(0);
-                                //unimplemented!();
-                                index = crate::cfg::emit_deref(
-                                    context, index, location, target, d, cfg, stack, cfg_g,
-                                )?;
-                            }
-                            _ => (),
+                        if mem.requires_deref() {
+                            let target = DerefTarget::Offset(0);
+                            //unimplemented!();
+                            index = crate::cfg::emit_deref(
+                                context, index, location, target, d, cfg, stack, cfg_g,
+                            )?;
                         }
                         /*
                         if ast_ty.is_ptr() {
