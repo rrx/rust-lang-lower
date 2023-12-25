@@ -1,19 +1,16 @@
 use crate::ast::{
     Argument, AssignTarget, Ast, AstNode, Builtin, DerefTarget, Literal, Parameter, ParameterNode,
+    VarDefinitionSpace,
 };
 use crate::cfg::{values_in_scope, CFGGraph, SymIndex, CFG};
 use crate::ir;
-use crate::ir::{IRKind, IRNode};
+use crate::ir::{IRGraph, IRKind, IRNode};
 
-use crate::compile::exec_main;
-use crate::default_pass_manager;
-use crate::intern::StringKey;
 use crate::op;
 use crate::{AstType, Extra, NodeBuilder};
 use crate::{Diagnostics, ParseError};
 use anyhow::Error;
 use anyhow::Result;
-use melior::ir::operation::OperationPrintingFlags;
 use melior::ir::Location;
 use melior::{
     dialect::{
@@ -23,41 +20,23 @@ use melior::{
         //llvm,
         memref,
         //ods,
-        scf,
+        //scf,
     },
     ir::{
         attribute::{
-            //DenseElementsAttribute,
+            DenseElementsAttribute,
             FlatSymbolRefAttribute,
             //FloatAttribute,
-            //IntegerAttribute,
+            IntegerAttribute,
             StringAttribute,
             TypeAttribute,
         },
-        r#type::{
-            FunctionType,
-            IntegerType,
-            MemRefType,
-            //RankedTensorType,
-        },
-        Attribute,
-        Block,
-        Identifier,
-        Module,
-        Operation,
-        Region,
-        //Type,
-        TypeLike,
-        Value,
-        ValueLike,
+        r#type::{FunctionType, IntegerType, MemRefType, RankedTensorType},
+        Attribute, Identifier, Region, TypeLike, ValueLike,
     },
     Context,
 };
-use petgraph::algo::dominators::simple_fast;
-use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
-use std::collections::HashMap;
-use std::collections::HashSet;
 
 impl IRNode {
     pub fn location<'c>(&self, context: &'c Context, d: &Diagnostics) -> Location<'c> {
@@ -70,7 +49,8 @@ impl IRNode {
         d: &mut Diagnostics,
         cfg: &mut CFG<'c, E>,
         stack: &mut Vec<NodeIndex>,
-        g: &mut CFGGraph<'c>,
+        g: &mut IRGraph,
+        cfg_g: &mut CFGGraph<'c>,
         b: &mut NodeBuilder<E>,
     ) -> Result<SymIndex> {
         let location = self.location(context, d);
@@ -78,14 +58,26 @@ impl IRNode {
             IRKind::Noop => {
                 let current_block = stack.last().unwrap().clone();
                 let op = op::build_bool_op(context, false, location);
-                let current = g.node_weight_mut(current_block).unwrap();
+                let current = cfg_g.node_weight_mut(current_block).unwrap();
                 Ok(current.push(op))
+            }
+
+            IRKind::Block(block) => {
+                let current_block = stack.last().unwrap().clone();
+                assert_eq!(cfg.root(), current_block);
+
+                let mut out = vec![];
+                for expr in block.children {
+                    let index = expr.lower_mlir(context, d, cfg, stack, g, cfg_g, b)?;
+                    out.push(index);
+                }
+                Ok(out.last().cloned().unwrap())
             }
 
             IRKind::Seq(exprs) => {
                 let mut out = vec![];
                 for expr in exprs {
-                    let index = expr.lower_mlir(context, d, cfg, stack, g, b)?;
+                    let index = expr.lower_mlir(context, d, cfg, stack, g, cfg_g, b)?;
                     out.push(index);
                 }
                 Ok(out.last().cloned().unwrap())
@@ -94,13 +86,11 @@ impl IRNode {
             IRKind::Ret(args) => {
                 let current_block = stack.last().unwrap().clone();
                 let mut rs = vec![];
-                //let current = g.node_weight(current_block).unwrap();
                 for expr in args {
-                    let index = expr.lower_mlir(context, d, cfg, stack, g, b)?;
+                    let index = expr.lower_mlir(context, d, cfg, stack, g, cfg_g, b)?;
                     rs.push(index);
-                    //rs.extend(current.values(index));
                 }
-                let current = g.node_weight_mut(current_block).unwrap();
+                let current = cfg_g.node_weight_mut(current_block).unwrap();
                 let rs = rs
                     .into_iter()
                     .map(|index| current.values(index))
@@ -109,7 +99,7 @@ impl IRNode {
                 Ok(current.push(func::r#return(&rs, location)))
             }
 
-            IRKind::Label(label, args) => {
+            IRKind::Label(_label, _args) => {
                 unreachable!()
             }
 
@@ -117,11 +107,26 @@ impl IRNode {
                 let current_block = stack.last().unwrap().clone();
                 let span = self.span.clone();
                 if let Some(index) = cfg.block_index(&label) {
+                    let mut arg_index = vec![];
+                    for expr in args {
+                        let index = expr.lower_mlir(context, d, cfg, stack, g, cfg_g, b)?;
+                        arg_index.push(index);
+                    }
+
+                    let current = cfg_g.node_weight(current_block).unwrap();
+
+                    let arg_values = arg_index
+                        .into_iter()
+                        .map(|index| current.values(index))
+                        .flatten()
+                        .collect::<Vec<_>>();
+
+                    let target_block = cfg_g.node_weight(index).unwrap().block.as_ref().unwrap();
+                    //let block = target_block.block.as_ref().unwrap();
+
+                    let op = cf::br(target_block, &arg_values, location);
                     g.add_edge(current_block, index, ());
-                    let target_block = g.node_weight_mut(index).unwrap();
-                    let block = target_block.block.as_ref().unwrap();
-                    let op = cf::br(block, &[], location);
-                    let current = g.node_weight_mut(current_block).unwrap();
+                    let current = cfg_g.node_weight_mut(current_block).unwrap();
                     Ok(current.push(op))
                 } else {
                     d.push_diagnostic(ir::error(
@@ -137,12 +142,12 @@ impl IRNode {
                 let span = self.span.clone();
                 let s = b.strings.resolve(&name);
                 if let Some((op, ty)) = op::build_reserved(context, &s, location) {
-                    let current = g.node_weight_mut(current_block).unwrap();
+                    let current = cfg_g.node_weight_mut(current_block).unwrap();
                     let index = current.push(op);
                     cfg.set_type(index, ty);
                     Ok(index)
                 } else {
-                    if let Some(sym_index) = cfg.name_in_scope(current_block, name, g) {
+                    if let Some(sym_index) = cfg.name_in_scope(current_block, name, cfg_g) {
                         println!(
                             "lookup identifier: {}, {:?}",
                             b.strings.resolve(&name),
@@ -158,7 +163,7 @@ impl IRNode {
                                 );
                                 let op =
                                     memref::get_global(context, &static_name, memref_ty, location);
-                                let current = g.node_weight_mut(current_block).unwrap();
+                                let current = cfg_g.node_weight_mut(current_block).unwrap();
                                 let index = current.push(op);
                                 cfg.set_type(index, ast_ty);
                                 return Ok(index);
@@ -179,10 +184,61 @@ impl IRNode {
                 }
             }
 
+            IRKind::Decl(key, ast_ty, mem) => {
+                let current_block = stack.last().unwrap().clone();
+                let is_current_static = current_block == cfg.root();
+                match mem {
+                    VarDefinitionSpace::Static => {
+                        if is_current_static {
+                            // STATIC/GLOBAL VARIABLE
+                            op::emit_static_variable(
+                                context,
+                                key,
+                                ast_ty,
+                                location,
+                                current_block,
+                                cfg,
+                                cfg_g,
+                                b,
+                            )
+                        } else {
+                            // STATIC VARIABLE IN FUNCTION CONTEXT
+
+                            // emitting in non-static context (local static var)
+                            // we create a unique global name to prevent conflict
+                            // and then we add ops to provide a local reference to the global name
+                            let base = b.strings.resolve(&key).clone();
+                            let name = b.unique_static_name();
+                            let name = format!("{}{}", base, name).clone();
+                            let global_name_key = b.strings.intern(name.clone());
+
+                            let ty = IntegerType::new(context, 64);
+                            let memref_ty = MemRefType::new(ty.into(), &[], None, None);
+                            let op = memref::alloca(context, memref_ty, &[], &[], None, location);
+                            let current = cfg_g.node_weight_mut(current_block).unwrap();
+                            let index = current.push_with_name(op, key);
+                            cfg.static_names.insert(index, global_name_key);
+                            Ok(index)
+                        }
+                    }
+
+                    VarDefinitionSpace::Default | VarDefinitionSpace::Stack => {
+                        let ty = op::from_type(context, &ast_ty);
+                        //let ty = IntegerType::new(context, 64);
+                        let memref_ty = MemRefType::new(ty.into(), &[], None, None);
+                        let op = memref::alloca(context, memref_ty, &[], &[], None, location);
+                        let current = cfg_g.node_weight_mut(current_block).unwrap();
+                        let index = current.push_with_name(op, key);
+                        Ok(index)
+                    }
+                    _ => unimplemented!("{:?}", mem),
+                }
+            }
+
             IRKind::Set(name, expr, select) => {
                 let current_block = stack.last().unwrap().clone();
                 let span = self.span.clone();
-                if let Some(sym_index) = cfg.name_in_scope(current_block, name, g) {
+                if let Some(sym_index) = cfg.name_in_scope(current_block, name, cfg_g) {
                     let is_symbol_static = sym_index.block() == cfg.root();
                     let is_current_static = current_block == cfg.root();
 
@@ -201,29 +257,36 @@ impl IRNode {
                             (b.strings.intern(name.clone()), name)
                         };
 
-                        // evaluate expr at compile time
-                        let (op, ast_ty) =
-                            op::emit_static_ir(context, global_name, *expr, location);
+                        match expr.kind {
+                            IRKind::Func(blocks, ast_ty) => {
+                                unimplemented!();
+                            }
+                            _ => {
+                                // evaluate expr at compile time
+                                let (op, ast_ty) =
+                                    op::emit_static_ir(context, global_name, *expr, location);
 
-                        let ptr_ty = AstType::Ptr(ast_ty.clone().into());
-                        let current = g.node_weight_mut(current_block).unwrap();
-                        let index = current.push_with_name(op, global_name_key);
-                        cfg.set_type(index, ptr_ty);
-                        if is_current_static {
-                            // STATIC/GLOBAL VARIABLE
-                            //cfg.static_names.insert(index, global_name);
-                        } else {
-                            // STATIC VARIABLE IN FUNCTION CONTEXT
-                            cfg.static_names.insert(index, global_name_key);
+                                let ptr_ty = AstType::Ptr(ast_ty.clone().into());
+                                let current = cfg_g.node_weight_mut(current_block).unwrap();
+                                let index = current.push_with_name(op, global_name_key);
+                                cfg.set_type(index, ptr_ty);
+                                if is_current_static {
+                                    // STATIC/GLOBAL VARIABLE
+                                    //cfg.static_names.insert(index, global_name);
+                                } else {
+                                    // STATIC VARIABLE IN FUNCTION CONTEXT
+                                    cfg.static_names.insert(index, global_name_key);
+                                }
+                                Ok(index)
+                            }
                         }
-                        Ok(index)
                     } else {
                         //log::debug!("assign alloca: {}", name);
-                        let rhs_index = expr.lower_mlir(context, d, cfg, stack, g, b)?;
+                        let rhs_index = expr.lower_mlir(context, d, cfg, stack, g, cfg_g, b)?;
                         let ty = IntegerType::new(context, 64);
                         let memref_ty = MemRefType::new(ty.into(), &[], None, None);
                         let op = memref::alloca(context, memref_ty, &[], &[], None, location);
-                        let current = g.node_weight_mut(current_block).unwrap();
+                        let current = cfg_g.node_weight_mut(current_block).unwrap();
 
                         // name the pointer
                         let ptr_index = current.push_with_name(op, name);
@@ -250,7 +313,7 @@ impl IRNode {
                 let current_block = stack.last().unwrap().clone();
                 let name = b.strings.resolve(&key);
                 let span = self.span.clone();
-                let (f, ty) = if let Some(index) = cfg.name_in_scope(current_block, key, g) {
+                let (f, ty) = if let Some(index) = cfg.name_in_scope(current_block, key, cfg_g) {
                     if let Some(ty) = cfg.lookup_type(index) {
                         (FlatSymbolRefAttribute::new(context, name), ty)
                     } else {
@@ -272,13 +335,13 @@ impl IRNode {
 
                     // lower call args
                     for a in args {
-                        let index = a.lower_mlir(context, d, cfg, stack, g, b)?;
+                        let index = a.lower_mlir(context, d, cfg, stack, g, cfg_g, b)?;
                         indices.push(index);
                     }
 
                     let call_args = indices
                         .into_iter()
-                        .map(|index| values_in_scope(g, index)[0])
+                        .map(|index| values_in_scope(cfg_g, index)[0])
                         .collect::<Vec<_>>();
 
                     let op = func::call(
@@ -288,7 +351,7 @@ impl IRNode {
                         &[ret_type.clone()],
                         location,
                     );
-                    let current = g.node_weight_mut(current_block).unwrap();
+                    let current = cfg_g.node_weight_mut(current_block).unwrap();
 
                     let index = current.push(op);
                     cfg.set_type(index, *ret.clone());
@@ -334,7 +397,7 @@ impl IRNode {
                 let func_type = FunctionType::new(context, &types, &ret_type);
                 //let mut entry_block = None;
 
-                let function_block = g.node_weight_mut(current_block).unwrap();
+                let function_block = cfg_g.node_weight_mut(current_block).unwrap();
                 let func_index = function_block.get_next_index();
                 //function_block.add_symbol(def.name, func_index);
                 //cfg.set_type(func_index, f_type);
@@ -347,14 +410,14 @@ impl IRNode {
                     //cfg.dump_scope(index, g);
                     for expr in block.children {
                         stack.push(index);
-                        if let Ok(_index) = expr.lower_mlir(context, d, cfg, stack, g, b) {
+                        if let Ok(_index) = expr.lower_mlir(context, d, cfg, stack, g, cfg_g, b) {
                             stack.pop();
                         } else {
                             stack.pop();
                             return Err(Error::new(ParseError::Invalid));
                         }
                     }
-                    let block = cfg.take_block(index, g);
+                    let block = cfg.take_block(index, cfg_g);
                     region.append_block(block);
                 }
 
@@ -374,7 +437,7 @@ impl IRNode {
                     location,
                 );
 
-                let function_block = g.node_weight_mut(current_block).unwrap();
+                let function_block = cfg_g.node_weight_mut(current_block).unwrap();
                 function_block.save_op(func_index, op);
 
                 //if let Some(entry_block) = entry_block {
@@ -387,7 +450,7 @@ impl IRNode {
 
             IRKind::Literal(lit) => {
                 let current_block = stack.last().unwrap().clone();
-                let current = g.node_weight_mut(current_block).unwrap();
+                let current = cfg_g.node_weight_mut(current_block).unwrap();
                 let (op, ast_ty) = match lit {
                     Literal::Float(f) => (op::build_float_op(context, f, location), AstType::Float),
 
@@ -413,9 +476,9 @@ impl IRNode {
                 match bi {
                     Builtin::Assert => {
                         let arg = args.pop().unwrap();
-                        let index = arg.lower_mlir(context, d, cfg, stack, g, b)?;
+                        let index = arg.lower_mlir(context, d, cfg, stack, g, cfg_g, b)?;
                         let msg = format!("assert at {}", location);
-                        let current = g.node_weight_mut(current_block).unwrap();
+                        let current = cfg_g.node_weight_mut(current_block).unwrap();
                         let r = current.value0(index).unwrap();
                         let op = cf::assert(context, r, &msg, location);
                         Ok(current.push(op))
@@ -423,18 +486,18 @@ impl IRNode {
                     Builtin::Print => {
                         let arg = args.pop().unwrap();
                         // eval expr
-                        let mut index = arg.lower_mlir(context, d, cfg, stack, g, b)?;
+                        let mut index = arg.lower_mlir(context, d, cfg, stack, g, cfg_g, b)?;
                         let ast_ty = cfg.lookup_type(index).unwrap();
 
                         // deref
                         if ast_ty.is_ptr() {
                             let target = DerefTarget::Offset(0);
                             index = crate::cfg::emit_deref(
-                                context, index, location, target, d, cfg, stack, g,
+                                context, index, location, target, d, cfg, stack, cfg_g,
                             )?;
                         }
 
-                        let current = g.node_weight_mut(current_block).unwrap();
+                        let current = cfg_g.node_weight_mut(current_block).unwrap();
                         let r = current.value0(index).unwrap();
                         let ty = r.r#type();
 
@@ -459,24 +522,24 @@ impl IRNode {
             }
 
             IRKind::Branch(condition, then_key, else_key) => {
-                let index = condition.lower_mlir(context, d, cfg, stack, g, b)?;
+                let index = condition.lower_mlir(context, d, cfg, stack, g, cfg_g, b)?;
                 let current_block = stack.last().unwrap().clone();
 
                 let then_args = vec![];
                 let then_block_index = cfg.block_index(&then_key).unwrap();
 
-                let current = g.node_weight(current_block).unwrap();
+                let current = cfg_g.node_weight(current_block).unwrap();
                 let r = current.value0(index).unwrap();
 
                 let else_args = vec![];
                 let else_block_index = cfg.block_index(&else_key).unwrap();
-                let then_block = g
+                let then_block = cfg_g
                     .node_weight(then_block_index)
                     .unwrap()
                     .block
                     .as_ref()
                     .unwrap();
-                let else_block = g
+                let else_block = cfg_g
                     .node_weight(else_block_index)
                     .unwrap()
                     .block
@@ -491,15 +554,15 @@ impl IRNode {
                     &else_args,
                     location,
                 );
-                let current = g.node_weight_mut(current_block).unwrap();
+                let current = cfg_g.node_weight_mut(current_block).unwrap();
                 Ok(current.push(op))
             }
 
             IRKind::Op1(op, a) => {
                 use crate::ast::UnaryOperation;
-                let index = a.lower_mlir(context, d, cfg, stack, g, b)?;
+                let index = a.lower_mlir(context, d, cfg, stack, g, cfg_g, b)?;
                 let current_block = stack.last().unwrap().clone();
-                let current = g.node_weight_mut(current_block).unwrap();
+                let current = cfg_g.node_weight_mut(current_block).unwrap();
                 let ty = {
                     println!("{:?}", current);
                     // get the type of the RHS
@@ -540,8 +603,8 @@ impl IRNode {
                 let y_extra = E::span(y.get_span());
                 let x_location = x.location(context, d);
                 let y_location = x.location(context, d);
-                let index_x = x.lower_mlir(context, d, cfg, stack, g, b)?;
-                let index_y = y.lower_mlir(context, d, cfg, stack, g, b)?;
+                let index_x = x.lower_mlir(context, d, cfg, stack, g, cfg_g, b)?;
+                let index_y = y.lower_mlir(context, d, cfg, stack, g, cfg_g, b)?;
 
                 //cfg.save_graph("out.dot", g);
                 println!("ix: {:?}, {}", index_x, fx);
@@ -553,13 +616,13 @@ impl IRNode {
                     .lookup_type(index_y)
                     .expect(&format!("missing type for {:?}, {}", index_y, fy));
                 let current_block = stack.last().unwrap().clone();
-                let current = g.node_weight_mut(current_block).unwrap();
+                let current = cfg_g.node_weight_mut(current_block).unwrap();
                 println!("{:?}", current);
 
                 let (_ty_x, index_x) = if let AstType::Ptr(ty) = ty_x {
                     let target = DerefTarget::Offset(0);
                     let index = crate::cfg::emit_deref(
-                        context, index_x, x_location, target, d, cfg, stack, g,
+                        context, index_x, x_location, target, d, cfg, stack, cfg_g,
                     )?;
                     (*ty, index)
                 } else {
@@ -569,7 +632,7 @@ impl IRNode {
                 let (_ty_y, index_y) = if let AstType::Ptr(ty) = ty_y {
                     let target = DerefTarget::Offset(0);
                     let index = crate::cfg::emit_deref(
-                        context, index_y, y_location, target, d, cfg, stack, g,
+                        context, index_y, y_location, target, d, cfg, stack, cfg_g,
                     )?;
                     (*ty, index)
                 } else {
@@ -577,11 +640,11 @@ impl IRNode {
                 };
 
                 // types must be the same for binary operation, no implicit casting yet
-                let a = values_in_scope(g, index_x)[0];
-                let b = values_in_scope(g, index_y)[0];
+                let a = values_in_scope(cfg_g, index_x)[0];
+                let b = values_in_scope(cfg_g, index_y)[0];
                 let (op, ast_ty) =
                     op::build_binop(context, op, a, &x_extra, b, &y_extra, location, d)?;
-                let current = g.node_weight_mut(current_block).unwrap();
+                let current = cfg_g.node_weight_mut(current_block).unwrap();
                 let index = current.push(op);
                 cfg.set_type(index, ast_ty);
                 Ok(index)

@@ -22,6 +22,7 @@ pub use melior::{
     ir::{Location, Module},
     Context,
 };
+pub use petgraph::graph::NodeIndex;
 
 #[cfg(test)]
 pub(crate) mod tests {

@@ -667,6 +667,14 @@ pub(crate) mod tests {
         d.dump();
         r.unwrap();
         env.save_graph("out.dot", &g, &b);
+        return;
+        let mut stack = vec![cfg.root()];
+        let r = ir.lower_mlir(
+            &context, &mut d, &mut cfg, &mut stack, &mut g, &mut cfg_g, &mut b,
+        );
+        d.dump();
+        r.unwrap();
+        env.save_graph("out.dot", &g, &b);
     }
 
     #[test]
@@ -697,5 +705,11 @@ pub(crate) mod tests {
     fn test_recursive() {
         run_test("../tests/test_recursive.star", 0);
         run_test_ir("../tests/test_recursive.star", 0);
+    }
+
+    #[test]
+    fn test_nothing() {
+        //run_test("../tests/test.star", 0);
+        run_test_ir("../tests/test.star", 0);
     }
 }

@@ -6,8 +6,13 @@ use crate::ast::{
     BinaryOperation,
     //Builtin,
 };
+use crate::cfg::{CFGGraph, SymIndex, CFG};
 use crate::ir::IRNode;
-use crate::{Ast, AstNode, AstType, Diagnostics, Extra, Literal, ParseError};
+use crate::{
+    Ast, AstNode, AstType, Diagnostics, Extra, Literal, NodeBuilder, NodeIndex, ParseError,
+    StringKey,
+};
+
 use anyhow::Error;
 use anyhow::Result;
 use codespan_reporting::diagnostic::Diagnostic;
@@ -136,6 +141,43 @@ pub fn build_reserved<'c>(
         }
         _ => None,
     }
+}
+
+pub fn emit_static_variable<'c, E: Extra>(
+    context: &'c Context,
+    name: StringKey,
+    ast_ty: AstType,
+    location: Location<'c>,
+    block_index: NodeIndex,
+    cfg: &mut CFG<'c, E>,
+    cfg_g: &mut CFGGraph<'c>,
+    b: &NodeBuilder<E>,
+) -> Result<SymIndex> {
+    // STATIC/GLOBAL VARIABLE
+    let integer_type = IntegerType::new(context, 64).into();
+    let ty = from_type(context, &ast_ty);
+    //let attribute =
+    //DenseElementsAttribute::new(RankedTensorType::new(&[], ty, None).into(), &[value]).unwrap();
+    let alignment = IntegerAttribute::new(8, integer_type);
+    let memspace = IntegerAttribute::new(0, integer_type).into();
+    let constant = false;
+
+    let op = memref::global(
+        context,
+        b.strings.resolve(&name),
+        Some("private"),
+        MemRefType::new(ty, &[], None, Some(memspace)),
+        // initial value is not set
+        None, //Some(attribute.into()),
+        constant,
+        Some(alignment),
+        location,
+    );
+
+    let current = cfg_g.node_weight_mut(block_index).unwrap();
+    let index = current.push_with_name(op, name);
+    cfg.set_type(index, ast_ty);
+    Ok(index)
 }
 
 pub fn emit_static<'c, E: Extra>(
