@@ -346,52 +346,72 @@ impl IRNode {
                 let current_block = stack.last().unwrap().clone();
                 let span = self.span.clone();
                 let s = b.strings.resolve(&name);
-                if let Some((op, ty)) = op::build_reserved(context, &s, location) {
-                    let current = cfg_g.node_weight_mut(current_block).unwrap();
-                    let index = current.push(op);
-                    cfg.set_type(index, ty, VarDefinitionSpace::Reg);
-                    Ok(index)
-                } else {
-                    println!("lookup: {}, {:?}", b.strings.resolve(&name), current_block);
+                //if let Some((op, ty)) = op::build_reserved(context, &s, location) {
+                //let current = cfg_g.node_weight_mut(current_block).unwrap();
+                //let index = current.push(op);
+                //cfg.set_type(index, ty, VarDefinitionSpace::Reg);
+                //Ok(index)
+                //} else {
+                println!("lookup: {}, {:?}", b.strings.resolve(&name), current_block);
 
-                    cfg.save_graph("out.dot", cfg_g, b);
-                    //cfg.dump_scope(current_block, cfg_g, b);
+                cfg.save_graph("out.dot", cfg_g, b);
+                //cfg.dump_scope(current_block, cfg_g, b);
 
-                    if let Some(sym_index) = cfg.name_in_scope(current_block, name, cfg_g) {
-                        println!(
-                            "lookup identifier: {}, {:?}",
-                            b.strings.resolve(&name),
-                            sym_index
-                        );
-                        if cfg.block_is_static(sym_index.block()) {
-                            let (ast_ty, mem) = cfg.lookup_type(sym_index).unwrap();
-                            if let AstType::Ptr(ty) = &ast_ty {
-                                let lower_ty = op::from_type(context, ty);
-                                let memref_ty = MemRefType::new(lower_ty, &[], None, None);
-                                let static_name = b.strings.resolve(
-                                    &cfg.static_names.get(&sym_index).cloned().unwrap_or(name),
-                                );
-                                let op =
-                                    memref::get_global(context, &static_name, memref_ty, location);
-                                let current = cfg_g.node_weight_mut(current_block).unwrap();
-                                let index = current.push(op);
-                                cfg.set_type(index, ast_ty, mem);
-                                return Ok(index);
-                            } else {
-                                //unreachable!("Identifier of static variable must be pointer");
-                                d.push_diagnostic(ir::error(
-                                    &format!("Expected pointer: {:?}", &ast_ty),
-                                    span,
-                                ));
-                                return Err(Error::new(ParseError::Invalid));
-                            }
-                        } else {
-                            return Ok(sym_index);
+                if let Some(mut sym_index) = cfg.name_in_scope(current_block, name, cfg_g) {
+                    println!(
+                        "lookup identifier: {}, {:?}",
+                        b.strings.resolve(&name),
+                        sym_index
+                    );
+                    if cfg.block_is_static(sym_index.block()) {
+                        let (ast_ty, mem) = cfg.lookup_type(sym_index).unwrap();
+
+                        /*
+                        if mem.requires_deref() {
+                            let target = DerefTarget::Offset(0);
+                            //unimplemented!();
+                            sym_index = crate::cfg::emit_deref(
+                                context, sym_index, location, target, d, cfg, stack, cfg_g,
+                                )?;
+                        }
+                        */
+
+                        if mem.requires_deref() {
+                            //if let AstType::Ptr(ty) = &ast_ty {
+                            let lower_ty = op::from_type(context, &ast_ty);
+                            let memref_ty = MemRefType::new(lower_ty, &[], None, None);
+                            let static_name = b.strings.resolve(
+                                &cfg.static_names.get(&sym_index).cloned().unwrap_or(name),
+                            );
+                            let op = memref::get_global(context, &static_name, memref_ty, location);
+                            let current = cfg_g.node_weight_mut(current_block).unwrap();
+                            let addr_index = current.push(op);
+                            let r_addr = current.value0(addr_index).unwrap();
+
+                            let op = memref::load(r_addr, &[], location);
+                            //let current = g.node_weight_mut(current_block).unwrap();
+                            let value_index = current.push(op);
+                            //cfg.set_type(index, ty, mem);
+                            //Ok(index)
+
+                            cfg.set_type(value_index, ast_ty, VarDefinitionSpace::Stack);
+                            return Ok(value_index);
+                            //} else {
+                            //unreachable!("Identifier of static variable must be pointer");
+                            //d.push_diagnostic(ir::error(
+                            //&format!("mlir Expected pointer: {:?}", &ast_ty),
+                            //span,
+                            //));
+                            //return Err(Error::new(ParseError::Invalid));
                         }
                     }
-                    d.push_diagnostic(ir::error(&format!("Name not found: {:?}", name), span));
-                    Err(Error::new(ParseError::Invalid))
+                    //} else {
+                    return Ok(sym_index);
+                    //}
                 }
+                d.push_diagnostic(ir::error(&format!("Name not found: {:?}", name), span));
+                Err(Error::new(ParseError::Invalid))
+                //}
             }
 
             IRKind::Call(key, args) => {
@@ -588,34 +608,41 @@ impl IRNode {
                 //cfg.save_graph("out.dot", g);
                 println!("ix: {:?}, {}", index_x, fx);
                 println!("iy: {:?}, {}", index_y, fy);
+
                 let (ty_x, mem_x) = cfg
                     .lookup_type(index_x)
                     .expect(&format!("missing type for {:?}, {}", index_x, fx));
-                let (ty_y, mem_x) = cfg
+
+                let (ty_y, mem_y) = cfg
                     .lookup_type(index_y)
                     .expect(&format!("missing type for {:?}, {}", index_y, fy));
+
+                println!("ty_x: {:?}", (ty_x, mem_x));
+                println!("ty_y: {:?}", (ty_y, mem_y));
                 let current_block = stack.last().unwrap().clone();
                 let current = cfg_g.node_weight_mut(current_block).unwrap();
                 println!("{:?}", current);
 
-                let (_ty_x, index_x) = if let AstType::Ptr(ty) = ty_x {
+                let index_x = if mem_x.requires_deref() {
+                    //let (_ty_x, index_x) = if let AstType::Ptr(ty) = ty_x {
                     let target = DerefTarget::Offset(0);
                     let index = crate::cfg::emit_deref(
                         context, index_x, x_location, target, d, cfg, stack, cfg_g,
                     )?;
-                    (*ty, index)
+                    index
                 } else {
-                    (ty_x, index_x)
+                    index_x
                 };
 
-                let (_ty_y, index_y) = if let AstType::Ptr(ty) = ty_y {
+                let index_y = if mem_y.requires_deref() {
+                    //let (_ty_y, index_y) = if let AstType::Ptr(ty) = ty_y {
                     let target = DerefTarget::Offset(0);
                     let index = crate::cfg::emit_deref(
                         context, index_y, y_location, target, d, cfg, stack, cfg_g,
                     )?;
-                    (*ty, index)
+                    index
                 } else {
-                    (ty_y, index_y)
+                    index_y
                 };
 
                 // types must be the same for binary operation, no implicit casting yet
