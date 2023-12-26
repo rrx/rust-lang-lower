@@ -937,44 +937,14 @@ impl IRNode {
 }
 
 impl<E: Extra> AstNode<E> {
-    pub fn normalize<'c>(
-        mut self,
-        cfg: &mut CFG<'c, E>,
-        d: &mut Diagnostics,
-        b: &mut NodeBuilder<E>,
-    ) -> Self {
+    pub fn normalize<'c>(mut self, d: &mut Diagnostics, b: &mut NodeBuilder<E>) -> Self {
         self.preprocess(d, b);
         self.analyze(b);
         self
     }
 
-    pub fn preprocess<'c>(
-        &mut self,
-        //cfg: &mut CFG<'c, E>,
-        d: &mut Diagnostics,
-        b: &mut NodeBuilder<E>,
-    ) {
+    pub fn preprocess<'c>(&mut self, d: &mut Diagnostics, b: &mut NodeBuilder<E>) {
         match &mut self.node {
-            /*
-            Ast::Builtin(bi, ref mut args) => {
-                let arity = bi.arity();
-                assert_eq!(arity, args.len());
-                match bi {
-                    Builtin::Import => {
-                        let arg = args.pop().unwrap();
-                        let Argument::Positional(expr) = arg;
-                        if let Some(s) = expr.try_string() {
-                            cfg.shared.insert(s);
-                        } else {
-                            d.push_diagnostic(expr.extra.error("Expected string"));
-                        }
-                        // replace with noop
-                        self.node = Ast::Noop;
-                    }
-                    _ => (),
-                }
-            }
-            */
             _ => (),
         }
         for child in self.children_mut() {
@@ -1430,22 +1400,22 @@ mod tests {
 
     #[test]
     fn test_ir_1() {
-        let context = default_context();
-        let mut cfg_g = CFGGraph::new();
+        //let context = default_context();
+        //let mut cfg_g = CFGGraph::new();
         let mut g = IRGraph::new();
         let mut d = Diagnostics::new();
         let file_id = d.add_source("test.py".into(), "test".into());
-        let mut b = NodeBuilder::new();
+        let mut b: NodeBuilder<SimpleExtra> = NodeBuilder::new();
         b.enter(file_id, "type.py");
 
-        let mut cfg: CFG<SimpleExtra> = CFG::new(
-            &context,
-            b.strings.intern("module".to_string()),
-            &d,
-            &mut cfg_g,
-        );
+        //let mut cfg: CFG<SimpleExtra> = CFG::new(
+        //&context,
+        //b.strings.intern("module".to_string()),
+        //&d,
+        //&mut cfg_g,
+        //);
         let mut env = IREnvironment::new();
-        let ast = gen_block(&mut b).normalize(&mut cfg, &mut d, &mut b);
+        let ast = gen_block(&mut b).normalize(&mut d, &mut b);
         //let mut stack = vec![cfg.root()];
         let index = env.add_block(b.s("module"), vec![], &d, &mut g);
         env.enter_block(index, ast.extra.get_span());
@@ -1461,23 +1431,23 @@ mod tests {
 
     #[test]
     fn test_ir_2() {
-        let context = default_context();
-        let mut cfg_g = CFGGraph::new();
+        //let context = default_context();
+        //let mut cfg_g = CFGGraph::new();
         let mut g = IRGraph::new();
         let mut d = Diagnostics::new();
         let file_id = d.add_source("test.py".into(), "test".into());
-        let mut b = NodeBuilder::new();
+        let mut b: NodeBuilder<SimpleExtra> = NodeBuilder::new();
         b.enter(file_id, "type.py");
 
-        let mut cfg: CFG<SimpleExtra> = CFG::new(
-            &context,
-            b.strings.intern("module".to_string()),
-            &d,
-            &mut cfg_g,
-        );
+        //let mut cfg: CFG<SimpleExtra> = CFG::new(
+        //&context,
+        //b.strings.intern("module".to_string()),
+        //&d,
+        //&mut cfg_g,
+        //);
         let mut env = IREnvironment::new();
 
-        let ast = crate::tests::gen_function_call(&mut b).normalize(&mut cfg, &mut d, &mut b);
+        let ast = crate::tests::gen_function_call(&mut b).normalize(&mut d, &mut b);
 
         let index = env.add_block(b.s("module"), vec![], &d, &mut g);
         env.enter_block(index, ast.extra.get_span());

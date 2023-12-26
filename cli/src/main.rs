@@ -7,10 +7,10 @@ use argh::FromArgs;
 use melior::ir;
 use simple_logger::{set_up_color_terminal, SimpleLogger};
 
-use lower::ast::SimpleExtra;
-use lower::cfg::{CFGGraph, CFG};
-use lower::compile::default_context;
-use lower::{Diagnostics, Extra, IREnvironment, IRGraph, NodeBuilder};
+use lower::{
+    default_context, CFGGraph, Diagnostics, Extra, IREnvironment, IRGraph, NodeBuilder,
+    SimpleExtra, CFG,
+};
 use parse::starlark::Parser;
 
 #[derive(FromArgs, Debug)]
@@ -80,7 +80,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             std::process::exit(1);
         }
 
-        let ast = result?.normalize(&mut cfg, &mut d, &mut b);
+        let ast = result?.normalize(&mut d, &mut b);
 
         // lower ast to ir
         let mut env = IREnvironment::new();

@@ -1,19 +1,18 @@
-use anyhow::Result;
+use std::collections::HashMap;
 use std::path::Path;
+
+use anyhow::Result;
+use codespan_reporting::diagnostic::{Diagnostic, Label};
 
 use starlark_syntax::codemap;
 use starlark_syntax::codemap::CodeMap;
-
 use starlark_syntax::lexer;
 use starlark_syntax::syntax;
 use starlark_syntax::syntax::module::AstModuleFields;
 
-use codespan_reporting::diagnostic::{Diagnostic, Label};
-
 use lower::ast;
 use lower::ast::{Ast, AstNode, CodeLocation, Extra};
 use lower::{AstType, Diagnostics, NodeBuilder, StringKey, TypeUnify};
-use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub enum DataType {
@@ -552,7 +551,7 @@ pub(crate) mod tests {
         let ast: AstNode<ast::SimpleExtra> = parser
             .parse(Path::new(filename), None, file_id, &mut d, &mut b)
             .unwrap()
-            .normalize(&mut cfg, &mut d, &mut b);
+            .normalize(&mut d, &mut b);
 
         println!("ast: {:#?}", ast);
 
