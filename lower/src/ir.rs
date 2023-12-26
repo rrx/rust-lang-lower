@@ -491,6 +491,14 @@ impl IRNode {
         Self { kind, span }
     }
 
+    pub fn try_string(&self) -> Option<String> {
+        if let IRKind::Literal(Literal::String(s)) = &self.kind {
+            Some(s.clone())
+        } else {
+            None
+        }
+    }
+
     pub fn get_span(&self) -> Span {
         self.span.clone()
     }
@@ -935,18 +943,19 @@ impl<E: Extra> AstNode<E> {
         d: &mut Diagnostics,
         b: &mut NodeBuilder<E>,
     ) -> Self {
-        self.preprocess(cfg, d, b);
+        self.preprocess(d, b);
         self.analyze(b);
         self
     }
 
     pub fn preprocess<'c>(
         &mut self,
-        cfg: &mut CFG<'c, E>,
+        //cfg: &mut CFG<'c, E>,
         d: &mut Diagnostics,
         b: &mut NodeBuilder<E>,
     ) {
         match &mut self.node {
+            /*
             Ast::Builtin(bi, ref mut args) => {
                 let arity = bi.arity();
                 assert_eq!(arity, args.len());
@@ -965,10 +974,11 @@ impl<E: Extra> AstNode<E> {
                     _ => (),
                 }
             }
+            */
             _ => (),
         }
         for child in self.children_mut() {
-            child.preprocess(cfg, d, b);
+            child.preprocess(d, b);
         }
     }
 
@@ -1308,6 +1318,7 @@ impl<E: Extra> AstNode<E> {
                     Literal::Int(f) => b.ir_integer(f),
                     Literal::Index(f) => b.ir_index(f),
                     Literal::Bool(f) => b.ir_bool(f),
+                    Literal::String(ref f) => b.ir_string(f.clone()),
                     _ => unimplemented!("{:?}", lit),
                 };
                 let ty = lit.into();

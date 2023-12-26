@@ -63,7 +63,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut cfg: CFG<SimpleExtra> = CFG::new(&context, b.s("module"), &d, &mut cfg_g);
 
     for path in config.inputs {
-        //let mut env: lower::Environment<SimpleExtra> = lower::Environment::default();
         let path = Path::new(&path);
         log::debug!("parsing: {}", path.to_str().unwrap());
 
@@ -82,16 +81,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
 
         let ast = result?.normalize(&mut cfg, &mut d, &mut b);
-
-        //let mut stack = vec![cfg.root()];
-        /*
-        let r = ast.lower(&context, &mut d, &mut cfg, &mut stack, &mut g, &mut b);
-        assert_eq!(1, stack.len());
-        if config.verbose {
-            d.dump();
-        }
-        r?;
-        */
 
         // lower ast to ir
         let mut env = IREnvironment::new();

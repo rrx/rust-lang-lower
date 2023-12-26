@@ -12,10 +12,7 @@ use codespan_reporting::diagnostic::{Diagnostic, Label};
 
 use lower::ast;
 use lower::ast::{Ast, AstNode, CodeLocation, Extra};
-use lower::intern::StringKey;
-use lower::{AstType, Diagnostics, NodeBuilder, TypeUnify};
-
-//use lower::cfg::CFG;
+use lower::{AstType, Diagnostics, NodeBuilder, StringKey, TypeUnify};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
@@ -372,29 +369,6 @@ impl<E: Extra> Parser<E> {
             }
 
             StmtP::Assign(assign) => {
-                // if the name exists in scope, then mutate it,
-                // otherwise, we assign it
-                // variables can be assigned inside of conditionals and loops, but their existence
-                // is tracked in the function scope, which can be nested
-                // the existence of a variable is checked at runtime, not compile time
-                // we can do both.  We can do a static check and if it works, optimize, otherwise
-                // we fall back to runtime checks.
-                // global variables are also handled in particular ways:
-                // if the global variable name is not assigned in the function context, then it
-                // will have the global variable in scope.  If the variable is assigned in the
-                // scope after it is used, it will give a use before reference error
-                // if you assign before use, then it treats the varaible as local to the function
-                // and global is unchanged
-                // To modify the global var you need to specify global <name>
-                // If no global is set then you can read the variable, but if you attempt to modify
-                // it, then the name is considered local
-                // at runtime, variables are added to scope, which means you can reference things
-                // that haven't been added, if they were added conditionally.  This is almost
-                // always not what you want to do though, so a static check should flag it, but
-                // it's legal python code.  Vars in while and cond blocks are not considered local
-                // to those blocks, but to the function, so we have to check all coded paths.  We
-                // don't have to be super sophisticated here, just a conservative static check
-                // that's optional.
                 use syntax::ast::AssignTargetP;
                 let rhs = self.from_expr(assign.rhs, env, d, b)?;
                 match assign.lhs.node {
@@ -408,23 +382,8 @@ impl<E: Extra> Parser<E> {
                         let name = b.s(&ident.node.ident);
 
                         // lookup
-                        // Global identifiers are dereferenced when accessed
-                        if let Some(data) = env.resolve(name) {
-                            if let DataType::Global = data.ty {
-                                //let extra: E = env.extra(item.span);
-                                //let ast = AstNode {
-                                //node: Ast::Identifier(name),
-                                //extra: extra.clone(),
-                                //};
-                                //Ok(b.deref_offset(ast, 0).set_extra(extra))
-                                let node = b.ident(name);
-                                Ok(b.mutate(node, rhs))
-                                //Ok(b.assign(&name, rhs))
-                            } else {
-                                //Ok(b.mutate(b.deref_offset(b.ident(&name), 0), rhs))
-                                //Ok(b.mutate(b.ident(&name), rhs))
-                                Ok(b.assign(name, rhs))
-                            }
+                        if let Some(_data) = env.resolve(name) {
+                            Ok(b.assign(name, rhs))
                         } else {
                             // name does not exist in scope
                             // Either create a global or do local, depending on context
@@ -523,18 +482,10 @@ impl<E: Extra> Parser<E> {
                 }
 
                 let name = b.s(&ident.node.ident);
-                if let Some(data) = env.resolve(name) {
+                if let Some(_data) = env.resolve(name) {
                     let extra = env.extra(item.span);
                     let ast = b.ident(name).set_extra(extra);
-
-                    // Global identifiers are dereferenced when accessed
-                    if let DataType::Global = data.ty {
-                        //let extra = env.extra(item.span);
-                        //Ok(b.deref_offset(ast, 0).set_extra(extra))
-                        Ok(ast)
-                    } else {
-                        Ok(ast)
-                    }
+                    Ok(ast)
                 } else {
                     d.push_diagnostic(env.error(
                         ident.span,
@@ -582,40 +533,6 @@ pub(crate) mod tests {
     use lower::{IREnvironment, IRGraph};
     use lower::{Location, Module};
     use test_log::test;
-
-    /*
-    fn run_test(filename: &str, expected: i32) {
-        let mut b = NodeBuilder::new();
-        let context = lower::default_context();
-        let mut d = Diagnostics::new();
-        let mut module = Module::new(Location::unknown(&context));
-        let mut cfg_g = CFGGraph::new();
-        let mut cfg: CFG<SimpleExtra> = CFG::new(&context, b.s("module"), &d, &mut cfg_g);
-        let file_id = d.add_source(
-            filename.to_string(),
-            std::fs::read_to_string(filename).unwrap(),
-        );
-
-        // parse
-        let mut parser = Parser::new();
-        let ast: AstNode<ast::SimpleExtra> = parser
-            .parse(Path::new(filename), None, file_id, &mut d, &mut b)
-            .unwrap()
-            .normalize(&mut cfg, &mut d, &mut b);
-
-        println!("ast: {:#?}", ast);
-        let mut stack = vec![cfg.root()];
-        let r = ast.lower(&context, &mut d, &mut cfg, &mut stack, &mut cfg_g, &mut b);
-        cfg.save_graph("out.dot", &cfg_g, &b);
-        d.dump();
-        assert_eq!(1, stack.len());
-        assert!(!d.has_errors);
-        r.unwrap();
-        cfg.module(&context, &mut module, &mut cfg_g);
-        let r = cfg.exec_main(&module, "../target/debug/");
-        assert_eq!(expected, r);
-    }
-    */
 
     fn run_test_ir(filename: &str, expected: i32) {
         let mut b = NodeBuilder::new();
@@ -676,37 +593,31 @@ pub(crate) mod tests {
 
     #[test]
     fn test_global() {
-        //run_test("../tests/test_global.star", 0);
         run_test_ir("../tests/test_global.star", 0);
     }
 
     #[test]
     fn test_static() {
-        //run_test("../tests/test_static.star", 0);
         run_test_ir("../tests/test_static.star", 0);
     }
 
     #[test]
     fn test_cond() {
-        //run_test("../tests/test_cond.star", 0);
         run_test_ir("../tests/test_cond.star", 0);
     }
 
     #[test]
     fn test_float() {
-        //run_test("../tests/test_float.star", 0);
         run_test_ir("../tests/test_float.star", 0);
     }
 
     #[test]
     fn test_recursive() {
-        //run_test("../tests/test_recursive.star", 0);
         run_test_ir("../tests/test_recursive.star", 0);
     }
 
     #[test]
     fn test_nothing() {
-        //run_test("../tests/test.star", 0);
         run_test_ir("../tests/test.star", 0);
     }
 }

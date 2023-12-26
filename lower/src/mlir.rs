@@ -1,5 +1,6 @@
 use crate::ast::{
-    //Argument, AssignTarget, Ast, AstNode,
+    Argument,
+    //AssignTarget, Ast, AstNode,
     Builtin,
     DerefTarget,
     Literal,
@@ -473,6 +474,15 @@ impl IRNode {
                 assert_eq!(arity, args.len());
                 let current_block = stack.last().unwrap().clone();
                 match bi {
+                    Builtin::Import => {
+                        let arg = args.pop().unwrap();
+                        if let Some(s) = arg.try_string() {
+                            cfg.shared.insert(s);
+                        } else {
+                            d.push_diagnostic(ir::error("Expected string", self.span));
+                        }
+                        op::emit_noop(context, location, current_block, cfg_g)
+                    }
                     Builtin::Assert => {
                         let arg = args.pop().unwrap();
                         let index = arg.lower_mlir(context, d, cfg, stack, cfg_g, b)?;
@@ -518,8 +528,7 @@ impl IRNode {
 
                         let current = cfg_g.node_weight_mut(current_block).unwrap();
                         Ok(current.push(op))
-                    }
-                    _ => unreachable!("{:?}", bi),
+                    } //_ => unreachable!("{:?}", bi),
                 }
             }
 

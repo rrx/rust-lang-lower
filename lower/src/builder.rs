@@ -434,6 +434,13 @@ impl<E: Extra> NodeBuilder<E> {
         )
     }
 
+    pub fn ir_string(&self, f: String) -> IRNode {
+        IRNode::new(
+            IRKind::Literal(Literal::String(f)),
+            self.span.clone().unwrap(),
+        )
+    }
+
     pub fn ir_op1(&self, op: UnaryOperation, v: IRNode) -> IRNode {
         IRNode::new(IRKind::Op1(op, v.into()), self.span.clone().unwrap())
     }
