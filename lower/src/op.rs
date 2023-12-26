@@ -154,7 +154,7 @@ pub fn emit_binop<'c, E: Extra>(
     d: &mut Diagnostics,
     cfg: &mut CFG<'c, E>,
     stack: &mut Vec<NodeIndex>,
-    g: &mut IRGraph,
+    //g: &mut IRGraph,
     cfg_g: &mut CFGGraph<'c>,
     b: &mut NodeBuilder<E>,
 ) -> Result<SymIndex> {
@@ -164,8 +164,8 @@ pub fn emit_binop<'c, E: Extra>(
     let y_extra = E::span(y.get_span());
     let x_location = x.location(context, d);
     let y_location = x.location(context, d);
-    let index_x = x.lower_mlir(context, d, cfg, stack, g, cfg_g, b)?;
-    let index_y = y.lower_mlir(context, d, cfg, stack, g, cfg_g, b)?;
+    let index_x = x.lower_mlir(context, d, cfg, stack, cfg_g, b)?;
+    let index_y = y.lower_mlir(context, d, cfg, stack, cfg_g, b)?;
 
     //cfg.save_graph("out.dot", g);
     //println!("ix: {:?}, {}", index_x, fx);
@@ -222,7 +222,7 @@ pub fn emit_deref<'c, E: Extra>(
     _d: &mut Diagnostics,
     cfg: &mut CFG<'c, E>,
     stack: &mut Vec<NodeIndex>,
-    g: &mut CFGGraph<'c>,
+    cfg_g: &mut CFGGraph<'c>,
 ) -> Result<SymIndex> {
     // we are expecting a memref here
     let current_block = stack.last().unwrap().clone();
@@ -232,9 +232,9 @@ pub fn emit_deref<'c, E: Extra>(
     if mem.requires_deref() {
         //if let AstType::Ptr(ast_ty) = &ty {
         //let location = extra.location(context, d);
-        let r = values_in_scope(g, index)[0];
+        let r = values_in_scope(cfg_g, index)[0];
         let op = memref::load(r, &[], location);
-        let current = g.node_weight_mut(current_block).unwrap();
+        let current = cfg_g.node_weight_mut(current_block).unwrap();
         let index = current.push(op);
         cfg.set_type(index, ty, mem);
         Ok(index)
@@ -256,7 +256,7 @@ pub fn emit_set_alloca<'c, E: Extra>(
     block_index: NodeIndex,
     cfg: &mut CFG<'c, E>,
     stack: &mut Vec<NodeIndex>,
-    g: &mut IRGraph,
+    //g: &mut IRGraph,
     cfg_g: &mut CFGGraph<'c>,
     d: &mut Diagnostics,
     b: &mut NodeBuilder<E>,
@@ -264,7 +264,7 @@ pub fn emit_set_alloca<'c, E: Extra>(
     log::debug!("assign alloca: {}", b.strings.resolve(&name));
     expr.dump(b, 0);
 
-    let rhs_index = expr.lower_mlir(context, d, cfg, stack, g, cfg_g, b)?;
+    let rhs_index = expr.lower_mlir(context, d, cfg, stack, cfg_g, b)?;
     //let ty = IntegerType::new(context, 64);
     //let memref_ty = MemRefType::new(ty.into(), &[], None, None);
     //let op = memref::alloca(context, memref_ty, &[], &[], None, location);
@@ -336,7 +336,7 @@ pub fn emit_set_function<'c, E: Extra>(
     current_block: NodeIndex,
     cfg: &mut CFG<'c, E>,
     stack: &mut Vec<NodeIndex>,
-    g: &mut IRGraph,
+    //g: &mut IRGraph,
     cfg_g: &mut CFGGraph<'c>,
     d: &mut Diagnostics,
     b: &mut NodeBuilder<E>,
@@ -376,7 +376,7 @@ pub fn emit_set_function<'c, E: Extra>(
 
                 for c in block.children.into_iter() {
                     stack.push(block_index);
-                    if let Ok(_index) = c.lower_mlir(context, d, cfg, stack, g, cfg_g, b) {
+                    if let Ok(_index) = c.lower_mlir(context, d, cfg, stack, cfg_g, b) {
                         stack.pop();
                     } else {
                         stack.pop();

@@ -109,9 +109,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         // lower to mlir
         let mut stack = vec![cfg.root()];
-        let r = ir.lower_mlir(
-            &context, &mut d, &mut cfg, &mut stack, &mut g, &mut cfg_g, &mut b,
-        );
+        let r = ir.lower_mlir(&context, &mut d, &mut cfg, &mut stack, &mut cfg_g, &mut b);
         d.dump();
         r.unwrap();
         env.save_graph("out.dot", &g, &b);
