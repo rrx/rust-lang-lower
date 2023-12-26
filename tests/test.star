@@ -1,7 +1,12 @@
 # just a static var
-z = 0
+z = 1
+
+b.use("prelude")
 
 def main() -> int:
+  out = z
   if True:
-    return 1
-  return 0
+    out = 0
+    return out
+
+  return out

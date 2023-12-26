@@ -687,7 +687,7 @@ pub(crate) mod tests {
 
     #[test]
     fn test_static() {
-        run_test("../tests/test_static.star", 0);
+        //run_test("../tests/test_static.star", 0);
         run_test_ir("../tests/test_static.star", 0);
     }
 

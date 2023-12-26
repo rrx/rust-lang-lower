@@ -9,16 +9,22 @@ def main() -> int:
 
   # this should mutate the global variable
   b.print(z)
-  #b.print(z + 1)
+  b.print(z + 1)
+
   z = z + 1
   b.print(z)
   b.check(z == 11)
 
+  z0 = z
+  z = z0
+  b.print(z)
+  b.check(z == 11)
+
   # unary integer
-  #xi = -10
+  xi = -10
 
   # local assign, global access
-  #y = z + xi + 1
-  #return y - 2
-  return 0
+  y = z + xi + 1
+
+  return y - 2
 
