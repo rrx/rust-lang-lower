@@ -335,10 +335,15 @@ pub struct AstNode<E> {
     pub node: Ast<E>,
     pub extra: E,
 }
-impl<E> AstNode<E> {
+
+impl<E: Extra> AstNode<E> {
     pub fn set_extra(mut self, extra: E) -> Self {
         self.extra = extra;
         self
+    }
+
+    pub fn location<'c>(&self, context: &'c Context, d: &Diagnostics) -> Location<'c> {
+        self.extra.location(context, d)
     }
 
     //pub fn new(node: Ast<E>, extra: E) -> Self {

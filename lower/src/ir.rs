@@ -1,7 +1,7 @@
 use anyhow::Error;
 use anyhow::Result;
 
-use crate::cfg::SymIndex;
+use crate::cfg::{SymIndex, CFG};
 use crate::{AstNode, AstType, Diagnostics, Extra, NodeBuilder, ParseError, StringKey};
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 //use melior::Context;
@@ -929,6 +929,55 @@ impl IRNode {
 }
 
 impl<E: Extra> AstNode<E> {
+    pub fn normalize<'c>(
+        mut self,
+        cfg: &mut CFG<'c, E>,
+        d: &mut Diagnostics,
+        b: &mut NodeBuilder<E>,
+    ) -> Self {
+        self.preprocess(cfg, d, b);
+        self.analyze(b);
+        self
+    }
+
+    pub fn preprocess<'c>(
+        &mut self,
+        cfg: &mut CFG<'c, E>,
+        d: &mut Diagnostics,
+        b: &mut NodeBuilder<E>,
+    ) {
+        match &mut self.node {
+            Ast::Builtin(bi, ref mut args) => {
+                let arity = bi.arity();
+                assert_eq!(arity, args.len());
+                match bi {
+                    Builtin::Import => {
+                        let arg = args.pop().unwrap();
+                        let Argument::Positional(expr) = arg;
+                        if let Some(s) = expr.try_string() {
+                            cfg.shared.insert(s);
+                        } else {
+                            d.push_diagnostic(expr.extra.error("Expected string"));
+                        }
+                        // replace with noop
+                        self.node = Ast::Noop;
+                    }
+                    _ => (),
+                }
+            }
+            _ => (),
+        }
+        for child in self.children_mut() {
+            child.preprocess(cfg, d, b);
+        }
+    }
+
+    pub fn analyze<'c>(&mut self, b: &mut NodeBuilder<E>) {
+        b.identify_node(self);
+        for child in self.children_mut() {
+            child.analyze(b);
+        }
+    }
     pub fn lower_ir_expr<'c>(
         self,
         d: &mut Diagnostics,

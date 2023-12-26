@@ -1,15 +1,16 @@
 use crate::ast::{
+    //BinOpNode,
+    BinaryOperation,
     //Argument, AssignTarget, Ast, AstNode,
     //Literal,
     //Parameter, ParameterNode,
-    BinOpNode,
-    BinaryOperation,
+    DerefTarget,
     Terminator,
     VarDefinitionSpace,
     //Builtin,
 };
 use crate::cfg::{values_in_scope, CFGGraph, SymIndex, CFG};
-use crate::ir;
+//use crate::ir;
 use crate::ir::{IRGraph, IRKind, IRNode};
 use crate::{
     Ast, AstNode, AstType, Diagnostics, Extra, Literal, NodeBuilder, NodeIndex, ParseError,
@@ -142,6 +143,39 @@ pub fn build_reserved<'c>(
         }
         _ => None,
     }
+}
+
+pub fn emit_deref<'c, E: Extra>(
+    _context: &'c Context,
+    index: SymIndex,
+    location: Location<'c>,
+    _target: DerefTarget,
+    _d: &mut Diagnostics,
+    cfg: &mut CFG<'c, E>,
+    stack: &mut Vec<NodeIndex>,
+    g: &mut CFGGraph<'c>,
+) -> Result<SymIndex> {
+    // we are expecting a memref here
+    let current_block = stack.last().unwrap().clone();
+    let (ty, mem) = cfg.lookup_type(index).unwrap();
+
+    // ensure proper type
+    if mem.requires_deref() {
+        //if let AstType::Ptr(ast_ty) = &ty {
+        //let location = extra.location(context, d);
+        let r = values_in_scope(g, index)[0];
+        let op = memref::load(r, &[], location);
+        let current = g.node_weight_mut(current_block).unwrap();
+        let index = current.push(op);
+        cfg.set_type(index, ty, mem);
+        Ok(index)
+    } else {
+        Ok(index)
+    }
+    //} else {
+    //d.push_diagnostic(extra.error(&format!("Trying to dereference a non-pointer: {:?}", ty)));
+    //Err(Error::new(ParseError::Invalid))
+    //}
 }
 
 pub fn emit_set_alloca<'c, E: Extra>(

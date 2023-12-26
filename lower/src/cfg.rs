@@ -1,5 +1,13 @@
 use crate::ast::{
-    Argument, AssignTarget, Ast, AstNode, Builtin, DerefTarget, Literal, Parameter, ParameterNode,
+    Argument,
+    //AssignTarget,
+    Ast,
+    AstNode,
+    Builtin,
+    //DerefTarget,
+    //Literal,
+    Parameter,
+    ParameterNode,
     VarDefinitionSpace,
 };
 use crate::compile::exec_main;
@@ -7,14 +15,13 @@ use crate::default_pass_manager;
 use crate::intern::StringKey;
 use crate::ir::IRArg;
 use crate::op;
-use crate::{AstType, Extra, NodeBuilder};
-use crate::{Diagnostics, ParseError};
-use anyhow::Error;
-use anyhow::Result;
+use crate::{AstType, Diagnostics, Extra, NodeBuilder};
+//use anyhow::Error;
+//use anyhow::Result;
 use melior::ir::operation::OperationPrintingFlags;
 use melior::ir::Location;
 use melior::{
-    dialect::memref,
+    //dialect::memref,
     ir::{
         //attribute::{
         //DenseElementsAttribute,
@@ -259,7 +266,7 @@ pub fn values_in_scope<'c, 'a>(g: &'a CFGGraph<'c>, sym_index: SymIndex) -> Vec<
 
 pub struct CFG<'c, E> {
     context: &'c Context,
-    shared: HashSet<String>,
+    pub(crate) shared: HashSet<String>,
     root: NodeIndex,
     index_count: usize,
     block_names: HashMap<StringKey, NodeIndex>,
@@ -577,63 +584,6 @@ impl<'c, E: Extra> CFG<'c, E> {
 }
 
 impl<E: Extra> AstNode<E> {
-    pub fn location<'c>(&self, context: &'c Context, d: &Diagnostics) -> Location<'c> {
-        self.extra.location(context, d)
-    }
-
-    pub fn normalize<'c>(
-        mut self,
-        cfg: &mut CFG<'c, E>,
-        d: &mut Diagnostics,
-        b: &mut NodeBuilder<E>,
-    ) -> Self {
-        self.preprocess(cfg, d, b);
-        self.analyze(b);
-        self
-    }
-
-    pub fn preprocess<'c>(
-        &mut self,
-        cfg: &mut CFG<'c, E>,
-        d: &mut Diagnostics,
-        b: &mut NodeBuilder<E>,
-    ) {
-        match &mut self.node {
-            Ast::Builtin(bi, ref mut args) => {
-                let arity = bi.arity();
-                assert_eq!(arity, args.len());
-                match bi {
-                    Builtin::Import => {
-                        let arg = args.pop().unwrap();
-                        let Argument::Positional(expr) = arg;
-                        if let Some(s) = expr.try_string() {
-                            cfg.shared.insert(s);
-                        } else {
-                            d.push_diagnostic(expr.extra.error("Expected string"));
-                        }
-                        //} else {
-                        //unimplemented!()
-                        //}
-                        // replace with noop
-                        self.node = Ast::Noop;
-                    }
-                    _ => (),
-                }
-            }
-            _ => (),
-        }
-        for child in self.children_mut() {
-            child.preprocess(cfg, d, b);
-        }
-    }
-
-    pub fn analyze<'c>(&mut self, b: &mut NodeBuilder<E>) {
-        b.identify_node(self);
-        for child in self.children_mut() {
-            child.analyze(b);
-        }
-    }
-
     /*
        pub fn lower<'c>(
            self,
@@ -1356,39 +1306,6 @@ impl<E: Extra> AstNode<E> {
            }
        }
     */
-}
-
-pub fn emit_deref<'c, E: Extra>(
-    _context: &'c Context,
-    index: SymIndex,
-    location: Location<'c>,
-    _target: DerefTarget,
-    _d: &mut Diagnostics,
-    cfg: &mut CFG<'c, E>,
-    stack: &mut Vec<NodeIndex>,
-    g: &mut CFGGraph<'c>,
-) -> Result<SymIndex> {
-    // we are expecting a memref here
-    let current_block = stack.last().unwrap().clone();
-    let (ty, mem) = cfg.lookup_type(index).unwrap();
-
-    // ensure proper type
-    if mem.requires_deref() {
-        //if let AstType::Ptr(ast_ty) = &ty {
-        //let location = extra.location(context, d);
-        let r = values_in_scope(g, index)[0];
-        let op = memref::load(r, &[], location);
-        let current = g.node_weight_mut(current_block).unwrap();
-        let index = current.push(op);
-        cfg.set_type(index, ty, mem);
-        Ok(index)
-    } else {
-        Ok(index)
-    }
-    //} else {
-    //d.push_diagnostic(extra.error(&format!("Trying to dereference a non-pointer: {:?}", ty)));
-    //Err(Error::new(ParseError::Invalid))
-    //}
 }
 
 /*

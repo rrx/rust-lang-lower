@@ -1,5 +1,9 @@
 use crate::ast::{
-    Argument, AssignTarget, Ast, AstNode, Builtin, DerefTarget, Literal, Parameter, ParameterNode,
+    //Argument, AssignTarget, Ast, AstNode,
+    Builtin,
+    DerefTarget,
+    Literal,
+    //Parameter, ParameterNode,
     VarDefinitionSpace,
 };
 use crate::cfg::{values_in_scope, CFGGraph, SymIndex, CFG};
@@ -23,21 +27,11 @@ use melior::{
         //scf,
     },
     ir::{
-        attribute::{
-            //DenseElementsAttribute,
-            FlatSymbolRefAttribute,
-            //FloatAttribute,
-            //IntegerAttribute,
-            StringAttribute,
-            TypeAttribute,
-        },
-        r#type::{
-            FunctionType,
-            IntegerType,
-            MemRefType,
-            //RankedTensorType
-        },
-        Attribute, Identifier, Region, TypeLike, ValueLike,
+        attribute::FlatSymbolRefAttribute,
+        r#type::MemRefType,
+        //Attribute, Identifier, Region,
+        TypeLike,
+        ValueLike,
     },
     Context,
 };
@@ -279,9 +273,8 @@ impl IRNode {
                         // if it's in memory, we need to copy to return
                         let target = DerefTarget::Offset(0);
                         //unimplemented!();
-                        index = crate::cfg::emit_deref(
-                            context, index, location, target, d, cfg, stack, cfg_g,
-                        )?;
+                        index =
+                            op::emit_deref(context, index, location, target, d, cfg, stack, cfg_g)?;
                     }
 
                     let rs = values_in_scope(cfg_g, index).clone();
@@ -363,10 +356,10 @@ impl IRNode {
                 }
             }
 
-            IRKind::Get(name, select) => {
+            IRKind::Get(name, _select) => {
                 let current_block = stack.last().unwrap().clone();
                 let span = self.span.clone();
-                let s = b.strings.resolve(&name);
+                //let s = b.strings.resolve(&name);
                 //if let Some((op, ty)) = op::build_reserved(context, &s, location) {
                 //let current = cfg_g.node_weight_mut(current_block).unwrap();
                 //let index = current.push(op);
@@ -378,7 +371,7 @@ impl IRNode {
                 //cfg.save_graph("out.dot", cfg_g, b);
                 //cfg.dump_scope(current_block, cfg_g, b);
 
-                if let Some(mut sym_index) = cfg.name_in_scope(current_block, name, cfg_g) {
+                if let Some(sym_index) = cfg.name_in_scope(current_block, name, cfg_g) {
                     println!(
                         "lookup identifier: {}, {:?}",
                         b.strings.resolve(&name),
@@ -431,7 +424,7 @@ impl IRNode {
                 let current_block = stack.last().unwrap().clone();
                 let name = b.strings.resolve(&key);
                 let span = self.span.clone();
-                let (f, (ty, mem)) =
+                let (f, (ty, _mem)) =
                     if let Some(index) = cfg.name_in_scope(current_block, key, cfg_g) {
                         if let Some(ty) = cfg.lookup_type(index) {
                             (FlatSymbolRefAttribute::new(context, name), ty)
@@ -529,7 +522,7 @@ impl IRNode {
                         if mem.requires_deref() {
                             let target = DerefTarget::Offset(0);
                             //unimplemented!();
-                            index = crate::cfg::emit_deref(
+                            index = op::emit_deref(
                                 context, index, location, target, d, cfg, stack, cfg_g,
                             )?;
                         }
@@ -637,9 +630,8 @@ impl IRNode {
 
                 let index_x = if mem_x.requires_deref() {
                     let target = DerefTarget::Offset(0);
-                    let index = crate::cfg::emit_deref(
-                        context, index_x, x_location, target, d, cfg, stack, cfg_g,
-                    )?;
+                    let index =
+                        op::emit_deref(context, index_x, x_location, target, d, cfg, stack, cfg_g)?;
                     index
                 } else {
                     index_x
@@ -647,9 +639,8 @@ impl IRNode {
 
                 let index_y = if mem_y.requires_deref() {
                     let target = DerefTarget::Offset(0);
-                    let index = crate::cfg::emit_deref(
-                        context, index_y, y_location, target, d, cfg, stack, cfg_g,
-                    )?;
+                    let index =
+                        op::emit_deref(context, index_y, y_location, target, d, cfg, stack, cfg_g)?;
                     index
                 } else {
                     index_y
