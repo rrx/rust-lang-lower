@@ -261,9 +261,39 @@ impl IRNode {
                 Ok(current.push(op))
             }
 
-            IRKind::Ret(mut args) => {
+            IRKind::Ret(args) => {
                 let current_block = stack.last().unwrap().clone();
 
+                let mut rs = vec![];
+                for expr in args {
+                    let mut index = expr.lower_mlir(context, d, cfg, stack, g, cfg_g, b)?;
+                    let (_ast_ty, mem) = cfg.lookup_type(index).unwrap();
+                    if mem.requires_deref() {
+                        // if it's in memory, we need to copy to return
+                        let target = DerefTarget::Offset(0);
+                        //unimplemented!();
+                        index =
+                            op::emit_deref(context, index, location, target, d, cfg, stack, cfg_g)?;
+                    }
+
+                    rs.push(index); //values_in_scope(cfg_g, index)[0]);//.clone();
+                                    //let data = cfg_g.node_weight(index.block()).unwrap();
+                                    //let r = data.value0(index).unwrap().into();
+                                    //let r = values_in_scope(cfg_g, index)[0];
+                                    //rs.push(index);
+                }
+                let rs = rs
+                    .into_iter()
+                    .map(|index| {
+                        //let data = cfg_g.node_weight(index.block()).unwrap();
+                        values_in_scope(cfg_g, index)[0]
+                    })
+                    .collect::<Vec<_>>();
+                let op = func::r#return(&rs, location);
+                let current = cfg_g.node_weight_mut(current_block).unwrap();
+                return Ok(current.push(op));
+
+                /*
                 if args.len() > 0 {
                     let expr = args.pop().unwrap();
                     let mut index = expr.lower_mlir(context, d, cfg, stack, g, cfg_g, b)?;
@@ -285,6 +315,7 @@ impl IRNode {
                     let current = cfg_g.node_weight_mut(current_block).unwrap();
                     Ok(current.push(func::r#return(&[], location)))
                 }
+                */
 
                 //let mut rs = vec![];
                 /*
@@ -320,7 +351,7 @@ impl IRNode {
                 let current_block = stack.last().unwrap().clone();
                 let span = self.span.clone();
                 if let Some(block_index) = cfg.block_index(&label) {
-                    g.add_edge(current_block, block_index, ());
+                    //g.add_edge(current_block, block_index, ());
 
                     let mut arg_index = vec![];
                     for expr in args {
