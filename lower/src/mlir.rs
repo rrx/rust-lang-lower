@@ -126,7 +126,8 @@ impl IRNode {
                             let name = format!("{}{}", base, name).clone();
                             let global_name_key = b.strings.intern(name.clone());
 
-                            let ty = IntegerType::new(context, 64);
+                            let ty = op::from_type(context, &ast_ty);
+                            //let ty = IntegerType::new(context, 64);
                             let memref_ty = MemRefType::new(ty.into(), &[], None, None);
                             let op = memref::alloca(context, memref_ty, &[], &[], None, location);
                             let current = cfg_g.node_weight_mut(current_block).unwrap();
@@ -154,23 +155,41 @@ impl IRNode {
             IRKind::Set(name, expr, _select) => {
                 let current_block = stack.last().unwrap().clone();
                 let span = self.span.clone();
+                let is_current_static = current_block == cfg.root();
                 if let Some(sym_index) = cfg.name_in_scope(current_block, name, cfg_g) {
                     let is_symbol_static = sym_index.block() == cfg.root();
                     if is_symbol_static {
-                        match expr.kind {
-                            IRKind::Func(_, _) => op::emit_set_function(
-                                context,
-                                sym_index,
-                                *expr,
-                                current_block,
-                                cfg,
-                                stack,
-                                g,
-                                cfg_g,
-                                d,
-                                b,
-                            ),
-                            _ => op::emit_set_static(
+                        if is_current_static {
+                            println!("expr: {:?}", expr);
+                            expr.dump(b, 0);
+                            match expr.kind {
+                                IRKind::Func(_, _) => op::emit_set_function(
+                                    context,
+                                    sym_index,
+                                    *expr,
+                                    current_block,
+                                    cfg,
+                                    stack,
+                                    g,
+                                    cfg_g,
+                                    d,
+                                    b,
+                                ),
+                                _ => op::emit_set_static(
+                                    context,
+                                    sym_index,
+                                    name,
+                                    *expr,
+                                    location,
+                                    current_block,
+                                    cfg,
+                                    cfg_g,
+                                    d,
+                                    b,
+                                ),
+                            }
+                        } else {
+                            op::emit_set_alloca(
                                 context,
                                 sym_index,
                                 name,
@@ -178,14 +197,16 @@ impl IRNode {
                                 location,
                                 current_block,
                                 cfg,
+                                stack,
+                                g,
                                 cfg_g,
                                 d,
                                 b,
-                            ),
+                            )
                         }
                     } else {
-                        let block = cfg_g.node_weight_mut(sym_index.block()).unwrap();
-                        block.add_symbol(name, sym_index);
+                        //let block = cfg_g.node_weight_mut(sym_index.block()).unwrap();
+                        //block.add_symbol(name, sym_index);
                         op::emit_set_alloca(
                             context,
                             sym_index,
@@ -354,7 +375,7 @@ impl IRNode {
                 //} else {
                 println!("lookup: {}, {:?}", b.strings.resolve(&name), current_block);
 
-                cfg.save_graph("out.dot", cfg_g, b);
+                //cfg.save_graph("out.dot", cfg_g, b);
                 //cfg.dump_scope(current_block, cfg_g, b);
 
                 if let Some(mut sym_index) = cfg.name_in_scope(current_block, name, cfg_g) {
@@ -366,18 +387,7 @@ impl IRNode {
                     if cfg.block_is_static(sym_index.block()) {
                         let (ast_ty, mem) = cfg.lookup_type(sym_index).unwrap();
 
-                        /*
                         if mem.requires_deref() {
-                            let target = DerefTarget::Offset(0);
-                            //unimplemented!();
-                            sym_index = crate::cfg::emit_deref(
-                                context, sym_index, location, target, d, cfg, stack, cfg_g,
-                                )?;
-                        }
-                        */
-
-                        if mem.requires_deref() {
-                            //if let AstType::Ptr(ty) = &ast_ty {
                             let lower_ty = op::from_type(context, &ast_ty);
                             let memref_ty = MemRefType::new(lower_ty, &[], None, None);
                             let static_name = b.strings.resolve(
@@ -387,27 +397,29 @@ impl IRNode {
                             let current = cfg_g.node_weight_mut(current_block).unwrap();
                             let addr_index = current.push(op);
                             let r_addr = current.value0(addr_index).unwrap();
-
                             let op = memref::load(r_addr, &[], location);
-                            //let current = g.node_weight_mut(current_block).unwrap();
                             let value_index = current.push(op);
-                            //cfg.set_type(index, ty, mem);
-                            //Ok(index)
-
+                            //current.add_symbol(name, value_index);
                             cfg.set_type(value_index, ast_ty, VarDefinitionSpace::Reg);
                             return Ok(value_index);
-                            //} else {
-                            //unreachable!("Identifier of static variable must be pointer");
-                            //d.push_diagnostic(ir::error(
-                            //&format!("mlir Expected pointer: {:?}", &ast_ty),
-                            //span,
-                            //));
-                            //return Err(Error::new(ParseError::Invalid));
                         }
+                    } else {
+                        let (ast_ty, mem) = cfg.lookup_type(sym_index).unwrap();
+
+                        if mem.requires_deref() {
+                            //let lower_ty = op::from_type(context, &ast_ty);
+                            //let memref_ty = MemRefType::new(lower_ty, &[], None, None);
+                            let r_addr = values_in_scope(cfg_g, sym_index)[0];
+                            //let r_addr = current.value0(sym_index).unwrap();
+                            let op = memref::load(r_addr, &[], location);
+                            let current = cfg_g.node_weight_mut(current_block).unwrap();
+                            let value_index = current.push(op);
+                            //current.add_symbol(name, value_index);
+                            cfg.set_type(value_index, ast_ty, VarDefinitionSpace::Reg);
+                            return Ok(value_index);
+                        }
+                        return Ok(sym_index);
                     }
-                    //} else {
-                    return Ok(sym_index);
-                    //}
                 }
                 d.push_diagnostic(ir::error(&format!("Name not found: {:?}", name), span));
                 Err(Error::new(ParseError::Invalid))

@@ -665,7 +665,7 @@ pub(crate) mod tests {
         r.unwrap();
         env.save_graph("out.dot", &g, &b);
 
-        return;
+        //return;
         let mut stack = vec![cfg.root()];
         let r = ir.lower_mlir(
             &context, &mut d, &mut cfg, &mut stack, &mut g, &mut cfg_g, &mut b,
@@ -675,6 +675,8 @@ pub(crate) mod tests {
         env.save_graph("out.dot", &g, &b);
         let mut module = Module::new(Location::unknown(&context));
         cfg.module(&context, &mut module, &mut cfg_g);
+        let r = cfg.exec_main(&module, "../target/debug/");
+        assert_eq!(expected, r);
     }
 
     #[test]

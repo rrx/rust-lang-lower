@@ -1040,17 +1040,19 @@ impl<E: Extra> AstNode<E> {
 
             Ast::Assign(target, expr) => match target {
                 AssignTarget::Alloca(name) | AssignTarget::Identifier(name) => {
-                    let mut seq = vec![];
-                    expr.lower_ir(&mut seq, d, env, g, b)?;
+                    //let mut seq = vec![];
+                    let ir = expr.lower_ir_expr(d, env, g, b)?;
                     let current_block = env.current_block();
                     if let Some(sym_index) = env.name_in_scope(current_block, name, g) {
-                        out.push(b.ir_set(name, b.ir_seq(seq), IRTypeSelect::Offset(0)));
-                        //let (ast_ty, mem) = env.lookup_type(sym_index).unwrap();
+                        out.push(b.ir_set(name, ir, IRTypeSelect::Offset(0)));
                         //env.set_type(sym_index, ast_ty, mem);
                         Ok(())
                     } else {
+                        //env.lookup_type();
                         let ty = AstType::Int;
+                        // inference required
                         out.push(b.ir_decl(name, ty.clone(), VarDefinitionSpace::Stack));
+                        out.push(b.ir_set(name, ir, IRTypeSelect::Offset(0)));
                         let data = g.node_weight_mut(current_block).unwrap();
                         let index = data.add_definition(name);
                         env.set_type(index, ty, VarDefinitionSpace::Stack);

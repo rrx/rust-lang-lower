@@ -158,7 +158,9 @@ pub fn emit_set_alloca<'c, E: Extra>(
     d: &mut Diagnostics,
     b: &mut NodeBuilder<E>,
 ) -> Result<SymIndex> {
-    //log::debug!("assign alloca: {}", name);
+    log::debug!("assign alloca: {}", b.strings.resolve(&name));
+    expr.dump(b, 0);
+
     let rhs_index = expr.lower_mlir(context, d, cfg, stack, g, cfg_g, b)?;
     //let ty = IntegerType::new(context, 64);
     //let memref_ty = MemRefType::new(ty.into(), &[], None, None);
@@ -169,16 +171,47 @@ pub fn emit_set_alloca<'c, E: Extra>(
     //let ast_ty = cfg.lookup_type(rhs_index).unwrap().to_ptr();
     //let ptr_ty = AstType::Ptr(ast_ty.into());
     //cfg.set_type(ptr_index, ast_ty);
+    println!("ty_lhs: {:?}", cfg.lookup_type(sym_index));
+    println!("ty_rhs: {:?}", cfg.lookup_type(rhs_index));
+    println!("rhs: {:?}", (rhs_index));
+    println!("lhs: {:?}", (sym_index));
+    println!("rhs: {:?}", (rhs_index));
+    cfg.dump_scope(block_index, cfg_g, b);
+    cfg.save_graph("out.dot", cfg_g, b);
+
+    let is_symbol_static = sym_index.block() == cfg.root();
+
+    let addr_index = if is_symbol_static {
+        let (lhs_ty, lhs_mem) = cfg.lookup_type(sym_index).unwrap();
+        let (rhs_ty, rhs_mem) = cfg.lookup_type(rhs_index).unwrap();
+
+        let lower_ty = from_type(context, &lhs_ty);
+        let memref_ty = MemRefType::new(lower_ty, &[], None, None);
+        let static_name = b
+            .strings
+            .resolve(&cfg.static_names.get(&sym_index).cloned().unwrap_or(name));
+        let op = memref::get_global(context, &static_name, memref_ty, location);
+        let current = cfg_g.node_weight_mut(block_index).unwrap();
+        let addr_index = current.push(op);
+        addr_index
+        //let r_addr = current.value0(addr_index).unwrap();
+        //r_addr
+    } else {
+        sym_index
+        //values_in_scope(cfg_g, sym_index)[0]
+    };
 
     let r_value = values_in_scope(cfg_g, rhs_index)[0];
-    let r_addr = values_in_scope(cfg_g, sym_index)[0];
+    let r_addr = values_in_scope(cfg_g, addr_index)[0];
     //let r_value = current.value0(rhs_index).unwrap();
     //let r_addr = current.value0(sym_index).unwrap();
 
     // emit store
+    // store(value, memref)
     let op = memref::store(r_value, r_addr, &[], location);
     let current = cfg_g.node_weight_mut(block_index).unwrap();
     let _index = current.push(op);
+    println!("current: {:?}", current);
     Ok(sym_index)
 }
 
@@ -282,6 +315,8 @@ pub fn emit_set_static<'c, E: Extra>(
     let is_symbol_static = sym_index.block() == cfg.root();
     assert!(is_symbol_static);
     let is_current_static = block_index == cfg.root();
+    // TODO: this needs to be cleaned up, only works for setting initial values on static variables
+    assert!(is_current_static);
 
     // we can emit a static variable in either static context, or in a function
     // TODO: consider moving this logic into a transformation
