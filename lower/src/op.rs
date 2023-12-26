@@ -145,6 +145,75 @@ pub fn build_reserved<'c>(
     }
 }
 
+pub fn emit_binop<'c, E: Extra>(
+    context: &'c Context,
+    op: BinaryOperation,
+    x: IRNode,
+    y: IRNode,
+    location: Location<'c>,
+    d: &mut Diagnostics,
+    cfg: &mut CFG<'c, E>,
+    stack: &mut Vec<NodeIndex>,
+    g: &mut IRGraph,
+    cfg_g: &mut CFGGraph<'c>,
+    b: &mut NodeBuilder<E>,
+) -> Result<SymIndex> {
+    let fx = format!("x: {:?}", x);
+    let fy = format!("y: {:?}", y);
+    let x_extra = E::span(x.get_span());
+    let y_extra = E::span(y.get_span());
+    let x_location = x.location(context, d);
+    let y_location = x.location(context, d);
+    let index_x = x.lower_mlir(context, d, cfg, stack, g, cfg_g, b)?;
+    let index_y = y.lower_mlir(context, d, cfg, stack, g, cfg_g, b)?;
+
+    //cfg.save_graph("out.dot", g);
+    //println!("ix: {:?}, {}", index_x, fx);
+    //println!("iy: {:?}, {}", index_y, fy);
+
+    let (_ty_x, mem_x) = cfg
+        .lookup_type(index_x)
+        .expect(&format!("missing type for {:?}, {}", index_x, fx));
+
+    let (_ty_y, mem_y) = cfg
+        .lookup_type(index_y)
+        .expect(&format!("missing type for {:?}, {}", index_y, fy));
+
+    //println!("ty_x: {:?}", (ty_x, mem_x));
+    //println!("ty_y: {:?}", (ty_y, mem_y));
+
+    let current_block = stack.last().unwrap().clone();
+    //println!("{:?}", op);
+
+    let index_x = if mem_x.requires_deref() {
+        let target = DerefTarget::Offset(0);
+        let index = emit_deref(context, index_x, x_location, target, d, cfg, stack, cfg_g)?;
+        index
+    } else {
+        index_x
+    };
+
+    let index_y = if mem_y.requires_deref() {
+        let target = DerefTarget::Offset(0);
+        let index = emit_deref(context, index_y, y_location, target, d, cfg, stack, cfg_g)?;
+        index
+    } else {
+        index_y
+    };
+
+    //let current = cfg_g.node_weight_mut(current_block).unwrap();
+    //println!("{:?}", current);
+
+    // types must be the same for binary operation, no implicit casting yet
+    let a = values_in_scope(cfg_g, index_x)[0];
+    let b = values_in_scope(cfg_g, index_y)[0];
+    let (op, ast_ty) = build_binop(context, op, a, &x_extra, b, &y_extra, location, d)?;
+    let current = cfg_g.node_weight_mut(current_block).unwrap();
+    let index = current.push(op);
+    cfg.set_type(index, ast_ty, VarDefinitionSpace::Reg);
+    Ok(index)
+}
+
 pub fn emit_deref<'c, E: Extra>(
     _context: &'c Context,
     index: SymIndex,

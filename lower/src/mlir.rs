@@ -271,75 +271,19 @@ impl IRNode {
                     if mem.requires_deref() {
                         // if it's in memory, we need to copy to return
                         let target = DerefTarget::Offset(0);
-                        //unimplemented!();
                         index =
                             op::emit_deref(context, index, location, target, d, cfg, stack, cfg_g)?;
                     }
 
-                    rs.push(index); //values_in_scope(cfg_g, index)[0]);//.clone();
-                                    //let data = cfg_g.node_weight(index.block()).unwrap();
-                                    //let r = data.value0(index).unwrap().into();
-                                    //let r = values_in_scope(cfg_g, index)[0];
-                                    //rs.push(index);
-                }
-                let rs = rs
-                    .into_iter()
-                    .map(|index| {
-                        //let data = cfg_g.node_weight(index.block()).unwrap();
-                        values_in_scope(cfg_g, index)[0]
-                    })
-                    .collect::<Vec<_>>();
-                let op = func::r#return(&rs, location);
-                let current = cfg_g.node_weight_mut(current_block).unwrap();
-                return Ok(current.push(op));
-
-                /*
-                if args.len() > 0 {
-                    let expr = args.pop().unwrap();
-                    let mut index = expr.lower_mlir(context, d, cfg, stack, g, cfg_g, b)?;
-                    let (_ast_ty, mem) = cfg.lookup_type(index).unwrap();
-
-                    if mem.requires_deref() {
-                        // if it's in memory, we need to copy to return
-                        let target = DerefTarget::Offset(0);
-                        //unimplemented!();
-                        index =
-                            op::emit_deref(context, index, location, target, d, cfg, stack, cfg_g)?;
-                    }
-
-                    let rs = values_in_scope(cfg_g, index).clone();
-                    let op = func::r#return(&rs, location);
-                    let current = cfg_g.node_weight_mut(current_block).unwrap();
-                    Ok(current.push(op))
-                } else {
-                    let current = cfg_g.node_weight_mut(current_block).unwrap();
-                    Ok(current.push(func::r#return(&[], location)))
-                }
-                */
-
-                //let mut rs = vec![];
-                /*
-                for expr in args {
-                    let index = expr.lower_mlir(context, d, cfg, stack, g, cfg_g, b)?;
-                    //let data = cfg_g.node_weight(index.block()).unwrap();
-                    //let r = data.value0(index).unwrap().into();
-                    //let r = values_in_scope(cfg_g, index)[0];
                     rs.push(index);
                 }
                 let rs = rs
                     .into_iter()
-                    .map(|index| {
-                        let data = cfg_g.node_weight(index.block()).unwrap();
-                        //values_in_scope(cfg_g, index)[0]
-                        //data.value0(index).unwrap().into()
-                        (data, index)
-                    })
-                    //.flatten()
+                    .map(|index| values_in_scope(cfg_g, index)[0])
                     .collect::<Vec<_>>();
-                let rs = rs.into_iter().map(|(data, index)| data.value0(index).unwrap()).collect::<Vec<_>>();
+                let op = func::r#return(&rs, location);
                 let current = cfg_g.node_weight_mut(current_block).unwrap();
-                Ok(current.push(func::r#return(&rs, location)))
-                */
+                return Ok(current.push(op));
             }
 
             IRKind::Label(_label, _args) => {
@@ -373,7 +317,6 @@ impl IRNode {
                         .block
                         .as_ref()
                         .unwrap();
-                    //let block = target_block.block.as_ref().unwrap();
 
                     let op = cf::br(target_block, &arg_values, location);
                     let current = cfg_g.node_weight_mut(current_block).unwrap();
@@ -397,17 +340,17 @@ impl IRNode {
                 //cfg.set_type(index, ty, VarDefinitionSpace::Reg);
                 //Ok(index)
                 //} else {
-                println!("lookup: {}, {:?}", b.strings.resolve(&name), current_block);
+                //println!("lookup: {}, {:?}", b.strings.resolve(&name), current_block);
 
                 //cfg.save_graph("out.dot", cfg_g, b);
                 //cfg.dump_scope(current_block, cfg_g, b);
 
                 if let Some(sym_index) = cfg.name_in_scope(current_block, name, cfg_g) {
-                    println!(
-                        "lookup identifier: {}, {:?}",
-                        b.strings.resolve(&name),
-                        sym_index
-                    );
+                    //println!(
+                    //"lookup identifier: {}, {:?}",
+                    //b.strings.resolve(&name),
+                    //sym_index
+                    //);
                     if cfg.block_is_static(sym_index.block()) {
                         let (ast_ty, mem) = cfg.lookup_type(sym_index).unwrap();
 
@@ -447,7 +390,6 @@ impl IRNode {
                 }
                 d.push_diagnostic(ir::error(&format!("Name not found: {:?}", name), span));
                 Err(Error::new(ParseError::Invalid))
-                //}
             }
 
             IRKind::Call(key, args) => {
@@ -557,15 +499,6 @@ impl IRNode {
                                 context, index, location, target, d, cfg, stack, cfg_g,
                             )?;
                         }
-                        /*
-                        if ast_ty.is_ptr() {
-                            let target = DerefTarget::Offset(0);
-                            unimplemented!();
-                            index = crate::cfg::emit_deref(
-                                context, index, location, target, d, cfg, stack, cfg_g,
-                            )?;
-                        }
-                        */
 
                         let r = values_in_scope(cfg_g, index)[0];
 
@@ -632,63 +565,7 @@ impl IRNode {
             }
 
             IRKind::Op2(op, x, y) => {
-                let fx = format!("x: {:?}", x);
-                let fy = format!("y: {:?}", y);
-                let x_extra = E::span(x.get_span());
-                let y_extra = E::span(y.get_span());
-                let x_location = x.location(context, d);
-                let y_location = x.location(context, d);
-                let index_x = x.lower_mlir(context, d, cfg, stack, g, cfg_g, b)?;
-                let index_y = y.lower_mlir(context, d, cfg, stack, g, cfg_g, b)?;
-
-                //cfg.save_graph("out.dot", g);
-                println!("ix: {:?}, {}", index_x, fx);
-                println!("iy: {:?}, {}", index_y, fy);
-
-                let (ty_x, mem_x) = cfg
-                    .lookup_type(index_x)
-                    .expect(&format!("missing type for {:?}, {}", index_x, fx));
-
-                let (ty_y, mem_y) = cfg
-                    .lookup_type(index_y)
-                    .expect(&format!("missing type for {:?}, {}", index_y, fy));
-
-                println!("ty_x: {:?}", (ty_x, mem_x));
-                println!("ty_y: {:?}", (ty_y, mem_y));
-
-                let current_block = stack.last().unwrap().clone();
-                println!("{:?}", op);
-
-                let index_x = if mem_x.requires_deref() {
-                    let target = DerefTarget::Offset(0);
-                    let index =
-                        op::emit_deref(context, index_x, x_location, target, d, cfg, stack, cfg_g)?;
-                    index
-                } else {
-                    index_x
-                };
-
-                let index_y = if mem_y.requires_deref() {
-                    let target = DerefTarget::Offset(0);
-                    let index =
-                        op::emit_deref(context, index_y, y_location, target, d, cfg, stack, cfg_g)?;
-                    index
-                } else {
-                    index_y
-                };
-
-                let current = cfg_g.node_weight_mut(current_block).unwrap();
-                println!("{:?}", current);
-
-                // types must be the same for binary operation, no implicit casting yet
-                let a = values_in_scope(cfg_g, index_x)[0];
-                let b = values_in_scope(cfg_g, index_y)[0];
-                let (op, ast_ty) =
-                    op::build_binop(context, op, a, &x_extra, b, &y_extra, location, d)?;
-                let current = cfg_g.node_weight_mut(current_block).unwrap();
-                let index = current.push(op);
-                cfg.set_type(index, ast_ty, VarDefinitionSpace::Reg);
-                Ok(index)
+                op::emit_binop(context, op, *x, *y, location, d, cfg, stack, g, cfg_g, b)
             }
 
             _ => {
