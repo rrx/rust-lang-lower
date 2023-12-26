@@ -583,6 +583,7 @@ pub(crate) mod tests {
     use lower::{Location, Module};
     use test_log::test;
 
+    /*
     fn run_test(filename: &str, expected: i32) {
         let mut b = NodeBuilder::new();
         let context = lower::default_context();
@@ -614,6 +615,7 @@ pub(crate) mod tests {
         let r = cfg.exec_main(&module, "../target/debug/");
         assert_eq!(expected, r);
     }
+    */
 
     fn run_test_ir(filename: &str, expected: i32) {
         let mut b = NodeBuilder::new();
@@ -676,7 +678,7 @@ pub(crate) mod tests {
 
     #[test]
     fn test_global() {
-        run_test("../tests/test_global.star", 0);
+        //run_test("../tests/test_global.star", 0);
         run_test_ir("../tests/test_global.star", 0);
     }
 
@@ -688,19 +690,19 @@ pub(crate) mod tests {
 
     #[test]
     fn test_cond() {
-        run_test("../tests/test_cond.star", 0);
+        //run_test("../tests/test_cond.star", 0);
         run_test_ir("../tests/test_cond.star", 0);
     }
 
     #[test]
     fn test_float() {
-        run_test("../tests/test_float.star", 0);
+        //run_test("../tests/test_float.star", 0);
         run_test_ir("../tests/test_float.star", 0);
     }
 
     #[test]
     fn test_recursive() {
-        run_test("../tests/test_recursive.star", 0);
+        //run_test("../tests/test_recursive.star", 0);
         run_test_ir("../tests/test_recursive.star", 0);
     }
 

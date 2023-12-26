@@ -1393,7 +1393,7 @@ mod tests {
         let r = ast.lower_ir_expr(&mut d, &mut env, &mut g, &mut b);
         d.dump();
         assert!(!d.has_errors);
-        let (ir, ty) = r.unwrap();
+        let (ir, _ty) = r.unwrap();
         println!("ir: {:#?}", ir);
         ir.dump(&b, 0);
         assert_eq!(1, env.stack.len());
@@ -1425,7 +1425,7 @@ mod tests {
         let r = ast.lower_ir_expr(&mut d, &mut env, &mut g, &mut b);
         d.dump();
         assert!(!d.has_errors);
-        let (ir, ty) = r.unwrap();
+        let (ir, _ty) = r.unwrap();
         println!("ir: {:#?}", ir);
         ir.dump(&b, 0);
         assert_eq!(1, env.stack.len());
