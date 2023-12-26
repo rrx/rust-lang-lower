@@ -537,10 +537,7 @@ pub(crate) mod tests {
         let mut b = NodeBuilder::new();
         let context = lower::default_context();
         let mut d = Diagnostics::new();
-        let mut cfg_g = CFGGraph::new();
-        let mut g = IRGraph::new();
-        let mut cfg: CFG<SimpleExtra> = CFG::new(&context, b.s("module"), &d, &mut cfg_g);
-        let mut env = IREnvironment::new();
+
         let file_id = d.add_source(
             filename.to_string(),
             std::fs::read_to_string(filename).unwrap(),
@@ -553,8 +550,8 @@ pub(crate) mod tests {
             .unwrap()
             .normalize(&mut d, &mut b);
 
-        println!("ast: {:#?}", ast);
-
+        let mut env = IREnvironment::new();
+        let mut g = IRGraph::new();
         let index = env.add_block(b.s("module"), vec![], &d, &mut g);
         env.enter_block(index, ast.extra.get_span());
 
@@ -577,6 +574,8 @@ pub(crate) mod tests {
         env.save_graph("out.dot", &g, &b);
 
         // lower to mlir
+        let mut cfg_g = CFGGraph::new();
+        let mut cfg: CFG<SimpleExtra> = CFG::new(&context, b.s("module"), &d, &mut cfg_g);
         let mut stack = vec![cfg.root()];
         let r = ir.lower_mlir(&context, &mut d, &mut cfg, &mut stack, &mut cfg_g, &mut b);
         d.dump();

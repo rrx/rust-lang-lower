@@ -3,7 +3,7 @@ use codespan_reporting::diagnostic::{Diagnostic, Severity};
 use codespan_reporting::files::Files;
 use codespan_reporting::files::SimpleFiles;
 use codespan_reporting::term;
-use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
+use codespan_reporting::term::termcolor::{BufferWriter, ColorChoice, StandardStream};
 use melior::ir;
 use melior::Context;
 use thiserror::Error;
@@ -49,6 +49,14 @@ impl Diagnostics {
 
     pub fn exit(&mut self) {
         self.stack.pop();
+    }
+
+    pub fn emit_string(&self, d: Diagnostic<usize>) -> String {
+        let config = codespan_reporting::term::Config::default();
+        let writer = BufferWriter::stdout(ColorChoice::Always);
+        let mut buffer = writer.buffer();
+        term::emit(&mut buffer, &config, &self.files, &d).unwrap();
+        String::from_utf8_lossy(buffer.as_slice()).to_string()
     }
 
     pub fn dump(&mut self) {

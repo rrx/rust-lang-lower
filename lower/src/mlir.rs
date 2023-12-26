@@ -486,7 +486,9 @@ impl IRNode {
                     Builtin::Assert => {
                         let arg = args.pop().unwrap();
                         let index = arg.lower_mlir(context, d, cfg, stack, cfg_g, b)?;
-                        let msg = format!("assert at {}", location);
+                        let msg = "assert";
+                        let msg = d.emit_string(ir::error(msg, self.span));
+                        //let msg = format!("assert at {}", location.to_string());
                         let current = cfg_g.node_weight_mut(current_block).unwrap();
                         let r = current.value0(index).unwrap();
                         let op = cf::assert(context, r, &msg, location);
