@@ -10,7 +10,7 @@ use simple_logger::{set_up_color_terminal, SimpleLogger};
 use lower::ast::SimpleExtra;
 use lower::cfg::{CFGGraph, CFG};
 use lower::compile::default_context;
-use lower::{Diagnostics, NodeBuilder};
+use lower::{Diagnostics, Extra, IREnvironment, IRGraph, NodeBuilder};
 use parse::starlark::Parser;
 
 #[derive(FromArgs, Debug)]
@@ -56,12 +56,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     let context = default_context();
 
     let location = ir::Location::unknown(&context);
-    let mut module = ir::Module::new(location);
     let mut parser: Parser<SimpleExtra> = Parser::new();
     let mut d = Diagnostics::new();
-    let mut g = CFGGraph::new();
+    let mut cfg_g = CFGGraph::new();
     let mut b: NodeBuilder<SimpleExtra> = NodeBuilder::new();
-    let mut cfg: CFG<SimpleExtra> = CFG::new(&context, b.s("module"), &d, &mut g);
+    let mut cfg: CFG<SimpleExtra> = CFG::new(&context, b.s("module"), &d, &mut cfg_g);
 
     for path in config.inputs {
         //let mut env: lower::Environment<SimpleExtra> = lower::Environment::default();
@@ -84,26 +83,52 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         let ast = result?.normalize(&mut cfg, &mut d, &mut b);
 
-        let mut stack = vec![cfg.root()];
+        //let mut stack = vec![cfg.root()];
+        /*
         let r = ast.lower(&context, &mut d, &mut cfg, &mut stack, &mut g, &mut b);
         assert_eq!(1, stack.len());
         if config.verbose {
             d.dump();
         }
         r?;
+        */
+
+        // lower ast to ir
+        let mut env = IREnvironment::new();
+        let mut g = IRGraph::new();
+        let index = env.add_block(b.s("module"), vec![], &d, &mut g);
+        env.enter_block(index, ast.extra.get_span());
+        let r = ast.lower_ir_expr(&mut d, &mut env, &mut g, &mut b);
+        if config.verbose {
+            d.dump();
+        }
+        //assert!(!d.has_errors);
+        let (ir, _ty) = r.unwrap();
+        ir.dump(&b, 0);
+        assert_eq!(1, env.stack_size());
+
+        // lower to mlir
+        let mut stack = vec![cfg.root()];
+        let r = ir.lower_mlir(
+            &context, &mut d, &mut cfg, &mut stack, &mut g, &mut cfg_g, &mut b,
+        );
+        d.dump();
+        r.unwrap();
+        env.save_graph("out.dot", &g, &b);
     }
-    cfg.save_graph("out.dot", &g, &b);
+    cfg.save_graph("out.dot", &cfg_g, &b);
     if d.has_errors {
         std::process::exit(1);
     }
 
+    let mut module = ir::Module::new(location);
     if config.verbose {
         module.as_operation().dump();
     }
     assert!(module.as_operation().verify());
 
     if config.lower {
-        cfg.module(&context, &mut module, &mut g);
+        cfg.module(&context, &mut module, &mut cfg_g);
         if config.verbose {
             module.as_operation().dump();
         }

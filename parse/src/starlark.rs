@@ -640,32 +640,25 @@ pub(crate) mod tests {
         let index = env.add_block(b.s("module"), vec![], &d, &mut g);
         env.enter_block(index, ast.extra.get_span());
 
+        // lower ast to ir
         let r = ast.lower_ir_expr(&mut d, &mut env, &mut g, &mut b);
         d.dump();
         assert!(!d.has_errors);
-        let (ir, ty) = r.unwrap();
-        //println!("ir: {:#?}", ir);
+        let (ir, _ty) = r.unwrap();
         ir.dump(&b, 0);
         assert_eq!(1, env.stack_size());
-        //if env.stack_size() == 0 {
-        //env.enter_block(index, self.extra.get_span());
-        //}
-        let ir = lower::ir::IRBlockSorter::run(ir, &mut b);
-        ir.dump(&b, 0);
-        //for a in x {
-        //a.dump(&b, 0);
-        //}
 
+        // Analyze
         let mut g = IRGraph::new();
         let mut env = IREnvironment::new();
-        //let index = env.add_block(b.s("module"), vec![], &mut d, &mut g);
-        //env.enter_block(index, ir.get_span());
+        let ir = lower::ir::IRBlockSorter::run(ir, &mut b);
+        ir.dump(&b, 0);
         let r = ir.build_graph(&mut d, &mut env, &mut g, &mut b);
         d.dump();
         r.unwrap();
         env.save_graph("out.dot", &g, &b);
 
-        //return;
+        // lower to mlir
         let mut stack = vec![cfg.root()];
         let r = ir.lower_mlir(
             &context, &mut d, &mut cfg, &mut stack, &mut g, &mut cfg_g, &mut b,
@@ -673,6 +666,8 @@ pub(crate) mod tests {
         d.dump();
         r.unwrap();
         env.save_graph("out.dot", &g, &b);
+
+        // execute module
         let mut module = Module::new(Location::unknown(&context));
         cfg.module(&context, &mut module, &mut cfg_g);
         let r = cfg.exec_main(&module, "../target/debug/");
