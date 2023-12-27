@@ -127,7 +127,6 @@ impl IRNode {
                             let global_name_key = b.strings.intern(name.clone());
 
                             let ty = op::from_type(context, &ast_ty);
-                            //let ty = IntegerType::new(context, 64);
                             let memref_ty = MemRefType::new(ty.into(), &[], None, None);
                             let op = memref::alloca(context, memref_ty, &[], &[], None, location);
                             let current = cfg_g.node_weight_mut(current_block).unwrap();
@@ -139,7 +138,6 @@ impl IRNode {
                     }
 
                     VarDefinitionSpace::Default | VarDefinitionSpace::Stack => {
-                        //unimplemented!("{:?}", mem);
                         let ty = op::from_type(context, &ast_ty);
                         let memref_ty = MemRefType::new(ty.into(), &[], None, None);
                         let op = memref::alloca(context, memref_ty, &[], &[], None, location);
@@ -179,7 +177,6 @@ impl IRNode {
                                 sym_index,
                                 name,
                                 *expr,
-                                //location,
                                 current_block,
                                 cfg,
                                 cfg_g,
@@ -283,8 +280,6 @@ impl IRNode {
                 let current_block = stack.last().unwrap().clone();
                 let span = self.span.clone();
                 if let Some(block_index) = cfg.block_index(&label) {
-                    //g.add_edge(current_block, block_index, ());
-
                     let mut arg_index = vec![];
                     for expr in args {
                         let index = expr.lower_mlir(context, d, cfg, stack, cfg_g, b, link)?;
