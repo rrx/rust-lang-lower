@@ -1,51 +1,18 @@
 use crate::ast::VarDefinitionSpace;
-//use crate::compile::exec_main;
-//use crate::default_pass_manager;
 use crate::intern::StringKey;
 use crate::ir::{IRArg, IRGraph};
 use crate::op;
 use crate::types::TypeBuilder;
 use crate::{AstType, Diagnostics, Extra, NodeBuilder};
-//use anyhow::Error;
-//use anyhow::Result;
-//use melior::ir::operation::OperationPrintingFlags;
 use melior::ir::Location;
 use melior::{
-    //dialect::memref,
-    ir::{
-        //attribute::{
-        //DenseElementsAttribute,
-        //FlatSymbolRefAttribute,
-        //FloatAttribute,
-        //IntegerAttribute,
-        //StringAttribute,
-        //TypeAttribute,
-        //},
-        //r#type::{
-        //FunctionType,
-        //IntegerType,
-        //MemRefType,
-        //RankedTensorType,
-        //},
-        //Attribute,
-        Block,
-        //Identifier,
-        //Module,
-        Operation,
-        //OperationRef,
-        //Region,
-        //Type,
-        //TypeLike,
-        Value,
-        //ValueLike,
-    },
+    ir::{Block, Operation, Value},
     Context,
 };
 use petgraph::algo::dominators::simple_fast;
 use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
 use std::collections::HashMap;
-//use std::collections::HashSet;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub struct BlockIndex(NodeIndex, usize);
@@ -269,19 +236,8 @@ pub struct CFG<E> {
 }
 
 impl<'c, E: Extra> CFG<E> {
-    pub fn new(
-        //context: &'c Context,
-        //module_name: StringKey,
-        g: IRGraph,
-        //d: &Diagnostics,
-        //cfg_g: &mut CFGGraph<'c>,
-    ) -> Self {
-        //for node in g.node_weights() {
-        //cfg_g.
-        //cfg_g.add_node(
-        //}
-
-        let mut cfg = Self {
+    pub fn new(g: IRGraph) -> Self {
+        Self {
             root: NodeIndex::new(0),
             block_names: HashMap::new(),
             block_names_index: HashMap::new(),
@@ -289,9 +245,7 @@ impl<'c, E: Extra> CFG<E> {
             static_names: HashMap::new(),
             g,
             _e: std::marker::PhantomData::default(),
-        };
-        //cfg.add_block_ir(context, module_name, &[], d, cfg_g);
-        cfg
+        }
     }
 
     pub fn root(&self) -> NodeIndex {
@@ -332,38 +286,6 @@ impl<'c, E: Extra> CFG<E> {
         self.block_names_index.insert(index, name);
         index
     }
-
-    /*
-    pub fn add_block(
-        &mut self,
-        context: &'c Context,
-        name: StringKey,
-        params: &[ParameterNode<E>],
-        d: &Diagnostics,
-        g: &mut CFGGraph<'c>,
-    ) -> NodeIndex {
-        // build parameter list for block
-        let mut block_params = vec![];
-        for p in params {
-            match p.node {
-                Parameter::Normal => {
-                    //| Parameter::WithDefault(_) => {
-                    block_params
-                        .push((op::from_type(context, &p.ty), p.extra.location(context, d)));
-                }
-                //_ => unimplemented!("{:?}", p),
-            }
-        }
-
-        let block = Block::new(&block_params);
-        let data = OpCollection::new(block);
-        let index = g.add_node(data);
-        g.node_weight_mut(index).unwrap().block_index = index;
-        self.block_names.insert(name, index);
-        self.block_names_index.insert(index, name);
-        index
-    }
-    */
 
     pub fn add_edge(&mut self, a: StringKey, b: StringKey, g: &mut CFGGraph<'c>) {
         let index_a = self.block_names.get(&a).unwrap();
