@@ -222,10 +222,10 @@ impl IREnvironment {
         self.block_names.insert(name, index);
         self.block_names_index.insert(index, name);
 
-        //let data = self.g.node_weight_mut(index).unwrap();
-        //for a in params {
-        //data.push_arg(a.name);
-        //}
+        let data = self.g.node_weight_mut(index).unwrap();
+        for a in params {
+            data.push_arg(a.name);
+        }
 
         index
     }
@@ -706,30 +706,13 @@ impl IRNode {
             } //_ => ()//unimplemented!()
         }
     }
-    /*
-    pub fn to_blocks<'c, E: Extra>(
-        &self,
-        d: &mut Diagnostics,
-        env: &mut IREnvironment,
-        g: &mut IRGraph,
-        b: &mut NodeBuilder<E>,
-    ) -> Result<Vec<IRNode>> {
-        let mut out = vec![];
-        if let IRKind::Block(block) = self {
-            out.append(block.children
-        }
-    }
-    */
 
     pub fn build_graph<'c, E: Extra>(
         &self,
         d: &mut Diagnostics,
         env: &mut IREnvironment,
-        //g: &mut IRGraph,
         b: &mut NodeBuilder<E>,
     ) -> Result<()> {
-        //println!("build");
-        //self.dump(b, 0);
         match &self.kind {
             IRKind::Noop => Ok(()),
 
@@ -804,10 +787,7 @@ impl IRNode {
 
             IRKind::Set(name, value, ref _select) => {
                 let current_index = env.current_block();
-                //env.dump(g, b, current_index);
                 if let Some(_index) = env.name_in_scope(current_index, *name) {
-                    //let data = g.node_weight_mut(index.block()).unwrap();
-                    //data.add_symbol(name, index);
                     value.build_graph(d, env, b)?;
                     Ok(())
                 } else {
@@ -822,8 +802,6 @@ impl IRNode {
             IRKind::Decl(name, ty, _mem) => {
                 let current_block = env.current_block();
                 let index = env.add_definition(current_block, *name);
-                //let data = env.g.node_weight_mut(current_block).unwrap();
-                //let index = data.add_definition(*name);
                 env.set_type(index, ty.clone(), VarDefinitionSpace::default());
                 Ok(())
             }
@@ -842,34 +820,10 @@ impl IRNode {
                 }
 
                 for (block_index, block) in seq {
-                    //println!("b: {:?}", block);
-                    //for n in &block.children {
-                    //n.dump(b, 0);
+                    //let data = env.g.node_weight_mut(block_index).unwrap();
+                    //for p in &block.params {
+                    //data.push_arg(p.name);
                     //}
-
-                    let data = env.g.node_weight_mut(block_index).unwrap();
-                    for p in &block.params {
-                        data.push_arg(p.name);
-                    }
-
-                    //let term = block.terminator().unwrap();
-                    /*
-                    match term {
-                        Terminator::Jump(key) => {
-                            let target_block = env.lookup_block(key).unwrap();
-                            //let data = g.node_weight_mut(block_index).unwrap();
-                            g.add_edge(block_index, target_block, ());
-                        }
-                        Terminator::Branch(then_key, else_key) => {
-                            for key in &[then_key, else_key] {
-                                let target_block = env.lookup_block(*key).unwrap();
-                                //let data = g.node_weight_mut(block_index).unwrap();
-                                g.add_edge(block_index, target_block, ());
-                            }
-                        }
-                        Terminator::Return => ()
-                    }
-                    */
 
                     env.enter_block(block_index, self.span.clone());
                     for child in &block.children {
@@ -881,25 +835,20 @@ impl IRNode {
             }
 
             IRKind::Block(block) => {
-                //let mut edges = vec![];
-                //let current_block = env.current_block();
-
-                //let _current = g.node_weight_mut(current_block).unwrap();
                 let block_index = env.add_block(block.name, block.params.clone(), d);
-                //let block_index = env.lookup_block(block.name).unwrap();
                 env.enter_block(block_index, self.get_span());
                 if let Some(last_block) = env.stack.last() {
                     if last_block.0 != block_index {
                         env.g.add_edge(last_block.0, block_index, ());
                     }
                 }
-                //env.enter_block(block_index, self.get_span());
+
+                //let data = env.g.node_weight_mut(block_index).unwrap();
+                //for a in &block.params {
+                //data.push_arg(a.name);
+                //}
+
                 for (_i, child) in block.children.iter().enumerate() {
-                    //edges.push((current_block, block_index));
-                    let data = env.g.node_weight_mut(block_index).unwrap();
-                    for a in &block.params {
-                        data.push_arg(a.name);
-                    }
                     child.build_graph(d, env, b)?;
                 }
                 env.exit_block();
@@ -1257,10 +1206,10 @@ impl<E: Extra> AstNode<E> {
                             let block_index = env.add_block(nb.name, args.clone(), d);
                             edges.push((current_block, block_index));
 
-                            let data = env.g.node_weight_mut(block_index).unwrap();
-                            for a in &nb.params {
-                                data.push_arg(a.name);
-                            }
+                            //let data = env.g.node_weight_mut(block_index).unwrap();
+                            //for a in &nb.params {
+                            //data.push_arg(a.name);
+                            //}
 
                             output_blocks.push((nb, block_index));
                         } else {
