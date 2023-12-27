@@ -599,7 +599,7 @@ impl<E: Extra> StarlarkParser<E> {
         // lower to mlir
         use lower::cfg::{CFGGraph, CFG};
         let mut cfg_g = CFGGraph::new();
-        let mut cfg: CFG<E> = CFG::new(context, b.s("module"), d, &mut cfg_g);
+        let mut cfg: CFG<E> = CFG::new(context, b.s("module"), env.g, d, &mut cfg_g);
         let mut stack = vec![cfg.root()];
         let r = ir.lower_mlir(
             context,
@@ -613,9 +613,9 @@ impl<E: Extra> StarlarkParser<E> {
         d.dump();
         r?;
 
-        if verbose {
-            env.save_graph("out.dot", b);
-        }
+        //if verbose {
+        //env.save_graph("out.dot", b);
+        //}
 
         let data = cfg_g.node_weight_mut(cfg.root()).unwrap();
         for op in data.take_ops() {

@@ -2,7 +2,7 @@ use crate::ast::VarDefinitionSpace;
 //use crate::compile::exec_main;
 //use crate::default_pass_manager;
 use crate::intern::StringKey;
-use crate::ir::IRArg;
+use crate::ir::{IRArg, IRGraph};
 use crate::op;
 use crate::types::TypeBuilder;
 use crate::{AstType, Diagnostics, Extra, NodeBuilder};
@@ -258,6 +258,7 @@ pub struct CFG<E> {
     root: NodeIndex,
     block_names: HashMap<StringKey, NodeIndex>,
     block_names_index: HashMap<NodeIndex, StringKey>,
+    g: IRGraph,
     pub(crate) types: TypeBuilder,
 
     // track local static variables
@@ -271,8 +272,9 @@ impl<'c, E: Extra> CFG<E> {
     pub fn new(
         context: &'c Context,
         module_name: StringKey,
+        g: IRGraph,
         d: &Diagnostics,
-        g: &mut CFGGraph<'c>,
+        cfg_g: &mut CFGGraph<'c>,
     ) -> Self {
         let mut cfg = Self {
             root: NodeIndex::new(0),
@@ -280,9 +282,10 @@ impl<'c, E: Extra> CFG<E> {
             block_names_index: HashMap::new(),
             types: TypeBuilder::new(),
             static_names: HashMap::new(),
+            g,
             _e: std::marker::PhantomData::default(),
         };
-        cfg.add_block_ir(context, module_name, &[], d, g);
+        cfg.add_block_ir(context, module_name, &[], d, cfg_g);
         cfg
     }
 

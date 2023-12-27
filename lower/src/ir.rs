@@ -124,7 +124,7 @@ pub struct IREnvironment {
     block_names_index: HashMap<NodeIndex, StringKey>,
     types: HashMap<SymIndex, (AstType, VarDefinitionSpace)>,
     label_count: usize,
-    g: IRGraph,
+    pub g: IRGraph,
 }
 
 pub type IRGraph = DiGraph<IRControlBlock, ()>;
@@ -140,11 +140,7 @@ impl IREnvironment {
         s
     }
 
-    pub fn lookup_type(
-        &self,
-        index: SymIndex,
-        //g: &IRGraph,
-    ) -> Option<(AstType, VarDefinitionSpace)> {
+    pub fn lookup_type(&self, index: SymIndex) -> Option<(AstType, VarDefinitionSpace)> {
         if let SymIndex::Arg(block_index, offset) = index {
             let block = self.g.node_weight(block_index).unwrap();
             Some((
@@ -180,12 +176,10 @@ impl IREnvironment {
 
     pub fn enter_block(&mut self, index: NodeIndex, span: Span) {
         self.stack.push((index, span));
-        //println!("enter: {:?}", self.stack);
     }
 
     pub fn exit_block(&mut self) {
         self.stack.pop();
-        //println!("exit: {:?}", self.stack);
     }
 
     pub fn stack_size(&self) -> usize {
@@ -215,7 +209,6 @@ impl IREnvironment {
         name: StringKey,
         params: Vec<IRArg>,
         _d: &Diagnostics,
-        //g: &mut IRGraph,
     ) -> NodeIndex {
         let index = self.g.add_node(IRControlBlock::new(params.clone()));
         self.g.node_weight_mut(index).unwrap().block_index = index;
@@ -236,12 +229,7 @@ impl IREnvironment {
         g.add_edge(*index_a, *index_b, ());
     }
 
-    pub fn name_in_scope(
-        &self,
-        index: NodeIndex,
-        name: StringKey,
-        //g: &IRGraph,
-    ) -> Option<SymIndex> {
+    pub fn name_in_scope(&self, index: NodeIndex, name: StringKey) -> Option<SymIndex> {
         let maybe_dom = simple_fast(&self.g, self.root())
             .dominators(index)
             .map(|it| it.collect::<Vec<_>>());
@@ -269,13 +257,13 @@ impl IREnvironment {
 
     pub fn dump_node<E>(
         &self,
-        g: &IRGraph,
+        //g: &IRGraph,
         b: &NodeBuilder<E>,
         index: NodeIndex,
         current_block: NodeIndex,
         depth: usize,
     ) {
-        let data = &g[index];
+        let data = &self.g[index];
         let name = b
             .strings
             .resolve(self.block_names_index.get(&index).unwrap());
@@ -294,13 +282,13 @@ impl IREnvironment {
                 width = depth * 2
             );
         }
-        for n in g.neighbors(index) {
-            self.dump_node(g, b, n, current_block, depth + 1);
+        for n in self.g.neighbors(index) {
+            self.dump_node(b, n, current_block, depth + 1);
         }
     }
 
-    pub fn dump<E>(&self, g: &IRGraph, b: &NodeBuilder<E>, current_block: NodeIndex) {
-        self.dump_node(g, b, self.root(), current_block, 0);
+    pub fn dump<E>(&self, b: &NodeBuilder<E>, current_block: NodeIndex) {
+        self.dump_node(b, self.root(), current_block, 0);
     }
 
     pub fn save_graph<E>(&self, filename: &str, b: &NodeBuilder<E>) {
@@ -820,11 +808,6 @@ impl IRNode {
                 }
 
                 for (block_index, block) in seq {
-                    //let data = env.g.node_weight_mut(block_index).unwrap();
-                    //for p in &block.params {
-                    //data.push_arg(p.name);
-                    //}
-
                     env.enter_block(block_index, self.span.clone());
                     for child in &block.children {
                         child.build_graph(d, env, b)?;
@@ -842,11 +825,6 @@ impl IRNode {
                         env.g.add_edge(last_block.0, block_index, ());
                     }
                 }
-
-                //let data = env.g.node_weight_mut(block_index).unwrap();
-                //for a in &block.params {
-                //data.push_arg(a.name);
-                //}
 
                 for (_i, child) in block.children.iter().enumerate() {
                     child.build_graph(d, env, b)?;
@@ -900,15 +878,7 @@ impl IRNode {
                 x.build_graph(d, env, b)?;
                 y.build_graph(d, env, b)?;
                 Ok(())
-            } /*
-              _ => {
-                  d.push_diagnostic(error(
-                      &format!("Build Graph Unimplemented: {:?}", self.kind,),
-                      self.span.clone(),
-                  ));
-                  Err(Error::new(ParseError::Invalid))
-              }
-              */
+            }
         }
     }
 }
@@ -939,7 +909,6 @@ impl<E: Extra> AstNode<E> {
         self,
         d: &mut Diagnostics,
         env: &mut IREnvironment,
-        //g: &mut IRGraph,
         b: &mut NodeBuilder<E>,
     ) -> Result<(IRNode, AstType)> {
         let mut out = vec![];
@@ -958,7 +927,6 @@ impl<E: Extra> AstNode<E> {
         out: &mut Vec<IRNode>,
         d: &mut Diagnostics,
         env: &mut IREnvironment,
-        //g: &mut IRGraph,
         b: &mut NodeBuilder<E>,
     ) -> Result<AstType> {
         if !self.node_id.is_valid() {
@@ -1035,8 +1003,6 @@ impl<E: Extra> AstNode<E> {
                     out.push(b.ir_set(ident, v, IRTypeSelect::default()));
                     let current_block = env.current_block();
                     let index = env.add_definition(current_block, ident);
-                    //let data = g.node_weight_mut(current_block).unwrap();
-                    //let index = data.add_definition(ident);
                     env.set_type(index, ty.clone(), VarDefinitionSpace::Static);
 
                     /*
@@ -1082,8 +1048,6 @@ impl<E: Extra> AstNode<E> {
                         out.push(b.ir_decl(name, ty.clone(), VarDefinitionSpace::Stack));
                         out.push(b.ir_set(name, ir, IRTypeSelect::Offset(0)));
                         let index = env.add_definition(current_block, name);
-                        //let data = g.node_weight_mut(current_block).unwrap();
-                        //let index = data.add_definition(name);
                         env.set_type(index, ty.clone(), VarDefinitionSpace::Stack);
                         Ok(ty)
                     }
@@ -1200,16 +1164,10 @@ impl<E: Extra> AstNode<E> {
 
                             if 0 == i {
                                 nb.name = def.name;
-                                //nb.params = args;
                             }
 
                             let block_index = env.add_block(nb.name, args.clone(), d);
                             edges.push((current_block, block_index));
-
-                            //let data = env.g.node_weight_mut(block_index).unwrap();
-                            //for a in &nb.params {
-                            //data.push_arg(a.name);
-                            //}
 
                             output_blocks.push((nb, block_index));
                         } else {
@@ -1370,30 +1328,19 @@ impl<E: Extra> AstNode<E> {
 mod tests {
     use super::*;
     use crate::ast::SimpleExtra;
-    //use crate::cfg::{CFGGraph, CFG};
     use crate::tests::gen_block;
     use crate::{Diagnostics, NodeBuilder};
     use test_log::test;
 
     #[test]
     fn test_ir_1() {
-        //let context = default_context();
-        //let mut cfg_g = CFGGraph::new();
-        //let mut g = IRGraph::new();
         let mut d = Diagnostics::new();
         let file_id = d.add_source("test.py".into(), "test".into());
         let mut b: NodeBuilder<SimpleExtra> = NodeBuilder::new();
         b.enter(file_id, "type.py");
 
-        //let mut cfg: CFG<SimpleExtra> = CFG::new(
-        //&context,
-        //b.strings.intern("module".to_string()),
-        //&d,
-        //&mut cfg_g,
-        //);
         let mut env = IREnvironment::new();
         let ast = gen_block(&mut b).normalize(&mut d, &mut b);
-        //let mut stack = vec![cfg.root()];
         let index = env.add_block(b.s("module"), vec![], &d);
         env.enter_block(index, ast.extra.get_span());
 
@@ -1408,20 +1355,11 @@ mod tests {
 
     #[test]
     fn test_ir_2() {
-        //let context = default_context();
-        //let mut cfg_g = CFGGraph::new();
-        //let mut g = IRGraph::new();
         let mut d = Diagnostics::new();
         let file_id = d.add_source("test.py".into(), "test".into());
         let mut b: NodeBuilder<SimpleExtra> = NodeBuilder::new();
         b.enter(file_id, "type.py");
 
-        //let mut cfg: CFG<SimpleExtra> = CFG::new(
-        //&context,
-        //b.strings.intern("module".to_string()),
-        //&d,
-        //&mut cfg_g,
-        //);
         let mut env = IREnvironment::new();
 
         let ast = crate::tests::gen_function_call(&mut b).normalize(&mut d, &mut b);
