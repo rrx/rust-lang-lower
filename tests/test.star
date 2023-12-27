@@ -7,6 +7,8 @@ def main() -> int:
   out = z
   if True:
     out = 0
+    #b.check(out > 0)
     return out
 
+  b.check(out > 0)
   return out

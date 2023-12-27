@@ -311,6 +311,10 @@ impl<'c, E: Extra> CFG<'c, E> {
         self.root
     }
 
+    pub fn shared_libraries(&self) -> Vec<String> {
+        self.shared.iter().cloned().collect::<Vec<_>>()
+    }
+
     pub fn exec_main(&self, module: &Module<'c>, libpath: &str) -> i32 {
         let shared = self.shared.iter().cloned().collect::<Vec<_>>();
         exec_main(&shared, module, libpath)
@@ -321,7 +325,12 @@ impl<'c, E: Extra> CFG<'c, E> {
         self.root == block_index
     }
 
-    pub fn module(&mut self, context: &Context, module: &mut Module<'c>, g: &mut CFGGraph<'c>) {
+    pub fn lower_module(
+        &mut self,
+        context: &Context,
+        module: &mut Module<'c>,
+        g: &mut CFGGraph<'c>,
+    ) {
         let data = g.node_weight_mut(self.root).unwrap();
         for op in data.ops.drain(..) {
             module.body().append_operation(op);

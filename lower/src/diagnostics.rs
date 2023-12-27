@@ -1,4 +1,3 @@
-use crate::ast::Span;
 use codespan_reporting::diagnostic::{Diagnostic, Severity};
 use codespan_reporting::files::Files;
 use codespan_reporting::files::SimpleFiles;
@@ -7,6 +6,8 @@ use codespan_reporting::term::termcolor::{BufferWriter, ColorChoice, StandardStr
 use melior::ir;
 use melior::Context;
 use thiserror::Error;
+
+use crate::ast::Span;
 
 pub type FileDB = SimpleFiles<String, String>;
 
@@ -22,6 +23,7 @@ pub struct Diagnostics {
     stack: Vec<Span>,
     pub has_errors: bool,
 }
+
 impl Diagnostics {
     pub fn new() -> Self {
         Self {

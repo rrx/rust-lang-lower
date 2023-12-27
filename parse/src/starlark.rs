@@ -1,6 +1,8 @@
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::path::Path;
 
+use anyhow::Error;
 use anyhow::Result;
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 
@@ -12,7 +14,7 @@ use starlark_syntax::syntax::module::AstModuleFields;
 
 use lower::ast;
 use lower::ast::{Ast, AstNode, CodeLocation, Extra};
-use lower::{AstType, Diagnostics, NodeBuilder, StringKey, TypeUnify};
+use lower::{AstType, Diagnostics, Module, NodeBuilder, ParseError, StringKey, TypeUnify};
 
 #[derive(Debug, Clone)]
 pub enum DataType {
@@ -524,68 +526,122 @@ impl<E: Extra> Parser<E> {
     }
 }
 
-#[cfg(test)]
-pub(crate) mod tests {
-    use super::*;
-    use lower::ast::SimpleExtra;
-    use lower::cfg::*;
-    use lower::{IREnvironment, IRGraph};
-    use lower::{Location, Module};
-    use test_log::test;
+#[derive(Default)]
+pub struct StarlarkParser<E> {
+    _e: std::marker::PhantomData<E>,
+    shared: HashSet<String>,
+}
 
-    fn run_test_ir(filename: &str, expected: i32) {
-        let mut b = NodeBuilder::new();
-        let context = lower::default_context();
-        let mut d = Diagnostics::new();
+impl<E: Extra> StarlarkParser<E> {
+    pub fn new() -> Self {
+        Self {
+            _e: std::marker::PhantomData::default(),
+            shared: HashSet::new(),
+        }
+    }
 
-        let file_id = d.add_source(
-            filename.to_string(),
-            std::fs::read_to_string(filename).unwrap(),
-        );
+    pub fn parse_module<'c>(
+        &mut self,
+        filename: &str,
+        context: &'c lower::Context,
+        module: &mut Module<'c>,
+        b: &mut NodeBuilder<E>,
+        d: &mut Diagnostics,
+        verbose: bool,
+    ) -> Result<()> {
+        log::debug!("parsing: {}", filename);
 
-        // parse
+        let file_id = d.add_source(filename.to_string(), std::fs::read_to_string(filename)?);
+
+        b.enter(file_id, &filename);
+
         let mut parser = Parser::new();
-        let ast: AstNode<ast::SimpleExtra> = parser
-            .parse(Path::new(filename), None, file_id, &mut d, &mut b)
-            .unwrap()
-            .normalize(&mut d, &mut b);
+        let ast: AstNode<E> = parser
+            .parse(Path::new(filename), None, file_id, d, b)?
+            .normalize(d, b);
 
+        use lower::{IREnvironment, IRGraph};
         let mut env = IREnvironment::new();
         let mut g = IRGraph::new();
-        let index = env.add_block(b.s("module"), vec![], &d, &mut g);
+        let index = env.add_block(b.s("module"), vec![], d, &mut g);
         env.enter_block(index, ast.extra.get_span());
 
         // lower ast to ir
-        let r = ast.lower_ir_expr(&mut d, &mut env, &mut g, &mut b);
+        let r = ast.lower_ir_expr(d, &mut env, &mut g, b);
         d.dump();
-        assert!(!d.has_errors);
-        let (ir, _ty) = r.unwrap();
+
+        if d.has_errors {
+            return Err(Error::new(ParseError::Invalid));
+        }
+
+        let (ir, _ty) = r?;
         ir.dump(&b, 0);
         assert_eq!(1, env.stack_size());
 
         // Analyze
         let mut g = IRGraph::new();
         let mut env = IREnvironment::new();
-        let ir = lower::ir::IRBlockSorter::run(ir, &mut b);
-        ir.dump(&b, 0);
-        let r = ir.build_graph(&mut d, &mut env, &mut g, &mut b);
+        let ir = lower::ir::IRBlockSorter::run(ir, b);
+        if verbose {
+            ir.dump(&b, 0);
+        }
+        let r = ir.build_graph(d, &mut env, &mut g, b);
         d.dump();
-        r.unwrap();
-        env.save_graph("out.dot", &g, &b);
+        r?;
+
+        if verbose {
+            env.save_graph("out.dot", &g, b);
+        }
 
         // lower to mlir
+        use lower::cfg::{CFGGraph, CFG};
         let mut cfg_g = CFGGraph::new();
-        let mut cfg: CFG<SimpleExtra> = CFG::new(&context, b.s("module"), &d, &mut cfg_g);
+        let mut cfg: CFG<E> = CFG::new(context, b.s("module"), d, &mut cfg_g);
         let mut stack = vec![cfg.root()];
-        let r = ir.lower_mlir(&context, &mut d, &mut cfg, &mut stack, &mut cfg_g, &mut b);
+        let r = ir.lower_mlir(context, d, &mut cfg, &mut stack, &mut cfg_g, b);
         d.dump();
-        r.unwrap();
-        env.save_graph("out.dot", &g, &b);
+        r?;
 
-        // execute module
+        if verbose {
+            env.save_graph("out.dot", &g, b);
+        }
+
+        // lower module
+        cfg.lower_module(context, module, &mut cfg_g);
+        for shared in cfg.shared_libraries() {
+            self.shared.insert(shared);
+        }
+        Ok(())
+    }
+
+    pub fn exec_main<'c>(&self, module: &Module, libpath: &str) -> i32 {
+        use lower::compile::exec_main;
+        exec_main(
+            &self.shared.iter().cloned().collect::<Vec<_>>(),
+            module,
+            libpath,
+        )
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::*;
+    use lower::ast::SimpleExtra;
+    use lower::Location;
+    use test_log::test;
+
+    fn run_test_ir(filename: &str, expected: i32) {
+        let mut p: StarlarkParser<SimpleExtra> = StarlarkParser::new();
+        let mut b = NodeBuilder::new();
+        let context = lower::default_context();
+        let mut d = Diagnostics::new();
         let mut module = Module::new(Location::unknown(&context));
-        cfg.module(&context, &mut module, &mut cfg_g);
-        let r = cfg.exec_main(&module, "../target/debug/");
+        p.parse_module(filename, &context, &mut module, &mut b, &mut d, true)
+            .unwrap();
+        module.as_operation().dump();
+        assert!(module.as_operation().verify());
+        let r = p.exec_main(&module, "../target/debug/");
         assert_eq!(expected, r);
     }
 

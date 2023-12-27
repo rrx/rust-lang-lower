@@ -12,6 +12,7 @@ use lower::{
     SimpleExtra, CFG,
 };
 use parse::starlark::Parser;
+use parse::starlark::StarlarkParser;
 
 #[derive(FromArgs, Debug)]
 /// Compile Stuff
@@ -56,64 +57,32 @@ fn main() -> Result<(), Box<dyn Error>> {
     let context = default_context();
 
     let location = ir::Location::unknown(&context);
-    let mut parser: Parser<SimpleExtra> = Parser::new();
-    let mut d = Diagnostics::new();
-    let mut cfg_g = CFGGraph::new();
-    let mut b: NodeBuilder<SimpleExtra> = NodeBuilder::new();
-    let mut cfg: CFG<SimpleExtra> = CFG::new(&context, b.s("module"), &d, &mut cfg_g);
-
-    for path in config.inputs {
-        let path = Path::new(&path);
-        log::debug!("parsing: {}", path.to_str().unwrap());
-
-        let filename = path.to_str().unwrap().to_string();
-        let file_id = d.add_source(filename.clone(), std::fs::read_to_string(path)?);
-
-        b.enter(file_id, &filename);
-
-        let result = parser.parse(&path, None, file_id, &mut d, &mut b);
-        if config.verbose {
-            d.dump();
-        }
-        if d.has_errors {
-            println!("Errors in parsing");
-            std::process::exit(1);
-        }
-
-        let ast = result?.normalize(&mut d, &mut b);
-
-        // lower ast to ir
-        let mut env = IREnvironment::new();
-        let mut g = IRGraph::new();
-        let index = env.add_block(b.s("module"), vec![], &d, &mut g);
-        env.enter_block(index, ast.extra.get_span());
-        let r = ast.lower_ir_expr(&mut d, &mut env, &mut g, &mut b);
-        if config.verbose {
-            d.dump();
-        }
-        //assert!(!d.has_errors);
-        let (ir, _ty) = r.unwrap();
-        ir.dump(&b, 0);
-        assert_eq!(1, env.stack_size());
-
-        // lower to mlir
-        let mut stack = vec![cfg.root()];
-        let r = ir.lower_mlir(&context, &mut d, &mut cfg, &mut stack, &mut cfg_g, &mut b);
-        d.dump();
-        r.unwrap();
-        env.save_graph("out.dot", &g, &b);
-    }
-    cfg.save_graph("out.dot", &cfg_g, &b);
-    if d.has_errors {
-        std::process::exit(1);
-    }
-
     let mut module = ir::Module::new(location);
+    //let mut parser: Parser<SimpleExtra> = Parser::new();
+    let mut p: StarlarkParser<SimpleExtra> = StarlarkParser::new();
+    let mut d = Diagnostics::new();
+    //let mut cfg_g = CFGGraph::new();
+    let mut b: NodeBuilder<SimpleExtra> = NodeBuilder::new();
+    //let mut cfg: CFG<SimpleExtra> = CFG::new(&context, b.s("module"), &d, &mut cfg_g);
+
+    for filename in config.inputs {
+        p.parse_module(
+            &filename,
+            &context,
+            &mut module,
+            &mut b,
+            &mut d,
+            config.verbose,
+        )?;
+    }
+
     if config.verbose {
         module.as_operation().dump();
     }
+
     assert!(module.as_operation().verify());
 
+    /*
     if config.lower {
         cfg.module(&context, &mut module, &mut cfg_g);
         if config.verbose {
@@ -121,6 +90,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
+    */
     if let Some(out_filename) = config.output {
         let mut output = File::create(out_filename)?;
         let s = module.as_operation().to_string();
@@ -128,7 +98,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     if config.exec {
-        let exit_code = cfg.exec_main(&module, "target/debug/");
+        let exit_code = p.exec_main(&module, "target/debug");
         std::process::exit(exit_code);
     }
 
