@@ -602,10 +602,10 @@ impl<E: Extra> StarlarkParser<E> {
         use lower::cfg::{CFGGraph, CFG};
         let mut types = TypeBuilder::new();
         let mut blocks = CFGBlocks::new(root, env.g);
-        let mut cfg_g = CFGGraph::new();
-        let mut cfg: CFG<E> = CFG::new();
+        //let mut cfg_g = CFGGraph::new();
+        //let mut cfg: CFG<E> = CFG::new();
         //context, b.s("module"), env.g, d);
-        blocks.add_block_ir(context, root, b.s("module"), &[], &mut types, d, &mut cfg_g);
+        blocks.add_block_ir(context, root, b.s("module"), &[], &mut types, d);
 
         let mut stack = vec![blocks.root()];
         let r = ir.lower_mlir(
@@ -614,7 +614,7 @@ impl<E: Extra> StarlarkParser<E> {
             &mut types,
             &mut blocks,
             &mut stack,
-            &mut cfg_g,
+            //&mut cfg_g,
             b,
             &mut self.link,
         );

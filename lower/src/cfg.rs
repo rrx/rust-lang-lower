@@ -218,7 +218,7 @@ pub type CFGGraph<'c> = DiGraph<OpCollection<'c>, ()>;
 
 pub fn values_in_scope<'c, 'a>(
     blocks: &'a CFGBlocks<'c>,
-    g: &'a CFGGraph<'c>,
+    //g: &'a CFGGraph<'c>,
     sym_index: SymIndex,
 ) -> Vec<Value<'c, 'a>> {
     //let data = g.node_weight(sym_index.block()).unwrap();
@@ -270,7 +270,7 @@ impl<'c> CFGBlocks<'c> {
         params: &[IRArg],
         types: &mut TypeBuilder,
         _d: &Diagnostics,
-        _g: &mut CFGGraph<'c>,
+        //_g: &mut CFGGraph<'c>,
     ) -> NodeIndex {
         // build parameter list for block
         //self.g.node_weight(
@@ -303,7 +303,7 @@ impl<'c> CFGBlocks<'c> {
         &self,
         index: NodeIndex,
         name: StringKey,
-        _g: &CFGGraph<'c>,
+        //_g: &CFGGraph<'c>,
     ) -> Option<SymIndex> {
         let dom = simple_fast(&self.g, self.root)
             .dominators(index)
@@ -320,7 +320,7 @@ impl<'c> CFGBlocks<'c> {
         None
     }
 
-    pub fn dump_scope<E: Extra>(&self, index: NodeIndex, _g: &CFGGraph<'c>, b: &NodeBuilder<E>) {
+    pub fn dump_scope<E: Extra>(&self, index: NodeIndex, b: &NodeBuilder<E>) {
         let dom = simple_fast(&self.g, self.root)
             .dominators(index)
             .unwrap()
@@ -340,7 +340,7 @@ impl<'c> CFGBlocks<'c> {
         }
     }
 
-    pub fn take_block(&mut self, index: NodeIndex, _g: &mut CFGGraph<'c>) -> Block<'c> {
+    pub fn take_block(&mut self, index: NodeIndex) -> Block<'c> {
         //let data = g.node_weight_mut(index).unwrap();
         let data = self.blocks.get_mut(&index).unwrap();
         let block = data.block.take().unwrap();
@@ -350,7 +350,7 @@ impl<'c> CFGBlocks<'c> {
         block
     }
 
-    pub fn save_graph<E: Extra>(&self, filename: &str, _g: &CFGGraph<'c>, b: &NodeBuilder<E>) {
+    pub fn save_graph<E: Extra>(&self, filename: &str, b: &NodeBuilder<E>) {
         return;
         use petgraph::dot::{Config, Dot};
         #[derive(Debug)]

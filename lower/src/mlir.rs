@@ -56,7 +56,7 @@ impl IRNode {
         //cfg: &mut CFG<'c, E>,
         stack: &mut Vec<NodeIndex>,
         //g: &mut IRGraph,
-        cfg_g: &mut CFGGraph<'c>,
+        //cfg_g: &mut CFGGraph<'c>,
         b: &mut NodeBuilder<E>,
         link: &mut LinkOptions,
     ) -> Result<SymIndex> {
@@ -64,7 +64,7 @@ impl IRNode {
         match self.kind {
             IRKind::Noop => {
                 let current_block = stack.last().unwrap().clone();
-                op::emit_noop(context, location, current_block, blocks, cfg_g)
+                op::emit_noop(context, location, current_block, blocks)
             }
 
             IRKind::Block(block) => {
@@ -73,8 +73,7 @@ impl IRNode {
                 assert_eq!(blocks.root(), current_block);
                 let mut out = vec![];
                 for expr in block.children {
-                    let index =
-                        expr.lower_mlir(context, d, types, blocks, stack, cfg_g, b, link)?;
+                    let index = expr.lower_mlir(context, d, types, blocks, stack, b, link)?;
                     out.push(index);
                 }
                 Ok(out.last().cloned().unwrap())
@@ -83,8 +82,7 @@ impl IRNode {
             IRKind::Seq(exprs) => {
                 let mut out = vec![];
                 for expr in exprs {
-                    let index =
-                        expr.lower_mlir(context, d, types, blocks, stack, cfg_g, b, link)?;
+                    let index = expr.lower_mlir(context, d, types, blocks, stack, b, link)?;
                     out.push(index);
                 }
                 Ok(out.last().cloned().unwrap())
@@ -106,7 +104,7 @@ impl IRNode {
                                     current_block,
                                     types,
                                     blocks,
-                                    cfg_g,
+                                    //cfg_g,
                                     b,
                                 ),
                                 _ => op::emit_declare_static(
@@ -117,7 +115,7 @@ impl IRNode {
                                     current_block,
                                     types,
                                     blocks,
-                                    cfg_g,
+                                    //cfg_g,
                                     b,
                                 ),
                             }
@@ -163,7 +161,7 @@ impl IRNode {
                 let current_block = stack.last().unwrap().clone();
                 let span = self.span.clone();
                 let is_current_static = current_block == blocks.root();
-                if let Some(sym_index) = blocks.name_in_scope(current_block, name, cfg_g) {
+                if let Some(sym_index) = blocks.name_in_scope(current_block, name) {
                     let is_symbol_static = sym_index.block() == blocks.root();
                     if is_symbol_static && is_current_static {
                         println!("expr: {:?}", expr);
@@ -177,7 +175,7 @@ impl IRNode {
                                 types,
                                 blocks,
                                 stack,
-                                cfg_g,
+                                //cfg_g,
                                 d,
                                 b,
                                 link,
@@ -189,7 +187,7 @@ impl IRNode {
                                 *expr,
                                 current_block,
                                 blocks,
-                                cfg_g,
+                                //cfg_g,
                                 d,
                                 b,
                             ),
@@ -205,7 +203,7 @@ impl IRNode {
                             types,
                             blocks,
                             stack,
-                            cfg_g,
+                            //cfg_g,
                             d,
                             b,
                             link,
@@ -219,7 +217,7 @@ impl IRNode {
 
             IRKind::Branch(condition, then_key, else_key) => {
                 let condition_index =
-                    condition.lower_mlir(context, d, types, blocks, stack, cfg_g, b, link)?;
+                    condition.lower_mlir(context, d, types, blocks, stack, b, link)?;
                 let current_block = stack.last().unwrap().clone();
 
                 // look up defined blocks
@@ -276,22 +274,19 @@ impl IRNode {
 
                 let mut rs = vec![];
                 for expr in args {
-                    let mut index =
-                        expr.lower_mlir(context, d, types, blocks, stack, cfg_g, b, link)?;
+                    let mut index = expr.lower_mlir(context, d, types, blocks, stack, b, link)?;
                     let (_ast_ty, mem) = types.lookup_type(index).unwrap();
                     if mem.requires_deref() {
                         // if it's in memory, we need to copy to return
                         let target = DerefTarget::Offset(0);
-                        index = op::emit_deref(
-                            index, location, target, d, types, blocks, stack, cfg_g,
-                        )?;
+                        index = op::emit_deref(index, location, target, d, types, blocks, stack)?;
                     }
 
                     rs.push(index);
                 }
                 let rs = rs
                     .into_iter()
-                    .map(|index| values_in_scope(blocks, cfg_g, index)[0])
+                    .map(|index| values_in_scope(blocks, index)[0])
                     .collect::<Vec<_>>();
                 let op = func::r#return(&rs, location);
                 //let current = cfg_g.node_weight_mut(current_block).unwrap();
@@ -310,8 +305,7 @@ impl IRNode {
                 if let Some(block_index) = blocks.block_index(&label) {
                     let mut arg_index = vec![];
                     for expr in args {
-                        let index =
-                            expr.lower_mlir(context, d, types, blocks, stack, cfg_g, b, link)?;
+                        let index = expr.lower_mlir(context, d, types, blocks, stack, b, link)?;
                         arg_index.push(index);
                     }
 
@@ -348,7 +342,7 @@ impl IRNode {
             IRKind::Get(name, _select) => {
                 let current_block = stack.last().unwrap().clone();
                 let span = self.span.clone();
-                if let Some(sym_index) = blocks.name_in_scope(current_block, name, cfg_g) {
+                if let Some(sym_index) = blocks.name_in_scope(current_block, name) {
                     if blocks.block_is_static(sym_index.block()) {
                         let (ast_ty, mem) = types.lookup_type(sym_index).unwrap();
 
@@ -374,7 +368,7 @@ impl IRNode {
                         let (ast_ty, mem) = types.lookup_type(sym_index).unwrap();
 
                         if mem.requires_deref() {
-                            let r_addr = values_in_scope(blocks, cfg_g, sym_index)[0];
+                            let r_addr = values_in_scope(blocks, sym_index)[0];
                             let op = memref::load(r_addr, &[], location);
                             //let current = cfg_g.node_weight_mut(current_block).unwrap();
                             let current = blocks.get_mut(&current_block).unwrap();
@@ -394,21 +388,21 @@ impl IRNode {
                 let current_block = stack.last().unwrap().clone();
                 let name = b.strings.resolve(&key);
                 let span = self.span.clone();
-                let (f, (ty, _mem)) =
-                    if let Some(index) = blocks.name_in_scope(current_block, key, cfg_g) {
-                        if let Some(ty) = types.lookup_type(index) {
-                            (FlatSymbolRefAttribute::new(context, name), ty)
-                        } else {
-                            d.push_diagnostic(ir::error(
-                                &format!("Type not found: {}, {:?}", name, index),
-                                span,
-                            ));
-                            return Err(Error::new(ParseError::Invalid));
-                        }
+                let (f, (ty, _mem)) = if let Some(index) = blocks.name_in_scope(current_block, key)
+                {
+                    if let Some(ty) = types.lookup_type(index) {
+                        (FlatSymbolRefAttribute::new(context, name), ty)
                     } else {
-                        d.push_diagnostic(ir::error(&format!("Name not found: {}", name), span));
+                        d.push_diagnostic(ir::error(
+                            &format!("Type not found: {}, {:?}", name, index),
+                            span,
+                        ));
                         return Err(Error::new(ParseError::Invalid));
-                    };
+                    }
+                } else {
+                    d.push_diagnostic(ir::error(&format!("Name not found: {}", name), span));
+                    return Err(Error::new(ParseError::Invalid));
+                };
 
                 if let AstType::Func(_func_arg_types, ret) = &ty {
                     let ret_type = op::from_type(context, &ret);
@@ -417,14 +411,13 @@ impl IRNode {
 
                     // lower call args
                     for a in args {
-                        let index =
-                            a.lower_mlir(context, d, types, blocks, stack, cfg_g, b, link)?;
+                        let index = a.lower_mlir(context, d, types, blocks, stack, b, link)?;
                         indices.push(index);
                     }
 
                     let call_args = indices
                         .into_iter()
-                        .map(|index| values_in_scope(blocks, cfg_g, index)[0])
+                        .map(|index| values_in_scope(blocks, index)[0])
                         .collect::<Vec<_>>();
 
                     let op = func::call(
@@ -483,12 +476,11 @@ impl IRNode {
                         } else {
                             d.push_diagnostic(ir::error("Expected string", self.span));
                         }
-                        op::emit_noop(context, location, current_block, blocks, cfg_g)
+                        op::emit_noop(context, location, current_block, blocks)
                     }
                     Builtin::Assert => {
                         let arg = args.pop().unwrap();
-                        let index =
-                            arg.lower_mlir(context, d, types, blocks, stack, cfg_g, b, link)?;
+                        let index = arg.lower_mlir(context, d, types, blocks, stack, b, link)?;
                         let msg = "assert";
                         let msg = d.emit_string(ir::error(msg, self.span));
                         //let msg = format!("assert at {}", location.to_string());
@@ -502,15 +494,14 @@ impl IRNode {
                         let arg = args.pop().unwrap();
                         // eval expr
                         let mut index =
-                            arg.lower_mlir(context, d, types, blocks, stack, cfg_g, b, link)?;
+                            arg.lower_mlir(context, d, types, blocks, stack, b, link)?;
                         let (ast_ty, mem) = types.lookup_type(index).unwrap();
 
                         // deref
                         if mem.requires_deref() {
                             let target = DerefTarget::Offset(0);
-                            index = op::emit_deref(
-                                index, location, target, d, types, blocks, stack, cfg_g,
-                            )?;
+                            index =
+                                op::emit_deref(index, location, target, d, types, blocks, stack)?;
                         }
 
                         //let r = values_in_scope(blocks, cfg_g, index)[0];
@@ -541,7 +532,7 @@ impl IRNode {
 
             IRKind::Op1(op, a) => {
                 use crate::ast::UnaryOperation;
-                let index = a.lower_mlir(context, d, types, blocks, stack, cfg_g, b, link)?;
+                let index = a.lower_mlir(context, d, types, blocks, stack, b, link)?;
                 let current_block = stack.last().unwrap().clone();
                 //let current = cfg_g.node_weight_mut(current_block).unwrap();
                 let current = blocks.get_mut(&current_block).unwrap();
@@ -579,7 +570,7 @@ impl IRNode {
             }
 
             IRKind::Op2(op, x, y) => op::emit_binop(
-                context, op, *x, *y, location, d, types, blocks, stack, cfg_g, b, link,
+                context, op, *x, *y, location, d, types, blocks, stack, b, link,
             ),
 
             _ => {

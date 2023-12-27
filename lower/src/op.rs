@@ -160,7 +160,7 @@ pub fn emit_binop<'c, E: Extra>(
     blocks: &mut CFGBlocks<'c>,
     stack: &mut Vec<NodeIndex>,
     //g: &mut IRGraph,
-    cfg_g: &mut CFGGraph<'c>,
+    //cfg_g: &mut CFGGraph<'c>,
     b: &mut NodeBuilder<E>,
     link: &mut LinkOptions,
 ) -> Result<SymIndex> {
@@ -170,8 +170,8 @@ pub fn emit_binop<'c, E: Extra>(
     let y_extra = E::span(y.get_span());
     let x_location = x.location(context, d);
     let y_location = x.location(context, d);
-    let index_x = x.lower_mlir(context, d, types, blocks, stack, cfg_g, b, link)?;
-    let index_y = y.lower_mlir(context, d, types, blocks, stack, cfg_g, b, link)?;
+    let index_x = x.lower_mlir(context, d, types, blocks, stack, b, link)?;
+    let index_y = y.lower_mlir(context, d, types, blocks, stack, b, link)?;
 
     //cfg.save_graph("out.dot", g);
     //println!("ix: {:?}, {}", index_x, fx);
@@ -193,7 +193,7 @@ pub fn emit_binop<'c, E: Extra>(
 
     let index_x = if mem_x.requires_deref() {
         let target = DerefTarget::Offset(0);
-        let index = emit_deref(index_x, x_location, target, d, types, blocks, stack, cfg_g)?;
+        let index = emit_deref(index_x, x_location, target, d, types, blocks, stack)?;
         index
     } else {
         index_x
@@ -201,7 +201,7 @@ pub fn emit_binop<'c, E: Extra>(
 
     let index_y = if mem_y.requires_deref() {
         let target = DerefTarget::Offset(0);
-        let index = emit_deref(index_y, y_location, target, d, types, blocks, stack, cfg_g)?;
+        let index = emit_deref(index_y, y_location, target, d, types, blocks, stack)?;
         index
     } else {
         index_y
@@ -233,7 +233,7 @@ pub fn emit_deref<'c>(
     types: &mut TypeBuilder,
     blocks: &mut CFGBlocks<'c>,
     stack: &mut Vec<NodeIndex>,
-    cfg_g: &mut CFGGraph<'c>,
+    //cfg_g: &mut CFGGraph<'c>,
 ) -> Result<SymIndex> {
     // we are expecting a memref here
     let current_block = stack.last().unwrap().clone();
@@ -272,7 +272,7 @@ pub fn emit_set_alloca<'c, E: Extra>(
     blocks: &mut CFGBlocks<'c>,
     stack: &mut Vec<NodeIndex>,
     //g: &mut IRGraph,
-    cfg_g: &mut CFGGraph<'c>,
+    //cfg_g: &mut CFGGraph<'c>,
     d: &mut Diagnostics,
     b: &mut NodeBuilder<E>,
     link: &mut LinkOptions,
@@ -280,7 +280,7 @@ pub fn emit_set_alloca<'c, E: Extra>(
     log::debug!("assign alloca: {}", b.strings.resolve(&name));
     expr.dump(b, 0);
 
-    let rhs_index = expr.lower_mlir(context, d, types, blocks, stack, cfg_g, b, link)?;
+    let rhs_index = expr.lower_mlir(context, d, types, blocks, stack, b, link)?;
     //let ty = IntegerType::new(context, 64);
     //let memref_ty = MemRefType::new(ty.into(), &[], None, None);
     //let op = memref::alloca(context, memref_ty, &[], &[], None, location);
@@ -295,8 +295,8 @@ pub fn emit_set_alloca<'c, E: Extra>(
     println!("rhs: {:?}", (rhs_index));
     println!("lhs: {:?}", (sym_index));
     println!("rhs: {:?}", (rhs_index));
-    blocks.dump_scope(block_index, cfg_g, b);
-    blocks.save_graph("out.dot", cfg_g, b);
+    blocks.dump_scope(block_index, b);
+    blocks.save_graph("out.dot", b);
 
     let is_symbol_static = sym_index.block() == blocks.root();
 
@@ -323,8 +323,8 @@ pub fn emit_set_alloca<'c, E: Extra>(
         //values_in_scope(cfg_g, sym_index)[0]
     };
 
-    let r_value = values_in_scope(blocks, cfg_g, rhs_index)[0];
-    let r_addr = values_in_scope(blocks, cfg_g, addr_index)[0];
+    let r_value = values_in_scope(blocks, rhs_index)[0];
+    let r_addr = values_in_scope(blocks, addr_index)[0];
     //let r_value = current.value0(rhs_index).unwrap();
     //let r_addr = current.value0(sym_index).unwrap();
 
@@ -343,7 +343,7 @@ pub fn emit_noop<'c>(
     location: Location<'c>,
     block_index: NodeIndex,
     blocks: &mut CFGBlocks<'c>,
-    cfg_g: &mut CFGGraph<'c>,
+    //cfg_g: &mut CFGGraph<'c>,
 ) -> Result<SymIndex> {
     let op = build_bool_op(context, false, location);
     //let current = cfg_g.node_weight_mut(block_index).unwrap();
@@ -360,7 +360,7 @@ pub fn emit_set_function<'c, E: Extra>(
     blocks: &mut CFGBlocks<'c>,
     stack: &mut Vec<NodeIndex>,
     //g: &mut IRGraph,
-    cfg_g: &mut CFGGraph<'c>,
+    //cfg_g: &mut CFGGraph<'c>,
     d: &mut Diagnostics,
     b: &mut NodeBuilder<E>,
     link: &mut LinkOptions,
@@ -378,7 +378,7 @@ pub fn emit_set_function<'c, E: Extra>(
                     &block.params,
                     types,
                     d,
-                    cfg_g,
+                    //cfg_g,
                 );
                 if 0 == i {
                     //cfg_g.add_edge(current_block, block_index, ());
@@ -408,9 +408,7 @@ pub fn emit_set_function<'c, E: Extra>(
 
                 for c in block.children.into_iter() {
                     stack.push(block_index);
-                    if let Ok(_index) =
-                        c.lower_mlir(context, d, types, blocks, stack, cfg_g, b, link)
-                    {
+                    if let Ok(_index) = c.lower_mlir(context, d, types, blocks, stack, b, link) {
                         stack.pop();
                     } else {
                         stack.pop();
@@ -421,7 +419,7 @@ pub fn emit_set_function<'c, E: Extra>(
 
             // build region and add it to the declared function
             for block_index in block_indicies {
-                let block = blocks.take_block(block_index, cfg_g);
+                let block = blocks.take_block(block_index);
                 //let current = cfg_g.node_weight_mut(current_block).unwrap();
                 let current = blocks.get_mut(&current_block).unwrap();
                 let op = current.op_ref(sym_index);
@@ -447,7 +445,7 @@ pub fn emit_set_static<'c, E: Extra>(
     //location: Location<'c>,
     block_index: NodeIndex,
     blocks: &mut CFGBlocks<'c>,
-    cfg_g: &mut CFGGraph<'c>,
+    //cfg_g: &mut CFGGraph<'c>,
     _d: &mut Diagnostics,
     b: &mut NodeBuilder<E>,
 ) -> Result<SymIndex> {
@@ -501,7 +499,7 @@ pub fn emit_declare_function<'c, E: Extra>(
     block_index: NodeIndex,
     types: &mut TypeBuilder,
     blocks: &mut CFGBlocks<'c>,
-    cfg_g: &mut CFGGraph<'c>,
+    //cfg_g: &mut CFGGraph<'c>,
     b: &NodeBuilder<E>,
 ) -> Result<SymIndex> {
     if let AstType::Func(params, ast_ret_type) = ast_ty.clone() {
@@ -562,7 +560,7 @@ pub fn emit_declare_static<'c, E: Extra>(
     block_index: NodeIndex,
     types: &mut TypeBuilder,
     blocks: &mut CFGBlocks<'c>,
-    cfg_g: &mut CFGGraph<'c>,
+    //cfg_g: &mut CFGGraph<'c>,
     b: &NodeBuilder<E>,
 ) -> Result<SymIndex> {
     // STATIC/GLOBAL VARIABLE
