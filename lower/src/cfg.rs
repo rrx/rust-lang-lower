@@ -15,6 +15,7 @@ use crate::ast::{
 use crate::intern::StringKey;
 use crate::ir::IRArg;
 use crate::op;
+use crate::types::TypeBuilder;
 use crate::{AstType, Diagnostics, Extra, NodeBuilder};
 //use anyhow::Error;
 //use anyhow::Result;
@@ -270,7 +271,8 @@ pub struct CFG<'c, E> {
     index_count: usize,
     block_names: HashMap<StringKey, NodeIndex>,
     block_names_index: HashMap<NodeIndex, StringKey>,
-    types: HashMap<SymIndex, (AstType, VarDefinitionSpace)>,
+    //types: HashMap<SymIndex, (AstType, VarDefinitionSpace)>,
+    pub(crate) types: TypeBuilder,
     pub(crate) static_names: HashMap<SymIndex, StringKey>,
     _e: std::marker::PhantomData<E>,
 }
@@ -289,7 +291,8 @@ impl<'c, E: Extra> CFG<'c, E> {
             index_count: 0,
             block_names: HashMap::new(),
             block_names_index: HashMap::new(),
-            types: HashMap::new(),
+            types: TypeBuilder::new(),
+            //types: HashMap::new(),
             static_names: HashMap::new(),
             //shared: HashSet::new(),
             _e: std::marker::PhantomData::default(),
@@ -298,6 +301,7 @@ impl<'c, E: Extra> CFG<'c, E> {
         cfg
     }
 
+    /*
     pub fn lookup_type(&self, index: SymIndex) -> Option<(AstType, VarDefinitionSpace)> {
         self.types.get(&index).cloned()
     }
@@ -305,6 +309,7 @@ impl<'c, E: Extra> CFG<'c, E> {
     pub fn set_type(&mut self, index: SymIndex, ty: AstType, mem: VarDefinitionSpace) {
         self.types.insert(index, (ty, mem));
     }
+    */
 
     pub fn root(&self) -> NodeIndex {
         self.root
@@ -343,7 +348,8 @@ impl<'c, E: Extra> CFG<'c, E> {
         block_node.block_index = index;
         for p in params {
             let index = block_node.push_arg(p.name);
-            self.set_type(index, p.ty.clone(), VarDefinitionSpace::Arg);
+            self.types
+                .set_type(index, p.ty.clone(), VarDefinitionSpace::Arg);
         }
         self.block_names.insert(name, index);
         self.block_names_index.insert(index, name);

@@ -1,5 +1,7 @@
+use crate::{SymIndex, VarDefinitionSpace};
 use anyhow::Result;
 use ena::unify::*;
+use std::collections::HashMap;
 use thiserror::Error;
 
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
@@ -87,6 +89,25 @@ impl AstType {
             Self::Ptr(v) => vec![v],
             _ => unimplemented!(),
         }
+    }
+}
+
+#[derive(Default)]
+pub struct TypeBuilder {
+    types: HashMap<SymIndex, (AstType, VarDefinitionSpace)>,
+}
+
+impl TypeBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn lookup_type(&self, index: SymIndex) -> Option<(AstType, VarDefinitionSpace)> {
+        self.types.get(&index).cloned()
+    }
+
+    pub fn set_type(&mut self, index: SymIndex, ty: AstType, mem: VarDefinitionSpace) {
+        self.types.insert(index, (ty, mem));
     }
 }
 

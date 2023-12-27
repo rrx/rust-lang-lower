@@ -10,9 +10,9 @@ pub mod mlir;
 pub mod op;
 pub mod types;
 
-pub use ast::{Ast, AstNode, Extra, Literal, SimpleExtra};
+pub use ast::{Ast, AstNode, Extra, Literal, SimpleExtra, VarDefinitionSpace};
 pub use builder::{NodeBuilder, NodeID};
-pub use cfg::{CFGGraph, CFG};
+pub use cfg::{CFGGraph, SymIndex, CFG};
 pub use compile::{default_context, default_pass_manager};
 pub use diagnostics::{Diagnostics, FileDB, ParseError};
 pub use intern::StringKey;

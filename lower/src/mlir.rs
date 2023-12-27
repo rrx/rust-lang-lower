@@ -133,7 +133,7 @@ impl IRNode {
                             let current = cfg_g.node_weight_mut(current_block).unwrap();
                             let index = current.push_with_name(op, key);
                             cfg.static_names.insert(index, global_name_key);
-                            cfg.set_type(index, ast_ty, mem);
+                            cfg.types.set_type(index, ast_ty, mem);
                             Ok(index)
                         }
                     }
@@ -145,7 +145,7 @@ impl IRNode {
                         let op = memref::alloca(context, memref_ty, &[], &[], None, location);
                         let current = cfg_g.node_weight_mut(current_block).unwrap();
                         let index = current.push_with_name(op, key);
-                        cfg.set_type(index, ast_ty, mem);
+                        cfg.types.set_type(index, ast_ty, mem);
                         Ok(index)
                     }
                     _ => unimplemented!("{:?}", mem),
@@ -180,7 +180,7 @@ impl IRNode {
                                     sym_index,
                                     name,
                                     *expr,
-                                    location,
+                                    //location,
                                     current_block,
                                     cfg,
                                     cfg_g,
@@ -274,7 +274,7 @@ impl IRNode {
                 let mut rs = vec![];
                 for expr in args {
                     let mut index = expr.lower_mlir(context, d, cfg, stack, cfg_g, b, link)?;
-                    let (_ast_ty, mem) = cfg.lookup_type(index).unwrap();
+                    let (_ast_ty, mem) = cfg.types.lookup_type(index).unwrap();
                     if mem.requires_deref() {
                         // if it's in memory, we need to copy to return
                         let target = DerefTarget::Offset(0);
@@ -359,7 +359,7 @@ impl IRNode {
                     //sym_index
                     //);
                     if cfg.block_is_static(sym_index.block()) {
-                        let (ast_ty, mem) = cfg.lookup_type(sym_index).unwrap();
+                        let (ast_ty, mem) = cfg.types.lookup_type(sym_index).unwrap();
 
                         if mem.requires_deref() {
                             let lower_ty = op::from_type(context, &ast_ty);
@@ -374,11 +374,12 @@ impl IRNode {
                             let op = memref::load(r_addr, &[], location);
                             let value_index = current.push(op);
                             //current.add_symbol(name, value_index);
-                            cfg.set_type(value_index, ast_ty, VarDefinitionSpace::Reg);
+                            cfg.types
+                                .set_type(value_index, ast_ty, VarDefinitionSpace::Reg);
                             return Ok(value_index);
                         }
                     } else {
-                        let (ast_ty, mem) = cfg.lookup_type(sym_index).unwrap();
+                        let (ast_ty, mem) = cfg.types.lookup_type(sym_index).unwrap();
 
                         if mem.requires_deref() {
                             //let lower_ty = op::from_type(context, &ast_ty);
@@ -389,7 +390,8 @@ impl IRNode {
                             let current = cfg_g.node_weight_mut(current_block).unwrap();
                             let value_index = current.push(op);
                             //current.add_symbol(name, value_index);
-                            cfg.set_type(value_index, ast_ty, VarDefinitionSpace::Reg);
+                            cfg.types
+                                .set_type(value_index, ast_ty, VarDefinitionSpace::Reg);
                             return Ok(value_index);
                         }
                         return Ok(sym_index);
@@ -406,7 +408,7 @@ impl IRNode {
                 let span = self.span.clone();
                 let (f, (ty, _mem)) =
                     if let Some(index) = cfg.name_in_scope(current_block, key, cfg_g) {
-                        if let Some(ty) = cfg.lookup_type(index) {
+                        if let Some(ty) = cfg.types.lookup_type(index) {
                             (FlatSymbolRefAttribute::new(context, name), ty)
                         } else {
                             d.push_diagnostic(ir::error(
@@ -446,7 +448,8 @@ impl IRNode {
                     let current = cfg_g.node_weight_mut(current_block).unwrap();
 
                     let index = current.push(op);
-                    cfg.set_type(index, *ret.clone(), VarDefinitionSpace::Reg);
+                    cfg.types
+                        .set_type(index, *ret.clone(), VarDefinitionSpace::Reg);
                     Ok(index)
                 } else {
                     unimplemented!("calling non function type: {:?}", ty);
@@ -474,7 +477,7 @@ impl IRNode {
                     _ => unimplemented!("{:?}", lit),
                 };
                 let index = current.push(op);
-                cfg.set_type(index, ast_ty, VarDefinitionSpace::Reg);
+                cfg.types.set_type(index, ast_ty, VarDefinitionSpace::Reg);
                 Ok(index)
             }
 
@@ -508,7 +511,7 @@ impl IRNode {
                         let arg = args.pop().unwrap();
                         // eval expr
                         let mut index = arg.lower_mlir(context, d, cfg, stack, cfg_g, b, link)?;
-                        let (ast_ty, mem) = cfg.lookup_type(index).unwrap();
+                        let (ast_ty, mem) = cfg.types.lookup_type(index).unwrap();
 
                         // deref
                         if mem.requires_deref() {
@@ -567,13 +570,15 @@ impl IRNode {
                             let r = current.value0(index_lhs).unwrap();
                             let r_rhs = current.value0(index).unwrap();
                             let index = current.push(arith::muli(r, r_rhs, location));
-                            cfg.set_type(index, AstType::Int, VarDefinitionSpace::Reg);
+                            cfg.types
+                                .set_type(index, AstType::Int, VarDefinitionSpace::Reg);
                             Ok(index)
                         } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
                             // arith has an op for negation
                             let r_rhs = current.value0(index).unwrap();
                             let index = current.push(arith::negf(r_rhs, location));
-                            cfg.set_type(index, AstType::Float, VarDefinitionSpace::Reg);
+                            cfg.types
+                                .set_type(index, AstType::Float, VarDefinitionSpace::Reg);
                             Ok(index)
                         } else {
                             unimplemented!()

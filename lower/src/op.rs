@@ -177,10 +177,12 @@ pub fn emit_binop<'c, E: Extra>(
     //println!("iy: {:?}, {}", index_y, fy);
 
     let (_ty_x, mem_x) = cfg
+        .types
         .lookup_type(index_x)
         .expect(&format!("missing type for {:?}, {}", index_x, fx));
 
     let (_ty_y, mem_y) = cfg
+        .types
         .lookup_type(index_y)
         .expect(&format!("missing type for {:?}, {}", index_y, fy));
 
@@ -215,7 +217,7 @@ pub fn emit_binop<'c, E: Extra>(
     let (op, ast_ty) = build_binop(context, op, a, &x_extra, b, &y_extra, location, d)?;
     let current = cfg_g.node_weight_mut(current_block).unwrap();
     let index = current.push(op);
-    cfg.set_type(index, ast_ty, VarDefinitionSpace::Reg);
+    cfg.types.set_type(index, ast_ty, VarDefinitionSpace::Reg);
     Ok(index)
 }
 
@@ -231,7 +233,7 @@ pub fn emit_deref<'c, E: Extra>(
 ) -> Result<SymIndex> {
     // we are expecting a memref here
     let current_block = stack.last().unwrap().clone();
-    let (ty, mem) = cfg.lookup_type(index).unwrap();
+    let (ty, mem) = cfg.types.lookup_type(index).unwrap();
 
     // ensure proper type
     if mem.requires_deref() {
@@ -241,7 +243,7 @@ pub fn emit_deref<'c, E: Extra>(
         let op = memref::load(r, &[], location);
         let current = cfg_g.node_weight_mut(current_block).unwrap();
         let index = current.push(op);
-        cfg.set_type(index, ty, mem);
+        cfg.types.set_type(index, ty, mem);
         Ok(index)
     } else {
         Ok(index)
@@ -280,8 +282,8 @@ pub fn emit_set_alloca<'c, E: Extra>(
     //let ast_ty = cfg.lookup_type(rhs_index).unwrap().to_ptr();
     //let ptr_ty = AstType::Ptr(ast_ty.into());
     //cfg.set_type(ptr_index, ast_ty);
-    println!("ty_lhs: {:?}", cfg.lookup_type(sym_index));
-    println!("ty_rhs: {:?}", cfg.lookup_type(rhs_index));
+    println!("ty_lhs: {:?}", cfg.types.lookup_type(sym_index));
+    println!("ty_rhs: {:?}", cfg.types.lookup_type(rhs_index));
     println!("rhs: {:?}", (rhs_index));
     println!("lhs: {:?}", (sym_index));
     println!("rhs: {:?}", (rhs_index));
@@ -291,8 +293,8 @@ pub fn emit_set_alloca<'c, E: Extra>(
     let is_symbol_static = sym_index.block() == cfg.root();
 
     let addr_index = if is_symbol_static {
-        let (lhs_ty, lhs_mem) = cfg.lookup_type(sym_index).unwrap();
-        let (rhs_ty, rhs_mem) = cfg.lookup_type(rhs_index).unwrap();
+        let (lhs_ty, _lhs_mem) = cfg.types.lookup_type(sym_index).unwrap();
+        let (_rhs_ty, _rhs_mem) = cfg.types.lookup_type(rhs_index).unwrap();
 
         let lower_ty = from_type(context, &lhs_ty);
         let memref_ty = MemRefType::new(lower_ty, &[], None, None);
@@ -415,7 +417,7 @@ pub fn emit_set_static<'c, E: Extra>(
     sym_index: SymIndex,
     name: StringKey,
     expr: IRNode,
-    location: Location<'c>,
+    //location: Location<'c>,
     block_index: NodeIndex,
     cfg: &mut CFG<'c, E>,
     cfg_g: &mut CFGGraph<'c>,
@@ -446,7 +448,7 @@ pub fn emit_set_static<'c, E: Extra>(
     };
 
     // evaluate expr at compile time
-    let (value, ast_ty) = build_static_attribute(context, global_name.clone(), expr, location);
+    let (value, ast_ty) = build_static_attribute(context, expr);
     let ty = from_type(context, &ast_ty);
     let attribute =
         DenseElementsAttribute::new(RankedTensorType::new(&[], ty, None).into(), &[value]).unwrap();
@@ -508,7 +510,8 @@ pub fn emit_declare_function<'c, E: Extra>(
         let function_block = cfg_g.node_weight_mut(block_index).unwrap();
         let index = function_block.push(op);
         function_block.add_symbol(key, index);
-        cfg.set_type(index, ast_ty, VarDefinitionSpace::Static);
+        cfg.types
+            .set_type(index, ast_ty, VarDefinitionSpace::Static);
 
         //if let Some(entry_block) = entry_block {
         //let data = g.node_weight_mut(entry_block).unwrap();
@@ -534,8 +537,6 @@ pub fn emit_declare_static<'c, E: Extra>(
     // STATIC/GLOBAL VARIABLE
     let integer_type = IntegerType::new(context, 64).into();
     let ty = from_type(context, &ast_ty);
-    //let attribute =
-    //DenseElementsAttribute::new(RankedTensorType::new(&[], ty, None).into(), &[value]).unwrap();
     let alignment = IntegerAttribute::new(8, integer_type);
     let memspace = IntegerAttribute::new(0, integer_type).into();
     let constant = false;
@@ -546,7 +547,7 @@ pub fn emit_declare_static<'c, E: Extra>(
         Some("private"),
         MemRefType::new(ty, &[], None, Some(memspace)),
         // initial value is not set
-        None, //Some(attribute.into()),
+        None,
         constant,
         Some(alignment),
         location,
@@ -554,7 +555,8 @@ pub fn emit_declare_static<'c, E: Extra>(
 
     let current = cfg_g.node_weight_mut(block_index).unwrap();
     let index = current.push_with_name(op, name);
-    cfg.set_type(index, ast_ty, VarDefinitionSpace::Static);
+    cfg.types
+        .set_type(index, ast_ty, VarDefinitionSpace::Static);
     Ok(index)
 }
 
@@ -604,12 +606,7 @@ pub fn emit_static<'c, E: Extra>(
     (op, ast_ty)
 }
 
-pub fn build_static_attribute<'c>(
-    context: &'c Context,
-    global_name: String,
-    expr: IRNode,
-    location: Location<'c>,
-) -> (Attribute<'c>, AstType) {
+pub fn build_static_attribute<'c>(context: &'c Context, expr: IRNode) -> (Attribute<'c>, AstType) {
     // evaluate expr at compile time
     match expr.kind {
         IRKind::Literal(Literal::Bool(x)) => {
@@ -617,8 +614,6 @@ pub fn build_static_attribute<'c>(
             let ty = from_type(context, &ast_ty);
             let v = if x { 1 } else { 0 };
             let value = IntegerAttribute::new(v, ty).into();
-
-            //let op = build_static(context, &global_name, ty, value, false, location);
             (value, ast_ty)
         }
 
@@ -626,27 +621,21 @@ pub fn build_static_attribute<'c>(
             let ast_ty = AstType::Int;
             let ty = from_type(context, &ast_ty);
             let value = IntegerAttribute::new(x, ty).into();
-            //let op = build_static(context, &global_name, ty, value, false, location);
             (value, ast_ty)
-            //(ast_ty, op)
         }
 
         IRKind::Literal(Literal::Index(x)) => {
             let ast_ty = AstType::Int;
             let ty = from_type(context, &ast_ty);
             let value = IntegerAttribute::new(x as i64, ty).into();
-            //let op = build_static(context, &global_name, ty, value, false, location);
             (value, ast_ty)
-            //(ast_ty, op)
         }
 
         IRKind::Literal(Literal::Float(x)) => {
             let ast_ty = AstType::Float;
             let ty = from_type(context, &ast_ty);
             let value = FloatAttribute::new(context, x, ty).into();
-            //let op = build_static(context, &global_name, ty, value, false, location);
             (value, ast_ty)
-            //(ast_ty, op)
         }
         _ => unreachable!("{:?}", expr.kind),
     }
