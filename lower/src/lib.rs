@@ -12,13 +12,13 @@ pub mod types;
 
 pub use ast::{Ast, AstNode, Extra, Literal, SimpleExtra, VarDefinitionSpace};
 pub use builder::{NodeBuilder, NodeID};
-pub use cfg::{CFGGraph, SymIndex, CFG};
+pub use cfg::{CFGBlocks, CFGGraph, SymIndex, CFG};
 pub use compile::{default_context, default_pass_manager};
 pub use diagnostics::{Diagnostics, FileDB, ParseError};
 pub use intern::StringKey;
 pub use ir::{IREnvironment, IRGraph};
 pub use link::LinkOptions;
-pub use types::{AstType, TypeUnify};
+pub use types::{AstType, TypeBuilder, TypeUnify};
 
 // re-export melior structs
 pub use melior::{

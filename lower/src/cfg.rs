@@ -216,36 +216,41 @@ impl SymbolData {
 
 pub type CFGGraph<'c> = DiGraph<OpCollection<'c>, ()>;
 
-pub fn values_in_scope<'c, 'a>(g: &'a CFGGraph<'c>, sym_index: SymIndex) -> Vec<Value<'c, 'a>> {
-    let data = g.node_weight(sym_index.block()).unwrap();
+pub fn values_in_scope<'c, 'a>(
+    blocks: &'a CFGBlocks<'c>,
+    g: &'a CFGGraph<'c>,
+    sym_index: SymIndex,
+) -> Vec<Value<'c, 'a>> {
+    //let data = g.node_weight(sym_index.block()).unwrap();
+    let data = blocks.get(&sym_index.block()).unwrap();
     data.values(sym_index)
 }
 
-pub struct CFG<E> {
+pub struct CFGBlocks<'c> {
     root: NodeIndex,
+    pub(crate) blocks: HashMap<NodeIndex, OpCollection<'c>>,
     block_names: HashMap<StringKey, NodeIndex>,
     block_names_index: HashMap<NodeIndex, StringKey>,
     g: IRGraph,
-    pub(crate) types: TypeBuilder,
-
-    // track local static variables
-    // local static variables have global static names
-    pub(crate) static_names: HashMap<SymIndex, StringKey>,
-
-    _e: std::marker::PhantomData<E>,
 }
 
-impl<'c, E: Extra> CFG<E> {
-    pub fn new(g: IRGraph) -> Self {
+impl<'c> CFGBlocks<'c> {
+    pub fn new(root: NodeIndex, g: IRGraph) -> Self {
         Self {
-            root: NodeIndex::new(0),
+            root, //: NodeIndex::new(0),
+            blocks: HashMap::new(),
             block_names: HashMap::new(),
             block_names_index: HashMap::new(),
-            types: TypeBuilder::new(),
-            static_names: HashMap::new(),
             g,
-            _e: std::marker::PhantomData::default(),
         }
+    }
+
+    pub fn get(&self, index: &NodeIndex) -> Option<&OpCollection<'c>> {
+        self.blocks.get(index)
+    }
+
+    pub fn get_mut(&mut self, index: &NodeIndex) -> Option<&mut OpCollection<'c>> {
+        self.blocks.get_mut(index)
     }
 
     pub fn root(&self) -> NodeIndex {
@@ -260,10 +265,12 @@ impl<'c, E: Extra> CFG<E> {
     pub fn add_block_ir(
         &mut self,
         context: &'c Context,
+        index: NodeIndex,
         name: StringKey,
         params: &[IRArg],
+        types: &mut TypeBuilder,
         _d: &Diagnostics,
-        g: &mut CFGGraph<'c>,
+        _g: &mut CFGGraph<'c>,
     ) -> NodeIndex {
         // build parameter list for block
         //self.g.node_weight(
@@ -274,30 +281,77 @@ impl<'c, E: Extra> CFG<E> {
         }
         let block = Block::new(&block_params);
         let data = OpCollection::new(block);
-        let index = g.add_node(data);
-        let block_node = g.node_weight_mut(index).unwrap();
+        //let index = g.add_node(data);
+        self.blocks.insert(index, data);
+        //let block_node = g.node_weight_mut(index).unwrap();
+        let block_node = self.blocks.get_mut(&index).unwrap();
         block_node.block_index = index;
         for p in params {
             let index = block_node.push_arg(p.name);
-            self.types
-                .set_type(index, p.ty.clone(), VarDefinitionSpace::Arg);
+            types.set_type(index, p.ty.clone(), VarDefinitionSpace::Arg);
         }
         self.block_names.insert(name, index);
         self.block_names_index.insert(index, name);
         index
     }
 
-    pub fn add_edge(&mut self, a: StringKey, b: StringKey, g: &mut CFGGraph<'c>) {
-        let index_a = self.block_names.get(&a).unwrap();
-        let index_b = self.block_names.get(&b).unwrap();
-        g.add_edge(*index_a, *index_b, ());
-    }
-
     pub fn block_index(&self, name: &StringKey) -> Option<NodeIndex> {
         self.block_names.get(name).cloned()
     }
 
-    pub fn save_graph(&self, filename: &str, g: &CFGGraph<'c>, b: &NodeBuilder<E>) {
+    pub fn name_in_scope(
+        &self,
+        index: NodeIndex,
+        name: StringKey,
+        _g: &CFGGraph<'c>,
+    ) -> Option<SymIndex> {
+        let dom = simple_fast(&self.g, self.root)
+            .dominators(index)
+            .expect("Node not connected to root")
+            .collect::<Vec<_>>();
+        //println!("dom: {:?} => {:?}", index, dom);
+        for i in dom.into_iter().rev() {
+            //let data = g.node_weight(i).unwrap();
+            let data = self.blocks.get(&i).unwrap();
+            if let Some(r) = data.lookup(name) {
+                return Some(r);
+            }
+        }
+        None
+    }
+
+    pub fn dump_scope<E: Extra>(&self, index: NodeIndex, _g: &CFGGraph<'c>, b: &NodeBuilder<E>) {
+        let dom = simple_fast(&self.g, self.root)
+            .dominators(index)
+            .unwrap()
+            .collect::<Vec<_>>();
+        println!("dom: {:?} => {:?}", index, dom);
+        for i in dom.into_iter().rev() {
+            //let data = g.node_weight(i).unwrap();
+            //let data = g.node_weight(i).unwrap();
+            let data = self.blocks.get(&i).unwrap();
+            let block_name = self.block_names_index.get(&i).unwrap();
+            println!(
+                "\t{:?}: {}, {:?}",
+                i,
+                b.strings.resolve(block_name),
+                data.symbols.keys()
+            );
+        }
+    }
+
+    pub fn take_block(&mut self, index: NodeIndex, _g: &mut CFGGraph<'c>) -> Block<'c> {
+        //let data = g.node_weight_mut(index).unwrap();
+        let data = self.blocks.get_mut(&index).unwrap();
+        let block = data.block.take().unwrap();
+        for op in data.ops.drain(..) {
+            block.append_operation(op);
+        }
+        block
+    }
+
+    pub fn save_graph<E: Extra>(&self, filename: &str, _g: &CFGGraph<'c>, b: &NodeBuilder<E>) {
+        return;
         use petgraph::dot::{Config, Dot};
         #[derive(Debug)]
         enum Shape {
@@ -335,15 +389,16 @@ impl<'c, E: Extra> CFG<E> {
             }
         }
         let mut g_out = DiGraph::new();
-        for node_index in g.node_indices() {
+        for node_index in self.g.node_indices() {
             let block_name = b
                 .strings
                 .resolve(self.block_names_index.get(&node_index).unwrap())
                 .clone();
             g_out.add_node(Node::new_block(block_name, node_index));
         }
-        for block_node_index in g.node_indices() {
-            let data = g.node_weight(block_node_index).unwrap();
+        for block_node_index in self.g.node_indices() {
+            //let data = g.node_weight(block_node_index).unwrap();
+            let data = self.blocks.get(&block_node_index).unwrap();
 
             let mut x = HashMap::new();
             for (name, symbol_index) in data.symbols.iter() {
@@ -370,8 +425,12 @@ impl<'c, E: Extra> CFG<E> {
                 x.insert(symbol_index, symbol_node_index);
             }
 
-            for n in g.neighbors_directed(block_node_index, petgraph::Direction::Outgoing) {
-                if let Some(parent) = g.node_weight(n).unwrap().parent_symbol {
+            for n in self
+                .g
+                .neighbors_directed(block_node_index, petgraph::Direction::Outgoing)
+            {
+                let block = self.blocks.get(&n).unwrap();
+                if let Some(parent) = block.parent_symbol {
                     let symbol_node_index = x.get(&parent).unwrap();
                     g_out.add_edge(*symbol_node_index, n, ());
                 } else {
@@ -401,53 +460,35 @@ impl<'c, E: Extra> CFG<E> {
         println!("{}", s);
         std::fs::write(path, s).unwrap();
     }
+}
 
-    pub fn name_in_scope(
-        &self,
-        index: NodeIndex,
-        name: StringKey,
-        g: &CFGGraph<'c>,
-    ) -> Option<SymIndex> {
-        let dom = simple_fast(g, self.root)
-            .dominators(index)
-            .expect("Node not connected to root")
-            .collect::<Vec<_>>();
-        //println!("dom: {:?} => {:?}", index, dom);
-        for i in dom.into_iter().rev() {
-            let data = g.node_weight(i).unwrap();
-            if let Some(r) = data.lookup(name) {
-                return Some(r);
-            }
-        }
-        None
-    }
+pub struct CFG<E> {
+    // track local static variables
+    // local static variables have global static names
+    pub(crate) static_names: HashMap<SymIndex, StringKey>,
+    _e: std::marker::PhantomData<E>,
+}
 
-    pub fn dump_scope(&self, index: NodeIndex, g: &CFGGraph<'c>, b: &NodeBuilder<E>) {
-        let dom = simple_fast(g, self.root)
-            .dominators(index)
-            .unwrap()
-            .collect::<Vec<_>>();
-        println!("dom: {:?} => {:?}", index, dom);
-        for i in dom.into_iter().rev() {
-            let data = g.node_weight(i).unwrap();
-            let block_name = self.block_names_index.get(&i).unwrap();
-            println!(
-                "\t{:?}: {}, {:?}",
-                i,
-                b.strings.resolve(block_name),
-                data.symbols.keys()
-            );
+impl<'c, E: Extra> CFG<E> {
+    pub fn new() -> Self {
+        Self {
+            //root,//: NodeIndex::new(0),
+            //blocks: HashMap::new(),
+            //block_names: HashMap::new(),
+            //block_names_index: HashMap::new(),
+            //types: TypeBuilder::new(),
+            static_names: HashMap::new(),
+            _e: std::marker::PhantomData::default(),
         }
     }
 
-    pub fn take_block(&mut self, index: NodeIndex, g: &mut CFGGraph<'c>) -> Block<'c> {
-        let data = g.node_weight_mut(index).unwrap();
-        let block = data.block.take().unwrap();
-        for op in data.ops.drain(..) {
-            block.append_operation(op);
-        }
-        block
+    /*
+    pub fn add_edge(&mut self, a: StringKey, b: StringKey, g: &mut CFGGraph<'c>) {
+        let index_a = self.block_names.get(&a).unwrap();
+        let index_b = self.block_names.get(&b).unwrap();
+        g.add_edge(*index_a, *index_b, ());
     }
+    */
 }
 
 //impl<E: Extra> AstNode<E> {

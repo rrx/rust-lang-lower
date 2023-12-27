@@ -54,6 +54,7 @@ pub struct IRArg {
 
 #[derive(Debug)]
 pub struct IRBlock {
+    pub(crate) index: NodeIndex,
     pub(crate) name: StringKey,
     pub(crate) params: Vec<IRArg>,
     pub(crate) children: Vec<IRNode>,
@@ -62,6 +63,7 @@ pub struct IRBlock {
 impl IRBlock {
     pub fn new(name: StringKey, params: Vec<IRArg>, children: Vec<IRNode>) -> Self {
         Self {
+            index: NodeIndex::new(0),
             name,
             params,
             children,
@@ -470,6 +472,7 @@ impl IRBlockSorter {
 
         let nb = if let IRKind::Label(name, args) = &first.as_ref().unwrap().kind {
             IRBlock {
+                index: NodeIndex::new(0),
                 name: *name,
                 params: args.clone(),
                 // skip the first child which is a label, it's redundant now that we have a block
@@ -479,6 +482,7 @@ impl IRBlockSorter {
             let offset = self.blocks.len();
             let name = b.strings.intern(format!("_block{}", offset));
             IRBlock {
+                index: NodeIndex::new(0),
                 name,
                 params: vec![],
                 children: self.stack.drain(..).collect(),
@@ -696,20 +700,22 @@ impl IRNode {
     }
 
     pub fn build_graph<'c, E: Extra>(
-        &self,
+        self,
         d: &mut Diagnostics,
         env: &mut IREnvironment,
         b: &mut NodeBuilder<E>,
-    ) -> Result<()> {
-        match &self.kind {
-            IRKind::Noop => Ok(()),
+    ) -> Result<IRNode> {
+        let span = self.get_span().clone();
+        match self.kind {
+            IRKind::Noop => Ok(self),
 
             IRKind::Seq(exprs) => {
                 //let current_index = env.current_block();
                 //let data = g.node_weight(current_index).unwrap();
 
+                let mut out = vec![];
                 for expr in exprs {
-                    expr.build_graph(d, env, b)?;
+                    out.push(expr.build_graph(d, env, b)?);
                     /*
                     if let IRKind::Block(block) = &expr.kind {
                         let block_index = env.add_block(block.name, block.params.clone(), d, g);
@@ -722,31 +728,32 @@ impl IRNode {
                     }
                     */
                 }
-                Ok(())
+                Ok(b.ir_seq(out))
             }
 
             IRKind::Ret(exprs) => {
+                let mut out = vec![];
                 for expr in exprs {
-                    expr.build_graph(d, env, b)?;
+                    out.push(expr.build_graph(d, env, b)?);
                 }
-                Ok(())
+                Ok(b.ir_ret(out))
             }
 
-            IRKind::Label(_name, _args) => {
+            IRKind::Label(ref _name, ref _args) => {
                 //let index = env.add_block(*name, args.clone(), d, g);
                 //env.enter_block(index, self.span.clone());
-                Ok(())
+                Ok(self)
             }
 
-            IRKind::Jump(label, args) => {
+            IRKind::Jump(label, ref args) => {
                 let block_index = env.current_block();
-                let target_index = env.lookup_block(*label).unwrap();
+                let target_index = env.lookup_block(label).unwrap();
                 env.connect_block(block_index, target_index);
                 let target = env.g.node_weight(target_index).unwrap();
 
                 // check arity of target
                 if target.params.len() == args.len() {
-                    Ok(())
+                    Ok(self)
                 } else {
                     d.push_diagnostic(error(
                         &format!(
@@ -762,8 +769,8 @@ impl IRNode {
             IRKind::Get(name, ref _select) => {
                 let current_block = env.current_block();
                 //self.dump(b, 0);
-                if let Some(_sym_index) = env.name_in_scope(current_block, *name) {
-                    Ok(())
+                if let Some(_sym_index) = env.name_in_scope(current_block, name) {
+                    Ok(self)
                 } else {
                     d.push_diagnostic(error(
                         &format!("Get undefined variable: {:?}", b.strings.resolve(&name)),
@@ -773,11 +780,11 @@ impl IRNode {
                 }
             }
 
-            IRKind::Set(name, value, ref _select) => {
+            IRKind::Set(name, value, select) => {
                 let current_index = env.current_block();
-                if let Some(_index) = env.name_in_scope(current_index, *name) {
-                    value.build_graph(d, env, b)?;
-                    Ok(())
+                if let Some(_index) = env.name_in_scope(current_index, name) {
+                    let value = value.build_graph(d, env, b)?;
+                    Ok(b.ir_set(name, value, select))
                 } else {
                     d.push_diagnostic(error(
                         &format!("Set undefined variable: {:?}", b.strings.resolve(&name)),
@@ -787,97 +794,115 @@ impl IRNode {
                 }
             }
 
-            IRKind::Decl(name, ty, _mem) => {
+            IRKind::Decl(name, ref ty, _mem) => {
                 let current_block = env.current_block();
-                let index = env.add_definition(current_block, *name);
+                let index = env.add_definition(current_block, name);
                 env.set_type(index, ty.clone(), VarDefinitionSpace::default());
-                Ok(())
+                Ok(self)
             }
 
-            IRKind::Call(_name, _args) => Ok(()),
+            IRKind::Call(_name, ref _args) => Ok(self),
 
-            IRKind::Func(blocks, _ret_type) => {
+            IRKind::Func(blocks, ret_type) => {
                 let current_block = env.current_block();
                 let mut seq = vec![];
-                for (i, block) in blocks.into_iter().enumerate() {
+                for (i, mut block) in blocks.into_iter().enumerate() {
                     let block_index = env.add_block(block.name, block.params.clone(), d);
+                    block.index = block_index;
                     if 0 == i {
                         env.g.add_edge(current_block, block_index, ());
                     }
-                    seq.push((block_index, block));
+                    seq.push(block);
                 }
 
-                for (block_index, block) in seq {
-                    env.enter_block(block_index, self.span.clone());
-                    for child in &block.children {
-                        child.build_graph(d, env, b)?;
+                let mut blocks = vec![];
+                for mut block in seq {
+                    env.enter_block(block.index, self.span.clone());
+                    let mut children = vec![];
+                    for child in block.children {
+                        children.push(child.build_graph(d, env, b)?);
                     }
                     env.exit_block();
+                    block.children = children;
+                    blocks.push(block);
                 }
-                Ok(())
+                Ok(IRNode {
+                    kind: IRKind::Func(blocks, ret_type),
+                    span,
+                })
             }
 
-            IRKind::Block(block) => {
+            IRKind::Block(mut block) => {
+                //let span = self.get_span().clone();
                 let block_index = env.add_block(block.name, block.params.clone(), d);
-                env.enter_block(block_index, self.get_span());
+                block.index = block_index;
+                env.enter_block(block_index, span.clone());
                 if let Some(last_block) = env.stack.last() {
                     if last_block.0 != block_index {
                         env.g.add_edge(last_block.0, block_index, ());
                     }
                 }
 
-                for (_i, child) in block.children.iter().enumerate() {
-                    child.build_graph(d, env, b)?;
+                let mut children = vec![];
+                for (_i, child) in block.children.into_iter().enumerate() {
+                    children.push(child.build_graph(d, env, b)?);
                 }
                 env.exit_block();
-                Ok(())
+                block.children = children;
+                Ok(IRNode {
+                    kind: IRKind::Block(block),
+                    span,
+                })
             }
 
-            IRKind::Literal(_lit) => Ok(()),
+            IRKind::Literal(ref _lit) => Ok(self),
 
-            IRKind::Builtin(_bi, _args) => Ok(()),
+            IRKind::Builtin(ref _bi, ref _args) => Ok(self),
 
             IRKind::Branch(condition, then_key, else_key) => {
-                condition.build_graph(d, env, b)?;
+                let condition = condition.build_graph(d, env, b)?;
                 let current_block = env.current_block();
-                let then_block = env.lookup_block(*then_key).unwrap();
+                let then_block = env.lookup_block(then_key).unwrap();
                 env.g.add_edge(current_block, then_block, ());
-                let else_block = env.lookup_block(*else_key).unwrap();
+                let else_block = env.lookup_block(else_key).unwrap();
                 env.g.add_edge(current_block, else_block, ());
-                Ok(())
+                Ok(b.ir_branch(condition, then_key, else_key))
             }
 
             IRKind::Cond(condition, then_expr, maybe_else_expr) => {
-                condition.build_graph(d, env, b)?;
+                let condition = condition.build_graph(d, env, b)?;
                 let current_block = env.current_block();
 
                 let next_block = env.add_block(b.s("next"), vec![], d);
 
                 let then_block = env.add_block(b.s("then"), vec![], d);
                 //let then_term = then_expr.kind.terminator();
-                then_expr.build_graph(d, env, b)?;
+                let then_expr = then_expr.build_graph(d, env, b)?;
                 env.g.add_edge(current_block, then_block, ());
                 env.g.add_edge(then_block, next_block, ());
-                if let Some(else_expr) = maybe_else_expr {
+                let maybe_else_expr = if let Some(else_expr) = maybe_else_expr {
                     let else_block = env.add_block(b.s("else"), vec![], d);
                     env.enter_block(else_block, else_expr.span.clone());
-                    else_expr.build_graph(d, env, b)?;
+                    let else_expr = else_expr.build_graph(d, env, b)?;
                     env.exit_block();
                     env.g.add_edge(current_block, else_block, ());
                     env.g.add_edge(else_block, next_block, ());
+                    Some(else_expr)
+                } else {
+                    None
                 };
-                Ok(())
+                Ok(b.ir_cond(condition, then_expr, maybe_else_expr))
             }
 
-            IRKind::Op1(_op, a) => {
-                a.build_graph(d, env, b)?;
-                Ok(())
+            IRKind::Op1(op, a) => {
+                let a = a.build_graph(d, env, b)?;
+                Ok(b.ir_op1(op, a))
             }
 
-            IRKind::Op2(_op_node, x, y) => {
-                x.build_graph(d, env, b)?;
-                y.build_graph(d, env, b)?;
-                Ok(())
+            IRKind::Op2(op_node, x, y) => {
+                let x = x.build_graph(d, env, b)?;
+                let y = y.build_graph(d, env, b)?;
+                Ok(b.ir_op2(op_node, x, y))
             }
         }
     }

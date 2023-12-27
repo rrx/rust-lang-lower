@@ -14,7 +14,8 @@ use starlark_syntax::syntax::module::AstModuleFields;
 use lower::ast;
 use lower::ast::{Ast, AstNode, CodeLocation, Extra};
 use lower::{
-    AstType, Diagnostics, LinkOptions, Module, NodeBuilder, ParseError, StringKey, TypeUnify,
+    AstType, CFGBlocks, Diagnostics, LinkOptions, Module, NodeBuilder, ParseError, StringKey,
+    TypeBuilder, TypeUnify,
 };
 
 #[derive(Debug, Clone)]
@@ -580,6 +581,7 @@ impl<E: Extra> StarlarkParser<E> {
             ir.dump(&b, 0);
         }
         assert_eq!(1, env.stack_size());
+        let root = env.root();
 
         // Analyze
         //let mut g = IRGraph::new();
@@ -590,7 +592,7 @@ impl<E: Extra> StarlarkParser<E> {
         }
         let r = ir.build_graph(d, &mut env, b);
         d.dump();
-        r?;
+        let ir = r?;
 
         if verbose {
             env.save_graph("out.dot", b);
@@ -598,16 +600,19 @@ impl<E: Extra> StarlarkParser<E> {
 
         // lower to mlir
         use lower::cfg::{CFGGraph, CFG};
+        let mut types = TypeBuilder::new();
+        let mut blocks = CFGBlocks::new(root, env.g);
         let mut cfg_g = CFGGraph::new();
-        let mut cfg: CFG<E> = CFG::new(env.g);
+        let mut cfg: CFG<E> = CFG::new();
         //context, b.s("module"), env.g, d);
-        cfg.add_block_ir(context, b.s("module"), &[], d, &mut cfg_g);
+        blocks.add_block_ir(context, root, b.s("module"), &[], &mut types, d, &mut cfg_g);
 
-        let mut stack = vec![cfg.root()];
+        let mut stack = vec![blocks.root()];
         let r = ir.lower_mlir(
             context,
             d,
-            &mut cfg,
+            &mut types,
+            &mut blocks,
             &mut stack,
             &mut cfg_g,
             b,
@@ -620,7 +625,8 @@ impl<E: Extra> StarlarkParser<E> {
         //env.save_graph("out.dot", b);
         //}
 
-        let data = cfg_g.node_weight_mut(cfg.root()).unwrap();
+        //let data = cfg_g.node_weight_mut(blocks.root()).unwrap();
+        let data = blocks.get_mut(&blocks.root()).unwrap();
         for op in data.take_ops() {
             module.body().append_operation(op);
         }

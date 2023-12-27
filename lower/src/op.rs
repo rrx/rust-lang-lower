@@ -17,8 +17,8 @@ use crate::ir::{
     IRNode,
 };
 use crate::{
-    Ast, AstNode, AstType, Diagnostics, Extra, LinkOptions, Literal, NodeBuilder, NodeIndex,
-    ParseError, StringKey,
+    Ast, AstNode, AstType, CFGBlocks, Diagnostics, Extra, LinkOptions, Literal, NodeBuilder,
+    NodeIndex, ParseError, StringKey, TypeBuilder,
 };
 
 use anyhow::Error;
@@ -156,7 +156,8 @@ pub fn emit_binop<'c, E: Extra>(
     y: IRNode,
     location: Location<'c>,
     d: &mut Diagnostics,
-    cfg: &mut CFG<E>,
+    types: &mut TypeBuilder,
+    blocks: &mut CFGBlocks<'c>,
     stack: &mut Vec<NodeIndex>,
     //g: &mut IRGraph,
     cfg_g: &mut CFGGraph<'c>,
@@ -169,20 +170,18 @@ pub fn emit_binop<'c, E: Extra>(
     let y_extra = E::span(y.get_span());
     let x_location = x.location(context, d);
     let y_location = x.location(context, d);
-    let index_x = x.lower_mlir(context, d, cfg, stack, cfg_g, b, link)?;
-    let index_y = y.lower_mlir(context, d, cfg, stack, cfg_g, b, link)?;
+    let index_x = x.lower_mlir(context, d, types, blocks, stack, cfg_g, b, link)?;
+    let index_y = y.lower_mlir(context, d, types, blocks, stack, cfg_g, b, link)?;
 
     //cfg.save_graph("out.dot", g);
     //println!("ix: {:?}, {}", index_x, fx);
     //println!("iy: {:?}, {}", index_y, fy);
 
-    let (_ty_x, mem_x) = cfg
-        .types
+    let (_ty_x, mem_x) = types
         .lookup_type(index_x)
         .expect(&format!("missing type for {:?}, {}", index_x, fx));
 
-    let (_ty_y, mem_y) = cfg
-        .types
+    let (_ty_y, mem_y) = types
         .lookup_type(index_y)
         .expect(&format!("missing type for {:?}, {}", index_y, fy));
 
@@ -194,7 +193,7 @@ pub fn emit_binop<'c, E: Extra>(
 
     let index_x = if mem_x.requires_deref() {
         let target = DerefTarget::Offset(0);
-        let index = emit_deref(context, index_x, x_location, target, d, cfg, stack, cfg_g)?;
+        let index = emit_deref(index_x, x_location, target, d, types, blocks, stack, cfg_g)?;
         index
     } else {
         index_x
@@ -202,7 +201,7 @@ pub fn emit_binop<'c, E: Extra>(
 
     let index_y = if mem_y.requires_deref() {
         let target = DerefTarget::Offset(0);
-        let index = emit_deref(context, index_y, y_location, target, d, cfg, stack, cfg_g)?;
+        let index = emit_deref(index_y, y_location, target, d, types, blocks, stack, cfg_g)?;
         index
     } else {
         index_y
@@ -212,38 +211,46 @@ pub fn emit_binop<'c, E: Extra>(
     //println!("{:?}", current);
 
     // types must be the same for binary operation, no implicit casting yet
-    let a = values_in_scope(cfg_g, index_x)[0];
-    let b = values_in_scope(cfg_g, index_y)[0];
+    let data = blocks.get(&index_x.block()).unwrap();
+    let a = data.values(index_x)[0];
+    //let a = values_in_scope(blocks, cfg_g, index_x)[0];
+    //let b = values_in_scope(blocks, cfg_g, index_y)[0];
+    let data = blocks.get(&index_y.block()).unwrap();
+    let b = data.values(index_y)[0];
     let (op, ast_ty) = build_binop(context, op, a, &x_extra, b, &y_extra, location, d)?;
-    let current = cfg_g.node_weight_mut(current_block).unwrap();
+    //let current = cfg_g.node_weight_mut(current_block).unwrap();
+    let current = blocks.get_mut(&current_block).unwrap();
     let index = current.push(op);
-    cfg.types.set_type(index, ast_ty, VarDefinitionSpace::Reg);
+    types.set_type(index, ast_ty, VarDefinitionSpace::Reg);
     Ok(index)
 }
 
-pub fn emit_deref<'c, E: Extra>(
-    _context: &'c Context,
+pub fn emit_deref<'c>(
     index: SymIndex,
     location: Location<'c>,
     _target: DerefTarget,
     _d: &mut Diagnostics,
-    cfg: &mut CFG<E>,
+    types: &mut TypeBuilder,
+    blocks: &mut CFGBlocks<'c>,
     stack: &mut Vec<NodeIndex>,
     cfg_g: &mut CFGGraph<'c>,
 ) -> Result<SymIndex> {
     // we are expecting a memref here
     let current_block = stack.last().unwrap().clone();
-    let (ty, mem) = cfg.types.lookup_type(index).unwrap();
+    let (ty, mem) = types.lookup_type(index).unwrap();
 
     // ensure proper type
     if mem.requires_deref() {
         //if let AstType::Ptr(ast_ty) = &ty {
         //let location = extra.location(context, d);
-        let r = values_in_scope(cfg_g, index)[0];
+        //let r = values_in_scope(blocks, cfg_g, index)[0];
+        let data = blocks.get(&index.block()).unwrap();
+        let r = data.values(index)[0];
         let op = memref::load(r, &[], location);
-        let current = cfg_g.node_weight_mut(current_block).unwrap();
+        //let current = cfg_g.node_weight_mut(current_block).unwrap();
+        let current = blocks.get_mut(&current_block).unwrap();
         let index = current.push(op);
-        cfg.types.set_type(index, ty, mem);
+        types.set_type(index, ty, mem);
         Ok(index)
     } else {
         Ok(index)
@@ -261,7 +268,8 @@ pub fn emit_set_alloca<'c, E: Extra>(
     expr: IRNode,
     location: Location<'c>,
     block_index: NodeIndex,
-    cfg: &mut CFG<E>,
+    types: &mut TypeBuilder,
+    blocks: &mut CFGBlocks<'c>,
     stack: &mut Vec<NodeIndex>,
     //g: &mut IRGraph,
     cfg_g: &mut CFGGraph<'c>,
@@ -272,7 +280,7 @@ pub fn emit_set_alloca<'c, E: Extra>(
     log::debug!("assign alloca: {}", b.strings.resolve(&name));
     expr.dump(b, 0);
 
-    let rhs_index = expr.lower_mlir(context, d, cfg, stack, cfg_g, b, link)?;
+    let rhs_index = expr.lower_mlir(context, d, types, blocks, stack, cfg_g, b, link)?;
     //let ty = IntegerType::new(context, 64);
     //let memref_ty = MemRefType::new(ty.into(), &[], None, None);
     //let op = memref::alloca(context, memref_ty, &[], &[], None, location);
@@ -282,27 +290,30 @@ pub fn emit_set_alloca<'c, E: Extra>(
     //let ast_ty = cfg.lookup_type(rhs_index).unwrap().to_ptr();
     //let ptr_ty = AstType::Ptr(ast_ty.into());
     //cfg.set_type(ptr_index, ast_ty);
-    println!("ty_lhs: {:?}", cfg.types.lookup_type(sym_index));
-    println!("ty_rhs: {:?}", cfg.types.lookup_type(rhs_index));
+    println!("ty_lhs: {:?}", types.lookup_type(sym_index));
+    println!("ty_rhs: {:?}", types.lookup_type(rhs_index));
     println!("rhs: {:?}", (rhs_index));
     println!("lhs: {:?}", (sym_index));
     println!("rhs: {:?}", (rhs_index));
-    cfg.dump_scope(block_index, cfg_g, b);
-    cfg.save_graph("out.dot", cfg_g, b);
+    blocks.dump_scope(block_index, cfg_g, b);
+    blocks.save_graph("out.dot", cfg_g, b);
 
-    let is_symbol_static = sym_index.block() == cfg.root();
+    let is_symbol_static = sym_index.block() == blocks.root();
 
     let addr_index = if is_symbol_static {
-        let (lhs_ty, _lhs_mem) = cfg.types.lookup_type(sym_index).unwrap();
-        let (_rhs_ty, _rhs_mem) = cfg.types.lookup_type(rhs_index).unwrap();
+        let (lhs_ty, _lhs_mem) = types.lookup_type(sym_index).unwrap();
+        let (_rhs_ty, _rhs_mem) = types.lookup_type(rhs_index).unwrap();
 
         let lower_ty = from_type(context, &lhs_ty);
         let memref_ty = MemRefType::new(lower_ty, &[], None, None);
-        let static_name = b
-            .strings
-            .resolve(&cfg.static_names.get(&sym_index).cloned().unwrap_or(name));
+        let static_name = b.strings.resolve(&name);
+        // TODO: FIXME
+        //let static_name = b
+        //.strings
+        //.resolve(&cfg.static_names.get(&sym_index).cloned().unwrap_or(name));
         let op = memref::get_global(context, &static_name, memref_ty, location);
-        let current = cfg_g.node_weight_mut(block_index).unwrap();
+        //let current = cfg_g.node_weight_mut(block_index).unwrap();
+        let current = blocks.get_mut(&block_index).unwrap();
         let addr_index = current.push(op);
         addr_index
         //let r_addr = current.value0(addr_index).unwrap();
@@ -312,15 +323,16 @@ pub fn emit_set_alloca<'c, E: Extra>(
         //values_in_scope(cfg_g, sym_index)[0]
     };
 
-    let r_value = values_in_scope(cfg_g, rhs_index)[0];
-    let r_addr = values_in_scope(cfg_g, addr_index)[0];
+    let r_value = values_in_scope(blocks, cfg_g, rhs_index)[0];
+    let r_addr = values_in_scope(blocks, cfg_g, addr_index)[0];
     //let r_value = current.value0(rhs_index).unwrap();
     //let r_addr = current.value0(sym_index).unwrap();
 
     // emit store
     // store(value, memref)
     let op = memref::store(r_value, r_addr, &[], location);
-    let current = cfg_g.node_weight_mut(block_index).unwrap();
+    //let current = cfg_g.node_weight_mut(block_index).unwrap();
+    let current = blocks.get_mut(&block_index).unwrap();
     let _index = current.push(op);
     println!("current: {:?}", current);
     Ok(sym_index)
@@ -330,10 +342,12 @@ pub fn emit_noop<'c>(
     context: &'c Context,
     location: Location<'c>,
     block_index: NodeIndex,
+    blocks: &mut CFGBlocks<'c>,
     cfg_g: &mut CFGGraph<'c>,
 ) -> Result<SymIndex> {
     let op = build_bool_op(context, false, location);
-    let current = cfg_g.node_weight_mut(block_index).unwrap();
+    //let current = cfg_g.node_weight_mut(block_index).unwrap();
+    let current = blocks.blocks.get_mut(&block_index).unwrap();
     Ok(current.push(op))
 }
 
@@ -342,7 +356,8 @@ pub fn emit_set_function<'c, E: Extra>(
     sym_index: SymIndex,
     expr: IRNode,
     current_block: NodeIndex,
-    cfg: &mut CFG<E>,
+    types: &mut TypeBuilder,
+    blocks: &mut CFGBlocks<'c>,
     stack: &mut Vec<NodeIndex>,
     //g: &mut IRGraph,
     cfg_g: &mut CFGGraph<'c>,
@@ -351,14 +366,22 @@ pub fn emit_set_function<'c, E: Extra>(
     link: &mut LinkOptions,
 ) -> Result<SymIndex> {
     match expr.kind {
-        IRKind::Func(blocks, _ast_ty) => {
+        IRKind::Func(func_blocks, _ast_ty) => {
             let mut block_seq = vec![];
 
             // create blocks, so they can be referenced when lowering
-            for (i, block) in blocks.into_iter().enumerate() {
-                let block_index = cfg.add_block_ir(context, block.name, &block.params, d, cfg_g);
+            for (i, block) in func_blocks.into_iter().enumerate() {
+                let block_index = blocks.add_block_ir(
+                    context,
+                    block.index,
+                    block.name,
+                    &block.params,
+                    types,
+                    d,
+                    cfg_g,
+                );
                 if 0 == i {
-                    cfg_g.add_edge(current_block, block_index, ());
+                    //cfg_g.add_edge(current_block, block_index, ());
                 }
                 block_seq.push((block, block_index));
             }
@@ -371,13 +394,13 @@ pub fn emit_set_function<'c, E: Extra>(
                 let term = block.terminator().unwrap();
                 match term {
                     Terminator::Jump(label) => {
-                        let target_block = cfg.block_index(&label).unwrap();
-                        cfg_g.add_edge(block_index, target_block, ());
+                        let target_block = blocks.block_index(&label).unwrap();
+                        //cfg_g.add_edge(block_index, target_block, ());
                     }
                     Terminator::Branch(a, b) => {
                         for key in &[a, b] {
-                            let target_block = cfg.block_index(&key).unwrap();
-                            cfg_g.add_edge(block_index, target_block, ());
+                            let target_block = blocks.block_index(&key).unwrap();
+                            //cfg_g.add_edge(block_index, target_block, ());
                         }
                     }
                     Terminator::Return => (),
@@ -385,7 +408,9 @@ pub fn emit_set_function<'c, E: Extra>(
 
                 for c in block.children.into_iter() {
                     stack.push(block_index);
-                    if let Ok(_index) = c.lower_mlir(context, d, cfg, stack, cfg_g, b, link) {
+                    if let Ok(_index) =
+                        c.lower_mlir(context, d, types, blocks, stack, cfg_g, b, link)
+                    {
                         stack.pop();
                     } else {
                         stack.pop();
@@ -396,13 +421,15 @@ pub fn emit_set_function<'c, E: Extra>(
 
             // build region and add it to the declared function
             for block_index in block_indicies {
-                let block = cfg.take_block(block_index, cfg_g);
-                let current = cfg_g.node_weight_mut(current_block).unwrap();
+                let block = blocks.take_block(block_index, cfg_g);
+                //let current = cfg_g.node_weight_mut(current_block).unwrap();
+                let current = blocks.get_mut(&current_block).unwrap();
                 let op = current.op_ref(sym_index);
                 op.region(0).unwrap().append_block(block);
             }
 
-            let current = cfg_g.node_weight_mut(current_block).unwrap();
+            //let current = cfg_g.node_weight_mut(current_block).unwrap();
+            let current = blocks.get_mut(&current_block).unwrap();
             let op = current.op_ref(sym_index);
             op.set_attribute("llvm.emit_c_interface", &Attribute::unit(context));
 
@@ -419,14 +446,14 @@ pub fn emit_set_static<'c, E: Extra>(
     expr: IRNode,
     //location: Location<'c>,
     block_index: NodeIndex,
-    cfg: &mut CFG<E>,
+    blocks: &mut CFGBlocks<'c>,
     cfg_g: &mut CFGGraph<'c>,
     _d: &mut Diagnostics,
     b: &mut NodeBuilder<E>,
 ) -> Result<SymIndex> {
-    let is_symbol_static = sym_index.block() == cfg.root();
+    let is_symbol_static = sym_index.block() == blocks.root();
     assert!(is_symbol_static);
-    let is_current_static = block_index == cfg.root();
+    let is_current_static = block_index == blocks.root();
     // TODO: this needs to be cleaned up, only works for setting initial values on static variables
     assert!(is_current_static);
 
@@ -453,13 +480,15 @@ pub fn emit_set_static<'c, E: Extra>(
     let attribute =
         DenseElementsAttribute::new(RankedTensorType::new(&[], ty, None).into(), &[value]).unwrap();
 
-    let current = cfg_g.node_weight_mut(block_index).unwrap();
+    //let current = cfg_g.node_weight_mut(block_index).unwrap();
+    let current = blocks.blocks.get_mut(&block_index).unwrap();
     let op = current.op_ref(sym_index);
     op.set_attribute("initial_value", &attribute.into());
     if !is_current_static {
         // STATIC VARIABLE IN FUNCTION CONTEXT
-        cfg.static_names
-            .insert(sym_index, b.strings.intern(global_name.clone()));
+        // TODO: FIXME
+        //cfg.static_names
+        //.insert(sym_index, b.strings.intern(global_name.clone()));
     }
     Ok(sym_index)
 }
@@ -470,12 +499,13 @@ pub fn emit_declare_function<'c, E: Extra>(
     ast_ty: AstType,
     location: Location<'c>,
     block_index: NodeIndex,
-    cfg: &mut CFG<E>,
+    types: &mut TypeBuilder,
+    blocks: &mut CFGBlocks<'c>,
     cfg_g: &mut CFGGraph<'c>,
     b: &NodeBuilder<E>,
 ) -> Result<SymIndex> {
     if let AstType::Func(params, ast_ret_type) = ast_ty.clone() {
-        let mut types = vec![];
+        let mut type_list = vec![];
         let mut ast_types = vec![];
         //let ast_ret_type = def.return_type;
 
@@ -485,7 +515,7 @@ pub fn emit_declare_function<'c, E: Extra>(
         )];
 
         for ty in params {
-            types.push(from_type(context, &ty));
+            type_list.push(from_type(context, &ty));
             ast_types.push(ty.clone());
         }
 
@@ -497,7 +527,7 @@ pub fn emit_declare_function<'c, E: Extra>(
             vec![from_type(context, &ast_ret_type)]
         };
 
-        let func_type = FunctionType::new(context, &types, &ret_type);
+        let func_type = FunctionType::new(context, &type_list, &ret_type);
         let op = func::func(
             context,
             StringAttribute::new(context, b.strings.resolve(&key)),
@@ -507,11 +537,11 @@ pub fn emit_declare_function<'c, E: Extra>(
             location,
         );
 
-        let function_block = cfg_g.node_weight_mut(block_index).unwrap();
+        //let function_block = cfg_g.node_weight_mut(block_index).unwrap();
+        let function_block = blocks.blocks.get_mut(&block_index).unwrap();
         let index = function_block.push(op);
         function_block.add_symbol(key, index);
-        cfg.types
-            .set_type(index, ast_ty, VarDefinitionSpace::Static);
+        types.set_type(index, ast_ty, VarDefinitionSpace::Static);
 
         //if let Some(entry_block) = entry_block {
         //let data = g.node_weight_mut(entry_block).unwrap();
@@ -530,7 +560,8 @@ pub fn emit_declare_static<'c, E: Extra>(
     ast_ty: AstType,
     location: Location<'c>,
     block_index: NodeIndex,
-    cfg: &mut CFG<E>,
+    types: &mut TypeBuilder,
+    blocks: &mut CFGBlocks<'c>,
     cfg_g: &mut CFGGraph<'c>,
     b: &NodeBuilder<E>,
 ) -> Result<SymIndex> {
@@ -553,10 +584,10 @@ pub fn emit_declare_static<'c, E: Extra>(
         location,
     );
 
-    let current = cfg_g.node_weight_mut(block_index).unwrap();
+    //let current = cfg_g.node_weight_mut(block_index).unwrap();
+    let current = blocks.blocks.get_mut(&block_index).unwrap();
     let index = current.push_with_name(op, name);
-    cfg.types
-        .set_type(index, ast_ty, VarDefinitionSpace::Static);
+    types.set_type(index, ast_ty, VarDefinitionSpace::Static);
     Ok(index)
 }
 
