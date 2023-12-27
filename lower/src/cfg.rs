@@ -255,13 +255,15 @@ pub fn values_in_scope<'c, 'a>(g: &'a CFGGraph<'c>, sym_index: SymIndex) -> Vec<
 }
 
 pub struct CFG<E> {
-    //context: &'c Context,
     root: NodeIndex,
-    //index_count: usize,
     block_names: HashMap<StringKey, NodeIndex>,
     block_names_index: HashMap<NodeIndex, StringKey>,
     pub(crate) types: TypeBuilder,
+
+    // track local static variables
+    // local static variables have global static names
     pub(crate) static_names: HashMap<SymIndex, StringKey>,
+
     _e: std::marker::PhantomData<E>,
 }
 
@@ -273,17 +275,13 @@ impl<'c, E: Extra> CFG<E> {
         g: &mut CFGGraph<'c>,
     ) -> Self {
         let mut cfg = Self {
-            // dummy
-            //context,
             root: NodeIndex::new(0),
-            //index_count: 0,
             block_names: HashMap::new(),
             block_names_index: HashMap::new(),
             types: TypeBuilder::new(),
             static_names: HashMap::new(),
             _e: std::marker::PhantomData::default(),
         };
-        //cfg.add_block(context, module_name, &[], d, g);
         cfg.add_block_ir(context, module_name, &[], d, g);
         cfg
     }

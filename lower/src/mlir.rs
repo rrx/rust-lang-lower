@@ -158,43 +158,14 @@ impl IRNode {
                 let is_current_static = current_block == cfg.root();
                 if let Some(sym_index) = cfg.name_in_scope(current_block, name, cfg_g) {
                     let is_symbol_static = sym_index.block() == cfg.root();
-                    if is_symbol_static {
-                        if is_current_static {
-                            println!("expr: {:?}", expr);
-                            expr.dump(b, 0);
-                            match expr.kind {
-                                IRKind::Func(_, _) => op::emit_set_function(
-                                    context,
-                                    sym_index,
-                                    *expr,
-                                    current_block,
-                                    cfg,
-                                    stack,
-                                    cfg_g,
-                                    d,
-                                    b,
-                                    link,
-                                ),
-                                _ => op::emit_set_static(
-                                    context,
-                                    sym_index,
-                                    name,
-                                    *expr,
-                                    //location,
-                                    current_block,
-                                    cfg,
-                                    cfg_g,
-                                    d,
-                                    b,
-                                ),
-                            }
-                        } else {
-                            op::emit_set_alloca(
+                    if is_symbol_static && is_current_static {
+                        println!("expr: {:?}", expr);
+                        expr.dump(b, 0);
+                        match expr.kind {
+                            IRKind::Func(_, _) => op::emit_set_function(
                                 context,
                                 sym_index,
-                                name,
                                 *expr,
-                                location,
                                 current_block,
                                 cfg,
                                 stack,
@@ -202,11 +173,21 @@ impl IRNode {
                                 d,
                                 b,
                                 link,
-                            )
+                            ),
+                            _ => op::emit_set_static(
+                                context,
+                                sym_index,
+                                name,
+                                *expr,
+                                //location,
+                                current_block,
+                                cfg,
+                                cfg_g,
+                                d,
+                                b,
+                            ),
                         }
                     } else {
-                        //let block = cfg_g.node_weight_mut(sym_index.block()).unwrap();
-                        //block.add_symbol(name, sym_index);
                         op::emit_set_alloca(
                             context,
                             sym_index,
@@ -340,24 +321,7 @@ impl IRNode {
             IRKind::Get(name, _select) => {
                 let current_block = stack.last().unwrap().clone();
                 let span = self.span.clone();
-                //let s = b.strings.resolve(&name);
-                //if let Some((op, ty)) = op::build_reserved(context, &s, location) {
-                //let current = cfg_g.node_weight_mut(current_block).unwrap();
-                //let index = current.push(op);
-                //cfg.set_type(index, ty, VarDefinitionSpace::Reg);
-                //Ok(index)
-                //} else {
-                //println!("lookup: {}, {:?}", b.strings.resolve(&name), current_block);
-
-                //cfg.save_graph("out.dot", cfg_g, b);
-                //cfg.dump_scope(current_block, cfg_g, b);
-
                 if let Some(sym_index) = cfg.name_in_scope(current_block, name, cfg_g) {
-                    //println!(
-                    //"lookup identifier: {}, {:?}",
-                    //b.strings.resolve(&name),
-                    //sym_index
-                    //);
                     if cfg.block_is_static(sym_index.block()) {
                         let (ast_ty, mem) = cfg.types.lookup_type(sym_index).unwrap();
 
@@ -373,7 +337,6 @@ impl IRNode {
                             let r_addr = current.value0(addr_index).unwrap();
                             let op = memref::load(r_addr, &[], location);
                             let value_index = current.push(op);
-                            //current.add_symbol(name, value_index);
                             cfg.types
                                 .set_type(value_index, ast_ty, VarDefinitionSpace::Reg);
                             return Ok(value_index);
@@ -382,14 +345,10 @@ impl IRNode {
                         let (ast_ty, mem) = cfg.types.lookup_type(sym_index).unwrap();
 
                         if mem.requires_deref() {
-                            //let lower_ty = op::from_type(context, &ast_ty);
-                            //let memref_ty = MemRefType::new(lower_ty, &[], None, None);
                             let r_addr = values_in_scope(cfg_g, sym_index)[0];
-                            //let r_addr = current.value0(sym_index).unwrap();
                             let op = memref::load(r_addr, &[], location);
                             let current = cfg_g.node_weight_mut(current_block).unwrap();
                             let value_index = current.push(op);
-                            //current.add_symbol(name, value_index);
                             cfg.types
                                 .set_type(value_index, ast_ty, VarDefinitionSpace::Reg);
                             return Ok(value_index);
@@ -490,7 +449,6 @@ impl IRNode {
                         let arg = args.pop().unwrap();
                         if let Some(s) = arg.try_string() {
                             link.add_library(&s);
-                            //cfg.shared.insert(s);
                         } else {
                             d.push_diagnostic(ir::error("Expected string", self.span));
                         }
@@ -516,15 +474,12 @@ impl IRNode {
                         // deref
                         if mem.requires_deref() {
                             let target = DerefTarget::Offset(0);
-                            //unimplemented!();
                             index = op::emit_deref(
                                 context, index, location, target, d, cfg, stack, cfg_g,
                             )?;
                         }
 
                         let r = values_in_scope(cfg_g, index)[0];
-
-                        //let r = current.value0(index).unwrap();
                         let ty = r.r#type();
 
                         // Select the baked version based on parameters
