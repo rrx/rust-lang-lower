@@ -65,13 +65,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let location = lower::Location::unknown(&context);
     let mut module = lower::Module::new(location);
-    //let mut parser: Parser<SimpleExtra> = Parser::new();
     let mut p: StarlarkParser<SimpleExtra> = StarlarkParser::new();
     let mut d = Diagnostics::new();
-    //let mut link = LinkOptions::new();
-    //let mut cfg_g = CFGGraph::new();
     let mut b: NodeBuilder<SimpleExtra> = NodeBuilder::new();
-    //let mut cfg: CFG<SimpleExtra> = CFG::new(&context, b.s("module"), &d, &mut cfg_g);
 
     for filename in config.inputs {
         p.parse_module(
@@ -80,7 +76,6 @@ fn main() -> Result<(), Box<dyn Error>> {
             &mut module,
             &mut b,
             &mut d,
-            //&mut link,
             config.verbose,
         )?;
     }
@@ -91,15 +86,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     assert!(module.as_operation().verify());
 
-    /*
-    if config.lower {
-        cfg.module(&context, &mut module, &mut cfg_g);
-        if config.verbose {
-            module.as_operation().dump();
-        }
-    }
-
-    */
     if let Some(out_filename) = config.output {
         let mut output = File::create(out_filename)?;
         let s = module.as_operation().to_string();

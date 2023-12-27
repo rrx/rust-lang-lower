@@ -401,6 +401,7 @@ impl<E: Extra> AstNode<E> {
         }
     }
 
+    /*
     pub fn to_blocks(self) -> Vec<NodeBlock<E>> {
         //let mut out = vec![];
         for expr in self.to_vec() {
@@ -422,6 +423,7 @@ impl<E: Extra> AstNode<E> {
         //out
         vec![]
     }
+    */
 
     pub fn children_mut<'a>(&'a mut self) -> AstNodeIterator<'a, E> {
         let mut values = vec![];

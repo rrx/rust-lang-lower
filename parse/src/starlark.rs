@@ -530,7 +530,6 @@ impl<E: Extra> Parser<E> {
 #[derive(Default)]
 pub struct StarlarkParser<E> {
     _e: std::marker::PhantomData<E>,
-    //shared: HashSet<String>,
     link: LinkOptions,
 }
 
@@ -539,7 +538,6 @@ impl<E: Extra> StarlarkParser<E> {
         Self {
             _e: std::marker::PhantomData::default(),
             link: LinkOptions::new(),
-            //shared: HashSet::new(),
         }
     }
 
@@ -550,7 +548,6 @@ impl<E: Extra> StarlarkParser<E> {
         module: &mut Module<'c>,
         b: &mut NodeBuilder<E>,
         d: &mut Diagnostics,
-        //link: &mut LinkOptions,
         verbose: bool,
     ) -> Result<()> {
         log::debug!("parsing: {}", filename);
@@ -622,10 +619,6 @@ impl<E: Extra> StarlarkParser<E> {
         for op in data.take_ops() {
             module.body().append_operation(op);
         }
-
-        //for shared in link.shared_libraries() {
-        //self.shared.insert(shared);
-        //}
         Ok(())
     }
 
@@ -633,14 +626,10 @@ impl<E: Extra> StarlarkParser<E> {
         &self,
         context: &lower::Context,
         module: &mut Module,
-        //link: &LinkOptions,
         libpath: &str,
         verbose: bool,
     ) -> i32 {
-        use lower::compile::exec_main;
-
         // lower mlir to llvmir
-        //cfg.lower_module_llvmir(context, module, verbose);
         if verbose {
             println!(
                 "lowered {}",
@@ -651,7 +640,6 @@ impl<E: Extra> StarlarkParser<E> {
             );
         }
 
-        //println!("module: {:?}", module);
         let pass_manager = lower::default_pass_manager(context);
         pass_manager.run(module).unwrap();
         assert!(module.as_operation().verify());
@@ -666,6 +654,7 @@ impl<E: Extra> StarlarkParser<E> {
             );
         }
 
+        use lower::compile::exec_main;
         exec_main(&self.link.shared_libraries(), module, libpath)
     }
 }
@@ -682,7 +671,6 @@ pub(crate) mod tests {
         let mut b = NodeBuilder::new();
         let context = lower::default_context();
         let mut d = Diagnostics::new();
-        //let mut link = LinkOptions::new();
         let mut module = Module::new(Location::unknown(&context));
         p.parse_module(filename, &context, &mut module, &mut b, &mut d, true)
             .unwrap();
