@@ -271,7 +271,6 @@ pub struct CFG<'c, E> {
     index_count: usize,
     block_names: HashMap<StringKey, NodeIndex>,
     block_names_index: HashMap<NodeIndex, StringKey>,
-    //types: HashMap<SymIndex, (AstType, VarDefinitionSpace)>,
     pub(crate) types: TypeBuilder,
     pub(crate) static_names: HashMap<SymIndex, StringKey>,
     _e: std::marker::PhantomData<E>,
@@ -292,35 +291,17 @@ impl<'c, E: Extra> CFG<'c, E> {
             block_names: HashMap::new(),
             block_names_index: HashMap::new(),
             types: TypeBuilder::new(),
-            //types: HashMap::new(),
             static_names: HashMap::new(),
-            //shared: HashSet::new(),
             _e: std::marker::PhantomData::default(),
         };
-        cfg.add_block(context, module_name, &[], d, g);
+        //cfg.add_block(context, module_name, &[], d, g);
+        cfg.add_block_ir(context, module_name, &[], d, g);
         cfg
     }
-
-    /*
-    pub fn lookup_type(&self, index: SymIndex) -> Option<(AstType, VarDefinitionSpace)> {
-        self.types.get(&index).cloned()
-    }
-
-    pub fn set_type(&mut self, index: SymIndex, ty: AstType, mem: VarDefinitionSpace) {
-        self.types.insert(index, (ty, mem));
-    }
-    */
 
     pub fn root(&self) -> NodeIndex {
         self.root
     }
-
-    /*
-    pub fn exec_main(&self, module: &Module<'c>, libpath: &str) -> i32 {
-        let shared = self.shared.iter().cloned().collect::<Vec<_>>();
-        exec_main(&shared, module, libpath)
-    }
-    */
 
     pub fn block_is_static(&self, block_index: NodeIndex) -> bool {
         // root block is static block, and there's only one for now
@@ -356,6 +337,7 @@ impl<'c, E: Extra> CFG<'c, E> {
         index
     }
 
+    /*
     pub fn add_block(
         &mut self,
         context: &'c Context,
@@ -373,7 +355,7 @@ impl<'c, E: Extra> CFG<'c, E> {
                     block_params
                         .push((op::from_type(context, &p.ty), p.extra.location(context, d)));
                 }
-                _ => unimplemented!("{:?}", p),
+                //_ => unimplemented!("{:?}", p),
             }
         }
 
@@ -385,6 +367,7 @@ impl<'c, E: Extra> CFG<'c, E> {
         self.block_names_index.insert(index, name);
         index
     }
+    */
 
     pub fn add_edge(&mut self, a: StringKey, b: StringKey, g: &mut CFGGraph<'c>) {
         let index_a = self.block_names.get(&a).unwrap();
@@ -395,20 +378,6 @@ impl<'c, E: Extra> CFG<'c, E> {
     pub fn block_index(&self, name: &StringKey) -> Option<NodeIndex> {
         self.block_names.get(name).cloned()
     }
-
-    /*
-    pub fn data_mut_by_name(
-        &mut self,
-        name: &str,
-        g: &'c mut CFGGraph<'c>,
-    ) -> Option<&mut OpCollection<'c>> {
-        if let Some(index) = self.block_names.get(name) {
-            g.node_weight_mut(*index)
-        } else {
-            None
-        }
-    }
-    */
 
     pub fn save_graph(&self, filename: &str, g: &CFGGraph<'c>, b: &NodeBuilder<E>) {
         use petgraph::dot::{Config, Dot};
