@@ -599,7 +599,10 @@ impl<E: Extra> StarlarkParser<E> {
         // lower to mlir
         use lower::cfg::{CFGGraph, CFG};
         let mut cfg_g = CFGGraph::new();
-        let mut cfg: CFG<E> = CFG::new(context, b.s("module"), env.g, d, &mut cfg_g);
+        let mut cfg: CFG<E> = CFG::new(env.g);
+        //context, b.s("module"), env.g, d);
+        cfg.add_block_ir(context, b.s("module"), &[], d, &mut cfg_g);
+
         let mut stack = vec![cfg.root()];
         let r = ir.lower_mlir(
             context,

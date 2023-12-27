@@ -270,12 +270,17 @@ pub struct CFG<E> {
 
 impl<'c, E: Extra> CFG<E> {
     pub fn new(
-        context: &'c Context,
-        module_name: StringKey,
+        //context: &'c Context,
+        //module_name: StringKey,
         g: IRGraph,
-        d: &Diagnostics,
-        cfg_g: &mut CFGGraph<'c>,
+        //d: &Diagnostics,
+        //cfg_g: &mut CFGGraph<'c>,
     ) -> Self {
+        //for node in g.node_weights() {
+        //cfg_g.
+        //cfg_g.add_node(
+        //}
+
         let mut cfg = Self {
             root: NodeIndex::new(0),
             block_names: HashMap::new(),
@@ -285,7 +290,7 @@ impl<'c, E: Extra> CFG<E> {
             g,
             _e: std::marker::PhantomData::default(),
         };
-        cfg.add_block_ir(context, module_name, &[], d, cfg_g);
+        //cfg.add_block_ir(context, module_name, &[], d, cfg_g);
         cfg
     }
 
@@ -307,6 +312,7 @@ impl<'c, E: Extra> CFG<E> {
         g: &mut CFGGraph<'c>,
     ) -> NodeIndex {
         // build parameter list for block
+        //self.g.node_weight(
         let mut block_params = vec![];
         for p in params {
             block_params.push((op::from_type(context, &p.ty), Location::unknown(context)));
