@@ -1,15 +1,4 @@
-use crate::ast::{
-    //Argument,
-    //AssignTarget,
-    //Ast,
-    //AstNode,
-    //Builtin,
-    //DerefTarget,
-    //Literal,
-    Parameter,
-    ParameterNode,
-    VarDefinitionSpace,
-};
+use crate::ast::VarDefinitionSpace;
 //use crate::compile::exec_main;
 //use crate::default_pass_manager;
 use crate::intern::StringKey;
@@ -265,10 +254,10 @@ pub fn values_in_scope<'c, 'a>(g: &'a CFGGraph<'c>, sym_index: SymIndex) -> Vec<
     data.values(sym_index)
 }
 
-pub struct CFG<'c, E> {
-    context: &'c Context,
+pub struct CFG<E> {
+    //context: &'c Context,
     root: NodeIndex,
-    index_count: usize,
+    //index_count: usize,
     block_names: HashMap<StringKey, NodeIndex>,
     block_names_index: HashMap<NodeIndex, StringKey>,
     pub(crate) types: TypeBuilder,
@@ -276,7 +265,7 @@ pub struct CFG<'c, E> {
     _e: std::marker::PhantomData<E>,
 }
 
-impl<'c, E: Extra> CFG<'c, E> {
+impl<'c, E: Extra> CFG<E> {
     pub fn new(
         context: &'c Context,
         module_name: StringKey,
@@ -285,9 +274,9 @@ impl<'c, E: Extra> CFG<'c, E> {
     ) -> Self {
         let mut cfg = Self {
             // dummy
-            context,
+            //context,
             root: NodeIndex::new(0),
-            index_count: 0,
+            //index_count: 0,
             block_names: HashMap::new(),
             block_names_index: HashMap::new(),
             types: TypeBuilder::new(),

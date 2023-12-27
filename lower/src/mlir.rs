@@ -51,7 +51,7 @@ impl IRNode {
         self,
         context: &'c Context,
         d: &mut Diagnostics,
-        cfg: &mut CFG<'c, E>,
+        cfg: &mut CFG<E>,
         stack: &mut Vec<NodeIndex>,
         //g: &mut IRGraph,
         cfg_g: &mut CFGGraph<'c>,
