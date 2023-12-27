@@ -124,6 +124,7 @@ pub struct IREnvironment {
     block_names_index: HashMap<NodeIndex, StringKey>,
     types: HashMap<SymIndex, (AstType, VarDefinitionSpace)>,
     label_count: usize,
+    g: IRGraph,
 }
 
 pub type IRGraph = DiGraph<IRControlBlock, ()>;
@@ -142,10 +143,10 @@ impl IREnvironment {
     pub fn lookup_type(
         &self,
         index: SymIndex,
-        g: &IRGraph,
+        //g: &IRGraph,
     ) -> Option<(AstType, VarDefinitionSpace)> {
         if let SymIndex::Arg(block_index, offset) = index {
-            let block = g.node_weight(block_index).unwrap();
+            let block = self.g.node_weight(block_index).unwrap();
             Some((
                 block.params.get(offset).unwrap().ty.clone(),
                 VarDefinitionSpace::Arg,
@@ -199,17 +200,29 @@ impl IREnvironment {
         self.block_names.get(&name).cloned()
     }
 
+    pub fn add_definition(&mut self, block_index: NodeIndex, ident: StringKey) -> SymIndex {
+        let data = self.g.node_weight_mut(block_index).unwrap();
+        let index = data.add_definition(ident);
+        index
+    }
+
     pub fn add_block(
         &mut self,
         name: StringKey,
         params: Vec<IRArg>,
         _d: &Diagnostics,
-        g: &mut IRGraph,
+        //g: &mut IRGraph,
     ) -> NodeIndex {
-        let index = g.add_node(IRControlBlock::new(params));
-        g.node_weight_mut(index).unwrap().block_index = index;
+        let index = self.g.add_node(IRControlBlock::new(params.clone()));
+        self.g.node_weight_mut(index).unwrap().block_index = index;
         self.block_names.insert(name, index);
         self.block_names_index.insert(index, name);
+
+        //let data = self.g.node_weight_mut(index).unwrap();
+        //for a in params {
+        //data.push_arg(a.name);
+        //}
+
         index
     }
 
@@ -223,15 +236,15 @@ impl IREnvironment {
         &self,
         index: NodeIndex,
         name: StringKey,
-        g: &IRGraph,
+        //g: &IRGraph,
     ) -> Option<SymIndex> {
-        let maybe_dom = simple_fast(g, self.root())
+        let maybe_dom = simple_fast(&self.g, self.root())
             .dominators(index)
             .map(|it| it.collect::<Vec<_>>());
         //println!("dom: {:?} => {:?}", index, dom);
         if let Some(dom) = maybe_dom {
             for i in dom.into_iter().rev() {
-                let data = g.node_weight(i).unwrap();
+                let data = self.g.node_weight(i).unwrap();
                 if let Some(r) = data.lookup(name) {
                     return Some(r);
                 }
@@ -286,13 +299,13 @@ impl IREnvironment {
         self.dump_node(g, b, self.root(), current_block, 0);
     }
 
-    pub fn save_graph<E>(&self, filename: &str, g: &IRGraph, b: &NodeBuilder<E>) {
+    pub fn save_graph<E>(&self, filename: &str, b: &NodeBuilder<E>) {
         use petgraph::dot::{Config, Dot};
 
         let s = format!(
             "{:?}",
             Dot::with_attr_getters(
-                &g,
+                &self.g,
                 &[Config::EdgeNoLabel, Config::NodeNoLabel],
                 &|_, _er| String::new(),
                 &|_, (_index, data)| {
@@ -708,7 +721,7 @@ impl IRNode {
         &self,
         d: &mut Diagnostics,
         env: &mut IREnvironment,
-        g: &mut IRGraph,
+        //g: &mut IRGraph,
         b: &mut NodeBuilder<E>,
     ) -> Result<()> {
         //println!("build");
@@ -721,7 +734,7 @@ impl IRNode {
                 //let data = g.node_weight(current_index).unwrap();
 
                 for expr in exprs {
-                    expr.build_graph(d, env, g, b)?;
+                    expr.build_graph(d, env, b)?;
                     /*
                     if let IRKind::Block(block) = &expr.kind {
                         let block_index = env.add_block(block.name, block.params.clone(), d, g);
@@ -739,7 +752,7 @@ impl IRNode {
 
             IRKind::Ret(exprs) => {
                 for expr in exprs {
-                    expr.build_graph(d, env, g, b)?;
+                    expr.build_graph(d, env, b)?;
                 }
                 Ok(())
             }
@@ -753,17 +766,17 @@ impl IRNode {
             IRKind::Jump(label, args) => {
                 let block_index = env.current_block();
                 let target_index = env.lookup_block(*label).unwrap();
-                let target = g.node_weight(target_index).unwrap();
+                let target = env.g.node_weight(target_index).unwrap();
                 // check arity of target
                 assert_eq!(target.params.len(), args.len());
-                g.add_edge(block_index, target_index, ());
+                env.g.add_edge(block_index, target_index, ());
                 Ok(())
             }
 
             IRKind::Get(name, ref _select) => {
                 let current_block = env.current_block();
                 //self.dump(b, 0);
-                if let Some(_sym_index) = env.name_in_scope(current_block, *name, g) {
+                if let Some(_sym_index) = env.name_in_scope(current_block, *name) {
                     Ok(())
                 } else {
                     d.push_diagnostic(error(
@@ -777,10 +790,10 @@ impl IRNode {
             IRKind::Set(name, value, ref _select) => {
                 let current_index = env.current_block();
                 //env.dump(g, b, current_index);
-                if let Some(_index) = env.name_in_scope(current_index, *name, g) {
+                if let Some(_index) = env.name_in_scope(current_index, *name) {
                     //let data = g.node_weight_mut(index.block()).unwrap();
                     //data.add_symbol(name, index);
-                    value.build_graph(d, env, g, b)?;
+                    value.build_graph(d, env, b)?;
                     Ok(())
                 } else {
                     d.push_diagnostic(error(
@@ -793,8 +806,9 @@ impl IRNode {
 
             IRKind::Decl(name, ty, _mem) => {
                 let current_block = env.current_block();
-                let data = g.node_weight_mut(current_block).unwrap();
-                let index = data.add_definition(*name);
+                let index = env.add_definition(current_block, *name);
+                //let data = env.g.node_weight_mut(current_block).unwrap();
+                //let index = data.add_definition(*name);
                 env.set_type(index, ty.clone(), VarDefinitionSpace::default());
                 Ok(())
             }
@@ -805,9 +819,9 @@ impl IRNode {
                 let current_block = env.current_block();
                 let mut seq = vec![];
                 for (i, block) in blocks.into_iter().enumerate() {
-                    let block_index = env.add_block(block.name, block.params.clone(), d, g);
+                    let block_index = env.add_block(block.name, block.params.clone(), d);
                     if 0 == i {
-                        g.add_edge(current_block, block_index, ());
+                        env.g.add_edge(current_block, block_index, ());
                     }
                     seq.push((block_index, block));
                 }
@@ -818,7 +832,7 @@ impl IRNode {
                     //n.dump(b, 0);
                     //}
 
-                    let data = g.node_weight_mut(block_index).unwrap();
+                    let data = env.g.node_weight_mut(block_index).unwrap();
                     for p in &block.params {
                         data.push_arg(p.name);
                     }
@@ -844,7 +858,7 @@ impl IRNode {
 
                     env.enter_block(block_index, self.span.clone());
                     for child in &block.children {
-                        child.build_graph(d, env, g, b)?;
+                        child.build_graph(d, env, b)?;
                     }
                     env.exit_block();
                 }
@@ -856,22 +870,22 @@ impl IRNode {
                 //let current_block = env.current_block();
 
                 //let _current = g.node_weight_mut(current_block).unwrap();
-                let block_index = env.add_block(block.name, block.params.clone(), d, g);
+                let block_index = env.add_block(block.name, block.params.clone(), d);
                 //let block_index = env.lookup_block(block.name).unwrap();
                 env.enter_block(block_index, self.get_span());
                 if let Some(last_block) = env.stack.last() {
                     if last_block.0 != block_index {
-                        g.add_edge(last_block.0, block_index, ());
+                        env.g.add_edge(last_block.0, block_index, ());
                     }
                 }
                 //env.enter_block(block_index, self.get_span());
                 for (_i, child) in block.children.iter().enumerate() {
                     //edges.push((current_block, block_index));
-                    let data = g.node_weight_mut(block_index).unwrap();
+                    let data = env.g.node_weight_mut(block_index).unwrap();
                     for a in &block.params {
                         data.push_arg(a.name);
                     }
-                    child.build_graph(d, env, g, b)?;
+                    child.build_graph(d, env, b)?;
                 }
                 env.exit_block();
                 Ok(())
@@ -882,45 +896,45 @@ impl IRNode {
             IRKind::Builtin(_bi, _args) => Ok(()),
 
             IRKind::Branch(condition, then_key, else_key) => {
-                condition.build_graph(d, env, g, b)?;
+                condition.build_graph(d, env, b)?;
                 let current_block = env.current_block();
                 let then_block = env.lookup_block(*then_key).unwrap();
-                g.add_edge(current_block, then_block, ());
+                env.g.add_edge(current_block, then_block, ());
                 let else_block = env.lookup_block(*else_key).unwrap();
-                g.add_edge(current_block, else_block, ());
+                env.g.add_edge(current_block, else_block, ());
                 Ok(())
             }
 
             IRKind::Cond(condition, then_expr, maybe_else_expr) => {
-                condition.build_graph(d, env, g, b)?;
+                condition.build_graph(d, env, b)?;
                 let current_block = env.current_block();
 
-                let next_block = env.add_block(b.s("next"), vec![], d, g);
+                let next_block = env.add_block(b.s("next"), vec![], d);
 
-                let then_block = env.add_block(b.s("then"), vec![], d, g);
+                let then_block = env.add_block(b.s("then"), vec![], d);
                 //let then_term = then_expr.kind.terminator();
-                then_expr.build_graph(d, env, g, b)?;
-                g.add_edge(current_block, then_block, ());
-                g.add_edge(then_block, next_block, ());
+                then_expr.build_graph(d, env, b)?;
+                env.g.add_edge(current_block, then_block, ());
+                env.g.add_edge(then_block, next_block, ());
                 if let Some(else_expr) = maybe_else_expr {
-                    let else_block = env.add_block(b.s("else"), vec![], d, g);
+                    let else_block = env.add_block(b.s("else"), vec![], d);
                     env.enter_block(else_block, else_expr.span.clone());
-                    else_expr.build_graph(d, env, g, b)?;
+                    else_expr.build_graph(d, env, b)?;
                     env.exit_block();
-                    g.add_edge(current_block, else_block, ());
-                    g.add_edge(else_block, next_block, ());
+                    env.g.add_edge(current_block, else_block, ());
+                    env.g.add_edge(else_block, next_block, ());
                 };
                 Ok(())
             }
 
             IRKind::Op1(_op, a) => {
-                a.build_graph(d, env, g, b)?;
+                a.build_graph(d, env, b)?;
                 Ok(())
             }
 
             IRKind::Op2(_op_node, x, y) => {
-                x.build_graph(d, env, g, b)?;
-                y.build_graph(d, env, g, b)?;
+                x.build_graph(d, env, b)?;
+                y.build_graph(d, env, b)?;
                 Ok(())
             } /*
               _ => {
@@ -961,11 +975,11 @@ impl<E: Extra> AstNode<E> {
         self,
         d: &mut Diagnostics,
         env: &mut IREnvironment,
-        g: &mut IRGraph,
+        //g: &mut IRGraph,
         b: &mut NodeBuilder<E>,
     ) -> Result<(IRNode, AstType)> {
         let mut out = vec![];
-        let ty = self.lower_ir(&mut out, d, env, g, b)?;
+        let ty = self.lower_ir(&mut out, d, env, b)?;
         if out.len() == 0 {
             Ok((b.ir_noop(), ty))
         } else if out.len() == 1 {
@@ -980,7 +994,7 @@ impl<E: Extra> AstNode<E> {
         out: &mut Vec<IRNode>,
         d: &mut Diagnostics,
         env: &mut IREnvironment,
-        g: &mut IRGraph,
+        //g: &mut IRGraph,
         b: &mut NodeBuilder<E>,
     ) -> Result<AstType> {
         if !self.node_id.is_valid() {
@@ -994,7 +1008,7 @@ impl<E: Extra> AstNode<E> {
             Ast::Sequence(exprs) => {
                 let mut ty = AstType::Unit;
                 for expr in exprs {
-                    let (ir, ret_ty) = expr.lower_ir_expr(d, env, g, b)?;
+                    let (ir, ret_ty) = expr.lower_ir_expr(d, env, b)?;
                     out.extend(ir.to_vec());
                     ty = ret_ty;
                 }
@@ -1005,7 +1019,7 @@ impl<E: Extra> AstNode<E> {
                 let mut args = vec![];
                 let mut ty = AstType::Unit;
                 if let Some(expr) = maybe_expr {
-                    ty = expr.lower_ir(&mut args, d, env, g, b)?;
+                    ty = expr.lower_ir(&mut args, d, env, b)?;
                 }
                 out.push(b.ir_ret(args));
                 Ok(ty)
@@ -1027,7 +1041,7 @@ impl<E: Extra> AstNode<E> {
                 let mut args = vec![];
                 for a in ast_args.into_iter() {
                     let Argument::Positional(expr) = a;
-                    let (ir, _ty) = expr.lower_ir_expr(d, env, g, b)?;
+                    let (ir, _ty) = expr.lower_ir_expr(d, env, b)?;
                     args.push(ir);
                 }
 
@@ -1036,26 +1050,29 @@ impl<E: Extra> AstNode<E> {
             }
 
             Ast::Identifier(name) => {
-                //let (ty, mem) = env.lookup_type(index);
                 let current_block = env.current_block();
-                if let Some(sym_index) = env.name_in_scope(current_block, name, g) {
-                    let (ty, _mem) = env.lookup_type(sym_index, g).unwrap();
+                if let Some(sym_index) = env.name_in_scope(current_block, name) {
+                    let (ty, _mem) = env.lookup_type(sym_index).unwrap();
                     out.push(b.ir_get(name, IRTypeSelect::default()));
                     Ok(ty)
                 } else {
-                    unreachable!()
+                    d.push_diagnostic(
+                        self.extra
+                            .error(&format!("Name not found: {}", b.strings.resolve(&name))),
+                    );
+                    Err(Error::new(ParseError::Invalid))
                 }
             }
 
             Ast::Global(ident, expr) => {
                 if let Ast::Literal(ref _lit) = expr.node {
-                    //let ty: AstType = lit.into();
-                    let (v, ty) = expr.lower_ir_expr(d, env, g, b)?;
+                    let (v, ty) = expr.lower_ir_expr(d, env, b)?;
                     out.push(b.ir_decl(ident, ty.clone(), VarDefinitionSpace::Static));
                     out.push(b.ir_set(ident, v, IRTypeSelect::default()));
                     let current_block = env.current_block();
-                    let data = g.node_weight_mut(current_block).unwrap();
-                    let index = data.add_definition(ident);
+                    let index = env.add_definition(current_block, ident);
+                    //let data = g.node_weight_mut(current_block).unwrap();
+                    //let index = data.add_definition(ident);
                     env.set_type(index, ty.clone(), VarDefinitionSpace::Static);
 
                     /*
@@ -1090,22 +1107,19 @@ impl<E: Extra> AstNode<E> {
 
             Ast::Assign(target, expr) => match target {
                 AssignTarget::Alloca(name) | AssignTarget::Identifier(name) => {
-                    //let mut seq = vec![];
-                    let (ir, ty) = expr.lower_ir_expr(d, env, g, b)?;
+                    let (ir, ty) = expr.lower_ir_expr(d, env, b)?;
                     let current_block = env.current_block();
-                    if let Some(sym_index) = env.name_in_scope(current_block, name, g) {
-                        let (ty, mem) = env.lookup_type(sym_index, g).unwrap();
+                    if let Some(sym_index) = env.name_in_scope(current_block, name) {
+                        let (ty, mem) = env.lookup_type(sym_index).unwrap();
                         out.push(b.ir_set(name, ir, IRTypeSelect::Offset(0)));
                         env.set_type(sym_index, ty.clone(), mem);
                         Ok(ty)
                     } else {
-                        //env.lookup_type();
-                        //let ty = AstType::Int;
-                        // inference required
                         out.push(b.ir_decl(name, ty.clone(), VarDefinitionSpace::Stack));
                         out.push(b.ir_set(name, ir, IRTypeSelect::Offset(0)));
-                        let data = g.node_weight_mut(current_block).unwrap();
-                        let index = data.add_definition(name);
+                        let index = env.add_definition(current_block, name);
+                        //let data = g.node_weight_mut(current_block).unwrap();
+                        //let index = data.add_definition(name);
                         env.set_type(index, ty.clone(), VarDefinitionSpace::Stack);
                         Ok(ty)
                     }
@@ -1114,8 +1128,7 @@ impl<E: Extra> AstNode<E> {
 
             Ast::Mutate(lhs, rhs) => match lhs.node {
                 Ast::Identifier(name) => {
-                    //let mut seq = vec![];
-                    let (ir, ty) = rhs.lower_ir_expr(d, env, g, b)?;
+                    let (ir, ty) = rhs.lower_ir_expr(d, env, b)?;
                     out.push(b.ir_set(name, ir, IRTypeSelect::Offset(0)));
                     Ok(ty)
                 }
@@ -1128,8 +1141,8 @@ impl<E: Extra> AstNode<E> {
                 let (f, ty, f_args, name) = match &expr.node {
                     Ast::Identifier(ident) => {
                         let name = b.strings.resolve(ident);
-                        if let Some(index) = env.name_in_scope(current_block, *ident, g) {
-                            if let Some((ty, _mem)) = env.lookup_type(index, g) {
+                        if let Some(index) = env.name_in_scope(current_block, *ident) {
+                            if let Some((ty, _mem)) = env.lookup_type(index) {
                                 if let AstType::Func(f_args, _) = ty.clone() {
                                     (ident, ty, f_args, name)
                                 } else {
@@ -1172,7 +1185,7 @@ impl<E: Extra> AstNode<E> {
                     for a in args {
                         match a {
                             Argument::Positional(expr) => {
-                                expr.lower_ir(&mut ir_args, d, env, g, b)?;
+                                expr.lower_ir(&mut ir_args, d, env, b)?;
                             }
                         }
                     }
@@ -1200,8 +1213,9 @@ impl<E: Extra> AstNode<E> {
                 let ast_ret_type = *def.return_type;
                 let f_type = AstType::Func(ast_types, ast_ret_type.clone().into());
 
-                let data = g.node_weight_mut(current_block).unwrap();
-                let index = data.add_definition(def.name);
+                let index = env.add_definition(current_block, def.name);
+                //let data = g.node_weight_mut(current_block).unwrap();
+                //let index = data.add_definition(def.name);
                 env.set_type(index, f_type.clone(), VarDefinitionSpace::Static);
                 out.push(b.ir_decl(def.name, f_type, VarDefinitionSpace::Static));
 
@@ -1225,10 +1239,10 @@ impl<E: Extra> AstNode<E> {
                                 //nb.params = args;
                             }
 
-                            let block_index = env.add_block(nb.name, args.clone(), d, g);
+                            let block_index = env.add_block(nb.name, args.clone(), d);
                             edges.push((current_block, block_index));
 
-                            let data = g.node_weight_mut(block_index).unwrap();
+                            let data = env.g.node_weight_mut(block_index).unwrap();
                             for a in &nb.params {
                                 data.push_arg(a.name);
                             }
@@ -1241,7 +1255,7 @@ impl<E: Extra> AstNode<E> {
                 }
 
                 for (a, b) in edges {
-                    g.add_edge(a, b, ());
+                    env.g.add_edge(a, b, ());
                 }
 
                 if output_blocks.len() > 0 {
@@ -1259,7 +1273,7 @@ impl<E: Extra> AstNode<E> {
                         }
 
                         let mut exprs = vec![];
-                        let (ir, _ty) = nb.body.lower_ir_expr(d, env, g, b)?;
+                        let (ir, _ty) = nb.body.lower_ir_expr(d, env, b)?;
                         exprs.extend(ir.to_vec());
 
                         let block = IRBlock::new(nb.name, args, exprs);
@@ -1299,7 +1313,7 @@ impl<E: Extra> AstNode<E> {
                 for a in args {
                     match a {
                         Argument::Positional(expr) => {
-                            expr.lower_ir(&mut ir_args, d, env, g, b)?;
+                            expr.lower_ir(&mut ir_args, d, env, b)?;
                         }
                     }
                 }
@@ -1316,11 +1330,11 @@ impl<E: Extra> AstNode<E> {
                 let b_next = env.fresh_label("next", b);
 
                 // then
-                let then_index = env.add_block(b_then, vec![], d, g);
+                let then_index = env.add_block(b_then, vec![], d);
                 //let span = then_expr.extra.get_span();
-                g.add_edge(current_block, then_index, ());
+                env.g.add_edge(current_block, then_index, ());
                 let mut then_seq = vec![b.ir_label(b_then, vec![])];
-                let (then_block, _ty) = then_expr.lower_ir_expr(d, env, g, b)?;
+                let (then_block, _ty) = then_expr.lower_ir_expr(d, env, b)?;
                 let term = then_block.kind.terminator();
                 then_seq.extend(then_block.to_vec());
                 if term.is_none() {
@@ -1333,7 +1347,7 @@ impl<E: Extra> AstNode<E> {
                     //let span = else_expr.extra.get_span();
                     let b_else = Some(env.fresh_label("else", b));
                     let mut else_seq = vec![b.ir_label(b_else.unwrap(), vec![])];
-                    let (else_block, _ty) = else_expr.lower_ir_expr(d, env, g, b)?;
+                    let (else_block, _ty) = else_expr.lower_ir_expr(d, env, b)?;
                     //g.add_edge(current_block, else_block, ());
                     let term = else_block.kind.terminator();
                     else_seq.extend(else_block.to_vec());
@@ -1346,7 +1360,7 @@ impl<E: Extra> AstNode<E> {
                     (None, None)
                 };
 
-                let (ir_cond, _ty) = condition.lower_ir_expr(d, env, g, b)?;
+                let (ir_cond, _ty) = condition.lower_ir_expr(d, env, b)?;
 
                 out.push(b.ir_branch(ir_cond, b_then, b_else.unwrap_or(b_next)));
                 out.extend(then_seq);
@@ -1358,19 +1372,20 @@ impl<E: Extra> AstNode<E> {
             }
 
             Ast::UnaryOp(op, a) => {
-                let (ir, ty) = a.lower_ir_expr(d, env, g, b)?;
+                let (ir, ty) = a.lower_ir_expr(d, env, b)?;
                 out.push(b.ir_op1(op, ir));
                 Ok(ty)
             }
 
             Ast::BinaryOp(op_node, x, y) => {
-                let (x, _ty) = x.lower_ir_expr(d, env, g, b)?;
-                let (y, ty) = y.lower_ir_expr(d, env, g, b)?;
+                let (x, _ty) = x.lower_ir_expr(d, env, b)?;
+                let (y, ty) = y.lower_ir_expr(d, env, b)?;
                 out.push(b.ir_op2(op_node.node, x, y));
                 Ok(ty)
             }
 
-            Ast::Deref(expr, _target) => expr.lower_ir(out, d, env, g, b),
+            // do nothing
+            Ast::Deref(expr, _target) => expr.lower_ir(out, d, env, b),
 
             Ast::Error => {
                 d.push_diagnostic(self.extra.error(&format!("Error")));
@@ -1400,7 +1415,7 @@ mod tests {
     fn test_ir_1() {
         //let context = default_context();
         //let mut cfg_g = CFGGraph::new();
-        let mut g = IRGraph::new();
+        //let mut g = IRGraph::new();
         let mut d = Diagnostics::new();
         let file_id = d.add_source("test.py".into(), "test".into());
         let mut b: NodeBuilder<SimpleExtra> = NodeBuilder::new();
@@ -1415,10 +1430,10 @@ mod tests {
         let mut env = IREnvironment::new();
         let ast = gen_block(&mut b).normalize(&mut d, &mut b);
         //let mut stack = vec![cfg.root()];
-        let index = env.add_block(b.s("module"), vec![], &d, &mut g);
+        let index = env.add_block(b.s("module"), vec![], &d);
         env.enter_block(index, ast.extra.get_span());
 
-        let r = ast.lower_ir_expr(&mut d, &mut env, &mut g, &mut b);
+        let r = ast.lower_ir_expr(&mut d, &mut env, &mut b);
         d.dump();
         assert!(!d.has_errors);
         let (ir, _ty) = r.unwrap();
@@ -1431,7 +1446,7 @@ mod tests {
     fn test_ir_2() {
         //let context = default_context();
         //let mut cfg_g = CFGGraph::new();
-        let mut g = IRGraph::new();
+        //let mut g = IRGraph::new();
         let mut d = Diagnostics::new();
         let file_id = d.add_source("test.py".into(), "test".into());
         let mut b: NodeBuilder<SimpleExtra> = NodeBuilder::new();
@@ -1447,10 +1462,10 @@ mod tests {
 
         let ast = crate::tests::gen_function_call(&mut b).normalize(&mut d, &mut b);
 
-        let index = env.add_block(b.s("module"), vec![], &d, &mut g);
+        let index = env.add_block(b.s("module"), vec![], &d);
         env.enter_block(index, ast.extra.get_span());
 
-        let r = ast.lower_ir_expr(&mut d, &mut env, &mut g, &mut b);
+        let r = ast.lower_ir_expr(&mut d, &mut env, &mut b);
         d.dump();
         assert!(!d.has_errors);
         let (ir, _ty) = r.unwrap();

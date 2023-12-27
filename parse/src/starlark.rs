@@ -561,14 +561,14 @@ impl<E: Extra> StarlarkParser<E> {
             .parse(Path::new(filename), None, file_id, d, b)?
             .normalize(d, b);
 
-        use lower::{IREnvironment, IRGraph};
+        use lower::IREnvironment;
         let mut env = IREnvironment::new();
-        let mut g = IRGraph::new();
-        let index = env.add_block(b.s("module"), vec![], d, &mut g);
+        //let mut g = IRGraph::new();
+        let index = env.add_block(b.s("module"), vec![], d);
         env.enter_block(index, ast.extra.get_span());
 
         // lower ast to ir
-        let r = ast.lower_ir_expr(d, &mut env, &mut g, b);
+        let r = ast.lower_ir_expr(d, &mut env, b);
         d.dump();
 
         if d.has_errors {
@@ -576,22 +576,24 @@ impl<E: Extra> StarlarkParser<E> {
         }
 
         let (ir, _ty) = r?;
-        ir.dump(&b, 0);
+        if verbose {
+            ir.dump(&b, 0);
+        }
         assert_eq!(1, env.stack_size());
 
         // Analyze
-        let mut g = IRGraph::new();
+        //let mut g = IRGraph::new();
         let mut env = IREnvironment::new();
         let ir = lower::ir::IRBlockSorter::run(ir, b);
         if verbose {
             ir.dump(&b, 0);
         }
-        let r = ir.build_graph(d, &mut env, &mut g, b);
+        let r = ir.build_graph(d, &mut env, b);
         d.dump();
         r?;
 
         if verbose {
-            env.save_graph("out.dot", &g, b);
+            env.save_graph("out.dot", b);
         }
 
         // lower to mlir
@@ -612,7 +614,7 @@ impl<E: Extra> StarlarkParser<E> {
         r?;
 
         if verbose {
-            env.save_graph("out.dot", &g, b);
+            env.save_graph("out.dot", b);
         }
 
         let data = cfg_g.node_weight_mut(cfg.root()).unwrap();
