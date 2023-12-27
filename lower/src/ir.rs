@@ -160,6 +160,10 @@ impl IREnvironment {
         self.types.insert(index, (ty, mem));
     }
 
+    pub fn connect_block(&mut self, source: NodeIndex, target: NodeIndex) {
+        self.g.add_edge(source, target, ());
+    }
+
     pub fn error(&self, msg: &str, span: Span) -> Diagnostic<usize> {
         let r = span.begin.pos as usize..span.end.pos as usize;
         let mut labels = vec![Label::primary(span.file_id, r).with_message(msg)];
@@ -766,11 +770,22 @@ impl IRNode {
             IRKind::Jump(label, args) => {
                 let block_index = env.current_block();
                 let target_index = env.lookup_block(*label).unwrap();
+                env.connect_block(block_index, target_index);
                 let target = env.g.node_weight(target_index).unwrap();
+
                 // check arity of target
-                assert_eq!(target.params.len(), args.len());
-                env.g.add_edge(block_index, target_index, ());
-                Ok(())
+                if target.params.len() == args.len() {
+                    Ok(())
+                } else {
+                    d.push_diagnostic(error(
+                        &format!(
+                            "Jump to block, mismatch parameters: to {}",
+                            b.strings.resolve(&label),
+                        ),
+                        self.span.clone(),
+                    ));
+                    Err(Error::new(ParseError::Invalid))
+                }
             }
 
             IRKind::Get(name, ref _select) => {
