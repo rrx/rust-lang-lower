@@ -5,6 +5,7 @@ pub mod compile;
 pub mod diagnostics;
 pub mod intern;
 pub mod ir;
+pub mod link;
 pub mod mlir;
 pub mod op;
 pub mod types;
@@ -16,10 +17,12 @@ pub use compile::{default_context, default_pass_manager};
 pub use diagnostics::{Diagnostics, FileDB, ParseError};
 pub use intern::StringKey;
 pub use ir::{IREnvironment, IRGraph};
+pub use link::LinkOptions;
 pub use types::{AstType, TypeUnify};
 
 // re-export melior structs
 pub use melior::{
+    ir::operation::OperationPrintingFlags,
     ir::{Location, Module},
     Context,
 };

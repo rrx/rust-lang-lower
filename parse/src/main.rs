@@ -1,17 +1,24 @@
 use std::error::Error;
 use std::fs::File;
 use std::io::Write;
-use std::path::Path;
+//use std::path::Path;
 
 use argh::FromArgs;
 //use melior::ir;
 use simple_logger::{set_up_color_terminal, SimpleLogger};
 
 use lower::{
-    default_context, CFGGraph, Diagnostics, Extra, IREnvironment, IRGraph, NodeBuilder,
-    SimpleExtra, CFG,
+    default_context,
+    //CFGGraph,
+    Diagnostics,
+    //CFG,
+    LinkOptions,
+    //Extra,
+    //IREnvironment, IRGraph,
+    NodeBuilder,
+    SimpleExtra,
 };
-use parse::starlark::Parser;
+//use parse::starlark::Parser;
 use parse::starlark::StarlarkParser;
 
 #[derive(FromArgs, Debug)]
@@ -61,6 +68,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     //let mut parser: Parser<SimpleExtra> = Parser::new();
     let mut p: StarlarkParser<SimpleExtra> = StarlarkParser::new();
     let mut d = Diagnostics::new();
+    //let mut link = LinkOptions::new();
     //let mut cfg_g = CFGGraph::new();
     let mut b: NodeBuilder<SimpleExtra> = NodeBuilder::new();
     //let mut cfg: CFG<SimpleExtra> = CFG::new(&context, b.s("module"), &d, &mut cfg_g);
@@ -72,6 +80,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             &mut module,
             &mut b,
             &mut d,
+            //&mut link,
             config.verbose,
         )?;
     }
@@ -98,7 +107,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     if config.exec {
-        let exit_code = p.exec_main(&module, "target/debug");
+        let exit_code = p.exec_main(&context, &mut module, "target/debug", config.verbose);
         std::process::exit(exit_code);
     }
 

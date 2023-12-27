@@ -11,10 +11,14 @@ use crate::ast::{
 };
 use crate::cfg::{values_in_scope, CFGGraph, SymIndex, CFG};
 //use crate::ir;
-use crate::ir::{IRGraph, IRKind, IRNode};
+use crate::ir::{
+    //IRGraph,
+    IRKind,
+    IRNode,
+};
 use crate::{
-    Ast, AstNode, AstType, Diagnostics, Extra, Literal, NodeBuilder, NodeIndex, ParseError,
-    StringKey,
+    Ast, AstNode, AstType, Diagnostics, Extra, LinkOptions, Literal, NodeBuilder, NodeIndex,
+    ParseError, StringKey,
 };
 
 use anyhow::Error;
@@ -157,6 +161,7 @@ pub fn emit_binop<'c, E: Extra>(
     //g: &mut IRGraph,
     cfg_g: &mut CFGGraph<'c>,
     b: &mut NodeBuilder<E>,
+    link: &mut LinkOptions,
 ) -> Result<SymIndex> {
     let fx = format!("x: {:?}", x);
     let fy = format!("y: {:?}", y);
@@ -164,8 +169,8 @@ pub fn emit_binop<'c, E: Extra>(
     let y_extra = E::span(y.get_span());
     let x_location = x.location(context, d);
     let y_location = x.location(context, d);
-    let index_x = x.lower_mlir(context, d, cfg, stack, cfg_g, b)?;
-    let index_y = y.lower_mlir(context, d, cfg, stack, cfg_g, b)?;
+    let index_x = x.lower_mlir(context, d, cfg, stack, cfg_g, b, link)?;
+    let index_y = y.lower_mlir(context, d, cfg, stack, cfg_g, b, link)?;
 
     //cfg.save_graph("out.dot", g);
     //println!("ix: {:?}, {}", index_x, fx);
@@ -260,11 +265,12 @@ pub fn emit_set_alloca<'c, E: Extra>(
     cfg_g: &mut CFGGraph<'c>,
     d: &mut Diagnostics,
     b: &mut NodeBuilder<E>,
+    link: &mut LinkOptions,
 ) -> Result<SymIndex> {
     log::debug!("assign alloca: {}", b.strings.resolve(&name));
     expr.dump(b, 0);
 
-    let rhs_index = expr.lower_mlir(context, d, cfg, stack, cfg_g, b)?;
+    let rhs_index = expr.lower_mlir(context, d, cfg, stack, cfg_g, b, link)?;
     //let ty = IntegerType::new(context, 64);
     //let memref_ty = MemRefType::new(ty.into(), &[], None, None);
     //let op = memref::alloca(context, memref_ty, &[], &[], None, location);
@@ -340,6 +346,7 @@ pub fn emit_set_function<'c, E: Extra>(
     cfg_g: &mut CFGGraph<'c>,
     d: &mut Diagnostics,
     b: &mut NodeBuilder<E>,
+    link: &mut LinkOptions,
 ) -> Result<SymIndex> {
     match expr.kind {
         IRKind::Func(blocks, _ast_ty) => {
@@ -376,7 +383,7 @@ pub fn emit_set_function<'c, E: Extra>(
 
                 for c in block.children.into_iter() {
                     stack.push(block_index);
-                    if let Ok(_index) = c.lower_mlir(context, d, cfg, stack, cfg_g, b) {
+                    if let Ok(_index) = c.lower_mlir(context, d, cfg, stack, cfg_g, b, link) {
                         stack.pop();
                     } else {
                         stack.pop();

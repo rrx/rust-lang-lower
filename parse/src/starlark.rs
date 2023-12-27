@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::collections::HashSet;
 use std::path::Path;
 
 use anyhow::Error;
@@ -14,7 +13,9 @@ use starlark_syntax::syntax::module::AstModuleFields;
 
 use lower::ast;
 use lower::ast::{Ast, AstNode, CodeLocation, Extra};
-use lower::{AstType, Diagnostics, Module, NodeBuilder, ParseError, StringKey, TypeUnify};
+use lower::{
+    AstType, Diagnostics, LinkOptions, Module, NodeBuilder, ParseError, StringKey, TypeUnify,
+};
 
 #[derive(Debug, Clone)]
 pub enum DataType {
@@ -529,14 +530,16 @@ impl<E: Extra> Parser<E> {
 #[derive(Default)]
 pub struct StarlarkParser<E> {
     _e: std::marker::PhantomData<E>,
-    shared: HashSet<String>,
+    //shared: HashSet<String>,
+    link: LinkOptions,
 }
 
 impl<E: Extra> StarlarkParser<E> {
     pub fn new() -> Self {
         Self {
             _e: std::marker::PhantomData::default(),
-            shared: HashSet::new(),
+            link: LinkOptions::new(),
+            //shared: HashSet::new(),
         }
     }
 
@@ -547,6 +550,7 @@ impl<E: Extra> StarlarkParser<E> {
         module: &mut Module<'c>,
         b: &mut NodeBuilder<E>,
         d: &mut Diagnostics,
+        //link: &mut LinkOptions,
         verbose: bool,
     ) -> Result<()> {
         log::debug!("parsing: {}", filename);
@@ -598,7 +602,15 @@ impl<E: Extra> StarlarkParser<E> {
         let mut cfg_g = CFGGraph::new();
         let mut cfg: CFG<E> = CFG::new(context, b.s("module"), d, &mut cfg_g);
         let mut stack = vec![cfg.root()];
-        let r = ir.lower_mlir(context, d, &mut cfg, &mut stack, &mut cfg_g, b);
+        let r = ir.lower_mlir(
+            context,
+            d,
+            &mut cfg,
+            &mut stack,
+            &mut cfg_g,
+            b,
+            &mut self.link,
+        );
         d.dump();
         r?;
 
@@ -606,21 +618,55 @@ impl<E: Extra> StarlarkParser<E> {
             env.save_graph("out.dot", &g, b);
         }
 
-        // lower module
-        cfg.lower_module(context, module, &mut cfg_g);
-        for shared in cfg.shared_libraries() {
-            self.shared.insert(shared);
+        let data = cfg_g.node_weight_mut(cfg.root()).unwrap();
+        for op in data.take_ops() {
+            module.body().append_operation(op);
         }
+
+        //for shared in link.shared_libraries() {
+        //self.shared.insert(shared);
+        //}
         Ok(())
     }
 
-    pub fn exec_main<'c>(&self, module: &Module, libpath: &str) -> i32 {
+    pub fn exec_main<'c>(
+        &self,
+        context: &lower::Context,
+        module: &mut Module,
+        //link: &LinkOptions,
+        libpath: &str,
+        verbose: bool,
+    ) -> i32 {
         use lower::compile::exec_main;
-        exec_main(
-            &self.shared.iter().cloned().collect::<Vec<_>>(),
-            module,
-            libpath,
-        )
+
+        // lower mlir to llvmir
+        //cfg.lower_module_llvmir(context, module, verbose);
+        if verbose {
+            println!(
+                "lowered {}",
+                module
+                    .as_operation()
+                    .to_string_with_flags(lower::OperationPrintingFlags::new())
+                    .unwrap()
+            );
+        }
+
+        //println!("module: {:?}", module);
+        let pass_manager = lower::default_pass_manager(context);
+        pass_manager.run(module).unwrap();
+        assert!(module.as_operation().verify());
+
+        if verbose {
+            println!(
+                "after pass {}",
+                module
+                    .as_operation()
+                    .to_string_with_flags(lower::OperationPrintingFlags::new())
+                    .unwrap()
+            );
+        }
+
+        exec_main(&self.link.shared_libraries(), module, libpath)
     }
 }
 
@@ -636,12 +682,13 @@ pub(crate) mod tests {
         let mut b = NodeBuilder::new();
         let context = lower::default_context();
         let mut d = Diagnostics::new();
+        //let mut link = LinkOptions::new();
         let mut module = Module::new(Location::unknown(&context));
         p.parse_module(filename, &context, &mut module, &mut b, &mut d, true)
             .unwrap();
         module.as_operation().dump();
         assert!(module.as_operation().verify());
-        let r = p.exec_main(&module, "../target/debug/");
+        let r = p.exec_main(&context, &mut module, "../target/debug/", true);
         assert_eq!(expected, r);
     }
 
