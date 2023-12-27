@@ -4,7 +4,7 @@ use std::io::Write;
 use std::path::Path;
 
 use argh::FromArgs;
-use melior::ir;
+//use melior::ir;
 use simple_logger::{set_up_color_terminal, SimpleLogger};
 
 use lower::{
@@ -56,8 +56,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     log::debug!("config: {:?}", config);
     let context = default_context();
 
-    let location = ir::Location::unknown(&context);
-    let mut module = ir::Module::new(location);
+    let location = lower::Location::unknown(&context);
+    let mut module = lower::Module::new(location);
     //let mut parser: Parser<SimpleExtra> = Parser::new();
     let mut p: StarlarkParser<SimpleExtra> = StarlarkParser::new();
     let mut d = Diagnostics::new();
