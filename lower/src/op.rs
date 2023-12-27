@@ -421,7 +421,7 @@ pub fn emit_set_static<'c, E: Extra>(
     block_index: NodeIndex,
     cfg: &mut CFG<E>,
     cfg_g: &mut CFGGraph<'c>,
-    d: &mut Diagnostics,
+    _d: &mut Diagnostics,
     b: &mut NodeBuilder<E>,
 ) -> Result<SymIndex> {
     let is_symbol_static = sym_index.block() == cfg.root();

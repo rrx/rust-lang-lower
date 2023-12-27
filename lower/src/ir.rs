@@ -1,8 +1,7 @@
 use anyhow::Error;
 use anyhow::Result;
 
-use crate::cfg::{SymIndex, CFG};
-use crate::{AstNode, AstType, Diagnostics, Extra, NodeBuilder, ParseError, StringKey};
+use crate::{AstNode, AstType, Diagnostics, Extra, NodeBuilder, ParseError, StringKey, SymIndex};
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 //use melior::Context;
 use std::fmt::Debug;
@@ -923,15 +922,15 @@ impl IRNode {
                 x.build_graph(d, env, g, b)?;
                 y.build_graph(d, env, g, b)?;
                 Ok(())
-            }
-
-            _ => {
-                d.push_diagnostic(error(
-                    &format!("Build Graph Unimplemented: {:?}", self.kind,),
-                    self.span.clone(),
-                ));
-                Err(Error::new(ParseError::Invalid))
-            }
+            } /*
+              _ => {
+                  d.push_diagnostic(error(
+                      &format!("Build Graph Unimplemented: {:?}", self.kind,),
+                      self.span.clone(),
+                  ));
+                  Err(Error::new(ParseError::Invalid))
+              }
+              */
         }
     }
 }
@@ -1195,8 +1194,7 @@ impl<E: Extra> AstNode<E> {
                         Parameter::Normal => {
                             //| Parameter::WithDefault(_) => {
                             ast_types.push(p.ty.clone());
-                        }
-                        _ => unimplemented!("{:?}", p),
+                        } //_ => unimplemented!("{:?}", p),
                     }
                 }
                 let ast_ret_type = *def.return_type;
@@ -1393,9 +1391,9 @@ impl<E: Extra> AstNode<E> {
 mod tests {
     use super::*;
     use crate::ast::SimpleExtra;
-    use crate::cfg::{CFGGraph, CFG};
+    //use crate::cfg::{CFGGraph, CFG};
     use crate::tests::gen_block;
-    use crate::{default_context, Diagnostics, NodeBuilder};
+    use crate::{Diagnostics, NodeBuilder};
     use test_log::test;
 
     #[test]

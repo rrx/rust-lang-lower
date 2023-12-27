@@ -450,9 +450,8 @@ impl<E: Extra> AstNode<E> {
             Ast::Call(f, args, _ty) => {
                 values.push(f);
                 for a in args {
-                    if let Argument::Positional(expr) = a {
-                        values.push(expr);
-                    }
+                    let Argument::Positional(expr) = a;
+                    values.push(expr);
                 }
             }
             Ast::Global(_, body) => {
@@ -475,9 +474,8 @@ impl<E: Extra> AstNode<E> {
             }
             Ast::Builtin(_, args) => {
                 for a in args {
-                    if let Argument::Positional(expr) = a {
-                        values.push(expr);
-                    }
+                    let Argument::Positional(expr) = a;
+                    values.push(expr);
                 }
             }
             _ => (),

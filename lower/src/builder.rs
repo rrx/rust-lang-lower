@@ -566,16 +566,16 @@ impl<'c, E: Extra> Definition<E> {
                     .params
                     .iter()
                     .map(|p| {
-                        if let Parameter::Normal = p.node {
-                            ParameterNode {
-                                name: p.name.clone(),
-                                ty: p.ty.clone(),
-                                node: Parameter::Normal,
-                                extra: p.extra.clone(),
-                            }
-                        } else {
-                            unreachable!()
+                        //if let Parameter::Normal = p.node {
+                        ParameterNode {
+                            name: p.name.clone(),
+                            ty: p.ty.clone(),
+                            node: Parameter::Normal,
+                            extra: p.extra.clone(),
                         }
+                        //} else {
+                        //unreachable!()
+                        //}
                     })
                     .collect::<Vec<_>>();
                 let nb = NodeBlock {
@@ -599,7 +599,7 @@ impl<'c, E: Extra> Definition<E> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    //use super::*;
     use test_log::test;
 
     #[test]
