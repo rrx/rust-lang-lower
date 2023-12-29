@@ -344,7 +344,13 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn module(&self, name: StringKey, body: AstNode<E>) -> AstNode<E> {
-        self.block(name, &[], body)
+        let extra = body.extra.clone();
+        let nb = AstNodeBlock {
+            name,
+            params: vec![],
+            body: body.into(),
+        };
+        self.build(Ast::Module(nb), extra)
     }
 
     pub fn block(
@@ -363,7 +369,7 @@ impl<E: Extra> NodeBuilder<E> {
                 extra: self.extra_unknown(),
             })
             .collect();
-        let nb = NodeBlock {
+        let nb = AstNodeBlock {
             name,
             params,
             body: body.into(),
@@ -480,87 +486,16 @@ impl<E: Extra> NodeBuilder<E> {
     }
 }
 
-pub struct AstBlockSorter<E> {
-    pub stack: Vec<AstNode<E>>,
-    pub blocks: Vec<AstNode<E>>,
-}
-impl<E: Extra> AstBlockSorter<E> {
-    pub fn new() -> Self {
-        Self {
-            stack: vec![],
-            blocks: vec![],
-        }
-    }
-    pub fn sort_children(
-        &mut self,
-        ast: AstNode<E>,
-        entry_params: &[ParameterNode<E>],
-        b: &mut NodeBuilder<E>,
-    ) {
-        match ast.node {
-            Ast::Sequence(exprs) => {
-                for e in exprs {
-                    if self.blocks.len() == 0 {
-                        self.sort_children(e, entry_params, b);
-                    } else {
-                        self.sort_children(e, &[], b);
-                    }
-                }
-            }
-            Ast::Block(ref nb) => {
-                // check params match
-                if self.blocks.len() == 0 {
-                    assert_eq!(nb.params.len(), entry_params.len());
-                }
-                self.blocks.push(ast);
-            }
-            Ast::Goto(_, _) => {
-                self.stack.push(ast);
-                self.close_block(b);
-            }
-            Ast::Label(_, _) => {
-                self.close_block(b);
-                self.stack.push(ast);
-            }
-            _ => {
-                self.stack.push(ast);
-            }
-        }
-    }
-
-    fn close_block(&mut self, b: &mut NodeBuilder<E>) {
-        if self.stack.len() == 0 {
-            return;
-        }
-
-        let extra = self.stack.first().unwrap().extra.clone();
-        // end of block
-        let offset = self.blocks.len();
-
-        let name = b.strings.intern(format!("_block{}", offset));
-        let seq = b
-            .seq(self.stack.drain(..).collect())
-            .set_extra(extra.clone());
-        let nb = NodeBlock {
-            name,
-            params: vec![],
-            body: seq.into(),
-        };
-        let ast = b.build(Ast::Block(nb), extra.clone());
-        self.blocks.push(ast);
-    }
-}
-
 impl<'c, E: Extra> Definition<E> {
     pub fn normalize(mut self, b: &mut NodeBuilder<E>) -> Self {
         // ensure that the function body is a sequence of named blocks
         if let Some(body) = self.body {
             let extra = body.extra.clone();
             // sort body
-            let mut s = crate::builder::AstBlockSorter::new();
+            let mut s = crate::sort::AstBlockSorter::new();
             s.sort_children(*body, &self.params, b);
 
-            let mut blocks = VecDeque::new();
+            let mut blocks = vec![]; //VecDeque::new();
 
             // initial nodes form the entry block
             if s.stack.len() > 0 {
@@ -582,13 +517,13 @@ impl<'c, E: Extra> Definition<E> {
                         //}
                     })
                     .collect::<Vec<_>>();
-                let nb = NodeBlock {
+                let nb = AstNodeBlock {
                     name: b.strings.intern("entry".to_string()),
                     params,
                     body: seq.into(),
                 };
                 let node = b.build(Ast::Block(nb), extra.clone());
-                blocks.push_back(node.into());
+                blocks.push(node.into());
             }
 
             blocks.extend(s.blocks.into_iter().map(|b| b.into()));

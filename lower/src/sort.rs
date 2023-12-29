@@ -1,4 +1,4 @@
-use crate::ast::{Ast, AstNode, Span};
+use crate::ast::{Ast, AstNode, AstNodeBlock, ParameterNode, Span};
 use crate::ir::IRArg;
 use crate::{
     //AstNode, AstType,
@@ -27,13 +27,85 @@ pub struct BlockScope {
 }
 
 pub struct AstBlockSorter<E> {
+    pub stack: Vec<AstNode<E>>,
+    pub blocks: Vec<AstNode<E>>,
+}
+
+impl<E: Extra> AstBlockSorter<E> {
+    pub fn new() -> Self {
+        Self {
+            stack: vec![],
+            blocks: vec![],
+        }
+    }
+    pub fn sort_children(
+        &mut self,
+        ast: AstNode<E>,
+        entry_params: &[ParameterNode<E>],
+        b: &mut NodeBuilder<E>,
+    ) {
+        match ast.node {
+            Ast::Sequence(exprs) => {
+                for e in exprs {
+                    if self.blocks.len() == 0 {
+                        self.sort_children(e, entry_params, b);
+                    } else {
+                        self.sort_children(e, &[], b);
+                    }
+                }
+            }
+            Ast::Block(ref nb) => {
+                // check params match
+                if self.blocks.len() == 0 {
+                    assert_eq!(nb.params.len(), entry_params.len());
+                }
+                self.blocks.push(ast);
+            }
+            Ast::Goto(_, _) => {
+                self.stack.push(ast);
+                self.close_block(b);
+            }
+            Ast::Label(_, _) => {
+                self.close_block(b);
+                self.stack.push(ast);
+            }
+            _ => {
+                self.stack.push(ast);
+            }
+        }
+    }
+
+    fn close_block(&mut self, b: &mut NodeBuilder<E>) {
+        if self.stack.len() == 0 {
+            return;
+        }
+
+        let extra = self.stack.first().unwrap().extra.clone();
+        // end of block
+        let offset = self.blocks.len();
+
+        let name = b.strings.intern(format!("_block{}", offset));
+        let seq = b
+            .seq(self.stack.drain(..).collect())
+            .set_extra(extra.clone());
+        let nb = AstNodeBlock {
+            name,
+            params: vec![],
+            body: seq.into(),
+        };
+        let ast = b.build(Ast::Block(nb), extra.clone());
+        self.blocks.push(ast);
+    }
+}
+
+pub struct AstBlockTransform<E> {
     pub exprs: Vec<AstNode<E>>,
     pub stack: Vec<AstNode<E>>,
     pub blocks: Vec<IRBlock>,
     pub names: HashMap<StringKey, NodeIndex>,
 }
 
-impl<E: Extra> AstBlockSorter<E> {
+impl<E: Extra> AstBlockTransform<E> {
     pub fn new() -> Self {
         Self {
             exprs: vec![],
@@ -120,7 +192,7 @@ impl<E: Extra> AstBlockSorter<E> {
         // skip the first child which is a label, it's redundant now that we have a block
         let params = block.params.clone();
         for expr in exprs.into_iter() {
-            let (ir, ty) = expr.lower_ir_expr(env, place, d, b)?;
+            let (ir, _ty) = expr.lower_ir_expr(env, place, d, b)?;
             children.push(ir);
         }
 
@@ -144,7 +216,7 @@ impl<E: Extra> AstBlockSorter<E> {
         b: &mut NodeBuilder<E>,
     ) {
         match expr.node {
-            Ast::Label(ref name, ref params) => {
+            Ast::Label(ref _name, ref params) => {
                 self.close(place, env, d, b);
                 self.stack.push(expr);
             }
@@ -222,6 +294,7 @@ impl IRBlockSorter {
     ) -> IRNode {
         let mut s = Self::new();
         let ir = match ir.kind {
+            /*
             IRKind::Seq(exprs) => {
                 let label = blocks.fresh_block_label("module", b);
                 //let module = b.s("module");
@@ -233,8 +306,10 @@ impl IRBlockSorter {
                     .insert(0, b.ir_label(label, block_index, vec![]));
                 IRNode::new(IRKind::Block(block), b.extra().get_span())
             }
+            */
             IRKind::Block(ref _block) => ir,
-            _ => unreachable!(),
+            IRKind::Module(ref _block) => ir,
+            _ => unreachable!("{:?}", ir),
         };
 
         s.sort(ir, places, blocks, d, b);
@@ -355,8 +430,8 @@ mod tests {
         let file_id = d.add_source("test.py".into(), "test".into());
         let mut b: NodeBuilder<SimpleExtra> = NodeBuilder::new();
         b.enter(file_id, "type.py");
-
-        let mut env = IREnvironment::new();
+        let module_key = b.s("module");
+        let mut env = IREnvironment::new();//module_key);
         let mut place = IRPlaceTable::new();
         let ast = gen_block(&mut b).normalize(&mut d, &mut b);
         let label = env.blocks.fresh_block_label("module", &mut b);
@@ -372,7 +447,7 @@ mod tests {
             b.ret(None),
         ];
 
-        let blocks = AstBlockSorter::run(seq, &mut env, &mut place, &mut scope, &mut d, &mut b);
+        let blocks = AstBlockTransform::run(seq, &mut env, &mut place, &mut scope, &mut d, &mut b);
         println!("blocks: {:?}", blocks);
     }
 }

@@ -184,7 +184,7 @@ pub enum Terminator {
 }
 
 #[derive(Debug)]
-pub struct NodeBlock<E> {
+pub struct AstNodeBlock<E> {
     pub(crate) name: StringKey,
     //pub(crate) label: BlockLabel,
     pub(crate) params: Vec<ParameterNode<E>>,
@@ -211,8 +211,8 @@ pub enum Ast<E> {
     While(Box<AstNode<E>>, Box<AstNode<E>>),
     Builtin(Builtin, Vec<Argument<E>>),
     Deref(Box<AstNode<E>>, DerefTarget),
-    Block(NodeBlock<E>),
-    Module(NodeBlock<E>),
+    Block(AstNodeBlock<E>),
+    Module(AstNodeBlock<E>),
     Loop(StringKey, Box<AstNode<E>>),
     Break(StringKey),
     Continue(StringKey),
