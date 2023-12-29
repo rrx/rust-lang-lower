@@ -84,7 +84,7 @@ pub struct IRControlBlock {
     arg_count: usize,
     block_index: NodeIndex,
     params: Vec<IRArg>,
-    symbols: HashMap<StringKey, (PlaceId, SymIndex)>,
+    symbols: HashMap<StringKey, PlaceId>,
     places: HashMap<PlaceId, SymIndex>,
     def_count: usize,
 }
@@ -100,7 +100,7 @@ impl IRControlBlock {
             places: HashMap::new(),
         }
     }
-    pub fn lookup(&self, name: StringKey) -> Option<(PlaceId, SymIndex)> {
+    pub fn lookup(&self, name: StringKey) -> Option<PlaceId> {
         self.symbols.get(&name).cloned()
     }
 
@@ -113,7 +113,7 @@ impl IRControlBlock {
 
     pub fn alloca_add(&mut self, place_id: PlaceId, name: StringKey, index: SymIndex) {
         //self.add_symbol(name, index);
-        self.symbols.insert(name, (place_id, index));
+        self.symbols.insert(name, place_id);
         assert_eq!(index.block(), self.block_index);
         self.places.insert(place_id, index);
     }
@@ -131,7 +131,7 @@ impl IRControlBlock {
     pub fn push_arg(&mut self, place_id: PlaceId, name: StringKey) -> SymIndex {
         assert!(self.arg_count < self.params.len());
         let index = SymIndex::Arg(self.block_index, self.arg_count);
-        self.symbols.insert(name, (place_id, index));
+        self.symbols.insert(name, place_id);
         self.arg_count += 1;
         index
     }
@@ -467,7 +467,7 @@ impl IREnvironment {
     }
 
     */
-    pub fn name_in_scope(&self, index: NodeIndex, name: StringKey) -> Option<(PlaceId, SymIndex)> {
+    pub fn name_in_scope(&self, index: NodeIndex, name: StringKey) -> Option<PlaceId> {
         let maybe_dom = simple_fast(&self.blocks.g, self.root())
             .dominators(index)
             .map(|it| it.collect::<Vec<_>>());
@@ -475,8 +475,8 @@ impl IREnvironment {
         if let Some(dom) = maybe_dom {
             for i in dom.into_iter().rev() {
                 let data = self.blocks.g.node_weight(i).unwrap();
-                if let Some((place_id, r)) = data.lookup(name) {
-                    return Some((place_id, r));
+                if let Some(place_id) = data.symbols.get(&name) {
+                    return Some(*place_id);
                 }
             }
         }
@@ -1171,7 +1171,7 @@ impl<E: Extra> AstNode<E> {
 
             Ast::Identifier(name) => {
                 let current_block = env.current_block();
-                if let Some((place_id, sym_index)) = env.name_in_scope(current_block, name) {
+                if let Some(place_id) = env.name_in_scope(current_block, name) {
                     let p = place.get_place(place_id);
                     //let (ty, _mem) = env.lookup_type(sym_index).unwrap();
                     out.push(b.ir_get(place_id, IRTypeSelect::default()));
@@ -1242,7 +1242,7 @@ impl<E: Extra> AstNode<E> {
                 AssignTarget::Alloca(name) | AssignTarget::Identifier(name) => {
                     let (ir, ty) = expr.lower_ir_expr(env, place, d, b)?;
                     let current_block = env.current_block();
-                    if let Some((place_id, sym_index)) = env.name_in_scope(current_block, name) {
+                    if let Some(place_id) = env.name_in_scope(current_block, name) {
                         let p = place.get_place(place_id);
                         //let (ty, mem) = env.lookup_type(sym_index).unwrap();
                         out.push(b.ir_set(place_id, ir, IRTypeSelect::Offset(0)));
@@ -1265,7 +1265,7 @@ impl<E: Extra> AstNode<E> {
                 Ast::Identifier(name) => {
                     let (ir, ty) = rhs.lower_ir_expr(env, place, d, b)?;
                     let current_block = env.current_block();
-                    if let Some((place_id, sym_index)) = env.name_in_scope(current_block, name) {
+                    if let Some(place_id) = env.name_in_scope(current_block, name) {
                         let p = place.get_place(place_id);
                         out.push(b.ir_set(place_id, ir, IRTypeSelect::Offset(0)));
                         Ok(ty)
@@ -1286,7 +1286,7 @@ impl<E: Extra> AstNode<E> {
                 let (f, ty, f_args, name) = match &expr.node {
                     Ast::Identifier(ident) => {
                         let name = b.strings.resolve(ident);
-                        if let Some((place_id, index)) = env.name_in_scope(current_block, *ident) {
+                        if let Some(place_id) = env.name_in_scope(current_block, *ident) {
                             let p = place.get_place(place_id);
                             //if let Some((ty, _mem)) = env.lookup_type(index) {
                             if let AstType::Func(f_args, _) = p.ty.clone() {
