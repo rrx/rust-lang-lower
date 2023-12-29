@@ -218,10 +218,8 @@ pub type CFGGraph<'c> = DiGraph<OpCollection<'c>, ()>;
 
 pub fn values_in_scope<'c, 'a>(
     blocks: &'a CFGBlocks<'c>,
-    //g: &'a CFGGraph<'c>,
     sym_index: SymIndex,
 ) -> Vec<Value<'c, 'a>> {
-    //let data = g.node_weight(sym_index.block()).unwrap();
     let data = blocks.get(&sym_index.block()).unwrap();
     data.values(sym_index)
 }
@@ -237,12 +235,17 @@ pub struct CFGBlocks<'c> {
 impl<'c> CFGBlocks<'c> {
     pub fn new(root: NodeIndex, g: IRGraph) -> Self {
         Self {
-            root, //: NodeIndex::new(0),
+            root,
             blocks: HashMap::new(),
             block_names: HashMap::new(),
             block_names_index: HashMap::new(),
             g,
         }
+    }
+
+    pub fn values_in_scope(&self, sym_index: SymIndex) -> Vec<Value<'c, '_>> {
+        let data = self.get(&sym_index.block()).unwrap();
+        data.values(sym_index)
     }
 
     pub fn get(&self, index: &NodeIndex) -> Option<&OpCollection<'c>> {
@@ -270,10 +273,8 @@ impl<'c> CFGBlocks<'c> {
         params: &[IRArg],
         types: &mut TypeBuilder,
         _d: &Diagnostics,
-        //_g: &mut CFGGraph<'c>,
     ) -> NodeIndex {
         // build parameter list for block
-        //self.g.node_weight(
         let mut block_params = vec![];
         for p in params {
             block_params.push((op::from_type(context, &p.ty), Location::unknown(context)));
@@ -281,9 +282,7 @@ impl<'c> CFGBlocks<'c> {
         }
         let block = Block::new(&block_params);
         let data = OpCollection::new(block);
-        //let index = g.add_node(data);
         self.blocks.insert(index, data);
-        //let block_node = g.node_weight_mut(index).unwrap();
         let block_node = self.blocks.get_mut(&index).unwrap();
         block_node.block_index = index;
         for p in params {
@@ -299,19 +298,13 @@ impl<'c> CFGBlocks<'c> {
         self.block_names.get(name).cloned()
     }
 
-    pub fn name_in_scope(
-        &self,
-        index: NodeIndex,
-        name: StringKey,
-        //_g: &CFGGraph<'c>,
-    ) -> Option<SymIndex> {
+    pub fn name_in_scope(&self, index: NodeIndex, name: StringKey) -> Option<SymIndex> {
         let dom = simple_fast(&self.g, self.root)
             .dominators(index)
             .expect("Node not connected to root")
             .collect::<Vec<_>>();
         //println!("dom: {:?} => {:?}", index, dom);
         for i in dom.into_iter().rev() {
-            //let data = g.node_weight(i).unwrap();
             let data = self.blocks.get(&i).unwrap();
             if let Some(r) = data.lookup(name) {
                 return Some(r);
@@ -327,8 +320,6 @@ impl<'c> CFGBlocks<'c> {
             .collect::<Vec<_>>();
         println!("dom: {:?} => {:?}", index, dom);
         for i in dom.into_iter().rev() {
-            //let data = g.node_weight(i).unwrap();
-            //let data = g.node_weight(i).unwrap();
             let data = self.blocks.get(&i).unwrap();
             let block_name = self.block_names_index.get(&i).unwrap();
             println!(
@@ -341,7 +332,6 @@ impl<'c> CFGBlocks<'c> {
     }
 
     pub fn take_block(&mut self, index: NodeIndex) -> Block<'c> {
-        //let data = g.node_weight_mut(index).unwrap();
         let data = self.blocks.get_mut(&index).unwrap();
         let block = data.block.take().unwrap();
         for op in data.ops.drain(..) {
@@ -351,7 +341,7 @@ impl<'c> CFGBlocks<'c> {
     }
 
     pub fn save_graph<E: Extra>(&self, filename: &str, b: &NodeBuilder<E>) {
-        return;
+        //return;
         use petgraph::dot::{Config, Dot};
         #[derive(Debug)]
         enum Shape {
@@ -397,7 +387,6 @@ impl<'c> CFGBlocks<'c> {
             g_out.add_node(Node::new_block(block_name, node_index));
         }
         for block_node_index in self.g.node_indices() {
-            //let data = g.node_weight(block_node_index).unwrap();
             let data = self.blocks.get(&block_node_index).unwrap();
 
             let mut x = HashMap::new();
@@ -462,6 +451,7 @@ impl<'c> CFGBlocks<'c> {
     }
 }
 
+/*
 pub struct CFG<E> {
     // track local static variables
     // local static variables have global static names
@@ -472,24 +462,12 @@ pub struct CFG<E> {
 impl<'c, E: Extra> CFG<E> {
     pub fn new() -> Self {
         Self {
-            //root,//: NodeIndex::new(0),
-            //blocks: HashMap::new(),
-            //block_names: HashMap::new(),
-            //block_names_index: HashMap::new(),
-            //types: TypeBuilder::new(),
             static_names: HashMap::new(),
             _e: std::marker::PhantomData::default(),
         }
     }
-
-    /*
-    pub fn add_edge(&mut self, a: StringKey, b: StringKey, g: &mut CFGGraph<'c>) {
-        let index_a = self.block_names.get(&a).unwrap();
-        let index_b = self.block_names.get(&b).unwrap();
-        g.add_edge(*index_a, *index_b, ());
-    }
-    */
 }
+*/
 
 //impl<E: Extra> AstNode<E> {
 /*

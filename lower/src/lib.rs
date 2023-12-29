@@ -12,7 +12,7 @@ pub mod types;
 
 pub use ast::{Ast, AstNode, Extra, Literal, SimpleExtra, VarDefinitionSpace};
 pub use builder::{NodeBuilder, NodeID};
-pub use cfg::{CFGBlocks, CFGGraph, SymIndex, CFG};
+pub use cfg::{CFGBlocks, CFGGraph, SymIndex};
 pub use compile::{default_context, default_pass_manager};
 pub use diagnostics::{Diagnostics, FileDB, ParseError};
 pub use intern::StringKey;

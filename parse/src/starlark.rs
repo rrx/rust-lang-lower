@@ -564,7 +564,6 @@ impl<E: Extra> StarlarkParser<E> {
 
         use lower::IREnvironment;
         let mut env = IREnvironment::new();
-        //let mut g = IRGraph::new();
         let index = env.add_block(b.s("module"), vec![], d);
         env.enter_block(index, ast.extra.get_span());
 
@@ -584,7 +583,6 @@ impl<E: Extra> StarlarkParser<E> {
         let root = env.root();
 
         // Analyze
-        //let mut g = IRGraph::new();
         let mut env = IREnvironment::new();
         let ir = lower::ir::IRBlockSorter::run(ir, b);
         if verbose {
@@ -599,12 +597,8 @@ impl<E: Extra> StarlarkParser<E> {
         }
 
         // lower to mlir
-        use lower::cfg::{CFGGraph, CFG};
         let mut types = TypeBuilder::new();
         let mut blocks = CFGBlocks::new(root, env.g);
-        //let mut cfg_g = CFGGraph::new();
-        //let mut cfg: CFG<E> = CFG::new();
-        //context, b.s("module"), env.g, d);
         blocks.add_block_ir(context, root, b.s("module"), &[], &mut types, d);
 
         let mut stack = vec![blocks.root()];
@@ -614,18 +608,12 @@ impl<E: Extra> StarlarkParser<E> {
             &mut types,
             &mut blocks,
             &mut stack,
-            //&mut cfg_g,
             b,
             &mut self.link,
         );
         d.dump();
         r?;
 
-        //if verbose {
-        //env.save_graph("out.dot", b);
-        //}
-
-        //let data = cfg_g.node_weight_mut(blocks.root()).unwrap();
         let data = blocks.get_mut(&blocks.root()).unwrap();
         for op in data.take_ops() {
             module.body().append_operation(op);

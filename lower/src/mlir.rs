@@ -7,7 +7,6 @@ use crate::ast::{
     //Parameter, ParameterNode,
     VarDefinitionSpace,
 };
-use crate::cfg::{values_in_scope, CFGGraph, SymIndex, CFG};
 use crate::ir;
 use crate::ir::{
     //IRGraph,
@@ -16,7 +15,7 @@ use crate::ir::{
 };
 
 use crate::op;
-use crate::{AstType, CFGBlocks, Extra, LinkOptions, NodeBuilder, TypeBuilder};
+use crate::{AstType, CFGBlocks, Extra, LinkOptions, NodeBuilder, SymIndex, TypeBuilder};
 use crate::{Diagnostics, ParseError};
 use anyhow::Error;
 use anyhow::Result;
@@ -53,10 +52,7 @@ impl IRNode {
         d: &mut Diagnostics,
         types: &mut TypeBuilder,
         blocks: &mut CFGBlocks<'c>,
-        //cfg: &mut CFG<'c, E>,
         stack: &mut Vec<NodeIndex>,
-        //g: &mut IRGraph,
-        //cfg_g: &mut CFGGraph<'c>,
         b: &mut NodeBuilder<E>,
         link: &mut LinkOptions,
     ) -> Result<SymIndex> {
@@ -133,7 +129,6 @@ impl IRNode {
                             let ty = op::from_type(context, &ast_ty);
                             let memref_ty = MemRefType::new(ty.into(), &[], None, None);
                             let op = memref::alloca(context, memref_ty, &[], &[], None, location);
-                            //let current = cfg_g.node_weight_mut(current_block).unwrap();
                             let current = blocks.get_mut(&current_block).unwrap();
                             let index = current.push_with_name(op, key);
                             // TODO: FIXME
@@ -286,7 +281,7 @@ impl IRNode {
                 }
                 let rs = rs
                     .into_iter()
-                    .map(|index| values_in_scope(blocks, index)[0])
+                    .map(|index| blocks.values_in_scope(index)[0])
                     .collect::<Vec<_>>();
                 let op = func::r#return(&rs, location);
                 //let current = cfg_g.node_weight_mut(current_block).unwrap();
@@ -368,7 +363,7 @@ impl IRNode {
                         let (ast_ty, mem) = types.lookup_type(sym_index).unwrap();
 
                         if mem.requires_deref() {
-                            let r_addr = values_in_scope(blocks, sym_index)[0];
+                            let r_addr = blocks.values_in_scope(sym_index)[0];
                             let op = memref::load(r_addr, &[], location);
                             //let current = cfg_g.node_weight_mut(current_block).unwrap();
                             let current = blocks.get_mut(&current_block).unwrap();
@@ -417,7 +412,7 @@ impl IRNode {
 
                     let call_args = indices
                         .into_iter()
-                        .map(|index| values_in_scope(blocks, index)[0])
+                        .map(|index| blocks.values_in_scope(index)[0])
                         .collect::<Vec<_>>();
 
                     let op = func::call(

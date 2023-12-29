@@ -5,11 +5,11 @@ use crate::ast::{
     //Literal,
     //Parameter, ParameterNode,
     DerefTarget,
-    Terminator,
+    //Terminator,
     VarDefinitionSpace,
     //Builtin,
 };
-use crate::cfg::{values_in_scope, CFGGraph, SymIndex, CFG};
+//use crate::cfg::{values_in_scope};
 //use crate::ir;
 use crate::ir::{
     //IRGraph,
@@ -18,7 +18,7 @@ use crate::ir::{
 };
 use crate::{
     Ast, AstNode, AstType, CFGBlocks, Diagnostics, Extra, LinkOptions, Literal, NodeBuilder,
-    NodeIndex, ParseError, StringKey, TypeBuilder,
+    NodeIndex, ParseError, StringKey, SymIndex, TypeBuilder,
 };
 
 use anyhow::Error;
@@ -211,12 +211,12 @@ pub fn emit_binop<'c, E: Extra>(
     //println!("{:?}", current);
 
     // types must be the same for binary operation, no implicit casting yet
-    let data = blocks.get(&index_x.block()).unwrap();
-    let a = data.values(index_x)[0];
-    //let a = values_in_scope(blocks, cfg_g, index_x)[0];
-    //let b = values_in_scope(blocks, cfg_g, index_y)[0];
-    let data = blocks.get(&index_y.block()).unwrap();
-    let b = data.values(index_y)[0];
+    //let data = blocks.get(&index_x.block()).unwrap();
+    //let a = data.values(index_x)[0];
+    let a = blocks.values_in_scope(index_x)[0];
+    let b = blocks.values_in_scope(index_y)[0];
+    //let data = blocks.get(&index_y.block()).unwrap();
+    //let b = data.values(index_y)[0];
     let (op, ast_ty) = build_binop(context, op, a, &x_extra, b, &y_extra, location, d)?;
     //let current = cfg_g.node_weight_mut(current_block).unwrap();
     let current = blocks.get_mut(&current_block).unwrap();
@@ -296,7 +296,7 @@ pub fn emit_set_alloca<'c, E: Extra>(
     println!("lhs: {:?}", (sym_index));
     println!("rhs: {:?}", (rhs_index));
     blocks.dump_scope(block_index, b);
-    blocks.save_graph("out.dot", b);
+    //blocks.save_graph("out.dot", b);
 
     let is_symbol_static = sym_index.block() == blocks.root();
 
@@ -312,7 +312,6 @@ pub fn emit_set_alloca<'c, E: Extra>(
         //.strings
         //.resolve(&cfg.static_names.get(&sym_index).cloned().unwrap_or(name));
         let op = memref::get_global(context, &static_name, memref_ty, location);
-        //let current = cfg_g.node_weight_mut(block_index).unwrap();
         let current = blocks.get_mut(&block_index).unwrap();
         let addr_index = current.push(op);
         addr_index
@@ -323,10 +322,8 @@ pub fn emit_set_alloca<'c, E: Extra>(
         //values_in_scope(cfg_g, sym_index)[0]
     };
 
-    let r_value = values_in_scope(blocks, rhs_index)[0];
-    let r_addr = values_in_scope(blocks, addr_index)[0];
-    //let r_value = current.value0(rhs_index).unwrap();
-    //let r_addr = current.value0(sym_index).unwrap();
+    let r_value = blocks.values_in_scope(rhs_index)[0];
+    let r_addr = blocks.values_in_scope(addr_index)[0];
 
     // emit store
     // store(value, memref)
@@ -343,10 +340,8 @@ pub fn emit_noop<'c>(
     location: Location<'c>,
     block_index: NodeIndex,
     blocks: &mut CFGBlocks<'c>,
-    //cfg_g: &mut CFGGraph<'c>,
 ) -> Result<SymIndex> {
     let op = build_bool_op(context, false, location);
-    //let current = cfg_g.node_weight_mut(block_index).unwrap();
     let current = blocks.blocks.get_mut(&block_index).unwrap();
     Ok(current.push(op))
 }
@@ -359,8 +354,6 @@ pub fn emit_set_function<'c, E: Extra>(
     types: &mut TypeBuilder,
     blocks: &mut CFGBlocks<'c>,
     stack: &mut Vec<NodeIndex>,
-    //g: &mut IRGraph,
-    //cfg_g: &mut CFGGraph<'c>,
     d: &mut Diagnostics,
     b: &mut NodeBuilder<E>,
     link: &mut LinkOptions,
@@ -391,20 +384,20 @@ pub fn emit_set_function<'c, E: Extra>(
             for (block, block_index) in block_seq.into_iter() {
                 block_indicies.push(block_index);
 
+                /*
                 let term = block.terminator().unwrap();
                 match term {
                     Terminator::Jump(label) => {
                         let target_block = blocks.block_index(&label).unwrap();
-                        //cfg_g.add_edge(block_index, target_block, ());
                     }
                     Terminator::Branch(a, b) => {
                         for key in &[a, b] {
                             let target_block = blocks.block_index(&key).unwrap();
-                            //cfg_g.add_edge(block_index, target_block, ());
                         }
                     }
                     Terminator::Return => (),
                 }
+                */
 
                 for c in block.children.into_iter() {
                     stack.push(block_index);
@@ -420,13 +413,11 @@ pub fn emit_set_function<'c, E: Extra>(
             // build region and add it to the declared function
             for block_index in block_indicies {
                 let block = blocks.take_block(block_index);
-                //let current = cfg_g.node_weight_mut(current_block).unwrap();
                 let current = blocks.get_mut(&current_block).unwrap();
                 let op = current.op_ref(sym_index);
                 op.region(0).unwrap().append_block(block);
             }
 
-            //let current = cfg_g.node_weight_mut(current_block).unwrap();
             let current = blocks.get_mut(&current_block).unwrap();
             let op = current.op_ref(sym_index);
             op.set_attribute("llvm.emit_c_interface", &Attribute::unit(context));
@@ -478,7 +469,6 @@ pub fn emit_set_static<'c, E: Extra>(
     let attribute =
         DenseElementsAttribute::new(RankedTensorType::new(&[], ty, None).into(), &[value]).unwrap();
 
-    //let current = cfg_g.node_weight_mut(block_index).unwrap();
     let current = blocks.blocks.get_mut(&block_index).unwrap();
     let op = current.op_ref(sym_index);
     op.set_attribute("initial_value", &attribute.into());
@@ -535,7 +525,6 @@ pub fn emit_declare_function<'c, E: Extra>(
             location,
         );
 
-        //let function_block = cfg_g.node_weight_mut(block_index).unwrap();
         let function_block = blocks.blocks.get_mut(&block_index).unwrap();
         let index = function_block.push(op);
         function_block.add_symbol(key, index);
@@ -582,7 +571,6 @@ pub fn emit_declare_static<'c, E: Extra>(
         location,
     );
 
-    //let current = cfg_g.node_weight_mut(block_index).unwrap();
     let current = blocks.blocks.get_mut(&block_index).unwrap();
     let index = current.push_with_name(op, name);
     types.set_type(index, ast_ty, VarDefinitionSpace::Static);
