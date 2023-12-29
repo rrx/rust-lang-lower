@@ -93,7 +93,7 @@ impl IRNode {
                 //key, ast_ty, mem) => {
                 let current_block = stack.last().unwrap().clone();
                 let is_current_static = current_block == blocks.root();
-                let p = place.get(place_id);
+                let p = place.get_place(place_id);
                 match p.mem {
                     VarDefinitionSpace::Static => {
                         if is_current_static {
@@ -167,7 +167,7 @@ impl IRNode {
                 let current_block = stack.last().unwrap().clone();
                 let span = self.span.clone();
                 let is_current_static = current_block == blocks.root();
-                let p = place.get(place_id);
+                let p = place.get_place(place_id);
                 if let Some(sym_index) = blocks.place_in_scope(current_block, place_id) {
                     let is_symbol_static = sym_index.block() == blocks.root();
                     if is_symbol_static && is_current_static {
@@ -356,7 +356,7 @@ impl IRNode {
             IRKind::Get(place_id, _select) => {
                 let current_block = stack.last().unwrap().clone();
                 let span = self.span.clone();
-                let p = place.get(place_id);
+                let p = place.get_place(place_id);
                 if let Some(sym_index) = blocks.name_in_scope(current_block, p.name) {
                     if blocks.block_is_static(sym_index.block()) {
                         let (ast_ty, mem) = types.lookup_type(sym_index).unwrap();

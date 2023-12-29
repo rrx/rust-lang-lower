@@ -1,4 +1,6 @@
-use crate::{AstType, NodeIndex, StringKey, SymIndex, VarDefinitionSpace};
+use crate::{
+    AstType, IRBlockGraph, IRControlBlock, NodeIndex, StringKey, SymIndex, VarDefinitionSpace,
+};
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct PlaceId(u32);
 
@@ -35,9 +37,14 @@ impl PlaceNode {
     }
 }
 
+#[derive(Debug)]
+pub struct BlockNode {}
+
 #[derive(Default)]
 pub struct IRPlaceTable {
     places: Vec<PlaceNode>,
+    //blocks: Vec<BlockNode>,
+    //g: IRBlockGraph,
 }
 
 impl IRPlaceTable {
@@ -45,13 +52,41 @@ impl IRPlaceTable {
         Self::default()
     }
 
-    pub fn add(&mut self, place: PlaceNode) -> PlaceId {
+    pub fn add_place(&mut self, place: PlaceNode) -> PlaceId {
         let offset = self.places.len();
         self.places.push(place);
         PlaceId(offset as u32)
     }
 
-    pub fn get(&self, place_id: PlaceId) -> &PlaceNode {
+    pub fn get_place(&self, place_id: PlaceId) -> &PlaceNode {
         self.places.get(place_id.0 as usize).unwrap()
     }
+
+    /*
+    pub fn connect_block(&mut self, source: NodeIndex, target: NodeIndex) {
+        self.g.add_edge(source, target, ());
+    }
+
+    pub fn get_block(&self, block_id: NodeIndex) -> &IRControlBlock {
+        self.g.node_weight(block_id).unwrap()
+    }
+
+    pub fn get_block_mut(&self, block_id: NodeIndex) -> &mut IRControlBlock {
+        self.g.node_weight_mut(block_id).unwrap()
+    }
+
+    pub fn add_definition(
+        &mut self,
+        block_index: NodeIndex,
+        place_id: PlaceId,
+        name: StringKey,
+    ) -> SymIndex {
+        let data = self.g.node_weight_mut(block_index).unwrap();
+        let index = data.add_definition(place_id);
+        data.alloca_add(place_id, name, index);
+        self.places.insert(place_id, index);
+        //data.add_symbol(name, index);
+        index
+    }
+    */
 }
