@@ -72,7 +72,6 @@ impl IRBlock {
         children: Vec<IRNode>,
     ) -> Self {
         Self {
-            //index: NodeIndex::new(0),
             index,
             label,
             params,
@@ -321,18 +320,28 @@ impl BlockTable {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct IREnvironment {
     stack: Vec<(NodeIndex, Span)>,
     block_names: Vec<HashMap<StringKey, BlockLabel>>,
     places: IndexMap<PlaceId, SymIndex>,
     label_count: usize,
     pub blocks: BlockTable,
+    //module_key: StringKey,
+    //module_root: Option<NodeIndex>,//HashMap<StringKey, NodeIndex>,
 }
 
 impl IREnvironment {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            stack: vec![],
+            block_names: vec![],
+            places: IndexMap::new(),
+            label_count: 0,
+            blocks: BlockTable::new(),
+            //module_key,
+            //module_root: None
+        }
     }
 
     pub fn error(&self, msg: &str, span: Span) -> Diagnostic<usize> {
@@ -364,6 +373,8 @@ impl IREnvironment {
     }
 
     pub fn root(&self) -> NodeIndex {
+        //self.module_root.get(&module_name).unwrap().clone()
+        //self.module_root.unwrap()
         self.stack.first().unwrap().clone().0
     }
 
@@ -389,11 +400,13 @@ impl IREnvironment {
         let maybe_dom = simple_fast(&self.blocks.g, self.root())
             .dominators(index)
             .map(|it| it.collect::<Vec<_>>());
-        //println!("dom: {:?} => {:?}", index, dom);
+        println!("dom: {:?} => {:?}", index, maybe_dom);
         if let Some(dom) = maybe_dom {
             for i in dom.into_iter().rev() {
                 let data = self.blocks.g.node_weight(i).unwrap();
+                println!("searching {:?}", (i, name));
                 if let Some(place_id) = data.symbols.get(&name) {
+                    println!("found {:?}", (place_id, name));
                     return Some(*place_id);
                 }
             }
@@ -412,7 +425,17 @@ impl IREnvironment {
     }
 
     pub fn dump<E>(&self, b: &NodeBuilder<E>, current_block: NodeIndex) {
+        let root = self.blocks.block_names_index.get(&self.root()).unwrap();
+        let current = self.blocks.block_names_index.get(&current_block).unwrap();
+        println!("dump: root: {:?} => {:?}", self.root(), current_block);
+        println!(
+            "dump: root: {:?} => {:?}",
+            b.strings.resolve(root),
+            b.strings.resolve(current)
+        );
+
         self.blocks.dump_node(b, self.root(), current_block, 0);
+        self.blocks.save_graph("out.dot", b);
     }
 }
 
@@ -506,6 +529,27 @@ impl IRNode {
 
     pub fn dump<E: Extra>(&self, places: &IRPlaceTable, b: &NodeBuilder<E>, mut depth: usize) {
         match &self.kind {
+            IRKind::Module(block) => {
+                println!(
+                    "{:width$}module({})",
+                    "",
+                    //block.label.0,
+                    b.strings.resolve(&block.label),
+                    width = depth * 2
+                );
+                for a in &block.params {
+                    println!(
+                        "{:width$}arg: {}: {:?}",
+                        "",
+                        b.strings.resolve(&a.name),
+                        a.ty,
+                        width = (depth + 1) * 2
+                    );
+                }
+                for a in &block.children {
+                    a.dump(places, b, depth + 1);
+                }
+            }
             IRKind::Func(blocks, _ret_ty) => {
                 println!("{:width$}func:", "", width = depth * 2);
                 depth += 1;
@@ -724,6 +768,16 @@ impl IRNode {
     ) -> Result<IRNode> {
         let span = self.get_span().clone();
         match self.kind {
+            IRKind::Module(mut block) => {
+                env.enter_block(block.index, span.clone());
+                let mut out = vec![];
+                for c in block.children {
+                    out.push(c.build_graph(places, env, d, b)?);
+                }
+                block.children = out;
+                env.exit_block();
+                Ok(IRNode::new(IRKind::Module(block), span))
+            }
             IRKind::Noop => Ok(self),
 
             IRKind::Module(_) => Ok(self),
@@ -787,7 +841,8 @@ impl IRNode {
                 return Ok(self);
 
                 let current_block = env.current_block();
-                //self.dump(b, 0);
+                self.dump(places, b, 0);
+                env.dump(b, current_block);
                 let p = places.get_place(place_id);
                 if let Some(_sym_index) = env.name_in_scope(current_block, p.name) {
                     Ok(self)
@@ -865,10 +920,10 @@ impl IRNode {
                     env.blocks
                         .add_block(places, block.label, block.params.clone(), d);
                 block.index = block_index;
-                env.enter_block(block_index, span.clone());
+                env.enter_block(block.index, span.clone());
                 if let Some(last_block) = env.stack.last() {
-                    if last_block.0 != block_index {
-                        env.blocks.g.add_edge(last_block.0, block_index, ());
+                    if last_block.0 != block.index {
+                        env.blocks.g.add_edge(last_block.0, block.index, ());
                     }
                 }
 
@@ -899,6 +954,7 @@ impl IRNode {
             }
 
             IRKind::Cond(condition, then_expr, maybe_else_expr) => {
+                unreachable!();
                 let condition = condition.build_graph(places, env, d, b)?;
                 let current_block = env.current_block();
 
@@ -909,16 +965,16 @@ impl IRNode {
                 let then_block = env.blocks.add_block(places, label, vec![], d);
                 //let then_term = then_expr.kind.terminator();
                 let then_expr = then_expr.build_graph(places, env, d, b)?;
-                env.blocks.g.add_edge(current_block, then_block, ());
-                env.blocks.g.add_edge(then_block, next_block, ());
+                //env.blocks.g.add_edge(current_block, then_block, ());
+                //env.blocks.g.add_edge(then_block, next_block, ());
                 let maybe_else_expr = if let Some(else_expr) = maybe_else_expr {
                     let label = env.blocks.fresh_block_label("else", b);
                     let else_block = env.blocks.add_block(places, label, vec![], d);
                     env.enter_block(else_block, else_expr.span.clone());
                     let else_expr = else_expr.build_graph(places, env, d, b)?;
                     env.exit_block();
-                    env.blocks.g.add_edge(current_block, else_block, ());
-                    env.blocks.g.add_edge(else_block, next_block, ());
+                    //env.blocks.g.add_edge(current_block, else_block, ());
+                    //env.blocks.g.add_edge(else_block, next_block, ());
                     Some(else_expr)
                 } else {
                     None
@@ -962,6 +1018,50 @@ impl<E: Extra> AstNode<E> {
             child.analyze(b);
         }
     }
+
+    pub fn lower_ir_module<'c>(
+        self,
+        env: &mut IREnvironment,
+        place: &mut IRPlaceTable,
+        d: &mut Diagnostics,
+        b: &mut NodeBuilder<E>,
+    ) -> Result<(IRNode, AstType, NodeIndex)> {
+        match self.node {
+            Ast::Module(nb) => {
+                assert_eq!(env.stack_size(), 0);
+                let index = env.blocks.add_block(place, nb.name, vec![], d);
+                env.enter_block(index, self.extra.get_span());
+                //env.module_root = Some(index);
+                let (ir, ty) = nb.body.lower_ir_expr(env, place, d, b)?;
+
+                let mut args = vec![];
+                for a in &nb.params {
+                    args.push(IRArg {
+                        name: a.name,
+                        ty: a.ty.clone(),
+                    });
+                }
+
+                let ir = IRNode::new(
+                    IRKind::Module(IRBlock::new(index, nb.name, args, ir.to_vec())),
+                    self.extra.get_span(),
+                );
+                env.exit_block();
+                Ok((ir, ty, index))
+            }
+            Ast::Sequence(ref _exprs) => {
+                let module_name = b.s("module");
+                let module = b.module(module_name, self);
+                module.lower_ir_module(env, place, d, b)
+            }
+            _ => {
+                let module_name = b.s("module");
+                let module = b.module(module_name, b.seq(vec![self]));
+                module.lower_ir_module(env, place, d, b)
+            }
+        }
+    }
+
     pub fn lower_ir_expr<'c>(
         self,
         env: &mut IREnvironment,
@@ -995,6 +1095,17 @@ impl<E: Extra> AstNode<E> {
 
         match self.node {
             Ast::Noop => Ok(AstType::Unit),
+
+            Ast::Module(nb) => {
+                //unreachable!();
+                let index = env.blocks.add_block(place, nb.name, vec![], d);
+                env.enter_block(index, self.extra.get_span());
+                //env.module_root = Some(index);
+                let (ir, ty) = nb.body.lower_ir_expr(env, place, d, b)?;
+                //env.exit_block();
+                out.push(ir);
+                Ok(ty)
+            }
 
             Ast::Sequence(exprs) => {
                 let mut ty = AstType::Unit;
@@ -1317,6 +1428,7 @@ impl<E: Extra> AstNode<E> {
                 let then_index = env.blocks.add_block(place, b_then, vec![], d);
                 //let span = then_expr.extra.get_span();
                 env.blocks.g.add_edge(current_block, then_index, ());
+                env.blocks.g.add_edge(then_index, next_index, ());
                 let mut then_seq = vec![b.ir_label(b_then, then_index, vec![])];
                 let (then_block, _ty) = then_expr.lower_ir_expr(env, place, d, b)?;
                 let term = then_block.kind.terminator();
@@ -1332,6 +1444,8 @@ impl<E: Extra> AstNode<E> {
                     //let span = else_expr.extra.get_span();
                     let b_else = env.blocks.fresh_block_label("else", b);
                     let else_index = env.blocks.add_block(place, b_else, vec![], d);
+                    env.blocks.g.add_edge(current_block, else_index, ());
+                    env.blocks.g.add_edge(else_index, next_index, ());
                     //let else_index = NodeIndex::new(0);
                     let mut else_seq = vec![b.ir_label(b_else, else_index, vec![])];
                     let (else_block, _ty) = else_expr.lower_ir_expr(env, place, d, b)?;
@@ -1354,7 +1468,7 @@ impl<E: Extra> AstNode<E> {
                 if let Some(seq) = else_seq {
                     out.extend(seq);
                 }
-                let next_index = NodeIndex::new(0);
+                //let next_index = NodeIndex::new(0);
                 out.push(b.ir_label(b_next, next_index, vec![]));
                 Ok(AstType::Unit)
             }

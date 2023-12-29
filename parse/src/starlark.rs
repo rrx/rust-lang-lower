@@ -208,6 +208,7 @@ impl<E: Extra> Parser<E> {
         &mut self,
         path: &Path,
         content: Option<&str>,
+        module_key: StringKey,
         file_id: usize,
         d: &mut Diagnostics,
         b: &mut NodeBuilder<E>,
@@ -226,7 +227,9 @@ impl<E: Extra> Parser<E> {
         let ast: ast::AstNode<E> = self.from_stmt(stmt, &mut env, d, b)?;
         let extra = ast.extra.clone();
         seq.push(ast);
-        Ok(b.seq(seq).set_extra(extra))
+        //let module_key = b.s(module_name);
+        //Ok(b.seq(seq).set_extra(extra))
+        Ok(b.module(module_key, b.seq(seq).set_extra(extra)))
     }
 
     fn from_parameter<'a, P: syntax::ast::AstPayload>(
@@ -560,16 +563,13 @@ impl<E: Extra> StarlarkParser<E> {
         b.enter(file_id, &filename);
 
         let mut parser = Parser::new();
+        let module_key = b.s("module");
         let ast: AstNode<E> = parser
-            .parse(Path::new(filename), None, file_id, d, b)?
+            .parse(Path::new(filename), None, module_key, file_id, d, b)?
             .normalize(d, b);
 
         use lower::IREnvironment;
-        let mut env = IREnvironment::new();
-        let index = env
-            .blocks
-            .add_block(&mut self.place, b.s("module"), vec![], d);
-        env.enter_block(index, ast.extra.get_span());
+        let mut env = IREnvironment::new(); //module_key);
 
         // lower ast to ir
         let r = ast.lower_ir_expr(&mut env, &mut self.place, d, b);
@@ -588,11 +588,14 @@ impl<E: Extra> StarlarkParser<E> {
 
         // Analyze
         let ir = lower::sort::IRBlockSorter::run(ir, &mut self.place, &mut env.blocks, d, b);
-        //if verbose {
-        //ir.dump(&self.place, &b, 0);
-        //}
+        if verbose {
+            ir.dump(&self.place, &b, 0);
+        }
 
         let mut env = IREnvironment::new();
+        //env.blocks.save_graph("out.dot", b);
+        //return Ok(());
+
         let r = ir.build_graph(&mut self.place, &mut env, d, b);
         d.dump();
         let ir = r?;
@@ -600,6 +603,8 @@ impl<E: Extra> StarlarkParser<E> {
         if verbose {
             env.blocks.save_graph("out.dot", b);
         }
+        env.blocks.save_graph("out.dot", b);
+        //return Ok(());
 
         // lower to mlir
         //let root = env.root();
