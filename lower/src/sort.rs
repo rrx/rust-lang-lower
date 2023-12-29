@@ -288,6 +288,7 @@ impl IRBlockSorter {
     pub fn run<E: Extra>(
         ir: IRNode,
         places: &mut IRPlaceTable,
+        //env: &mut IREnvironment,
         blocks: &mut BlockTable,
         d: &mut Diagnostics,
         b: &mut NodeBuilder<E>,
@@ -296,8 +297,10 @@ impl IRBlockSorter {
         let ir = match ir.kind {
             IRKind::Seq(exprs) => {
                 let label = blocks.fresh_block_label("module", b);
+                //let index = blocks.add_block(places, label, vec![], d);
+                let index = NodeIndex::new(0);
                 //let module = b.s("module");
-                let mut block = IRBlock::new(label, vec![], exprs);
+                let mut block = IRBlock::new(index, label, vec![], exprs);
                 //let block_index = blocks.add_block(places, label, vec![], d);
                 let block_index = NodeIndex::new(0);
                 block

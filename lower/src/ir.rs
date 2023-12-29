@@ -65,9 +65,15 @@ pub struct IRBlock {
 }
 
 impl IRBlock {
-    pub fn new(label: BlockLabel, params: Vec<IRArg>, children: Vec<IRNode>) -> Self {
+    pub fn new(
+        index: NodeIndex,
+        label: BlockLabel,
+        params: Vec<IRArg>,
+        children: Vec<IRNode>,
+    ) -> Self {
         Self {
-            index: NodeIndex::new(0),
+            //index: NodeIndex::new(0),
+            index,
             label,
             params,
             children,
@@ -1017,8 +1023,8 @@ impl<E: Extra> AstNode<E> {
                     });
                 }
 
-                //let block_index = env.blocks.add_block(place, name, args.clone(), d);
-                let block_index = NodeIndex::new(0);
+                let block_index = env.blocks.add_block(place, name, args.clone(), d);
+                //let block_index = NodeIndex::new(0);
                 //let s = b.strings.resolve(&name);
                 //let label = env.blocks.fresh_block_label(s, b);
                 //env.block_names.last_mut().unwrap().insert(name, label);
@@ -1251,7 +1257,7 @@ impl<E: Extra> AstNode<E> {
                         exprs.extend(ir.to_vec());
 
                         //let label = env.blocks.fresh_block_label(
-                        let block = IRBlock::new(nb.name, args, exprs);
+                        let block = IRBlock::new(block_index, nb.name, args, exprs);
                         blocks.push(block);
                         env.exit_block();
                     }
