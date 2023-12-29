@@ -66,7 +66,7 @@ impl IRNode {
                 op::emit_noop(context, location, current_block, blocks)
             }
 
-            IRKind::Block(block) => {
+            IRKind::Block(block) | IRKind::Module(block) => {
                 let current_block = stack.last().unwrap().clone();
                 // this is only used for the top level module?
                 assert_eq!(blocks.root(), current_block);

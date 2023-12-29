@@ -572,19 +572,19 @@ impl<E: Extra> StarlarkParser<E> {
         let mut env = IREnvironment::new(); //module_key);
 
         // lower ast to ir
-        let r = ast.lower_ir_expr(&mut env, &mut self.place, d, b);
+        let r = ast.lower_ir_module(&mut env, &mut self.place, d, b);
         d.dump();
 
         if d.has_errors {
             return Err(Error::new(ParseError::Invalid));
         }
 
-        let (ir, _ty) = r?;
+        let (ir, _ty, root) = r?;
         if verbose {
             ir.dump(&self.place, &b, 0);
         }
-        assert_eq!(1, env.stack_size());
-        let root = env.root();
+        assert_eq!(0, env.stack_size());
+        //let root = env.root();
 
         // Analyze
         let ir = lower::sort::IRBlockSorter::run(ir, &mut self.place, &mut env.blocks, d, b);

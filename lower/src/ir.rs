@@ -1097,12 +1097,12 @@ impl<E: Extra> AstNode<E> {
             Ast::Noop => Ok(AstType::Unit),
 
             Ast::Module(nb) => {
-                //unreachable!();
+                unreachable!();
                 let index = env.blocks.add_block(place, nb.name, vec![], d);
                 env.enter_block(index, self.extra.get_span());
                 //env.module_root = Some(index);
                 let (ir, ty) = nb.body.lower_ir_expr(env, place, d, b)?;
-                //env.exit_block();
+                env.exit_block();
                 out.push(ir);
                 Ok(ty)
             }
