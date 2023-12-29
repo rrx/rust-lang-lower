@@ -263,11 +263,13 @@ impl BlockTable {
         index
     }
 
+    /*
     pub fn add_edge(&mut self, a: BlockLabel, b: BlockLabel, g: &mut IRBlockGraph) {
         let index_a = self.block_names.get(&a).unwrap();
         let index_b = self.block_names.get(&b).unwrap();
         g.add_edge(*index_a, *index_b, ());
     }
+    */
 
     pub fn dump_node<E>(
         &self,
@@ -1279,9 +1281,9 @@ impl<E: Extra> AstNode<E> {
                     let (ir, _ty) = expr.lower_ir_expr(env, place, d, b)?;
                     args.push(ir);
                 }
-                let label = env.block_names.last_mut().unwrap().get(&name).unwrap();
+                //let label = env.block_names.last_mut().unwrap().get(&name).unwrap();
 
-                out.push(b.ir_jump(*label, args));
+                out.push(b.ir_jump(name, args));
                 Ok(AstType::Unit)
             }
 
