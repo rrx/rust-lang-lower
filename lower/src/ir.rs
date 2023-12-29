@@ -209,11 +209,15 @@ impl BlockTable {
         Self::default()
     }
 
-    pub fn fresh_block_label<E: Extra>(&mut self, name: &str, b: &mut NodeBuilder<E>) -> BlockLabel {
+    pub fn fresh_block_label<E: Extra>(
+        &mut self,
+        name: &str,
+        b: &mut NodeBuilder<E>,
+    ) -> BlockLabel {
         let offset = self.names.len();
         let s = b.s(&format!("b_{}_{}", name, offset));
         self.names.push(s);
-        //BlockLabel(offset as u32) 
+        //BlockLabel(offset as u32)
         s
     }
 
@@ -228,7 +232,7 @@ impl BlockTable {
     }
 
     //pub fn lookup_block(&self, name: StringKey) -> Option<NodeIndex> {
-        //self.block_names.get(&name).cloned()
+    //self.block_names.get(&name).cloned()
     //}
 
     pub fn connect_block(&mut self, source: NodeIndex, target: NodeIndex) {
@@ -275,9 +279,7 @@ impl BlockTable {
         let data = &self.g[index];
         let key = self.block_names_index.get(&index).unwrap();
         //let key = self.names.get(label.0 as usize).unwrap();
-        let name = b
-            .strings
-            .resolve(key);
+        let name = b.strings.resolve(key);
         if index == current_block {
             println!("{:width$}Current: {}", "", name, width = depth * 2);
         } else {
@@ -657,7 +659,12 @@ impl IRBlockSorter {
         b.ir_seq(blocks)
     }
 
-    pub fn sort_block<E: Extra>(&mut self, block: IRBlock, blocks: &mut BlockTable, b: &mut NodeBuilder<E>) {
+    pub fn sort_block<E: Extra>(
+        &mut self,
+        block: IRBlock,
+        blocks: &mut BlockTable,
+        b: &mut NodeBuilder<E>,
+    ) {
         let mut s = Self::new();
         for c in block.children {
             s.sort(c, blocks, b);
@@ -1094,9 +1101,9 @@ impl IRNode {
                 //let span = self.get_span().clone();
                 //let s = b.strings.resolve(&block.name);
                 //let label = env.blocks.fresh_block_label(&s, b);
-                let block_index = env
-                    .blocks
-                    .add_block(places, block.label, block.params.clone(), d);
+                let block_index =
+                    env.blocks
+                        .add_block(places, block.label, block.params.clone(), d);
                 block.index = block_index;
                 env.enter_block(block_index, span.clone());
                 if let Some(last_block) = env.stack.last() {

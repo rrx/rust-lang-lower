@@ -3,8 +3,7 @@ use crate::intern::StringPool;
 use crate::Diagnostics;
 use crate::{
     ir::{IRArg, IRKind, IRNode, IRTypeSelect},
-    AstType, PlaceId, StringKey,
-    BlockLabel,
+    AstType, BlockLabel, PlaceId, StringKey,
 };
 use melior::{ir::Location, Context};
 use std::collections::VecDeque;

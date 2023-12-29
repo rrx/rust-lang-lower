@@ -1,6 +1,6 @@
 use crate::intern::StringKey;
 use crate::Diagnostics;
-use crate::{AstType, NodeID, BlockLabel};
+use crate::{AstType, BlockLabel, NodeID};
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use melior::{ir::Location, Context};
 use std::fmt::Debug;

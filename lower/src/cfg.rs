@@ -2,8 +2,8 @@ use crate::intern::StringKey;
 use crate::op;
 use crate::types::TypeBuilder;
 use crate::{
-    AstType, Diagnostics, Extra, IRArg, IRBlockGraph, IRPlaceTable, NodeBuilder, PlaceId,
-    VarDefinitionSpace, BlockLabel,
+    AstType, BlockLabel, Diagnostics, Extra, IRArg, IRBlockGraph, IRPlaceTable, NodeBuilder,
+    PlaceId, VarDefinitionSpace,
 };
 use melior::ir::Location;
 use melior::{
