@@ -9,6 +9,7 @@ pub mod link;
 pub mod mlir;
 pub mod op;
 pub mod place;
+pub mod sort;
 pub mod types;
 
 pub use ast::{Ast, AstNode, Extra, Literal, SimpleExtra, VarDefinitionSpace};
