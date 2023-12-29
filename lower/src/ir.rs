@@ -98,11 +98,11 @@ impl IRControlBlock {
             places: HashMap::new(),
         }
     }
-    /*
     pub fn lookup(&self, name: StringKey) -> Option<SymIndex> {
         self.symbols.get(&name).cloned()
     }
 
+    /*
     pub fn add_symbol(&mut self, name: StringKey, index: SymIndex) {
         assert_eq!(index.block(), self.block_index);
         self.symbols.insert(name, index);
@@ -119,9 +119,11 @@ impl IRControlBlock {
         self.places.get(&place_id).cloned()
     }
 
+    /*
     pub fn alloca_get_name(&self, name: StringKey) -> Option<SymIndex> {
         self.symbols.get(&name).cloned()
     }
+    */
 
     pub fn push_arg(&mut self, name: StringKey) -> SymIndex {
         assert!(self.arg_count < self.params.len());
@@ -305,7 +307,7 @@ impl IREnvironment {
         if let Some(dom) = maybe_dom {
             for i in dom.into_iter().rev() {
                 let data = self.g.node_weight(i).unwrap();
-                if let Some(r) = data.alloca_get_name(name) {
+                if let Some(r) = data.lookup(name) {
                     return Some(r);
                 }
             }

@@ -29,6 +29,10 @@ impl PlaceNode {
     pub fn new_stack(name: StringKey, ty: AstType) -> Self {
         Self::new(name, ty, VarDefinitionSpace::Stack)
     }
+
+    pub fn new_arg(name: StringKey, ty: AstType) -> Self {
+        Self::new(name, ty, VarDefinitionSpace::Arg)
+    }
 }
 
 #[derive(Default)]
