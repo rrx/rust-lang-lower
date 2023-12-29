@@ -82,7 +82,7 @@ pub struct IRControlBlock {
     arg_count: usize,
     block_index: NodeIndex,
     params: Vec<IRArg>,
-    symbols: HashMap<StringKey, SymIndex>,
+    symbols: HashMap<StringKey, (PlaceId, SymIndex)>,
     places: HashMap<PlaceId, SymIndex>,
     def_count: usize,
 }
@@ -98,7 +98,7 @@ impl IRControlBlock {
             places: HashMap::new(),
         }
     }
-    pub fn lookup(&self, name: StringKey) -> Option<SymIndex> {
+    pub fn lookup(&self, name: StringKey) -> Option<(PlaceId, SymIndex)> {
         self.symbols.get(&name).cloned()
     }
 
@@ -111,7 +111,8 @@ impl IRControlBlock {
 
     pub fn alloca_add(&mut self, place_id: PlaceId, name: StringKey, index: SymIndex) {
         //self.add_symbol(name, index);
-        self.symbols.insert(name, index);
+        self.symbols.insert(name, (place_id, index));
+        assert_eq!(index.block(), self.block_index);
         self.places.insert(place_id, index);
     }
 
@@ -125,10 +126,10 @@ impl IRControlBlock {
     }
     */
 
-    pub fn push_arg(&mut self, name: StringKey) -> SymIndex {
+    pub fn push_arg(&mut self, place_id: PlaceId, name: StringKey) -> SymIndex {
         assert!(self.arg_count < self.params.len());
         let index = SymIndex::Arg(self.block_index, self.arg_count);
-        self.symbols.insert(name, index);
+        self.symbols.insert(name, (place_id, index));
         self.arg_count += 1;
         index
     }
@@ -276,6 +277,7 @@ impl IREnvironment {
 
     pub fn add_block(
         &mut self,
+        places: &mut IRPlaceTable,
         name: StringKey,
         params: Vec<IRArg>,
         _d: &Diagnostics,
@@ -287,7 +289,9 @@ impl IREnvironment {
 
         let data = self.g.node_weight_mut(index).unwrap();
         for a in params {
-            data.push_arg(a.name);
+            let p = PlaceNode::new_arg(a.name, a.ty);
+            let place_id = places.add(p);
+            data.push_arg(place_id, a.name);
         }
 
         index
@@ -299,7 +303,7 @@ impl IREnvironment {
         g.add_edge(*index_a, *index_b, ());
     }
 
-    pub fn name_in_scope(&self, index: NodeIndex, name: StringKey) -> Option<SymIndex> {
+    pub fn name_in_scope(&self, index: NodeIndex, name: StringKey) -> Option<(PlaceId, SymIndex)> {
         let maybe_dom = simple_fast(&self.g, self.root())
             .dominators(index)
             .map(|it| it.collect::<Vec<_>>());
@@ -307,8 +311,8 @@ impl IREnvironment {
         if let Some(dom) = maybe_dom {
             for i in dom.into_iter().rev() {
                 let data = self.g.node_weight(i).unwrap();
-                if let Some(r) = data.lookup(name) {
-                    return Some(r);
+                if let Some((place_id, r)) = data.lookup(name) {
+                    return Some((place_id, r));
                 }
             }
         }
@@ -395,7 +399,7 @@ impl IREnvironment {
 pub enum IRKind {
     Decl(PlaceId),
     // set(variable, expr, type offset)
-    Set(StringKey, Box<IRNode>, IRTypeSelect),
+    Set(PlaceId, Box<IRNode>, IRTypeSelect),
     // get(variable, type offset)
     Get(StringKey, IRTypeSelect),
     // ret(args)
@@ -640,11 +644,12 @@ impl IRNode {
                     width = depth * 2
                 );
             }
-            IRKind::Set(key, v, select) => {
+            IRKind::Set(place_id, v, select) => {
+                let p = places.get(*place_id);
                 println!(
                     "{:width$}set({}, {:?})",
                     "",
-                    b.strings.resolve(key),
+                    b.strings.resolve(&p.name),
                     select,
                     width = depth * 2
                 );
@@ -770,7 +775,7 @@ impl IRNode {
 
     pub fn build_graph<'c, E: Extra>(
         self,
-        places: &IRPlaceTable,
+        places: &mut IRPlaceTable,
         env: &mut IREnvironment,
         d: &mut Diagnostics,
         b: &mut NodeBuilder<E>,
@@ -850,18 +855,18 @@ impl IRNode {
                 }
             }
 
-            IRKind::Set(name, value, select) => {
-                let current_index = env.current_block();
-                if let Some(_index) = env.name_in_scope(current_index, name) {
-                    let value = value.build_graph(places, env, d, b)?;
-                    Ok(b.ir_set(name, value, select))
-                } else {
-                    d.push_diagnostic(error(
-                        &format!("Set undefined variable: {:?}", b.strings.resolve(&name)),
-                        self.span.clone(),
-                    ));
-                    Err(Error::new(ParseError::Invalid))
-                }
+            IRKind::Set(place_id, value, select) => {
+                //let current_index = env.current_block();
+                //if let Some(_index) = env.name_in_scope(current_index, name) {
+                let value = value.build_graph(places, env, d, b)?;
+                Ok(b.ir_set(place_id, value, select))
+                //} else {
+                //d.push_diagnostic(error(
+                //&format!("Set undefined variable: {:?}", b.strings.resolve(&name)),
+                //self.span.clone(),
+                //));
+                //Err(Error::new(ParseError::Invalid))
+                //}
             }
 
             IRKind::Decl(place_id) => {
@@ -878,7 +883,7 @@ impl IRNode {
                 let current_block = env.current_block();
                 let mut seq = vec![];
                 for (i, mut block) in blocks.into_iter().enumerate() {
-                    let block_index = env.add_block(block.name, block.params.clone(), d);
+                    let block_index = env.add_block(places, block.name, block.params.clone(), d);
                     block.index = block_index;
                     if 0 == i {
                         env.g.add_edge(current_block, block_index, ());
@@ -905,7 +910,7 @@ impl IRNode {
 
             IRKind::Block(mut block) => {
                 //let span = self.get_span().clone();
-                let block_index = env.add_block(block.name, block.params.clone(), d);
+                let block_index = env.add_block(places, block.name, block.params.clone(), d);
                 block.index = block_index;
                 env.enter_block(block_index, span.clone());
                 if let Some(last_block) = env.stack.last() {
@@ -944,15 +949,15 @@ impl IRNode {
                 let condition = condition.build_graph(places, env, d, b)?;
                 let current_block = env.current_block();
 
-                let next_block = env.add_block(b.s("next"), vec![], d);
+                let next_block = env.add_block(places, b.s("next"), vec![], d);
 
-                let then_block = env.add_block(b.s("then"), vec![], d);
+                let then_block = env.add_block(places, b.s("then"), vec![], d);
                 //let then_term = then_expr.kind.terminator();
                 let then_expr = then_expr.build_graph(places, env, d, b)?;
                 env.g.add_edge(current_block, then_block, ());
                 env.g.add_edge(then_block, next_block, ());
                 let maybe_else_expr = if let Some(else_expr) = maybe_else_expr {
-                    let else_block = env.add_block(b.s("else"), vec![], d);
+                    let else_block = env.add_block(places, b.s("else"), vec![], d);
                     env.enter_block(else_block, else_expr.span.clone());
                     let else_expr = else_expr.build_graph(places, env, d, b)?;
                     env.exit_block();
@@ -1081,15 +1086,16 @@ impl<E: Extra> AstNode<E> {
 
             Ast::Identifier(name) => {
                 let current_block = env.current_block();
-                if let Some(sym_index) = env.name_in_scope(current_block, name) {
-                    let (ty, _mem) = env.lookup_type(sym_index).unwrap();
+                if let Some((place_id, sym_index)) = env.name_in_scope(current_block, name) {
+                    let p = place.get(place_id);
+                    //let (ty, _mem) = env.lookup_type(sym_index).unwrap();
                     out.push(b.ir_get(name, IRTypeSelect::default()));
-                    Ok(ty)
+                    Ok(p.ty.clone())
                 } else {
-                    d.push_diagnostic(
-                        self.extra
-                            .error(&format!("Name not found: {}", b.strings.resolve(&name))),
-                    );
+                    d.push_diagnostic(self.extra.error(&format!(
+                        "Variable name not found: {}",
+                        b.strings.resolve(&name)
+                    )));
                     Err(Error::new(ParseError::Invalid))
                 }
             }
@@ -1113,7 +1119,7 @@ impl<E: Extra> AstNode<E> {
                     let place_id = place.add(place_data);
 
                     out.push(b.ir_decl(place_id)); //ident, ty.clone(), VarDefinitionSpace::Static));
-                    out.push(b.ir_set(ident, v, IRTypeSelect::default()));
+                    out.push(b.ir_set(place_id, v, IRTypeSelect::default()));
                     let index = env.add_definition(current_block, place_id, ident);
                     env.set_type(index, ty.clone(), VarDefinitionSpace::Static);
 
@@ -1151,17 +1157,18 @@ impl<E: Extra> AstNode<E> {
                 AssignTarget::Alloca(name) | AssignTarget::Identifier(name) => {
                     let (ir, ty) = expr.lower_ir_expr(env, place, d, b)?;
                     let current_block = env.current_block();
-                    if let Some(sym_index) = env.name_in_scope(current_block, name) {
-                        let (ty, mem) = env.lookup_type(sym_index).unwrap();
-                        out.push(b.ir_set(name, ir, IRTypeSelect::Offset(0)));
-                        env.set_type(sym_index, ty.clone(), mem);
+                    if let Some((place_id, sym_index)) = env.name_in_scope(current_block, name) {
+                        let p = place.get(place_id);
+                        //let (ty, mem) = env.lookup_type(sym_index).unwrap();
+                        out.push(b.ir_set(place_id, ir, IRTypeSelect::Offset(0)));
+                        env.set_type(sym_index, p.ty.clone(), p.mem);
                         Ok(ty)
                     } else {
                         let place_data = PlaceNode::new_stack(name, ty.clone());
                         //place_data.mem = VarDefinitionSpace::Stack;
                         let place_id = place.add(place_data);
                         out.push(b.ir_decl(place_id)); //name, ty.clone(), VarDefinitionSpace::Stack));
-                        out.push(b.ir_set(name, ir, IRTypeSelect::Offset(0)));
+                        out.push(b.ir_set(place_id, ir, IRTypeSelect::Offset(0)));
                         let index = env.add_definition(current_block, place_id, name);
                         env.set_type(index, ty.clone(), VarDefinitionSpace::Stack);
                         Ok(ty)
@@ -1172,8 +1179,18 @@ impl<E: Extra> AstNode<E> {
             Ast::Mutate(lhs, rhs) => match lhs.node {
                 Ast::Identifier(name) => {
                     let (ir, ty) = rhs.lower_ir_expr(env, place, d, b)?;
-                    out.push(b.ir_set(name, ir, IRTypeSelect::Offset(0)));
-                    Ok(ty)
+                    let current_block = env.current_block();
+                    if let Some((place_id, sym_index)) = env.name_in_scope(current_block, name) {
+                        let p = place.get(place_id);
+                        out.push(b.ir_set(place_id, ir, IRTypeSelect::Offset(0)));
+                        Ok(ty)
+                    } else {
+                        d.push_diagnostic(
+                            self.extra
+                                .error(&format!("Name not found: {}", b.strings.resolve(&name))),
+                        );
+                        return Err(Error::new(ParseError::Invalid));
+                    }
                 }
                 _ => unimplemented!("{:?}", &lhs.node),
             },
@@ -1184,29 +1201,28 @@ impl<E: Extra> AstNode<E> {
                 let (f, ty, f_args, name) = match &expr.node {
                     Ast::Identifier(ident) => {
                         let name = b.strings.resolve(ident);
-                        if let Some(index) = env.name_in_scope(current_block, *ident) {
-                            if let Some((ty, _mem)) = env.lookup_type(index) {
-                                if let AstType::Func(f_args, _) = ty.clone() {
-                                    (ident, ty, f_args, name)
-                                } else {
-                                    d.push_diagnostic(
-                                        self.extra.error(&format!(
-                                            "Type not function: {}, {:?}",
-                                            name, ty
-                                        )),
-                                    );
-                                    return Err(Error::new(ParseError::Invalid));
-                                }
+                        if let Some((place_id, index)) = env.name_in_scope(current_block, *ident) {
+                            let p = place.get(place_id);
+                            //if let Some((ty, _mem)) = env.lookup_type(index) {
+                            if let AstType::Func(f_args, _) = p.ty.clone() {
+                                (ident, p.ty.clone(), f_args, name)
                             } else {
                                 d.push_diagnostic(
                                     self.extra
-                                        .error(&format!("Type not found: {}, {:?}", name, index)),
+                                        .error(&format!("Type not function: {}, {:?}", name, p.ty)),
                                 );
                                 return Err(Error::new(ParseError::Invalid));
                             }
+                            //} else {
+                            //d.push_diagnostic(
+                            //self.extra
+                            //.error(&format!("Type not found: {}, {:?}", name, index)),
+                            //);
+                            //return Err(Error::new(ParseError::Invalid));
+                            //}
                         } else {
                             d.push_diagnostic(
-                                self.extra.error(&format!("Name not found: {}", name)),
+                                self.extra.error(&format!("Call name not found: {}", name)),
                             );
                             return Err(Error::new(ParseError::Invalid));
                         }
@@ -1287,7 +1303,7 @@ impl<E: Extra> AstNode<E> {
                                 nb.name = def.name;
                             }
 
-                            let block_index = env.add_block(nb.name, args.clone(), d);
+                            let block_index = env.add_block(place, nb.name, args.clone(), d);
                             edges.push((current_block, block_index));
 
                             output_blocks.push((nb, block_index));
@@ -1332,7 +1348,7 @@ impl<E: Extra> AstNode<E> {
                     let blocks = s.blocks;
 
                     let ir = IRNode::new(IRKind::Func(blocks, ast_ret_type), span);
-                    out.push(b.ir_set(def.name, ir, IRTypeSelect::default()));
+                    out.push(b.ir_set(place_id, ir, IRTypeSelect::default()));
                 }
                 Ok(AstType::Unit)
             }
@@ -1373,7 +1389,7 @@ impl<E: Extra> AstNode<E> {
                 let b_next = env.fresh_label("next", b);
 
                 // then
-                let then_index = env.add_block(b_then, vec![], d);
+                let then_index = env.add_block(place, b_then, vec![], d);
                 //let span = then_expr.extra.get_span();
                 env.g.add_edge(current_block, then_index, ());
                 let mut then_seq = vec![b.ir_label(b_then, vec![])];
@@ -1461,10 +1477,10 @@ mod tests {
         b.enter(file_id, "type.py");
 
         let mut env = IREnvironment::new();
-        let ast = gen_block(&mut b).normalize(&mut d, &mut b);
-        let index = env.add_block(b.s("module"), vec![], &d);
-        env.enter_block(index, ast.extra.get_span());
         let mut place = IRPlaceTable::new();
+        let ast = gen_block(&mut b).normalize(&mut d, &mut b);
+        let index = env.add_block(&mut place, b.s("module"), vec![], &d);
+        env.enter_block(index, ast.extra.get_span());
         let r = ast.lower_ir_expr(&mut env, &mut place, &mut d, &mut b);
         d.dump();
         assert!(!d.has_errors);
@@ -1486,7 +1502,7 @@ mod tests {
 
         let ast = crate::tests::gen_function_call(&mut b).normalize(&mut d, &mut b);
 
-        let index = env.add_block(b.s("module"), vec![], &d);
+        let index = env.add_block(&mut place, b.s("module"), vec![], &d);
         env.enter_block(index, ast.extra.get_span());
 
         let r = ast.lower_ir_expr(&mut env, &mut place, &mut d, &mut b);

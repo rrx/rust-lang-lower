@@ -394,9 +394,9 @@ impl<E: Extra> NodeBuilder<E> {
         IRNode::new(IRKind::Get(key, select), self.span.clone().unwrap())
     }
 
-    pub fn ir_set(&self, key: StringKey, expr: IRNode, select: IRTypeSelect) -> IRNode {
+    pub fn ir_set(&self, place_id: PlaceId, expr: IRNode, select: IRTypeSelect) -> IRNode {
         IRNode::new(
-            IRKind::Set(key, expr.into(), select),
+            IRKind::Set(place_id, expr.into(), select),
             self.span.clone().unwrap(),
         )
     }

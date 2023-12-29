@@ -1,7 +1,10 @@
 use crate::intern::StringKey;
 use crate::op;
 use crate::types::TypeBuilder;
-use crate::{AstType, Diagnostics, Extra, IRArg, IRBlockGraph, NodeBuilder, VarDefinitionSpace};
+use crate::{
+    AstType, Diagnostics, Extra, IRArg, IRBlockGraph, IRPlaceTable, NodeBuilder, PlaceId,
+    VarDefinitionSpace,
+};
 use melior::ir::Location;
 use melior::{
     ir::{Block, Operation, Value},
@@ -72,6 +75,7 @@ pub struct OpCollection<'c> {
     block_index: NodeIndex,
     ops: Vec<Operation<'c>>,
     symbols: HashMap<StringKey, SymIndex>,
+    places: HashMap<PlaceId, SymIndex>,
 }
 
 impl<'c> OpCollection<'c> {
@@ -84,6 +88,7 @@ impl<'c> OpCollection<'c> {
             block_index: NodeIndex::new(0),
             ops: vec![],
             symbols: HashMap::new(),
+            places: HashMap::new(),
         }
     }
 
@@ -111,9 +116,17 @@ impl<'c> OpCollection<'c> {
         SymIndex::Op(self.block_index, offset)
     }
 
+    /*
     pub fn push_with_name(&mut self, op: Operation<'c>, name: StringKey) -> SymIndex {
         let index = self.push(op);
         self.symbols.insert(name, index);
+        index
+    }
+    */
+
+    pub fn push_with_place(&mut self, op: Operation<'c>, place_id: PlaceId) -> SymIndex {
+        let index = self.push(op);
+        self.places.insert(place_id, index);
         index
     }
 
@@ -170,6 +183,10 @@ impl<'c> OpCollection<'c> {
         self.symbols.get(&name).cloned()
     }
 
+    pub fn lookup_place(&self, place_id: PlaceId) -> Option<SymIndex> {
+        self.places.get(&place_id).cloned()
+    }
+
     pub fn append_ops(&mut self, block_ref: &Block<'c>) {
         for op in self.take_ops() {
             block_ref.append_operation(op);
@@ -185,6 +202,11 @@ impl<'c> OpCollection<'c> {
     pub fn add_symbol(&mut self, name: StringKey, index: SymIndex) {
         assert_eq!(index.block(), self.block_index);
         self.symbols.insert(name, index);
+    }
+
+    pub fn add_place(&mut self, place_id: PlaceId, index: SymIndex) {
+        assert_eq!(index.block(), self.block_index);
+        self.places.insert(place_id, index);
     }
 
     pub fn push_arg(&mut self, name: StringKey) -> SymIndex {
@@ -300,6 +322,21 @@ impl<'c> CFGBlocks<'c> {
 
     pub fn block_index(&self, name: &StringKey) -> Option<NodeIndex> {
         self.block_names.get(name).cloned()
+    }
+
+    pub fn place_in_scope(&self, index: NodeIndex, place_id: PlaceId) -> Option<SymIndex> {
+        let dom = simple_fast(&self.g, self.root)
+            .dominators(index)
+            .expect("Node not connected to root")
+            .collect::<Vec<_>>();
+        //println!("dom: {:?} => {:?}", index, dom);
+        for i in dom.into_iter().rev() {
+            let data = self.blocks.get(&i).unwrap();
+            if let Some(r) = data.lookup_place(place_id) {
+                return Some(r);
+            }
+        }
+        None
     }
 
     pub fn name_in_scope(&self, index: NodeIndex, name: StringKey) -> Option<SymIndex> {

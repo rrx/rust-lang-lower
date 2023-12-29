@@ -18,7 +18,7 @@ use crate::ir::{
 };
 use crate::{
     Ast, AstNode, AstType, CFGBlocks, Diagnostics, Extra, IRPlaceTable, LinkOptions, Literal,
-    NodeBuilder, NodeIndex, ParseError, StringKey, SymIndex, TypeBuilder,
+    NodeBuilder, NodeIndex, ParseError, PlaceId, StringKey, SymIndex, TypeBuilder,
 };
 
 use anyhow::Error;
@@ -488,6 +488,7 @@ pub fn emit_set_static<'c, E: Extra>(
 
 pub fn emit_declare_function<'c, E: Extra>(
     context: &'c Context,
+    place_id: PlaceId,
     key: StringKey,
     ast_ty: AstType,
     location: Location<'c>,
@@ -531,7 +532,7 @@ pub fn emit_declare_function<'c, E: Extra>(
         );
 
         let function_block = blocks.blocks.get_mut(&block_index).unwrap();
-        let index = function_block.push(op);
+        let index = function_block.push_with_place(op, place_id);
         function_block.add_symbol(key, index);
         types.set_type(index, ast_ty, VarDefinitionSpace::Static);
 
@@ -548,6 +549,7 @@ pub fn emit_declare_function<'c, E: Extra>(
 
 pub fn emit_declare_static<'c, E: Extra>(
     context: &'c Context,
+    place_id: PlaceId,
     name: StringKey,
     ast_ty: AstType,
     location: Location<'c>,
@@ -577,7 +579,8 @@ pub fn emit_declare_static<'c, E: Extra>(
     );
 
     let current = blocks.blocks.get_mut(&block_index).unwrap();
-    let index = current.push_with_name(op, name);
+    let index = current.push_with_place(op, place_id);
+    current.add_symbol(name, index);
     types.set_type(index, ast_ty, VarDefinitionSpace::Static);
     Ok(index)
 }

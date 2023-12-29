@@ -101,6 +101,7 @@ impl IRNode {
                             match &p.ty {
                                 AstType::Func(_, _) => op::emit_declare_function(
                                     context,
+                                    place_id,
                                     p.name,
                                     p.ty.clone(),
                                     location,
@@ -112,6 +113,7 @@ impl IRNode {
                                 ),
                                 _ => op::emit_declare_static(
                                     context,
+                                    place_id,
                                     p.name,
                                     p.ty.clone(),
                                     location,
@@ -137,7 +139,8 @@ impl IRNode {
                             let memref_ty = MemRefType::new(ty.into(), &[], None, None);
                             let op = memref::alloca(context, memref_ty, &[], &[], None, location);
                             let current = blocks.get_mut(&current_block).unwrap();
-                            let index = current.push_with_name(op, p.name);
+                            let index = current.push_with_place(op, place_id);
+                            current.add_symbol(p.name, index);
                             // TODO: FIXME
                             //cfg.static_names.insert(index, global_name_key);
                             types.set_type(index, p.ty.clone(), p.mem);
@@ -151,7 +154,8 @@ impl IRNode {
                         let op = memref::alloca(context, memref_ty, &[], &[], None, location);
                         //let current = cfg_g.node_weight_mut(current_block).unwrap();
                         let current = blocks.get_mut(&current_block).unwrap();
-                        let index = current.push_with_name(op, p.name);
+                        let index = current.push_with_place(op, place_id);
+                        current.add_symbol(p.name, index);
                         types.set_type(index, p.ty.clone(), p.mem);
                         Ok(index)
                     }
@@ -159,11 +163,12 @@ impl IRNode {
                 }
             }
 
-            IRKind::Set(name, expr, _select) => {
+            IRKind::Set(place_id, expr, _select) => {
                 let current_block = stack.last().unwrap().clone();
                 let span = self.span.clone();
                 let is_current_static = current_block == blocks.root();
-                if let Some(sym_index) = blocks.name_in_scope(current_block, name) {
+                let p = place.get(place_id);
+                if let Some(sym_index) = blocks.place_in_scope(current_block, place_id) {
                     let is_symbol_static = sym_index.block() == blocks.root();
                     if is_symbol_static && is_current_static {
                         println!("expr: {:?}", expr);
@@ -186,7 +191,7 @@ impl IRNode {
                             _ => op::emit_set_static(
                                 context,
                                 sym_index,
-                                name,
+                                p.name,
                                 *expr,
                                 current_block,
                                 blocks,
@@ -200,7 +205,7 @@ impl IRNode {
                             context,
                             place,
                             sym_index,
-                            name,
+                            p.name,
                             *expr,
                             location,
                             current_block,
@@ -214,7 +219,10 @@ impl IRNode {
                         )
                     }
                 } else {
-                    d.push_diagnostic(ir::error(&format!("Name not found: {:?}", name), span));
+                    d.push_diagnostic(ir::error(
+                        &format!("Set name not found: {:?}", b.strings.resolve(&p.name)),
+                        span,
+                    ));
                     Err(Error::new(ParseError::Invalid))
                 }
             }
@@ -385,7 +393,7 @@ impl IRNode {
                         return Ok(sym_index);
                     }
                 }
-                d.push_diagnostic(ir::error(&format!("Name not found: {:?}", name), span));
+                d.push_diagnostic(ir::error(&format!("Get name not found: {:?}", name), span));
                 Err(Error::new(ParseError::Invalid))
             }
 
@@ -406,7 +414,10 @@ impl IRNode {
                         return Err(Error::new(ParseError::Invalid));
                     }
                 } else {
-                    d.push_diagnostic(ir::error(&format!("Name not found: {}", name), span));
+                    d.push_diagnostic(ir::error(
+                        &format!("IR call name not found: {}", name),
+                        span,
+                    ));
                     return Err(Error::new(ParseError::Invalid));
                 };
 
