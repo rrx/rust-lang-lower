@@ -784,6 +784,8 @@ impl IRNode {
             }
 
             IRKind::Get(place_id, ref _select) => {
+                return Ok(self);
+
                 let current_block = env.current_block();
                 //self.dump(b, 0);
                 let p = places.get_place(place_id);
@@ -1309,6 +1311,7 @@ impl<E: Extra> AstNode<E> {
                 let current_block = env.current_block();
                 let b_then = env.blocks.fresh_block_label("then", b);
                 let b_next = env.blocks.fresh_block_label("next", b);
+                let next_index = env.blocks.add_block(place, b_next, vec![], d);
 
                 // then
                 let then_index = env.blocks.add_block(place, b_then, vec![], d);
@@ -1321,14 +1324,15 @@ impl<E: Extra> AstNode<E> {
                 if term.is_none() {
                     then_seq.push(b.ir_jump(b_next, vec![]));
                 }
+                env.blocks.g.add_edge(then_index, next_index, ());
 
                 // else
                 let (b_else, else_seq) = if let Some(else_expr) = maybe_else_expr {
                     //let else_index = env.add_block(b_then, vec![], d, g);
                     //let span = else_expr.extra.get_span();
                     let b_else = env.blocks.fresh_block_label("else", b);
-                    //let else_index = env.blocks.add_block(place, b_else, vec![], d);
-                    let else_index = NodeIndex::new(0);
+                    let else_index = env.blocks.add_block(place, b_else, vec![], d);
+                    //let else_index = NodeIndex::new(0);
                     let mut else_seq = vec![b.ir_label(b_else, else_index, vec![])];
                     let (else_block, _ty) = else_expr.lower_ir_expr(env, place, d, b)?;
                     //g.add_edge(current_block, else_block, ());
@@ -1336,7 +1340,7 @@ impl<E: Extra> AstNode<E> {
                     else_seq.extend(else_block.to_vec());
                     if term.is_none() {
                         else_seq.push(b.ir_jump(b_next, vec![]));
-                        //g.add_edge(else_index, then_index, ());
+                        env.blocks.g.add_edge(else_index, next_index, ());
                     }
                     (Some(b_else), Some(else_seq))
                 } else {
@@ -1350,7 +1354,6 @@ impl<E: Extra> AstNode<E> {
                 if let Some(seq) = else_seq {
                     out.extend(seq);
                 }
-                //let next_index = env.blocks.add_block(place, b_next, vec![], d);
                 let next_index = NodeIndex::new(0);
                 out.push(b.ir_label(b_next, next_index, vec![]));
                 Ok(AstType::Unit)

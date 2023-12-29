@@ -601,6 +601,7 @@ impl<E: Extra> StarlarkParser<E> {
         }
 
         // lower to mlir
+        //let root = env.root();
         let mut types = TypeBuilder::new();
         let mut blocks = CFGBlocks::new(root, env.blocks.g);
         blocks.add_block_ir(context, root, b.s("module"), &[], &mut types, d);
