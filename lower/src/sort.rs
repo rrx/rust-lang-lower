@@ -294,7 +294,6 @@ impl IRBlockSorter {
     ) -> IRNode {
         let mut s = Self::new();
         let ir = match ir.kind {
-            /*
             IRKind::Seq(exprs) => {
                 let label = blocks.fresh_block_label("module", b);
                 //let module = b.s("module");
@@ -306,7 +305,6 @@ impl IRBlockSorter {
                     .insert(0, b.ir_label(label, block_index, vec![]));
                 IRNode::new(IRKind::Block(block), b.extra().get_span())
             }
-            */
             IRKind::Block(ref _block) => ir,
             IRKind::Module(ref _block) => ir,
             _ => unreachable!("{:?}", ir),
@@ -431,7 +429,7 @@ mod tests {
         let mut b: NodeBuilder<SimpleExtra> = NodeBuilder::new();
         b.enter(file_id, "type.py");
         let module_key = b.s("module");
-        let mut env = IREnvironment::new();//module_key);
+        let mut env = IREnvironment::new(); //module_key);
         let mut place = IRPlaceTable::new();
         let ast = gen_block(&mut b).normalize(&mut d, &mut b);
         let label = env.blocks.fresh_block_label("module", &mut b);

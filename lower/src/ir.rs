@@ -439,6 +439,7 @@ pub enum IRKind {
     Op1(UnaryOperation, Box<IRNode>),
     Op2(BinaryOperation, Box<IRNode>, Box<IRNode>),
     Block(IRBlock),
+    Module(IRBlock),
     Seq(Vec<IRNode>),
     Literal(Literal),
     Builtin(Builtin, Vec<IRNode>),
@@ -662,6 +663,28 @@ impl IRNode {
                 println!("{:width$}noop", "", width = depth * 2);
             }
 
+            IRKind::Module(block) => {
+                println!(
+                    "{:width$}module({})",
+                    "",
+                    //block.label.0,
+                    b.strings.resolve(&block.label),
+                    width = depth * 2
+                );
+                for a in &block.params {
+                    println!(
+                        "{:width$}arg: {}: {:?}",
+                        "",
+                        b.strings.resolve(&a.name),
+                        a.ty,
+                        width = (depth + 1) * 2
+                    );
+                }
+                for a in &block.children {
+                    a.dump(places, b, depth + 1);
+                }
+            }
+
             IRKind::Block(block) => {
                 println!(
                     "{:width$}block({})",
@@ -696,6 +719,8 @@ impl IRNode {
         let span = self.get_span().clone();
         match self.kind {
             IRKind::Noop => Ok(self),
+
+            IRKind::Module(_) => Ok(self),
 
             IRKind::Seq(exprs) => {
                 let mut out = vec![];
