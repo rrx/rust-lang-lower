@@ -390,8 +390,8 @@ impl<E: Extra> NodeBuilder<E> {
         IRNode::new(IRKind::Jump(key, args), self.span.clone().unwrap())
     }
 
-    pub fn ir_get(&self, key: StringKey, select: IRTypeSelect) -> IRNode {
-        IRNode::new(IRKind::Get(key, select), self.span.clone().unwrap())
+    pub fn ir_get(&self, place_id: PlaceId, select: IRTypeSelect) -> IRNode {
+        IRNode::new(IRKind::Get(place_id, select), self.span.clone().unwrap())
     }
 
     pub fn ir_set(&self, place_id: PlaceId, expr: IRNode, select: IRTypeSelect) -> IRNode {

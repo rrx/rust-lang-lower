@@ -401,7 +401,7 @@ pub enum IRKind {
     // set(variable, expr, type offset)
     Set(PlaceId, Box<IRNode>, IRTypeSelect),
     // get(variable, type offset)
-    Get(StringKey, IRTypeSelect),
+    Get(PlaceId, IRTypeSelect),
     // ret(args)
     Ret(Vec<IRNode>),
     Cond(Box<IRNode>, Box<IRNode>, Option<Box<IRNode>>),
@@ -655,11 +655,12 @@ impl IRNode {
                 );
                 v.dump(places, b, depth + 1);
             }
-            IRKind::Get(key, select) => {
+            IRKind::Get(place_id, select) => {
+                let p = places.get(*place_id);
                 println!(
                     "{:width$}get({}, {:?})",
                     "",
-                    b.strings.resolve(key),
+                    b.strings.resolve(&p.name),
                     select,
                     width = depth * 2
                 );
@@ -841,14 +842,15 @@ impl IRNode {
                 }
             }
 
-            IRKind::Get(name, ref _select) => {
+            IRKind::Get(place_id, ref _select) => {
                 let current_block = env.current_block();
                 //self.dump(b, 0);
-                if let Some(_sym_index) = env.name_in_scope(current_block, name) {
+                let p = places.get(place_id);
+                if let Some(_sym_index) = env.name_in_scope(current_block, p.name) {
                     Ok(self)
                 } else {
                     d.push_diagnostic(error(
-                        &format!("Get undefined variable: {:?}", b.strings.resolve(&name)),
+                        &format!("Get undefined variable: {:?}", b.strings.resolve(&p.name)),
                         self.span.clone(),
                     ));
                     Err(Error::new(ParseError::Invalid))
@@ -1089,7 +1091,7 @@ impl<E: Extra> AstNode<E> {
                 if let Some((place_id, sym_index)) = env.name_in_scope(current_block, name) {
                     let p = place.get(place_id);
                     //let (ty, _mem) = env.lookup_type(sym_index).unwrap();
-                    out.push(b.ir_get(name, IRTypeSelect::default()));
+                    out.push(b.ir_get(place_id, IRTypeSelect::default()));
                     Ok(p.ty.clone())
                 } else {
                     d.push_diagnostic(self.extra.error(&format!(

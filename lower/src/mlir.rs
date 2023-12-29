@@ -353,10 +353,11 @@ impl IRNode {
                 }
             }
 
-            IRKind::Get(name, _select) => {
+            IRKind::Get(place_id, _select) => {
                 let current_block = stack.last().unwrap().clone();
                 let span = self.span.clone();
-                if let Some(sym_index) = blocks.name_in_scope(current_block, name) {
+                let p = place.get(place_id);
+                if let Some(sym_index) = blocks.name_in_scope(current_block, p.name) {
                     if blocks.block_is_static(sym_index.block()) {
                         let (ast_ty, mem) = types.lookup_type(sym_index).unwrap();
 
@@ -364,7 +365,7 @@ impl IRNode {
                             let lower_ty = op::from_type(context, &ast_ty);
                             let memref_ty = MemRefType::new(lower_ty, &[], None, None);
                             // TODO: FIXME
-                            let static_name = b.strings.resolve(&name);
+                            let static_name = b.strings.resolve(&p.name);
                             //let static_name = b.strings.resolve(
                             //&cfg.static_names.get(&sym_index).cloned().unwrap_or(name),
                             //);
@@ -393,7 +394,10 @@ impl IRNode {
                         return Ok(sym_index);
                     }
                 }
-                d.push_diagnostic(ir::error(&format!("Get name not found: {:?}", name), span));
+                d.push_diagnostic(ir::error(
+                    &format!("Get name not found: {:?}", p.name),
+                    span,
+                ));
                 Err(Error::new(ParseError::Invalid))
             }
 
