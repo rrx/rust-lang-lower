@@ -1,7 +1,10 @@
 use anyhow::Error;
 use anyhow::Result;
 
-use crate::{AstNode, AstType, Diagnostics, Extra, NodeBuilder, ParseError, StringKey, SymIndex};
+use crate::{
+    AstNode, AstType, Diagnostics, Extra, IRPlaceTable, NodeBuilder, ParseError, PlaceId,
+    PlaceNode, StringKey, SymIndex,
+};
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use std::fmt::Debug;
 
@@ -132,58 +135,7 @@ impl IRControlBlock {
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct AllocaId(NodeIndex);
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-pub struct PlaceId(u32);
-
-#[derive(Debug)]
-pub struct PlaceNode {
-    pub(crate) name: StringKey,
-    pub(crate) static_name: Option<StringKey>,
-    pub(crate) mem: VarDefinitionSpace,
-    pub(crate) ty: AstType,
-}
-
-impl PlaceNode {
-    pub fn new(name: StringKey, ty: AstType, mem: VarDefinitionSpace) -> Self {
-        Self {
-            name,
-            static_name: None,
-            mem,
-            ty,
-        }
-    }
-
-    pub fn new_static(name: StringKey, ty: AstType) -> Self {
-        Self::new(name, ty, VarDefinitionSpace::Static)
-    }
-
-    pub fn new_stack(name: StringKey, ty: AstType) -> Self {
-        Self::new(name, ty, VarDefinitionSpace::Stack)
-    }
-}
-
 //pub type IRPlaceGraph = DiGraph<PlaceNode, ()>;
-
-#[derive(Default)]
-pub struct IRPlaceTable {
-    places: Vec<PlaceNode>,
-}
-
-impl IRPlaceTable {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn add(&mut self, place: PlaceNode) -> PlaceId {
-        let offset = self.places.len();
-        self.places.push(place);
-        PlaceId(offset as u32)
-    }
-
-    pub fn get(&self, place_id: PlaceId) -> &PlaceNode {
-        self.places.get(place_id.0 as usize).unwrap()
-    }
-}
 
 /*
 pub fn place_save_graph<E>(g: &IRPlaceGraph, blocks: &CFGBlocks, filename: &str, b: &NodeBuilder<E>) {
