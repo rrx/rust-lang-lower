@@ -566,7 +566,9 @@ impl<E: Extra> StarlarkParser<E> {
 
         use lower::IREnvironment;
         let mut env = IREnvironment::new();
-        let index = env.add_block(&mut self.place, b.s("module"), vec![], d);
+        let index = env
+            .blocks
+            .add_block(&mut self.place, b.s("module"), vec![], d);
         env.enter_block(index, ast.extra.get_span());
 
         // lower ast to ir
@@ -595,12 +597,12 @@ impl<E: Extra> StarlarkParser<E> {
         let ir = r?;
 
         if verbose {
-            env.save_graph("out.dot", b);
+            env.blocks.save_graph("out.dot", b);
         }
 
         // lower to mlir
         let mut types = TypeBuilder::new();
-        let mut blocks = CFGBlocks::new(root, env.g);
+        let mut blocks = CFGBlocks::new(root, env.blocks.g);
         blocks.add_block_ir(context, root, b.s("module"), &[], &mut types, d);
 
         let mut stack = vec![blocks.root()];

@@ -181,19 +181,125 @@ pub fn place_save_graph<E>(g: &IRPlaceGraph, blocks: &CFGBlocks, filename: &str,
 
 pub type IRBlockGraph = DiGraph<IRControlBlock, ()>;
 
+#[derive(Default, Debug)]
 pub struct BlockTable {
     pub g: IRBlockGraph,
+    block_names: HashMap<StringKey, NodeIndex>,
+    block_names_index: HashMap<NodeIndex, StringKey>,
+}
+
+impl BlockTable {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn lookup_block(&self, name: StringKey) -> Option<NodeIndex> {
+        self.block_names.get(&name).cloned()
+    }
+
+    pub fn connect_block(&mut self, source: NodeIndex, target: NodeIndex) {
+        self.g.add_edge(source, target, ());
+    }
+
+    pub fn add_block(
+        &mut self,
+        places: &mut IRPlaceTable,
+        name: StringKey,
+        params: Vec<IRArg>,
+        _d: &Diagnostics,
+    ) -> NodeIndex {
+        let index = self.g.add_node(IRControlBlock::new(params.clone()));
+        self.g.node_weight_mut(index).unwrap().block_index = index;
+        self.block_names.insert(name, index);
+        self.block_names_index.insert(index, name);
+
+        let data = self.g.node_weight_mut(index).unwrap();
+        for a in params {
+            let p = PlaceNode::new_arg(a.name, a.ty);
+            let place_id = places.add_place(p);
+            data.push_arg(place_id, a.name);
+        }
+
+        index
+    }
+
+    pub fn add_edge(&mut self, a: StringKey, b: StringKey, g: &mut IRBlockGraph) {
+        let index_a = self.block_names.get(&a).unwrap();
+        let index_b = self.block_names.get(&b).unwrap();
+        g.add_edge(*index_a, *index_b, ());
+    }
+
+    pub fn dump_node<E>(
+        &self,
+        b: &NodeBuilder<E>,
+        index: NodeIndex,
+        current_block: NodeIndex,
+        depth: usize,
+    ) {
+        let data = &self.g[index];
+        let name = b
+            .strings
+            .resolve(self.block_names_index.get(&index).unwrap());
+        if index == current_block {
+            println!("{:width$}Current: {}", "", name, width = depth * 2);
+        } else {
+            println!("{:width$}Node: {}", "", name, width = depth * 2);
+        }
+        for (k, v) in data.symbols.iter() {
+            println!(
+                "{:width$}  Symbol: {}, {:?}, {:?}",
+                "",
+                b.strings.resolve(k),
+                k,
+                v,
+                width = depth * 2
+            );
+        }
+        for n in self.g.neighbors(index) {
+            self.dump_node(b, n, current_block, depth + 1);
+        }
+    }
+
+    pub fn save_graph<E>(&self, filename: &str, b: &NodeBuilder<E>) {
+        use petgraph::dot::{Config, Dot};
+
+        let s = format!(
+            "{:?}",
+            Dot::with_attr_getters(
+                &self.g,
+                &[Config::EdgeNoLabel, Config::NodeNoLabel],
+                &|_, _er| String::new(),
+                &|_, (_index, data)| {
+                    let key = self.block_names_index.get(&data.block_index).unwrap();
+                    let name = b.strings.resolve(key);
+                    format!(
+                        //"label = \"[{}]{}\" shape={:?}",
+                        "label = \"{}\"",
+                        name,
+                        //data.block_index.index(),
+                        //&data.name,
+                        //&data.ty.to_string()
+                    )
+                }
+            )
+        );
+        let path = std::fs::canonicalize(filename).unwrap();
+        println!("{}", path.clone().into_os_string().into_string().unwrap());
+        println!("{}", s);
+        std::fs::write(path, s).unwrap();
+    }
 }
 
 #[derive(Debug, Default)]
 pub struct IREnvironment {
     stack: Vec<(NodeIndex, Span)>,
-    block_names: HashMap<StringKey, NodeIndex>,
-    block_names_index: HashMap<NodeIndex, StringKey>,
+    //block_names: HashMap<StringKey, NodeIndex>,
+    //block_names_index: HashMap<NodeIndex, StringKey>,
     types: HashMap<SymIndex, (AstType, VarDefinitionSpace)>,
     places: IndexMap<PlaceId, SymIndex>,
     label_count: usize,
-    pub g: IRBlockGraph,
+    //pub g: IRBlockGraph,
+    pub blocks: BlockTable,
 }
 
 impl IREnvironment {
@@ -209,7 +315,7 @@ impl IREnvironment {
 
     pub fn lookup_type(&self, index: SymIndex) -> Option<(AstType, VarDefinitionSpace)> {
         if let SymIndex::Arg(block_index, offset) = index {
-            let block = self.g.node_weight(block_index).unwrap();
+            let block = self.blocks.g.node_weight(block_index).unwrap();
             Some((
                 block.params.get(offset).unwrap().ty.clone(),
                 VarDefinitionSpace::Arg,
@@ -223,9 +329,9 @@ impl IREnvironment {
         self.types.insert(index, (ty, mem));
     }
 
-    pub fn connect_block(&mut self, source: NodeIndex, target: NodeIndex) {
-        self.g.add_edge(source, target, ());
-    }
+    //pub fn connect_block(&mut self, source: NodeIndex, target: NodeIndex) {
+    //self.g.add_edge(source, target, ());
+    //}
 
     pub fn error(&self, msg: &str, span: Span) -> Diagnostic<usize> {
         let r = span.begin.pos as usize..span.end.pos as usize;
@@ -261,9 +367,9 @@ impl IREnvironment {
         self.stack.last().unwrap().clone().0
     }
 
-    pub fn lookup_block(&self, name: StringKey) -> Option<NodeIndex> {
-        self.block_names.get(&name).cloned()
-    }
+    //pub fn lookup_block(&self, name: StringKey) -> Option<NodeIndex> {
+    //self.block_names.get(&name).cloned()
+    //}
 
     pub fn add_definition(
         &mut self,
@@ -271,7 +377,7 @@ impl IREnvironment {
         place_id: PlaceId,
         name: StringKey,
     ) -> SymIndex {
-        let data = self.g.node_weight_mut(block_index).unwrap();
+        let data = self.blocks.g.node_weight_mut(block_index).unwrap();
         let index = data.add_definition(place_id);
         data.alloca_add(place_id, name, index);
         self.places.insert(place_id, index);
@@ -279,6 +385,7 @@ impl IREnvironment {
         index
     }
 
+    /*
     pub fn add_block(
         &mut self,
         places: &mut IRPlaceTable,
@@ -286,8 +393,8 @@ impl IREnvironment {
         params: Vec<IRArg>,
         _d: &Diagnostics,
     ) -> NodeIndex {
-        let index = self.g.add_node(IRControlBlock::new(params.clone()));
-        self.g.node_weight_mut(index).unwrap().block_index = index;
+        let index = self.blocks.g.add_node(IRControlBlock::new(params.clone()));
+        self.blocks.g.node_weight_mut(index).unwrap().block_index = index;
         self.block_names.insert(name, index);
         self.block_names_index.insert(index, name);
 
@@ -307,14 +414,15 @@ impl IREnvironment {
         g.add_edge(*index_a, *index_b, ());
     }
 
+    */
     pub fn name_in_scope(&self, index: NodeIndex, name: StringKey) -> Option<(PlaceId, SymIndex)> {
-        let maybe_dom = simple_fast(&self.g, self.root())
+        let maybe_dom = simple_fast(&self.blocks.g, self.root())
             .dominators(index)
             .map(|it| it.collect::<Vec<_>>());
         //println!("dom: {:?} => {:?}", index, dom);
         if let Some(dom) = maybe_dom {
             for i in dom.into_iter().rev() {
-                let data = self.g.node_weight(i).unwrap();
+                let data = self.blocks.g.node_weight(i).unwrap();
                 if let Some((place_id, r)) = data.lookup(name) {
                     return Some((place_id, r));
                 }
@@ -333,9 +441,9 @@ impl IREnvironment {
         self.root() == block_index
     }
 
+    /*
     pub fn dump_node<E>(
         &self,
-        //g: &IRGraph,
         b: &NodeBuilder<E>,
         index: NodeIndex,
         current_block: NodeIndex,
@@ -364,11 +472,13 @@ impl IREnvironment {
             self.dump_node(b, n, current_block, depth + 1);
         }
     }
+    */
 
     pub fn dump<E>(&self, b: &NodeBuilder<E>, current_block: NodeIndex) {
-        self.dump_node(b, self.root(), current_block, 0);
+        self.blocks.dump_node(b, self.root(), current_block, 0);
     }
 
+    /*
     pub fn save_graph<E>(&self, filename: &str, b: &NodeBuilder<E>) {
         use petgraph::dot::{Config, Dot};
 
@@ -397,6 +507,7 @@ impl IREnvironment {
         println!("{}", s);
         std::fs::write(path, s).unwrap();
     }
+    */
 }
 
 #[derive(Debug)]
@@ -827,9 +938,9 @@ impl IRNode {
 
             IRKind::Jump(label, ref args) => {
                 let block_index = env.current_block();
-                let target_index = env.lookup_block(label).unwrap();
-                env.connect_block(block_index, target_index);
-                let target = env.g.node_weight(target_index).unwrap();
+                let target_index = env.blocks.lookup_block(label).unwrap();
+                env.blocks.connect_block(block_index, target_index);
+                let target = env.blocks.g.node_weight(target_index).unwrap();
 
                 // check arity of target
                 if target.params.len() == args.len() {
@@ -889,10 +1000,12 @@ impl IRNode {
                 let current_block = env.current_block();
                 let mut seq = vec![];
                 for (i, mut block) in blocks.into_iter().enumerate() {
-                    let block_index = env.add_block(places, block.name, block.params.clone(), d);
+                    let block_index =
+                        env.blocks
+                            .add_block(places, block.name, block.params.clone(), d);
                     block.index = block_index;
                     if 0 == i {
-                        env.g.add_edge(current_block, block_index, ());
+                        env.blocks.g.add_edge(current_block, block_index, ());
                     }
                     seq.push(block);
                 }
@@ -916,12 +1029,14 @@ impl IRNode {
 
             IRKind::Block(mut block) => {
                 //let span = self.get_span().clone();
-                let block_index = env.add_block(places, block.name, block.params.clone(), d);
+                let block_index = env
+                    .blocks
+                    .add_block(places, block.name, block.params.clone(), d);
                 block.index = block_index;
                 env.enter_block(block_index, span.clone());
                 if let Some(last_block) = env.stack.last() {
                     if last_block.0 != block_index {
-                        env.g.add_edge(last_block.0, block_index, ());
+                        env.blocks.g.add_edge(last_block.0, block_index, ());
                     }
                 }
 
@@ -944,10 +1059,10 @@ impl IRNode {
             IRKind::Branch(condition, then_key, else_key) => {
                 let condition = condition.build_graph(places, env, d, b)?;
                 let current_block = env.current_block();
-                let then_block = env.lookup_block(then_key).unwrap();
-                env.g.add_edge(current_block, then_block, ());
-                let else_block = env.lookup_block(else_key).unwrap();
-                env.g.add_edge(current_block, else_block, ());
+                let then_block = env.blocks.lookup_block(then_key).unwrap();
+                env.blocks.g.add_edge(current_block, then_block, ());
+                let else_block = env.blocks.lookup_block(else_key).unwrap();
+                env.blocks.g.add_edge(current_block, else_block, ());
                 Ok(b.ir_branch(condition, then_key, else_key))
             }
 
@@ -955,20 +1070,20 @@ impl IRNode {
                 let condition = condition.build_graph(places, env, d, b)?;
                 let current_block = env.current_block();
 
-                let next_block = env.add_block(places, b.s("next"), vec![], d);
+                let next_block = env.blocks.add_block(places, b.s("next"), vec![], d);
 
-                let then_block = env.add_block(places, b.s("then"), vec![], d);
+                let then_block = env.blocks.add_block(places, b.s("then"), vec![], d);
                 //let then_term = then_expr.kind.terminator();
                 let then_expr = then_expr.build_graph(places, env, d, b)?;
-                env.g.add_edge(current_block, then_block, ());
-                env.g.add_edge(then_block, next_block, ());
+                env.blocks.g.add_edge(current_block, then_block, ());
+                env.blocks.g.add_edge(then_block, next_block, ());
                 let maybe_else_expr = if let Some(else_expr) = maybe_else_expr {
-                    let else_block = env.add_block(places, b.s("else"), vec![], d);
+                    let else_block = env.blocks.add_block(places, b.s("else"), vec![], d);
                     env.enter_block(else_block, else_expr.span.clone());
                     let else_expr = else_expr.build_graph(places, env, d, b)?;
                     env.exit_block();
-                    env.g.add_edge(current_block, else_block, ());
-                    env.g.add_edge(else_block, next_block, ());
+                    env.blocks.g.add_edge(current_block, else_block, ());
+                    env.blocks.g.add_edge(else_block, next_block, ());
                     Some(else_expr)
                 } else {
                     None
@@ -1309,7 +1424,7 @@ impl<E: Extra> AstNode<E> {
                                 nb.name = def.name;
                             }
 
-                            let block_index = env.add_block(place, nb.name, args.clone(), d);
+                            let block_index = env.blocks.add_block(place, nb.name, args.clone(), d);
                             edges.push((current_block, block_index));
 
                             output_blocks.push((nb, block_index));
@@ -1320,7 +1435,7 @@ impl<E: Extra> AstNode<E> {
                 }
 
                 for (a, b) in edges {
-                    env.g.add_edge(a, b, ());
+                    env.blocks.g.add_edge(a, b, ());
                 }
 
                 if output_blocks.len() > 0 {
@@ -1395,9 +1510,9 @@ impl<E: Extra> AstNode<E> {
                 let b_next = env.fresh_label("next", b);
 
                 // then
-                let then_index = env.add_block(place, b_then, vec![], d);
+                let then_index = env.blocks.add_block(place, b_then, vec![], d);
                 //let span = then_expr.extra.get_span();
-                env.g.add_edge(current_block, then_index, ());
+                env.blocks.g.add_edge(current_block, then_index, ());
                 let mut then_seq = vec![b.ir_label(b_then, vec![])];
                 let (then_block, _ty) = then_expr.lower_ir_expr(env, place, d, b)?;
                 let term = then_block.kind.terminator();
@@ -1485,7 +1600,7 @@ mod tests {
         let mut env = IREnvironment::new();
         let mut place = IRPlaceTable::new();
         let ast = gen_block(&mut b).normalize(&mut d, &mut b);
-        let index = env.add_block(&mut place, b.s("module"), vec![], &d);
+        let index = env.blocks.add_block(&mut place, b.s("module"), vec![], &d);
         env.enter_block(index, ast.extra.get_span());
         let r = ast.lower_ir_expr(&mut env, &mut place, &mut d, &mut b);
         d.dump();
@@ -1508,7 +1623,7 @@ mod tests {
 
         let ast = crate::tests::gen_function_call(&mut b).normalize(&mut d, &mut b);
 
-        let index = env.add_block(&mut place, b.s("module"), vec![], &d);
+        let index = env.blocks.add_block(&mut place, b.s("module"), vec![], &d);
         env.enter_block(index, ast.extra.get_span());
 
         let r = ast.lower_ir_expr(&mut env, &mut place, &mut d, &mut b);
