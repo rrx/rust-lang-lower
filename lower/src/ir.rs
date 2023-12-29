@@ -123,11 +123,11 @@ impl IRControlBlock {
         index
     }
 
-    pub fn add_definition(&mut self, name: StringKey) -> SymIndex {
+    pub fn add_definition(&mut self, place_id: PlaceId) -> SymIndex {
         let offset = self.def_count;
         self.def_count += 1;
         let index = SymIndex::Def(self.block_index, offset);
-        self.add_symbol(name, index);
+        //self.add_symbol(name, index);
         index
     }
 }
@@ -249,9 +249,15 @@ impl IREnvironment {
         self.block_names.get(&name).cloned()
     }
 
-    pub fn add_definition(&mut self, block_index: NodeIndex, ident: StringKey) -> SymIndex {
+    pub fn add_definition(
+        &mut self,
+        block_index: NodeIndex,
+        place_id: PlaceId,
+        name: StringKey,
+    ) -> SymIndex {
         let data = self.g.node_weight_mut(block_index).unwrap();
-        let index = data.add_definition(ident);
+        let index = data.add_definition(place_id);
+        data.add_symbol(name, index);
         index
     }
 
@@ -848,7 +854,7 @@ impl IRNode {
             IRKind::Decl(place_id) => {
                 let current_block = env.current_block();
                 let place_data = places.get(place_id);
-                let index = env.add_definition(current_block, place_data.name);
+                let index = env.add_definition(current_block, place_id, place_data.name);
                 env.set_type(index, place_data.ty.clone(), place_data.mem);
                 Ok(self)
             }
@@ -1095,7 +1101,7 @@ impl<E: Extra> AstNode<E> {
 
                     out.push(b.ir_decl(place_id)); //ident, ty.clone(), VarDefinitionSpace::Static));
                     out.push(b.ir_set(ident, v, IRTypeSelect::default()));
-                    let index = env.add_definition(current_block, ident);
+                    let index = env.add_definition(current_block, place_id, ident);
                     env.set_type(index, ty.clone(), VarDefinitionSpace::Static);
 
                     /*
@@ -1143,7 +1149,7 @@ impl<E: Extra> AstNode<E> {
                         let place_id = place.add(place_data);
                         out.push(b.ir_decl(place_id)); //name, ty.clone(), VarDefinitionSpace::Stack));
                         out.push(b.ir_set(name, ir, IRTypeSelect::Offset(0)));
-                        let index = env.add_definition(current_block, name);
+                        let index = env.add_definition(current_block, place_id, name);
                         env.set_type(index, ty.clone(), VarDefinitionSpace::Stack);
                         Ok(ty)
                     }
@@ -1237,13 +1243,14 @@ impl<E: Extra> AstNode<E> {
                 let ast_ret_type = *def.return_type;
                 let f_type = AstType::Func(ast_types, ast_ret_type.clone().into());
 
-                let index = env.add_definition(current_block, def.name);
+                let place_data = PlaceNode::new_static(def.name, f_type.clone());
+                let place_id = place.add(place_data);
+
+                let index = env.add_definition(current_block, place_id, def.name);
                 //let data = g.node_weight_mut(current_block).unwrap();
                 //let index = data.add_definition(def.name);
                 env.set_type(index, f_type.clone(), VarDefinitionSpace::Static);
 
-                let place_data = PlaceNode::new_static(def.name, f_type);
-                let place_id = place.add(place_data);
                 //place_data.mem = VarDefinitionSpace::Static;
                 //out.push(b.ir_decl(def.name, f_type, VarDefinitionSpace::Static));
                 out.push(b.ir_decl(place_id)); //def.name, f_type, VarDefinitionSpace::Static));
