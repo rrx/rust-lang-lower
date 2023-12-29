@@ -1,6 +1,6 @@
 use crate::intern::StringKey;
 use crate::Diagnostics;
-use crate::{AstType, NodeID};
+use crate::{AstType, NodeID, BlockLabel};
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use melior::{ir::Location, Context};
 use std::fmt::Debug;
@@ -186,6 +186,7 @@ pub enum Terminator {
 #[derive(Debug)]
 pub struct NodeBlock<E> {
     pub(crate) name: StringKey,
+    //pub(crate) label: BlockLabel,
     pub(crate) params: Vec<ParameterNode<E>>,
     pub(crate) body: Box<AstNode<E>>,
 }

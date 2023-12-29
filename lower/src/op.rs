@@ -370,7 +370,7 @@ pub fn emit_set_function<'c, E: Extra>(
                 let block_index = blocks.add_block_ir(
                     context,
                     block.index,
-                    block.name,
+                    block.label,
                     &block.params,
                     types,
                     d,

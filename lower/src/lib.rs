@@ -17,7 +17,7 @@ pub use cfg::{CFGBlocks, CFGGraph, SymIndex};
 pub use compile::{default_context, default_pass_manager};
 pub use diagnostics::{Diagnostics, FileDB, ParseError};
 pub use intern::StringKey;
-pub use ir::{IRArg, IRBlockGraph, IRControlBlock, IREnvironment};
+pub use ir::{IRArg, IRBlockGraph, IRControlBlock, IREnvironment, BlockLabel};
 pub use link::LinkOptions;
 pub use place::{IRPlaceTable, PlaceId, PlaceNode};
 pub use types::{AstType, TypeBuilder, TypeUnify};

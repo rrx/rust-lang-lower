@@ -588,7 +588,7 @@ impl<E: Extra> StarlarkParser<E> {
 
         // Analyze
         let mut env = IREnvironment::new();
-        let ir = lower::ir::IRBlockSorter::run(ir, b);
+        let ir = lower::ir::IRBlockSorter::run(ir, &mut env.blocks, b);
         if verbose {
             ir.dump(&self.place, &b, 0);
         }

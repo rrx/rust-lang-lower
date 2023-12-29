@@ -3,7 +3,7 @@ use crate::op;
 use crate::types::TypeBuilder;
 use crate::{
     AstType, Diagnostics, Extra, IRArg, IRBlockGraph, IRPlaceTable, NodeBuilder, PlaceId,
-    VarDefinitionSpace,
+    VarDefinitionSpace, BlockLabel,
 };
 use melior::ir::Location;
 use melior::{
@@ -249,8 +249,8 @@ pub fn values_in_scope<'c, 'a>(
 pub struct CFGBlocks<'c> {
     root: NodeIndex,
     pub(crate) blocks: HashMap<NodeIndex, OpCollection<'c>>,
-    block_names: HashMap<StringKey, NodeIndex>,
-    block_names_index: HashMap<NodeIndex, StringKey>,
+    block_names: HashMap<BlockLabel, NodeIndex>,
+    block_names_index: HashMap<NodeIndex, BlockLabel>,
     g: IRBlockGraph,
 }
 
@@ -270,7 +270,7 @@ impl<'c> CFGBlocks<'c> {
         data.values(sym_index)
     }
 
-    pub fn get_name(&self, index: &NodeIndex) -> StringKey {
+    pub fn get_label(&self, index: &NodeIndex) -> BlockLabel {
         self.block_names_index.get(index).unwrap().clone()
     }
 
@@ -295,7 +295,7 @@ impl<'c> CFGBlocks<'c> {
         &mut self,
         context: &'c Context,
         index: NodeIndex,
-        name: StringKey,
+        label: BlockLabel,
         params: &[IRArg],
         types: &mut TypeBuilder,
         _d: &Diagnostics,
@@ -315,13 +315,13 @@ impl<'c> CFGBlocks<'c> {
             let index = block_node.push_arg(p.name);
             types.set_type(index, p.ty.clone(), VarDefinitionSpace::Arg);
         }
-        self.block_names.insert(name, index);
-        self.block_names_index.insert(index, name);
+        self.block_names.insert(label, index);
+        self.block_names_index.insert(index, label);
         index
     }
 
-    pub fn block_index(&self, name: &StringKey) -> Option<NodeIndex> {
-        self.block_names.get(name).cloned()
+    pub fn block_index(&self, label: &BlockLabel) -> Option<NodeIndex> {
+        self.block_names.get(label).cloned()
     }
 
     pub fn place_in_scope(&self, index: NodeIndex, place_id: PlaceId) -> Option<SymIndex> {
@@ -366,6 +366,7 @@ impl<'c> CFGBlocks<'c> {
             println!(
                 "\t{:?}: {}, {:?}",
                 i,
+                //block_name.offset(),
                 b.strings.resolve(block_name),
                 data.symbols.keys()
             );
@@ -421,6 +422,8 @@ impl<'c> CFGBlocks<'c> {
         }
         let mut g_out = DiGraph::new();
         for node_index in self.g.node_indices() {
+            let label = self.block_names_index.get(&node_index).unwrap();
+            //let block_name = format!("b{}", label.offset());
             let block_name = b
                 .strings
                 .resolve(self.block_names_index.get(&node_index).unwrap())

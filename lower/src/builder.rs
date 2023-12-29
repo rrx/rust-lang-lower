@@ -4,6 +4,7 @@ use crate::Diagnostics;
 use crate::{
     ir::{IRArg, IRKind, IRNode, IRTypeSelect},
     AstType, PlaceId, StringKey,
+    BlockLabel,
 };
 use melior::{ir::Location, Context};
 use std::collections::VecDeque;
@@ -383,11 +384,11 @@ impl<E: Extra> NodeBuilder<E> {
         IRNode::new(IRKind::Ret(seq), self.span.clone().unwrap())
     }
 
-    pub fn ir_label(&self, key: StringKey, args: Vec<IRArg>) -> IRNode {
-        IRNode::new(IRKind::Label(key, args), self.span.clone().unwrap())
+    pub fn ir_label(&self, label: BlockLabel, args: Vec<IRArg>) -> IRNode {
+        IRNode::new(IRKind::Label(label, args), self.span.clone().unwrap())
     }
-    pub fn ir_jump(&self, key: StringKey, args: Vec<IRNode>) -> IRNode {
-        IRNode::new(IRKind::Jump(key, args), self.span.clone().unwrap())
+    pub fn ir_jump(&self, label: BlockLabel, args: Vec<IRNode>) -> IRNode {
+        IRNode::new(IRKind::Jump(label, args), self.span.clone().unwrap())
     }
 
     pub fn ir_get(&self, place_id: PlaceId, select: IRTypeSelect) -> IRNode {
@@ -452,7 +453,7 @@ impl<E: Extra> NodeBuilder<E> {
         )
     }
 
-    pub fn ir_branch(&self, condition: IRNode, then_br: StringKey, else_br: StringKey) -> IRNode {
+    pub fn ir_branch(&self, condition: IRNode, then_br: BlockLabel, else_br: BlockLabel) -> IRNode {
         IRNode::new(
             IRKind::Branch(condition.into(), then_br, else_br),
             self.span.clone().unwrap(),

@@ -346,7 +346,9 @@ impl IRNode {
                     Ok(current.push(op))
                 } else {
                     d.push_diagnostic(ir::error(
-                        &format!("Missing block: {}", b.strings.resolve(&label)),
+                        &format!("Missing block: {}",
+                                 //label.offset(),
+                                 b.strings.resolve(&label)),
                         span,
                     ));
                     Err(Error::new(ParseError::Invalid))
