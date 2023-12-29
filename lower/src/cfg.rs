@@ -248,6 +248,10 @@ impl<'c> CFGBlocks<'c> {
         data.values(sym_index)
     }
 
+    pub fn get_name(&self, index: &NodeIndex) -> StringKey {
+        self.block_names_index.get(index).unwrap().clone()
+    }
+
     pub fn get(&self, index: &NodeIndex) -> Option<&OpCollection<'c>> {
         self.blocks.get(index)
     }

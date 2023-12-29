@@ -17,8 +17,8 @@ use crate::ir::{
     IRNode,
 };
 use crate::{
-    Ast, AstNode, AstType, CFGBlocks, Diagnostics, Extra, LinkOptions, Literal, NodeBuilder,
-    NodeIndex, ParseError, StringKey, SymIndex, TypeBuilder,
+    Ast, AstNode, AstType, CFGBlocks, Diagnostics, Extra, IRPlaceTable, LinkOptions, Literal,
+    NodeBuilder, NodeIndex, ParseError, StringKey, SymIndex, TypeBuilder,
 };
 
 use anyhow::Error;
@@ -151,6 +151,7 @@ pub fn build_reserved<'c>(
 
 pub fn emit_binop<'c, E: Extra>(
     context: &'c Context,
+    place: &IRPlaceTable,
     op: BinaryOperation,
     x: IRNode,
     y: IRNode,
@@ -170,8 +171,8 @@ pub fn emit_binop<'c, E: Extra>(
     let y_extra = E::span(y.get_span());
     let x_location = x.location(context, d);
     let y_location = x.location(context, d);
-    let index_x = x.lower_mlir(context, d, types, blocks, stack, b, link)?;
-    let index_y = y.lower_mlir(context, d, types, blocks, stack, b, link)?;
+    let index_x = x.lower_mlir(context, place, d, types, blocks, stack, b, link)?;
+    let index_y = y.lower_mlir(context, place, d, types, blocks, stack, b, link)?;
 
     //cfg.save_graph("out.dot", g);
     //println!("ix: {:?}, {}", index_x, fx);
@@ -263,6 +264,7 @@ pub fn emit_deref<'c>(
 
 pub fn emit_set_alloca<'c, E: Extra>(
     context: &'c Context,
+    place: &IRPlaceTable,
     sym_index: SymIndex,
     name: StringKey,
     expr: IRNode,
@@ -278,9 +280,9 @@ pub fn emit_set_alloca<'c, E: Extra>(
     link: &mut LinkOptions,
 ) -> Result<SymIndex> {
     log::debug!("assign alloca: {}", b.strings.resolve(&name));
-    expr.dump(b, 0);
+    expr.dump(&place, b, 0);
 
-    let rhs_index = expr.lower_mlir(context, d, types, blocks, stack, b, link)?;
+    let rhs_index = expr.lower_mlir(context, place, d, types, blocks, stack, b, link)?;
     //let ty = IntegerType::new(context, 64);
     //let memref_ty = MemRefType::new(ty.into(), &[], None, None);
     //let op = memref::alloca(context, memref_ty, &[], &[], None, location);
@@ -348,6 +350,7 @@ pub fn emit_noop<'c>(
 
 pub fn emit_set_function<'c, E: Extra>(
     context: &'c Context,
+    place: &IRPlaceTable,
     sym_index: SymIndex,
     expr: IRNode,
     current_block: NodeIndex,
@@ -401,7 +404,9 @@ pub fn emit_set_function<'c, E: Extra>(
 
                 for c in block.children.into_iter() {
                     stack.push(block_index);
-                    if let Ok(_index) = c.lower_mlir(context, d, types, blocks, stack, b, link) {
+                    if let Ok(_index) =
+                        c.lower_mlir(context, place, d, types, blocks, stack, b, link)
+                    {
                         stack.pop();
                     } else {
                         stack.pop();

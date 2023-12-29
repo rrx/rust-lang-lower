@@ -15,7 +15,9 @@ use crate::ir::{
 };
 
 use crate::op;
-use crate::{AstType, CFGBlocks, Extra, LinkOptions, NodeBuilder, SymIndex, TypeBuilder};
+use crate::{
+    AstType, CFGBlocks, Extra, IRPlaceTable, LinkOptions, NodeBuilder, SymIndex, TypeBuilder,
+};
 use crate::{Diagnostics, ParseError};
 use anyhow::Error;
 use anyhow::Result;
@@ -49,6 +51,7 @@ impl IRNode {
     pub fn lower_mlir<'c, E: Extra>(
         self,
         context: &'c Context,
+        place: &IRPlaceTable,
         d: &mut Diagnostics,
         types: &mut TypeBuilder,
         blocks: &mut CFGBlocks<'c>,
@@ -69,7 +72,8 @@ impl IRNode {
                 assert_eq!(blocks.root(), current_block);
                 let mut out = vec![];
                 for expr in block.children {
-                    let index = expr.lower_mlir(context, d, types, blocks, stack, b, link)?;
+                    let index =
+                        expr.lower_mlir(context, place, d, types, blocks, stack, b, link)?;
                     out.push(index);
                 }
                 Ok(out.last().cloned().unwrap())
@@ -78,24 +82,27 @@ impl IRNode {
             IRKind::Seq(exprs) => {
                 let mut out = vec![];
                 for expr in exprs {
-                    let index = expr.lower_mlir(context, d, types, blocks, stack, b, link)?;
+                    let index =
+                        expr.lower_mlir(context, place, d, types, blocks, stack, b, link)?;
                     out.push(index);
                 }
                 Ok(out.last().cloned().unwrap())
             }
 
-            IRKind::Decl(key, ast_ty, mem) => {
+            IRKind::Decl(place_id) => {
+                //key, ast_ty, mem) => {
                 let current_block = stack.last().unwrap().clone();
                 let is_current_static = current_block == blocks.root();
-                match mem {
+                let p = place.get(place_id);
+                match p.mem {
                     VarDefinitionSpace::Static => {
                         if is_current_static {
                             // STATIC/GLOBAL VARIABLE
-                            match &ast_ty {
+                            match &p.ty {
                                 AstType::Func(_, _) => op::emit_declare_function(
                                     context,
-                                    key,
-                                    ast_ty,
+                                    p.name,
+                                    p.ty.clone(),
                                     location,
                                     current_block,
                                     types,
@@ -105,8 +112,8 @@ impl IRNode {
                                 ),
                                 _ => op::emit_declare_static(
                                     context,
-                                    key,
-                                    ast_ty,
+                                    p.name,
+                                    p.ty.clone(),
                                     location,
                                     current_block,
                                     types,
@@ -121,34 +128,34 @@ impl IRNode {
                             // emitting in non-static context (local static var)
                             // we create a unique global name to prevent conflict
                             // and then we add ops to provide a local reference to the global name
-                            let base = b.strings.resolve(&key).clone();
+                            let base = b.strings.resolve(&p.name).clone();
                             let name = b.unique_static_name();
                             let name = format!("{}{}", base, name).clone();
                             let global_name_key = b.strings.intern(name.clone());
 
-                            let ty = op::from_type(context, &ast_ty);
+                            let ty = op::from_type(context, &p.ty);
                             let memref_ty = MemRefType::new(ty.into(), &[], None, None);
                             let op = memref::alloca(context, memref_ty, &[], &[], None, location);
                             let current = blocks.get_mut(&current_block).unwrap();
-                            let index = current.push_with_name(op, key);
+                            let index = current.push_with_name(op, p.name);
                             // TODO: FIXME
                             //cfg.static_names.insert(index, global_name_key);
-                            types.set_type(index, ast_ty, mem);
+                            types.set_type(index, p.ty.clone(), p.mem);
                             Ok(index)
                         }
                     }
 
                     VarDefinitionSpace::Default | VarDefinitionSpace::Stack => {
-                        let ty = op::from_type(context, &ast_ty);
+                        let ty = op::from_type(context, &p.ty);
                         let memref_ty = MemRefType::new(ty.into(), &[], None, None);
                         let op = memref::alloca(context, memref_ty, &[], &[], None, location);
                         //let current = cfg_g.node_weight_mut(current_block).unwrap();
                         let current = blocks.get_mut(&current_block).unwrap();
-                        let index = current.push_with_name(op, key);
-                        types.set_type(index, ast_ty, mem);
+                        let index = current.push_with_name(op, p.name);
+                        types.set_type(index, p.ty.clone(), p.mem);
                         Ok(index)
                     }
-                    _ => unimplemented!("{:?}", mem),
+                    _ => unimplemented!("{:?}", p.mem),
                 }
             }
 
@@ -160,10 +167,11 @@ impl IRNode {
                     let is_symbol_static = sym_index.block() == blocks.root();
                     if is_symbol_static && is_current_static {
                         println!("expr: {:?}", expr);
-                        expr.dump(b, 0);
+                        expr.dump(place, b, 0);
                         match expr.kind {
                             IRKind::Func(_, _) => op::emit_set_function(
                                 context,
+                                place,
                                 sym_index,
                                 *expr,
                                 current_block,
@@ -190,6 +198,7 @@ impl IRNode {
                     } else {
                         op::emit_set_alloca(
                             context,
+                            place,
                             sym_index,
                             name,
                             *expr,
@@ -212,7 +221,7 @@ impl IRNode {
 
             IRKind::Branch(condition, then_key, else_key) => {
                 let condition_index =
-                    condition.lower_mlir(context, d, types, blocks, stack, b, link)?;
+                    condition.lower_mlir(context, place, d, types, blocks, stack, b, link)?;
                 let current_block = stack.last().unwrap().clone();
 
                 // look up defined blocks
@@ -269,7 +278,8 @@ impl IRNode {
 
                 let mut rs = vec![];
                 for expr in args {
-                    let mut index = expr.lower_mlir(context, d, types, blocks, stack, b, link)?;
+                    let mut index =
+                        expr.lower_mlir(context, place, d, types, blocks, stack, b, link)?;
                     let (_ast_ty, mem) = types.lookup_type(index).unwrap();
                     if mem.requires_deref() {
                         // if it's in memory, we need to copy to return
@@ -300,7 +310,8 @@ impl IRNode {
                 if let Some(block_index) = blocks.block_index(&label) {
                     let mut arg_index = vec![];
                     for expr in args {
-                        let index = expr.lower_mlir(context, d, types, blocks, stack, b, link)?;
+                        let index =
+                            expr.lower_mlir(context, place, d, types, blocks, stack, b, link)?;
                         arg_index.push(index);
                     }
 
@@ -406,7 +417,8 @@ impl IRNode {
 
                     // lower call args
                     for a in args {
-                        let index = a.lower_mlir(context, d, types, blocks, stack, b, link)?;
+                        let index =
+                            a.lower_mlir(context, place, d, types, blocks, stack, b, link)?;
                         indices.push(index);
                     }
 
@@ -475,7 +487,8 @@ impl IRNode {
                     }
                     Builtin::Assert => {
                         let arg = args.pop().unwrap();
-                        let index = arg.lower_mlir(context, d, types, blocks, stack, b, link)?;
+                        let index =
+                            arg.lower_mlir(context, place, d, types, blocks, stack, b, link)?;
                         let msg = "assert";
                         let msg = d.emit_string(ir::error(msg, self.span));
                         //let msg = format!("assert at {}", location.to_string());
@@ -489,7 +502,7 @@ impl IRNode {
                         let arg = args.pop().unwrap();
                         // eval expr
                         let mut index =
-                            arg.lower_mlir(context, d, types, blocks, stack, b, link)?;
+                            arg.lower_mlir(context, place, d, types, blocks, stack, b, link)?;
                         let (ast_ty, mem) = types.lookup_type(index).unwrap();
 
                         // deref
@@ -527,7 +540,7 @@ impl IRNode {
 
             IRKind::Op1(op, a) => {
                 use crate::ast::UnaryOperation;
-                let index = a.lower_mlir(context, d, types, blocks, stack, b, link)?;
+                let index = a.lower_mlir(context, place, d, types, blocks, stack, b, link)?;
                 let current_block = stack.last().unwrap().clone();
                 //let current = cfg_g.node_weight_mut(current_block).unwrap();
                 let current = blocks.get_mut(&current_block).unwrap();
@@ -565,7 +578,7 @@ impl IRNode {
             }
 
             IRKind::Op2(op, x, y) => op::emit_binop(
-                context, op, *x, *y, location, d, types, blocks, stack, b, link,
+                context, place, op, *x, *y, location, d, types, blocks, stack, b, link,
             ),
 
             _ => {

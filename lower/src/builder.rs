@@ -3,7 +3,7 @@ use crate::intern::StringPool;
 use crate::Diagnostics;
 use crate::{
     ir::{IRArg, IRKind, IRNode, IRTypeSelect},
-    AstType, StringKey,
+    AstType, PlaceId, StringKey,
 };
 use melior::{ir::Location, Context};
 use std::collections::VecDeque;
@@ -401,8 +401,8 @@ impl<E: Extra> NodeBuilder<E> {
         )
     }
 
-    pub fn ir_decl(&self, key: StringKey, ty: AstType, mem: VarDefinitionSpace) -> IRNode {
-        IRNode::new(IRKind::Decl(key, ty, mem), self.span.clone().unwrap())
+    pub fn ir_decl(&self, place_id: PlaceId) -> IRNode {
+        IRNode::new(IRKind::Decl(place_id), self.span.clone().unwrap())
     }
 
     pub fn ir_call(&self, key: StringKey, args: Vec<IRNode>) -> IRNode {

@@ -3,7 +3,6 @@ use anyhow::Result;
 
 use crate::{AstNode, AstType, Diagnostics, Extra, NodeBuilder, ParseError, StringKey, SymIndex};
 use codespan_reporting::diagnostic::{Diagnostic, Label};
-//use melior::Context;
 use std::fmt::Debug;
 
 use crate::ast::{
@@ -81,6 +80,7 @@ pub struct IRControlBlock {
     block_index: NodeIndex,
     params: Vec<IRArg>,
     symbols: HashMap<StringKey, SymIndex>,
+    places: HashMap<AllocaId, SymIndex>,
     def_count: usize,
 }
 
@@ -92,6 +92,7 @@ impl IRControlBlock {
             block_index: NodeIndex::new(0),
             params,
             symbols: HashMap::new(),
+            places: HashMap::new(),
         }
     }
     pub fn lookup(&self, name: StringKey) -> Option<SymIndex> {
@@ -100,6 +101,15 @@ impl IRControlBlock {
     pub fn add_symbol(&mut self, name: StringKey, index: SymIndex) {
         assert_eq!(index.block(), self.block_index);
         self.symbols.insert(name, index);
+    }
+
+    pub fn alloca_add(&mut self, place_id: AllocaId, name: StringKey, index: SymIndex) {
+        self.add_symbol(name, index);
+        self.places.insert(place_id, index);
+    }
+
+    pub fn alloca_get(&mut self, place_id: AllocaId) -> Option<SymIndex> {
+        self.places.get(&place_id).cloned()
     }
 
     pub fn push_arg(&mut self, name: StringKey) -> SymIndex {
@@ -118,6 +128,93 @@ impl IRControlBlock {
         index
     }
 }
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+pub struct AllocaId(NodeIndex);
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+pub struct PlaceId(u32);
+
+#[derive(Debug)]
+pub struct PlaceNode {
+    pub(crate) name: StringKey,
+    pub(crate) static_name: Option<StringKey>,
+    pub(crate) mem: VarDefinitionSpace,
+    pub(crate) ty: AstType,
+}
+
+impl PlaceNode {
+    pub fn new(name: StringKey, ty: AstType, mem: VarDefinitionSpace) -> Self {
+        Self {
+            name,
+            static_name: None,
+            mem,
+            ty,
+        }
+    }
+
+    pub fn new_static(name: StringKey, ty: AstType) -> Self {
+        Self::new(name, ty, VarDefinitionSpace::Static)
+    }
+
+    pub fn new_stack(name: StringKey, ty: AstType) -> Self {
+        Self::new(name, ty, VarDefinitionSpace::Stack)
+    }
+}
+
+//pub type IRPlaceGraph = DiGraph<PlaceNode, ()>;
+
+#[derive(Default)]
+pub struct IRPlaceTable {
+    places: Vec<PlaceNode>,
+}
+
+impl IRPlaceTable {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn add(&mut self, place: PlaceNode) -> PlaceId {
+        let offset = self.places.len();
+        self.places.push(place);
+        PlaceId(offset as u32)
+    }
+
+    pub fn get(&self, place_id: PlaceId) -> &PlaceNode {
+        self.places.get(place_id.0 as usize).unwrap()
+    }
+}
+
+/*
+pub fn place_save_graph<E>(g: &IRPlaceGraph, blocks: &CFGBlocks, filename: &str, b: &NodeBuilder<E>) {
+    use petgraph::dot::{Config, Dot};
+
+    let s = format!(
+        "{:?}",
+        Dot::with_attr_getters(
+            &g,
+            &[Config::EdgeNoLabel, Config::NodeNoLabel],
+            &|_, _er| String::new(),
+            &|_, (_index, data)| {
+                //let key = blocks.get_name(&data.block_index);
+                //let name = b.strings.resolve(&key);
+                format!(
+                    //"label = \"[{}]{}\" shape={:?}",
+                    "label = \"{}\"",
+                    _index.index(),
+                    //data.block_index.index(),
+                    //&data.name,
+                    //&data.ty.to_string()
+                    )
+            }
+            )
+        );
+    let path = std::fs::canonicalize(filename).unwrap();
+    println!("{}", path.clone().into_os_string().into_string().unwrap());
+    println!("{}", s);
+    std::fs::write(path, s).unwrap();
+}
+*/
 
 #[derive(Debug, Default)]
 pub struct IREnvironment {
@@ -325,7 +422,7 @@ impl IREnvironment {
 
 #[derive(Debug)]
 pub enum IRKind {
-    Decl(StringKey, AstType, VarDefinitionSpace),
+    Decl(PlaceId),
     // set(variable, expr, type offset)
     Set(StringKey, Box<IRNode>, IRTypeSelect),
     // get(variable, type offset)
@@ -519,7 +616,7 @@ impl IRNode {
         }
     }
 
-    pub fn dump<E: Extra>(&self, b: &NodeBuilder<E>, mut depth: usize) {
+    pub fn dump<E: Extra>(&self, places: &IRPlaceTable, b: &NodeBuilder<E>, mut depth: usize) {
         match &self.kind {
             IRKind::Func(blocks, _ret_ty) => {
                 println!("{:width$}func:", "", width = depth * 2);
@@ -541,14 +638,14 @@ impl IRNode {
                         );
                     }
                     for a in &block.children {
-                        a.dump(b, depth + 1);
+                        a.dump(places, b, depth + 1);
                     }
                 }
             }
             IRKind::Seq(exprs) => {
                 //println!("{:width$}seq:", "", width = depth * 2);
                 for e in exprs {
-                    e.dump(b, depth);
+                    e.dump(places, b, depth);
                 }
             }
             IRKind::Branch(cond, br_then, br_else) => {
@@ -559,15 +656,16 @@ impl IRNode {
                     b.strings.resolve(br_else),
                     width = depth * 2
                 );
-                cond.dump(b, depth + 1);
+                cond.dump(places, b, depth + 1);
             }
-            IRKind::Decl(key, ty, mem) => {
+            IRKind::Decl(place_id) => {
+                let p = places.get(*place_id);
                 println!(
                     "{:width$}decl({}, {:?}, {:?})",
                     "",
-                    b.strings.resolve(key),
-                    ty,
-                    mem,
+                    b.strings.resolve(&p.name),
+                    p.ty,
+                    p.mem,
                     width = depth * 2
                 );
             }
@@ -579,7 +677,7 @@ impl IRNode {
                     select,
                     width = depth * 2
                 );
-                v.dump(b, depth + 1);
+                v.dump(places, b, depth + 1);
             }
             IRKind::Get(key, select) => {
                 println!(
@@ -593,16 +691,16 @@ impl IRNode {
             IRKind::Ret(vs) => {
                 println!("{:width$}ret:", "", width = depth * 2);
                 for e in vs {
-                    e.dump(b, depth + 1);
+                    e.dump(places, b, depth + 1);
                 }
             }
 
             IRKind::Cond(c, a, mb) => {
                 println!("{:width$}cond:", "", width = depth * 2);
-                c.dump(b, depth + 1);
-                a.dump(b, depth + 1);
+                c.dump(places, b, depth + 1);
+                a.dump(places, b, depth + 1);
                 if let Some(else_expr) = mb {
-                    else_expr.dump(b, depth + 1);
+                    else_expr.dump(places, b, depth + 1);
                 }
             }
 
@@ -632,7 +730,7 @@ impl IRNode {
                     width = depth * 2
                 );
                 for a in args {
-                    a.dump(b, depth + 1);
+                    a.dump(places, b, depth + 1);
                 }
             }
 
@@ -645,20 +743,20 @@ impl IRNode {
                 );
                 if args.len() > 0 {
                     for a in args {
-                        a.dump(b, depth + 1);
+                        a.dump(places, b, depth + 1);
                     }
                 }
             }
 
             IRKind::Op1(op, expr) => {
                 println!("{:width$}unary: {:?}", "", op, width = depth * 2);
-                expr.dump(b, depth + 1);
+                expr.dump(places, b, depth + 1);
             }
 
             IRKind::Op2(op, x, y) => {
                 println!("{:width$}binop: {:?}", "", op, width = depth * 2);
-                x.dump(b, depth + 1);
-                y.dump(b, depth + 1);
+                x.dump(places, b, depth + 1);
+                y.dump(places, b, depth + 1);
             }
 
             IRKind::Literal(lit) => {
@@ -668,7 +766,7 @@ impl IRNode {
             IRKind::Builtin(bi, args) => {
                 println!("{:width$}builtin({:?})", "", bi, width = depth * 2);
                 for a in args {
-                    a.dump(b, depth + 1);
+                    a.dump(places, b, depth + 1);
                 }
             }
 
@@ -693,7 +791,7 @@ impl IRNode {
                     );
                 }
                 for a in &block.children {
-                    a.dump(b, depth + 1);
+                    a.dump(places, b, depth + 1);
                 }
             } //_ => ()//unimplemented!()
         }
@@ -701,8 +799,9 @@ impl IRNode {
 
     pub fn build_graph<'c, E: Extra>(
         self,
-        d: &mut Diagnostics,
+        places: &IRPlaceTable,
         env: &mut IREnvironment,
+        d: &mut Diagnostics,
         b: &mut NodeBuilder<E>,
     ) -> Result<IRNode> {
         let span = self.get_span().clone();
@@ -715,7 +814,7 @@ impl IRNode {
 
                 let mut out = vec![];
                 for expr in exprs {
-                    out.push(expr.build_graph(d, env, b)?);
+                    out.push(expr.build_graph(places, env, d, b)?);
                     /*
                     if let IRKind::Block(block) = &expr.kind {
                         let block_index = env.add_block(block.name, block.params.clone(), d, g);
@@ -734,7 +833,7 @@ impl IRNode {
             IRKind::Ret(exprs) => {
                 let mut out = vec![];
                 for expr in exprs {
-                    out.push(expr.build_graph(d, env, b)?);
+                    out.push(expr.build_graph(places, env, d, b)?);
                 }
                 Ok(b.ir_ret(out))
             }
@@ -783,7 +882,7 @@ impl IRNode {
             IRKind::Set(name, value, select) => {
                 let current_index = env.current_block();
                 if let Some(_index) = env.name_in_scope(current_index, name) {
-                    let value = value.build_graph(d, env, b)?;
+                    let value = value.build_graph(places, env, d, b)?;
                     Ok(b.ir_set(name, value, select))
                 } else {
                     d.push_diagnostic(error(
@@ -794,10 +893,11 @@ impl IRNode {
                 }
             }
 
-            IRKind::Decl(name, ref ty, _mem) => {
+            IRKind::Decl(place_id) => {
                 let current_block = env.current_block();
-                let index = env.add_definition(current_block, name);
-                env.set_type(index, ty.clone(), VarDefinitionSpace::default());
+                let place_data = places.get(place_id);
+                let index = env.add_definition(current_block, place_data.name);
+                env.set_type(index, place_data.ty.clone(), place_data.mem);
                 Ok(self)
             }
 
@@ -820,7 +920,7 @@ impl IRNode {
                     env.enter_block(block.index, self.span.clone());
                     let mut children = vec![];
                     for child in block.children {
-                        children.push(child.build_graph(d, env, b)?);
+                        children.push(child.build_graph(places, env, d, b)?);
                     }
                     env.exit_block();
                     block.children = children;
@@ -845,7 +945,7 @@ impl IRNode {
 
                 let mut children = vec![];
                 for (_i, child) in block.children.into_iter().enumerate() {
-                    children.push(child.build_graph(d, env, b)?);
+                    children.push(child.build_graph(places, env, d, b)?);
                 }
                 env.exit_block();
                 block.children = children;
@@ -860,7 +960,7 @@ impl IRNode {
             IRKind::Builtin(ref _bi, ref _args) => Ok(self),
 
             IRKind::Branch(condition, then_key, else_key) => {
-                let condition = condition.build_graph(d, env, b)?;
+                let condition = condition.build_graph(places, env, d, b)?;
                 let current_block = env.current_block();
                 let then_block = env.lookup_block(then_key).unwrap();
                 env.g.add_edge(current_block, then_block, ());
@@ -870,20 +970,20 @@ impl IRNode {
             }
 
             IRKind::Cond(condition, then_expr, maybe_else_expr) => {
-                let condition = condition.build_graph(d, env, b)?;
+                let condition = condition.build_graph(places, env, d, b)?;
                 let current_block = env.current_block();
 
                 let next_block = env.add_block(b.s("next"), vec![], d);
 
                 let then_block = env.add_block(b.s("then"), vec![], d);
                 //let then_term = then_expr.kind.terminator();
-                let then_expr = then_expr.build_graph(d, env, b)?;
+                let then_expr = then_expr.build_graph(places, env, d, b)?;
                 env.g.add_edge(current_block, then_block, ());
                 env.g.add_edge(then_block, next_block, ());
                 let maybe_else_expr = if let Some(else_expr) = maybe_else_expr {
                     let else_block = env.add_block(b.s("else"), vec![], d);
                     env.enter_block(else_block, else_expr.span.clone());
-                    let else_expr = else_expr.build_graph(d, env, b)?;
+                    let else_expr = else_expr.build_graph(places, env, d, b)?;
                     env.exit_block();
                     env.g.add_edge(current_block, else_block, ());
                     env.g.add_edge(else_block, next_block, ());
@@ -895,13 +995,13 @@ impl IRNode {
             }
 
             IRKind::Op1(op, a) => {
-                let a = a.build_graph(d, env, b)?;
+                let a = a.build_graph(places, env, d, b)?;
                 Ok(b.ir_op1(op, a))
             }
 
             IRKind::Op2(op_node, x, y) => {
-                let x = x.build_graph(d, env, b)?;
-                let y = y.build_graph(d, env, b)?;
+                let x = x.build_graph(places, env, d, b)?;
+                let y = y.build_graph(places, env, d, b)?;
                 Ok(b.ir_op2(op_node, x, y))
             }
         }
@@ -932,12 +1032,13 @@ impl<E: Extra> AstNode<E> {
     }
     pub fn lower_ir_expr<'c>(
         self,
-        d: &mut Diagnostics,
         env: &mut IREnvironment,
+        place: &mut IRPlaceTable,
+        d: &mut Diagnostics,
         b: &mut NodeBuilder<E>,
     ) -> Result<(IRNode, AstType)> {
         let mut out = vec![];
-        let ty = self.lower_ir(&mut out, d, env, b)?;
+        let ty = self.lower_ir(&mut out, env, place, d, b)?;
         if out.len() == 0 {
             Ok((b.ir_noop(), ty))
         } else if out.len() == 1 {
@@ -950,8 +1051,9 @@ impl<E: Extra> AstNode<E> {
     pub fn lower_ir<'c>(
         self,
         out: &mut Vec<IRNode>,
-        d: &mut Diagnostics,
         env: &mut IREnvironment,
+        place: &mut IRPlaceTable,
+        d: &mut Diagnostics,
         b: &mut NodeBuilder<E>,
     ) -> Result<AstType> {
         if !self.node_id.is_valid() {
@@ -965,7 +1067,7 @@ impl<E: Extra> AstNode<E> {
             Ast::Sequence(exprs) => {
                 let mut ty = AstType::Unit;
                 for expr in exprs {
-                    let (ir, ret_ty) = expr.lower_ir_expr(d, env, b)?;
+                    let (ir, ret_ty) = expr.lower_ir_expr(env, place, d, b)?;
                     out.extend(ir.to_vec());
                     ty = ret_ty;
                 }
@@ -976,7 +1078,7 @@ impl<E: Extra> AstNode<E> {
                 let mut args = vec![];
                 let mut ty = AstType::Unit;
                 if let Some(expr) = maybe_expr {
-                    ty = expr.lower_ir(&mut args, d, env, b)?;
+                    ty = expr.lower_ir(&mut args, env, place, d, b)?;
                 }
                 out.push(b.ir_ret(args));
                 Ok(ty)
@@ -998,7 +1100,7 @@ impl<E: Extra> AstNode<E> {
                 let mut args = vec![];
                 for a in ast_args.into_iter() {
                     let Argument::Positional(expr) = a;
-                    let (ir, _ty) = expr.lower_ir_expr(d, env, b)?;
+                    let (ir, _ty) = expr.lower_ir_expr(env, place, d, b)?;
                     args.push(ir);
                 }
 
@@ -1023,10 +1125,24 @@ impl<E: Extra> AstNode<E> {
 
             Ast::Global(ident, expr) => {
                 if let Ast::Literal(ref _lit) = expr.node {
-                    let (v, ty) = expr.lower_ir_expr(d, env, b)?;
-                    out.push(b.ir_decl(ident, ty.clone(), VarDefinitionSpace::Static));
-                    out.push(b.ir_set(ident, v, IRTypeSelect::default()));
+                    let (v, ty) = expr.lower_ir_expr(env, place, d, b)?;
+
                     let current_block = env.current_block();
+                    let is_static = env.root() == current_block;
+
+                    let mut place_data = PlaceNode::new_static(ident, ty.clone());
+                    if !is_static {
+                        // create a unique static name
+                        let name = b.unique_static_name();
+                        let name = format!("{}{}", b.strings.resolve(&ident), name).clone();
+                        let key = b.strings.intern(name.clone());
+                        place_data.static_name = Some(key);
+                    }
+
+                    let place_id = place.add(place_data);
+
+                    out.push(b.ir_decl(place_id)); //ident, ty.clone(), VarDefinitionSpace::Static));
+                    out.push(b.ir_set(ident, v, IRTypeSelect::default()));
                     let index = env.add_definition(current_block, ident);
                     env.set_type(index, ty.clone(), VarDefinitionSpace::Static);
 
@@ -1062,7 +1178,7 @@ impl<E: Extra> AstNode<E> {
 
             Ast::Assign(target, expr) => match target {
                 AssignTarget::Alloca(name) | AssignTarget::Identifier(name) => {
-                    let (ir, ty) = expr.lower_ir_expr(d, env, b)?;
+                    let (ir, ty) = expr.lower_ir_expr(env, place, d, b)?;
                     let current_block = env.current_block();
                     if let Some(sym_index) = env.name_in_scope(current_block, name) {
                         let (ty, mem) = env.lookup_type(sym_index).unwrap();
@@ -1070,7 +1186,10 @@ impl<E: Extra> AstNode<E> {
                         env.set_type(sym_index, ty.clone(), mem);
                         Ok(ty)
                     } else {
-                        out.push(b.ir_decl(name, ty.clone(), VarDefinitionSpace::Stack));
+                        let place_data = PlaceNode::new_stack(name, ty.clone());
+                        //place_data.mem = VarDefinitionSpace::Stack;
+                        let place_id = place.add(place_data);
+                        out.push(b.ir_decl(place_id)); //name, ty.clone(), VarDefinitionSpace::Stack));
                         out.push(b.ir_set(name, ir, IRTypeSelect::Offset(0)));
                         let index = env.add_definition(current_block, name);
                         env.set_type(index, ty.clone(), VarDefinitionSpace::Stack);
@@ -1081,7 +1200,7 @@ impl<E: Extra> AstNode<E> {
 
             Ast::Mutate(lhs, rhs) => match lhs.node {
                 Ast::Identifier(name) => {
-                    let (ir, ty) = rhs.lower_ir_expr(d, env, b)?;
+                    let (ir, ty) = rhs.lower_ir_expr(env, place, d, b)?;
                     out.push(b.ir_set(name, ir, IRTypeSelect::Offset(0)));
                     Ok(ty)
                 }
@@ -1138,7 +1257,7 @@ impl<E: Extra> AstNode<E> {
                     for a in args {
                         match a {
                             Argument::Positional(expr) => {
-                                expr.lower_ir(&mut ir_args, d, env, b)?;
+                                expr.lower_ir(&mut ir_args, env, place, d, b)?;
                             }
                         }
                     }
@@ -1170,7 +1289,12 @@ impl<E: Extra> AstNode<E> {
                 //let data = g.node_weight_mut(current_block).unwrap();
                 //let index = data.add_definition(def.name);
                 env.set_type(index, f_type.clone(), VarDefinitionSpace::Static);
-                out.push(b.ir_decl(def.name, f_type, VarDefinitionSpace::Static));
+
+                let place_data = PlaceNode::new_static(def.name, f_type);
+                let place_id = place.add(place_data);
+                //place_data.mem = VarDefinitionSpace::Static;
+                //out.push(b.ir_decl(def.name, f_type, VarDefinitionSpace::Static));
+                out.push(b.ir_decl(place_id)); //def.name, f_type, VarDefinitionSpace::Static));
 
                 let mut output_blocks = vec![];
                 let mut edges = vec![];
@@ -1220,7 +1344,7 @@ impl<E: Extra> AstNode<E> {
                         }
 
                         let mut exprs = vec![];
-                        let (ir, _ty) = nb.body.lower_ir_expr(d, env, b)?;
+                        let (ir, _ty) = nb.body.lower_ir_expr(env, place, d, b)?;
                         exprs.extend(ir.to_vec());
 
                         let block = IRBlock::new(nb.name, args, exprs);
@@ -1260,7 +1384,7 @@ impl<E: Extra> AstNode<E> {
                 for a in args {
                     match a {
                         Argument::Positional(expr) => {
-                            expr.lower_ir(&mut ir_args, d, env, b)?;
+                            expr.lower_ir(&mut ir_args, env, place, d, b)?;
                         }
                     }
                 }
@@ -1281,7 +1405,7 @@ impl<E: Extra> AstNode<E> {
                 //let span = then_expr.extra.get_span();
                 env.g.add_edge(current_block, then_index, ());
                 let mut then_seq = vec![b.ir_label(b_then, vec![])];
-                let (then_block, _ty) = then_expr.lower_ir_expr(d, env, b)?;
+                let (then_block, _ty) = then_expr.lower_ir_expr(env, place, d, b)?;
                 let term = then_block.kind.terminator();
                 then_seq.extend(then_block.to_vec());
                 if term.is_none() {
@@ -1294,7 +1418,7 @@ impl<E: Extra> AstNode<E> {
                     //let span = else_expr.extra.get_span();
                     let b_else = Some(env.fresh_label("else", b));
                     let mut else_seq = vec![b.ir_label(b_else.unwrap(), vec![])];
-                    let (else_block, _ty) = else_expr.lower_ir_expr(d, env, b)?;
+                    let (else_block, _ty) = else_expr.lower_ir_expr(env, place, d, b)?;
                     //g.add_edge(current_block, else_block, ());
                     let term = else_block.kind.terminator();
                     else_seq.extend(else_block.to_vec());
@@ -1307,7 +1431,7 @@ impl<E: Extra> AstNode<E> {
                     (None, None)
                 };
 
-                let (ir_cond, _ty) = condition.lower_ir_expr(d, env, b)?;
+                let (ir_cond, _ty) = condition.lower_ir_expr(env, place, d, b)?;
 
                 out.push(b.ir_branch(ir_cond, b_then, b_else.unwrap_or(b_next)));
                 out.extend(then_seq);
@@ -1319,20 +1443,20 @@ impl<E: Extra> AstNode<E> {
             }
 
             Ast::UnaryOp(op, a) => {
-                let (ir, ty) = a.lower_ir_expr(d, env, b)?;
+                let (ir, ty) = a.lower_ir_expr(env, place, d, b)?;
                 out.push(b.ir_op1(op, ir));
                 Ok(ty)
             }
 
             Ast::BinaryOp(op_node, x, y) => {
-                let (x, _ty) = x.lower_ir_expr(d, env, b)?;
-                let (y, ty) = y.lower_ir_expr(d, env, b)?;
+                let (x, _ty) = x.lower_ir_expr(env, place, d, b)?;
+                let (y, ty) = y.lower_ir_expr(env, place, d, b)?;
                 out.push(b.ir_op2(op_node.node, x, y));
                 Ok(ty)
             }
 
             // do nothing
-            Ast::Deref(expr, _target) => expr.lower_ir(out, d, env, b),
+            Ast::Deref(expr, _target) => expr.lower_ir(out, env, place, d, b),
 
             Ast::Error => {
                 d.push_diagnostic(self.extra.error(&format!("Error")));
@@ -1368,13 +1492,13 @@ mod tests {
         let ast = gen_block(&mut b).normalize(&mut d, &mut b);
         let index = env.add_block(b.s("module"), vec![], &d);
         env.enter_block(index, ast.extra.get_span());
-
-        let r = ast.lower_ir_expr(&mut d, &mut env, &mut b);
+        let mut place = IRPlaceTable::new();
+        let r = ast.lower_ir_expr(&mut env, &mut place, &mut d, &mut b);
         d.dump();
         assert!(!d.has_errors);
         let (ir, _ty) = r.unwrap();
         println!("ir: {:#?}", ir);
-        ir.dump(&b, 0);
+        ir.dump(&place, &b, 0);
         assert_eq!(1, env.stack.len());
     }
 
@@ -1386,18 +1510,19 @@ mod tests {
         b.enter(file_id, "type.py");
 
         let mut env = IREnvironment::new();
+        let mut place = IRPlaceTable::new();
 
         let ast = crate::tests::gen_function_call(&mut b).normalize(&mut d, &mut b);
 
         let index = env.add_block(b.s("module"), vec![], &d);
         env.enter_block(index, ast.extra.get_span());
 
-        let r = ast.lower_ir_expr(&mut d, &mut env, &mut b);
+        let r = ast.lower_ir_expr(&mut env, &mut place, &mut d, &mut b);
         d.dump();
         assert!(!d.has_errors);
         let (ir, _ty) = r.unwrap();
         println!("ir: {:#?}", ir);
-        ir.dump(&b, 0);
+        ir.dump(&place, &b, 0);
         assert_eq!(1, env.stack.len());
     }
 }

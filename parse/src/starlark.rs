@@ -14,8 +14,8 @@ use starlark_syntax::syntax::module::AstModuleFields;
 use lower::ast;
 use lower::ast::{Ast, AstNode, CodeLocation, Extra};
 use lower::{
-    AstType, CFGBlocks, Diagnostics, LinkOptions, Module, NodeBuilder, ParseError, StringKey,
-    TypeBuilder, TypeUnify,
+    AstType, CFGBlocks, Diagnostics, IRPlaceTable, LinkOptions, Module, NodeBuilder, ParseError,
+    StringKey, TypeBuilder, TypeUnify,
 };
 
 #[derive(Debug, Clone)]
@@ -532,6 +532,7 @@ impl<E: Extra> Parser<E> {
 pub struct StarlarkParser<E> {
     _e: std::marker::PhantomData<E>,
     link: LinkOptions,
+    place: IRPlaceTable,
 }
 
 impl<E: Extra> StarlarkParser<E> {
@@ -539,6 +540,7 @@ impl<E: Extra> StarlarkParser<E> {
         Self {
             _e: std::marker::PhantomData::default(),
             link: LinkOptions::new(),
+            place: IRPlaceTable::new(),
         }
     }
 
@@ -568,7 +570,7 @@ impl<E: Extra> StarlarkParser<E> {
         env.enter_block(index, ast.extra.get_span());
 
         // lower ast to ir
-        let r = ast.lower_ir_expr(d, &mut env, b);
+        let r = ast.lower_ir_expr(&mut env, &mut self.place, d, b);
         d.dump();
 
         if d.has_errors {
@@ -577,7 +579,7 @@ impl<E: Extra> StarlarkParser<E> {
 
         let (ir, _ty) = r?;
         if verbose {
-            ir.dump(&b, 0);
+            ir.dump(&self.place, &b, 0);
         }
         assert_eq!(1, env.stack_size());
         let root = env.root();
@@ -586,9 +588,9 @@ impl<E: Extra> StarlarkParser<E> {
         let mut env = IREnvironment::new();
         let ir = lower::ir::IRBlockSorter::run(ir, b);
         if verbose {
-            ir.dump(&b, 0);
+            ir.dump(&self.place, &b, 0);
         }
-        let r = ir.build_graph(d, &mut env, b);
+        let r = ir.build_graph(&self.place, &mut env, d, b);
         d.dump();
         let ir = r?;
 
@@ -604,6 +606,7 @@ impl<E: Extra> StarlarkParser<E> {
         let mut stack = vec![blocks.root()];
         let r = ir.lower_mlir(
             context,
+            &self.place,
             d,
             &mut types,
             &mut blocks,
@@ -677,6 +680,7 @@ pub(crate) mod tests {
         assert!(module.as_operation().verify());
         let r = p.exec_main(&context, &mut module, "../target/debug/", true);
         assert_eq!(expected, r);
+        //place_save_graph(&p.place, )
     }
 
     #[test]
