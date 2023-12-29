@@ -1,9 +1,11 @@
-use crate::{AstType, StringKey, VarDefinitionSpace};
+use crate::{AstType, NodeIndex, StringKey, SymIndex, VarDefinitionSpace};
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct PlaceId(u32);
 
 #[derive(Debug)]
 pub struct PlaceNode {
+    //pub(crate) block_index: NodeIndex,
+    //pub(crate) index: SymIndex,
     pub(crate) name: StringKey,
     pub(crate) static_name: Option<StringKey>,
     pub(crate) mem: VarDefinitionSpace,

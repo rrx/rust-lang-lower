@@ -1,11 +1,11 @@
-use anyhow::Error;
-use anyhow::Result;
-
 use crate::{
     AstNode, AstType, Diagnostics, Extra, IRPlaceTable, NodeBuilder, ParseError, PlaceId,
     PlaceNode, StringKey, SymIndex,
 };
+use anyhow::Error;
+use anyhow::Result;
 use codespan_reporting::diagnostic::{Diagnostic, Label};
+use indexmap::IndexMap;
 use std::fmt::Debug;
 
 use crate::ast::{
@@ -83,7 +83,7 @@ pub struct IRControlBlock {
     block_index: NodeIndex,
     params: Vec<IRArg>,
     symbols: HashMap<StringKey, SymIndex>,
-    places: HashMap<AllocaId, SymIndex>,
+    places: HashMap<PlaceId, SymIndex>,
     def_count: usize,
 }
 
@@ -98,21 +98,29 @@ impl IRControlBlock {
             places: HashMap::new(),
         }
     }
+    /*
     pub fn lookup(&self, name: StringKey) -> Option<SymIndex> {
         self.symbols.get(&name).cloned()
     }
+
     pub fn add_symbol(&mut self, name: StringKey, index: SymIndex) {
         assert_eq!(index.block(), self.block_index);
         self.symbols.insert(name, index);
     }
+    */
 
-    pub fn alloca_add(&mut self, place_id: AllocaId, name: StringKey, index: SymIndex) {
-        self.add_symbol(name, index);
+    pub fn alloca_add(&mut self, place_id: PlaceId, name: StringKey, index: SymIndex) {
+        //self.add_symbol(name, index);
+        self.symbols.insert(name, index);
         self.places.insert(place_id, index);
     }
 
-    pub fn alloca_get(&mut self, place_id: AllocaId) -> Option<SymIndex> {
+    pub fn alloca_get(&self, place_id: PlaceId) -> Option<SymIndex> {
         self.places.get(&place_id).cloned()
+    }
+
+    pub fn alloca_get_name(&self, name: StringKey) -> Option<SymIndex> {
+        self.symbols.get(&name).cloned()
     }
 
     pub fn push_arg(&mut self, name: StringKey) -> SymIndex {
@@ -174,6 +182,7 @@ pub struct IREnvironment {
     block_names: HashMap<StringKey, NodeIndex>,
     block_names_index: HashMap<NodeIndex, StringKey>,
     types: HashMap<SymIndex, (AstType, VarDefinitionSpace)>,
+    places: IndexMap<PlaceId, SymIndex>,
     label_count: usize,
     pub g: IRBlockGraph,
 }
@@ -257,7 +266,9 @@ impl IREnvironment {
     ) -> SymIndex {
         let data = self.g.node_weight_mut(block_index).unwrap();
         let index = data.add_definition(place_id);
-        data.add_symbol(name, index);
+        data.alloca_add(place_id, name, index);
+        self.places.insert(place_id, index);
+        //data.add_symbol(name, index);
         index
     }
 
@@ -294,7 +305,7 @@ impl IREnvironment {
         if let Some(dom) = maybe_dom {
             for i in dom.into_iter().rev() {
                 let data = self.g.node_weight(i).unwrap();
-                if let Some(r) = data.lookup(name) {
+                if let Some(r) = data.alloca_get_name(name) {
                     return Some(r);
                 }
             }
