@@ -1,9 +1,7 @@
-use crate::ast::VarDefinitionSpace;
 use crate::intern::StringKey;
-use crate::ir::{IRArg, IRGraph};
 use crate::op;
 use crate::types::TypeBuilder;
-use crate::{AstType, Diagnostics, Extra, NodeBuilder};
+use crate::{AstType, Diagnostics, Extra, IRArg, IRBlockGraph, NodeBuilder, VarDefinitionSpace};
 use melior::ir::Location;
 use melior::{
     ir::{Block, Operation, Value},
@@ -216,6 +214,7 @@ impl SymbolData {
 
 pub type CFGGraph<'c> = DiGraph<OpCollection<'c>, ()>;
 
+/*
 pub fn values_in_scope<'c, 'a>(
     blocks: &'a CFGBlocks<'c>,
     sym_index: SymIndex,
@@ -223,17 +222,18 @@ pub fn values_in_scope<'c, 'a>(
     let data = blocks.get(&sym_index.block()).unwrap();
     data.values(sym_index)
 }
+*/
 
 pub struct CFGBlocks<'c> {
     root: NodeIndex,
     pub(crate) blocks: HashMap<NodeIndex, OpCollection<'c>>,
     block_names: HashMap<StringKey, NodeIndex>,
     block_names_index: HashMap<NodeIndex, StringKey>,
-    g: IRGraph,
+    g: IRBlockGraph,
 }
 
 impl<'c> CFGBlocks<'c> {
-    pub fn new(root: NodeIndex, g: IRGraph) -> Self {
+    pub fn new(root: NodeIndex, g: IRBlockGraph) -> Self {
         Self {
             root,
             blocks: HashMap::new(),

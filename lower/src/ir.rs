@@ -126,10 +126,10 @@ pub struct IREnvironment {
     block_names_index: HashMap<NodeIndex, StringKey>,
     types: HashMap<SymIndex, (AstType, VarDefinitionSpace)>,
     label_count: usize,
-    pub g: IRGraph,
+    pub g: IRBlockGraph,
 }
 
-pub type IRGraph = DiGraph<IRControlBlock, ()>;
+pub type IRBlockGraph = DiGraph<IRControlBlock, ()>;
 
 impl IREnvironment {
     pub fn new() -> Self {
@@ -225,7 +225,7 @@ impl IREnvironment {
         index
     }
 
-    pub fn add_edge(&mut self, a: StringKey, b: StringKey, g: &mut IRGraph) {
+    pub fn add_edge(&mut self, a: StringKey, b: StringKey, g: &mut IRBlockGraph) {
         let index_a = self.block_names.get(&a).unwrap();
         let index_b = self.block_names.get(&b).unwrap();
         g.add_edge(*index_a, *index_b, ());
