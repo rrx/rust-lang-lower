@@ -20,6 +20,7 @@ use std::collections::HashMap;
 use crate::ir::{BlockTable, IRBlock, IRKind, IRNode};
 use petgraph::graph::NodeIndex;
 
+#[derive(Default)]
 pub struct BlockScope {
     // names must be unique in the scope
     names: HashMap<StringKey, NodeIndex>,
@@ -98,7 +99,7 @@ impl<E: Extra> AstBlockSorter<E> {
 
         let first = self.stack.pop().unwrap();
         assert_eq!(self.stack.len(), 0);
-        let span_first = exprs.first().unwrap().extra.get_span().clone();
+        let span_first = first.extra.get_span().clone();
         let span_last = exprs.last().unwrap().extra.get_span().clone();
         let _span = Span {
             file_id: span_first.file_id,
@@ -112,6 +113,7 @@ impl<E: Extra> AstBlockSorter<E> {
             unreachable!()
         };
 
+        println!("names: {:?}", self.names);
         let block_index = self.names.get(label).unwrap();
         let block = env.blocks.g.node_weight(*block_index).unwrap();
         let mut children = vec![];
@@ -178,12 +180,16 @@ impl<E: Extra> AstBlockSorter<E> {
         scope: &mut BlockScope,
         d: &mut Diagnostics,
         b: &mut NodeBuilder<E>,
-    ) -> Vec<IRBlock> {
+    ) -> Result<Vec<IRBlock>> {
         let mut s = Self::new();
         for expr in exprs {
-            s.add(expr, env, place, scope, d, b);
+            s.add(expr, env, place, scope, d, b)?;
         }
-        s.blocks
+        let exprs = s.exprs.drain(..).collect::<Vec<_>>();
+        for expr in exprs {
+            s.visit(expr, place, env, d, b);
+        }
+        Ok(s.blocks)
     }
 }
 
@@ -332,5 +338,41 @@ impl IRBlockSorter {
         // end of block
 
         self.blocks.push(nb);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::SimpleExtra;
+    use crate::tests::gen_block;
+    use crate::{Diagnostics, NodeBuilder};
+    use test_log::test;
+
+    //#[test]
+    fn test_ir_sort_1() {
+        let mut d = Diagnostics::new();
+        let file_id = d.add_source("test.py".into(), "test".into());
+        let mut b: NodeBuilder<SimpleExtra> = NodeBuilder::new();
+        b.enter(file_id, "type.py");
+
+        let mut env = IREnvironment::new();
+        let mut place = IRPlaceTable::new();
+        let ast = gen_block(&mut b).normalize(&mut d, &mut b);
+        let label = env.blocks.fresh_block_label("module", &mut b);
+        let index = env.blocks.add_block(&mut place, label, vec![], &d);
+        env.enter_block(index, ast.extra.get_span());
+        let mut scope = BlockScope::default();
+        let test1 = b.s("test1");
+        let test2 = b.s("test2");
+        let seq = vec![
+            b.label(test1, vec![]),
+            b.goto(test2, vec![]),
+            b.label(test2, vec![]),
+            b.ret(None),
+        ];
+
+        let blocks = AstBlockSorter::run(seq, &mut env, &mut place, &mut scope, &mut d, &mut b);
+        println!("blocks: {:?}", blocks);
     }
 }

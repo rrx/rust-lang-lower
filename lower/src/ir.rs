@@ -1174,6 +1174,9 @@ impl<E: Extra> AstNode<E> {
                 if let Some(body) = def.body {
                     let blocks = body.try_seq().unwrap();
 
+                    //let mut scope = crate::sort::BlockScope::default();
+                    //let blocks = crate::sort::AstBlockSorter::run(blocks, env, place, &mut scope, d, b);
+
                     for (i, block) in blocks.into_iter().enumerate() {
                         if let Ast::Block(mut nb) = block.node {
                             let mut args = vec![];
