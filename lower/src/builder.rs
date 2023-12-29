@@ -3,7 +3,7 @@ use crate::intern::StringPool;
 use crate::Diagnostics;
 use crate::{
     ir::{IRArg, IRKind, IRNode, IRTypeSelect},
-    AstType, BlockLabel, PlaceId, StringKey,
+    AstType, BlockLabel, NodeIndex, PlaceId, StringKey,
 };
 use melior::{ir::Location, Context};
 use std::collections::VecDeque;
@@ -383,9 +383,13 @@ impl<E: Extra> NodeBuilder<E> {
         IRNode::new(IRKind::Ret(seq), self.span.clone().unwrap())
     }
 
-    pub fn ir_label(&self, label: BlockLabel, args: Vec<IRArg>) -> IRNode {
-        IRNode::new(IRKind::Label(label, args), self.span.clone().unwrap())
+    pub fn ir_label(&self, label: BlockLabel, block_index: NodeIndex, args: Vec<IRArg>) -> IRNode {
+        IRNode::new(
+            IRKind::Label(label, block_index, args),
+            self.span.clone().unwrap(),
+        )
     }
+
     pub fn ir_jump(&self, label: BlockLabel, args: Vec<IRNode>) -> IRNode {
         IRNode::new(IRKind::Jump(label, args), self.span.clone().unwrap())
     }

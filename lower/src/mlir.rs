@@ -307,7 +307,7 @@ impl IRNode {
                 return Ok(current.push(op));
             }
 
-            IRKind::Label(_label, _args) => {
+            IRKind::Label(_label, _index, _args) => {
                 // this should have been removed by now, when converted to blocks
                 unreachable!()
             }
