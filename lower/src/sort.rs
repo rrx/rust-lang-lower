@@ -286,6 +286,8 @@ impl IRBlockSorter {
     }
 
     pub fn run<E: Extra>(
+        index: NodeIndex,
+        name: StringKey,
         ir: IRNode,
         places: &mut IRPlaceTable,
         //env: &mut IREnvironment,
@@ -296,6 +298,7 @@ impl IRBlockSorter {
         let mut s = Self::new();
         let ir = match ir.kind {
             IRKind::Seq(exprs) => {
+                unreachable!();
                 let label = blocks.fresh_block_label("module", b);
                 //let index = blocks.add_block(places, label, vec![], d);
                 let index = NodeIndex::new(0);
@@ -315,8 +318,20 @@ impl IRBlockSorter {
 
         s.sort(ir, places, blocks, d, b);
         s.close_block(places, blocks, d, b);
-        let blocks = s.blocks(b);
-        b.ir_seq(blocks)
+        if s.blocks.len() == 1 {
+            let block = s.blocks.pop().unwrap();
+            //if let IRKind::Block(block) = block {
+            b.ir_block(block.label, block.index, vec![], block.children)
+            //} else {
+            //unreachable!()
+            //}
+            //b.ir_module(index, name, blocks)//b.ir_seq(blocks)
+        } else {
+            let blocks = s.blocks(b);
+
+            //b.ir_module(name, index, blocks)//b.ir_seq(blocks)
+            b.ir_block(name, index, vec![], blocks) //b.ir_seq(blocks)
+        }
     }
 
     pub fn sort_block<E: Extra>(

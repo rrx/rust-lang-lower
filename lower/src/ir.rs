@@ -1041,18 +1041,22 @@ impl<E: Extra> AstNode<E> {
                 let mut children = vec![b.ir_label(nb.name, index, vec![])];
                 let (ir, ty) = nb.body.lower_ir_expr(env, place, d, b)?;
                 children.extend(ir.to_vec());
+                /*
                 let mut args = vec![];
+
                 for a in &nb.params {
                     args.push(IRArg {
                         name: a.name,
                         ty: a.ty.clone(),
                     });
                 }
+                */
 
-                let ir = IRNode::new(
-                    IRKind::Module(IRBlock::new(index, nb.name, args, children)),
-                    self.extra.get_span(),
-                );
+                let ir = b.ir_module(nb.name, index, children);
+                //IRNode::new(
+                //IRKind::Module(IRBlock::new(index, nb.name, args, children)),
+                //self.extra.get_span(),
+                //);
                 env.exit_block();
                 Ok((ir, ty, index))
             }

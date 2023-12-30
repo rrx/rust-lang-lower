@@ -2,11 +2,11 @@ use crate::ast::*;
 use crate::intern::StringPool;
 use crate::Diagnostics;
 use crate::{
-    ir::{IRArg, IRKind, IRNode, IRTypeSelect},
+    ir::{IRArg, IRBlock, IRKind, IRNode, IRTypeSelect},
     AstType, BlockLabel, NodeIndex, PlaceId, StringKey,
 };
 use melior::{ir::Location, Context};
-use std::collections::VecDeque;
+//use std::collections::VecDeque;
 
 #[derive(Debug, Clone, Copy)]
 pub struct NodeID(Option<u32>);
@@ -377,6 +377,13 @@ impl<E: Extra> NodeBuilder<E> {
         self.build(Ast::Block(nb), extra)
     }
 
+    pub fn ir_module(&self, label: BlockLabel, index: NodeIndex, seq: Vec<IRNode>) -> IRNode {
+        IRNode::new(
+            IRKind::Module(IRBlock::new(index, label, vec![], seq)),
+            self.span.clone().unwrap(),
+        )
+    }
+
     pub fn ir_noop(&self) -> IRNode {
         IRNode::new(IRKind::Noop, self.span.clone().unwrap())
     }
@@ -387,6 +394,19 @@ impl<E: Extra> NodeBuilder<E> {
 
     pub fn ir_ret(&self, seq: Vec<IRNode>) -> IRNode {
         IRNode::new(IRKind::Ret(seq), self.span.clone().unwrap())
+    }
+
+    pub fn ir_block(
+        &self,
+        label: BlockLabel,
+        block_index: NodeIndex,
+        args: Vec<IRArg>,
+        seq: Vec<IRNode>,
+    ) -> IRNode {
+        IRNode::new(
+            IRKind::Block(IRBlock::new(block_index, label, args, seq)),
+            self.span.clone().unwrap(),
+        )
     }
 
     pub fn ir_label(&self, label: BlockLabel, block_index: NodeIndex, args: Vec<IRArg>) -> IRNode {
