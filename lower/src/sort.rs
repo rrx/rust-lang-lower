@@ -321,7 +321,8 @@ impl IRBlockSorter {
         if s.blocks.len() == 1 {
             let block = s.blocks.pop().unwrap();
             //if let IRKind::Block(block) = block {
-            b.ir_block(block.label, block.index, vec![], block.children)
+            //b.ir_block(block.label, block.index, vec![], block.children)
+            b.ir_module(block.label, block.index, block.children)
             //} else {
             //unreachable!()
             //}

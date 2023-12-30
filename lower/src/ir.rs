@@ -769,6 +769,11 @@ impl IRNode {
         let span = self.get_span().clone();
         match self.kind {
             IRKind::Module(mut block) => {
+                let block_index =
+                    env.blocks
+                        .add_block(places, block.label, block.params.clone(), d);
+                block.index = block_index;
+
                 env.enter_block(block.index, span.clone());
                 let mut out = vec![];
 
@@ -781,10 +786,39 @@ impl IRNode {
                     out.push(c.build_graph(places, env, d, b)?);
                 }
                 block.children = out;
-                //env.exit_block();
+                env.exit_block();
 
                 Ok(IRNode::new(IRKind::Module(block), span))
             }
+
+            IRKind::Block(mut block) => {
+                //let span = self.get_span().clone();
+                //let s = b.strings.resolve(&block.name);
+                //let label = env.blocks.fresh_block_label(&s, b);
+                let block_index =
+                    env.blocks
+                        .add_block(places, block.label, block.params.clone(), d);
+                block.index = block_index;
+
+                env.enter_block(block.index, span.clone());
+                if let Some(last_block) = env.stack.last() {
+                    if last_block.0 != block.index {
+                        env.blocks.g.add_edge(last_block.0, block.index, ());
+                    }
+                }
+
+                let mut children = vec![];
+                for (_i, child) in block.children.into_iter().enumerate() {
+                    children.push(child.build_graph(places, env, d, b)?);
+                }
+                env.exit_block();
+                block.children = children;
+                Ok(IRNode {
+                    kind: IRKind::Block(block),
+                    span,
+                })
+            }
+
             IRKind::Noop => Ok(self),
 
             //IRKind::Module(_) => Ok(self),
@@ -914,33 +948,6 @@ impl IRNode {
                 }
                 Ok(IRNode {
                     kind: IRKind::Func(blocks, ret_type),
-                    span,
-                })
-            }
-
-            IRKind::Block(mut block) => {
-                //let span = self.get_span().clone();
-                //let s = b.strings.resolve(&block.name);
-                //let label = env.blocks.fresh_block_label(&s, b);
-                let block_index =
-                    env.blocks
-                        .add_block(places, block.label, block.params.clone(), d);
-                block.index = block_index;
-                env.enter_block(block.index, span.clone());
-                if let Some(last_block) = env.stack.last() {
-                    if last_block.0 != block.index {
-                        env.blocks.g.add_edge(last_block.0, block.index, ());
-                    }
-                }
-
-                let mut children = vec![];
-                for (_i, child) in block.children.into_iter().enumerate() {
-                    children.push(child.build_graph(places, env, d, b)?);
-                }
-                env.exit_block();
-                block.children = children;
-                Ok(IRNode {
-                    kind: IRKind::Block(block),
                     span,
                 })
             }
