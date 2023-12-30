@@ -1313,9 +1313,9 @@ impl<E: Extra> AstNode<E> {
                 let index = env.add_definition(current_block, place_id, def.name);
                 out.push(b.ir_decl(place_id));
 
-                let mut output_blocks = vec![];
-                let mut edges = vec![];
                 if let Some(body) = def.body {
+                    let mut output_blocks = vec![];
+                    let mut edges = vec![];
                     let blocks = body.try_seq().unwrap();
 
                     //let mut scope = crate::sort::BlockScope::default();
@@ -1345,46 +1345,47 @@ impl<E: Extra> AstNode<E> {
                             unreachable!()
                         }
                     }
-                }
 
-                for (a, b) in edges {
-                    env.blocks.g.add_edge(a, b, ());
-                }
+                    for (a, b) in edges {
+                        env.blocks.g.add_edge(a, b, ());
+                    }
 
-                if output_blocks.len() > 0 {
-                    let mut blocks = vec![];
-                    let span = self.extra.get_span();
-                    for (_i, (nb, block_index)) in output_blocks.into_iter().enumerate() {
-                        env.enter_block(block_index, span.clone());
+                    if output_blocks.len() > 0 {
+                        let mut blocks = vec![];
+                        let span = self.extra.get_span();
+                        for (_i, (nb, block_index)) in output_blocks.into_iter().enumerate() {
+                            env.enter_block(block_index, span.clone());
 
-                        let mut args = vec![];
-                        for a in nb.params {
-                            args.push(IRArg {
-                                name: a.name,
-                                ty: a.ty,
-                            });
+                            let mut args = vec![];
+                            for a in nb.params {
+                                args.push(IRArg {
+                                    name: a.name,
+                                    ty: a.ty,
+                                });
+                            }
+
+                            let mut exprs = vec![];
+                            let (ir, _ty) = nb.body.lower_ir_expr(env, place, d, b)?;
+                            exprs.extend(ir.to_vec());
+
+                            //let label = env.blocks.fresh_block_label(
+                            let block = IRBlock::new(block_index, nb.name, args, exprs);
+                            blocks.push(block);
+                            env.exit_block();
                         }
 
-                        let mut exprs = vec![];
-                        let (ir, _ty) = nb.body.lower_ir_expr(env, place, d, b)?;
-                        exprs.extend(ir.to_vec());
+                        let mut s = IRBlockSorter::new();
+                        for (_i, block) in blocks.into_iter().enumerate() {
+                            s.sort_block(block, place, &mut env.blocks, d, b);
+                        }
+                        s.close_block(place, &mut env.blocks, d, b);
+                        let blocks = s.blocks;
 
-                        //let label = env.blocks.fresh_block_label(
-                        let block = IRBlock::new(block_index, nb.name, args, exprs);
-                        blocks.push(block);
-                        env.exit_block();
+                        let ir = IRNode::new(IRKind::Func(blocks, ast_ret_type), span);
+                        out.push(b.ir_set(place_id, ir, IRTypeSelect::default()));
                     }
-
-                    let mut s = IRBlockSorter::new();
-                    for (_i, block) in blocks.into_iter().enumerate() {
-                        s.sort_block(block, place, &mut env.blocks, d, b);
-                    }
-                    s.close_block(place, &mut env.blocks, d, b);
-                    let blocks = s.blocks;
-
-                    let ir = IRNode::new(IRKind::Func(blocks, ast_ret_type), span);
-                    out.push(b.ir_set(place_id, ir, IRTypeSelect::default()));
                 }
+
                 Ok(AstType::Unit)
             }
 

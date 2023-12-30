@@ -227,8 +227,6 @@ impl<E: Extra> Parser<E> {
         let ast: ast::AstNode<E> = self.from_stmt(stmt, &mut env, d, b)?;
         let extra = ast.extra.clone();
         seq.push(ast);
-        //let module_key = b.s(module_name);
-        //Ok(b.seq(seq).set_extra(extra))
         Ok(b.module(module_key, b.seq(seq).set_extra(extra)))
     }
 
@@ -569,7 +567,7 @@ impl<E: Extra> StarlarkParser<E> {
             .normalize(d, b);
 
         use lower::IREnvironment;
-        let mut env = IREnvironment::new(); //module_key);
+        let mut env = IREnvironment::new();
 
         // lower ast to ir
         let r = ast.lower_ir_module(&mut env, &mut self.place, d, b);
@@ -584,7 +582,6 @@ impl<E: Extra> StarlarkParser<E> {
             ir.dump(&self.place, &b, 0);
         }
         assert_eq!(0, env.stack_size());
-        //let root = env.root();
 
         // Analyze
         let ir = lower::sort::IRBlockSorter::run(ir, &mut self.place, &mut env.blocks, d, b);
