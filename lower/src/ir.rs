@@ -297,14 +297,15 @@ impl BlockTable {
                 &self.g,
                 &[Config::EdgeNoLabel, Config::NodeNoLabel],
                 &|_, _er| String::new(),
-                &|_, (_index, data)| {
+                &|_, (index, data)| {
                     let label = self.block_names_index.get(&data.block_index).unwrap();
                     //let key = self.names.get(label.0 as usize).unwrap();
                     //let key = self.block_names_index.get(&data.block_index).unwrap();
                     let name = b.strings.resolve(label);
                     format!(
                         //"label = \"[{}]{}\" shape={:?}",
-                        "label = \"{}\"",
+                        "label = \"{}{}\"",
+                        index.index(),
                         name,
                         //data.block_index.index(),
                         //&data.name,
@@ -769,10 +770,10 @@ impl IRNode {
         let span = self.get_span().clone();
         match self.kind {
             IRKind::Module(mut block) => {
-                let block_index =
-                    env.blocks
-                        .add_block(places, block.label, block.params.clone(), d);
-                block.index = block_index;
+                //let block_index =
+                //env.blocks
+                //.add_block(places, block.label, block.params.clone(), d);
+                //block.index = block_index;
 
                 env.enter_block(block.index, span.clone());
                 let mut out = vec![];
@@ -795,10 +796,10 @@ impl IRNode {
                 //let span = self.get_span().clone();
                 //let s = b.strings.resolve(&block.name);
                 //let label = env.blocks.fresh_block_label(&s, b);
-                let block_index =
-                    env.blocks
-                        .add_block(places, block.label, block.params.clone(), d);
-                block.index = block_index;
+                //let block_index =
+                //env.blocks
+                //.add_block(places, block.label, block.params.clone(), d);
+                //block.index = block_index;
 
                 env.enter_block(block.index, span.clone());
                 if let Some(last_block) = env.stack.last() {
@@ -1463,13 +1464,15 @@ impl<E: Extra> AstNode<E> {
                 env.blocks.g.add_edge(current_block, then_index, ());
                 env.blocks.g.add_edge(then_index, next_index, ());
                 let mut then_seq = vec![b.ir_label(b_then, then_index, vec![])];
+                env.enter_block(then_index, self.extra.get_span());
                 let (then_block, _ty) = then_expr.lower_ir_expr(env, place, d, b)?;
+                env.exit_block();
                 let term = then_block.kind.terminator();
                 then_seq.extend(then_block.to_vec());
                 if term.is_none() {
                     then_seq.push(b.ir_jump(b_next, vec![]));
                 }
-                env.blocks.g.add_edge(then_index, next_index, ());
+                //env.blocks.g.add_edge(then_index, next_index, ());
 
                 // else
                 let (b_else, else_seq) = if let Some(else_expr) = maybe_else_expr {
@@ -1478,16 +1481,18 @@ impl<E: Extra> AstNode<E> {
                     let b_else = env.blocks.fresh_block_label("else", b);
                     let else_index = env.blocks.add_block(place, b_else, vec![], d);
                     env.blocks.g.add_edge(current_block, else_index, ());
-                    env.blocks.g.add_edge(else_index, next_index, ());
+                    //env.blocks.g.add_edge(else_index, next_index, ());
                     //let else_index = NodeIndex::new(0);
                     let mut else_seq = vec![b.ir_label(b_else, else_index, vec![])];
+                    env.enter_block(else_index, self.extra.get_span());
                     let (else_block, _ty) = else_expr.lower_ir_expr(env, place, d, b)?;
+                    env.exit_block();
                     //g.add_edge(current_block, else_block, ());
                     let term = else_block.kind.terminator();
                     else_seq.extend(else_block.to_vec());
                     if term.is_none() {
                         else_seq.push(b.ir_jump(b_next, vec![]));
-                        env.blocks.g.add_edge(else_index, next_index, ());
+                        //env.blocks.g.add_edge(else_index, next_index, ());
                     }
                     (Some(b_else), Some(else_seq))
                 } else {
