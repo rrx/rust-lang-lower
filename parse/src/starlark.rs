@@ -584,15 +584,15 @@ impl<E: Extra> StarlarkParser<E> {
         assert_eq!(0, env.stack_size());
 
         // Analyze
-        let ir = lower::sort::IRBlockSorter::run(
-            root,
-            module_key,
-            ir,
-            &mut self.place,
-            &mut env.blocks,
-            d,
-            b,
-        );
+        //let ir = lower::sort::IRBlockSorter::run(
+        //root,
+        //module_key,
+        //ir,
+        //&mut self.place,
+        //&mut env.blocks,
+        //d,
+        //b,
+        //);
         if verbose {
             ir.dump(&self.place, &b, 0);
         }
