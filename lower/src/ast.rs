@@ -235,6 +235,14 @@ impl<E: Extra> Ast<E> {
         Ast::Literal(Literal::Bool(x))
     }
 
+    pub fn is_label(&self) -> bool {
+        if let Ast::Label(_, _) = self {
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn terminator(&self) -> Option<Terminator> {
         match self {
             Self::Sequence(exprs) => exprs.last().unwrap().node.terminator(),

@@ -513,13 +513,35 @@ impl<'c, E: Extra> Definition<E> {
             let extra = body.extra.clone();
             // sort body
             let mut s = crate::sort::AstBlockSorter::new();
+            s.stack.push(b.label(self.name, self.params.clone()));
             s.sort_children(*body, &self.params, b);
 
             let mut blocks = vec![]; //VecDeque::new();
 
             // initial nodes form the entry block
             if s.stack.len() > 0 {
+                //if let Ast::Label(_, _) = s.stack.first().unwrap().node {
+                //} else {
+                //unreachable!()
+                //}
+
+                //assert!(s.stack.last().unwrap().node.terminator().is_some());
+
+                for (i, v) in s.stack.iter().enumerate() {
+                    if i == 0 {
+                        // first
+                        assert!(v.node.is_label());
+                    } else if i + 1 == s.stack.len() {
+                        //last
+                        assert!(v.node.terminator().is_some());
+                    } else {
+                        assert!(v.node.terminator().is_none());
+                        assert_eq!(false, v.node.is_label());
+                    }
+                }
+
                 let seq = b.seq(s.stack).set_extra(extra.clone());
+
                 // TODO: check that function args match the first block args
                 let params = self
                     .params
