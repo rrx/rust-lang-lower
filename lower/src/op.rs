@@ -292,11 +292,11 @@ pub fn emit_set_alloca<'c, E: Extra>(
     //let ast_ty = cfg.lookup_type(rhs_index).unwrap().to_ptr();
     //let ptr_ty = AstType::Ptr(ast_ty.into());
     //cfg.set_type(ptr_index, ast_ty);
-    println!("ty_lhs: {:?}", types.lookup_type(sym_index));
-    println!("ty_rhs: {:?}", types.lookup_type(rhs_index));
-    println!("rhs: {:?}", (rhs_index));
-    println!("lhs: {:?}", (sym_index));
-    println!("rhs: {:?}", (rhs_index));
+    //println!("ty_lhs: {:?}", types.lookup_type(sym_index));
+    //println!("ty_rhs: {:?}", types.lookup_type(rhs_index));
+    //println!("rhs: {:?}", (rhs_index));
+    //println!("lhs: {:?}", (sym_index));
+    //println!("rhs: {:?}", (rhs_index));
     blocks.dump_scope(block_index, b);
     //blocks.save_graph("out.dot", b);
 
@@ -333,7 +333,7 @@ pub fn emit_set_alloca<'c, E: Extra>(
     //let current = cfg_g.node_weight_mut(block_index).unwrap();
     let current = blocks.get_mut(&block_index).unwrap();
     let _index = current.push(op);
-    println!("current: {:?}", current);
+    //println!("current: {:?}", current);
     Ok(sym_index)
 }
 

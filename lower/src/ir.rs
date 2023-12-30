@@ -314,10 +314,10 @@ impl BlockTable {
                 }
             )
         );
-        let path = std::fs::canonicalize(filename).unwrap();
-        println!("{}", path.clone().into_os_string().into_string().unwrap());
-        println!("{}", s);
-        std::fs::write(path, s).unwrap();
+        //let path = std::fs::canonicalize(filename).unwrap();
+        //println!("{}", path.clone().into_os_string().into_string().unwrap());
+        //println!("{}", s);
+        std::fs::write(filename, s).unwrap();
     }
 }
 
@@ -401,13 +401,13 @@ impl IREnvironment {
         let maybe_dom = simple_fast(&self.blocks.g, self.root())
             .dominators(index)
             .map(|it| it.collect::<Vec<_>>());
-        println!("dom: {:?} => {:?}", index, maybe_dom);
+        //println!("dom: {:?} => {:?}", index, maybe_dom);
         if let Some(dom) = maybe_dom {
             for i in dom.into_iter().rev() {
                 let data = self.blocks.g.node_weight(i).unwrap();
-                println!("searching {:?}", (i, name));
+                //println!("searching {:?}", (i, name));
                 if let Some(place_id) = data.symbols.get(&name) {
-                    println!("found {:?}", (place_id, name));
+                    //println!("found {:?}", (place_id, name));
                     return Some(*place_id);
                 }
             }
@@ -897,10 +897,15 @@ impl IRNode {
             }
 
             IRKind::Set(place_id, value, select) => {
-                //let current_index = env.current_block();
-                //if let Some(_index) = env.name_in_scope(current_index, name) {
+                //Ok(self)
+
                 let value = value.build_graph(places, env, d, b)?;
                 Ok(b.ir_set(place_id, value, select))
+                //
+                //let current_index = env.current_block();
+                //if let Some(_index) = env.name_in_scope(current_index, name) {
+                //let current_index = env.current_block();
+                //if let Some(_index) = env.name_in_scope(current_index, name) {
                 //} else {
                 //d.push_diagnostic(error(
                 //&format!("Set undefined variable: {:?}", b.strings.resolve(&name)),
@@ -911,9 +916,9 @@ impl IRNode {
             }
 
             IRKind::Decl(place_id) => {
-                let current_block = env.current_block();
-                let place_data = places.get_place(place_id);
-                let index = env.add_definition(current_block, place_id, place_data.name);
+                //let current_block = env.current_block();
+                //let place_data = places.get_place(place_id);
+                //let index = env.add_definition(current_block, place_id, place_data.name);
                 //env.set_type(index, place_data.ty.clone(), place_data.mem);
                 Ok(self)
             }
@@ -926,12 +931,13 @@ impl IRNode {
                 for (i, mut block) in blocks.into_iter().enumerate() {
                     //let s = b.strings.resolve(&block.name);
                     //let label = env.blocks.fresh_block_label(&s, b);
+                    // TODO: remove this, add_block
                     let block_index =
                         env.blocks
                             .add_block(places, block.label, block.params.clone(), d);
                     block.index = block_index;
                     if 0 == i {
-                        env.blocks.g.add_edge(current_block, block_index, ());
+                        env.blocks.g.add_edge(current_block, block.index, ());
                     }
                     seq.push(block);
                 }
@@ -972,6 +978,7 @@ impl IRNode {
                 let condition = condition.build_graph(places, env, d, b)?;
                 let current_block = env.current_block();
 
+                // TODO: remove the add blocks, they are declared earlier
                 let label = env.blocks.fresh_block_label("next", b);
                 let next_block = env.blocks.add_block(places, label, vec![], d);
 
@@ -1045,26 +1052,11 @@ impl<E: Extra> AstNode<E> {
                 assert_eq!(env.stack_size(), 0);
                 let index = env.blocks.add_block(place, nb.name, vec![], d);
                 env.enter_block(index, self.extra.get_span());
-                //env.module_root = Some(index);
-                let mut children = vec![b.ir_label(nb.name, index, vec![])];
+                //let mut children = vec![b.ir_label(nb.name, index, vec![])];
+                let mut children = vec![];
                 let (ir, ty) = nb.body.lower_ir_expr(env, place, d, b)?;
                 children.extend(ir.to_vec());
-                /*
-                let mut args = vec![];
-
-                for a in &nb.params {
-                    args.push(IRArg {
-                        name: a.name,
-                        ty: a.ty.clone(),
-                    });
-                }
-                */
-
                 let ir = b.ir_module(nb.name, index, children);
-                //IRNode::new(
-                //IRKind::Module(IRBlock::new(index, nb.name, args, children)),
-                //self.extra.get_span(),
-                //);
                 env.exit_block();
                 Ok((ir, ty, index))
             }
@@ -1308,7 +1300,7 @@ impl<E: Extra> AstNode<E> {
                     } else {
                         let place_data = PlaceNode::new_stack(name, ty.clone());
                         let place_id = place.add_place(place_data);
-                        out.push(b.ir_decl(place_id)); //name, ty.clone(), VarDefinitionSpace::Stack));
+                        out.push(b.ir_decl(place_id));
                         out.push(b.ir_set(place_id, ir, IRTypeSelect::Offset(0)));
                         let index = env.add_definition(current_block, place_id, name);
                         Ok(ty)

@@ -171,8 +171,8 @@ impl IRNode {
                 if let Some(sym_index) = blocks.place_in_scope(current_block, place_id) {
                     let is_symbol_static = sym_index.block() == blocks.root();
                     if is_symbol_static && is_current_static {
-                        println!("expr: {:?}", expr);
-                        expr.dump(place, b, 0);
+                        //println!("expr: {:?}", expr);
+                        //expr.dump(place, b, 0);
                         match expr.kind {
                             IRKind::Func(_, _) => op::emit_set_function(
                                 context,
@@ -401,7 +401,7 @@ impl IRNode {
                     }
                 }
                 d.push_diagnostic(ir::error(
-                    &format!("Get name not found: {:?}", p.name),
+                    &format!("Get name not found: {:?}", b.strings.resolve(&p.name)),
                     span,
                 ));
                 Err(Error::new(ParseError::Invalid))
@@ -566,7 +566,7 @@ impl IRNode {
                 //let current = cfg_g.node_weight_mut(current_block).unwrap();
                 let current = blocks.get_mut(&current_block).unwrap();
                 let ty = {
-                    println!("{:?}", current);
+                    //println!("{:?}", current);
                     // get the type of the RHS
                     let ty = current.value0(index).unwrap().r#type();
                     ty

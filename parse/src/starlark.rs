@@ -318,6 +318,7 @@ impl<E: Extra> Parser<E> {
                 for p in params.iter() {
                     env.define(p.name);
                 }
+
                 let mut body = vec![b.label(name, params.clone())];
                 body.extend(self.from_stmt(*def.body, env, d, b)?.to_vec());
 
@@ -595,9 +596,9 @@ impl<E: Extra> StarlarkParser<E> {
         //);
         if verbose {
             ir.dump(&self.place, &b, 0);
+            env.blocks.save_graph("lower.dot", b);
         }
 
-        env.blocks.save_graph("out.dot", b);
         //return Ok(());
 
         //let mut env = IREnvironment::new();
@@ -607,9 +608,8 @@ impl<E: Extra> StarlarkParser<E> {
         let ir = r?;
 
         if verbose {
-            env.blocks.save_graph("out.dot", b);
+            env.blocks.save_graph("build.dot", b);
         }
-        env.blocks.save_graph("out.dot", b);
         //return Ok(());
 
         // lower to mlir
