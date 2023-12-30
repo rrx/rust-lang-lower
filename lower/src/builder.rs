@@ -513,20 +513,18 @@ impl<'c, E: Extra> Definition<E> {
             let extra = body.extra.clone();
             // sort body
             let mut s = crate::sort::AstBlockSorter::new();
+
+            // push label that matches the function signature
             s.stack.push(b.label(self.name, self.params.clone()));
             s.sort_children(*body, &self.params, b);
 
-            let mut blocks = vec![]; //VecDeque::new();
+            let mut blocks = vec![];
 
             // initial nodes form the entry block
             if s.stack.len() > 0 {
-                //if let Ast::Label(_, _) = s.stack.first().unwrap().node {
-                //} else {
-                //unreachable!()
-                //}
-
-                //assert!(s.stack.last().unwrap().node.terminator().is_some());
-
+                // ensure a well formed block
+                // must start with a label and end with a terminator
+                // statements in between should be neither
                 for (i, v) in s.stack.iter().enumerate() {
                     if i == 0 {
                         // first
@@ -560,7 +558,7 @@ impl<'c, E: Extra> Definition<E> {
                     })
                     .collect::<Vec<_>>();
                 let nb = AstNodeBlock {
-                    name: b.strings.intern("entry".to_string()),
+                    name: self.name, //b.strings.intern("entry".to_string()),
                     params,
                     body: seq.into(),
                 };

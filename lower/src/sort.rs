@@ -13,7 +13,6 @@ use crate::{
     //PlaceNode, StringKey, SymIndex
 };
 
-use anyhow::Error;
 use anyhow::Result;
 use std::collections::HashMap;
 
@@ -76,10 +75,13 @@ impl<E: Extra> AstBlockSorter<E> {
     }
 
     fn close_block(&mut self, b: &mut NodeBuilder<E>) {
+        unreachable!();
         if self.stack.len() == 0 {
             return;
         }
 
+        // create a new block
+        assert!(self.stack.first().unwrap().node.is_label());
         let extra = self.stack.first().unwrap().extra.clone();
         // end of block
         let offset = self.blocks.len();
@@ -285,6 +287,7 @@ impl IRBlockSorter {
             .collect()
     }
 
+    /*
     pub fn run<E: Extra>(
         index: NodeIndex,
         name: StringKey,
@@ -334,23 +337,25 @@ impl IRBlockSorter {
             b.ir_block(name, index, vec![], blocks) //b.ir_seq(blocks)
         }
     }
+    */
 
     pub fn sort_block<E: Extra>(
-        &mut self,
+        //&mut self,
         block: IRBlock,
         places: &mut IRPlaceTable,
         blocks: &mut BlockTable,
         d: &mut Diagnostics,
         b: &mut NodeBuilder<E>,
-    ) {
+    ) -> Vec<IRBlock> {
         let mut s = Self::new();
         for c in block.children {
             s.sort(c, places, blocks, d, b);
         }
         s.close_block(places, blocks, d, b);
-        for block in s.blocks {
-            self.blocks.push(block);
-        }
+        s.blocks
+        //for block in s.blocks {
+        //self.blocks.push(block);
+        //}
     }
 
     pub fn sort<E: Extra>(
@@ -368,7 +373,8 @@ impl IRBlockSorter {
                 }
             }
             IRKind::Block(nb) | IRKind::Module(nb) => {
-                self.sort_block(nb, places, blocks, d, b);
+                self.blocks
+                    .extend(Self::sort_block(nb, places, blocks, d, b));
             }
             IRKind::Jump(_, _) => {
                 self.stack.push(ir);
@@ -414,6 +420,7 @@ impl IRBlockSorter {
                 children: self.stack.drain(..).skip(1).collect(),
             }
         } else {
+            //unreachable!("{:?}", first);
             //assert!(false);
             let offset = self.blocks.len();
             //let label = blocks.fresh_block_label("block", b);

@@ -586,23 +586,10 @@ impl<E: Extra> StarlarkParser<E> {
         assert_eq!(0, env.stack_size());
 
         // Analyze
-        //let ir = lower::sort::IRBlockSorter::run(
-        //root,
-        //module_key,
-        //ir,
-        //&mut self.place,
-        //&mut env.blocks,
-        //d,
-        //b,
-        //);
         if verbose {
             ir.dump(&self.place, &b, 0);
             env.blocks.save_graph("lower.dot", b);
         }
-
-        //return Ok(());
-
-        //let mut env = IREnvironment::new();
 
         let r = ir.build_graph(&mut self.place, &mut env, d, b);
         d.dump();
@@ -611,10 +598,8 @@ impl<E: Extra> StarlarkParser<E> {
         if verbose {
             env.blocks.save_graph("build.dot", b);
         }
-        //return Ok(());
 
         // lower to mlir
-        //let root = env.root();
         let mut types = TypeBuilder::new();
         let mut blocks = CFGBlocks::new(root, env.blocks.g);
         blocks.add_block_ir(context, root, b.s("module"), &[], &mut types, d);

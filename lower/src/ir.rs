@@ -1121,9 +1121,8 @@ impl<E: Extra> AstNode<E> {
         }
 
         let mut blocks = vec![];
+        //let mut s = IRBlockSorter::new();
         for (_i, (nb, block_index)) in output_blocks.into_iter().enumerate() {
-            env.enter_block(block_index, span.clone());
-
             let mut args = vec![];
             for a in nb.params {
                 args.push(IRArg {
@@ -1133,21 +1132,27 @@ impl<E: Extra> AstNode<E> {
             }
 
             let mut exprs = vec![];
+            env.enter_block(block_index, span.clone());
             let (ir, _ty) = nb.body.lower_ir_expr(env, place, d, b)?;
+            env.exit_block();
+
             exprs.extend(ir.to_vec());
 
-            //let label = env.blocks.fresh_block_label(
             let block = IRBlock::new(block_index, nb.name, args, exprs);
-            blocks.push(block);
-            env.exit_block();
+            blocks.extend(IRBlockSorter::sort_block(
+                block,
+                place,
+                &mut env.blocks,
+                d,
+                b,
+            ));
+            //blocks.push(block);
         }
 
-        let mut s = IRBlockSorter::new();
-        for (_i, block) in blocks.into_iter().enumerate() {
-            s.sort_block(block, place, &mut env.blocks, d, b);
-        }
-        s.close_block(place, &mut env.blocks, d, b);
-        let blocks = s.blocks;
+        //for (_i, block) in blocks.into_iter().enumerate() {
+        //}
+        //s.close_block(place, &mut env.blocks, d, b);
+        //let blocks = s.blocks;
         Ok(blocks)
     }
 
@@ -1552,16 +1557,17 @@ mod tests {
         let mut env = IREnvironment::new();
         let mut place = IRPlaceTable::new();
         let ast = gen_block(&mut b).normalize(&mut d, &mut b);
-        let label = env.blocks.fresh_block_label("module", &mut b);
-        let index = env.blocks.add_block(&mut place, label, vec![], &d);
-        env.enter_block(index, ast.extra.get_span());
-        let r = ast.lower_ir_expr(&mut env, &mut place, &mut d, &mut b);
+        //let label = env.blocks.fresh_block_label("module", &mut b);
+        //let index = env.blocks.add_block(&mut place, label, vec![], &d);
+        //env.enter_block(index, ast.extra.get_span());
+        let r = ast.lower_ir_module(&mut env, &mut place, &mut d, &mut b);
         d.dump();
         assert!(!d.has_errors);
-        let (ir, _ty) = r.unwrap();
+        let (ir, _ty, root) = r.unwrap();
         println!("ir: {:#?}", ir);
         ir.dump(&place, &b, 0);
-        assert_eq!(1, env.stack.len());
+        assert_eq!(0, env.stack.len());
+        env.blocks.g.node_weight(root).unwrap();
     }
 
     #[test]
@@ -1576,16 +1582,18 @@ mod tests {
 
         let ast = crate::tests::gen_function_call(&mut b).normalize(&mut d, &mut b);
 
-        let label = env.blocks.fresh_block_label("module", &mut b);
-        let index = env.blocks.add_block(&mut place, label, vec![], &d);
-        env.enter_block(index, ast.extra.get_span());
+        //let label = env.blocks.fresh_block_label("module", &mut b);
+        //let index = env.blocks.add_block(&mut place, label, vec![], &d);
+        //env.enter_block(index, ast.extra.get_span());
 
-        let r = ast.lower_ir_expr(&mut env, &mut place, &mut d, &mut b);
+        //let r = ast.lower_ir_expr(&mut env, &mut place, &mut d, &mut b);
+        let r = ast.lower_ir_module(&mut env, &mut place, &mut d, &mut b);
         d.dump();
         assert!(!d.has_errors);
-        let (ir, _ty) = r.unwrap();
+        let (ir, _ty, root) = r.unwrap();
         println!("ir: {:#?}", ir);
         ir.dump(&place, &b, 0);
-        assert_eq!(1, env.stack.len());
+        assert_eq!(0, env.stack.len());
+        env.blocks.g.node_weight(root).unwrap();
     }
 }
