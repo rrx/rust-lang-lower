@@ -348,7 +348,7 @@ impl<E: Extra> NodeBuilder<E> {
         let nb = AstNodeBlock {
             name,
             params: vec![],
-            body: body.into(),
+            children: vec![body.into()],
         };
         self.build(Ast::Module(nb), extra)
     }
@@ -372,7 +372,7 @@ impl<E: Extra> NodeBuilder<E> {
         let nb = AstNodeBlock {
             name,
             params,
-            body: body.into(),
+            children: vec![body], //: body.into(),
         };
         self.build(Ast::Block(nb), extra)
     }
@@ -538,7 +538,8 @@ impl<'c, E: Extra> Definition<E> {
                     }
                 }
 
-                let seq = b.seq(s.stack).set_extra(extra.clone());
+                let children = s.stack;
+                //let seq = b.seq(s.stack).set_extra(extra.clone());
 
                 // TODO: check that function args match the first block args
                 let params = self
@@ -560,7 +561,7 @@ impl<'c, E: Extra> Definition<E> {
                 let nb = AstNodeBlock {
                     name: self.name, //b.strings.intern("entry".to_string()),
                     params,
-                    body: seq.into(),
+                    children,
                 };
                 let node = b.build(Ast::Block(nb), extra.clone());
                 blocks.push(node.into());

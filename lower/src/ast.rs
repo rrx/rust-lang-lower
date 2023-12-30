@@ -188,7 +188,7 @@ pub struct AstNodeBlock<E> {
     pub(crate) name: StringKey,
     //pub(crate) label: BlockLabel,
     pub(crate) params: Vec<ParameterNode<E>>,
-    pub(crate) body: Box<AstNode<E>>,
+    pub(crate) children: Vec<AstNode<E>>,
 }
 
 #[derive(Debug)]
@@ -246,7 +246,7 @@ impl<E: Extra> Ast<E> {
     pub fn terminator(&self) -> Option<Terminator> {
         match self {
             Self::Sequence(exprs) => exprs.last().unwrap().node.terminator(),
-            Self::Block(nb) => nb.body.node.terminator(),
+            Self::Block(nb) => nb.children.last().unwrap().node.terminator(),
             Self::Goto(key, _) => Some(Terminator::Jump(*key)),
             Self::Return(_) => Some(Terminator::Return),
             _ => None,
@@ -375,9 +375,9 @@ impl<E: Extra> AstNode<E> {
         }
     }
 
-    pub fn try_block(self) -> Option<AstNode<E>> {
+    pub fn try_block(self) -> Option<Vec<AstNode<E>>> {
         if let Ast::Block(nb) = self.node {
-            Some(*nb.body)
+            Some(nb.children)
         } else {
             None
         }
@@ -481,7 +481,7 @@ impl<E: Extra> AstNode<E> {
                 }
             }
             Ast::Block(ref mut nb) | Ast::Module(ref mut nb) => {
-                values.push(&mut nb.body);
+                values.extend(&mut nb.children);
             }
             Ast::Builtin(_, args) => {
                 for a in args {

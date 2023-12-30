@@ -1,3 +1,4 @@
+use crate::intern::InternKey;
 use crate::sort::IRBlockSorter;
 use crate::{
     AstNode, AstType, Diagnostics, Extra, IRPlaceTable, NodeBuilder, ParseError, PlaceId,
@@ -241,6 +242,11 @@ impl BlockTable {
         _d: &Diagnostics,
     ) -> NodeIndex {
         let index = self.g.add_node(IRControlBlock::new(params.clone()));
+        println!(
+            "add_block: index: {}, label: {}",
+            index.index(),
+            label.index()
+        );
         //let block_label = self.fresh_block_label(name, b);
         self.g.node_weight_mut(index).unwrap().block_index = index;
         //assert!(!self.block_names.contains_key(&label));
@@ -304,8 +310,9 @@ impl BlockTable {
                     let name = b.strings.resolve(label);
                     format!(
                         //"label = \"[{}]{}\" shape={:?}",
-                        "label = \"{}{}\"",
+                        "label = \"{}:{:?}:{}\"",
                         index.index(),
+                        label.index(),
                         name,
                         //data.block_index.index(),
                         //&data.name,
@@ -932,6 +939,7 @@ impl IRNode {
                     //let s = b.strings.resolve(&block.name);
                     //let label = env.blocks.fresh_block_label(&s, b);
                     // TODO: remove this, add_block
+                    println!("func: addblock");
                     let block_index =
                         env.blocks
                             .add_block(places, block.label, block.params.clone(), d);
@@ -1050,12 +1058,17 @@ impl<E: Extra> AstNode<E> {
         match self.node {
             Ast::Module(nb) => {
                 assert_eq!(env.stack_size(), 0);
+                println!("Module: addblock");
                 let index = env.blocks.add_block(place, nb.name, vec![], d);
                 env.enter_block(index, self.extra.get_span());
                 //let mut children = vec![b.ir_label(nb.name, index, vec![])];
                 let mut children = vec![];
-                let (ir, ty) = nb.body.lower_ir_expr(env, place, d, b)?;
-                children.extend(ir.to_vec());
+                let mut ty = AstType::Unit;
+                for c in nb.children {
+                    let (ir, _ty) = c.lower_ir_expr(env, place, d, b)?;
+                    children.extend(ir.to_vec());
+                    let ty = _ty;
+                }
                 let ir = b.ir_module(nb.name, index, children);
                 env.exit_block();
                 Ok((ir, ty, index))
@@ -1105,8 +1118,10 @@ impl<E: Extra> AstNode<E> {
                     nb.name = name;
                 }
 
+                //nb.body.
                 //let s = b.strings.resolve(&nb.name);
                 //let label = env.blocks.fresh_block_label(s, b);
+                println!("irfuncbody: addblock");
                 let block_index = env.blocks.add_block(place, nb.name, args.clone(), d);
                 edges.push((current_block, block_index));
 
@@ -1133,10 +1148,14 @@ impl<E: Extra> AstNode<E> {
 
             let mut exprs = vec![];
             env.enter_block(block_index, span.clone());
-            let (ir, _ty) = nb.body.lower_ir_expr(env, place, d, b)?;
+            for c in nb.children {
+                let (ir, _ty) = c.lower_ir_expr(env, place, d, b)?;
+                exprs.extend(ir.to_vec());
+            }
+            //let (ir, _ty) = nb.body.lower_ir_expr(env, place, d, b)?;
             env.exit_block();
 
-            exprs.extend(ir.to_vec());
+            //exprs.extend(ir.to_vec());
 
             let block = IRBlock::new(block_index, nb.name, args, exprs);
             blocks.extend(IRBlockSorter::sort_block(
@@ -1195,9 +1214,13 @@ impl<E: Extra> AstNode<E> {
                 let index = env.blocks.add_block(place, nb.name, vec![], d);
                 env.enter_block(index, self.extra.get_span());
                 //env.module_root = Some(index);
-                let (ir, ty) = nb.body.lower_ir_expr(env, place, d, b)?;
+                let ty = AstType::Unit;
+                for c in nb.children {
+                    let (ir, _ty) = c.lower_ir_expr(env, place, d, b)?;
+                    out.push(ir);
+                    ty = _ty;
+                }
                 env.exit_block();
-                out.push(ir);
                 Ok(ty)
             }
 
@@ -1222,6 +1245,8 @@ impl<E: Extra> AstNode<E> {
             }
 
             Ast::Label(name, ast_args) => {
+                //return Ok(AstType::Unit);
+                //unreachable!();
                 let mut args = vec![];
                 for a in &ast_args {
                     args.push(IRArg {
@@ -1230,6 +1255,7 @@ impl<E: Extra> AstNode<E> {
                     });
                 }
 
+                println!("label: addblock");
                 let block_index = env.blocks.add_block(place, name, args.clone(), d);
                 //let block_index = NodeIndex::new(0);
                 //let s = b.strings.resolve(&name);
@@ -1560,7 +1586,6 @@ mod tests {
         d.dump();
         assert!(!d.has_errors);
         let (ir, _ty, root) = r.unwrap();
-        //println!("ir: {:#?}", ir);
         ir.dump(&place, &b, 0);
         assert_eq!(0, env.stack.len());
         env.blocks.g.node_weight(root).unwrap();
@@ -1579,7 +1604,6 @@ mod tests {
         d.dump();
         assert!(!d.has_errors);
         let (ir, _ty, root) = r.unwrap();
-        //println!("ir: {:#?}", ir);
         ir.dump(&place, &b, 0);
         assert_eq!(0, env.stack.len());
         env.blocks.g.node_weight(root).unwrap();

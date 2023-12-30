@@ -87,13 +87,14 @@ impl<E: Extra> AstBlockSorter<E> {
         let offset = self.blocks.len();
 
         let name = b.strings.intern(format!("_block{}", offset));
-        let seq = b
-            .seq(self.stack.drain(..).collect())
-            .set_extra(extra.clone());
+        let children = self.stack.drain(..).collect();
+        //let seq = b
+        //.seq(self.stack.drain(..).collect())
+        //.set_extra(extra.clone());
         let nb = AstNodeBlock {
             name,
             params: vec![],
-            body: seq.into(),
+            children, //: seq.into(),
         };
         let ast = b.build(Ast::Block(nb), extra.clone());
         self.blocks.push(ast);
@@ -384,6 +385,7 @@ impl IRBlockSorter {
                 self.close_block(places, blocks, d, b);
                 self.stack.push(ir);
             }
+            IRKind::Noop => (),
             _ => {
                 self.stack.push(ir);
             }
@@ -425,8 +427,8 @@ impl IRBlockSorter {
             let offset = self.blocks.len();
             //let label = blocks.fresh_block_label("block", b);
             let label = b.strings.intern(format!("_block{}", offset));
-            //let block_index = blocks.add_block(places, label, vec![], d);
-            let block_index = NodeIndex::new(0);
+            println!("A: addblock");
+            let block_index = blocks.add_block(places, label, vec![], d);
             IRBlock {
                 index: block_index,
                 label,
