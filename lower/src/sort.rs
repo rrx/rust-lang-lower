@@ -377,6 +377,10 @@ impl IRBlockSorter {
                 self.blocks
                     .extend(Self::sort_block(nb, places, blocks, d, b));
             }
+            IRKind::Branch(_, x, y) => {
+                self.stack.push(ir);
+                self.close_block(places, blocks, d, b);
+            }
             IRKind::Jump(_, _) => {
                 self.stack.push(ir);
                 self.close_block(places, blocks, d, b);
@@ -422,7 +426,10 @@ impl IRBlockSorter {
                 children: self.stack.drain(..).skip(1).collect(),
             }
         } else {
-            //unreachable!("{:?}", first);
+            for s in &self.stack {
+                s.dump(places, b, 0);
+            }
+            unreachable!("{:?}", first);
             //assert!(false);
             let offset = self.blocks.len();
             //let label = blocks.fresh_block_label("block", b);

@@ -537,27 +537,6 @@ impl IRNode {
 
     pub fn dump<E: Extra>(&self, places: &IRPlaceTable, b: &NodeBuilder<E>, mut depth: usize) {
         match &self.kind {
-            IRKind::Module(block) => {
-                println!(
-                    "{:width$}module({})",
-                    "",
-                    //block.label.0,
-                    b.strings.resolve(&block.label),
-                    width = depth * 2
-                );
-                for a in &block.params {
-                    println!(
-                        "{:width$}arg: {}: {:?}",
-                        "",
-                        b.strings.resolve(&a.name),
-                        a.ty,
-                        width = (depth + 1) * 2
-                    );
-                }
-                for a in &block.children {
-                    a.dump(places, b, depth + 1);
-                }
-            }
             IRKind::Func(blocks, _ret_ty) => {
                 println!("{:width$}func:", "", width = depth * 2);
                 depth += 1;
@@ -1114,14 +1093,22 @@ impl<E: Extra> AstNode<E> {
                     });
                 }
 
-                if 0 == i {
-                    nb.name = name;
-                }
-
                 //nb.body.
                 //let s = b.strings.resolve(&nb.name);
                 //let label = env.blocks.fresh_block_label(s, b);
-                println!("irfuncbody: addblock");
+                let is_label = nb.children.first().unwrap().node.is_label();
+
+                println!("irfuncbody: addblock: {}", is_label);
+                //if let Ast::Label(key, args) = nb.children.first().as_ref().unwrap().node. {
+                //}
+                if 0 == i {
+                    nb.name = name;
+
+                    // skip label on first
+                    //let children = nb.children.into_iter().skip(1).collect();
+                    //nb.children = children;
+                }
+                //
                 let block_index = env.blocks.add_block(place, nb.name, args.clone(), d);
                 edges.push((current_block, block_index));
 
@@ -1245,8 +1232,11 @@ impl<E: Extra> AstNode<E> {
             }
 
             Ast::Label(name, ast_args) => {
+                //out.push(b.ir_noop());
                 //return Ok(AstType::Unit);
                 //unreachable!();
+                //env.block_names
+
                 let mut args = vec![];
                 for a in &ast_args {
                     args.push(IRArg {
@@ -1256,11 +1246,12 @@ impl<E: Extra> AstNode<E> {
                 }
 
                 println!("label: addblock");
-                let block_index = env.blocks.add_block(place, name, args.clone(), d);
+                //let block_index = env.blocks.add_block(place, name, args.clone(), d);
                 //let block_index = NodeIndex::new(0);
                 //let s = b.strings.resolve(&name);
                 //let label = env.blocks.fresh_block_label(s, b);
                 //env.block_names.last_mut().unwrap().insert(name, label);
+                let block_index = env.stack.last().unwrap().0;
                 out.push(b.ir_label(name, block_index, args));
                 Ok(AstType::Unit)
             }
@@ -1431,7 +1422,7 @@ impl<E: Extra> AstNode<E> {
                 let place_data = PlaceNode::new_static(def.name, f_type.clone());
                 let place_id = place.add_place(place_data);
 
-                let index = env.add_definition(current_block, place_id, def.name);
+                let _sym_index = env.add_definition(current_block, place_id, def.name);
                 out.push(b.ir_decl(place_id));
 
                 if let Some(body) = def.body {
@@ -1529,7 +1520,6 @@ impl<E: Extra> AstNode<E> {
                 if let Some(seq) = else_seq {
                     out.extend(seq);
                 }
-                //let next_index = NodeIndex::new(0);
                 out.push(b.ir_label(b_next, next_index, vec![]));
                 Ok(AstType::Unit)
             }

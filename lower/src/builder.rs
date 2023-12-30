@@ -538,6 +538,7 @@ impl<'c, E: Extra> Definition<E> {
                     }
                 }
 
+                //let children = s.stack.into_iter().skip(1).collect::<Vec<_>>().drain(..).collect();
                 let children = s.stack;
                 //let seq = b.seq(s.stack).set_extra(extra.clone());
 
