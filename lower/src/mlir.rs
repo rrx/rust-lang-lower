@@ -309,7 +309,9 @@ impl IRNode {
 
             IRKind::Label(_label, _index, _args) => {
                 // this should have been removed by now, when converted to blocks
-                unreachable!()
+                //unreachable!()
+                let current_block = stack.last().unwrap().clone();
+                op::emit_noop(context, location, current_block, blocks)
             }
 
             IRKind::Jump(label, args) => {

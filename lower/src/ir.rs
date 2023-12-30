@@ -771,17 +771,23 @@ impl IRNode {
             IRKind::Module(mut block) => {
                 env.enter_block(block.index, span.clone());
                 let mut out = vec![];
+
+                // insert proper label
+                let ir = b.ir_label(block.label, block.index, vec![]);
+                out.push(ir.build_graph(places, env, d, b)?);
+                //b.ir_label(block.label, block.index, vec![]));
+
                 for c in block.children {
                     out.push(c.build_graph(places, env, d, b)?);
                 }
                 block.children = out;
-                env.exit_block();
+                //env.exit_block();
+
                 Ok(IRNode::new(IRKind::Module(block), span))
             }
             IRKind::Noop => Ok(self),
 
-            IRKind::Module(_) => Ok(self),
-
+            //IRKind::Module(_) => Ok(self),
             IRKind::Seq(exprs) => {
                 let mut out = vec![];
                 for expr in exprs {
@@ -841,8 +847,8 @@ impl IRNode {
                 return Ok(self);
 
                 let current_block = env.current_block();
-                self.dump(places, b, 0);
-                env.dump(b, current_block);
+                //self.dump(places, b, 0);
+                //env.dump(b, current_block);
                 let p = places.get_place(place_id);
                 if let Some(_sym_index) = env.name_in_scope(current_block, p.name) {
                     Ok(self)
@@ -1032,8 +1038,9 @@ impl<E: Extra> AstNode<E> {
                 let index = env.blocks.add_block(place, nb.name, vec![], d);
                 env.enter_block(index, self.extra.get_span());
                 //env.module_root = Some(index);
+                let mut children = vec![b.ir_label(nb.name, index, vec![])];
                 let (ir, ty) = nb.body.lower_ir_expr(env, place, d, b)?;
-
+                children.extend(ir.to_vec());
                 let mut args = vec![];
                 for a in &nb.params {
                     args.push(IRArg {
@@ -1043,7 +1050,7 @@ impl<E: Extra> AstNode<E> {
                 }
 
                 let ir = IRNode::new(
-                    IRKind::Module(IRBlock::new(index, nb.name, args, ir.to_vec())),
+                    IRKind::Module(IRBlock::new(index, nb.name, args, children)),
                     self.extra.get_span(),
                 );
                 env.exit_block();
@@ -1060,6 +1067,84 @@ impl<E: Extra> AstNode<E> {
                 module.lower_ir_module(env, place, d, b)
             }
         }
+    }
+
+    pub fn lower_ir_function_body(
+        self,
+        name: StringKey,
+        current_block: NodeIndex,
+        env: &mut IREnvironment,
+        place: &mut IRPlaceTable,
+        d: &mut Diagnostics,
+        b: &mut NodeBuilder<E>,
+    ) -> Result<Vec<IRBlock>> {
+        let span = self.extra.get_span();
+        let mut output_blocks = vec![];
+        let mut edges = vec![];
+
+        let blocks = self.try_seq().unwrap();
+
+        //let mut scope = crate::sort::BlockScope::default();
+        //let blocks = crate::sort::AstBlockSorter::run(blocks, env, place, &mut scope, d, b);
+
+        for (i, block) in blocks.into_iter().enumerate() {
+            if let Ast::Block(mut nb) = block.node {
+                let mut args = vec![];
+                for a in &nb.params {
+                    args.push(IRArg {
+                        name: a.name,
+                        ty: a.ty.clone(),
+                    });
+                }
+
+                if 0 == i {
+                    nb.name = name;
+                }
+
+                //let s = b.strings.resolve(&nb.name);
+                //let label = env.blocks.fresh_block_label(s, b);
+                let block_index = env.blocks.add_block(place, nb.name, args.clone(), d);
+                edges.push((current_block, block_index));
+
+                output_blocks.push((nb, block_index));
+            } else {
+                unreachable!()
+            }
+        }
+
+        for (a, b) in edges {
+            env.blocks.g.add_edge(a, b, ());
+        }
+
+        let mut blocks = vec![];
+        for (_i, (nb, block_index)) in output_blocks.into_iter().enumerate() {
+            env.enter_block(block_index, span.clone());
+
+            let mut args = vec![];
+            for a in nb.params {
+                args.push(IRArg {
+                    name: a.name,
+                    ty: a.ty,
+                });
+            }
+
+            let mut exprs = vec![];
+            let (ir, _ty) = nb.body.lower_ir_expr(env, place, d, b)?;
+            exprs.extend(ir.to_vec());
+
+            //let label = env.blocks.fresh_block_label(
+            let block = IRBlock::new(block_index, nb.name, args, exprs);
+            blocks.push(block);
+            env.exit_block();
+        }
+
+        let mut s = IRBlockSorter::new();
+        for (_i, block) in blocks.into_iter().enumerate() {
+            s.sort_block(block, place, &mut env.blocks, d, b);
+        }
+        s.close_block(place, &mut env.blocks, d, b);
+        let blocks = s.blocks;
+        Ok(blocks)
     }
 
     pub fn lower_ir_expr<'c>(
@@ -1291,6 +1376,7 @@ impl<E: Extra> AstNode<E> {
             }
 
             Ast::Definition(mut def) => {
+                let span = self.extra.get_span();
                 def = def.normalize(b);
                 let current_block = env.current_block();
                 assert!(env.block_is_static(current_block));
@@ -1314,76 +1400,11 @@ impl<E: Extra> AstNode<E> {
                 out.push(b.ir_decl(place_id));
 
                 if let Some(body) = def.body {
-                    let mut output_blocks = vec![];
-                    let mut edges = vec![];
-                    let blocks = body.try_seq().unwrap();
+                    let blocks =
+                        body.lower_ir_function_body(def.name, current_block, env, place, d, b)?;
 
-                    //let mut scope = crate::sort::BlockScope::default();
-                    //let blocks = crate::sort::AstBlockSorter::run(blocks, env, place, &mut scope, d, b);
-
-                    for (i, block) in blocks.into_iter().enumerate() {
-                        if let Ast::Block(mut nb) = block.node {
-                            let mut args = vec![];
-                            for a in &nb.params {
-                                args.push(IRArg {
-                                    name: a.name,
-                                    ty: a.ty.clone(),
-                                });
-                            }
-
-                            if 0 == i {
-                                nb.name = def.name;
-                            }
-
-                            //let s = b.strings.resolve(&nb.name);
-                            //let label = env.blocks.fresh_block_label(s, b);
-                            let block_index = env.blocks.add_block(place, nb.name, args.clone(), d);
-                            edges.push((current_block, block_index));
-
-                            output_blocks.push((nb, block_index));
-                        } else {
-                            unreachable!()
-                        }
-                    }
-
-                    for (a, b) in edges {
-                        env.blocks.g.add_edge(a, b, ());
-                    }
-
-                    if output_blocks.len() > 0 {
-                        let mut blocks = vec![];
-                        let span = self.extra.get_span();
-                        for (_i, (nb, block_index)) in output_blocks.into_iter().enumerate() {
-                            env.enter_block(block_index, span.clone());
-
-                            let mut args = vec![];
-                            for a in nb.params {
-                                args.push(IRArg {
-                                    name: a.name,
-                                    ty: a.ty,
-                                });
-                            }
-
-                            let mut exprs = vec![];
-                            let (ir, _ty) = nb.body.lower_ir_expr(env, place, d, b)?;
-                            exprs.extend(ir.to_vec());
-
-                            //let label = env.blocks.fresh_block_label(
-                            let block = IRBlock::new(block_index, nb.name, args, exprs);
-                            blocks.push(block);
-                            env.exit_block();
-                        }
-
-                        let mut s = IRBlockSorter::new();
-                        for (_i, block) in blocks.into_iter().enumerate() {
-                            s.sort_block(block, place, &mut env.blocks, d, b);
-                        }
-                        s.close_block(place, &mut env.blocks, d, b);
-                        let blocks = s.blocks;
-
-                        let ir = IRNode::new(IRKind::Func(blocks, ast_ret_type), span);
-                        out.push(b.ir_set(place_id, ir, IRTypeSelect::default()));
-                    }
+                    let ir = IRNode::new(IRKind::Func(blocks, ast_ret_type), span);
+                    out.push(b.ir_set(place_id, ir, IRTypeSelect::default()));
                 }
 
                 Ok(AstType::Unit)

@@ -589,9 +589,10 @@ impl<E: Extra> StarlarkParser<E> {
             ir.dump(&self.place, &b, 0);
         }
 
-        let mut env = IREnvironment::new();
-        //env.blocks.save_graph("out.dot", b);
+        env.blocks.save_graph("out.dot", b);
         //return Ok(());
+
+        let mut env = IREnvironment::new();
 
         let r = ir.build_graph(&mut self.place, &mut env, d, b);
         d.dump();

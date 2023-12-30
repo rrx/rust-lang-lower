@@ -351,7 +351,7 @@ impl IRBlockSorter {
                     self.sort(e, places, blocks, d, b);
                 }
             }
-            IRKind::Block(nb) => {
+            IRKind::Block(nb) | IRKind::Module(nb) => {
                 self.sort_block(nb, places, blocks, d, b);
             }
             IRKind::Jump(_, _) => {
