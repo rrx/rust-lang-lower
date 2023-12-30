@@ -1553,18 +1553,14 @@ mod tests {
         let file_id = d.add_source("test.py".into(), "test".into());
         let mut b: NodeBuilder<SimpleExtra> = NodeBuilder::new();
         b.enter(file_id, "type.py");
-
         let mut env = IREnvironment::new();
         let mut place = IRPlaceTable::new();
         let ast = gen_block(&mut b).normalize(&mut d, &mut b);
-        //let label = env.blocks.fresh_block_label("module", &mut b);
-        //let index = env.blocks.add_block(&mut place, label, vec![], &d);
-        //env.enter_block(index, ast.extra.get_span());
         let r = ast.lower_ir_module(&mut env, &mut place, &mut d, &mut b);
         d.dump();
         assert!(!d.has_errors);
         let (ir, _ty, root) = r.unwrap();
-        println!("ir: {:#?}", ir);
+        //println!("ir: {:#?}", ir);
         ir.dump(&place, &b, 0);
         assert_eq!(0, env.stack.len());
         env.blocks.g.node_weight(root).unwrap();
@@ -1576,22 +1572,14 @@ mod tests {
         let file_id = d.add_source("test.py".into(), "test".into());
         let mut b: NodeBuilder<SimpleExtra> = NodeBuilder::new();
         b.enter(file_id, "type.py");
-
         let mut env = IREnvironment::new();
         let mut place = IRPlaceTable::new();
-
         let ast = crate::tests::gen_function_call(&mut b).normalize(&mut d, &mut b);
-
-        //let label = env.blocks.fresh_block_label("module", &mut b);
-        //let index = env.blocks.add_block(&mut place, label, vec![], &d);
-        //env.enter_block(index, ast.extra.get_span());
-
-        //let r = ast.lower_ir_expr(&mut env, &mut place, &mut d, &mut b);
         let r = ast.lower_ir_module(&mut env, &mut place, &mut d, &mut b);
         d.dump();
         assert!(!d.has_errors);
         let (ir, _ty, root) = r.unwrap();
-        println!("ir: {:#?}", ir);
+        //println!("ir: {:#?}", ir);
         ir.dump(&place, &b, 0);
         assert_eq!(0, env.stack.len());
         env.blocks.g.node_weight(root).unwrap();
