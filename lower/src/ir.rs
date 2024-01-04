@@ -1188,10 +1188,10 @@ impl<E: Extra> AstNode<E> {
         d: &mut Diagnostics,
         b: &mut NodeBuilder<E>,
     ) -> Result<AstType> {
-        if !self.node_id.is_valid() {
-            d.push_diagnostic(self.extra.error(&format!("Invalid NodeID: {:#?}", self)));
-            return Err(Error::new(ParseError::Invalid));
-        }
+        //if !self.node_id.is_valid() {
+        //d.push_diagnostic(self.extra.error(&format!("Invalid NodeID: {:#?}", self)));
+        //return Err(Error::new(ParseError::Invalid));
+        //}
 
         match self.node {
             Ast::Noop => Ok(AstType::Unit),
@@ -1592,6 +1592,8 @@ mod tests {
         let ast = crate::tests::gen_function_call(&mut b).normalize(&mut d, &mut b);
         ast.dump(&mut b, 0);
         let ast = ast.first_pass(&mut b, &mut d).unwrap();
+        ast.dump(&mut b, 0);
+
         let r = ast.lower_ir_module(&mut env, &mut place, &mut d, &mut b);
 
         d.dump();

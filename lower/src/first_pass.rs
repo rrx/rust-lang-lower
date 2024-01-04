@@ -39,6 +39,7 @@ impl Default for Layer {
 pub struct Environment {
     in_func: bool,
     layers: Vec<Layer>,
+    unique: usize,
 }
 
 impl Environment {
@@ -47,7 +48,14 @@ impl Environment {
         Self {
             in_func: false,
             layers: vec![start],
+            unique: 0,
         }
+    }
+
+    pub fn gen_unique(&mut self) -> usize {
+        let s = self.unique;
+        self.unique += 1;
+        s
     }
 
     pub fn enter_scope(&mut self) {
@@ -161,12 +169,24 @@ impl<E: Extra> AstNode<E> {
                 Ok(self)
             }
 
-            Ast::Definition(def) => {
-                //if let Some(body) = def.body {
-                //blockify(body.to_vec(), def.name, def.params, b, d);
-                //}
-                self.node = Ast::Definition(def.normalize(b));
-                Ok(self)
+            Ast::Definition(mut def) => {
+                if let Some(body) = def.body.take() {
+                    let block = AstNodeBlock {
+                        name: def.name,
+                        params: def.params.clone(),
+                        children: body.to_vec(),
+                    };
+                    let blocks = blockify(block, env, b, d)?
+                        .into_iter()
+                        .map(|block| b.node(Ast::Block(block)))
+                        .collect::<Vec<_>>();
+                    let seq = b.node(Ast::Sequence(blocks));
+                    def.body = Some(seq.into());
+                    Ok(b.node(Ast::Definition(def)))
+                } else {
+                    Ok(b.node(Ast::Definition(def)))
+                }
+                //self.node = Ast::Definition(def.normalize(b));
             }
             Ast::Sequence(exprs) => {
                 let mut out = vec![];
@@ -183,12 +203,13 @@ impl<E: Extra> AstNode<E> {
 
 fn terminate_seq<E: Extra>(
     mut exprs: Vec<AstNode<E>>,
+    env: &mut Environment,
     b: &mut NodeBuilder<E>,
     d: &mut Diagnostics,
 ) -> Result<(Vec<AstNode<E>>, Vec<AstNode<E>>)> {
     // split the sequence on terminator, and return a tuple (terminated sequence, remainder)
     if let Some(index) = exprs.iter().position(|expr| expr.node.is_terminator()) {
-        let rest = exprs.split_off(index);
+        let rest = exprs.split_off(index + 1);
         return Ok((exprs, rest));
     }
 
@@ -205,41 +226,57 @@ fn terminate_seq<E: Extra>(
     Ok((exprs, vec![]))
 }
 
-/*
-pub fn blockify<E: Extra>(mut block: AstNodeBlock<E>, b: &mut NodeBuilder<E>, d: &mut Diagnostics) -> Result<Vec<AstNodeBlock<E>>> {
-    let mut children = block.children;
+pub fn blockify<E: Extra>(
+    mut block: AstNodeBlock<E>,
+    env: &mut Environment,
+    b: &mut NodeBuilder<E>,
+    d: &mut Diagnostics,
+) -> Result<Vec<AstNodeBlock<E>>> {
+    let children = block.children;
     let mut out = vec![];
-    let (seq, rest) = terminate_seq(children, b, d)?;
+    let (seq, rest) = terminate_seq(children, env, b, d)?;
+    println!("seq {:?}", seq);
+    println!("rest {:?}", rest);
 
-    if rest.len() == 0 {
-        let block = AstNodeBlock {
-            name: block_name,
-            params: block_params,
-            children: seq,
+    let ty = seq.last().unwrap().node.get_type(env);
+    block.children = vec![];
+
+    // if label is missing, add it
+    if !seq.first().unwrap().node.is_label() {
+        block
+            .children
+            .push(b.label(block.name, block.params.clone()));
+    }
+    block.children.extend(seq);
+    out.push(block);
+
+    if rest.len() > 0 {
+        let block_params = match ty {
+            AstType::Unit => vec![],
+            AstType::Tuple(types) => vec![],
+            _ => unimplemented!(),
         };
-        return
-    } else {
-        // the previous block return arity, should match the new block arity
-    }
 
-    /*
-    if let Some(index) = children.iter().position(|expr| expr.node.is_terminator()) {
-        let rest = children.split_off(index);
-        if rest.len() == 0 {
-            // last element is a terminator
-            return Ok(out);
+        let block = if let Ast::Label(ref key, ref params) = rest.first().unwrap().node {
+            AstNodeBlock {
+                name: *key,
+                params: params.clone(),
+                children: rest,
+            }
         } else {
-        }
-    }
-    */
+            let name = format!("_block{}", env.gen_unique());
+            let key = b.s(&name);
+            AstNodeBlock {
+                name: key,
+                params: block_params,
+                children: rest,
+            }
+        };
 
-    // implicit return, ensure it matches the function signature
-    //children.push(b.ret(None));
-    //block.children = children;
-    //out.push(block);
+        out.extend(blockify(block, env, b, d)?);
+    }
     Ok(out)
 }
-*/
 
 /*
 pub fn blockify2<E: Extra>(exprs: Vec<AstNode<E>>, entry_name: StringKey, entry_params: Vec<ParameterNode<E>>, b: &mut NodeBuilder<E>, d: &mut Diagnostics) -> Result<Vec<AstNode<E>>> {

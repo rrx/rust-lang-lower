@@ -717,7 +717,7 @@ pub(crate) mod tests {
         run_test_ir("../tests/test.star", 0);
     }
 
-    //#[test]
+    #[test]
     fn test_goto() {
         run_test_ir("../tests/goto.star", 0);
     }

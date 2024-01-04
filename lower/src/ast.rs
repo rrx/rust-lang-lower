@@ -249,7 +249,7 @@ impl<E: Extra> Ast<E> {
             Self::Call(_, _, _) => true,
             Self::Identifier(_) => true,
             Self::Literal(_) => true,
-            Self::Conditional(_, _, _) => true,
+            //Self::Conditional(_, _, _) => true,
             Self::While(_, _) => true,
             _ => false,
         }
@@ -261,7 +261,7 @@ impl<E: Extra> Ast<E> {
             Self::Block(_) => true,
             Self::Goto(_, _) => true,
             Self::Return(_) => true,
-            Self::Conditional(_, _, _) => true,
+            //Self::Conditional(_, _, _) => true,
             Self::Break(_, _) => true,
             Self::Continue(_, _) => true,
             Self::While(_, _) => true,
