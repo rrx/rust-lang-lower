@@ -1403,7 +1403,7 @@ impl<E: Extra> AstNode<E> {
 
             Ast::Definition(mut def) => {
                 let span = self.extra.get_span();
-                def = def.normalize(b);
+                //def = def.normalize(b);
                 let current_block = env.current_block();
                 assert!(env.block_is_static(current_block));
 
@@ -1590,7 +1590,10 @@ mod tests {
         let mut env = IREnvironment::new();
         let mut place = IRPlaceTable::new();
         let ast = crate::tests::gen_function_call(&mut b).normalize(&mut d, &mut b);
+        ast.dump(&mut b, 0);
+        let ast = ast.first_pass(&mut b, &mut d).unwrap();
         let r = ast.lower_ir_module(&mut env, &mut place, &mut d, &mut b);
+
         d.dump();
         assert!(!d.has_errors);
         let (ir, _ty, root) = r.unwrap();

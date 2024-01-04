@@ -738,6 +738,13 @@ impl<E: Extra> AstNode<E> {
                 }
             }
 
+            Ast::Deref(a, _) => a.dump(b, depth),
+            Ast::Mutate(lhs, rhs) => {
+                println!("{:width$}mutate", "", width = depth * 2);
+                lhs.dump(b, depth + 1);
+                rhs.dump(b, depth + 1);
+            }
+
             _ => unimplemented!("{:?}", self),
         }
     }
