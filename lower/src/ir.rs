@@ -918,13 +918,13 @@ impl IRNode {
                     //let s = b.strings.resolve(&block.name);
                     //let label = env.blocks.fresh_block_label(&s, b);
                     // TODO: remove this, add_block
-                    println!("func: addblock");
-                    let block_index =
-                        env.blocks
-                            .add_block(places, block.label, block.params.clone(), d);
-                    block.index = block_index;
+                    //println!("func: addblock");
+                    //let block_index =
+                        //env.blocks
+                            //.add_block(places, block.label, block.params.clone(), d);
+                    //block.index = block_index;
                     if 0 == i {
-                        env.blocks.g.add_edge(current_block, block.index, ());
+                        //env.blocks.g.add_edge(current_block, block.index, ());
                     }
                     seq.push(block);
                 }
@@ -954,9 +954,9 @@ impl IRNode {
                 let condition = condition.build_graph(places, env, d, b)?;
                 let current_block = env.current_block();
                 let then_block = env.blocks.lookup_block_label(then_key).unwrap();
-                env.blocks.g.add_edge(current_block, then_block, ());
+                //env.blocks.g.add_edge(current_block, then_block, ());
                 let else_block = env.blocks.lookup_block_label(else_key).unwrap();
-                env.blocks.g.add_edge(current_block, else_block, ());
+                //env.blocks.g.add_edge(current_block, else_block, ());
                 Ok(b.ir_branch(condition, then_key, else_key))
             }
 
