@@ -52,6 +52,21 @@ impl<E: Extra> NodeBuilder<E> {
         }
     }
 
+    pub fn build_builtin_from_name(
+        &mut self,
+        name: &str,
+        args: Vec<Argument<E>>,
+    ) -> Option<AstNode<E>> {
+        if let Some(b) = Builtin::from_name(name) {
+            assert_eq!(b.arity(), args.len());
+            Some(self.node(Ast::Builtin(b, args)))
+        } else if let Some(ast) = Ast::from_name(name, args, self) {
+            Some(self.node(ast))
+        } else {
+            None
+        }
+    }
+
     fn fresh_def_arg(&mut self) -> DefinitionId {
         let def_id = DefinitionId::Arg(self.current_def_id);
         self.current_def_id += 1;
@@ -372,7 +387,7 @@ impl<E: Extra> NodeBuilder<E> {
         let nb = AstNodeBlock {
             name,
             params,
-            children: vec![body], //: body.into(),
+            children: vec![body],
         };
         self.build(Ast::Block(nb), extra)
     }

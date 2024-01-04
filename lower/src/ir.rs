@@ -920,8 +920,8 @@ impl IRNode {
                     // TODO: remove this, add_block
                     //println!("func: addblock");
                     //let block_index =
-                        //env.blocks
-                            //.add_block(places, block.label, block.params.clone(), d);
+                    //env.blocks
+                    //.add_block(places, block.label, block.params.clone(), d);
                     //block.index = block_index;
                     if 0 == i {
                         //env.blocks.g.add_edge(current_block, block.index, ());

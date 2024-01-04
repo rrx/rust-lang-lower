@@ -457,10 +457,10 @@ impl<E: Extra> Parser<E> {
                                 Ok(b.apply(key, args, AstType::Int).set_extra(extra))
                             } else if &ident.node.ident == "b" {
                                 // builtin namespace
-                                if let Some(bi) = ast::Builtin::from_name(&name.node) {
-                                    assert_eq!(args.len(), bi.arity());
+                                if let Some(mut ast) = b.build_builtin_from_name(&name, args) {
                                     let extra = env.extra(item.span);
-                                    Ok(b.build(Ast::Builtin(bi, args), extra))
+                                    ast.extra = extra;
+                                    Ok(ast)
                                 } else {
                                     d.push_diagnostic(env.error(name.span, "Builtin not found"));
                                     Ok(b.error())

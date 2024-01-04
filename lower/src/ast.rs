@@ -1,6 +1,5 @@
-use crate::intern::StringKey;
 use crate::Diagnostics;
-use crate::{AstType, BlockLabel, NodeID};
+use crate::{AstType, BlockLabel, NodeBuilder, NodeID, StringKey};
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use melior::{ir::Location, Context};
 use std::fmt::Debug;
@@ -114,6 +113,13 @@ pub enum Argument<E> {
 impl<E> From<AstNode<E>> for Argument<E> {
     fn from(item: AstNode<E>) -> Self {
         Argument::Positional(item.into())
+    }
+}
+
+impl<E: Extra> Argument<E> {
+    pub fn try_string(self) -> Option<String> {
+        let Self::Positional(node) = self;
+        (*node).try_string()
     }
 }
 
@@ -250,6 +256,39 @@ impl<E: Extra> Ast<E> {
             Self::Goto(key, _) => Some(Terminator::Jump(*key)),
             Self::Return(_) => Some(Terminator::Return),
             _ => None,
+        }
+    }
+
+    pub fn from_name(
+        name: &str,
+        mut args: Vec<Argument<E>>,
+        b: &mut NodeBuilder<E>,
+    ) -> Option<Self> {
+        if name == "goto" {
+            let rest = args.split_off(1);
+            let s = args.pop().unwrap().try_string().unwrap();
+            let key = b.s(&s);
+            Some(Self::Goto(key, rest))
+        } else if name == "label" {
+            let rest = args.split_off(1);
+            let s = args.pop().unwrap().try_string().unwrap();
+            let key = b.s(&s);
+
+            let mut params = vec![];
+            for arg in rest {
+                let Argument::Positional(node) = arg;
+                let name = node.try_string().unwrap();
+                let key = b.s(&name);
+                params.push(ParameterNode {
+                    name: key,
+                    ty: AstType::Unit,
+                    node: Parameter::Normal,
+                    extra: node.extra,
+                });
+            }
+            Some(Self::Label(key, params))
+        } else {
+            None
         }
     }
 }
