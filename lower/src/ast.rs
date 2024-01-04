@@ -53,14 +53,7 @@ pub enum Literal {
 
 impl From<Literal> for AstType {
     fn from(item: Literal) -> Self {
-        match item {
-            Literal::Int(_) => AstType::Int,
-            Literal::Float(_) => AstType::Float,
-            Literal::Bool(_) => AstType::Bool,
-            Literal::Index(_) => AstType::Index,
-            Literal::String(_) => AstType::String,
-            Literal::Type(_) => AstType::Type,
-        }
+        From::from(&item)
     }
 }
 
@@ -220,9 +213,9 @@ pub enum Ast<E> {
     Block(AstNodeBlock<E>),
     Module(AstNodeBlock<E>),
     Loop(StringKey, Box<AstNode<E>>),
-    Break(StringKey),
-    Continue(StringKey),
-    Goto(StringKey, Vec<Argument<E>>),
+    Break(Option<StringKey>, Vec<AstNode<E>>),
+    Continue(Option<StringKey>, Vec<AstNode<E>>),
+    Goto(StringKey, Vec<AstNode<E>>),
     Label(StringKey, Vec<ParameterNode<E>>),
     Noop,
     Error,
@@ -249,6 +242,34 @@ impl<E: Extra> Ast<E> {
         }
     }
 
+    pub fn is_expr(&self) -> bool {
+        match self {
+            Self::BinaryOp(_, _, _) => true,
+            Self::UnaryOp(_, _) => true,
+            Self::Call(_, _, _) => true,
+            Self::Identifier(_) => true,
+            Self::Literal(_) => true,
+            Self::Conditional(_, _, _) => true,
+            Self::While(_, _) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_terminator(&self) -> bool {
+        match self {
+            Self::Sequence(exprs) => exprs.last().unwrap().node.is_terminator(),
+            Self::Block(_) => true,
+            Self::Goto(_, _) => true,
+            Self::Return(_) => true,
+            Self::Conditional(_, _, _) => true,
+            Self::Break(_, _) => true,
+            Self::Continue(_, _) => true,
+            Self::While(_, _) => true,
+            Self::Test(_, _) => true,
+            _ => false,
+        }
+    }
+
     pub fn terminator(&self) -> Option<Terminator> {
         match self {
             Self::Sequence(exprs) => exprs.last().unwrap().node.terminator(),
@@ -265,7 +286,14 @@ impl<E: Extra> Ast<E> {
         b: &mut NodeBuilder<E>,
     ) -> Option<Self> {
         if name == "goto" {
-            let rest = args.split_off(1);
+            let rest = args
+                .split_off(1)
+                .into_iter()
+                .map(|a| {
+                    let Argument::Positional(expr) = a;
+                    *expr
+                })
+                .collect::<Vec<_>>();
             let s = args.pop().unwrap().try_string().unwrap();
             let key = b.s(&s);
             Some(Self::Goto(key, rest))
@@ -531,6 +559,187 @@ impl<E: Extra> AstNode<E> {
             _ => (),
         }
         AstNodeIterator { values }
+    }
+
+    pub fn dump(&self, b: &NodeBuilder<E>, mut depth: usize) {
+        match &self.node {
+            Ast::Module(block) => {
+                println!(
+                    "{:width$}module({}):",
+                    "",
+                    b.r(block.name),
+                    width = depth * 2
+                );
+                depth += 1;
+                for c in &block.children {
+                    c.dump(b, depth);
+                }
+            }
+            Ast::Sequence(exprs) => {
+                for expr in exprs {
+                    expr.dump(b, depth);
+                }
+            }
+            Ast::Return(maybe_result) => {
+                println!("{:width$}ret:", "", width = depth * 2);
+                if let Some(result) = maybe_result {
+                    result.dump(b, depth + 1);
+                }
+            }
+            Ast::Builtin(bi, args) => {
+                println!("{:width$}builtin({:?})", "", bi, width = depth * 2);
+                for a in args {
+                    let Argument::Positional(expr) = a;
+                    expr.dump(b, depth + 1);
+                }
+            }
+            Ast::Literal(lit) => {
+                println!("{:width$}{:?}", "", lit, width = depth * 2);
+            }
+
+            Ast::Label(name, args) => {
+                println!(
+                    "{:width$}label: {}",
+                    "",
+                    //name.0,
+                    b.strings.resolve(name),
+                    width = depth * 2
+                );
+                for e in args {
+                    println!(
+                        "{:width$}arg: {}, {:?}",
+                        "",
+                        b.strings.resolve(&e.name),
+                        e.ty,
+                        width = (depth + 1) * 2
+                    );
+                }
+            }
+
+            Ast::Goto(key, args) => {
+                println!(
+                    "{:width$}goto: {}",
+                    "",
+                    //key.0,
+                    b.strings.resolve(key),
+                    width = depth * 2
+                );
+                for a in args {
+                    //let Argument::Positional(expr) = a;
+                    a.dump(b, depth + 1);
+                }
+            }
+            Ast::Definition(def) => {
+                println!("{:width$}func({}):", "", b.r(def.name), width = depth * 2);
+                depth += 1;
+
+                for a in &def.params {
+                    println!(
+                        "{:width$}arg: {}: {:?}",
+                        "",
+                        b.strings.resolve(&a.name),
+                        a.ty,
+                        width = depth * 2
+                    );
+                }
+                if let Some(ref body) = def.body {
+                    body.dump(b, depth);
+                }
+            }
+
+            Ast::Block(block) => {
+                println!(
+                    "{:width$}block({})",
+                    "",
+                    //block.label.0,
+                    b.r(block.name),
+                    width = depth * 2
+                );
+                for a in &block.params {
+                    println!(
+                        "{:width$}arg: {}: {:?}",
+                        "",
+                        b.strings.resolve(&a.name),
+                        a.ty,
+                        width = (depth + 1) * 2
+                    );
+                }
+                for a in &block.children {
+                    a.dump(b, depth + 1);
+                }
+            }
+
+            Ast::Global(key, value) => {
+                println!("{:width$}global: {}", "", b.r(*key), width = depth * 2);
+                value.dump(b, depth + 1);
+            }
+
+            Ast::Assign(target, value) => {
+                println!("{:width$}assign: {:?}", "", target, width = depth * 2);
+                depth += 1;
+                match target {
+                    AssignTarget::Identifier(key) => {
+                        println!(
+                            "{:width$}target identifier: {}",
+                            "",
+                            b.strings.resolve(key),
+                            width = depth * 2
+                        );
+                    }
+                    AssignTarget::Alloca(key) => {
+                        println!(
+                            "{:width$}target alloca: {}",
+                            "",
+                            b.strings.resolve(key),
+                            width = depth * 2
+                        );
+                    }
+                }
+                value.dump(b, depth);
+            }
+
+            Ast::BinaryOp(op, x, y) => {
+                println!("{:width$}binop: {:?}", "", op, width = depth * 2);
+                x.dump(b, depth + 1);
+                y.dump(b, depth + 1);
+            }
+
+            Ast::UnaryOp(op, expr) => {
+                println!("{:width$}unary: {:?}", "", op, width = depth * 2);
+                expr.dump(b, depth + 1);
+            }
+
+            Ast::Identifier(key) => {
+                println!(
+                    "{:width$}ident: {}",
+                    "",
+                    b.strings.resolve(&key),
+                    width = depth * 2
+                );
+            }
+
+            Ast::Conditional(c, a, mb) => {
+                println!("{:width$}cond:", "", width = depth * 2);
+                c.dump(b, depth + 1);
+                a.dump(b, depth + 1);
+                if let Some(else_expr) = mb {
+                    else_expr.dump(b, depth + 1);
+                }
+            }
+
+            Ast::Call(f, args, ret_ty) => {
+                println!("{:width$}call: {:?}", "", ret_ty, width = depth * 2);
+                f.dump(b, depth + 1);
+                if args.len() > 0 {
+                    for a in args {
+                        let Argument::Positional(expr) = a;
+                        expr.dump(b, depth + 1);
+                    }
+                }
+            }
+
+            _ => unimplemented!("{:?}", self),
+        }
     }
 }
 

@@ -3,6 +3,7 @@ pub mod builder;
 pub mod cfg;
 pub mod compile;
 pub mod diagnostics;
+pub mod first_pass;
 pub mod intern;
 pub mod ir;
 pub mod link;
@@ -12,7 +13,10 @@ pub mod place;
 pub mod sort;
 pub mod types;
 
-pub use ast::{Ast, AstNode, Extra, Literal, SimpleExtra, VarDefinitionSpace};
+pub use ast::{
+    Argument, Ast, AstNode, AstNodeBlock, BinaryOperation, Extra, Literal, ParameterNode,
+    SimpleExtra, UnaryOperation, VarDefinitionSpace,
+};
 pub use builder::{NodeBuilder, NodeID};
 pub use cfg::{CFGBlocks, CFGGraph, SymIndex};
 pub use compile::{default_context, default_pass_manager};

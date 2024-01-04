@@ -40,6 +40,10 @@ impl<E: Extra> NodeBuilder<E> {
         }
     }
 
+    pub fn r(&self, key: StringKey) -> &str {
+        self.strings.resolve(&key)
+    }
+
     pub fn s(&mut self, s: &str) -> StringKey {
         self.strings.intern(s.into())
     }
@@ -345,7 +349,7 @@ impl<E: Extra> NodeBuilder<E> {
     pub fn label(&self, name: StringKey, args: Vec<ParameterNode<E>>) -> AstNode<E> {
         self.build(Ast::Label(name, args), self.extra_unknown())
     }
-    pub fn goto(&self, name: StringKey, args: Vec<Argument<E>>) -> AstNode<E> {
+    pub fn goto(&self, name: StringKey, args: Vec<AstNode<E>>) -> AstNode<E> {
         self.build(Ast::Goto(name, args), self.extra_unknown())
     }
 
