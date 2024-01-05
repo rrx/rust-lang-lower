@@ -1,10 +1,21 @@
 use crate::{
-    Argument, Ast, AstNode, AstNodeBlock, AstType, BinaryOperation, Diagnostics, Extra,
-    NodeBuilder, ParameterNode, StringKey, UnaryOperation,
+    //Argument,
+    Ast,
+    AstNode,
+    AstNodeBlock,
+    AstType,
+    BinaryOperation,
+    Diagnostics,
+    Extra,
+    NodeBuilder,
+    Span,
+    //ParameterNode,
+    StringKey,
+    TypeUnify,
+    UnaryOperation,
 };
-use anyhow::Error;
 use anyhow::Result;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub enum DataType {
@@ -141,20 +152,43 @@ impl<E: Extra> Ast<E> {
                     AstType::Tuple(types)
                 }
             }
+
+            // return has the never type, because it never returns an expression, it returns before
+            Ast::Return(_) => AstType::Never,
+
             _ => AstType::Unit,
         }
     }
 }
 
+pub fn unify(x: &AstType, y: &AstType, spans: &[Span], types: &mut TypeUnify, d: &mut Diagnostics) {
+    use codespan_reporting::diagnostic::{Diagnostic, Label};
+    if types.unify(x, y).is_err() {
+        let labels = spans
+            .iter()
+            .map(|span| {
+                let r = span.begin.pos as usize..span.end.pos as usize;
+                Label::primary(span.file_id, r).with_message("Type mismatch")
+            })
+            .collect();
+        let diagnostic = Diagnostic::error()
+            .with_labels(labels)
+            .with_message("error");
+        d.push_diagnostic(diagnostic);
+    }
+}
+
 impl<E: Extra> AstNode<E> {
-    pub fn first_pass(mut self, b: &mut NodeBuilder<E>, d: &mut Diagnostics) -> Result<Self> {
+    pub fn first_pass(self, b: &mut NodeBuilder<E>, d: &mut Diagnostics) -> Result<Self> {
         let mut env = Environment::new();
-        self.run_first_pass(&mut env, b, d)
+        let mut types = TypeUnify::new();
+        self.run_first_pass(&mut env, &mut types, b, d)
     }
 
     fn run_first_pass(
         mut self,
         env: &mut Environment,
+        types: &mut TypeUnify,
         b: &mut NodeBuilder<E>,
         d: &mut Diagnostics,
     ) -> Result<Self> {
@@ -162,7 +196,7 @@ impl<E: Extra> AstNode<E> {
             Ast::Module(mut block) => {
                 let mut children = vec![];
                 for c in block.children {
-                    children.push(c.run_first_pass(env, b, d)?);
+                    children.push(c.run_first_pass(env, types, b, d)?);
                 }
                 block.children = children;
                 self.node = Ast::Module(block);
@@ -171,6 +205,8 @@ impl<E: Extra> AstNode<E> {
 
             Ast::Definition(mut def) => {
                 if let Some(body) = def.body.take() {
+                    let body = body.run_first_pass(env, types, b, d)?;
+
                     let block = AstNodeBlock {
                         name: def.name,
                         params: def.params.clone(),
@@ -191,9 +227,28 @@ impl<E: Extra> AstNode<E> {
             Ast::Sequence(exprs) => {
                 let mut out = vec![];
                 for expr in exprs {
-                    out.extend(expr.run_first_pass(env, b, d)?.to_vec());
+                    out.extend(expr.run_first_pass(env, types, b, d)?.to_vec());
                 }
                 self.node = Ast::Sequence(out);
+                Ok(self)
+            }
+
+            Ast::Conditional(ref condition, ref then_expr, ref maybe_else_expr) => {
+                let ty = condition.node.get_type(env);
+
+                unify(&ty, &AstType::Bool, &[condition.extra.get_span()], types, d);
+
+                if let Some(else_expr) = maybe_else_expr {
+                    let then_ty = then_expr.node.get_type(env);
+                    let else_ty = else_expr.node.get_type(env);
+                    unify(
+                        &then_ty,
+                        &else_ty,
+                        &[then_expr.extra.get_span(), else_expr.extra.get_span()],
+                        types,
+                        d,
+                    );
+                }
                 Ok(self)
             }
             _ => Ok(self),
@@ -226,6 +281,65 @@ fn terminate_seq<E: Extra>(
     Ok((exprs, vec![]))
 }
 
+pub fn ensure_terminate<E: Extra>(
+    mut exprs: Vec<AstNode<E>>,
+    next_key: StringKey,
+    b: &mut NodeBuilder<E>,
+) -> Vec<AstNode<E>> {
+    // if the last node is not a terminator, then we add one
+    let last = exprs.last().unwrap();
+    if !last.node.is_terminator() {
+        let last = exprs.pop().unwrap();
+        let extra = last.extra.clone();
+        exprs.push(b.node(Ast::Goto(next_key, vec![])).set_extra(extra));
+    }
+    exprs
+}
+
+pub fn blockify_cond<E: Extra>(
+    condition: AstNode<E>,
+    then_expr: AstNode<E>,
+    maybe_else_expr: Option<AstNode<E>>,
+    env: &mut Environment,
+    next_key: StringKey,
+    b: &mut NodeBuilder<E>,
+    d: &mut Diagnostics,
+) -> Result<(Vec<AstNode<E>>, Vec<AstNodeBlock<E>>)> {
+    let mut seq = vec![];
+    let mut blocks = vec![];
+
+    let then_name = format!("then_block{}", env.gen_unique());
+    let key = b.s(&then_name);
+    let then_block_name = key;
+    let then_block = AstNodeBlock {
+        name: then_block_name,
+        params: vec![],
+        children: ensure_terminate(then_expr.to_vec(), next_key, b),
+    };
+    blocks.push(then_block);
+
+    let else_block_name = if let Some(else_expr) = maybe_else_expr {
+        let else_name = format!("else_block{}", env.gen_unique());
+        let key = b.s(&else_name);
+        let else_block = AstNodeBlock {
+            name: key,
+            params: vec![],
+            children: ensure_terminate(else_expr.to_vec(), next_key, b),
+        };
+        blocks.push(else_block);
+        key
+    } else {
+        next_key
+    };
+
+    seq.push(b.node(Ast::Branch(
+        condition.into(),
+        then_block_name,
+        else_block_name,
+    )));
+    Ok((seq, blocks))
+}
+
 pub fn blockify<E: Extra>(
     mut block: AstNodeBlock<E>,
     env: &mut Environment,
@@ -235,22 +349,20 @@ pub fn blockify<E: Extra>(
     let children = block.children;
     let mut out = vec![];
     let (seq, rest) = terminate_seq(children, env, b, d)?;
-    println!("seq {:?}", seq);
-    println!("rest {:?}", rest);
+    //println!("seq {:?}", seq);
+    //println!("rest {:?}", rest);
 
     let ty = seq.last().unwrap().node.get_type(env);
-    block.children = vec![];
+    let mut block_children = vec![];
 
     // if label is missing, add it
     if !seq.first().unwrap().node.is_label() {
-        block
-            .children
-            .push(b.label(block.name, block.params.clone()));
+        block_children.push(b.label(block.name, block.params.clone()));
     }
-    block.children.extend(seq);
-    out.push(block);
 
-    if rest.len() > 0 {
+    block_children.extend(seq);
+
+    let (next_key, next_blocks) = if rest.len() > 0 {
         let block_params = match ty {
             AstType::Unit => vec![],
             AstType::Tuple(types) => vec![],
@@ -273,63 +385,35 @@ pub fn blockify<E: Extra>(
             }
         };
 
-        out.extend(blockify(block, env, b, d)?);
+        let key = block.name;
+        let next_blocks = blockify(block, env, b, d)?;
+        (Some(key), next_blocks)
+    } else {
+        (None, vec![])
+    };
+
+    let last = block_children.pop().unwrap();
+    match last.node {
+        Ast::Conditional(condition, then_expr, maybe_else_expr) => {
+            let (seq, seq_blocks) = blockify_cond(
+                *condition,
+                *then_expr,
+                maybe_else_expr.map(|e| *e),
+                env,
+                next_key.unwrap(),
+                b,
+                d,
+            )?;
+            block_children.extend(seq);
+            out.extend(seq_blocks);
+        }
+        _ => block_children.push(last),
     }
+    block.children = block_children;
+    out.push(block);
+    out.extend(next_blocks);
     Ok(out)
 }
-
-/*
-pub fn blockify2<E: Extra>(exprs: Vec<AstNode<E>>, entry_name: StringKey, entry_params: Vec<ParameterNode<E>>, b: &mut NodeBuilder<E>, d: &mut Diagnostics) -> Result<Vec<AstNode<E>>> {
-    let mut blocks = vec![];
-    let mut current = exprs;
-    let mut names = vec![];
-    loop {
-        if current.len() == 0 {
-            break;
-        }
-        let index = current.iter().position(|expr| expr.node.is_terminator());
-        let rest = if let Some(index) = index {
-            let rest = current.split_off(index);
-            rest
-        } else {
-            vec![]
-        };
-
-        let first = current.first().unwrap();
-
-        let mut current_names = HashSet::new();
-        let (block_name, block_params) = if let Ast::Label(key, first_params) = &first.node {
-            current_names.insert(key);
-            if blocks.len() == 0 {
-                // on the first blocks
-                //assert_eq!(first_params.len(), entry_params.len());
-                current_names.insert(&entry_name);
-            }
-            (*key, first_params.clone())
-        } else {
-            if blocks.len() == 0 {
-                (entry_name, entry_params.clone())
-            } else {
-                let name = format!("_block{}", blocks.len());
-                let key = b.s(&name);
-                (key, vec![])
-            }
-        };
-
-
-        let block = AstNodeBlock {
-            name: block_name,
-            params: block_params,
-            children: current,
-        };
-        blocks.push(b.node(Ast::Block(block)));
-        names.push(current_names);
-
-        current = rest;
-    }
-    Ok(blocks)
-}
-*/
 
 #[cfg(test)]
 pub(crate) mod tests {

@@ -204,6 +204,7 @@ pub enum Ast<E> {
     Assign(AssignTarget, Box<AstNode<E>>),
     Replace(AssignTarget, Box<AstNode<E>>),
     Mutate(Box<AstNode<E>>, Box<AstNode<E>>),
+    Branch(Box<AstNode<E>>, StringKey, StringKey),
     Conditional(Box<AstNode<E>>, Box<AstNode<E>>, Option<Box<AstNode<E>>>),
     Return(Option<Box<AstNode<E>>>),
     Test(Box<AstNode<E>>, Box<AstNode<E>>),
@@ -720,11 +721,25 @@ impl<E: Extra> AstNode<E> {
 
             Ast::Conditional(c, a, mb) => {
                 println!("{:width$}cond:", "", width = depth * 2);
-                c.dump(b, depth + 1);
+                depth += 1;
+                c.dump(b, depth);
+                println!("{:width$}then:", "", width = depth * 2);
                 a.dump(b, depth + 1);
                 if let Some(else_expr) = mb {
+                    println!("{:width$}else:", "", width = depth * 2);
                     else_expr.dump(b, depth + 1);
                 }
+            }
+
+            Ast::Branch(c, then_key, else_key) => {
+                println!(
+                    "{:width$}branch: {}, {}",
+                    "",
+                    b.r(*then_key),
+                    b.r(*else_key),
+                    width = depth * 2
+                );
+                c.dump(b, depth + 1);
             }
 
             Ast::Call(f, args, ret_ty) => {

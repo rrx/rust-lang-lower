@@ -23,6 +23,7 @@ pub enum AstType {
     Float,
     Bool,
     Unit,
+    Never,
     Type,
     Ptr(Box<AstType>),
     Tuple(Vec<AstType>),

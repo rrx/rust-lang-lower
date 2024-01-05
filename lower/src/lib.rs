@@ -15,7 +15,7 @@ pub mod types;
 
 pub use ast::{
     Argument, Ast, AstNode, AstNodeBlock, BinaryOperation, Extra, Literal, ParameterNode,
-    SimpleExtra, UnaryOperation, VarDefinitionSpace,
+    SimpleExtra, Span, UnaryOperation, VarDefinitionSpace,
 };
 pub use builder::{NodeBuilder, NodeID};
 pub use cfg::{CFGBlocks, CFGGraph, SymIndex};

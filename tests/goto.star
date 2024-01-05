@@ -1,7 +1,7 @@
 b.use("prelude")
 
 def main() -> int:
-  b.goto("ret")
+  b.goto("a")
   b.label("a")
   b.goto("ret")
   b.label("ret")

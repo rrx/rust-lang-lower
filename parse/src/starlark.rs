@@ -169,7 +169,7 @@ fn from_binop(item: syntax::ast::BinOp) -> ast::BinaryOperation {
 }
 
 fn from_type<P: syntax::ast::AstPayload>(item: &syntax::ast::TypeExprP<P>) -> Option<AstType> {
-    log::debug!("type: {:?}", item);
+    //log::debug!("type: {:?}", item);
     match &item.expr.node {
         syntax::ast::ExprP::Identifier(name) => match name.ident.as_str() {
             "float" => Some(AstType::Float),
@@ -239,7 +239,7 @@ impl<E: Extra> Parser<E> {
     ) -> ast::ParameterNode<E> {
         use syntax::ast::ParameterP;
 
-        log::debug!("p: {:?}", item);
+        //log::debug!("p: {:?}", item);
         match item.node {
             ParameterP::Normal(ident, maybe_type) => {
                 let extra = env.extra(item.span);
@@ -379,7 +379,7 @@ impl<E: Extra> Parser<E> {
                 let rhs = self.from_expr(assign.rhs, env, d, b)?;
                 match assign.lhs.node {
                     AssignTargetP::Identifier(ident) => {
-                        log::debug!("parse ident: {}", ident.node.ident);
+                        //log::debug!("parse ident: {}", ident.node.ident);
                         let name = &ident.node.ident;
                         if let Some(node) = b.build_literal_from_identifier(name) {
                             return Ok(node);
@@ -481,8 +481,6 @@ impl<E: Extra> Parser<E> {
             }
 
             ExprP::Identifier(ident) => {
-                env.dump();
-
                 if let Some(node) = b.build_literal_from_identifier(&ident.node.ident) {
                     return Ok(node);
                 }
