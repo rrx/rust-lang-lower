@@ -1,4 +1,4 @@
-use crate::{SymIndex, VarDefinitionSpace};
+use crate::{StringKey, SymIndex, VarDefinitionSpace};
 use anyhow::Result;
 use ena::unify::*;
 use std::collections::HashMap;
@@ -27,6 +27,7 @@ pub enum AstType {
     Type,
     Ptr(Box<AstType>),
     Tuple(Vec<AstType>),
+    NamedTuple(Vec<(StringKey, AstType)>),
     // Func(parameters, return type)
     Func(Vec<AstType>, Box<AstType>),
     Variable(u32),

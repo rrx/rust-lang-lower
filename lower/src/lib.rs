@@ -1,4 +1,5 @@
 pub mod ast;
+pub mod blockify;
 pub mod builder;
 pub mod cfg;
 pub mod compile;
@@ -14,8 +15,8 @@ pub mod sort;
 pub mod types;
 
 pub use ast::{
-    Argument, Ast, AstNode, AstNodeBlock, BinaryOperation, Extra, Literal, ParameterNode,
-    SimpleExtra, Span, UnaryOperation, VarDefinitionSpace,
+    Argument, Ast, AstNode, AstNodeBlock, BinaryOperation, Definition, Extra, Literal,
+    ParameterNode, SimpleExtra, Span, UnaryOperation, VarDefinitionSpace,
 };
 pub use builder::{NodeBuilder, NodeID};
 pub use cfg::{CFGBlocks, CFGGraph, SymIndex};

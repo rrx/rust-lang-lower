@@ -323,7 +323,7 @@ impl BlockTable {
         );
         //let path = std::fs::canonicalize(filename).unwrap();
         //println!("{}", path.clone().into_os_string().into_string().unwrap());
-        //println!("{}", s);
+        println!("saved graph {}", filename);
         std::fs::write(filename, s).unwrap();
     }
 }

@@ -676,7 +676,7 @@ impl<E: Extra> AstNode<E> {
             }
 
             Ast::Assign(target, value) => {
-                println!("{:width$}assign: {:?}", "", target, width = depth * 2);
+                println!("{:width$}assign", "", width = depth * 2);
                 depth += 1;
                 match target {
                     AssignTarget::Identifier(key) => {

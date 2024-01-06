@@ -37,7 +37,7 @@ impl<K: InternKey, V: InternValue> InternPool<K, V> {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Hash, PartialOrd, Ord)]
 pub struct StringKey(usize);
 impl InternValue for String {}
 impl InternKey for StringKey {

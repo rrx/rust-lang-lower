@@ -427,6 +427,18 @@ impl<E: Extra> Parser<E> {
                 Ok(b.binop(from_binop(op), node_a, node_b))
             }
 
+            ExprP::If(args) => {
+                let (condition, then_expr, else_expr) = *args;
+                let condition = self.from_expr(condition, env, d, b)?;
+                let then_expr = self.from_expr(then_expr, env, d, b)?;
+                let else_expr = self.from_expr(else_expr, env, d, b)?;
+                let extra = env.extra(item.span);
+                Ok(b.build(
+                    Ast::Conditional(condition.into(), then_expr.into(), Some(else_expr.into())),
+                    extra,
+                ))
+            }
+
             ExprP::Call(expr, expr_args) => {
                 let mut args = vec![];
                 for arg in expr_args {
@@ -582,16 +594,14 @@ impl<E: Extra> StarlarkParser<E> {
         }
 
         let (ir, _ty, root) = r?;
-        if verbose {
-            ir.dump(&self.place, &b, 0);
-        }
-        assert_eq!(0, env.stack_size());
 
         // Analyze
         if verbose {
             ir.dump(&self.place, &b, 0);
             env.blocks.save_graph("lower.dot", b);
         }
+
+        assert_eq!(0, env.stack_size());
 
         let r = ir.build_graph(&mut self.place, &mut env, d, b);
         d.dump();
@@ -677,8 +687,8 @@ pub(crate) mod tests {
         let context = lower::default_context();
         let mut d = Diagnostics::new();
         let mut module = Module::new(Location::unknown(&context));
-        p.parse_module(filename, &context, &mut module, &mut b, &mut d, true)
-            .unwrap();
+        let r = p.parse_module(filename, &context, &mut module, &mut b, &mut d, true);
+        r.unwrap();
         module.as_operation().dump();
         assert!(module.as_operation().verify());
         let r = p.exec_main(&context, &mut module, "../target/debug/", true);
