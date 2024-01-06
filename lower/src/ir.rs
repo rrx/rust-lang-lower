@@ -1,8 +1,7 @@
-use crate::intern::InternKey;
 use crate::sort::IRBlockSorter;
 use crate::{
-    AstNode, AstType, Diagnostics, Extra, IRPlaceTable, NodeBuilder, ParseError, PlaceId,
-    PlaceNode, StringKey, SymIndex,
+    AstNode, AstType, Diagnostics, Extra, IRPlaceTable, InternKey, NodeBuilder, ParseError,
+    PlaceId, PlaceNode, StringKey, StringLabel, SymIndex,
 };
 
 use anyhow::Error;
@@ -53,14 +52,14 @@ impl Default for IRTypeSelect {
 
 #[derive(Debug, Clone)]
 pub struct IRArg {
-    pub(crate) name: StringKey,
+    pub(crate) name: StringLabel,
     pub(crate) ty: AstType,
 }
 
 #[derive(Debug)]
 pub struct IRBlock {
     pub(crate) index: NodeIndex,
-    pub(crate) label: BlockLabel,
+    pub(crate) label: StringLabel,
     pub(crate) params: Vec<IRArg>,
     pub(crate) children: Vec<IRNode>,
 }
@@ -68,7 +67,7 @@ pub struct IRBlock {
 impl IRBlock {
     pub fn new(
         index: NodeIndex,
-        label: BlockLabel,
+        label: StringLabel,
         params: Vec<IRArg>,
         children: Vec<IRNode>,
     ) -> Self {
@@ -90,7 +89,7 @@ pub struct IRControlBlock {
     arg_count: usize,
     block_index: NodeIndex,
     pub(crate) params: Vec<IRArg>,
-    symbols: HashMap<StringKey, PlaceId>,
+    symbols: HashMap<StringLabel, PlaceId>,
     places: HashMap<PlaceId, SymIndex>,
     def_count: usize,
 }
@@ -106,11 +105,11 @@ impl IRControlBlock {
             places: HashMap::new(),
         }
     }
-    pub fn lookup(&self, name: StringKey) -> Option<PlaceId> {
+    pub fn lookup(&self, name: StringLabel) -> Option<PlaceId> {
         self.symbols.get(&name).cloned()
     }
 
-    pub fn alloca_add(&mut self, place_id: PlaceId, name: StringKey, index: SymIndex) {
+    pub fn alloca_add(&mut self, place_id: PlaceId, name: StringLabel, index: SymIndex) {
         //self.add_symbol(name, index);
         self.symbols.insert(name, place_id);
         assert_eq!(index.block(), self.block_index);
@@ -121,7 +120,7 @@ impl IRControlBlock {
         self.places.get(&place_id).cloned()
     }
 
-    pub fn push_arg(&mut self, place_id: PlaceId, name: StringKey) -> SymIndex {
+    pub fn push_arg(&mut self, place_id: PlaceId, name: StringLabel) -> SymIndex {
         assert!(self.arg_count < self.params.len());
         let index = SymIndex::Arg(self.block_index, self.arg_count);
         self.symbols.insert(name, place_id);
@@ -187,16 +186,12 @@ impl BlockLabel {
 }
 */
 
-//#[derive(Debug)]
-pub type BlockLabel = StringKey;
-
 #[derive(Default, Debug)]
 pub struct BlockTable {
     pub g: IRBlockGraph,
     names: Vec<StringKey>,
-    block_names: HashMap<BlockLabel, NodeIndex>,
-    block_names_index: HashMap<NodeIndex, BlockLabel>,
-    //label_count: usize,
+    block_names: HashMap<StringLabel, NodeIndex>,
+    block_names_index: HashMap<NodeIndex, StringLabel>,
 }
 
 impl BlockTable {
@@ -208,21 +203,21 @@ impl BlockTable {
         &mut self,
         name: &str,
         b: &mut NodeBuilder<E>,
-    ) -> BlockLabel {
+    ) -> StringLabel {
         let offset = self.names.len();
         let s = b.s(&format!("b_{}_{}", name, offset));
         self.names.push(s);
         //BlockLabel(offset as u32)
-        s
+        StringLabel::Block(offset)
     }
 
-    pub fn fresh_label<E: Extra>(&mut self, name: &str, b: &mut NodeBuilder<E>) -> StringKey {
+    pub fn fresh_label<E: Extra>(&mut self, name: &str, b: &mut NodeBuilder<E>) -> StringLabel {
         let block_label = self.fresh_block_label(name, b);
         //self.names.get(block_label.0 as usize).unwrap().clone()
         block_label
     }
 
-    pub fn lookup_block_label(&self, label: BlockLabel) -> Option<NodeIndex> {
+    pub fn lookup_block_label(&self, label: StringLabel) -> Option<NodeIndex> {
         self.block_names.get(&label).cloned()
     }
 
@@ -237,16 +232,12 @@ impl BlockTable {
     pub fn add_block(
         &mut self,
         places: &mut IRPlaceTable,
-        label: BlockLabel,
+        label: StringLabel,
         params: Vec<IRArg>,
         _d: &Diagnostics,
     ) -> NodeIndex {
         let index = self.g.add_node(IRControlBlock::new(params.clone()));
-        println!(
-            "add_block: index: {}, label: {}",
-            index.index(),
-            label.index()
-        );
+        println!("add_block: index: {}, label: {:?}", index.index(), label);
         //let block_label = self.fresh_block_label(name, b);
         self.g.node_weight_mut(index).unwrap().block_index = index;
         //assert!(!self.block_names.contains_key(&label));
@@ -263,7 +254,7 @@ impl BlockTable {
         index
     }
 
-    pub fn dump_node<E>(
+    pub fn dump_node<E: Extra>(
         &self,
         b: &NodeBuilder<E>,
         index: NodeIndex,
@@ -273,7 +264,7 @@ impl BlockTable {
         let data = &self.g[index];
         let key = self.block_names_index.get(&index).unwrap();
         //let key = self.names.get(label.0 as usize).unwrap();
-        let name = b.strings.resolve(key);
+        let name = b.resolve_label(*key);
         if index == current_block {
             println!("{:width$}Current: {}", "", name, width = depth * 2);
         } else {
@@ -283,7 +274,7 @@ impl BlockTable {
             println!(
                 "{:width$}  Symbol: {}, {:?}, {:?}",
                 "",
-                b.strings.resolve(k),
+                b.resolve_label(*k),
                 k,
                 v,
                 width = depth * 2
@@ -294,7 +285,7 @@ impl BlockTable {
         }
     }
 
-    pub fn save_graph<E>(&self, filename: &str, b: &NodeBuilder<E>) {
+    pub fn save_graph<E: Extra>(&self, filename: &str, b: &NodeBuilder<E>) {
         use petgraph::dot::{Config, Dot};
 
         let s = format!(
@@ -307,12 +298,12 @@ impl BlockTable {
                     let label = self.block_names_index.get(&data.block_index).unwrap();
                     //let key = self.names.get(label.0 as usize).unwrap();
                     //let key = self.block_names_index.get(&data.block_index).unwrap();
-                    let name = b.strings.resolve(label);
+                    let name = b.resolve_label(*label);
                     format!(
                         //"label = \"[{}]{}\" shape={:?}",
                         "label = \"{}:{:?}:{}\"",
                         index.index(),
-                        label.index(),
+                        label,
                         name,
                         //data.block_index.index(),
                         //&data.name,
@@ -331,24 +322,20 @@ impl BlockTable {
 #[derive(Debug)]
 pub struct IREnvironment {
     stack: Vec<(NodeIndex, Span)>,
-    block_names: Vec<HashMap<StringKey, BlockLabel>>,
+    //block_names: Vec<HashMap<StringKey, BlockLabel>>,
     places: IndexMap<PlaceId, SymIndex>,
     label_count: usize,
     pub blocks: BlockTable,
-    //module_key: StringKey,
-    //module_root: Option<NodeIndex>,//HashMap<StringKey, NodeIndex>,
 }
 
 impl IREnvironment {
     pub fn new() -> Self {
         Self {
             stack: vec![],
-            block_names: vec![],
+            //block_names: vec![],
             places: IndexMap::new(),
             label_count: 0,
             blocks: BlockTable::new(),
-            //module_key,
-            //module_root: None
         }
     }
 
@@ -394,7 +381,7 @@ impl IREnvironment {
         &mut self,
         block_index: NodeIndex,
         place_id: PlaceId,
-        name: StringKey,
+        name: StringLabel,
     ) -> SymIndex {
         let data = self.blocks.g.node_weight_mut(block_index).unwrap();
         let index = data.add_definition(place_id);
@@ -404,7 +391,7 @@ impl IREnvironment {
         index
     }
 
-    pub fn name_in_scope(&self, index: NodeIndex, name: StringKey) -> Option<PlaceId> {
+    pub fn name_in_scope(&self, index: NodeIndex, name: StringLabel) -> Option<PlaceId> {
         let maybe_dom = simple_fast(&self.blocks.g, self.root())
             .dominators(index)
             .map(|it| it.collect::<Vec<_>>());
@@ -432,14 +419,14 @@ impl IREnvironment {
         self.root() == block_index
     }
 
-    pub fn dump<E>(&self, b: &NodeBuilder<E>, current_block: NodeIndex) {
+    pub fn dump<E: Extra>(&self, b: &NodeBuilder<E>, current_block: NodeIndex) {
         let root = self.blocks.block_names_index.get(&self.root()).unwrap();
         let current = self.blocks.block_names_index.get(&current_block).unwrap();
         println!("dump: root: {:?} => {:?}", self.root(), current_block);
         println!(
             "dump: root: {:?} => {:?}",
-            b.strings.resolve(root),
-            b.strings.resolve(current)
+            b.resolve_label(*root),
+            b.resolve_label(*current)
         );
 
         self.blocks.dump_node(b, self.root(), current_block, 0);
@@ -449,8 +436,8 @@ impl IREnvironment {
 
 #[derive(Debug)]
 pub enum IRTerminator {
-    Jump(BlockLabel),
-    Branch(BlockLabel, BlockLabel),
+    Jump(StringLabel),
+    Branch(StringLabel, StringLabel),
     Return,
 }
 
@@ -464,14 +451,14 @@ pub enum IRKind {
     // ret(args)
     Ret(Vec<IRNode>),
     Cond(Box<IRNode>, Box<IRNode>, Option<Box<IRNode>>),
-    Branch(Box<IRNode>, BlockLabel, BlockLabel),
+    Branch(Box<IRNode>, StringLabel, StringLabel),
     // start block
-    Label(BlockLabel, NodeIndex, Vec<IRArg>),
-    Jump(BlockLabel, Vec<IRNode>),
+    Label(StringLabel, NodeIndex, Vec<IRArg>),
+    Jump(StringLabel, Vec<IRNode>),
     // function, a collection of blocks, the first of which is the entry, return type
     Func(Vec<IRBlock>, AstType),
     // call(variable, args), return type is inferred from variable
-    Call(StringKey, Vec<IRNode>),
+    Call(StringLabel, Vec<IRNode>),
     // op(operation, args)
     Op1(UnaryOperation, Box<IRNode>),
     Op2(BinaryOperation, Box<IRNode>, Box<IRNode>),
@@ -544,7 +531,7 @@ impl IRNode {
                     println!(
                         "{:width$}block({})",
                         "",
-                        b.strings.resolve(&block.label),
+                        b.resolve_label(block.label),
                         //block.label.0,
                         width = depth * 2
                     );
@@ -552,7 +539,7 @@ impl IRNode {
                         println!(
                             "{:width$}arg: {}: {:?}",
                             "",
-                            b.strings.resolve(&a.name),
+                            b.resolve_label(a.name),
                             a.ty,
                             width = (depth + 1) * 2
                         );
@@ -573,9 +560,9 @@ impl IRNode {
                     "{:width$}branch({}, {})",
                     "",
                     //br_then.0,
-                    b.strings.resolve(br_then),
+                    b.resolve_label(*br_then),
                     //br_else.0,
-                    b.strings.resolve(br_else),
+                    b.resolve_label(*br_else),
                     width = depth * 2
                 );
                 cond.dump(places, b, depth + 1);
@@ -585,7 +572,7 @@ impl IRNode {
                 println!(
                     "{:width$}decl({}, {:?}, {:?})",
                     "",
-                    b.strings.resolve(&p.name),
+                    b.resolve_label(p.name),
                     p.ty,
                     p.mem,
                     width = depth * 2
@@ -596,7 +583,7 @@ impl IRNode {
                 println!(
                     "{:width$}set({}, {:?})",
                     "",
-                    b.strings.resolve(&p.name),
+                    b.resolve_label(p.name),
                     select,
                     width = depth * 2
                 );
@@ -607,7 +594,7 @@ impl IRNode {
                 println!(
                     "{:width$}get({}, {:?})",
                     "",
-                    b.strings.resolve(&p.name),
+                    b.resolve_label(p.name),
                     select,
                     width = depth * 2
                 );
@@ -633,14 +620,14 @@ impl IRNode {
                     "{:width$}label: {}",
                     "",
                     //name.0,
-                    b.strings.resolve(name),
+                    b.resolve_label(*name),
                     width = depth * 2
                 );
                 for e in args {
                     println!(
                         "{:width$}arg: {}, {:?}",
                         "",
-                        b.strings.resolve(&e.name),
+                        b.resolve_label(e.name),
                         e.ty,
                         width = (depth + 1) * 2
                     );
@@ -652,7 +639,7 @@ impl IRNode {
                     "{:width$}jump({})",
                     "",
                     //key.0,
-                    b.strings.resolve(key),
+                    b.resolve_label(*key),
                     width = depth * 2
                 );
                 for a in args {
@@ -664,7 +651,7 @@ impl IRNode {
                 println!(
                     "{:width$}call({})",
                     "",
-                    b.strings.resolve(key),
+                    b.resolve_label(*key),
                     width = depth * 2
                 );
                 if args.len() > 0 {
@@ -705,14 +692,14 @@ impl IRNode {
                     "{:width$}module({})",
                     "",
                     //block.label.0,
-                    b.strings.resolve(&block.label),
+                    b.resolve_label(block.label),
                     width = depth * 2
                 );
                 for a in &block.params {
                     println!(
                         "{:width$}arg: {}: {:?}",
                         "",
-                        b.strings.resolve(&a.name),
+                        b.resolve_label(a.name),
                         a.ty,
                         width = (depth + 1) * 2
                     );
@@ -727,14 +714,14 @@ impl IRNode {
                     "{:width$}block({})",
                     "",
                     //block.label.0,
-                    b.strings.resolve(&block.label),
+                    b.resolve_label(block.label),
                     width = depth * 2
                 );
                 for a in &block.params {
                     println!(
                         "{:width$}arg: {}: {:?}",
                         "",
-                        b.strings.resolve(&a.name),
+                        b.resolve_label(a.name),
                         a.ty,
                         width = (depth + 1) * 2
                     );
@@ -856,7 +843,7 @@ impl IRNode {
                         &format!(
                             "Jump to block, mismatch parameters: to {}",
                             //label.0,
-                            b.strings.resolve(&label),
+                            b.resolve_label(label),
                         ),
                         self.span.clone(),
                     ));
@@ -867,6 +854,7 @@ impl IRNode {
             IRKind::Get(place_id, ref _select) => {
                 return Ok(self);
 
+                /*
                 let current_block = env.current_block();
                 //self.dump(places, b, 0);
                 //env.dump(b, current_block);
@@ -875,11 +863,12 @@ impl IRNode {
                     Ok(self)
                 } else {
                     d.push_diagnostic(error(
-                        &format!("Get undefined variable: {:?}", b.strings.resolve(&p.name)),
+                        &format!("Get undefined variable: {:?}", b.resolve_label(p.name)),
                         self.span.clone(),
                     ));
                     Err(Error::new(ParseError::Invalid))
                 }
+                */
             }
 
             IRKind::Set(place_id, value, select) => {
@@ -1067,7 +1056,7 @@ impl<E: Extra> AstNode<E> {
 
     pub fn lower_ir_function_body(
         self,
-        name: StringKey,
+        name: StringLabel,
         current_block: NodeIndex,
         env: &mut IREnvironment,
         place: &mut IRPlaceTable,
@@ -1088,7 +1077,7 @@ impl<E: Extra> AstNode<E> {
                 let mut args = vec![];
                 for a in &nb.params {
                     args.push(IRArg {
-                        name: a.name,
+                        name: StringLabel::Intern(a.name),
                         ty: a.ty.clone(),
                     });
                 }
@@ -1128,7 +1117,7 @@ impl<E: Extra> AstNode<E> {
             let mut args = vec![];
             for a in nb.params {
                 args.push(IRArg {
-                    name: a.name,
+                    name: StringLabel::Intern(a.name),
                     ty: a.ty,
                 });
             }
@@ -1240,7 +1229,7 @@ impl<E: Extra> AstNode<E> {
                 let mut args = vec![];
                 for a in &ast_args {
                     args.push(IRArg {
-                        name: a.name,
+                        name: a.name.into(),
                         ty: a.ty.clone(),
                     });
                 }
@@ -1278,7 +1267,7 @@ impl<E: Extra> AstNode<E> {
                 } else {
                     d.push_diagnostic(self.extra.error(&format!(
                         "Variable name not found: {}",
-                        b.strings.resolve(&name)
+                        b.resolve_label(name)
                     )));
                     Err(Error::new(ParseError::Invalid))
                 }
@@ -1295,8 +1284,8 @@ impl<E: Extra> AstNode<E> {
                     if !is_static {
                         // create a unique static name
                         let name = b.unique_static_name();
-                        let name = format!("{}{}", b.strings.resolve(&ident), name).clone();
-                        let key = b.strings.intern(name.clone());
+                        let name = format!("{}{}", b.r(ident), name).clone();
+                        let key = b.s(&name);
                         place_data.static_name = Some(key);
                     }
 
@@ -1304,7 +1293,7 @@ impl<E: Extra> AstNode<E> {
 
                     out.push(b.ir_decl(place_id));
                     out.push(b.ir_set(place_id, v, IRTypeSelect::default()));
-                    let index = env.add_definition(current_block, place_id, ident);
+                    let index = env.add_definition(current_block, place_id, ident.into());
                     Ok(ty)
                 } else {
                     unimplemented!()
@@ -1341,7 +1330,7 @@ impl<E: Extra> AstNode<E> {
                     } else {
                         d.push_diagnostic(
                             self.extra
-                                .error(&format!("Name not found: {}", b.strings.resolve(&name))),
+                                .error(&format!("Name not found: {}", b.resolve_label(name))),
                         );
                         return Err(Error::new(ParseError::Invalid));
                     }
@@ -1354,7 +1343,7 @@ impl<E: Extra> AstNode<E> {
                 let current_block = env.current_block();
                 let (f, ty, f_args, name) = match &expr.node {
                     Ast::Identifier(ident) => {
-                        let name = b.strings.resolve(ident);
+                        let name = b.resolve_label(*ident);
                         if let Some(place_id) = env.name_in_scope(current_block, *ident) {
                             let p = place.get_place(place_id);
                             if let AstType::Func(f_args, _) = p.ty.clone() {
@@ -1422,12 +1411,18 @@ impl<E: Extra> AstNode<E> {
                 let place_data = PlaceNode::new_static(def.name, f_type.clone());
                 let place_id = place.add_place(place_data);
 
-                let _sym_index = env.add_definition(current_block, place_id, def.name);
+                let _sym_index = env.add_definition(current_block, place_id, def.name.into());
                 out.push(b.ir_decl(place_id));
 
                 if let Some(body) = def.body {
-                    let blocks =
-                        body.lower_ir_function_body(def.name, current_block, env, place, d, b)?;
+                    let blocks = body.lower_ir_function_body(
+                        def.name.into(),
+                        current_block,
+                        env,
+                        place,
+                        d,
+                        b,
+                    )?;
 
                     let ir = IRNode::new(IRKind::Func(blocks, ast_ret_type), span);
                     out.push(b.ir_set(place_id, ir, IRTypeSelect::default()));

@@ -130,10 +130,10 @@ impl IRNode {
                             // emitting in non-static context (local static var)
                             // we create a unique global name to prevent conflict
                             // and then we add ops to provide a local reference to the global name
-                            let base = b.strings.resolve(&p.name).clone();
+                            let base = b.resolve_label(p.name).clone();
                             let name = b.unique_static_name();
                             let name = format!("{}{}", base, name).clone();
-                            let global_name_key = b.strings.intern(name.clone());
+                            let global_name_key = b.s(&name);
 
                             let ty = op::from_type(context, &p.ty);
                             let memref_ty = MemRefType::new(ty.into(), &[], None, None);
@@ -220,7 +220,7 @@ impl IRNode {
                     }
                 } else {
                     d.push_diagnostic(ir::error(
-                        &format!("Set name not found: {:?}", b.strings.resolve(&p.name)),
+                        &format!("Set name not found: {:?}", b.resolve_label(p.name)),
                         span,
                     ));
                     Err(Error::new(ParseError::Invalid))
@@ -351,7 +351,7 @@ impl IRNode {
                         &format!(
                             "Missing block: {}",
                             //label.offset(),
-                            b.strings.resolve(&label)
+                            b.resolve_label(label)
                         ),
                         span,
                     ));
@@ -371,7 +371,7 @@ impl IRNode {
                             let lower_ty = op::from_type(context, &ast_ty);
                             let memref_ty = MemRefType::new(lower_ty, &[], None, None);
                             // TODO: FIXME
-                            let static_name = b.strings.resolve(&p.name);
+                            let static_name = b.resolve_label(p.name);
                             //let static_name = b.strings.resolve(
                             //&cfg.static_names.get(&sym_index).cloned().unwrap_or(name),
                             //);
@@ -401,7 +401,7 @@ impl IRNode {
                     }
                 }
                 d.push_diagnostic(ir::error(
-                    &format!("Get name not found: {:?}", b.strings.resolve(&p.name)),
+                    &format!("Get name not found: {:?}", b.resolve_label(p.name)),
                     span,
                 ));
                 Err(Error::new(ParseError::Invalid))
@@ -410,12 +410,12 @@ impl IRNode {
             IRKind::Call(key, args) => {
                 // function to call
                 let current_block = stack.last().unwrap().clone();
-                let name = b.strings.resolve(&key);
+                let name = b.resolve_label(key);
                 let span = self.span.clone();
                 let (f, (ty, _mem)) = if let Some(index) = blocks.name_in_scope(current_block, key)
                 {
                     if let Some(ty) = types.lookup_type(index) {
-                        (FlatSymbolRefAttribute::new(context, name), ty)
+                        (FlatSymbolRefAttribute::new(context, &name), ty)
                     } else {
                         d.push_diagnostic(ir::error(
                             &format!("Type not found: {}, {:?}", name, index),

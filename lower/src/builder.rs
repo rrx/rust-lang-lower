@@ -3,7 +3,7 @@ use crate::intern::StringPool;
 use crate::Diagnostics;
 use crate::{
     ir::{IRArg, IRBlock, IRKind, IRNode, IRTypeSelect},
-    AstType, BlockLabel, NodeIndex, PlaceId, StringKey,
+    AstType, NodeIndex, PlaceId, StringKey,
 };
 use melior::{ir::Location, Context};
 //use std::collections::VecDeque;
@@ -16,13 +16,58 @@ impl NodeID {
     }
 }
 
+#[derive(Debug, Eq, PartialEq, Hash, Clone, Copy)]
+pub enum StringLabel {
+    Intern(StringKey),
+    Block(usize),
+    Variable(usize),
+}
+
+impl From<StringKey> for StringLabel {
+    fn from(item: StringKey) -> Self {
+        Self::Intern(item)
+    }
+}
+
+impl From<&StringKey> for StringLabel {
+    fn from(item: &StringKey) -> Self {
+        Self::Intern(*item)
+    }
+}
+
+pub struct LabelBuilder {
+    unique_count: usize,
+    strings: StringPool,
+}
+
+impl LabelBuilder {
+    pub fn new() -> Self {
+        Self {
+            unique_count: 0,
+            strings: StringPool::new(),
+        }
+    }
+
+    pub fn fresh_block_id(&mut self) -> StringLabel {
+        let offset = self.unique_count;
+        self.unique_count += 1;
+        StringLabel::Block(offset)
+    }
+
+    pub fn fresh_var_id(&mut self) -> StringLabel {
+        let offset = self.unique_count;
+        self.unique_count += 1;
+        StringLabel::Block(offset)
+    }
+}
+
 pub struct NodeBuilder<E> {
     span: Option<Span>,
     filename: String,
     current_node_id: u32,
     current_def_id: u32,
     static_count: usize,
-    pub strings: StringPool,
+    pub labels: LabelBuilder,
     _e: std::marker::PhantomData<E>,
 }
 
@@ -35,17 +80,25 @@ impl<E: Extra> NodeBuilder<E> {
             current_node_id: 0,
             current_def_id: 0,
             static_count: 0,
-            strings: StringPool::new(),
+            labels: LabelBuilder::new(),
             _e: std::marker::PhantomData::default(),
         }
     }
 
     pub fn r(&self, key: StringKey) -> &str {
-        self.strings.resolve(&key)
+        self.labels.strings.resolve(&key)
     }
 
     pub fn s(&mut self, s: &str) -> StringKey {
-        self.strings.intern(s.into())
+        self.labels.strings.intern(s.into())
+    }
+
+    pub fn resolve_label(&self, k: StringLabel) -> String {
+        match k {
+            StringLabel::Intern(key) => self.labels.strings.resolve(&key).clone(),
+            StringLabel::Block(offset) => format!("b{}", offset),
+            StringLabel::Variable(offset) => format!("v{}", offset),
+        }
     }
 
     pub fn build_literal_from_identifier(&self, name: &str) -> Option<AstNode<E>> {
@@ -200,9 +253,9 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn prelude(&mut self) -> Vec<AstNode<E>> {
-        let a = self.strings.intern("a".into());
-        let print_index = self.strings.intern("print_index".into());
-        let print_float = self.strings.intern("print_float".into());
+        let a = self.s("a".into());
+        let print_index = self.s("print_index".into());
+        let print_float = self.s("print_float".into());
         vec![
             self.definition(print_index, &[(a, AstType::Int)], AstType::Unit, None),
             self.definition(print_float, &[(a, AstType::Float)], AstType::Unit, None),
@@ -261,11 +314,11 @@ impl<E: Extra> NodeBuilder<E> {
         self.node(Ast::Sequence(nodes))
     }
 
-    pub fn v(&self, name: StringKey) -> AstNode<E> {
+    pub fn v(&self, name: StringLabel) -> AstNode<E> {
         self.ident(name)
     }
 
-    pub fn ident(&self, name: StringKey) -> AstNode<E> {
+    pub fn ident(&self, name: StringLabel) -> AstNode<E> {
         self.build(Ast::Identifier(name), self.extra_unknown())
     }
 
@@ -305,7 +358,7 @@ impl<E: Extra> NodeBuilder<E> {
         node.into()
     }
 
-    pub fn apply(&self, name: StringKey, args: Vec<Argument<E>>, ty: AstType) -> AstNode<E> {
+    pub fn apply(&self, name: StringLabel, args: Vec<Argument<E>>, ty: AstType) -> AstNode<E> {
         let ident = self.ident(name);
         self.build(Ast::Call(ident.into(), args, ty), self.extra_unknown())
     }
@@ -316,7 +369,7 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn main(&mut self, body: AstNode<E>) -> AstNode<E> {
-        let key = self.strings.intern("main".into());
+        let key = self.s("main".into());
         self.func(key, &[], AstType::Int, body)
     }
 
@@ -325,11 +378,11 @@ impl<E: Extra> NodeBuilder<E> {
         self.build(Ast::Mutate(lhs.into(), rhs.into()), extra)
     }
 
-    pub fn assign(&self, name: StringKey, rhs: AstNode<E>) -> AstNode<E> {
+    pub fn assign(&self, name: StringLabel, rhs: AstNode<E>) -> AstNode<E> {
         self.node(Ast::Assign(AssignTarget::Identifier(name), rhs.into()))
     }
 
-    pub fn alloca(&self, name: StringKey, rhs: AstNode<E>) -> AstNode<E> {
+    pub fn alloca(&self, name: StringLabel, rhs: AstNode<E>) -> AstNode<E> {
         self.node(Ast::Assign(AssignTarget::Alloca(name), rhs.into()))
     }
 
@@ -346,10 +399,10 @@ impl<E: Extra> NodeBuilder<E> {
         ))
     }
 
-    pub fn label(&self, name: StringKey, args: Vec<ParameterNode<E>>) -> AstNode<E> {
+    pub fn label(&self, name: StringLabel, args: Vec<ParameterNode<E>>) -> AstNode<E> {
         self.build(Ast::Label(name, args), self.extra_unknown())
     }
-    pub fn goto(&self, name: StringKey, args: Vec<AstNode<E>>) -> AstNode<E> {
+    pub fn goto(&self, name: StringLabel, args: Vec<AstNode<E>>) -> AstNode<E> {
         self.build(Ast::Goto(name, args), self.extra_unknown())
     }
 
@@ -365,7 +418,7 @@ impl<E: Extra> NodeBuilder<E> {
     pub fn module(&self, name: StringKey, body: AstNode<E>) -> AstNode<E> {
         let extra = body.extra.clone();
         let nb = AstNodeBlock {
-            name,
+            name: StringLabel::Intern(name),
             params: vec![],
             children: vec![body.into()],
         };
@@ -374,7 +427,7 @@ impl<E: Extra> NodeBuilder<E> {
 
     pub fn block(
         &self,
-        name: StringKey,
+        name: StringLabel,
         params: &[(StringKey, AstType)],
         body: AstNode<E>,
     ) -> AstNode<E> {
@@ -396,7 +449,7 @@ impl<E: Extra> NodeBuilder<E> {
         self.build(Ast::Block(nb), extra)
     }
 
-    pub fn ir_module(&self, label: BlockLabel, index: NodeIndex, seq: Vec<IRNode>) -> IRNode {
+    pub fn ir_module(&self, label: StringLabel, index: NodeIndex, seq: Vec<IRNode>) -> IRNode {
         IRNode::new(
             IRKind::Module(IRBlock::new(index, label, vec![], seq)),
             self.span.clone().unwrap(),
@@ -417,7 +470,7 @@ impl<E: Extra> NodeBuilder<E> {
 
     pub fn ir_block(
         &self,
-        label: BlockLabel,
+        label: StringLabel,
         block_index: NodeIndex,
         args: Vec<IRArg>,
         seq: Vec<IRNode>,
@@ -428,14 +481,14 @@ impl<E: Extra> NodeBuilder<E> {
         )
     }
 
-    pub fn ir_label(&self, label: BlockLabel, block_index: NodeIndex, args: Vec<IRArg>) -> IRNode {
+    pub fn ir_label(&self, label: StringLabel, block_index: NodeIndex, args: Vec<IRArg>) -> IRNode {
         IRNode::new(
             IRKind::Label(label, block_index, args),
             self.span.clone().unwrap(),
         )
     }
 
-    pub fn ir_jump(&self, label: BlockLabel, args: Vec<IRNode>) -> IRNode {
+    pub fn ir_jump(&self, label: StringLabel, args: Vec<IRNode>) -> IRNode {
         IRNode::new(IRKind::Jump(label, args), self.span.clone().unwrap())
     }
 
@@ -454,7 +507,7 @@ impl<E: Extra> NodeBuilder<E> {
         IRNode::new(IRKind::Decl(place_id), self.span.clone().unwrap())
     }
 
-    pub fn ir_call(&self, key: StringKey, args: Vec<IRNode>) -> IRNode {
+    pub fn ir_call(&self, key: StringLabel, args: Vec<IRNode>) -> IRNode {
         IRNode::new(IRKind::Call(key, args), self.span.clone().unwrap())
     }
 
@@ -501,7 +554,12 @@ impl<E: Extra> NodeBuilder<E> {
         )
     }
 
-    pub fn ir_branch(&self, condition: IRNode, then_br: BlockLabel, else_br: BlockLabel) -> IRNode {
+    pub fn ir_branch(
+        &self,
+        condition: IRNode,
+        then_br: StringLabel,
+        else_br: StringLabel,
+    ) -> IRNode {
         IRNode::new(
             IRKind::Branch(condition.into(), then_br, else_br),
             self.span.clone().unwrap(),
@@ -534,7 +592,8 @@ impl<'c, E: Extra> Definition<E> {
             let mut s = crate::sort::AstBlockSorter::new();
 
             // push label that matches the function signature
-            s.stack.push(b.label(self.name, self.params.clone()));
+            s.stack
+                .push(b.label(StringLabel::Intern(self.name), self.params.clone()));
             s.sort_children(*body, &self.params, b);
 
             let mut blocks = vec![];
@@ -579,7 +638,7 @@ impl<'c, E: Extra> Definition<E> {
                     })
                     .collect::<Vec<_>>();
                 let nb = AstNodeBlock {
-                    name: self.name, //b.strings.intern("entry".to_string()),
+                    name: StringLabel::Intern(self.name), //b.strings.intern("entry".to_string()),
                     params,
                     children,
                 };

@@ -1,5 +1,6 @@
 use crate::{
-    AstType, IRBlockGraph, IRControlBlock, NodeIndex, StringKey, SymIndex, VarDefinitionSpace,
+    AstType, IRBlockGraph, IRControlBlock, NodeIndex, StringKey, StringLabel, SymIndex,
+    VarDefinitionSpace,
 };
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct PlaceId(u32);
@@ -8,14 +9,14 @@ pub struct PlaceId(u32);
 pub struct PlaceNode {
     //pub(crate) block_index: NodeIndex,
     //pub(crate) index: SymIndex,
-    pub(crate) name: StringKey,
+    pub(crate) name: StringLabel,
     pub(crate) static_name: Option<StringKey>,
     pub(crate) mem: VarDefinitionSpace,
     pub(crate) ty: AstType,
 }
 
 impl PlaceNode {
-    pub fn new(name: StringKey, ty: AstType, mem: VarDefinitionSpace) -> Self {
+    pub fn new(name: StringLabel, ty: AstType, mem: VarDefinitionSpace) -> Self {
         Self {
             name,
             static_name: None,
@@ -25,14 +26,14 @@ impl PlaceNode {
     }
 
     pub fn new_static(name: StringKey, ty: AstType) -> Self {
-        Self::new(name, ty, VarDefinitionSpace::Static)
+        Self::new(StringLabel::Intern(name), ty, VarDefinitionSpace::Static)
     }
 
-    pub fn new_stack(name: StringKey, ty: AstType) -> Self {
+    pub fn new_stack(name: StringLabel, ty: AstType) -> Self {
         Self::new(name, ty, VarDefinitionSpace::Stack)
     }
 
-    pub fn new_arg(name: StringKey, ty: AstType) -> Self {
+    pub fn new_arg(name: StringLabel, ty: AstType) -> Self {
         Self::new(name, ty, VarDefinitionSpace::Arg)
     }
 }

@@ -11,6 +11,7 @@ use crate::{
     //ParseError,
     //PlaceId,
     //PlaceNode, StringKey, SymIndex
+    StringLabel,
 };
 
 use anyhow::Result;
@@ -22,7 +23,7 @@ use petgraph::graph::NodeIndex;
 #[derive(Default)]
 pub struct BlockScope {
     // names must be unique in the scope
-    names: HashMap<StringKey, NodeIndex>,
+    names: HashMap<StringLabel, NodeIndex>,
 }
 
 pub struct AstBlockSorter<E> {
@@ -84,9 +85,9 @@ impl<E: Extra> AstBlockSorter<E> {
         assert!(self.stack.first().unwrap().node.is_label());
         let extra = self.stack.first().unwrap().extra.clone();
         // end of block
-        let offset = self.blocks.len();
+        //let offset = self.blocks.len();
 
-        let name = b.strings.intern(format!("_block{}", offset));
+        let name = b.labels.fresh_block_id(); //(format!("_block{}", offset));
         let children = self.stack.drain(..).collect();
         //let seq = b
         //.seq(self.stack.drain(..).collect())
@@ -105,7 +106,7 @@ pub struct AstBlockTransform<E> {
     pub exprs: Vec<AstNode<E>>,
     pub stack: Vec<AstNode<E>>,
     pub blocks: Vec<IRBlock>,
-    pub names: HashMap<StringKey, NodeIndex>,
+    pub names: HashMap<StringLabel, NodeIndex>,
 }
 
 impl<E: Extra> AstBlockTransform<E> {
@@ -133,7 +134,7 @@ impl<E: Extra> AstBlockTransform<E> {
                 let mut args = vec![];
                 for p in params {
                     args.push(IRArg {
-                        name: p.name,
+                        name: StringLabel::Intern(p.name),
                         ty: p.ty.clone(),
                     });
                 }
@@ -146,7 +147,7 @@ impl<E: Extra> AstBlockTransform<E> {
                 // not a label
                 if self.exprs.len() == 0 {
                     // empty expressions, create a block
-                    let label = b.s("block");
+                    let label = b.s("block").into();
                     let block_index = env.blocks.add_block(place, label, vec![], d);
                     // name should be unique in scope
                     assert!(!scope.names.contains_key(&label));
@@ -431,9 +432,9 @@ impl IRBlockSorter {
             }
             unreachable!("{:?}", first);
             //assert!(false);
-            let offset = self.blocks.len();
-            //let label = blocks.fresh_block_label("block", b);
-            let label = b.strings.intern(format!("_block{}", offset));
+            //let offset = self.blocks.len();
+            let label = b.labels.fresh_block_id();
+            //let label = b.strings.intern(format!("_block{}", offset));
             println!("A: addblock");
             let block_index = blocks.add_block(places, label, vec![], d);
             IRBlock {
@@ -471,8 +472,8 @@ mod tests {
         let index = env.blocks.add_block(&mut place, label, vec![], &d);
         env.enter_block(index, ast.extra.get_span());
         let mut scope = BlockScope::default();
-        let test1 = b.s("test1");
-        let test2 = b.s("test2");
+        let test1 = b.s("test1").into();
+        let test2 = b.s("test2").into();
         let seq = vec![
             b.label(test1, vec![]),
             b.goto(test2, vec![]),

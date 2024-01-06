@@ -186,7 +186,9 @@ fn from_assign_target<E: Extra, P: syntax::ast::AstPayload>(
 ) -> ast::AssignTarget {
     use syntax::ast::AssignTargetP;
     match item {
-        AssignTargetP::Identifier(ident) => ast::AssignTarget::Identifier(b.s(&ident.node.ident)),
+        AssignTargetP::Identifier(ident) => {
+            ast::AssignTarget::Identifier(b.s(&ident.node.ident).into())
+        }
         _ => unimplemented!(),
     }
 }
@@ -389,13 +391,13 @@ impl<E: Extra> Parser<E> {
 
                         // lookup
                         if let Some(_data) = env.resolve(name) {
-                            Ok(b.assign(name, rhs))
+                            Ok(b.assign(name.into(), rhs))
                         } else {
                             // name does not exist in scope
                             // Either create a global or do local, depending on context
                             env.define(name);
                             if env.in_func {
-                                Ok(b.assign(name, rhs))
+                                Ok(b.assign(name.into(), rhs))
                             } else {
                                 Ok(b.global(name, rhs))
                             }
@@ -450,7 +452,7 @@ impl<E: Extra> Parser<E> {
                         let name = b.s(&ident.node.ident);
                         if let Some(_data) = env.resolve(name) {
                             let extra: E = env.extra(item.span);
-                            Ok(b.apply(name, args, AstType::Int).set_extra(extra))
+                            Ok(b.apply(name.into(), args, AstType::Int).set_extra(extra))
                         } else if let Some(bi) = ast::Builtin::from_name(&ident.node.ident) {
                             let extra = env.extra(item.span);
                             assert_eq!(args.len(), bi.arity());
@@ -466,7 +468,7 @@ impl<E: Extra> Parser<E> {
                             let key = b.s(&ident.node.ident);
                             if let Some(_data) = env.resolve(key) {
                                 let extra: E = env.extra(item.span);
-                                Ok(b.apply(key, args, AstType::Int).set_extra(extra))
+                                Ok(b.apply(key.into(), args, AstType::Int).set_extra(extra))
                             } else if &ident.node.ident == "b" {
                                 // builtin namespace
                                 if let Some(mut ast) = b.build_builtin_from_name(&name, args) {
@@ -500,7 +502,7 @@ impl<E: Extra> Parser<E> {
                 let name = b.s(&ident.node.ident);
                 if let Some(_data) = env.resolve(name) {
                     let extra = env.extra(item.span);
-                    let ast = b.ident(name).set_extra(extra);
+                    let ast = b.ident(name.into()).set_extra(extra);
                     Ok(ast)
                 } else {
                     d.push_diagnostic(env.error(
@@ -614,7 +616,7 @@ impl<E: Extra> StarlarkParser<E> {
         // lower to mlir
         let mut types = TypeBuilder::new();
         let mut blocks = CFGBlocks::new(root, env.blocks.g);
-        blocks.add_block_ir(context, root, b.s("module"), &[], &mut types, d);
+        blocks.add_block_ir(context, root, b.s("module").into(), &[], &mut types, d);
 
         let mut stack = vec![blocks.root()];
         let r = ir.lower_mlir(

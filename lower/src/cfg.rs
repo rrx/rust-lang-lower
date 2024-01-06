@@ -1,9 +1,17 @@
-use crate::intern::StringKey;
+//use crate::intern::StringKey;
 use crate::op;
 use crate::types::TypeBuilder;
 use crate::{
-    AstType, BlockLabel, Diagnostics, Extra, IRArg, IRBlockGraph, IRPlaceTable, NodeBuilder,
-    PlaceId, VarDefinitionSpace,
+    AstType,
+    Diagnostics,
+    Extra,
+    IRArg,
+    IRBlockGraph,
+    //IRPlaceTable,
+    NodeBuilder,
+    PlaceId,
+    StringLabel,
+    VarDefinitionSpace,
 };
 use melior::ir::Location;
 use melior::{
@@ -74,7 +82,7 @@ pub struct OpCollection<'c> {
     parent_symbol: Option<SymIndex>,
     block_index: NodeIndex,
     ops: Vec<Operation<'c>>,
-    symbols: HashMap<StringKey, SymIndex>,
+    symbols: HashMap<StringLabel, SymIndex>,
     places: HashMap<PlaceId, SymIndex>,
 }
 
@@ -179,7 +187,7 @@ impl<'c> OpCollection<'c> {
         }
     }
 
-    pub fn lookup(&self, name: StringKey) -> Option<SymIndex> {
+    pub fn lookup(&self, name: StringLabel) -> Option<SymIndex> {
         self.symbols.get(&name).cloned()
     }
 
@@ -199,7 +207,7 @@ impl<'c> OpCollection<'c> {
         self.ops.drain(..).collect()
     }
 
-    pub fn add_symbol(&mut self, name: StringKey, index: SymIndex) {
+    pub fn add_symbol(&mut self, name: StringLabel, index: SymIndex) {
         assert_eq!(index.block(), self.block_index);
         self.symbols.insert(name, index);
     }
@@ -209,7 +217,7 @@ impl<'c> OpCollection<'c> {
         self.places.insert(place_id, index);
     }
 
-    pub fn push_arg(&mut self, name: StringKey) -> SymIndex {
+    pub fn push_arg(&mut self, name: StringLabel) -> SymIndex {
         assert!(self.arg_count < self.block.as_ref().unwrap().argument_count());
         let index = SymIndex::Arg(self.block_index, self.arg_count);
         self.symbols.insert(name, index);
@@ -249,8 +257,8 @@ pub fn values_in_scope<'c, 'a>(
 pub struct CFGBlocks<'c> {
     root: NodeIndex,
     pub(crate) blocks: HashMap<NodeIndex, OpCollection<'c>>,
-    block_names: HashMap<BlockLabel, NodeIndex>,
-    block_names_index: HashMap<NodeIndex, BlockLabel>,
+    block_names: HashMap<StringLabel, NodeIndex>,
+    block_names_index: HashMap<NodeIndex, StringLabel>,
     g: IRBlockGraph,
 }
 
@@ -270,7 +278,7 @@ impl<'c> CFGBlocks<'c> {
         data.values(sym_index)
     }
 
-    pub fn get_label(&self, index: &NodeIndex) -> BlockLabel {
+    pub fn get_label(&self, index: &NodeIndex) -> StringLabel {
         self.block_names_index.get(index).unwrap().clone()
     }
 
@@ -295,7 +303,7 @@ impl<'c> CFGBlocks<'c> {
         &mut self,
         context: &'c Context,
         index: NodeIndex,
-        label: BlockLabel,
+        label: StringLabel,
         params: &[IRArg],
         types: &mut TypeBuilder,
         _d: &Diagnostics,
@@ -320,7 +328,7 @@ impl<'c> CFGBlocks<'c> {
         index
     }
 
-    pub fn block_index(&self, label: &BlockLabel) -> Option<NodeIndex> {
+    pub fn block_index(&self, label: &StringLabel) -> Option<NodeIndex> {
         self.block_names.get(label).cloned()
     }
 
@@ -339,7 +347,7 @@ impl<'c> CFGBlocks<'c> {
         None
     }
 
-    pub fn name_in_scope(&self, index: NodeIndex, name: StringKey) -> Option<SymIndex> {
+    pub fn name_in_scope(&self, index: NodeIndex, name: StringLabel) -> Option<SymIndex> {
         let dom = simple_fast(&self.g, self.root)
             .dominators(index)
             .expect("Node not connected to root")
@@ -367,7 +375,7 @@ impl<'c> CFGBlocks<'c> {
                 "\t{:?}: {}, {:?}",
                 i,
                 //block_name.offset(),
-                b.strings.resolve(block_name),
+                b.resolve_label(*block_name),
                 data.symbols.keys()
             );
         }
@@ -425,8 +433,7 @@ impl<'c> CFGBlocks<'c> {
             let label = self.block_names_index.get(&node_index).unwrap();
             //let block_name = format!("b{}", label.offset());
             let block_name = b
-                .strings
-                .resolve(self.block_names_index.get(&node_index).unwrap())
+                .resolve_label(*self.block_names_index.get(&node_index).unwrap())
                 .clone();
             g_out.add_node(Node::new_block(block_name, node_index));
         }
@@ -435,7 +442,7 @@ impl<'c> CFGBlocks<'c> {
 
             let mut x = HashMap::new();
             for (name, symbol_index) in data.symbols.iter() {
-                let name = b.strings.resolve(name).clone();
+                let name = b.resolve_label(*name).clone();
                 let name = match symbol_index {
                     SymIndex::Op(_, _) => {
                         format!("op:{}", name)

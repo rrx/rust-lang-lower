@@ -17,8 +17,23 @@ use crate::ir::{
     IRNode,
 };
 use crate::{
-    Ast, AstNode, AstType, CFGBlocks, Diagnostics, Extra, IRPlaceTable, LinkOptions, Literal,
-    NodeBuilder, NodeIndex, ParseError, PlaceId, StringKey, SymIndex, TypeBuilder,
+    Ast,
+    AstNode,
+    AstType,
+    CFGBlocks,
+    Diagnostics,
+    Extra,
+    IRPlaceTable,
+    LinkOptions,
+    Literal,
+    NodeBuilder,
+    NodeIndex,
+    ParseError,
+    PlaceId,
+    StringLabel,
+    //StringKey,
+    SymIndex,
+    TypeBuilder,
 };
 
 use anyhow::Error;
@@ -266,7 +281,7 @@ pub fn emit_set_alloca<'c, E: Extra>(
     context: &'c Context,
     place: &IRPlaceTable,
     sym_index: SymIndex,
-    name: StringKey,
+    name: StringLabel,
     expr: IRNode,
     location: Location<'c>,
     block_index: NodeIndex,
@@ -279,7 +294,7 @@ pub fn emit_set_alloca<'c, E: Extra>(
     b: &mut NodeBuilder<E>,
     link: &mut LinkOptions,
 ) -> Result<SymIndex> {
-    log::debug!("assign alloca: {}", b.strings.resolve(&name));
+    log::debug!("assign alloca: {}", b.resolve_label(name));
     expr.dump(&place, b, 0);
 
     let rhs_index = expr.lower_mlir(context, place, d, types, blocks, stack, b, link)?;
@@ -308,7 +323,7 @@ pub fn emit_set_alloca<'c, E: Extra>(
 
         let lower_ty = from_type(context, &lhs_ty);
         let memref_ty = MemRefType::new(lower_ty, &[], None, None);
-        let static_name = b.strings.resolve(&name);
+        let static_name = b.resolve_label(name);
         // TODO: FIXME
         //let static_name = b
         //.strings
@@ -436,7 +451,7 @@ pub fn emit_set_function<'c, E: Extra>(
 pub fn emit_set_static<'c, E: Extra>(
     context: &'c Context,
     sym_index: SymIndex,
-    name: StringKey,
+    name: StringLabel,
     expr: IRNode,
     //location: Location<'c>,
     block_index: NodeIndex,
@@ -457,12 +472,12 @@ pub fn emit_set_static<'c, E: Extra>(
     // symbol in static context
     let global_name = if is_current_static {
         // emitting in static context
-        b.strings.resolve(&name).clone()
+        b.resolve_label(name).to_string()
     } else {
         // emitting in non-static context (local static var)
         // we create a unique global name to prevent conflict
         // and then we add ops to provide a local reference to the global name
-        let base = b.strings.resolve(&name).clone();
+        let base = b.resolve_label(name).clone();
         let name = b.unique_static_name();
         let name = format!("{}{}", base, name).clone();
         name
@@ -489,7 +504,7 @@ pub fn emit_set_static<'c, E: Extra>(
 pub fn emit_declare_function<'c, E: Extra>(
     context: &'c Context,
     place_id: PlaceId,
-    key: StringKey,
+    key: StringLabel,
     ast_ty: AstType,
     location: Location<'c>,
     block_index: NodeIndex,
@@ -524,7 +539,7 @@ pub fn emit_declare_function<'c, E: Extra>(
         let func_type = FunctionType::new(context, &type_list, &ret_type);
         let op = func::func(
             context,
-            StringAttribute::new(context, b.strings.resolve(&key)),
+            StringAttribute::new(context, &b.resolve_label(key)),
             TypeAttribute::new(func_type.into()),
             region,
             &attributes,
@@ -550,7 +565,7 @@ pub fn emit_declare_function<'c, E: Extra>(
 pub fn emit_declare_static<'c, E: Extra>(
     context: &'c Context,
     place_id: PlaceId,
-    name: StringKey,
+    name: StringLabel,
     ast_ty: AstType,
     location: Location<'c>,
     block_index: NodeIndex,
@@ -568,7 +583,7 @@ pub fn emit_declare_static<'c, E: Extra>(
 
     let op = memref::global(
         context,
-        b.strings.resolve(&name),
+        &b.resolve_label(name),
         Some("private"),
         MemRefType::new(ty, &[], None, Some(memspace)),
         // initial value is not set

@@ -10,7 +10,8 @@ use crate::{
     NodeBuilder,
     Span,
     //ParameterNode,
-    StringKey,
+    //StringKey,
+    StringLabel,
     TypeUnify,
     UnaryOperation,
 };
@@ -36,7 +37,7 @@ impl Data {
 
 #[derive(Debug)]
 pub struct Layer {
-    names: HashMap<StringKey, Data>,
+    names: HashMap<StringLabel, Data>,
 }
 impl Default for Layer {
     fn default() -> Self {
@@ -77,12 +78,12 @@ impl Environment {
         self.layers.pop().unwrap();
     }
 
-    pub fn define(&mut self, name: StringKey, ty: AstType) {
+    pub fn define(&mut self, name: StringLabel, ty: AstType) {
         let data = Data::new(ty);
         self.layers.last_mut().unwrap().names.insert(name, data);
     }
 
-    pub fn resolve(&self, name: StringKey) -> Option<Data> {
+    pub fn resolve(&self, name: StringLabel) -> Option<Data> {
         for layer in self.layers.iter().rev() {
             return layer.names.get(&name).cloned();
         }
@@ -208,7 +209,7 @@ impl<E: Extra> AstNode<E> {
                     let body = body.run_first_pass(env, types, b, d)?;
 
                     let block = AstNodeBlock {
-                        name: def.name,
+                        name: def.name.into(),
                         params: def.params.clone(),
                         children: body.to_vec(),
                     };
@@ -283,7 +284,7 @@ fn terminate_seq<E: Extra>(
 
 pub fn ensure_terminate<E: Extra>(
     mut exprs: Vec<AstNode<E>>,
-    next_key: StringKey,
+    next_key: StringLabel,
     b: &mut NodeBuilder<E>,
 ) -> Vec<AstNode<E>> {
     // if the last node is not a terminator, then we add one
@@ -291,7 +292,7 @@ pub fn ensure_terminate<E: Extra>(
     if !last.node.is_terminator() {
         let last = exprs.pop().unwrap();
         let extra = last.extra.clone();
-        exprs.push(b.node(Ast::Goto(next_key, vec![])).set_extra(extra));
+        exprs.push(b.node(Ast::Goto(next_key.into(), vec![])).set_extra(extra));
     }
     exprs
 }
@@ -301,7 +302,7 @@ pub fn blockify_cond<E: Extra>(
     then_expr: AstNode<E>,
     maybe_else_expr: Option<AstNode<E>>,
     env: &mut Environment,
-    next_key: StringKey,
+    next_key: StringLabel,
     b: &mut NodeBuilder<E>,
     d: &mut Diagnostics,
 ) -> Result<(Vec<AstNode<E>>, Vec<AstNodeBlock<E>>)> {
@@ -312,7 +313,7 @@ pub fn blockify_cond<E: Extra>(
     let key = b.s(&then_name);
     let then_block_name = key;
     let then_block = AstNodeBlock {
-        name: then_block_name,
+        name: then_block_name.into(),
         params: vec![],
         children: ensure_terminate(then_expr.to_vec(), next_key, b),
     };
@@ -320,7 +321,7 @@ pub fn blockify_cond<E: Extra>(
 
     let else_block_name = if let Some(else_expr) = maybe_else_expr {
         let else_name = format!("else_block{}", env.gen_unique());
-        let key = b.s(&else_name);
+        let key = b.s(&else_name).into();
         let else_block = AstNodeBlock {
             name: key,
             params: vec![],
@@ -334,8 +335,8 @@ pub fn blockify_cond<E: Extra>(
 
     seq.push(b.node(Ast::Branch(
         condition.into(),
-        then_block_name,
-        else_block_name,
+        then_block_name.into(),
+        else_block_name.into(),
     )));
     Ok((seq, blocks))
 }
@@ -379,7 +380,7 @@ pub fn blockify<E: Extra>(
             let name = format!("_block{}", env.gen_unique());
             let key = b.s(&name);
             AstNodeBlock {
-                name: key,
+                name: key.into(),
                 params: block_params,
                 children: rest,
             }
@@ -417,5 +418,5 @@ pub fn blockify<E: Extra>(
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use super::*;
+    //use super::*;
 }

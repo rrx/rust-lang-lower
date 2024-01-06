@@ -1,5 +1,5 @@
 use crate::Diagnostics;
-use crate::{AstType, BlockLabel, NodeBuilder, NodeID, StringKey};
+use crate::{AstType, NodeBuilder, NodeID, StringKey, StringLabel};
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use melior::{ir::Location, Context};
 use std::fmt::Debug;
@@ -177,14 +177,14 @@ pub enum DerefTarget {
 
 #[derive(Debug)]
 pub enum Terminator {
-    Jump(StringKey),
-    Branch(StringKey, StringKey),
+    Jump(StringLabel),
+    Branch(StringLabel, StringLabel),
     Return,
 }
 
 #[derive(Debug)]
 pub struct AstNodeBlock<E> {
-    pub(crate) name: StringKey,
+    pub(crate) name: StringLabel,
     //pub(crate) label: BlockLabel,
     pub(crate) params: Vec<ParameterNode<E>>,
     pub(crate) children: Vec<AstNode<E>>,
@@ -195,7 +195,7 @@ pub enum Ast<E> {
     BinaryOp(BinOpNode<E>, Box<AstNode<E>>, Box<AstNode<E>>),
     UnaryOp(UnaryOperation, Box<AstNode<E>>),
     Call(Box<AstNode<E>>, Vec<Argument<E>>, AstType),
-    Identifier(StringKey),
+    Identifier(StringLabel),
     Literal(Literal),
     Sequence(Vec<AstNode<E>>),
     Definition(Definition<E>),
@@ -204,7 +204,7 @@ pub enum Ast<E> {
     Assign(AssignTarget, Box<AstNode<E>>),
     Replace(AssignTarget, Box<AstNode<E>>),
     Mutate(Box<AstNode<E>>, Box<AstNode<E>>),
-    Branch(Box<AstNode<E>>, StringKey, StringKey),
+    Branch(Box<AstNode<E>>, StringLabel, StringLabel),
     Conditional(Box<AstNode<E>>, Box<AstNode<E>>, Option<Box<AstNode<E>>>),
     Return(Option<Box<AstNode<E>>>),
     Test(Box<AstNode<E>>, Box<AstNode<E>>),
@@ -213,11 +213,11 @@ pub enum Ast<E> {
     Deref(Box<AstNode<E>>, DerefTarget),
     Block(AstNodeBlock<E>),
     Module(AstNodeBlock<E>),
-    Loop(StringKey, Box<AstNode<E>>),
-    Break(Option<StringKey>, Vec<AstNode<E>>),
-    Continue(Option<StringKey>, Vec<AstNode<E>>),
-    Goto(StringKey, Vec<AstNode<E>>),
-    Label(StringKey, Vec<ParameterNode<E>>),
+    Loop(StringLabel, Box<AstNode<E>>),
+    Break(Option<StringLabel>, Vec<AstNode<E>>),
+    Continue(Option<StringLabel>, Vec<AstNode<E>>),
+    Goto(StringLabel, Vec<AstNode<E>>),
+    Label(StringLabel, Vec<ParameterNode<E>>),
     Noop,
     Error,
 }
@@ -297,7 +297,7 @@ impl<E: Extra> Ast<E> {
                 .collect::<Vec<_>>();
             let s = args.pop().unwrap().try_string().unwrap();
             let key = b.s(&s);
-            Some(Self::Goto(key, rest))
+            Some(Self::Goto(key.into(), rest))
         } else if name == "label" {
             let rest = args.split_off(1);
             let s = args.pop().unwrap().try_string().unwrap();
@@ -315,7 +315,7 @@ impl<E: Extra> Ast<E> {
                     extra: node.extra,
                 });
             }
-            Some(Self::Label(key, params))
+            Some(Self::Label(key.into(), params))
         } else {
             None
         }
@@ -568,7 +568,7 @@ impl<E: Extra> AstNode<E> {
                 println!(
                     "{:width$}module({}):",
                     "",
-                    b.r(block.name),
+                    b.resolve_label(block.name.into()),
                     width = depth * 2
                 );
                 depth += 1;
@@ -603,14 +603,14 @@ impl<E: Extra> AstNode<E> {
                     "{:width$}label: {}",
                     "",
                     //name.0,
-                    b.strings.resolve(name),
+                    b.resolve_label(*name),
                     width = depth * 2
                 );
                 for e in args {
                     println!(
                         "{:width$}arg: {}, {:?}",
                         "",
-                        b.strings.resolve(&e.name),
+                        b.resolve_label(e.name.into()),
                         e.ty,
                         width = (depth + 1) * 2
                     );
@@ -622,7 +622,7 @@ impl<E: Extra> AstNode<E> {
                     "{:width$}goto: {}",
                     "",
                     //key.0,
-                    b.strings.resolve(key),
+                    b.resolve_label(*key),
                     width = depth * 2
                 );
                 for a in args {
@@ -638,7 +638,7 @@ impl<E: Extra> AstNode<E> {
                     println!(
                         "{:width$}arg: {}: {:?}",
                         "",
-                        b.strings.resolve(&a.name),
+                        b.resolve_label(a.name.into()),
                         a.ty,
                         width = depth * 2
                     );
@@ -653,14 +653,14 @@ impl<E: Extra> AstNode<E> {
                     "{:width$}block({})",
                     "",
                     //block.label.0,
-                    b.r(block.name),
+                    b.resolve_label(block.name),
                     width = depth * 2
                 );
                 for a in &block.params {
                     println!(
                         "{:width$}arg: {}: {:?}",
                         "",
-                        b.strings.resolve(&a.name),
+                        b.resolve_label(a.name.into()),
                         a.ty,
                         width = (depth + 1) * 2
                     );
@@ -683,7 +683,7 @@ impl<E: Extra> AstNode<E> {
                         println!(
                             "{:width$}target identifier: {}",
                             "",
-                            b.strings.resolve(key),
+                            b.resolve_label(*key),
                             width = depth * 2
                         );
                     }
@@ -691,7 +691,7 @@ impl<E: Extra> AstNode<E> {
                         println!(
                             "{:width$}target alloca: {}",
                             "",
-                            b.strings.resolve(key),
+                            b.resolve_label(*key),
                             width = depth * 2
                         );
                     }
@@ -714,7 +714,7 @@ impl<E: Extra> AstNode<E> {
                 println!(
                     "{:width$}ident: {}",
                     "",
-                    b.strings.resolve(&key),
+                    b.resolve_label(*key),
                     width = depth * 2
                 );
             }
@@ -735,8 +735,8 @@ impl<E: Extra> AstNode<E> {
                 println!(
                     "{:width$}branch: {}, {}",
                     "",
-                    b.r(*then_key),
-                    b.r(*else_key),
+                    b.resolve_label(*then_key),
+                    b.resolve_label(*else_key),
                     width = depth * 2
                 );
                 c.dump(b, depth + 1);
@@ -786,6 +786,6 @@ impl<E> From<Argument<E>> for AstNode<E> {
 
 #[derive(Debug)]
 pub enum AssignTarget {
-    Identifier(StringKey),
-    Alloca(StringKey),
+    Identifier(StringLabel),
+    Alloca(StringLabel),
 }
