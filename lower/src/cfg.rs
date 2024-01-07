@@ -2,8 +2,8 @@
 use crate::op;
 use crate::types::TypeBuilder;
 use crate::{
-    AstType, Diagnostics, Extra, IRArg, IRBlockGraph, IRControlBlock, IRPlaceTable, NodeBuilder,
-    PlaceId, PlaceNode, StringLabel, VarDefinitionSpace,
+    AstType, BlockId, Diagnostics, Extra, IRArg, IRBlockGraph, IRControlBlock, IRPlaceTable,
+    NodeBuilder, PlaceId, PlaceNode, StringLabel, VarDefinitionSpace,
 };
 use melior::ir::Location;
 use melior::{
@@ -250,8 +250,8 @@ pub fn values_in_scope<'c, 'a>(
 pub struct CFGBlocks<'c> {
     root: NodeIndex,
     pub(crate) blocks: HashMap<NodeIndex, OpCollection<'c>>,
-    block_names: HashMap<StringLabel, NodeIndex>,
-    block_names_index: HashMap<NodeIndex, StringLabel>,
+    block_names: HashMap<BlockId, NodeIndex>,
+    block_names_index: HashMap<NodeIndex, BlockId>,
     g: IRBlockGraph,
 }
 
@@ -271,7 +271,7 @@ impl<'c> CFGBlocks<'c> {
         data.values(sym_index)
     }
 
-    pub fn get_label(&self, index: &NodeIndex) -> StringLabel {
+    pub fn get_label(&self, index: &NodeIndex) -> BlockId {
         self.block_names_index.get(index).unwrap().clone()
     }
 
@@ -295,7 +295,7 @@ impl<'c> CFGBlocks<'c> {
     pub fn add_block(
         &mut self,
         places: &mut IRPlaceTable,
-        label: StringLabel,
+        label: BlockId,
         params: Vec<IRArg>,
         _d: &Diagnostics,
     ) -> NodeIndex {
@@ -319,7 +319,7 @@ impl<'c> CFGBlocks<'c> {
         &mut self,
         context: &'c Context,
         index: NodeIndex,
-        label: StringLabel,
+        label: BlockId,
         params: &[IRArg],
         types: &mut TypeBuilder,
         _d: &Diagnostics,
@@ -344,7 +344,7 @@ impl<'c> CFGBlocks<'c> {
         index
     }
 
-    pub fn block_index(&self, label: &StringLabel) -> Option<NodeIndex> {
+    pub fn block_index(&self, label: &BlockId) -> Option<NodeIndex> {
         self.block_names.get(label).cloned()
     }
 
@@ -391,7 +391,7 @@ impl<'c> CFGBlocks<'c> {
                 "\t{:?}: {}, {:?}",
                 i,
                 //block_name.offset(),
-                b.resolve_label(*block_name),
+                b.resolve_block_label(*block_name),
                 data.symbols.keys()
             );
         }
@@ -449,7 +449,7 @@ impl<'c> CFGBlocks<'c> {
             let label = self.block_names_index.get(&node_index).unwrap();
             //let block_name = format!("b{}", label.offset());
             let block_name = b
-                .resolve_label(*self.block_names_index.get(&node_index).unwrap())
+                .resolve_block_label(*self.block_names_index.get(&node_index).unwrap())
                 .clone();
             g_out.add_node(Node::new_block(block_name, node_index));
         }

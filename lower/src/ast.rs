@@ -1,5 +1,5 @@
 use crate::Diagnostics;
-use crate::{AstType, NodeBuilder, NodeID, StringKey, StringLabel};
+use crate::{AstType, BlockId, NodeBuilder, NodeID, StringKey, StringLabel};
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use melior::{ir::Location, Context};
 use std::fmt::Debug;
@@ -177,14 +177,14 @@ pub enum DerefTarget {
 
 #[derive(Debug)]
 pub enum Terminator {
-    Jump(StringLabel),
+    Jump(BlockId),
     Branch(StringLabel, StringLabel),
     Return,
 }
 
 #[derive(Debug)]
 pub struct AstNodeBlock<E> {
-    pub(crate) name: StringLabel,
+    pub(crate) name: BlockId,
     //pub(crate) label: BlockLabel,
     pub(crate) params: Vec<ParameterNode<E>>,
     pub(crate) children: Vec<AstNode<E>>,
@@ -204,7 +204,7 @@ pub enum Ast<E> {
     Assign(AssignTarget, Box<AstNode<E>>),
     Replace(AssignTarget, Box<AstNode<E>>),
     Mutate(Box<AstNode<E>>, Box<AstNode<E>>),
-    Branch(Box<AstNode<E>>, StringLabel, StringLabel),
+    Branch(Box<AstNode<E>>, BlockId, BlockId),
     Conditional(Box<AstNode<E>>, Box<AstNode<E>>, Option<Box<AstNode<E>>>),
     Ternary(Box<AstNode<E>>, Box<AstNode<E>>, Box<AstNode<E>>),
     Return(Option<Box<AstNode<E>>>),
@@ -217,8 +217,8 @@ pub enum Ast<E> {
     Loop(StringLabel, Box<AstNode<E>>),
     Break(Option<StringLabel>, Vec<AstNode<E>>),
     Continue(Option<StringLabel>, Vec<AstNode<E>>),
-    Goto(StringLabel, Vec<AstNode<E>>),
-    Label(StringLabel, Vec<ParameterNode<E>>),
+    Goto(BlockId, Vec<AstNode<E>>),
+    Label(BlockId, Vec<ParameterNode<E>>),
     Noop,
     Error,
 }
@@ -578,7 +578,7 @@ impl<E: Extra> AstNode<E> {
                 println!(
                     "{:width$}module({}):",
                     "",
-                    b.resolve_label(block.name.into()),
+                    b.resolve_block_label(block.name.into()),
                     width = depth * 2
                 );
                 depth += 1;
@@ -613,7 +613,7 @@ impl<E: Extra> AstNode<E> {
                     "{:width$}label: {}",
                     "",
                     //name.0,
-                    b.resolve_label(*name),
+                    b.resolve_block_label(*name),
                     width = depth * 2
                 );
                 for e in args {
@@ -632,7 +632,7 @@ impl<E: Extra> AstNode<E> {
                     "{:width$}goto: {}",
                     "",
                     //key.0,
-                    b.resolve_label(*key),
+                    b.resolve_block_label(*key),
                     width = depth * 2
                 );
                 for a in args {
@@ -663,7 +663,7 @@ impl<E: Extra> AstNode<E> {
                     "{:width$}block({})",
                     "",
                     //block.label.0,
-                    b.resolve_label(block.name),
+                    b.resolve_block_label(block.name),
                     width = depth * 2
                 );
                 for a in &block.params {
@@ -755,8 +755,8 @@ impl<E: Extra> AstNode<E> {
                 println!(
                     "{:width$}branch: {}, {}",
                     "",
-                    b.resolve_label(*then_key),
-                    b.resolve_label(*else_key),
+                    b.resolve_block_label(*then_key),
+                    b.resolve_block_label(*else_key),
                     width = depth * 2
                 );
                 c.dump(b, depth + 1);

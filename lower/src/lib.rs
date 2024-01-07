@@ -18,6 +18,7 @@ pub use ast::{
     Argument, Ast, AstNode, AstNodeBlock, BinaryOperation, Definition, Extra, Literal,
     ParameterNode, SimpleExtra, Span, UnaryOperation, VarDefinitionSpace,
 };
+pub use blockify::BlockId;
 pub use builder::{NodeBuilder, NodeID, StringLabel};
 pub use cfg::{CFGBlocks, CFGGraph, SymIndex};
 pub use compile::{default_context, default_pass_manager};
@@ -64,7 +65,7 @@ pub(crate) mod tests {
         //seq.push(b.global("z", b.integer(10)));
         let y = b.s("y").into();
         let yy = b.s("yy").into();
-        let asdf = b.s("asdf").into();
+        let asdf: BlockId = b.s("asdf").into();
         let asdf2 = b.s("asdf2").into();
         let entry = b.s("entry").into();
         let main = b.main(b.seq(vec![

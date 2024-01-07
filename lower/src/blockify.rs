@@ -5,11 +5,23 @@ use crate::{
     StringKey, StringLabel, UnaryOperation,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
 pub enum BlockId {
     Name(StringKey),
     // unique
     U(usize),
+}
+
+impl From<StringKey> for BlockId {
+    fn from(item: StringKey) -> BlockId {
+        BlockId::Name(item)
+    }
+}
+
+impl From<&StringKey> for BlockId {
+    fn from(item: &StringKey) -> BlockId {
+        BlockId::Name(*item)
+    }
 }
 
 #[derive(Debug)]

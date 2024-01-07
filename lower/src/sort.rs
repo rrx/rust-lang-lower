@@ -2,12 +2,13 @@ use crate::ast::{Ast, AstNode, AstNodeBlock, ParameterNode, Span};
 use crate::ir::IRArg;
 use crate::{
     //AstNode, AstType,
+    BlockId,
     Diagnostics,
     Extra,
     IREnvironment,
     IRPlaceTable,
     NodeBuilder,
-    StringKey,
+    //StringKey,
     //ParseError,
     //PlaceId,
     //PlaceNode, StringKey, SymIndex
@@ -23,7 +24,7 @@ use petgraph::graph::NodeIndex;
 #[derive(Default)]
 pub struct BlockScope {
     // names must be unique in the scope
-    names: HashMap<StringLabel, NodeIndex>,
+    names: HashMap<BlockId, NodeIndex>,
 }
 
 pub struct AstBlockSorter<E> {
@@ -106,7 +107,7 @@ pub struct AstBlockTransform<E> {
     pub exprs: Vec<AstNode<E>>,
     pub stack: Vec<AstNode<E>>,
     pub blocks: Vec<IRBlock>,
-    pub names: HashMap<StringLabel, NodeIndex>,
+    pub names: HashMap<BlockId, NodeIndex>,
 }
 
 impl<E: Extra> AstBlockTransform<E> {

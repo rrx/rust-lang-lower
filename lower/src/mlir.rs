@@ -408,7 +408,7 @@ impl IRNode {
                         &format!(
                             "Missing block: {}",
                             //label.offset(),
-                            b.resolve_label(label)
+                            b.resolve_block_label(label)
                         ),
                         span,
                     ));

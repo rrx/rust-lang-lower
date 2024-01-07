@@ -5,6 +5,7 @@ use crate::{
     AstNodeBlock,
     AstType,
     BinaryOperation,
+    BlockId,
     Diagnostics,
     Extra,
     NodeBuilder,
@@ -284,7 +285,7 @@ fn terminate_seq<E: Extra>(
 
 pub fn ensure_terminate<E: Extra>(
     mut exprs: Vec<AstNode<E>>,
-    next_key: StringLabel,
+    next_key: BlockId,
     b: &mut NodeBuilder<E>,
 ) -> Vec<AstNode<E>> {
     // if the last node is not a terminator, then we add one
@@ -302,7 +303,7 @@ pub fn blockify_cond<E: Extra>(
     then_expr: AstNode<E>,
     maybe_else_expr: Option<AstNode<E>>,
     env: &mut Environment,
-    next_key: StringLabel,
+    next_key: BlockId,
     b: &mut NodeBuilder<E>,
     d: &mut Diagnostics,
 ) -> Result<(Vec<AstNode<E>>, Vec<AstNodeBlock<E>>)> {
