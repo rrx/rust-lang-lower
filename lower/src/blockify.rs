@@ -67,7 +67,7 @@ impl<E: Extra> Definition<E> {
                 self.name.into(),
                 self.params.clone(),
                 b,
-            );
+            )?;
             Ok(self)
         } else {
             Ok(self)

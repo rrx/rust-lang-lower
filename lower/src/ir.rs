@@ -1,7 +1,18 @@
 use crate::sort::IRBlockSorter;
 use crate::{
-    AstNode, AstType, Diagnostics, Extra, IRPlaceTable, InternKey, NodeBuilder, ParseError,
-    PlaceId, PlaceNode, StringKey, StringLabel, SymIndex,
+    AstNode,
+    AstType,
+    Diagnostics,
+    Extra,
+    IRPlaceTable,
+    //InternKey,
+    NodeBuilder,
+    ParseError,
+    PlaceId,
+    PlaceNode,
+    StringKey,
+    StringLabel,
+    SymIndex,
 };
 
 use anyhow::Error;
@@ -128,7 +139,7 @@ impl IRControlBlock {
         index
     }
 
-    pub fn add_definition(&mut self, place_id: PlaceId) -> SymIndex {
+    pub fn add_definition(&mut self, _place_id: PlaceId) -> SymIndex {
         let offset = self.def_count;
         self.def_count += 1;
         let index = SymIndex::Def(self.block_index, offset);
@@ -322,7 +333,6 @@ impl BlockTable {
 #[derive(Debug)]
 pub struct IREnvironment {
     stack: Vec<(NodeIndex, Span)>,
-    //block_names: Vec<HashMap<StringKey, BlockLabel>>,
     places: IndexMap<PlaceId, SymIndex>,
     label_count: usize,
     pub blocks: BlockTable,
@@ -332,7 +342,6 @@ impl IREnvironment {
     pub fn new() -> Self {
         Self {
             stack: vec![],
-            //block_names: vec![],
             places: IndexMap::new(),
             label_count: 0,
             blocks: BlockTable::new(),
@@ -355,12 +364,10 @@ impl IREnvironment {
 
     pub fn enter_block(&mut self, index: NodeIndex, span: Span) {
         self.stack.push((index, span));
-        //self.block_names.push(HashMap::new());
     }
 
     pub fn exit_block(&mut self) {
         self.stack.pop();
-        //self.block_names.pop();
     }
 
     pub fn stack_size(&self) -> usize {
@@ -368,8 +375,6 @@ impl IREnvironment {
     }
 
     pub fn root(&self) -> NodeIndex {
-        //self.module_root.get(&module_name).unwrap().clone()
-        //self.module_root.unwrap()
         self.stack.first().unwrap().clone().0
     }
 
@@ -391,7 +396,7 @@ impl IREnvironment {
         index
     }
 
-    pub fn name_in_scope(&self, index: NodeIndex, name: StringLabel) -> Option<PlaceId> {
+    pub fn block_name_in_scope(&self, index: NodeIndex, name: StringLabel) -> Option<PlaceId> {
         let maybe_dom = simple_fast(&self.blocks.g, self.root())
             .dominators(index)
             .map(|it| it.collect::<Vec<_>>());
@@ -623,7 +628,7 @@ impl IRNode {
                 }
             }
 
-            IRKind::Label(name, block_index, args) => {
+            IRKind::Label(name, _block_index, args) => {
                 println!(
                     "{:width$}label: {}",
                     "",
@@ -831,7 +836,7 @@ impl IRNode {
                 Ok(b.ir_ret(out))
             }
 
-            IRKind::Label(ref _name, block_index, ref _args) => {
+            IRKind::Label(ref _name, _block_index, ref _args) => {
                 //let index = env.add_block(*name, args.clone(), d, g);
                 //env.enter_block(index, self.span.clone());
                 Ok(self)
@@ -859,7 +864,7 @@ impl IRNode {
                 }
             }
 
-            IRKind::Get(place_id, ref _select) => {
+            IRKind::Get(_place_id, ref _select) => {
                 return Ok(self);
 
                 /*
@@ -898,7 +903,7 @@ impl IRNode {
                 //}
             }
 
-            IRKind::Decl(place_id) => {
+            IRKind::Decl(_place_id) => {
                 //let current_block = env.current_block();
                 //let place_data = places.get_place(place_id);
                 //let index = env.add_definition(current_block, place_id, place_data.name);
@@ -909,9 +914,9 @@ impl IRNode {
             IRKind::Call(_name, ref _args) => Ok(self),
 
             IRKind::Func(blocks, ret_type) => {
-                let current_block = env.current_block();
+                let _current_block = env.current_block();
                 let mut seq = vec![];
-                for (i, mut block) in blocks.into_iter().enumerate() {
+                for (i, block) in blocks.into_iter().enumerate() {
                     //let s = b.strings.resolve(&block.name);
                     //let label = env.blocks.fresh_block_label(&s, b);
                     // TODO: remove this, add_block
@@ -949,8 +954,8 @@ impl IRNode {
 
             IRKind::Branch(condition, then_key, else_key) => {
                 let condition = condition.build_graph(places, env, d, b)?;
-                let current_block = env.current_block();
-                let then_block = env.blocks.lookup_block_label(then_key).unwrap();
+                let _current_block = env.current_block();
+                let _then_block = env.blocks.lookup_block_label(then_key).unwrap();
                 //env.blocks.g.add_edge(current_block, then_block, ());
                 let else_block = env.blocks.lookup_block_label(else_key).unwrap();
                 //env.blocks.g.add_edge(current_block, else_block, ());
@@ -1270,7 +1275,7 @@ impl<E: Extra> AstNode<E> {
 
             Ast::Identifier(name) => {
                 let current_block = env.current_block();
-                if let Some(place_id) = env.name_in_scope(current_block, name) {
+                if let Some(place_id) = env.block_name_in_scope(current_block, name) {
                     let p = place.get_place(place_id);
                     out.push(b.ir_get(place_id, IRTypeSelect::default()));
                     Ok(p.ty.clone())
@@ -1303,7 +1308,7 @@ impl<E: Extra> AstNode<E> {
 
                     out.push(b.ir_decl(place_id));
                     out.push(b.ir_set(place_id, v, IRTypeSelect::default()));
-                    let index = env.add_definition(current_block, place_id, ident.into());
+                    let _index = env.add_definition(current_block, place_id, ident.into());
                     Ok(ty)
                 } else {
                     unimplemented!()
@@ -1314,8 +1319,8 @@ impl<E: Extra> AstNode<E> {
                 AssignTarget::Alloca(name) | AssignTarget::Identifier(name) => {
                     let (ir, ty) = expr.lower_ir_expr(env, place, d, b)?;
                     let current_block = env.current_block();
-                    if let Some(place_id) = env.name_in_scope(current_block, name) {
-                        let p = place.get_place(place_id);
+                    if let Some(place_id) = env.block_name_in_scope(current_block, name) {
+                        let _p = place.get_place(place_id);
                         out.push(b.ir_set(place_id, ir, IRTypeSelect::Offset(0)));
                         Ok(ty)
                     } else {
@@ -1323,7 +1328,7 @@ impl<E: Extra> AstNode<E> {
                         let place_id = place.add_place(place_data);
                         out.push(b.ir_decl(place_id));
                         out.push(b.ir_set(place_id, ir, IRTypeSelect::Offset(0)));
-                        let index = env.add_definition(current_block, place_id, name);
+                        let _index = env.add_definition(current_block, place_id, name);
                         Ok(ty)
                     }
                 }
@@ -1333,8 +1338,8 @@ impl<E: Extra> AstNode<E> {
                 Ast::Identifier(name) => {
                     let (ir, ty) = rhs.lower_ir_expr(env, place, d, b)?;
                     let current_block = env.current_block();
-                    if let Some(place_id) = env.name_in_scope(current_block, name) {
-                        let p = place.get_place(place_id);
+                    if let Some(place_id) = env.block_name_in_scope(current_block, name) {
+                        let _p = place.get_place(place_id);
                         out.push(b.ir_set(place_id, ir, IRTypeSelect::Offset(0)));
                         Ok(ty)
                     } else {
@@ -1354,7 +1359,7 @@ impl<E: Extra> AstNode<E> {
                 let (f, ty, f_args, name) = match &expr.node {
                     Ast::Identifier(ident) => {
                         let name = b.resolve_label(*ident);
-                        if let Some(place_id) = env.name_in_scope(current_block, *ident) {
+                        if let Some(place_id) = env.block_name_in_scope(current_block, *ident) {
                             let p = place.get_place(place_id);
                             if let AstType::Func(f_args, _) = p.ty.clone() {
                                 (ident, p.ty.clone(), f_args, name)
@@ -1400,7 +1405,7 @@ impl<E: Extra> AstNode<E> {
                 }
             }
 
-            Ast::Definition(mut def) => {
+            Ast::Definition(def) => {
                 let span = self.extra.get_span();
                 //def = def.normalize(b);
                 let current_block = env.current_block();
