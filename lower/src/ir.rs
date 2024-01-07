@@ -199,6 +199,7 @@ impl BlockLabel {
 
 #[derive(Default, Debug)]
 pub struct BlockTable {
+    root: Option<NodeIndex>,
     pub g: IRBlockGraph,
     names: Vec<StringKey>,
     block_names: HashMap<StringLabel, NodeIndex>,
@@ -208,6 +209,19 @@ pub struct BlockTable {
 impl BlockTable {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn set_root(&mut self, index: NodeIndex) {
+        self.root = Some(index);
+    }
+
+    pub fn root(&self) -> NodeIndex {
+        self.root.unwrap()
+    }
+
+    pub fn block_is_static(&self, block_index: NodeIndex) -> bool {
+        // root block is static block, and there's only one for now
+        self.root.unwrap() == block_index
     }
 
     pub fn fresh_block_label<E: Extra>(
@@ -363,6 +377,10 @@ impl IREnvironment {
     }
 
     pub fn enter_block(&mut self, index: NodeIndex, span: Span) {
+        if self.stack.len() == 0 {
+            self.blocks.set_root(index);
+        }
+
         self.stack.push((index, span));
     }
 
@@ -375,7 +393,8 @@ impl IREnvironment {
     }
 
     pub fn root(&self) -> NodeIndex {
-        self.stack.first().unwrap().clone().0
+        self.blocks.root()
+        //self.stack.first().unwrap().clone().0
     }
 
     pub fn current_block(&self) -> NodeIndex {

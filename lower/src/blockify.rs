@@ -1,6 +1,9 @@
 use anyhow::Result;
 
-use crate::{Ast, AstNode, Definition, Extra, NodeBuilder, ParameterNode, StringKey, StringLabel};
+use crate::{
+    Ast, AstNode, BinaryOperation, Definition, Extra, NodeBuilder, ParameterNode, PlaceId,
+    StringKey, StringLabel, UnaryOperation,
+};
 
 #[derive(Debug)]
 pub enum BlockId {
@@ -21,26 +24,37 @@ pub struct LoopLayer {
 }
 
 #[derive(Debug)]
-pub struct Blockify<E> {
-    nodes: Vec<AstNode<E>>,
+pub struct ValueId(u32);
+
+#[derive(Debug)]
+pub enum LCode {
+    Label(BlockId, u8, u8), // BlockId, number of positional arguments, number of named arguments
+    NamedArg(StringKey),
+    Op1(UnaryOperation, ValueId),
+    Op2(BinaryOperation, ValueId, ValueId),
+    Load(PlaceId),
+    Store(PlaceId, ValueId),
+    Jump(BlockId),
+    Branch(ValueId, BlockId, BlockId),
+}
+
+#[derive(Debug)]
+pub struct Blockify {
+    code: Vec<LCode>,
     pending_blocks: Vec<AstBlock>,
     loop_stack: Vec<LoopLayer>,
 }
 
-impl<E: Extra> Blockify<E> {
+impl Blockify {
     pub fn new() -> Self {
         Self {
-            nodes: vec![],
+            code: vec![],
             pending_blocks: vec![],
             loop_stack: vec![],
         }
     }
 
-    fn add(&mut self, node: AstNode<E>) -> Result<()> {
-        Ok(())
-    }
-
-    pub fn build(
+    pub fn build_block<E: Extra>(
         &mut self,
         node: AstNode<E>,
         name: StringLabel,
@@ -49,11 +63,18 @@ impl<E: Extra> Blockify<E> {
     ) -> Result<()> {
         let seq = node.to_vec();
         if !seq.first().unwrap().node.is_label() {
-            self.add(b.label(name, params))?;
+            //self.add(b.label(name, params))?;
         }
         for n in seq {
-            self.add(n)?;
+            //self.add(n)?;
         }
+        Ok(())
+    }
+}
+
+impl<E: Extra> Definition<E> {
+    fn flatten(self, b: &mut NodeBuilder<E>) -> Result<()> {
+        //let code = LCode::Label();
         Ok(())
     }
 }
@@ -62,7 +83,7 @@ impl<E: Extra> Definition<E> {
     fn blockify(mut self, b: &mut NodeBuilder<E>) -> Result<Self> {
         if let Some(ref _body) = self.body {
             let mut blockify = Blockify::new();
-            blockify.build(
+            blockify.build_block(
                 *self.body.take().unwrap(),
                 self.name.into(),
                 self.params.clone(),

@@ -579,8 +579,11 @@ impl<E: Extra> StarlarkParser<E> {
         let ast: AstNode<E> = parser
             .parse(Path::new(filename), None, module_key, file_id, d, b)?
             .normalize(d, b);
+        ast.blockify(b)?;
 
-        //ast.blockify(b)?;
+        let ast: AstNode<E> = parser
+            .parse(Path::new(filename), None, module_key, file_id, d, b)?
+            .normalize(d, b);
         ast.dump(b, 0);
         let ast = ast.first_pass(b, d)?;
         ast.dump(b, 0);
