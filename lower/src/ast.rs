@@ -206,6 +206,7 @@ pub enum Ast<E> {
     Mutate(Box<AstNode<E>>, Box<AstNode<E>>),
     Branch(Box<AstNode<E>>, StringLabel, StringLabel),
     Conditional(Box<AstNode<E>>, Box<AstNode<E>>, Option<Box<AstNode<E>>>),
+    Ternary(Box<AstNode<E>>, Box<AstNode<E>>, Box<AstNode<E>>),
     Return(Option<Box<AstNode<E>>>),
     Test(Box<AstNode<E>>, Box<AstNode<E>>),
     While(Box<AstNode<E>>, Box<AstNode<E>>),
@@ -316,6 +317,15 @@ impl<E: Extra> Ast<E> {
                 });
             }
             Some(Self::Label(key.into(), params))
+        } else if name == "ternary" {
+            let Argument::Positional(else_expr) = args.pop().unwrap();
+            let Argument::Positional(then_expr) = args.pop().unwrap();
+            let Argument::Positional(condition) = args.pop().unwrap();
+            Some(Self::Ternary(
+                condition.into(),
+                then_expr.into(),
+                else_expr.into(),
+            ))
         } else {
             None
         }
@@ -729,6 +739,16 @@ impl<E: Extra> AstNode<E> {
                     println!("{:width$}else:", "", width = depth * 2);
                     else_expr.dump(b, depth + 1);
                 }
+            }
+
+            Ast::Ternary(c, then_expr, else_expr) => {
+                println!("{:width$}ternary:", "", width = depth * 2);
+                depth += 1;
+                c.dump(b, depth);
+                println!("{:width$}then:", "", width = depth * 2);
+                then_expr.dump(b, depth + 1);
+                println!("{:width$}else:", "", width = depth * 2);
+                else_expr.dump(b, depth + 1);
             }
 
             Ast::Branch(c, then_key, else_key) => {

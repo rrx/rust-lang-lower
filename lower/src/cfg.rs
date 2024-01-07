@@ -2,16 +2,8 @@
 use crate::op;
 use crate::types::TypeBuilder;
 use crate::{
-    AstType,
-    Diagnostics,
-    Extra,
-    IRArg,
-    IRBlockGraph,
-    //IRPlaceTable,
-    NodeBuilder,
-    PlaceId,
-    StringLabel,
-    VarDefinitionSpace,
+    AstType, Diagnostics, Extra, IRArg, IRBlockGraph, IRControlBlock, IRPlaceTable, NodeBuilder,
+    PlaceId, PlaceNode, StringLabel, VarDefinitionSpace,
 };
 use melior::ir::Location;
 use melior::{
@@ -166,6 +158,7 @@ impl<'c> OpCollection<'c> {
             SymIndex::Op(block_index, offset) => {
                 assert_eq!(block_index, self.block_index);
                 assert!(offset < self.ops.len());
+                //println!("op: {:?}", self.ops.get(offset).unwrap());
                 self.ops
                     .get(offset)
                     .expect("Op missing")
@@ -299,7 +292,30 @@ impl<'c> CFGBlocks<'c> {
         self.root == block_index
     }
 
-    pub fn add_block_ir(
+    pub fn add_block(
+        &mut self,
+        places: &mut IRPlaceTable,
+        label: StringLabel,
+        params: Vec<IRArg>,
+        _d: &Diagnostics,
+    ) -> NodeIndex {
+        let index = self.g.add_node(IRControlBlock::new(params.clone()));
+        //println!("add_block: index: {}, label: {:?}", index.index(), label);
+        self.g.node_weight_mut(index).unwrap().block_index = index;
+        self.block_names.insert(label, index);
+        self.block_names_index.insert(index, label);
+
+        let data = self.g.node_weight_mut(index).unwrap();
+        for a in params {
+            let p = PlaceNode::new_arg(a.name, a.ty);
+            let place_id = places.add_place(p);
+            data.push_arg(place_id, a.name);
+        }
+
+        index
+    }
+
+    pub fn update_block_ir(
         &mut self,
         context: &'c Context,
         index: NodeIndex,
@@ -495,10 +511,11 @@ impl<'c> CFGBlocks<'c> {
                 }
             )
         );
-        let path = std::fs::canonicalize(filename).unwrap();
-        println!("{}", path.clone().into_os_string().into_string().unwrap());
+        //let path = std::fs::canonicalize(filename).unwrap();
+        println!("saved graph {:?}", filename);
+        //println!("{}", path.clone().into_os_string().into_string().unwrap());
         println!("{}", s);
-        std::fs::write(path, s).unwrap();
+        std::fs::write(filename, s).unwrap();
     }
 }
 
@@ -1079,7 +1096,7 @@ impl<'c, E: Extra> CFG<E> {
                    let else_expr = maybe_else_expr.unwrap();
                    let else_location = else_expr.location(context, d);
                    stack.push(*else_block_index);
-                   println!("else: {:?}", else_expr.node);
+                   //println!("else: {:?}", else_expr.node);
                    if let Ok(_index) = else_expr.lower(context, d, cfg, stack, g, b) {
                        let data = g.node_weight_mut(*else_block_index).unwrap();
                        data.push(scf::r#yield(&[], else_location));
@@ -1135,7 +1152,7 @@ impl<'c, E: Extra> CFG<E> {
                let current_block = stack.last().unwrap().clone();
                let current = g.node_weight_mut(current_block).unwrap();
                let ty = {
-                   println!("{:?}", current);
+                   //println!("{:?}", current);
                    // get the type of the RHS
                    let ty = current.value0(index).unwrap().r#type();
                    ty
@@ -1175,8 +1192,8 @@ impl<'c, E: Extra> CFG<E> {
                let index_x = x.lower(context, d, cfg, stack, g, b)?;
                let index_y = y.lower(context, d, cfg, stack, g, b)?;
                //cfg.save_graph("out.dot", g);
-               println!("ix: {:?}, {}", index_x, fx);
-               println!("iy: {:?}, {}", index_y, fy);
+               //println!("ix: {:?}, {}", index_x, fx);
+               //println!("iy: {:?}, {}", index_y, fy);
                let (ty_x, mem_x) = cfg
                    .lookup_type(index_x)
                    .expect(&format!("missing type for {:?}, {}", index_x, fx));
@@ -1185,7 +1202,7 @@ impl<'c, E: Extra> CFG<E> {
                    .expect(&format!("missing type for {:?}, {}", index_y, fy));
                let current_block = stack.last().unwrap().clone();
                let current = g.node_weight_mut(current_block).unwrap();
-               println!("{:?}", current);
+               //println!("{:?}", current);
 
                let (_ty_x, index_x) = if let AstType::Ptr(ty) = ty_x {
                    let target = DerefTarget::Offset(0);

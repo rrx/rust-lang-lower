@@ -415,10 +415,10 @@ impl<E: Extra> NodeBuilder<E> {
         }
     }
 
-    pub fn module(&self, name: StringKey, body: AstNode<E>) -> AstNode<E> {
+    pub fn module(&self, name: StringLabel, body: AstNode<E>) -> AstNode<E> {
         let extra = body.extra.clone();
         let nb = AstNodeBlock {
-            name: StringLabel::Intern(name),
+            name,
             params: vec![],
             children: vec![body.into()],
         };
@@ -550,6 +550,13 @@ impl<E: Extra> NodeBuilder<E> {
     pub fn ir_op2(&self, op: BinaryOperation, a: IRNode, b: IRNode) -> IRNode {
         IRNode::new(
             IRKind::Op2(op, a.into(), b.into()),
+            self.span.clone().unwrap(),
+        )
+    }
+
+    pub fn ir_ternary(&self, condition: IRNode, a: IRNode, b: IRNode) -> IRNode {
+        IRNode::new(
+            IRKind::Ternary(condition.into(), a.into(), b.into()),
             self.span.clone().unwrap(),
         )
     }

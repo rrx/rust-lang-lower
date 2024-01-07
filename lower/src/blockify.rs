@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::{Ast, AstNode, Definition, Extra, StringKey};
+use crate::{Ast, AstNode, Definition, Extra, NodeBuilder, ParameterNode, StringKey, StringLabel};
 
 #[derive(Debug)]
 pub enum BlockId {
@@ -40,8 +40,18 @@ impl<E: Extra> Blockify<E> {
         Ok(())
     }
 
-    pub fn build(&mut self, node: AstNode<E>) -> Result<()> {
-        for n in node.to_vec() {
+    pub fn build(
+        &mut self,
+        node: AstNode<E>,
+        name: StringLabel,
+        params: Vec<ParameterNode<E>>,
+        b: &mut NodeBuilder<E>,
+    ) -> Result<()> {
+        let seq = node.to_vec();
+        if !seq.first().unwrap().node.is_label() {
+            self.add(b.label(name, params))?;
+        }
+        for n in seq {
             self.add(n)?;
         }
         Ok(())
@@ -49,12 +59,18 @@ impl<E: Extra> Blockify<E> {
 }
 
 impl<E: Extra> Definition<E> {
-    fn blockify(mut self) -> Result<()> {
+    fn blockify(mut self, b: &mut NodeBuilder<E>) -> Result<Self> {
         if let Some(ref _body) = self.body {
             let mut blockify = Blockify::new();
-            blockify.build(*self.body.take().unwrap())
+            blockify.build(
+                *self.body.take().unwrap(),
+                self.name.into(),
+                self.params.clone(),
+                b,
+            );
+            Ok(self)
         } else {
-            Ok(())
+            Ok(self)
         }
     }
 }
@@ -64,18 +80,23 @@ impl<E: Extra> AstNode<E> {
         false
     }
 
-    pub fn blockify(self) -> Result<()> {
+    pub fn blockify(self, b: &mut NodeBuilder<E>) -> Result<Self> {
         match self.node {
-            Ast::Module(block) => {
+            Ast::Module(mut block) => {
+                let mut seq = vec![];
                 for c in block.children.into_iter() {
-                    c.blockify()?
+                    seq.push(c.blockify(b)?);
                 }
-                Ok(())
+                block.children = seq;
+                Ok(b.module(block.name, b.node(Ast::Module(block))))
             }
 
-            Ast::Definition(def) => def.blockify(),
+            Ast::Definition(def) => {
+                let def = def.blockify(b)?;
+                Ok(b.node(Ast::Definition(def)))
+            }
 
-            _ => Ok(()),
+            _ => Ok(self),
         }
     }
 }

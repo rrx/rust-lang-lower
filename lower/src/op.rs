@@ -166,7 +166,7 @@ pub fn build_reserved<'c>(
 
 pub fn emit_binop<'c, E: Extra>(
     context: &'c Context,
-    place: &IRPlaceTable,
+    place: &mut IRPlaceTable,
     op: BinaryOperation,
     x: IRNode,
     y: IRNode,
@@ -279,7 +279,7 @@ pub fn emit_deref<'c>(
 
 pub fn emit_set_alloca<'c, E: Extra>(
     context: &'c Context,
-    place: &IRPlaceTable,
+    place: &mut IRPlaceTable,
     sym_index: SymIndex,
     name: StringLabel,
     expr: IRNode,
@@ -365,7 +365,7 @@ pub fn emit_noop<'c>(
 
 pub fn emit_set_function<'c, E: Extra>(
     context: &'c Context,
-    place: &IRPlaceTable,
+    place: &mut IRPlaceTable,
     sym_index: SymIndex,
     expr: IRNode,
     current_block: NodeIndex,
@@ -382,7 +382,7 @@ pub fn emit_set_function<'c, E: Extra>(
 
             // create blocks, so they can be referenced when lowering
             for (i, block) in func_blocks.into_iter().enumerate() {
-                let block_index = blocks.add_block_ir(
+                let block_index = blocks.update_block_ir(
                     context,
                     block.index,
                     block.label,

@@ -87,7 +87,7 @@ impl IRBlock {
 #[derive(Debug)]
 pub struct IRControlBlock {
     arg_count: usize,
-    block_index: NodeIndex,
+    pub(crate) block_index: NodeIndex,
     pub(crate) params: Vec<IRArg>,
     symbols: HashMap<StringLabel, PlaceId>,
     places: HashMap<PlaceId, SymIndex>,
@@ -462,6 +462,7 @@ pub enum IRKind {
     // op(operation, args)
     Op1(UnaryOperation, Box<IRNode>),
     Op2(BinaryOperation, Box<IRNode>, Box<IRNode>),
+    Ternary(Box<IRNode>, Box<IRNode>, Box<IRNode>),
     Block(IRBlock),
     Module(IRBlock),
     Seq(Vec<IRNode>),
@@ -604,6 +605,13 @@ impl IRNode {
                 for e in vs {
                     e.dump(places, b, depth + 1);
                 }
+            }
+
+            IRKind::Ternary(c, x, y) => {
+                println!("{:width$}ternary:", "", width = depth * 2);
+                c.dump(places, b, depth + 1);
+                x.dump(places, b, depth + 1);
+                y.dump(places, b, depth + 1);
             }
 
             IRKind::Cond(c, a, mb) => {
@@ -949,6 +957,8 @@ impl IRNode {
                 Ok(b.ir_branch(condition, then_key, else_key))
             }
 
+            IRKind::Ternary(_, _, _) => Ok(self),
+
             IRKind::Cond(condition, then_expr, maybe_else_expr) => {
                 unreachable!();
                 let condition = condition.build_graph(places, env, d, b)?;
@@ -1043,12 +1053,12 @@ impl<E: Extra> AstNode<E> {
             }
             Ast::Sequence(ref _exprs) => {
                 let module_name = b.s("module");
-                let module = b.module(module_name, self);
+                let module = b.module(module_name.into(), self);
                 module.lower_ir_module(env, place, d, b)
             }
             _ => {
                 let module_name = b.s("module");
-                let module = b.module(module_name, b.seq(vec![self]));
+                let module = b.module(module_name.into(), b.seq(vec![self]));
                 module.lower_ir_module(env, place, d, b)
             }
         }
@@ -1459,6 +1469,14 @@ impl<E: Extra> AstNode<E> {
                     self.extra.get_span(),
                 ));
                 Ok(AstType::Unit)
+            }
+
+            Ast::Ternary(condition, then_expr, else_expr) => {
+                let (c, _ty) = condition.lower_ir_expr(env, place, d, b)?;
+                let (then_expr, _ty) = then_expr.lower_ir_expr(env, place, d, b)?;
+                let (else_expr, ty) = else_expr.lower_ir_expr(env, place, d, b)?;
+                out.push(b.ir_ternary(c, then_expr, else_expr));
+                Ok(ty)
             }
 
             Ast::Conditional(condition, then_expr, maybe_else_expr) => {

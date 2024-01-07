@@ -229,7 +229,7 @@ impl<E: Extra> Parser<E> {
         let ast: ast::AstNode<E> = self.from_stmt(stmt, &mut env, d, b)?;
         let extra = ast.extra.clone();
         seq.push(ast);
-        Ok(b.module(module_key, b.seq(seq).set_extra(extra)))
+        Ok(b.module(module_key.into(), b.seq(seq).set_extra(extra)))
     }
 
     fn from_parameter<'a, P: syntax::ast::AstPayload>(
@@ -436,7 +436,7 @@ impl<E: Extra> Parser<E> {
                 let else_expr = self.from_expr(else_expr, env, d, b)?;
                 let extra = env.extra(item.span);
                 Ok(b.build(
-                    Ast::Conditional(condition.into(), then_expr.into(), Some(else_expr.into())),
+                    Ast::Ternary(condition.into(), then_expr.into(), else_expr.into()),
                     extra,
                 ))
             }
@@ -580,6 +580,7 @@ impl<E: Extra> StarlarkParser<E> {
             .parse(Path::new(filename), None, module_key, file_id, d, b)?
             .normalize(d, b);
 
+        //ast.blockify(b)?;
         ast.dump(b, 0);
         let ast = ast.first_pass(b, d)?;
         ast.dump(b, 0);
@@ -616,12 +617,12 @@ impl<E: Extra> StarlarkParser<E> {
         // lower to mlir
         let mut types = TypeBuilder::new();
         let mut blocks = CFGBlocks::new(root, env.blocks.g);
-        blocks.add_block_ir(context, root, b.s("module").into(), &[], &mut types, d);
+        blocks.update_block_ir(context, root, b.s("module").into(), &[], &mut types, d);
 
         let mut stack = vec![blocks.root()];
         let r = ir.lower_mlir(
             context,
-            &self.place,
+            &mut self.place,
             d,
             &mut types,
             &mut blocks,

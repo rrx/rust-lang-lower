@@ -30,12 +30,13 @@ use melior::{
         //llvm,
         memref,
         //ods,
-        //scf,
+        scf,
     },
     ir::{
         attribute::FlatSymbolRefAttribute,
         r#type::MemRefType,
-        //Attribute, Identifier, Region,
+        //Attribute, Identifier,
+        Region,
         TypeLike,
         ValueLike,
     },
@@ -51,7 +52,7 @@ impl IRNode {
     pub fn lower_mlir<'c, E: Extra>(
         self,
         context: &'c Context,
-        place: &IRPlaceTable,
+        place: &mut IRPlaceTable,
         d: &mut Diagnostics,
         types: &mut TypeBuilder,
         blocks: &mut CFGBlocks<'c>,
@@ -225,6 +226,62 @@ impl IRNode {
                     ));
                     Err(Error::new(ParseError::Invalid))
                 }
+            }
+
+            IRKind::Ternary(condition, then_expr, else_expr) => {
+                let current_block_index = stack.last().unwrap().clone();
+                let condition_index =
+                    condition.lower_mlir(context, place, d, types, blocks, stack, b, link)?;
+                then_expr.dump(&place, b, 0);
+
+                let label = b.labels.fresh_block_id();
+                let then_block_index = blocks.add_block(place, label, vec![], d);
+                blocks.update_block_ir(context, then_block_index, label, &[], types, d);
+                stack.push(then_block_index);
+                let then_index =
+                    then_expr.lower_mlir(context, place, d, types, blocks, stack, b, link)?;
+                let block = blocks.get_mut(&then_block_index).unwrap();
+                let rs = block.values(then_index);
+                block.push(scf::r#yield(&rs, location));
+                stack.pop().unwrap();
+
+                let then_region = Region::new();
+                let block = blocks.take_block(then_block_index);
+                then_region.append_block(block);
+
+                let label = b.labels.fresh_block_id();
+                let else_block_index = blocks.add_block(place, label, vec![], d);
+                blocks.update_block_ir(context, else_block_index, label, &[], types, d);
+                stack.push(else_block_index);
+                else_expr.dump(&place, b, 0);
+                let else_index =
+                    else_expr.lower_mlir(context, place, d, types, blocks, stack, b, link)?;
+                let block = blocks.get_mut(&else_block_index).unwrap();
+                let rs = block.values(else_index);
+                block.push(scf::r#yield(&rs, location));
+                stack.pop().unwrap();
+
+                let else_region = Region::new();
+                let block = blocks.take_block(else_block_index);
+                else_region.append_block(block);
+
+                //blocks.dump_scope(current_block_index, b);
+                //blocks.save_graph("ternary.dot", b);
+
+                let current = blocks.get(&current_block_index).unwrap();
+                println!("block: {:?}", current);
+                let r_condition = current.value0(condition_index).unwrap();
+                //let r_then = blocks.values_in_scope(then_index)[0];
+                //let r_else = blocks.values_in_scope(else_index)[0];
+                //let r_else = current.value0(else_index).unwrap();
+                let (ast_ty, _mem) = types.lookup_type(else_index).unwrap();
+                let lower_ty = op::from_type(context, &ast_ty);
+                let r_types = &[lower_ty];
+                let op = scf::r#if(r_condition, r_types, then_region, else_region, location);
+                let current = blocks.get_mut(&current_block_index).unwrap();
+                let index = current.push(op);
+                types.set_type(index, ast_ty, VarDefinitionSpace::Stack);
+                Ok(index)
             }
 
             IRKind::Branch(condition, then_key, else_key) => {
@@ -472,7 +529,6 @@ impl IRNode {
 
             IRKind::Literal(lit) => {
                 let current_block = stack.last().unwrap().clone();
-                //let current = cfg_g.node_weight_mut(current_block).unwrap();
                 let current = blocks.blocks.get_mut(&current_block).unwrap();
                 let (op, ast_ty) = match lit {
                     Literal::Float(f) => (op::build_float_op(context, f, location), AstType::Float),
