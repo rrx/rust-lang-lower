@@ -1,19 +1,7 @@
 use crate::sort::IRBlockSorter;
 use crate::{
-    AstNode,
-    AstType,
-    BlockId,
-    Diagnostics,
-    Extra,
-    IRPlaceTable,
-    //InternKey,
-    NodeBuilder,
-    ParseError,
-    PlaceId,
-    PlaceNode,
-    StringKey,
-    StringLabel,
-    SymIndex,
+    AstNode, AstType, BlockId, Diagnostics, Extra, IRPlaceTable, NodeBuilder, ParseError, PlaceId,
+    PlaceNode, StringKey, StringLabel, SymIndex,
 };
 
 use anyhow::Error;
@@ -122,7 +110,6 @@ impl IRControlBlock {
     }
 
     pub fn alloca_add(&mut self, place_id: PlaceId, name: StringLabel, index: SymIndex) {
-        //self.add_symbol(name, index);
         self.symbols.insert(name, place_id);
         assert_eq!(index.block(), self.block_index);
         self.places.insert(place_id, index);
@@ -144,59 +131,11 @@ impl IRControlBlock {
         let offset = self.def_count;
         self.def_count += 1;
         let index = SymIndex::Def(self.block_index, offset);
-        //self.add_symbol(name, index);
         index
     }
 }
 
-//#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-//pub struct AllocaId(NodeIndex);
-
-//pub type IRPlaceGraph = DiGraph<PlaceNode, ()>;
-
-/*
-pub fn place_save_graph<E>(g: &IRPlaceGraph, blocks: &CFGBlocks, filename: &str, b: &NodeBuilder<E>) {
-    use petgraph::dot::{Config, Dot};
-
-    let s = format!(
-        "{:?}",
-        Dot::with_attr_getters(
-            &g,
-            &[Config::EdgeNoLabel, Config::NodeNoLabel],
-            &|_, _er| String::new(),
-            &|_, (_index, data)| {
-                //let key = blocks.get_name(&data.block_index);
-                //let name = b.strings.resolve(&key);
-                format!(
-                    //"label = \"[{}]{}\" shape={:?}",
-                    "label = \"{}\"",
-                    _index.index(),
-                    //data.block_index.index(),
-                    //&data.name,
-                    //&data.ty.to_string()
-                    )
-            }
-            )
-        );
-    let path = std::fs::canonicalize(filename).unwrap();
-    println!("{}", path.clone().into_os_string().into_string().unwrap());
-    println!("{}", s);
-    std::fs::write(path, s).unwrap();
-}
-*/
-
 pub type IRBlockGraph = DiGraph<IRControlBlock, ()>;
-
-/*
-#[derive(Debug, Eq, PartialEq, Hash, Copy, Clone)]
-pub struct BlockLabel(u32);
-
-impl BlockLabel {
-    pub fn offset(&self) -> usize {
-        self.0 as usize
-    }
-}
-*/
 
 #[derive(Default, Debug)]
 pub struct BlockTable {

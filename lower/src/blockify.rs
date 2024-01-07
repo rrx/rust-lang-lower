@@ -1,8 +1,18 @@
 use anyhow::Result;
 
 use crate::{
-    Ast, AstNode, BinaryOperation, Definition, Extra, NodeBuilder, ParameterNode, PlaceId,
-    StringKey, StringLabel, UnaryOperation,
+    Ast,
+    AstNode,
+    BinaryOperation,
+    Definition,
+    Extra,
+    Literal,
+    NodeBuilder,
+    ParameterNode,
+    PlaceId,
+    StringKey,
+    //StringLabel,
+    UnaryOperation,
 };
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
@@ -42,6 +52,7 @@ pub struct ValueId(u32);
 pub enum LCode {
     Label(BlockId, u8, u8), // BlockId, number of positional arguments, number of named arguments
     NamedArg(StringKey),
+    Const(Literal),
     Op1(UnaryOperation, ValueId),
     Op2(BinaryOperation, ValueId, ValueId),
     Load(PlaceId),
@@ -66,19 +77,51 @@ impl Blockify {
         }
     }
 
+    pub fn push_code(&mut self, code: LCode) -> ValueId {
+        let offset = self.code.len();
+        self.code.push(code);
+        ValueId(offset as u32)
+    }
+
+    pub fn add<E: Extra>(&mut self, node: AstNode<E>) -> Result<ValueId> {
+        match node.node {
+            Ast::Literal(lit) => Ok(self.push_code(LCode::Const(lit))),
+
+            //Ast::Identifier(label) => {
+            //}
+            Ast::UnaryOp(op, x) => {
+                let vx = self.add(*x)?;
+                let code = LCode::Op1(op, vx);
+                Ok(self.push_code(code))
+            }
+
+            Ast::BinaryOp(op, x, y) => {
+                let vx = self.add(*x)?;
+                let vy = self.add(*y)?;
+                let code = LCode::Op2(op.node, vx, vy);
+                Ok(self.push_code(code))
+            }
+            _ => unimplemented!(),
+        }
+    }
+
     pub fn build_block<E: Extra>(
         &mut self,
         node: AstNode<E>,
-        name: StringLabel,
+        name: StringKey,
         params: Vec<ParameterNode<E>>,
         b: &mut NodeBuilder<E>,
     ) -> Result<()> {
         let seq = node.to_vec();
         if !seq.first().unwrap().node.is_label() {
-            //self.add(b.label(name, params))?;
+            self.code
+                .push(LCode::Label(name.into(), 0, params.len() as u8));
+            for p in params {
+                self.code.push(LCode::NamedArg(p.name));
+            }
         }
         for n in seq {
-            //self.add(n)?;
+            self.add(n)?;
         }
         Ok(())
     }
