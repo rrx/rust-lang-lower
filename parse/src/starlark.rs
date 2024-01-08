@@ -14,8 +14,8 @@ use starlark_syntax::syntax::module::AstModuleFields;
 use lower::ast;
 use lower::ast::{Ast, AstNode, CodeLocation, Extra};
 use lower::{
-    AstType, CFGBlocks, Diagnostics, IRPlaceTable, LinkOptions, Module, NodeBuilder, ParseError,
-    StringKey, TypeBuilder, TypeUnify,
+    AstType, Blockify, CFGBlocks, Diagnostics, IRPlaceTable, LinkOptions, Module, NodeBuilder,
+    ParseError, StringKey, TypeBuilder, TypeUnify,
 };
 
 #[derive(Debug, Clone)]
@@ -559,7 +559,7 @@ impl<E: Extra> StarlarkParser<E> {
         }
     }
 
-    pub fn parse_module<'c>(
+    pub fn parse_module2<'c>(
         &mut self,
         filename: &str,
         context: &'c lower::Context,
@@ -569,6 +569,7 @@ impl<E: Extra> StarlarkParser<E> {
         verbose: bool,
     ) -> Result<()> {
         log::debug!("parsing: {}", filename);
+        use lower::IREnvironment;
 
         let file_id = d.add_source(filename.to_string(), std::fs::read_to_string(filename)?);
 
@@ -579,16 +580,42 @@ impl<E: Extra> StarlarkParser<E> {
         let ast: AstNode<E> = parser
             .parse(Path::new(filename), None, module_key, file_id, d, b)?
             .normalize(d, b);
-        ast.blockify(b)?;
 
+        let mut env = IREnvironment::new();
+        let mut blockify = Blockify::new();
+        blockify.add(ast, &mut env, b, d)?;
+        blockify.build(&mut env, b, d)?;
+        //ast.blockify(&mut self.place, &mut env, b, d)?;
+        blockify.dump(&self.place, b);
+        Ok(())
+    }
+
+    pub fn parse_module<'c>(
+        &mut self,
+        filename: &str,
+        context: &'c lower::Context,
+        module: &mut Module<'c>,
+        b: &mut NodeBuilder<E>,
+        d: &mut Diagnostics,
+        verbose: bool,
+    ) -> Result<()> {
+        log::debug!("parsing: {}", filename);
+        use lower::IREnvironment;
+
+        let file_id = d.add_source(filename.to_string(), std::fs::read_to_string(filename)?);
+
+        b.enter(file_id, &filename);
+
+        let mut parser = Parser::new();
+        let module_key = b.s("module");
         let ast: AstNode<E> = parser
             .parse(Path::new(filename), None, module_key, file_id, d, b)?
             .normalize(d, b);
+
         ast.dump(b, 0);
         let ast = ast.first_pass(b, d)?;
         ast.dump(b, 0);
 
-        use lower::IREnvironment;
         let mut env = IREnvironment::new();
 
         // lower ast to ir
@@ -687,6 +714,16 @@ pub(crate) mod tests {
     use lower::Location;
     use test_log::test;
 
+    fn run_test_ir2(filename: &str, expected: i32) {
+        let mut p: StarlarkParser<SimpleExtra> = StarlarkParser::new();
+        let mut b = NodeBuilder::new();
+        let context = lower::default_context();
+        let mut d = Diagnostics::new();
+        let mut module = Module::new(Location::unknown(&context));
+        let r = p.parse_module2(filename, &context, &mut module, &mut b, &mut d, true);
+        r.unwrap();
+    }
+
     fn run_test_ir(filename: &str, expected: i32) {
         let mut p: StarlarkParser<SimpleExtra> = StarlarkParser::new();
         let mut b = NodeBuilder::new();
@@ -733,6 +770,7 @@ pub(crate) mod tests {
 
     #[test]
     fn test_goto() {
+        //run_test_ir2("../tests/goto.star", 0);
         run_test_ir("../tests/goto.star", 0);
     }
 }

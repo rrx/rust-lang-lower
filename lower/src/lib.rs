@@ -18,7 +18,7 @@ pub use ast::{
     Argument, Ast, AstNode, AstNodeBlock, BinaryOperation, Definition, Extra, Literal,
     ParameterNode, SimpleExtra, Span, UnaryOperation, VarDefinitionSpace,
 };
-pub use blockify::BlockId;
+pub use blockify::{BlockId, Blockify};
 pub use builder::{NodeBuilder, NodeID, StringLabel};
 pub use cfg::{CFGBlocks, CFGGraph, SymIndex};
 pub use compile::{default_context, default_pass_manager};

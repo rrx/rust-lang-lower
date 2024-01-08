@@ -134,7 +134,7 @@ impl IRNode {
                             let base = b.resolve_label(p.name).clone();
                             let name = b.unique_static_name();
                             let name = format!("{}{}", base, name).clone();
-                            let global_name_key = b.s(&name);
+                            let _global_name_key = b.s(&name);
 
                             let ty = op::from_type(context, &p.ty);
                             let memref_ty = MemRefType::new(ty.into(), &[], None, None);

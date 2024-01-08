@@ -109,7 +109,7 @@ impl<E: Extra> Ast<E> {
     pub fn get_type(&self, env: &Environment) -> AstType {
         match self {
             Ast::Literal(lit) => lit.into(),
-            Ast::BinaryOp(op, a, b) => match op.node {
+            Ast::BinaryOp(op, a, _b) => match op.node {
                 BinaryOperation::NE => AstType::Bool,
                 BinaryOperation::EQ => AstType::Bool,
                 BinaryOperation::GT => AstType::Bool,
@@ -260,9 +260,9 @@ impl<E: Extra> AstNode<E> {
 
 fn terminate_seq<E: Extra>(
     mut exprs: Vec<AstNode<E>>,
-    env: &mut Environment,
+    _env: &mut Environment,
     b: &mut NodeBuilder<E>,
-    d: &mut Diagnostics,
+    _d: &mut Diagnostics,
 ) -> Result<(Vec<AstNode<E>>, Vec<AstNode<E>>)> {
     // split the sequence on terminator, and return a tuple (terminated sequence, remainder)
     if let Some(index) = exprs.iter().position(|expr| expr.node.is_terminator()) {
@@ -305,7 +305,7 @@ pub fn blockify_cond<E: Extra>(
     env: &mut Environment,
     next_key: BlockId,
     b: &mut NodeBuilder<E>,
-    d: &mut Diagnostics,
+    _d: &mut Diagnostics,
 ) -> Result<(Vec<AstNode<E>>, Vec<AstNodeBlock<E>>)> {
     let mut seq = vec![];
     let mut blocks = vec![];
@@ -367,7 +367,7 @@ pub fn blockify<E: Extra>(
     let (next_key, next_blocks) = if rest.len() > 0 {
         let block_params = match ty {
             AstType::Unit => vec![],
-            AstType::Tuple(types) => vec![],
+            AstType::Tuple(_types) => vec![],
             _ => unimplemented!(),
         };
 

@@ -1,4 +1,10 @@
-use crate::ast::{Ast, AstNode, AstNodeBlock, ParameterNode, Span};
+use crate::ast::{
+    Ast,
+    AstNode,
+    //AstNodeBlock,
+    ParameterNode,
+    Span,
+};
 use crate::ir::IRArg;
 use crate::{
     //AstNode, AstType,
@@ -76,8 +82,9 @@ impl<E: Extra> AstBlockSorter<E> {
         }
     }
 
-    fn close_block(&mut self, b: &mut NodeBuilder<E>) {
+    fn close_block(&mut self, _b: &mut NodeBuilder<E>) {
         unreachable!();
+        /*
         if self.stack.len() == 0 {
             return;
         }
@@ -100,6 +107,7 @@ impl<E: Extra> AstBlockSorter<E> {
         };
         let ast = b.build(Ast::Block(nb), extra.clone());
         self.blocks.push(ast);
+        */
     }
 }
 
@@ -221,11 +229,11 @@ impl<E: Extra> AstBlockTransform<E> {
         b: &mut NodeBuilder<E>,
     ) {
         match expr.node {
-            Ast::Label(ref _name, ref params) => {
+            Ast::Label(ref _name, ref _params) => {
                 self.close(place, env, d, b);
                 self.stack.push(expr);
             }
-            Ast::Goto(ref name, ref params) => {
+            Ast::Goto(ref _name, ref _params) => {
                 self.stack.push(expr);
                 self.close(place, env, d, b);
             }
@@ -244,8 +252,8 @@ impl<E: Extra> AstBlockTransform<E> {
                     self.visit(e, place, env, d, b);
                 }
             }
-            Ast::Conditional(cond, then_expr, maybe_else) => {}
-            Ast::Return(maybe_ret) => {}
+            Ast::Conditional(_cond, _then_expr, _maybe_else) => {}
+            Ast::Return(_maybe_ret) => {}
             _ => (),
         }
     }
@@ -379,7 +387,7 @@ impl IRBlockSorter {
                 self.blocks
                     .extend(Self::sort_block(nb, places, blocks, d, b));
             }
-            IRKind::Branch(_, x, y) => {
+            IRKind::Branch(_, _x, _y) => {
                 self.stack.push(ir);
                 self.close_block(places, blocks, d, b);
             }
@@ -401,8 +409,8 @@ impl IRBlockSorter {
     pub fn close_block<E: Extra>(
         &mut self,
         places: &mut IRPlaceTable,
-        blocks: &mut BlockTable,
-        d: &mut Diagnostics,
+        _blocks: &mut BlockTable,
+        _d: &mut Diagnostics,
         b: &mut NodeBuilder<E>,
     ) {
         if self.stack.len() == 0 {
@@ -434,6 +442,7 @@ impl IRBlockSorter {
             unreachable!("{:?}", first);
             //assert!(false);
             //let offset = self.blocks.len();
+            /*
             let label = b.labels.fresh_block_id();
             //let label = b.strings.intern(format!("_block{}", offset));
             println!("A: addblock");
@@ -444,6 +453,7 @@ impl IRBlockSorter {
                 params: vec![],
                 children: self.stack.drain(..).collect(),
             }
+            */
         };
         // end of block
 
@@ -457,7 +467,7 @@ mod tests {
     use crate::ast::SimpleExtra;
     use crate::tests::gen_block;
     use crate::{Diagnostics, NodeBuilder};
-    use test_log::test;
+    //use test_log::test;
 
     //#[test]
     fn test_ir_sort_1() {
@@ -465,7 +475,7 @@ mod tests {
         let file_id = d.add_source("test.py".into(), "test".into());
         let mut b: NodeBuilder<SimpleExtra> = NodeBuilder::new();
         b.enter(file_id, "type.py");
-        let module_key = b.s("module");
+        let _module_key = b.s("module");
         let mut env = IREnvironment::new(); //module_key);
         let mut place = IRPlaceTable::new();
         let ast = gen_block(&mut b).normalize(&mut d, &mut b);

@@ -167,6 +167,10 @@ impl Builtin {
             Self::Import => 1,
         }
     }
+
+    pub fn get_return_type(&self) -> AstType {
+        AstType::Unit
+    }
 }
 
 #[derive(Debug)]

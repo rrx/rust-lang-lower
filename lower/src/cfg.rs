@@ -446,7 +446,7 @@ impl<'c> CFGBlocks<'c> {
         }
         let mut g_out = DiGraph::new();
         for node_index in self.g.node_indices() {
-            let label = self.block_names_index.get(&node_index).unwrap();
+            let _label = self.block_names_index.get(&node_index).unwrap();
             //let block_name = format!("b{}", label.offset());
             let block_name = b
                 .resolve_block_label(*self.block_names_index.get(&node_index).unwrap())

@@ -915,15 +915,16 @@ impl IRNode {
                 let _current_block = env.current_block();
                 let _then_block = env.blocks.lookup_block_label(then_key).unwrap();
                 //env.blocks.g.add_edge(current_block, then_block, ());
-                let else_block = env.blocks.lookup_block_label(else_key).unwrap();
+                let _else_block = env.blocks.lookup_block_label(else_key).unwrap();
                 //env.blocks.g.add_edge(current_block, else_block, ());
                 Ok(b.ir_branch(condition, then_key, else_key))
             }
 
             IRKind::Ternary(_, _, _) => Ok(self),
 
-            IRKind::Cond(condition, then_expr, maybe_else_expr) => {
+            IRKind::Cond(_condition, _then_expr, _maybe_else_expr) => {
                 unreachable!();
+                /*
                 let condition = condition.build_graph(places, env, d, b)?;
                 let current_block = env.current_block();
 
@@ -950,6 +951,7 @@ impl IRNode {
                     None
                 };
                 Ok(b.ir_cond(condition, then_expr, maybe_else_expr))
+                */
             }
 
             IRKind::Op1(op, a) => {
@@ -1008,7 +1010,7 @@ impl<E: Extra> AstNode<E> {
                 for c in nb.children {
                     let (ir, _ty) = c.lower_ir_expr(env, place, d, b)?;
                     children.extend(ir.to_vec());
-                    let ty = _ty;
+                    ty = _ty;
                 }
                 let ir = b.ir_module(nb.name, index, children);
                 env.exit_block();
@@ -1158,8 +1160,9 @@ impl<E: Extra> AstNode<E> {
         match self.node {
             Ast::Noop => Ok(AstType::Unit),
 
-            Ast::Module(nb) => {
+            Ast::Module(_nb) => {
                 unreachable!();
+                /*
                 let index = env.blocks.add_block(place, nb.name, vec![], d);
                 env.enter_block(index, self.extra.get_span());
                 //env.module_root = Some(index);
@@ -1171,6 +1174,7 @@ impl<E: Extra> AstNode<E> {
                 }
                 env.exit_block();
                 Ok(ty)
+                */
             }
 
             Ast::Sequence(exprs) => {

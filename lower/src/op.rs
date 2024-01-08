@@ -470,7 +470,7 @@ pub fn emit_set_static<'c, E: Extra>(
     // TODO: consider moving this logic into a transformation
 
     // symbol in static context
-    let global_name = if is_current_static {
+    let _global_name = if is_current_static {
         // emitting in static context
         b.resolve_label(name).to_string()
     } else {

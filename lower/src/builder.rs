@@ -19,7 +19,6 @@ impl NodeID {
 #[derive(Debug, Eq, PartialEq, Hash, Clone, Copy)]
 pub enum StringLabel {
     Intern(StringKey),
-    //Block(usize),
     Variable(usize),
 }
 
