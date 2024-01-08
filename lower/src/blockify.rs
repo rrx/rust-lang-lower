@@ -366,6 +366,21 @@ impl<E: Extra> Blockify<E> {
                 Ok(self.push_code(code, None))
             }
 
+            Ast::Ternary(c, x, y) => {
+                let v = self.add(*c, env, b, d)?;
+
+                let then_block_id = b.labels.fresh_block_id();
+                let seq = vec![b.node(Ast::Label(then_block_id, vec![])), *x];
+                self.pending_blocks.push(b.seq(seq));
+
+                let else_block_id = b.labels.fresh_block_id();
+                let seq = vec![b.node(Ast::Label(else_block_id, vec![])), *y];
+                self.pending_blocks.push(b.seq(seq));
+
+                let code = LCode::Branch(v, then_block_id, else_block_id);
+                Ok(self.push_code(code, None))
+            }
+
             Ast::BinaryOp(op, x, y) => {
                 let vx = self.add(*x, env, b, d)?;
                 let vy = self.add(*y, env, b, d)?;
