@@ -9,10 +9,10 @@ pub struct PlaceId(u32);
 pub struct PlaceNode {
     //pub(crate) block_index: NodeIndex,
     //pub(crate) index: SymIndex,
-    pub(crate) name: StringLabel,
-    pub(crate) static_name: Option<StringKey>,
-    pub(crate) mem: VarDefinitionSpace,
-    pub(crate) ty: AstType,
+    pub name: StringLabel,
+    pub static_name: Option<StringKey>,
+    pub mem: VarDefinitionSpace,
+    pub ty: AstType,
 }
 
 impl PlaceNode {

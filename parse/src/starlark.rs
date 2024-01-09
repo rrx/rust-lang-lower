@@ -11,11 +11,12 @@ use starlark_syntax::lexer;
 use starlark_syntax::syntax;
 use starlark_syntax::syntax::module::AstModuleFields;
 
+use flat::Blockify;
 use lower::ast;
 use lower::ast::{Ast, AstNode, CodeLocation, Extra};
 use lower::{
-    AstType, Blockify, CFGBlocks, Diagnostics, IRPlaceTable, LinkOptions, Module, NodeBuilder,
-    ParseError, StringKey, TypeBuilder, TypeUnify,
+    AstType, CFGBlocks, Diagnostics, IRPlaceTable, LinkOptions, Module, NodeBuilder, ParseError,
+    StringKey, TypeBuilder, TypeUnify,
 };
 
 #[derive(Debug, Clone)]

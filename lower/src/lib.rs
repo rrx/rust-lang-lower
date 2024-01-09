@@ -1,5 +1,4 @@
 pub mod ast;
-pub mod blockify;
 pub mod builder;
 pub mod cfg;
 pub mod compile;
@@ -18,8 +17,8 @@ pub use ast::{
     Argument, Ast, AstNode, AstNodeBlock, BinaryOperation, Definition, Extra, Literal,
     ParameterNode, SimpleExtra, Span, UnaryOperation, VarDefinitionSpace,
 };
-pub use blockify::{BlockId, Blockify};
-pub use builder::{NodeBuilder, NodeID, StringLabel};
+//pub use blockify::{BlockId, Blockify};
+pub use builder::{BlockId, NodeBuilder, NodeID, StringLabel};
 pub use cfg::{CFGBlocks, CFGGraph, SymIndex};
 pub use compile::{default_context, default_pass_manager};
 pub use diagnostics::{Diagnostics, FileDB, ParseError};
@@ -28,6 +27,9 @@ pub use ir::{IRArg, IRBlockGraph, IRControlBlock, IREnvironment};
 pub use link::LinkOptions;
 pub use place::{IRPlaceTable, PlaceId, PlaceNode};
 pub use types::{AstType, TypeBuilder, TypeUnify};
+
+// re-export codespan
+pub use codespan_reporting::diagnostic::{Diagnostic, Label};
 
 // re-export melior structs
 pub use melior::{

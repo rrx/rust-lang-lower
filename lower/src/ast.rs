@@ -89,7 +89,7 @@ pub enum BinaryOperation {
 
 #[derive(Debug)]
 pub struct BinOpNode<E> {
-    pub(crate) node: BinaryOperation,
+    pub node: BinaryOperation,
     extra: E,
 }
 impl<E> BinOpNode<E> {
@@ -188,10 +188,10 @@ pub enum Terminator {
 
 #[derive(Debug)]
 pub struct AstNodeBlock<E> {
-    pub(crate) name: BlockId,
+    pub name: BlockId,
     //pub(crate) label: BlockLabel,
-    pub(crate) params: Vec<ParameterNode<E>>,
-    pub(crate) children: Vec<AstNode<E>>,
+    pub params: Vec<ParameterNode<E>>,
+    pub children: Vec<AstNode<E>>,
 }
 
 #[derive(Debug)]

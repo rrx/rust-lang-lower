@@ -3,10 +3,28 @@ use crate::intern::StringPool;
 use crate::Diagnostics;
 use crate::{
     ir::{IRArg, IRBlock, IRKind, IRNode, IRTypeSelect},
-    AstType, BlockId, NodeIndex, PlaceId, StringKey,
+    AstType, NodeIndex, PlaceId, StringKey,
 };
 use melior::{ir::Location, Context};
-//use std::collections::VecDeque;
+
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
+pub enum BlockId {
+    Name(StringKey),
+    // unique
+    U(usize),
+}
+
+impl From<StringKey> for BlockId {
+    fn from(item: StringKey) -> BlockId {
+        BlockId::Name(item)
+    }
+}
+
+impl From<&StringKey> for BlockId {
+    fn from(item: &StringKey) -> BlockId {
+        BlockId::Name(*item)
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct NodeID(Option<u32>);

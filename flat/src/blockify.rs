@@ -1,8 +1,8 @@
 use anyhow::Result;
-use codespan_reporting::diagnostic::{Diagnostic, Label};
+//use codespan_reporting::diagnostic::{Diagnostic, Label};
 //use indexmap::IndexMap;
 
-use crate::{
+use lower::{
     ast::AssignTarget,
     ast::Builtin,
     Argument,
@@ -10,10 +10,13 @@ use crate::{
     AstNode,
     AstType,
     BinaryOperation,
+    BlockId,
+    Diagnostic,
     Diagnostics,
     Extra,
     IREnvironment,
     IRPlaceTable,
+    Label,
     Literal,
     NodeBuilder,
     ParameterNode,
@@ -26,25 +29,6 @@ use crate::{
     //Definition,
     VarDefinitionSpace,
 };
-
-#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
-pub enum BlockId {
-    Name(StringKey),
-    // unique
-    U(usize),
-}
-
-impl From<StringKey> for BlockId {
-    fn from(item: StringKey) -> BlockId {
-        BlockId::Name(item)
-    }
-}
-
-impl From<&StringKey> for BlockId {
-    fn from(item: &StringKey) -> BlockId {
-        BlockId::Name(*item)
-    }
-}
 
 #[derive(Debug)]
 pub struct AstBlock {
