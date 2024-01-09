@@ -563,11 +563,11 @@ impl<E: Extra> StarlarkParser<E> {
     pub fn parse_module2<'c>(
         &mut self,
         filename: &str,
-        context: &'c lower::Context,
-        module: &mut Module<'c>,
+        _context: &'c lower::Context,
+        _module: &mut Module<'c>,
         b: &mut NodeBuilder<E>,
         d: &mut Diagnostics,
-        verbose: bool,
+        _verbose: bool,
     ) -> Result<()> {
         log::debug!("parsing: {}", filename);
         use lower::IREnvironment;
@@ -715,7 +715,7 @@ pub(crate) mod tests {
     use lower::Location;
     use test_log::test;
 
-    fn run_test_ir2(filename: &str, expected: i32) {
+    fn run_test_ir2(filename: &str, _expected: i32) {
         let mut p: StarlarkParser<SimpleExtra> = StarlarkParser::new();
         let mut b = NodeBuilder::new();
         let context = lower::default_context();

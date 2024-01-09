@@ -230,12 +230,12 @@ impl<E: Extra> AstBlockTransform<E> {
     ) {
         match expr.node {
             Ast::Label(ref _name, ref _params) => {
-                self.close(place, env, d, b);
+                self.close(place, env, d, b).unwrap();
                 self.stack.push(expr);
             }
             Ast::Goto(ref _name, ref _params) => {
                 self.stack.push(expr);
-                self.close(place, env, d, b);
+                self.close(place, env, d, b).unwrap();
             }
             /*
             Ast::Break(name) => {

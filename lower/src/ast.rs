@@ -1,5 +1,5 @@
 use crate::Diagnostics;
-use crate::{AstType, BlockId, NodeBuilder, NodeID, StringKey, StringLabel};
+use crate::{AstType, BlockId, NodeBuilder, NodeID, StringKey};
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use melior::{ir::Location, Context};
 use std::fmt::Debug;

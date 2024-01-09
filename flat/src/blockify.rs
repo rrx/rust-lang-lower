@@ -109,12 +109,6 @@ pub fn dump_codes<E: Extra>(codes: &[LCode], _places: &IRPlaceTable, _b: &NodeBu
     }
 }
 
-#[derive(Debug, Copy, Clone)]
-pub struct ScopeId(u32);
-
-#[derive(Debug)]
-pub struct ScopeLayer {}
-
 #[derive(Debug)]
 pub struct Environment {
     stack: Vec<BlockId>,
@@ -123,99 +117,13 @@ pub struct Environment {
     //pub blocks: BlockTable,
 }
 
-impl Environment {
-    pub fn new() -> Self {
-        Self {
-            stack: vec![],
-            //places: IndexMap::new(),
-            //label_count: 0,
-            //blocks: BlockTable::new(),
-        }
-    }
-
-    pub fn error(&self, msg: &str, span: Span) -> Diagnostic<usize> {
-        let r = span.begin.pos as usize..span.end.pos as usize;
-        let labels = vec![Label::primary(span.file_id, r).with_message(msg)];
-        let error = Diagnostic::error()
-            .with_labels(labels)
-            .with_message("error");
-        error
-    }
-
-    pub fn enter_block(&mut self, block_id: BlockId, _span: Span) {
-        self.stack.push(block_id);
-    }
-
-    pub fn exit_block(&mut self) {
-        self.stack.pop();
-    }
-
-    pub fn stack_size(&self) -> usize {
-        self.stack.len()
-    }
-
-    pub fn root(&self) -> BlockId {
-        self.stack.first().unwrap().clone()
-    }
-
-    pub fn current_block(&self) -> BlockId {
-        self.stack.last().unwrap().clone()
-    }
-
-    pub fn block_is_static(&self, block_index: BlockId) -> bool {
-        // root block is static block, and there's only one for now
-        self.root() == block_index
-    }
-
-    /*
-    pub fn add_definition(
-        &mut self,
-        block_id: BlockId,
-        place_id: PlaceId,
-        name: StringLabel,
-    ) -> SymIndex {
-        let data = self.blocks.g.node_weight_mut(block_index).unwrap();
-        let index = data.add_definition(place_id);
-        data.alloca_add(place_id, name, index);
-        self.places.insert(place_id, index);
-        //data.add_symbol(name, index);
-        index
-    }
-
-    pub fn block_name_in_scope(&self, index: NodeIndex, name: StringLabel) -> Option<PlaceId> {
-        let maybe_dom = simple_fast(&self.blocks.g, self.root())
-            .dominators(index)
-            .map(|it| it.collect::<Vec<_>>());
-        //println!("dom: {:?} => {:?}", index, maybe_dom);
-        if let Some(dom) = maybe_dom {
-            for i in dom.into_iter().rev() {
-                let data = self.blocks.g.node_weight(i).unwrap();
-                //println!("searching {:?}", (i, name));
-                if let Some(place_id) = data.symbols.get(&name) {
-                    //println!("found {:?}", (place_id, name));
-                    return Some(*place_id);
-                }
-            }
-        }
-        None
-    }
-    */
-
-    /*
-    pub fn dump<E: Extra>(&self, b: &NodeBuilder<E>, current_block: NodeIndex) {
-        let root = self.blocks.block_names_index.get(&self.root()).unwrap();
-        let current = self.blocks.block_names_index.get(&current_block).unwrap();
-        println!("dump: root: {:?} => {:?}", self.root(), current_block);
-        println!(
-            "dump: root: {:?} => {:?}",
-            b.resolve_block_label(*root),
-            b.resolve_block_label(*current)
-        );
-
-        self.blocks.dump_node(b, self.root(), current_block, 0);
-        self.blocks.save_graph("out.dot", b);
-    }
-    */
+pub fn error(msg: &str, span: Span) -> Diagnostic<usize> {
+    let r = span.begin.pos as usize..span.end.pos as usize;
+    let labels = vec![Label::primary(span.file_id, r).with_message(msg)];
+    let error = Diagnostic::error()
+        .with_labels(labels)
+        .with_message("error");
+    error
 }
 
 #[derive(Debug)]

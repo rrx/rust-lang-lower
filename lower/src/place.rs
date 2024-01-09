@@ -1,5 +1,9 @@
 use crate::{
-    AstType, IRBlockGraph, IRControlBlock, NodeIndex, StringKey, StringLabel, SymIndex,
+    AstType,
+    //IRBlockGraph, IRControlBlock, NodeIndex,
+    StringKey,
+    StringLabel,
+    //SymIndex,
     VarDefinitionSpace,
 };
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
