@@ -582,10 +582,11 @@ impl<E: Extra> StarlarkParser<E> {
 
         let mut env = flat::Environment::new();
         let mut blockify = Blockify::new();
-        blockify.add(ast, &mut env, b, d)?;
-        blockify.build(&mut env, b, d)?;
+        //blockify.add(ast, &mut env, b, d)?;
+        blockify.build(ast, &mut env, b, d)?;
         //ast.blockify(&mut self.place, &mut env, b, d)?;
-        blockify.dump(&self.place, b);
+        blockify.dump(&env, b);
+        env.dump(b);
         Ok(())
     }
 

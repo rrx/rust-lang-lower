@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use lower::{AstType, StringKey};
+use lower::{AstType, Extra, NodeBuilder, StringKey};
 
 #[derive(Debug, Clone)]
 pub struct Data {
@@ -45,6 +45,14 @@ impl Environment {
         }
     }
 
+    pub fn dependent_scope(&mut self, parent_id: ScopeId) -> ScopeId {
+        let offset = self.layers.len();
+        self.layers.push(ScopeLayer::new(parent_id));
+        let scope_id = ScopeId(offset as u32);
+        self.stack.push(scope_id);
+        scope_id
+    }
+
     pub fn enter_scope(&mut self) -> ScopeId {
         let offset = self.layers.len();
         let parent_id = if offset == 0 {
@@ -52,11 +60,7 @@ impl Environment {
         } else {
             *self.stack.last().unwrap()
         };
-
-        self.layers.push(ScopeLayer::new(parent_id));
-        let scope_id = ScopeId(offset as u32);
-        self.stack.push(scope_id);
-        scope_id
+        self.dependent_scope(parent_id)
     }
 
     pub fn exit_scope(&mut self) {
@@ -95,8 +99,13 @@ impl Environment {
         None
     }
 
-    pub fn dump(&self) {
-        println!("{:?}", self);
+    pub fn dump<E: Extra>(&self, b: &NodeBuilder<E>) {
+        for (index, layer) in self.layers.iter().enumerate() {
+            println!("Layer({})", index);
+            for (key, data) in layer.names.iter() {
+                println!("  {} = {:?}", b.r(*key), data);
+            }
+        }
     }
 
     pub fn root(&self) -> ScopeId {
