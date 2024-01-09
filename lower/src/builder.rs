@@ -393,11 +393,11 @@ impl<E: Extra> NodeBuilder<E> {
         self.build(Ast::Mutate(lhs.into(), rhs.into()), extra)
     }
 
-    pub fn assign(&self, name: StringLabel, rhs: AstNode<E>) -> AstNode<E> {
+    pub fn assign(&self, name: StringKey, rhs: AstNode<E>) -> AstNode<E> {
         self.node(Ast::Assign(AssignTarget::Identifier(name), rhs.into()))
     }
 
-    pub fn alloca(&self, name: StringLabel, rhs: AstNode<E>) -> AstNode<E> {
+    pub fn alloca(&self, name: StringKey, rhs: AstNode<E>) -> AstNode<E> {
         self.node(Ast::Assign(AssignTarget::Alloca(name), rhs.into()))
     }
 

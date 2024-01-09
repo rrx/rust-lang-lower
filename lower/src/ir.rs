@@ -1281,16 +1281,16 @@ impl<E: Extra> AstNode<E> {
                 AssignTarget::Alloca(name) | AssignTarget::Identifier(name) => {
                     let (ir, ty) = expr.lower_ir_expr(env, place, d, b)?;
                     let current_block = env.current_block();
-                    if let Some(place_id) = env.block_name_in_scope(current_block, name) {
+                    if let Some(place_id) = env.block_name_in_scope(current_block, name.into()) {
                         let _p = place.get_place(place_id);
                         out.push(b.ir_set(place_id, ir, IRTypeSelect::Offset(0)));
                         Ok(ty)
                     } else {
-                        let place_data = PlaceNode::new_stack(name, ty.clone());
+                        let place_data = PlaceNode::new_stack(name.into(), ty.clone());
                         let place_id = place.add_place(place_data);
                         out.push(b.ir_decl(place_id));
                         out.push(b.ir_set(place_id, ir, IRTypeSelect::Offset(0)));
-                        let _index = env.add_definition(current_block, place_id, name);
+                        let _index = env.add_definition(current_block, place_id, name.into());
                         Ok(ty)
                     }
                 }

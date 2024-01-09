@@ -697,7 +697,7 @@ impl<E: Extra> AstNode<E> {
                         println!(
                             "{:width$}target identifier: {}",
                             "",
-                            b.resolve_label(*key),
+                            b.resolve_label(key.into()),
                             width = depth * 2
                         );
                     }
@@ -705,7 +705,7 @@ impl<E: Extra> AstNode<E> {
                         println!(
                             "{:width$}target alloca: {}",
                             "",
-                            b.resolve_label(*key),
+                            b.resolve_label(key.into()),
                             width = depth * 2
                         );
                     }
@@ -810,6 +810,6 @@ impl<E> From<Argument<E>> for AstNode<E> {
 
 #[derive(Debug)]
 pub enum AssignTarget {
-    Identifier(StringLabel),
-    Alloca(StringLabel),
+    Identifier(StringKey),
+    Alloca(StringKey),
 }

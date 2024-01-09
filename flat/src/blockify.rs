@@ -109,6 +109,12 @@ pub fn dump_codes<E: Extra>(codes: &[LCode], _places: &IRPlaceTable, _b: &NodeBu
     }
 }
 
+#[derive(Debug, Copy, Clone)]
+pub struct ScopeId(u32);
+
+#[derive(Debug)]
+pub struct ScopeLayer {}
+
 #[derive(Debug)]
 pub struct Environment {
     stack: Vec<BlockId>,
@@ -314,7 +320,7 @@ impl<E: Extra> Blockify<E> {
 
                 let v = self.add(*expr, env, b, d)?;
                 let ty = self.get_place(v).ty.clone();
-                let p = PlaceNode::new_stack(name, ty);
+                let p = PlaceNode::new_stack(name.into(), ty);
                 Ok(self.push_code(LCode::Declare, Some(p)))
             }
 
