@@ -570,8 +570,6 @@ impl<E: Extra> StarlarkParser<E> {
         _verbose: bool,
     ) -> Result<()> {
         log::debug!("parsing: {}", filename);
-        use lower::IREnvironment;
-
         let file_id = d.add_source(filename.to_string(), std::fs::read_to_string(filename)?);
 
         b.enter(file_id, &filename);
@@ -582,7 +580,7 @@ impl<E: Extra> StarlarkParser<E> {
             .parse(Path::new(filename), None, module_key, file_id, d, b)?
             .normalize(d, b);
 
-        let mut env = IREnvironment::new();
+        let mut env = flat::Environment::new();
         let mut blockify = Blockify::new();
         blockify.add(ast, &mut env, b, d)?;
         blockify.build(&mut env, b, d)?;

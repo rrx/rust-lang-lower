@@ -14,7 +14,6 @@ use lower::{
     Diagnostic,
     Diagnostics,
     Extra,
-    IREnvironment,
     IRPlaceTable,
     Label,
     Literal,
@@ -29,6 +28,8 @@ use lower::{
     //Definition,
     VarDefinitionSpace,
 };
+
+use crate::Environment;
 
 #[derive(Debug)]
 pub struct AstBlock {
@@ -78,12 +79,12 @@ impl LCode {
         }
     }
 
-    pub fn dump<E: Extra>(&self, depth: usize, env: &IREnvironment, b: &NodeBuilder<E>) {
+    pub fn dump<E: Extra>(&self, depth: usize, env: &Environment, b: &NodeBuilder<E>) {
         match self {
             Self::Label(block_id, _args, _kwargs) => {
-                let index = env.blocks.lookup_block_label(*block_id).unwrap();
-                let _block = env.blocks.g.node_weight(index).unwrap();
-                env.blocks.dump_node(b, index, index, depth);
+                //let index = env.blocks.lookup_block_label(*block_id).unwrap();
+                //let _block = env.blocks.g.node_weight(index).unwrap();
+                //env.blocks.dump_node(b, index, index, depth);
                 //println!("{:width$}label({:?}", "", b.resolve_block_label(block.name.into()), width = depth * 2);
             }
             _ => unimplemented!(),
@@ -107,14 +108,6 @@ pub fn dump_codes<E: Extra>(codes: &[LCode], _places: &IRPlaceTable, _b: &NodeBu
             break;
         }
     }
-}
-
-#[derive(Debug)]
-pub struct Environment {
-    stack: Vec<BlockId>,
-    //places: IndexMap<PlaceId, SymIndex>,
-    //label_count: usize,
-    //pub blocks: BlockTable,
 }
 
 pub fn error(msg: &str, span: Span) -> Diagnostic<usize> {
@@ -161,7 +154,7 @@ impl<E: Extra> Blockify<E> {
 
     pub fn build(
         &mut self,
-        env: &mut IREnvironment,
+        env: &mut Environment,
         b: &mut NodeBuilder<E>,
         d: &mut Diagnostics,
     ) -> Result<()> {
@@ -175,7 +168,7 @@ impl<E: Extra> Blockify<E> {
     pub fn add(
         &mut self,
         node: AstNode<E>,
-        env: &mut IREnvironment,
+        env: &mut Environment,
         b: &mut NodeBuilder<E>,
         d: &mut Diagnostics,
     ) -> Result<ValueId> {
@@ -306,7 +299,7 @@ impl<E: Extra> Blockify<E> {
         name: StringKey,
         params: Vec<ParameterNode<E>>,
         //places: &mut IRPlaceTable,
-        env: &mut IREnvironment,
+        env: &mut Environment,
         b: &mut NodeBuilder<E>,
         d: &mut Diagnostics,
     ) -> Result<()> {
@@ -324,74 +317,3 @@ impl<E: Extra> Blockify<E> {
         Ok(())
     }
 }
-
-/*
-impl<E: Extra> Definition<E> {
-    fn flatten(self, b: &mut NodeBuilder<E>) -> Result<()> {
-        //let code = LCode::Label();
-        Ok(())
-    }
-}
-
-impl<E: Extra> Definition<E> {
-    fn blockify(mut self, places: &mut IRPlaceTable, env: &mut IREnvironment, b: &mut NodeBuilder<E>, d: &mut Diagnostics) -> Result<()> {
-        if let Some(ref _body) = self.body {
-            let mut blockify = Blockify::new();
-            blockify.build_block(
-                *self.body.take().unwrap(),
-                self.name.into(),
-                self.params.clone(),
-                places,
-                env,
-                b,
-                d,
-            )?;
-            Ok(())
-        } else {
-            Ok(())
-        }
-    }
-}
-*/
-
-/*
-impl<E: Extra> AstNode<E> {
-    pub fn is_term_recursive(&self) -> bool {
-        false
-    }
-
-    pub fn blockify(
-        self,
-        places: &mut IRPlaceTable,
-        env: &mut IREnvironment,
-        b: &mut NodeBuilder<E>,
-        d: &mut Diagnostics,
-    ) -> Result<()> {
-        match self.node {
-            Ast::Module(block) => {
-                let _block_index = env.blocks.add_block(places, block.name, vec![], d);
-
-                //env.enter_block(block.
-                for c in block.children.into_iter() {
-                    c.blockify(places, env, b, d)?;
-                }
-                Ok(())
-            }
-
-            Ast::Sequence(exprs) => {
-                for c in exprs.into_iter() {
-                    c.blockify(places, env, b, d)?;
-                }
-                Ok(())
-            }
-
-            Ast::Definition(def) => {
-                //let def = def.blockify(places, env, b, d)?;
-                Ok(())
-            }
-
-            _ => Ok(()),
-        }
-    }
-}
-*/
