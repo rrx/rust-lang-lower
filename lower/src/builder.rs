@@ -69,7 +69,6 @@ impl LabelBuilder {
         let offset = self.unique_count;
         self.unique_count += 1;
         BlockId::U(offset)
-        //StringLabel::Block(offset)
     }
 
     pub fn fresh_var_id(&mut self) -> StringLabel {
@@ -121,7 +120,6 @@ impl<E: Extra> NodeBuilder<E> {
     pub fn resolve_label(&self, k: StringLabel) -> String {
         match k {
             StringLabel::Intern(key) => self.labels.strings.resolve(&key).clone(),
-            //StringLabel::Block(offset) => format!("b{}", offset),
             StringLabel::Variable(offset) => format!("v{}", offset),
         }
     }
@@ -230,16 +228,8 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn extra_unknown(&self) -> E {
-        let begin = CodeLocation {
-            pos: 0,
-            //line: 0,
-            //col: 0,
-        };
-        let end = CodeLocation {
-            pos: 0,
-            //line: 0,
-            //col: 0,
-        };
+        let begin = CodeLocation { pos: 0 };
+        let end = CodeLocation { pos: 0 };
         E::new(self.current_file_id(), begin, end)
     }
 
@@ -264,7 +254,7 @@ impl<E: Extra> NodeBuilder<E> {
             })
             .collect();
         self.node(Ast::Definition(Definition {
-            name, //: self.strings.intern(name.to_string()),
+            name,
             params,
             return_type: return_type.into(),
             body: body.map(|b| b.into()),
@@ -611,8 +601,9 @@ impl<E: Extra> NodeBuilder<E> {
     }
 }
 
+/*
 impl<'c, E: Extra> Definition<E> {
-    pub fn normalize(mut self, b: &mut NodeBuilder<E>) -> Self {
+    pub fn normalize2(mut self, b: &mut NodeBuilder<E>) -> Self {
         // ensure that the function body is a sequence of named blocks
         if let Some(body) = self.body {
             let extra = body.extra.clone();
@@ -682,6 +673,7 @@ impl<'c, E: Extra> Definition<E> {
         self
     }
 }
+*/
 
 #[cfg(test)]
 mod tests {
