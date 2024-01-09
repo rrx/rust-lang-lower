@@ -182,7 +182,7 @@ pub enum DerefTarget {
 #[derive(Debug)]
 pub enum Terminator {
     Jump(BlockId),
-    Branch(StringLabel, StringLabel),
+    Branch(StringKey, StringKey),
     Return,
 }
 
@@ -199,11 +199,11 @@ pub enum Ast<E> {
     BinaryOp(BinOpNode<E>, Box<AstNode<E>>, Box<AstNode<E>>),
     UnaryOp(UnaryOperation, Box<AstNode<E>>),
     Call(Box<AstNode<E>>, Vec<Argument<E>>, AstType),
-    Identifier(StringLabel),
+    Identifier(StringKey),
     Literal(Literal),
     Sequence(Vec<AstNode<E>>),
     Definition(Definition<E>),
-    Variable(Definition<E>),
+    //Variable(Definition<E>),
     Global(StringKey, Box<AstNode<E>>),
     Assign(AssignTarget, Box<AstNode<E>>),
     Replace(AssignTarget, Box<AstNode<E>>),
@@ -218,9 +218,9 @@ pub enum Ast<E> {
     Deref(Box<AstNode<E>>, DerefTarget),
     Block(AstNodeBlock<E>),
     Module(AstNodeBlock<E>),
-    Loop(StringLabel, Box<AstNode<E>>),
-    Break(Option<StringLabel>, Vec<AstNode<E>>),
-    Continue(Option<StringLabel>, Vec<AstNode<E>>),
+    Loop(StringKey, Box<AstNode<E>>),
+    Break(Option<StringKey>, Vec<AstNode<E>>),
+    Continue(Option<StringKey>, Vec<AstNode<E>>),
     Goto(BlockId, Vec<AstNode<E>>),
     Label(BlockId, Vec<ParameterNode<E>>),
     Noop,
@@ -728,7 +728,7 @@ impl<E: Extra> AstNode<E> {
                 println!(
                     "{:width$}ident: {}",
                     "",
-                    b.resolve_label(*key),
+                    b.resolve_label(key.into()),
                     width = depth * 2
                 );
             }

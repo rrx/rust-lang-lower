@@ -329,11 +329,11 @@ impl<E: Extra> NodeBuilder<E> {
         self.node(Ast::Sequence(nodes))
     }
 
-    pub fn v(&self, name: StringLabel) -> AstNode<E> {
+    pub fn v(&self, name: StringKey) -> AstNode<E> {
         self.ident(name)
     }
 
-    pub fn ident(&self, name: StringLabel) -> AstNode<E> {
+    pub fn ident(&self, name: StringKey) -> AstNode<E> {
         self.build(Ast::Identifier(name), self.extra_unknown())
     }
 
@@ -373,7 +373,7 @@ impl<E: Extra> NodeBuilder<E> {
         node.into()
     }
 
-    pub fn apply(&self, name: StringLabel, args: Vec<Argument<E>>, ty: AstType) -> AstNode<E> {
+    pub fn apply(&self, name: StringKey, args: Vec<Argument<E>>, ty: AstType) -> AstNode<E> {
         let ident = self.ident(name);
         self.build(Ast::Call(ident.into(), args, ty), self.extra_unknown())
     }

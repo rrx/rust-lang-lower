@@ -1237,14 +1237,14 @@ impl<E: Extra> AstNode<E> {
 
             Ast::Identifier(name) => {
                 let current_block = env.current_block();
-                if let Some(place_id) = env.block_name_in_scope(current_block, name) {
+                if let Some(place_id) = env.block_name_in_scope(current_block, name.into()) {
                     let p = place.get_place(place_id);
                     out.push(b.ir_get(place_id, IRTypeSelect::default()));
                     Ok(p.ty.clone())
                 } else {
                     d.push_diagnostic(self.extra.error(&format!(
                         "Variable name not found: {}",
-                        b.resolve_label(name)
+                        b.resolve_label(name.into())
                     )));
                     Err(Error::new(ParseError::Invalid))
                 }
@@ -1300,14 +1300,16 @@ impl<E: Extra> AstNode<E> {
                 Ast::Identifier(name) => {
                     let (ir, ty) = rhs.lower_ir_expr(env, place, d, b)?;
                     let current_block = env.current_block();
-                    if let Some(place_id) = env.block_name_in_scope(current_block, name) {
+                    if let Some(place_id) = env.block_name_in_scope(current_block, name.into()) {
                         let _p = place.get_place(place_id);
                         out.push(b.ir_set(place_id, ir, IRTypeSelect::Offset(0)));
                         Ok(ty)
                     } else {
                         d.push_diagnostic(
-                            self.extra
-                                .error(&format!("Name not found: {}", b.resolve_label(name))),
+                            self.extra.error(&format!(
+                                "Name not found: {}",
+                                b.resolve_label(name.into())
+                            )),
                         );
                         return Err(Error::new(ParseError::Invalid));
                     }
@@ -1320,8 +1322,9 @@ impl<E: Extra> AstNode<E> {
                 let current_block = env.current_block();
                 let (f, ty, f_args, name) = match &expr.node {
                     Ast::Identifier(ident) => {
-                        let name = b.resolve_label(*ident);
-                        if let Some(place_id) = env.block_name_in_scope(current_block, *ident) {
+                        let name = b.resolve_label(ident.into());
+                        if let Some(place_id) = env.block_name_in_scope(current_block, ident.into())
+                        {
                             let p = place.get_place(place_id);
                             if let AstType::Func(f_args, _) = p.ty.clone() {
                                 (ident, p.ty.clone(), f_args, name)
@@ -1360,7 +1363,7 @@ impl<E: Extra> AstNode<E> {
                             }
                         }
                     }
-                    out.push(b.ir_call(*f, ir_args));
+                    out.push(b.ir_call(f.into(), ir_args));
                     Ok(*ret.clone())
                 } else {
                     unimplemented!("calling non function type: {:?}", ty);

@@ -11,8 +11,8 @@ use crate::{
     NodeBuilder,
     Span,
     //ParameterNode,
-    //StringKey,
-    StringLabel,
+    StringKey,
+    //StringLabel,
     TypeUnify,
     UnaryOperation,
 };
@@ -38,7 +38,7 @@ impl Data {
 
 #[derive(Debug)]
 pub struct Layer {
-    names: HashMap<StringLabel, Data>,
+    names: HashMap<StringKey, Data>,
 }
 impl Default for Layer {
     fn default() -> Self {
@@ -79,12 +79,12 @@ impl Environment {
         self.layers.pop().unwrap();
     }
 
-    pub fn define(&mut self, name: StringLabel, ty: AstType) {
+    pub fn define(&mut self, name: StringKey, ty: AstType) {
         let data = Data::new(ty);
         self.layers.last_mut().unwrap().names.insert(name, data);
     }
 
-    pub fn resolve(&self, name: StringLabel) -> Option<Data> {
+    pub fn resolve(&self, name: StringKey) -> Option<Data> {
         for layer in self.layers.iter().rev() {
             return layer.names.get(&name).cloned();
         }
