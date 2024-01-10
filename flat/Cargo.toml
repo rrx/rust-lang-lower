@@ -9,5 +9,5 @@ edition = "2021"
 lower = { path = "../lower" }
 anyhow = "*"
 thiserror = "*"
-
+tabled = "0.15.0"
 

@@ -20,6 +20,7 @@ pub struct ScopeId(u32);
 pub struct ScopeLayer {
     parent_id: ScopeId,
     names: HashMap<StringKey, Data>,
+    last_pos: Option<usize>,
 }
 
 impl ScopeLayer {
@@ -27,6 +28,7 @@ impl ScopeLayer {
         Self {
             parent_id,
             names: HashMap::new(),
+            last_pos: None,
         }
     }
 }
@@ -34,27 +36,27 @@ impl ScopeLayer {
 #[derive(Debug)]
 pub struct Environment {
     stack: Vec<ScopeId>,
-    layers: Vec<ScopeLayer>,
+    scopes: Vec<ScopeLayer>,
 }
 
 impl Environment {
     pub fn new() -> Self {
         Self {
             stack: vec![],
-            layers: vec![],
+            scopes: vec![],
         }
     }
 
     pub fn dependent_scope(&mut self, parent_id: ScopeId) -> ScopeId {
-        let offset = self.layers.len();
-        self.layers.push(ScopeLayer::new(parent_id));
+        let offset = self.scopes.len();
+        self.scopes.push(ScopeLayer::new(parent_id));
         let scope_id = ScopeId(offset as u32);
         self.stack.push(scope_id);
         scope_id
     }
 
     pub fn enter_scope(&mut self) -> ScopeId {
-        let offset = self.layers.len();
+        let offset = self.scopes.len();
         let parent_id = if offset == 0 {
             ScopeId(0)
         } else {
@@ -69,7 +71,7 @@ impl Environment {
 
     pub fn define(&mut self, scope_id: ScopeId, name: StringKey, ty: AstType) {
         let data = Data::new(ty);
-        self.layers
+        self.scopes
             .get_mut(scope_id.0 as usize)
             .unwrap()
             .names
@@ -77,11 +79,11 @@ impl Environment {
     }
 
     pub fn get_scope(&self, scope_id: ScopeId) -> &ScopeLayer {
-        self.layers.get(scope_id.0 as usize).unwrap()
+        self.scopes.get(scope_id.0 as usize).unwrap()
     }
 
     pub fn get_scope_mut(&mut self, scope_id: ScopeId) -> &mut ScopeLayer {
-        self.layers.get_mut(scope_id.0 as usize).unwrap()
+        self.scopes.get_mut(scope_id.0 as usize).unwrap()
     }
 
     pub fn resolve(&self, scope_id: ScopeId, name: StringKey) -> Option<&Data> {
@@ -100,10 +102,12 @@ impl Environment {
     }
 
     pub fn dump<E: Extra>(&self, b: &NodeBuilder<E>) {
-        for (index, layer) in self.layers.iter().enumerate() {
-            println!("Layer({})", index);
-            for (key, data) in layer.names.iter() {
-                println!("  {} = {:?}", b.r(*key), data);
+        for (index, layer) in self.scopes.iter().enumerate() {
+            if layer.names.len() > 0 {
+                println!("scope({})", index);
+                for (key, data) in layer.names.iter() {
+                    println!("  {} = {:?}", b.r(*key), data);
+                }
             }
         }
     }

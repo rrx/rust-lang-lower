@@ -33,6 +33,12 @@ pub enum AstType {
     Variable(u32),
 }
 
+impl std::fmt::Display for AstType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
 impl AstType {
     pub fn unknown(id: u32) -> Self {
         Self::Variable(id)
