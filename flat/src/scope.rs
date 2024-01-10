@@ -1,6 +1,9 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use lower::{AstType, Extra, NodeBuilder, StringKey};
+
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
+pub struct ValueId(pub(crate) u32);
 
 #[derive(Debug, Clone)]
 pub struct Data {
@@ -13,56 +16,74 @@ impl Data {
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub struct ScopeId(u32);
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+pub struct ScopeId(pub(crate) u32);
+impl std::fmt::Display for ScopeId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
 
 #[derive(Debug)]
 pub struct ScopeLayer {
-    parent_id: ScopeId,
+    //parent_id: ScopeId,
     names: HashMap<StringKey, Data>,
-    last_pos: Option<usize>,
+    pub(crate) last_value: Option<ValueId>,
+    pub(crate) succ: HashSet<ScopeId>,
+    pub(crate) pred: HashSet<ScopeId>,
 }
 
 impl ScopeLayer {
-    fn new(parent_id: ScopeId) -> Self {
+    pub fn new() -> Self {
         Self {
-            parent_id,
+            //parent_id,
             names: HashMap::new(),
-            last_pos: None,
+            last_value: None,
+            pred: HashSet::new(),
+            succ: HashSet::new(),
         }
+    }
+
+    pub fn add_pred(&mut self, parent_id: ScopeId) {
+        self.pred.insert(parent_id);
     }
 }
 
 #[derive(Debug)]
 pub struct Environment {
-    stack: Vec<ScopeId>,
-    scopes: Vec<ScopeLayer>,
+    pub(crate) static_scope: ScopeId,
+    pub(crate) stack: Vec<ScopeId>,
+    pub(crate) scopes: Vec<ScopeLayer>,
 }
 
 impl Environment {
     pub fn new() -> Self {
+        let scope = ScopeLayer::new();
         Self {
+            static_scope: ScopeId(0),
             stack: vec![],
-            scopes: vec![],
+            scopes: vec![scope],
         }
     }
 
-    pub fn dependent_scope(&mut self, parent_id: ScopeId) -> ScopeId {
+    pub fn new_scope(&mut self) -> ScopeId {
         let offset = self.scopes.len();
-        self.scopes.push(ScopeLayer::new(parent_id));
-        let scope_id = ScopeId(offset as u32);
-        self.stack.push(scope_id);
+        let scope = ScopeLayer::new();
+        self.scopes.push(scope);
+        ScopeId(offset as u32)
+    }
+
+    pub fn dependent_scope(&mut self, parent_id: ScopeId) -> ScopeId {
+        let scope_id = self.new_scope();
+        //let offset = self.scopes.len();
+        //let mut scope = ScopeLayer::new();
+        self.add_pred(scope_id, parent_id);
+        self.add_succ(parent_id, scope_id);
         scope_id
     }
 
-    pub fn enter_scope(&mut self) -> ScopeId {
-        let offset = self.scopes.len();
-        let parent_id = if offset == 0 {
-            ScopeId(0)
-        } else {
-            *self.stack.last().unwrap()
-        };
-        self.dependent_scope(parent_id)
+    pub fn enter_scope(&mut self, scope_id: ScopeId) {
+        self.stack.push(scope_id);
     }
 
     pub fn exit_scope(&mut self) {
@@ -86,6 +107,14 @@ impl Environment {
         self.scopes.get_mut(scope_id.0 as usize).unwrap()
     }
 
+    pub fn add_pred(&mut self, scope_id: ScopeId, pred: ScopeId) {
+        self.get_scope_mut(scope_id).pred.insert(pred);
+    }
+
+    pub fn add_succ(&mut self, scope_id: ScopeId, succ: ScopeId) {
+        self.get_scope_mut(scope_id).succ.insert(succ);
+    }
+
     pub fn resolve(&self, scope_id: ScopeId, name: StringKey) -> Option<&Data> {
         let current_id = scope_id;
         loop {
@@ -94,7 +123,7 @@ impl Environment {
                 return Some(data);
             }
 
-            if current_id == scope.parent_id {
+            if scope.pred.contains(&current_id) {
                 break;
             }
         }
@@ -112,11 +141,19 @@ impl Environment {
         }
     }
 
+    /*
     pub fn root(&self) -> ScopeId {
         self.stack.first().unwrap().clone()
     }
 
-    pub fn current_scope(&self) -> ScopeId {
-        self.stack.last().unwrap().clone()
+    */
+    /*
+        pub fn previous_scope(&self) -> Option<ScopeId> {
+            self.prev
+        }
+    */
+    pub fn current_scope(&self) -> Option<ScopeId> {
+        self.stack.last().cloned()
+        //self.stack.last().unwrap().clone()
     }
 }

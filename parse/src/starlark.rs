@@ -580,13 +580,12 @@ impl<E: Extra> StarlarkParser<E> {
             .parse(Path::new(filename), None, module_key, file_id, d, b)?
             .normalize(d, b);
 
-        let mut env = flat::Environment::new();
+        //let mut env = flat::Environment::new();
         let mut blockify = Blockify::new();
         //blockify.add(ast, &mut env, b, d)?;
-        blockify.build(ast, &mut env, b, d)?;
+        blockify.build(ast, b, d)?;
         //ast.blockify(&mut self.place, &mut env, b, d)?;
-        blockify.dump(&env, b);
-        env.dump(b);
+        blockify.dump(b);
         Ok(())
     }
 
@@ -770,7 +769,7 @@ pub(crate) mod tests {
 
     #[test]
     fn test_goto() {
-        //run_test_ir2("../tests/goto.star", 0);
-        run_test_ir("../tests/goto.star", 0);
+        run_test_ir2("../tests/goto.star", 0);
+        //run_test_ir("../tests/goto.star", 0);
     }
 }

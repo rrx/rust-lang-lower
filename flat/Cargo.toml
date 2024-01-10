@@ -10,4 +10,5 @@ lower = { path = "../lower" }
 anyhow = "*"
 thiserror = "*"
 tabled = "0.15.0"
+indexmap = "2.1.0"
 
