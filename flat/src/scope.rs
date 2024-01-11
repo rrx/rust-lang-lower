@@ -28,6 +28,7 @@ impl std::fmt::Display for ScopeId {
 pub struct ScopeLayer {
     //parent_id: ScopeId,
     names: HashMap<StringKey, Data>,
+    pub(crate) labels: HashMap<StringKey, ValueId>,
     pub(crate) last_value: Option<ValueId>,
     pub(crate) succ: HashSet<ScopeId>,
     pub(crate) pred: HashSet<ScopeId>,
@@ -37,6 +38,7 @@ impl ScopeLayer {
     pub fn new() -> Self {
         Self {
             //parent_id,
+            labels: HashMap::new(),
             names: HashMap::new(),
             last_value: None,
             pred: HashSet::new(),
@@ -135,6 +137,12 @@ impl Environment {
             if layer.names.len() > 0 {
                 println!("scope({})", index);
                 for (key, data) in layer.names.iter() {
+                    println!("  {} = {:?}", b.r(*key), data);
+                }
+            }
+            if layer.labels.len() > 0 {
+                println!("labels({})", index);
+                for (key, data) in layer.labels.iter() {
                     println!("  {} = {:?}", b.r(*key), data);
                 }
             }
