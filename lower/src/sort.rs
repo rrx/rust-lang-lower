@@ -14,7 +14,7 @@ use crate::{
     IREnvironment,
     IRPlaceTable,
     NodeBuilder,
-    //StringKey,
+    StringKey,
     //ParseError,
     //PlaceId,
     //PlaceNode, StringKey, SymIndex
@@ -115,7 +115,7 @@ pub struct AstBlockTransform<E> {
     pub exprs: Vec<AstNode<E>>,
     pub stack: Vec<AstNode<E>>,
     pub blocks: Vec<IRBlock>,
-    pub names: HashMap<BlockId, NodeIndex>,
+    pub names: HashMap<StringKey, NodeIndex>,
 }
 
 impl<E: Extra> AstBlockTransform<E> {
@@ -147,20 +147,20 @@ impl<E: Extra> AstBlockTransform<E> {
                         ty: p.ty.clone(),
                     });
                 }
-                let block_index = env.blocks.add_block(place, *name, args, d);
+                let block_index = env.blocks.add_block(place, name.into(), args, d);
                 // name should be unique in scope
-                assert!(!scope.names.contains_key(&name));
-                scope.names.insert(*name, block_index);
+                assert!(!scope.names.contains_key(&name.into()));
+                scope.names.insert(name.into(), block_index);
             }
             _ => {
                 // not a label
                 if self.exprs.len() == 0 {
                     // empty expressions, create a block
-                    let label = b.s("block").into();
-                    let block_index = env.blocks.add_block(place, label, vec![], d);
+                    let label = b.s("block");
+                    let block_index = env.blocks.add_block(place, label.into(), vec![], d);
                     // name should be unique in scope
-                    assert!(!scope.names.contains_key(&label));
-                    scope.names.insert(label, block_index);
+                    assert!(!scope.names.contains_key(&label.into()));
+                    scope.names.insert(label.into(), block_index);
                     self.exprs.push(b.label(label, vec![]));
                 }
             }
@@ -193,7 +193,7 @@ impl<E: Extra> AstBlockTransform<E> {
         };
 
         let label = if let Ast::Label(ref label, ref _args) = first.node {
-            label
+            label.into()
         } else {
             unreachable!()
         };
@@ -211,7 +211,7 @@ impl<E: Extra> AstBlockTransform<E> {
 
         let nb = IRBlock {
             index: *block_index,
-            label: *label,
+            label: label.into(),
             params,
             children,
         };

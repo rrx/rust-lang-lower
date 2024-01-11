@@ -195,13 +195,14 @@ impl<E: Extra> AstNode<E> {
         d: &mut Diagnostics,
     ) -> Result<Self> {
         match self.node {
-            Ast::Module(mut block) => {
-                let mut children = vec![];
-                for c in block.children {
-                    children.push(c.run_first_pass(env, types, b, d)?);
-                }
-                block.children = children;
-                self.node = Ast::Module(block);
+            Ast::Module(name, body) => {
+                //let mut children = vec![];
+                let body = body.run_first_pass(env, types, b, d)?;
+                //for c in block.children {
+                //children.push(c.run_first_pass(env, types, b, d)?);
+                //}
+                //block.children = children;
+                self.node = Ast::Module(name, body.into());
                 Ok(self)
             }
 
@@ -293,7 +294,8 @@ pub fn ensure_terminate<E: Extra>(
     if !last.node.is_terminator() {
         let last = exprs.pop().unwrap();
         let extra = last.extra.clone();
-        exprs.push(b.node(Ast::Goto(next_key.into(), vec![])).set_extra(extra));
+        let key = b.s(&next_key.to_string(b));
+        exprs.push(b.node(Ast::Goto(key, vec![])).set_extra(extra));
     }
     exprs
 }
@@ -322,16 +324,16 @@ pub fn blockify_cond<E: Extra>(
 
     let else_block_name = if let Some(else_expr) = maybe_else_expr {
         let else_name = format!("else_block{}", env.gen_unique());
-        let key = b.s(&else_name).into();
+        let key = b.s(&else_name);
         let else_block = AstNodeBlock {
-            name: key,
+            name: key.into(),
             params: vec![],
             children: ensure_terminate(else_expr.to_vec(), next_key, b),
         };
         blocks.push(else_block);
         key
     } else {
-        next_key
+        b.s(&next_key.to_string(b))
     };
 
     seq.push(b.node(Ast::Branch(
@@ -359,7 +361,8 @@ pub fn blockify<E: Extra>(
 
     // if label is missing, add it
     if !seq.first().unwrap().node.is_label() {
-        block_children.push(b.label(block.name, block.params.clone()));
+        let key = b.s(&block.name.to_string(b));
+        block_children.push(b.label(key, block.params.clone()));
     }
 
     block_children.extend(seq);
@@ -373,7 +376,7 @@ pub fn blockify<E: Extra>(
 
         let block = if let Ast::Label(ref key, ref params) = rest.first().unwrap().node {
             AstNodeBlock {
-                name: *key,
+                name: key.into(),
                 params: params.clone(),
                 children: rest,
             }

@@ -26,6 +26,15 @@ impl From<&StringKey> for BlockId {
     }
 }
 
+impl BlockId {
+    pub fn to_string<E: Extra>(self, b: &NodeBuilder<E>) -> String {
+        match self {
+            Self::Name(key) => b.r(key).to_string(),
+            Self::U(i) => format!("b{}", i),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct NodeID(Option<u32>);
 impl NodeID {
@@ -414,11 +423,11 @@ impl<E: Extra> NodeBuilder<E> {
         ))
     }
 
-    pub fn label(&self, name: BlockId, args: Vec<ParameterNode<E>>) -> AstNode<E> {
+    pub fn label(&self, name: StringKey, args: Vec<ParameterNode<E>>) -> AstNode<E> {
         self.build(Ast::Label(name, args), self.extra_unknown())
     }
 
-    pub fn goto(&self, name: BlockId, args: Vec<AstNode<E>>) -> AstNode<E> {
+    pub fn goto(&self, name: StringKey, args: Vec<AstNode<E>>) -> AstNode<E> {
         self.build(Ast::Goto(name, args), self.extra_unknown())
     }
 
@@ -431,19 +440,19 @@ impl<E: Extra> NodeBuilder<E> {
         }
     }
 
-    pub fn module(&self, name: BlockId, body: AstNode<E>) -> AstNode<E> {
+    pub fn module(&self, name: StringKey, body: AstNode<E>) -> AstNode<E> {
         let extra = body.extra.clone();
-        let nb = AstNodeBlock {
-            name,
-            params: vec![],
-            children: vec![body.into()],
-        };
-        self.build(Ast::Module(nb), extra)
+        //let nb = AstNodeBlock {
+        //name: name.into(),
+        //params: vec![],
+        //children: vec![body.into()],
+        //};
+        self.build(Ast::Module(name, body.into()), extra)
     }
 
     pub fn block(
         &self,
-        name: BlockId,
+        name: StringKey,
         params: &[(StringKey, AstType)],
         body: AstNode<E>,
     ) -> AstNode<E> {
@@ -458,7 +467,7 @@ impl<E: Extra> NodeBuilder<E> {
             })
             .collect();
         let nb = AstNodeBlock {
-            name,
+            name: name.into(),
             params,
             children: vec![body],
         };

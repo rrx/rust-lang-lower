@@ -181,7 +181,7 @@ pub enum DerefTarget {
 
 #[derive(Debug)]
 pub enum Terminator {
-    Jump(BlockId),
+    Jump(StringKey),
     Branch(StringKey, StringKey),
     Return,
 }
@@ -208,7 +208,7 @@ pub enum Ast<E> {
     Assign(AssignTarget, Box<AstNode<E>>),
     Replace(AssignTarget, Box<AstNode<E>>),
     Mutate(Box<AstNode<E>>, Box<AstNode<E>>),
-    Branch(Box<AstNode<E>>, BlockId, BlockId),
+    Branch(Box<AstNode<E>>, StringKey, StringKey),
     Conditional(Box<AstNode<E>>, Box<AstNode<E>>, Option<Box<AstNode<E>>>),
     Ternary(Box<AstNode<E>>, Box<AstNode<E>>, Box<AstNode<E>>),
     Return(Option<Box<AstNode<E>>>),
@@ -217,12 +217,12 @@ pub enum Ast<E> {
     Builtin(Builtin, Vec<Argument<E>>),
     Deref(Box<AstNode<E>>, DerefTarget),
     Block(AstNodeBlock<E>),
-    Module(AstNodeBlock<E>),
+    Module(StringKey, Box<AstNode<E>>),
     Loop(StringKey, Box<AstNode<E>>),
     Break(Option<StringKey>, Vec<AstNode<E>>),
     Continue(Option<StringKey>, Vec<AstNode<E>>),
-    Goto(BlockId, Vec<AstNode<E>>),
-    Label(BlockId, Vec<ParameterNode<E>>),
+    Goto(StringKey, Vec<AstNode<E>>),
+    Label(StringKey, Vec<ParameterNode<E>>),
     Noop,
     Error,
 }
@@ -562,8 +562,12 @@ impl<E: Extra> AstNode<E> {
                     values.push(a);
                 }
             }
-            Ast::Block(ref mut nb) | Ast::Module(ref mut nb) => {
+            Ast::Block(ref mut nb) => {
                 values.extend(&mut nb.children);
+            }
+            Ast::Module(_name, ref mut body) => {
+                values.push(body);
+                //values.extend(&mut body.to_vec());
             }
             Ast::Builtin(_, args) => {
                 for a in args {
@@ -578,17 +582,13 @@ impl<E: Extra> AstNode<E> {
 
     pub fn dump(&self, b: &NodeBuilder<E>, mut depth: usize) {
         match &self.node {
-            Ast::Module(block) => {
-                println!(
-                    "{:width$}module({}):",
-                    "",
-                    b.resolve_block_label(block.name.into()),
-                    width = depth * 2
-                );
+            Ast::Module(name, body) => {
+                println!("{:width$}module({}):", "", b.r(*name), width = depth * 2);
                 depth += 1;
-                for c in &block.children {
-                    c.dump(b, depth);
-                }
+                body.dump(b, depth);
+                //for c in body.to_vec() {
+                //c.dump(b, depth);
+                //}
             }
             Ast::Sequence(exprs) => {
                 for expr in exprs {
@@ -617,7 +617,7 @@ impl<E: Extra> AstNode<E> {
                     "{:width$}label: {}",
                     "",
                     //name.0,
-                    b.resolve_block_label(*name),
+                    b.r(*name),
                     width = depth * 2
                 );
                 for e in args {
@@ -636,7 +636,7 @@ impl<E: Extra> AstNode<E> {
                     "{:width$}goto: {}",
                     "",
                     //key.0,
-                    b.resolve_block_label(*key),
+                    b.r(*key),
                     width = depth * 2
                 );
                 for a in args {
@@ -759,8 +759,8 @@ impl<E: Extra> AstNode<E> {
                 println!(
                     "{:width$}branch: {}, {}",
                     "",
-                    b.resolve_block_label(*then_key),
-                    b.resolve_block_label(*else_key),
+                    b.r(*then_key),
+                    b.r(*else_key),
                     width = depth * 2
                 );
                 c.dump(b, depth + 1);

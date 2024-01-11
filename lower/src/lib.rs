@@ -67,7 +67,7 @@ pub(crate) mod tests {
         //seq.push(b.global("z", b.integer(10)));
         let y = b.s("y").into();
         let yy = b.s("yy").into();
-        let asdf: BlockId = b.s("asdf").into();
+        let asdf = b.s("asdf");
         let asdf2 = b.s("asdf2").into();
         let entry = b.s("entry").into();
         let main = b.main(b.seq(vec![
@@ -81,7 +81,7 @@ pub(crate) mod tests {
                     //b.mutate(b.ident("y"), b.integer(998)),
                     //b.ret(Some(b.integer(0))),
                     // branch to asdf
-                    b.goto(asdf, vec![]),
+                    b.goto(asdf.into(), vec![]),
                 ]),
             ),
             b.block(

@@ -999,20 +999,20 @@ impl<E: Extra> AstNode<E> {
         b: &mut NodeBuilder<E>,
     ) -> Result<(IRNode, AstType, NodeIndex)> {
         match self.node {
-            Ast::Module(nb) => {
+            Ast::Module(name, body) => {
                 assert_eq!(env.stack_size(), 0);
                 println!("Module: addblock");
-                let index = env.blocks.add_block(place, nb.name, vec![], d);
+                let index = env.blocks.add_block(place, name.into(), vec![], d);
                 env.enter_block(index, self.extra.get_span());
                 //let mut children = vec![b.ir_label(nb.name, index, vec![])];
                 let mut children = vec![];
                 let mut ty = AstType::Unit;
-                for c in nb.children {
+                for c in body.to_vec() {
                     let (ir, _ty) = c.lower_ir_expr(env, place, d, b)?;
                     children.extend(ir.to_vec());
                     ty = _ty;
                 }
-                let ir = b.ir_module(nb.name, index, children);
+                let ir = b.ir_module(name.into(), index, children);
                 env.exit_block();
                 Ok((ir, ty, index))
             }
@@ -1160,7 +1160,7 @@ impl<E: Extra> AstNode<E> {
         match self.node {
             Ast::Noop => Ok(AstType::Unit),
 
-            Ast::Module(_nb) => {
+            Ast::Module(_, _) => {
                 unreachable!();
                 /*
                 let index = env.blocks.add_block(place, nb.name, vec![], d);
@@ -1218,7 +1218,7 @@ impl<E: Extra> AstNode<E> {
                 //let label = env.blocks.fresh_block_label(s, b);
                 //env.block_names.last_mut().unwrap().insert(name, label);
                 let block_index = env.stack.last().unwrap().0;
-                out.push(b.ir_label(name, block_index, args));
+                out.push(b.ir_label(name.into(), block_index, args));
                 Ok(AstType::Unit)
             }
 
@@ -1231,7 +1231,7 @@ impl<E: Extra> AstNode<E> {
                 }
                 //let label = env.block_names.last_mut().unwrap().get(&name).unwrap();
 
-                out.push(b.ir_jump(name, args));
+                out.push(b.ir_jump(name.into(), args));
                 Ok(AstType::Unit)
             }
 
