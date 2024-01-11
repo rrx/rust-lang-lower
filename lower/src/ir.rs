@@ -1222,13 +1222,13 @@ impl<E: Extra> AstNode<E> {
                 Ok(AstType::Unit)
             }
 
-            Ast::Goto(name, ast_args) => {
+            Ast::Goto(name) => {
                 let mut args = vec![];
-                for a in ast_args.into_iter() {
-                    //let Argument::Positional(expr) = a;
-                    let (ir, _ty) = a.lower_ir_expr(env, place, d, b)?;
-                    args.push(ir);
-                }
+                //for a in ast_args.into_iter() {
+                //let Argument::Positional(expr) = a;
+                //let (ir, _ty) = a.lower_ir_expr(env, place, d, b)?;
+                //args.push(ir);
+                //}
                 //let label = env.block_names.last_mut().unwrap().get(&name).unwrap();
 
                 out.push(b.ir_jump(name.into(), args));

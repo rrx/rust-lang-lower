@@ -68,7 +68,7 @@ impl<E: Extra> AstBlockSorter<E> {
                 }
                 self.blocks.push(ast);
             }
-            Ast::Goto(_, _) => {
+            Ast::Goto(_) => {
                 self.stack.push(ast);
                 self.close_block(b);
             }
@@ -233,7 +233,7 @@ impl<E: Extra> AstBlockTransform<E> {
                 self.close(place, env, d, b).unwrap();
                 self.stack.push(expr);
             }
-            Ast::Goto(ref _name, ref _params) => {
+            Ast::Goto(ref _name) => {
                 self.stack.push(expr);
                 self.close(place, env, d, b).unwrap();
             }
@@ -487,7 +487,7 @@ mod tests {
         let test2 = b.s("test2").into();
         let seq = vec![
             b.label(test1, vec![]),
-            b.goto(test2, vec![]),
+            b.goto(test2),
             b.label(test2, vec![]),
             b.ret(None),
         ];

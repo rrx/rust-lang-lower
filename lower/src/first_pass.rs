@@ -101,7 +101,7 @@ impl<E: Extra> Ast<E> {
         match self {
             Ast::Sequence(exprs) => exprs.last().unwrap().node.terminator_types(env),
             Ast::Block(block) => block.children.last().unwrap().node.terminator_types(env),
-            Ast::Goto(_, args) => args.iter().map(|a| a.node.get_type(env)).collect(),
+            //Ast::Goto(_) => args.iter().map(|a| a.node.get_type(env)).collect(),
             _ => vec![],
         }
     }
@@ -141,7 +141,7 @@ impl<E: Extra> Ast<E> {
                 a_ty
             }
             Ast::Block(block) => block.children.last().unwrap().node.get_type(env),
-            Ast::Break(_, args) | Ast::Continue(_, args) | Ast::Goto(_, args) => {
+            Ast::Break(_, args) | Ast::Continue(_, args) => {
                 let mut types = args
                     .iter()
                     .map(|a| a.node.get_type(env))
@@ -295,7 +295,7 @@ pub fn ensure_terminate<E: Extra>(
         let last = exprs.pop().unwrap();
         let extra = last.extra.clone();
         let key = b.s(&next_key.to_string(b));
-        exprs.push(b.node(Ast::Goto(key, vec![])).set_extra(extra));
+        exprs.push(b.node(Ast::Goto(key)).set_extra(extra));
     }
     exprs
 }

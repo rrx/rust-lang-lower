@@ -221,7 +221,7 @@ pub enum Ast<E> {
     Loop(StringKey, Box<AstNode<E>>),
     Break(Option<StringKey>, Vec<AstNode<E>>),
     Continue(Option<StringKey>, Vec<AstNode<E>>),
-    Goto(StringKey, Vec<AstNode<E>>),
+    Goto(StringKey),
     Label(StringKey, Vec<ParameterNode<E>>),
     Noop,
     Error,
@@ -265,7 +265,7 @@ impl<E: Extra> Ast<E> {
         match self {
             Self::Sequence(exprs) => exprs.last().unwrap().node.is_terminator(),
             Self::Block(_) => true,
-            Self::Goto(_, _) => true,
+            Self::Goto(_) => true,
             Self::Return(_) => true,
             //Self::Conditional(_, _, _) => true,
             Self::Break(_, _) => true,
@@ -280,7 +280,7 @@ impl<E: Extra> Ast<E> {
         match self {
             Self::Sequence(exprs) => exprs.last().unwrap().node.terminator(),
             Self::Block(nb) => nb.children.last().unwrap().node.terminator(),
-            Self::Goto(key, _) => Some(Terminator::Jump(*key)),
+            Self::Goto(key) => Some(Terminator::Jump(*key)),
             Self::Return(_) => Some(Terminator::Return),
             _ => None,
         }
@@ -300,9 +300,10 @@ impl<E: Extra> Ast<E> {
                     *expr
                 })
                 .collect::<Vec<_>>();
+            assert_eq!(rest.len(), 0);
             let s = args.pop().unwrap().try_string().unwrap();
             let key = b.s(&s);
-            Some(Self::Goto(key.into(), rest))
+            Some(Self::Goto(key.into()))
         } else if name == "label" {
             let rest = args.split_off(1);
             let s = args.pop().unwrap().try_string().unwrap();
@@ -631,7 +632,7 @@ impl<E: Extra> AstNode<E> {
                 }
             }
 
-            Ast::Goto(key, args) => {
+            Ast::Goto(key) => {
                 println!(
                     "{:width$}goto: {}",
                     "",
@@ -639,10 +640,6 @@ impl<E: Extra> AstNode<E> {
                     b.r(*key),
                     width = depth * 2
                 );
-                for a in args {
-                    //let Argument::Positional(expr) = a;
-                    a.dump(b, depth + 1);
-                }
             }
             Ast::Definition(def) => {
                 println!("{:width$}func({}):", "", b.r(def.name), width = depth * 2);

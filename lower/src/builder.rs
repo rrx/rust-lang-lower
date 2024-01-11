@@ -427,8 +427,8 @@ impl<E: Extra> NodeBuilder<E> {
         self.build(Ast::Label(name, args), self.extra_unknown())
     }
 
-    pub fn goto(&self, name: StringKey, args: Vec<AstNode<E>>) -> AstNode<E> {
-        self.build(Ast::Goto(name, args), self.extra_unknown())
+    pub fn goto(&self, name: StringKey) -> AstNode<E> {
+        self.build(Ast::Goto(name), self.extra_unknown())
     }
 
     pub fn param(&self, name: StringKey, ty: AstType) -> ParameterNode<E> {

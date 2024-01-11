@@ -7,12 +7,13 @@ pub struct ValueId(pub(crate) u32);
 
 #[derive(Debug, Clone)]
 pub struct Data {
-    ty: AstType,
+    pub(crate) ty: AstType,
+    pub(crate) value_id: ValueId,
 }
 
 impl Data {
-    pub fn new(ty: AstType) -> Self {
-        Data { ty }
+    pub fn new(value_id: ValueId, ty: AstType) -> Self {
+        Data { value_id, ty }
     }
 }
 
@@ -61,9 +62,10 @@ pub struct Environment {
 impl Environment {
     pub fn new() -> Self {
         let scope = ScopeLayer::new();
+        let scope_id = ScopeId(0);
         Self {
-            static_scope: ScopeId(0),
-            stack: vec![],
+            static_scope: scope_id,
+            stack: vec![scope_id],
             scopes: vec![scope],
         }
     }
@@ -92,13 +94,24 @@ impl Environment {
         self.stack.pop().unwrap();
     }
 
-    pub fn define(&mut self, scope_id: ScopeId, name: StringKey, ty: AstType) {
-        let data = Data::new(ty);
+    pub fn scope_define(
+        &mut self,
+        scope_id: ScopeId,
+        name: StringKey,
+        value_id: ValueId,
+        ty: AstType,
+    ) {
+        let data = Data::new(value_id, ty);
         self.scopes
             .get_mut(scope_id.0 as usize)
             .unwrap()
             .names
             .insert(name, data);
+    }
+
+    pub fn define(&mut self, name: StringKey, value_id: ValueId, ty: AstType) {
+        let scope_id = self.current_scope().unwrap();
+        self.scope_define(scope_id, name, value_id, ty);
     }
 
     pub fn get_scope(&self, scope_id: ScopeId) -> &ScopeLayer {
@@ -117,8 +130,17 @@ impl Environment {
         self.get_scope_mut(scope_id).succ.insert(succ);
     }
 
-    pub fn resolve(&self, scope_id: ScopeId, name: StringKey) -> Option<&Data> {
-        let current_id = scope_id;
+    pub fn resolve(&self, name: StringKey) -> Option<&Data> {
+        // resolve scope through the tree, starting at the current scope
+        for scope_id in self.stack.iter().rev() {
+            let scope = self.get_scope(*scope_id);
+            if let Some(data) = scope.names.get(&name) {
+                return Some(data);
+            }
+        }
+        None
+        /*
+
         loop {
             let scope = self.get_scope(current_id);
             if let Some(data) = scope.names.get(&name) {
@@ -130,6 +152,7 @@ impl Environment {
             }
         }
         None
+        */
     }
 
     pub fn dump<E: Extra>(&self, b: &NodeBuilder<E>) {

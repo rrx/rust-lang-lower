@@ -580,13 +580,8 @@ impl<E: Extra> StarlarkParser<E> {
             .parse(Path::new(filename), None, module_key, file_id, d, b)?
             .normalize(d, b);
 
-        //let mut env = flat::Environment::new();
         let mut blockify = Blockify::new();
-        //blockify.add(ast, &mut env, b, d)?;
-        blockify.build(ast, b, d)?;
-        //ast.blockify(&mut self.place, &mut env, b, d)?;
-        blockify.dump(b);
-        Ok(())
+        blockify.build(ast, b, d)
     }
 
     pub fn parse_module<'c>(
@@ -720,6 +715,7 @@ pub(crate) mod tests {
         let mut d = Diagnostics::new();
         let mut module = Module::new(Location::unknown(&context));
         let r = p.parse_module2(filename, &context, &mut module, &mut b, &mut d, true);
+        d.dump();
         r.unwrap();
     }
 
@@ -730,6 +726,7 @@ pub(crate) mod tests {
         let mut d = Diagnostics::new();
         let mut module = Module::new(Location::unknown(&context));
         let r = p.parse_module(filename, &context, &mut module, &mut b, &mut d, true);
+        d.dump();
         r.unwrap();
         module.as_operation().dump();
         assert!(module.as_operation().verify());
@@ -754,11 +751,13 @@ pub(crate) mod tests {
 
     #[test]
     fn test_float() {
+        //run_test_ir2("../tests/test_float.star", 0);
         run_test_ir("../tests/test_float.star", 0);
     }
 
     #[test]
     fn test_recursive() {
+        //run_test_ir2("../tests/test_recursive.star", 0);
         run_test_ir("../tests/test_recursive.star", 0);
     }
 
@@ -769,7 +768,7 @@ pub(crate) mod tests {
 
     #[test]
     fn test_goto() {
-        run_test_ir2("../tests/goto.star", 0);
-        //run_test_ir("../tests/goto.star", 0);
+        //run_test_ir2("../tests/goto.star", 0);
+        run_test_ir("../tests/goto.star", 0);
     }
 }
