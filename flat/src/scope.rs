@@ -82,7 +82,7 @@ impl Block {
 
 #[derive(Debug)]
 pub struct Environment {
-    pub(crate) static_scope: ScopeId,
+    //pub(crate) static_scope: ScopeId,
     pub(crate) stack: Vec<ScopeId>,
     pub(crate) scopes: Vec<ScopeLayer>,
     pub(crate) blocks: Vec<Block>,
@@ -90,12 +90,12 @@ pub struct Environment {
 
 impl Environment {
     pub fn new() -> Self {
-        let scope = ScopeLayer::new();
-        let scope_id = ScopeId(0);
+        //let scope = ScopeLayer::new();
+        //let scope_id = ScopeId(0);
         Self {
-            static_scope: scope_id,
-            stack: vec![scope_id],
-            scopes: vec![scope],
+            //static_scope: scope_id,
+            stack: vec![],  //scope_id],
+            scopes: vec![], //scope],
             blocks: vec![],
         }
     }
@@ -167,6 +167,16 @@ impl Environment {
         self.get_scope_mut(scope_id).succ.insert(succ);
     }
 
+    pub fn resolve_block(&self, name: StringKey) -> Option<ValueId> {
+        for scope_id in self.stack.iter().rev() {
+            let scope = self.get_scope(*scope_id);
+            if let Some(value_id) = scope.labels.get(&name) {
+                return Some(*value_id);
+            }
+        }
+        None
+    }
+
     pub fn resolve(&self, name: StringKey) -> Option<&Data> {
         // resolve scope through the tree, starting at the current scope
         for scope_id in self.stack.iter().rev() {
@@ -197,17 +207,12 @@ impl Environment {
             println!("block({:?}, {:?})", index, block);
         }
         for (index, layer) in self.scopes.iter().enumerate() {
-            if layer.names.len() > 0 {
-                println!("scope({})", index);
-                for (key, data) in layer.names.iter() {
-                    println!("  {} = {:?}", b.r(*key), data);
-                }
+            println!("scope({})", index);
+            for (key, data) in layer.names.iter() {
+                println!("  name  {} = {:?}", b.r(*key), data);
             }
-            if layer.labels.len() > 0 {
-                println!("labels({})", index);
-                for (key, data) in layer.labels.iter() {
-                    println!("  {} = {:?}", b.r(*key), data);
-                }
+            for (key, data) in layer.labels.iter() {
+                println!("  label {} = {:?}", b.r(*key), data);
             }
         }
     }

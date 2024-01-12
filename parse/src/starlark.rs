@@ -581,7 +581,10 @@ impl<E: Extra> StarlarkParser<E> {
             .normalize(d, b);
 
         let mut blockify = Blockify::new();
-        blockify.build(ast, b, d)
+        let r = blockify.build(ast, b, d);
+        blockify.dump(b);
+        r?;
+        Ok(())
     }
 
     pub fn parse_module<'c>(
@@ -757,8 +760,8 @@ pub(crate) mod tests {
 
     #[test]
     fn test_recursive() {
-        //run_test_ir2("../tests/test_recursive.star", 0);
-        run_test_ir("../tests/test_recursive.star", 0);
+        run_test_ir2("../tests/test_recursive.star", 0);
+        //run_test_ir("../tests/test_recursive.star", 0);
     }
 
     #[test]
@@ -768,7 +771,7 @@ pub(crate) mod tests {
 
     #[test]
     fn test_goto() {
-        //run_test_ir2("../tests/goto.star", 0);
-        run_test_ir("../tests/goto.star", 0);
+        run_test_ir2("../tests/goto.star", 0);
+        //run_test_ir("../tests/goto.star", 0);
     }
 }

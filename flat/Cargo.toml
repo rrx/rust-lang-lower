@@ -11,4 +11,5 @@ anyhow = "*"
 thiserror = "*"
 tabled = "0.15.0"
 indexmap = "2.1.0"
+petgraph = "0.6.4"
 
