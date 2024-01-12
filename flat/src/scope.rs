@@ -5,6 +5,9 @@ use lower::{AstType, Extra, NodeBuilder, StringKey};
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 pub struct ValueId(pub(crate) u32);
 
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
+pub struct BlockId(pub(crate) u32);
+
 #[derive(Debug, Clone)]
 pub struct Data {
     pub(crate) ty: AstType,
@@ -53,10 +56,36 @@ impl ScopeLayer {
 }
 
 #[derive(Debug)]
+pub struct Block {
+    pub(crate) last_value: Option<ValueId>,
+    pub(crate) succ: HashSet<BlockId>,
+    pub(crate) pred: HashSet<BlockId>,
+}
+
+impl Block {
+    pub fn new() -> Self {
+        Self {
+            last_value: None,
+            pred: HashSet::new(),
+            succ: HashSet::new(),
+        }
+    }
+
+    pub fn add_pred(&mut self, parent_id: BlockId) {
+        self.pred.insert(parent_id);
+    }
+
+    pub fn add_succ(&mut self, succ_block_id: BlockId) {
+        self.pred.insert(succ_block_id);
+    }
+}
+
+#[derive(Debug)]
 pub struct Environment {
     pub(crate) static_scope: ScopeId,
     pub(crate) stack: Vec<ScopeId>,
     pub(crate) scopes: Vec<ScopeLayer>,
+    pub(crate) blocks: Vec<Block>,
 }
 
 impl Environment {
@@ -67,6 +96,7 @@ impl Environment {
             static_scope: scope_id,
             stack: vec![scope_id],
             scopes: vec![scope],
+            blocks: vec![],
         }
     }
 
@@ -75,6 +105,13 @@ impl Environment {
         let scope = ScopeLayer::new();
         self.scopes.push(scope);
         ScopeId(offset as u32)
+    }
+
+    pub fn new_block(&mut self) -> BlockId {
+        let offset = self.blocks.len();
+        let block = Block::new();
+        self.blocks.push(block);
+        BlockId(offset as u32)
     }
 
     pub fn dependent_scope(&mut self, parent_id: ScopeId) -> ScopeId {
@@ -156,6 +193,9 @@ impl Environment {
     }
 
     pub fn dump<E: Extra>(&self, b: &NodeBuilder<E>) {
+        for (index, block) in self.blocks.iter().enumerate() {
+            println!("block({:?}, {:?})", index, block);
+        }
         for (index, layer) in self.scopes.iter().enumerate() {
             if layer.names.len() > 0 {
                 println!("scope({})", index);
