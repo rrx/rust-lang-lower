@@ -581,8 +581,9 @@ impl<E: Extra> StarlarkParser<E> {
             .normalize(d, b);
 
         let mut blockify = Blockify::new();
-        let r = blockify.build(ast, b, d);
+        let r = blockify.build_module(ast, b, d);
         blockify.dump(b);
+        blockify.save_graph("out.dot", b);
         r?;
         Ok(())
     }

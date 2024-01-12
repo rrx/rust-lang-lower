@@ -34,14 +34,13 @@ pub struct ScopeLayer {
     names: HashMap<StringKey, Data>,
     pub(crate) labels: HashMap<StringKey, ValueId>,
     pub(crate) last_value: Option<ValueId>,
-    pub(crate) succ: HashSet<ScopeId>,
-    pub(crate) pred: HashSet<ScopeId>,
+    pub(crate) succ: HashSet<ValueId>,
+    pub(crate) pred: HashSet<ValueId>,
 }
 
 impl ScopeLayer {
     pub fn new() -> Self {
         Self {
-            //parent_id,
             labels: HashMap::new(),
             names: HashMap::new(),
             last_value: None,
@@ -50,7 +49,7 @@ impl ScopeLayer {
         }
     }
 
-    pub fn add_pred(&mut self, parent_id: ScopeId) {
+    pub fn add_pred(&mut self, parent_id: ValueId) {
         self.pred.insert(parent_id);
     }
 }
@@ -58,8 +57,8 @@ impl ScopeLayer {
 #[derive(Debug)]
 pub struct Block {
     pub(crate) last_value: Option<ValueId>,
-    pub(crate) succ: HashSet<BlockId>,
-    pub(crate) pred: HashSet<BlockId>,
+    pub(crate) succ: HashSet<ValueId>,
+    pub(crate) pred: HashSet<ValueId>,
 }
 
 impl Block {
@@ -71,18 +70,17 @@ impl Block {
         }
     }
 
-    pub fn add_pred(&mut self, parent_id: BlockId) {
+    pub fn add_pred(&mut self, parent_id: ValueId) {
         self.pred.insert(parent_id);
     }
 
-    pub fn add_succ(&mut self, succ_block_id: BlockId) {
+    pub fn add_succ(&mut self, succ_block_id: ValueId) {
         self.pred.insert(succ_block_id);
     }
 }
 
 #[derive(Debug)]
 pub struct Environment {
-    //pub(crate) static_scope: ScopeId,
     pub(crate) stack: Vec<ScopeId>,
     pub(crate) scopes: Vec<ScopeLayer>,
     pub(crate) blocks: Vec<Block>,
@@ -90,12 +88,9 @@ pub struct Environment {
 
 impl Environment {
     pub fn new() -> Self {
-        //let scope = ScopeLayer::new();
-        //let scope_id = ScopeId(0);
         Self {
-            //static_scope: scope_id,
-            stack: vec![],  //scope_id],
-            scopes: vec![], //scope],
+            stack: vec![],
+            scopes: vec![],
             blocks: vec![],
         }
     }
@@ -114,14 +109,14 @@ impl Environment {
         BlockId(offset as u32)
     }
 
-    pub fn dependent_scope(&mut self, parent_id: ScopeId) -> ScopeId {
+    /*
+    pub fn dependent_scope(&mut self, parent_id: ValueId) -> ScopeId {
         let scope_id = self.new_scope();
-        //let offset = self.scopes.len();
-        //let mut scope = ScopeLayer::new();
         self.add_pred(scope_id, parent_id);
         self.add_succ(parent_id, scope_id);
         scope_id
     }
+    */
 
     pub fn enter_scope(&mut self, scope_id: ScopeId) {
         self.stack.push(scope_id);
@@ -159,12 +154,20 @@ impl Environment {
         self.scopes.get_mut(scope_id.0 as usize).unwrap()
     }
 
-    pub fn add_pred(&mut self, scope_id: ScopeId, pred: ScopeId) {
-        self.get_scope_mut(scope_id).pred.insert(pred);
+    pub fn get_block(&self, block_id: BlockId) -> &Block {
+        self.blocks.get(block_id.0 as usize).unwrap()
     }
 
-    pub fn add_succ(&mut self, scope_id: ScopeId, succ: ScopeId) {
-        self.get_scope_mut(scope_id).succ.insert(succ);
+    pub fn get_block_mut(&mut self, block_id: BlockId) -> &mut Block {
+        self.blocks.get_mut(block_id.0 as usize).unwrap()
+    }
+
+    pub fn add_pred(&mut self, block_id: BlockId, pred: ValueId) {
+        self.get_block_mut(block_id).pred.insert(pred);
+    }
+
+    pub fn add_succ(&mut self, block_id: BlockId, succ: ValueId) {
+        self.get_block_mut(block_id).succ.insert(succ);
     }
 
     pub fn resolve_block(&self, name: StringKey) -> Option<ValueId> {
@@ -186,20 +189,6 @@ impl Environment {
             }
         }
         None
-        /*
-
-        loop {
-            let scope = self.get_scope(current_id);
-            if let Some(data) = scope.names.get(&name) {
-                return Some(data);
-            }
-
-            if scope.pred.contains(&current_id) {
-                break;
-            }
-        }
-        None
-        */
     }
 
     pub fn dump<E: Extra>(&self, b: &NodeBuilder<E>) {
@@ -217,19 +206,7 @@ impl Environment {
         }
     }
 
-    /*
-    pub fn root(&self) -> ScopeId {
-        self.stack.first().unwrap().clone()
-    }
-
-    */
-    /*
-        pub fn previous_scope(&self) -> Option<ScopeId> {
-            self.prev
-        }
-    */
     pub fn current_scope(&self) -> Option<ScopeId> {
         self.stack.last().cloned()
-        //self.stack.last().unwrap().clone()
     }
 }
