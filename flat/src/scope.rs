@@ -37,6 +37,7 @@ pub struct ScopeLayer {
     pub(crate) succ: HashSet<ValueId>,
     pub(crate) pred: HashSet<ValueId>,
     pub(crate) return_block: Option<ValueId>,
+    pub(crate) next_block: Option<ValueId>,
 }
 
 impl ScopeLayer {
@@ -48,6 +49,7 @@ impl ScopeLayer {
             pred: HashSet::new(),
             succ: HashSet::new(),
             return_block: None,
+            next_block: None,
         }
     }
 
@@ -85,7 +87,7 @@ impl Block {
 pub struct Environment {
     pub(crate) stack: Vec<ScopeId>,
     pub(crate) scopes: Vec<ScopeLayer>,
-    pub(crate) blocks: Vec<Block>,
+    pub(crate) blocks: HashMap<ValueId, Block>,
 }
 
 impl Environment {
@@ -93,7 +95,7 @@ impl Environment {
         Self {
             stack: vec![],
             scopes: vec![],
-            blocks: vec![],
+            blocks: HashMap::new(),
         }
     }
 
@@ -104,11 +106,10 @@ impl Environment {
         ScopeId(offset as u32)
     }
 
-    pub fn new_block(&mut self) -> BlockId {
-        let offset = self.blocks.len();
+    pub fn new_block(&mut self, value_id: ValueId) {
         let block = Block::new();
-        self.blocks.push(block);
-        BlockId(offset as u32)
+        self.blocks.insert(value_id, block);
+        //BlockId(offset as u32)
     }
 
     pub fn enter_scope(&mut self, scope_id: ScopeId) {
@@ -147,20 +148,26 @@ impl Environment {
         self.scopes.get_mut(scope_id.0 as usize).unwrap()
     }
 
-    pub fn get_block(&self, block_id: BlockId) -> &Block {
-        self.blocks.get(block_id.0 as usize).unwrap()
+    pub fn get_block(&self, block_id: ValueId) -> &Block {
+        self.blocks.get(&block_id).unwrap()
     }
 
-    pub fn get_block_mut(&mut self, block_id: BlockId) -> &mut Block {
-        self.blocks.get_mut(block_id.0 as usize).unwrap()
+    pub fn get_block_mut(&mut self, block_id: ValueId) -> &mut Block {
+        self.blocks.get_mut(&block_id).unwrap()
     }
 
-    pub fn add_pred(&mut self, block_id: BlockId, pred: ValueId) {
+    pub fn add_pred(&mut self, block_id: ValueId, pred: ValueId) {
         self.get_block_mut(block_id).pred.insert(pred);
     }
 
-    pub fn add_succ(&mut self, block_id: BlockId, succ: ValueId) {
+    pub fn add_succ(&mut self, block_id: ValueId, succ: ValueId) {
         self.get_block_mut(block_id).succ.insert(succ);
+    }
+
+    pub fn get_next_block(&self) -> Option<ValueId> {
+        let scope_id = self.current_scope().unwrap();
+        let scope = self.get_scope(scope_id);
+        scope.next_block
     }
 
     pub fn resolve_return_block(&self) -> Option<ValueId> {
@@ -195,6 +202,7 @@ impl Environment {
     }
 
     pub fn dump<E: Extra>(&self, b: &NodeBuilder<E>) {
+        println!("current scope: {:?}", self.current_scope());
         for (index, block) in self.blocks.iter().enumerate() {
             println!("block({:?}, {:?})", index, block);
         }
