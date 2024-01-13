@@ -124,6 +124,28 @@ pub fn error(msg: &str, span: Span) -> Diagnostic<usize> {
 }
 
 #[derive(Debug)]
+pub enum NextSeqState {
+    Empty,                // no nodes follow
+    NextLabel(StringKey), // next node is a label, we can reuse it possibly
+    NextReturn,           // next node is a return statement
+    Other,                // all other options
+}
+
+impl NextSeqState {
+    pub fn get<E: Extra>(next_node: Option<&AstNode<E>>) -> Self {
+        if let Some(next_node) = next_node {
+            match next_node.node {
+                Ast::Return(_) => Self::NextReturn,
+                Ast::Label(key, _) => Self::NextLabel(key),
+                _ => Self::Other,
+            }
+        } else {
+            Self::Empty
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct Blockify {
     code: Vec<LCode>,
     types: Vec<AstType>,
@@ -465,7 +487,7 @@ impl Blockify {
         let mut iter = exprs.into_iter().peekable();
         loop {
             if let Some(expr) = iter.next() {
-                if let Some(next_expr) = iter.peek() {}
+                let next_state = NextSeqState::get(iter.peek());
 
                 let v = self.add(current_block_id, expr, b, d)?;
                 current_block_id = *self.entries.get(v.0 as usize).unwrap();
