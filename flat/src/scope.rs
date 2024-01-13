@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use lower::{AstType, Extra, NodeBuilder, StringKey};
+use lower::{AstType, Extra, NodeBuilder, StringKey, StringLabel};
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 pub struct ValueId(pub(crate) u32);
@@ -32,10 +32,11 @@ impl std::fmt::Display for ScopeId {
 pub struct ScopeLayer {
     //parent_id: ScopeId,
     names: HashMap<StringKey, Data>,
-    pub(crate) labels: HashMap<StringKey, ValueId>,
+    pub(crate) labels: HashMap<StringLabel, ValueId>,
     pub(crate) last_value: Option<ValueId>,
     pub(crate) succ: HashSet<ValueId>,
     pub(crate) pred: HashSet<ValueId>,
+    pub(crate) return_block: Option<ValueId>,
 }
 
 impl ScopeLayer {
@@ -46,6 +47,7 @@ impl ScopeLayer {
             last_value: None,
             pred: HashSet::new(),
             succ: HashSet::new(),
+            return_block: None,
         }
     }
 
@@ -109,15 +111,6 @@ impl Environment {
         BlockId(offset as u32)
     }
 
-    /*
-    pub fn dependent_scope(&mut self, parent_id: ValueId) -> ScopeId {
-        let scope_id = self.new_scope();
-        self.add_pred(scope_id, parent_id);
-        self.add_succ(parent_id, scope_id);
-        scope_id
-    }
-    */
-
     pub fn enter_scope(&mut self, scope_id: ScopeId) {
         self.stack.push(scope_id);
     }
@@ -170,7 +163,17 @@ impl Environment {
         self.get_block_mut(block_id).succ.insert(succ);
     }
 
-    pub fn resolve_block(&self, name: StringKey) -> Option<ValueId> {
+    pub fn resolve_return_block(&self) -> Option<ValueId> {
+        for scope_id in self.stack.iter().rev() {
+            let scope = self.get_scope(*scope_id);
+            if let Some(value_id) = scope.return_block {
+                return Some(value_id);
+            }
+        }
+        None
+    }
+
+    pub fn resolve_block(&self, name: StringLabel) -> Option<ValueId> {
         for scope_id in self.stack.iter().rev() {
             let scope = self.get_scope(*scope_id);
             if let Some(value_id) = scope.labels.get(&name) {
@@ -201,7 +204,7 @@ impl Environment {
                 println!("  name  {} = {:?}", b.r(*key), data);
             }
             for (key, data) in layer.labels.iter() {
-                println!("  label {} = {:?}", b.r(*key), data);
+                println!("  label {} = {:?}", b.resolve_label(*key), data);
             }
         }
     }

@@ -634,24 +634,7 @@ impl<E: Extra> AstNode<E> {
             }
 
             Ast::Label(name) => {
-                println!(
-                    "{:width$}label: {}",
-                    "",
-                    //name.0,
-                    b.r(*name),
-                    width = depth * 2
-                );
-                /*
-                for e in args {
-                    println!(
-                        "{:width$}arg: {}, {:?}",
-                        "",
-                        b.resolve_label(e.name.into()),
-                        e.ty,
-                        width = (depth + 1) * 2
-                    );
-                }
-                */
+                println!("{:width$}label: {}", "", b.r(*name), width = depth * 2);
             }
 
             Ast::Goto(key) => {
