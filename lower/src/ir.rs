@@ -1197,19 +1197,34 @@ impl<E: Extra> AstNode<E> {
                 Ok(ty)
             }
 
-            Ast::Label(name, ast_args) => {
+            Ast::BlockStart(name, params) => {
+                let mut args = vec![];
+                for a in &params {
+                    args.push(IRArg {
+                        name: a.name.into(),
+                        ty: a.ty.clone(),
+                    });
+                }
+                let block_index = env.stack.last().unwrap().0;
+                out.push(b.ir_label(name.into(), block_index, args));
+                Ok(AstType::Unit)
+            }
+
+            Ast::Label(name) => {
                 //out.push(b.ir_noop());
                 //return Ok(AstType::Unit);
                 //unreachable!();
                 //env.block_names
 
                 let mut args = vec![];
+                /*
                 for a in &ast_args {
                     args.push(IRArg {
                         name: a.name.into(),
                         ty: a.ty.clone(),
                     });
                 }
+                */
 
                 println!("label: addblock");
                 //let block_index = env.blocks.add_block(place, name, args.clone(), d);

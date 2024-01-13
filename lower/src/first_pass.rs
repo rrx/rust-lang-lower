@@ -362,7 +362,8 @@ pub fn blockify<E: Extra>(
     // if label is missing, add it
     if !seq.first().unwrap().node.is_label() {
         let key = b.s(&block.name.to_string(b));
-        block_children.push(b.label(key, block.params.clone()));
+        //assert_eq!(block.params.len(), 0);
+        block_children.push(b.block_start(key, block.params.clone()));
     }
 
     block_children.extend(seq);
@@ -374,10 +375,10 @@ pub fn blockify<E: Extra>(
             _ => unimplemented!(),
         };
 
-        let block = if let Ast::Label(ref key, ref params) = rest.first().unwrap().node {
+        let block = if let Ast::Label(ref key) = rest.first().unwrap().node {
             AstNodeBlock {
                 name: key.into(),
-                params: params.clone(),
+                params: vec![], //params.clone(),
                 children: rest,
             }
         } else {

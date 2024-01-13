@@ -72,7 +72,11 @@ impl<E: Extra> AstBlockSorter<E> {
                 self.stack.push(ast);
                 self.close_block(b);
             }
-            Ast::Label(_, _) => {
+            Ast::Label(_) => {
+                self.close_block(b);
+                self.stack.push(ast);
+            }
+            Ast::BlockStart(_, _) => {
                 self.close_block(b);
                 self.stack.push(ast);
             }
@@ -139,7 +143,7 @@ impl<E: Extra> AstBlockTransform<E> {
     ) -> Result<()> {
         // create blocks as we go
         match &expr.node {
-            Ast::Label(name, params) => {
+            Ast::BlockStart(name, params) => {
                 let mut args = vec![];
                 for p in params {
                     args.push(IRArg {
@@ -147,6 +151,22 @@ impl<E: Extra> AstBlockTransform<E> {
                         ty: p.ty.clone(),
                     });
                 }
+                let block_index = env.blocks.add_block(place, name.into(), args, d);
+                // name should be unique in scope
+                assert!(!scope.names.contains_key(&name.into()));
+                scope.names.insert(name.into(), block_index);
+            }
+
+            Ast::Label(name) => {
+                let mut args = vec![];
+                /*
+                for p in params {
+                    args.push(IRArg {
+                        name: StringLabel::Intern(p.name),
+                        ty: p.ty.clone(),
+                    });
+                }
+                */
                 let block_index = env.blocks.add_block(place, name.into(), args, d);
                 // name should be unique in scope
                 assert!(!scope.names.contains_key(&name.into()));
@@ -161,7 +181,7 @@ impl<E: Extra> AstBlockTransform<E> {
                     // name should be unique in scope
                     assert!(!scope.names.contains_key(&label.into()));
                     scope.names.insert(label.into(), block_index);
-                    self.exprs.push(b.label(label, vec![]));
+                    self.exprs.push(b.label(label));
                 }
             }
         }
@@ -192,7 +212,7 @@ impl<E: Extra> AstBlockTransform<E> {
             end: span_last.end,
         };
 
-        let label = if let Ast::Label(ref label, ref _args) = first.node {
+        let label = if let Ast::Label(ref label) = first.node {
             label.into()
         } else {
             unreachable!()
@@ -229,7 +249,7 @@ impl<E: Extra> AstBlockTransform<E> {
         b: &mut NodeBuilder<E>,
     ) {
         match expr.node {
-            Ast::Label(ref _name, ref _params) => {
+            Ast::Label(ref _name) => {
                 self.close(place, env, d, b).unwrap();
                 self.stack.push(expr);
             }
@@ -485,12 +505,7 @@ mod tests {
         let mut scope = BlockScope::default();
         let test1 = b.s("test1").into();
         let test2 = b.s("test2").into();
-        let seq = vec![
-            b.label(test1, vec![]),
-            b.goto(test2),
-            b.label(test2, vec![]),
-            b.ret(None),
-        ];
+        let seq = vec![b.label(test1), b.goto(test2), b.label(test2), b.ret(None)];
 
         let blocks = AstBlockTransform::run(seq, &mut env, &mut place, &mut scope, &mut d, &mut b);
         println!("blocks: {:?}", blocks);

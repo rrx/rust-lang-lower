@@ -136,7 +136,7 @@ impl NextSeqState {
         if let Some(next_node) = next_node {
             match next_node.node {
                 Ast::Return(_) => Self::NextReturn,
-                Ast::Label(key, _) => Self::NextLabel(key),
+                Ast::Label(key) => Self::NextLabel(key),
                 _ => Self::Other,
             }
         } else {
@@ -477,8 +477,8 @@ impl Blockify {
         // generate blocks for all predefined labels
         // this needs to be done first as a forward declaration
         for expr in exprs.iter() {
-            if let Ast::Label(name, params) = &expr.node {
-                let _ = self.push_label(*name, scope_id, &[], &params);
+            if let Ast::Label(name) = &expr.node {
+                let _ = self.push_label::<E>(*name, scope_id, &[], &[]);
             }
         }
 
@@ -612,7 +612,7 @@ impl Blockify {
                 }
             }
 
-            Ast::Label(name, params) => {
+            Ast::Label(name) => {
                 // all blocks should have been forward declared in the sequence
                 let value_id = self.env.resolve_block(name).unwrap();
 
@@ -622,10 +622,10 @@ impl Blockify {
 
                     let code = self.code.get(last_value.0 as usize).unwrap();
                     if !code.is_term() {
-                        if params.len() > 0 {
-                            // if this block requires parameters, then we have an error
-                            unreachable!()
-                        }
+                        //if params.len() > 0 {
+                        // if this block requires parameters, then we have an error
+                        //unreachable!()
+                        //}
 
                         //println!("label: {}", b.r(name));
                         //println!("code: {:?}", self.code_to_string(last_value, b));

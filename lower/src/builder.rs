@@ -423,8 +423,12 @@ impl<E: Extra> NodeBuilder<E> {
         ))
     }
 
-    pub fn label(&self, name: StringKey, args: Vec<ParameterNode<E>>) -> AstNode<E> {
-        self.build(Ast::Label(name, args), self.extra_unknown())
+    pub fn label(&self, name: StringKey) -> AstNode<E> {
+        self.build(Ast::Label(name), self.extra_unknown())
+    }
+
+    pub fn block_start(&self, name: StringKey, params: Vec<ParameterNode<E>>) -> AstNode<E> {
+        self.build(Ast::BlockStart(name, params), self.extra_unknown())
     }
 
     pub fn goto(&self, name: StringKey) -> AstNode<E> {

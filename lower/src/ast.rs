@@ -222,7 +222,8 @@ pub enum Ast<E> {
     Break(Option<StringKey>, Vec<AstNode<E>>),
     Continue(Option<StringKey>, Vec<AstNode<E>>),
     Goto(StringKey),
-    Label(StringKey, Vec<ParameterNode<E>>),
+    BlockStart(StringKey, Vec<ParameterNode<E>>),
+    Label(StringKey),
     Noop,
     Error,
 }
@@ -241,7 +242,7 @@ impl<E: Extra> Ast<E> {
     }
 
     pub fn is_label(&self) -> bool {
-        if let Ast::Label(_, _) = self {
+        if let Ast::Label(_) = self {
             true
         } else {
             false
@@ -321,7 +322,7 @@ impl<E: Extra> Ast<E> {
                     extra: node.extra,
                 });
             }
-            Some(Self::Label(key.into(), params))
+            Some(Self::Label(key.into()))
         } else if name == "ternary" {
             let Argument::Positional(else_expr) = args.pop().unwrap();
             let Argument::Positional(then_expr) = args.pop().unwrap();
@@ -613,7 +614,26 @@ impl<E: Extra> AstNode<E> {
                 println!("{:width$}{:?}", "", lit, width = depth * 2);
             }
 
-            Ast::Label(name, args) => {
+            Ast::BlockStart(name, params) => {
+                println!(
+                    "{:width$}block_start: {}",
+                    "",
+                    //name.0,
+                    b.r(*name),
+                    width = depth * 2
+                );
+                for e in params {
+                    println!(
+                        "{:width$}arg: {}, {:?}",
+                        "",
+                        b.resolve_label(e.name.into()),
+                        e.ty,
+                        width = (depth + 1) * 2
+                    );
+                }
+            }
+
+            Ast::Label(name) => {
                 println!(
                     "{:width$}label: {}",
                     "",
@@ -621,6 +641,7 @@ impl<E: Extra> AstNode<E> {
                     b.r(*name),
                     width = depth * 2
                 );
+                /*
                 for e in args {
                     println!(
                         "{:width$}arg: {}, {:?}",
@@ -630,6 +651,7 @@ impl<E: Extra> AstNode<E> {
                         width = (depth + 1) * 2
                     );
                 }
+                */
             }
 
             Ast::Goto(key) => {

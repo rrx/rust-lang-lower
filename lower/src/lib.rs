@@ -75,7 +75,7 @@ pub(crate) mod tests {
                 entry,
                 &[],
                 b.seq(vec![
-                    b.label(entry, vec![]),
+                    b.label(entry),
                     b.assign(yy, b.integer(1)),
                     b.alloca(y, b.integer(999)),
                     //b.mutate(b.ident("y"), b.integer(998)),
@@ -88,7 +88,7 @@ pub(crate) mod tests {
                 asdf,
                 &[],
                 b.seq(vec![
-                    b.label(asdf, vec![]),
+                    b.label(asdf),
                     //b.ident("y"),
                     //b.ident("z"),
                     b.assign(yy, b.integer(2)),
@@ -106,7 +106,7 @@ pub(crate) mod tests {
                 asdf2,
                 &[],
                 b.seq(vec![
-                    b.label(asdf2, vec![]),
+                    b.label(asdf2),
                     b.assign(yy, b.integer(3)),
                     //b.mutate(b.ident("y"), b.integer(996)),
                     b.ret(Some(b.integer(0))),
