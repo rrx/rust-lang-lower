@@ -249,6 +249,14 @@ impl<E: Extra> Ast<E> {
         }
     }
 
+    pub fn get_label(&self) -> Option<StringKey> {
+        if let Ast::Label(key) = self {
+            Some(*key)
+        } else {
+            None
+        }
+    }
+
     pub fn is_expr(&self) -> bool {
         match self {
             Self::BinaryOp(_, _, _) => true,

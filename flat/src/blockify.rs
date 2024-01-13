@@ -474,6 +474,8 @@ impl Blockify {
         //self.blocks[label_id.0 as usize] = label_id;
         self.names.insert(label_id, name);
         self.block_name(scope_id, name, label_id);
+        let block = self.env.get_block_mut(label_id);
+        block.last_value = Some(label_id);
         for p in kwargs {
             let v = self.push_code(
                 LCode::NamedParameter(p.name),
@@ -506,11 +508,39 @@ impl Blockify {
             }
         }
 
+        let last_value = self.env.get_block(block_id).last_value.unwrap();
+        let mut last_code = self.code.get(last_value.0 as usize).unwrap();
+        /*
+        if exprs.first().unwrap().node.is_label() {
+            let last_value = self.env.get_block(block_id).last_value.unwrap();
+            let last_code = self.code.get(last_value.0 as usize).unwrap();
+            if last_code.is_start() {
+            }
+        }
+        */
+
         let mut value_id = None;
         let mut current_block_id = Some(block_id); //None;
         let mut iter = exprs.into_iter().peekable();
         loop {
             if let Some(expr) = iter.next() {
+                // double label
+                if last_code.is_start() {
+                    if let Some(key) = expr.node.get_label() {
+                        if let Some(target_value_id) = self.env.resolve_block(key.into()) {
+                            let code = LCode::Jump(target_value_id, 0);
+                            self.push_code(
+                                code,
+                                scope_id,
+                                current_block_id.unwrap(),
+                                AstType::Unit,
+                            );
+                        } else {
+                            unreachable!()
+                        }
+                    }
+                }
+
                 let (is_term, next_state) = NextSeqState::get(&expr, iter.peek());
                 match (is_term, next_state) {
                     (true, NextSeqState::NextLabel(key)) => {
@@ -564,6 +594,7 @@ impl Blockify {
 
                 let v = self.add(current_block_id.unwrap(), expr, b, d)?;
                 current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
+                last_code = self.code.get(v.0 as usize).unwrap();
                 value_id = Some(v);
             } else {
                 break;
@@ -635,6 +666,7 @@ impl Blockify {
             scope.next_block = Some(return_block);
             scope.entry_block = Some(entry_id);
 
+            // declare function before adding the body, for recursion
             let v_decl = self.push_code_with_name(
                 LCode::DeclareFunction(Some(entry_id)),
                 scope_id,
