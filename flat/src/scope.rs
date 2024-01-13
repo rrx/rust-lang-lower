@@ -30,7 +30,6 @@ impl std::fmt::Display for ScopeId {
 
 #[derive(Debug)]
 pub struct ScopeLayer {
-    //parent_id: ScopeId,
     names: HashMap<StringKey, Data>,
     pub(crate) labels: HashMap<StringLabel, ValueId>,
     pub(crate) last_value: Option<ValueId>,
@@ -38,6 +37,7 @@ pub struct ScopeLayer {
     pub(crate) pred: HashSet<ValueId>,
     pub(crate) return_block: Option<ValueId>,
     pub(crate) next_block: Option<ValueId>,
+    pub(crate) entry_block: Option<ValueId>,
 }
 
 impl ScopeLayer {
@@ -50,6 +50,7 @@ impl ScopeLayer {
             succ: HashSet::new(),
             return_block: None,
             next_block: None,
+            entry_block: None,
         }
     }
 
@@ -109,7 +110,6 @@ impl Environment {
     pub fn new_block(&mut self, value_id: ValueId) {
         let block = Block::new();
         self.blocks.insert(value_id, block);
-        //BlockId(offset as u32)
     }
 
     pub fn enter_scope(&mut self, scope_id: ScopeId) {
