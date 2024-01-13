@@ -235,7 +235,7 @@ impl Blockify {
         }
     }
 
-    pub fn dump_codes<E: Extra>(&self, b: &NodeBuilder<E>) {
+    pub fn dump_codes<E: Extra>(&self, b: &NodeBuilder<E>, filter_block_id: Option<ValueId>) {
         let mut pos = 0;
         let mut out = vec![];
 
@@ -261,24 +261,33 @@ impl Blockify {
             let scope_id = self.scopes[pos];
             let block_id = self.entries[pos];
             let v = ValueId(pos as u32);
-            out.push(CodeRow {
-                pos,
-                next,
-                prev: self.prev_pos[pos].0 as usize,
-                value: self.code_to_string(v, b),
-                ty,
-                name: self
-                    .names
-                    .get(&v)
-                    .map(|key| b.resolve_label(*key))
-                    .unwrap_or("".to_string())
-                    .to_string(),
-                scope_id: scope_id.0 as usize,
-                block_id: block_id.0 as usize,
-                pred: format!("{:?}", self.env.scopes[scope_id.0 as usize].pred),
-                succ: format!("{:?}", self.env.scopes[scope_id.0 as usize].succ),
-                term: code.is_term(),
-            });
+            let mut display = true;
+            if let Some(filter_block_id) = filter_block_id {
+                if filter_block_id != block_id {
+                    display = false;
+                }
+            }
+
+            if display {
+                out.push(CodeRow {
+                    pos,
+                    next,
+                    prev: self.prev_pos[pos].0 as usize,
+                    value: self.code_to_string(v, b),
+                    ty,
+                    name: self
+                        .names
+                        .get(&v)
+                        .map(|key| b.resolve_label(*key))
+                        .unwrap_or("".to_string())
+                        .to_string(),
+                    scope_id: scope_id.0 as usize,
+                    block_id: block_id.0 as usize,
+                    pred: format!("{:?}", self.env.scopes[scope_id.0 as usize].pred),
+                    succ: format!("{:?}", self.env.scopes[scope_id.0 as usize].succ),
+                    term: code.is_term(),
+                });
+            }
 
             pos += 1;
             if pos == self.code.len() {
@@ -290,8 +299,13 @@ impl Blockify {
     }
 
     pub fn dump<E: Extra>(&self, b: &NodeBuilder<E>) {
-        self.dump_codes(b);
+        self.dump_codes(b, None);
         self.env.dump(b);
+
+        for (block_id, block) in self.env.blocks.iter() {
+            println!("block({:?}, {:?})", block_id, block);
+            self.dump_codes(b, Some(*block_id));
+        }
     }
 
     pub fn push_code_with_name(
@@ -327,24 +341,12 @@ impl Blockify {
         self.next_pos.push(v);
         self.scopes.push(scope_id);
         self.entries.push(block_id);
-        //if block_id.0 as usize != offset {
-        //self.blocks.push(self.blocks[block_id.0 as usize]);
-        //} else {
-        //self.blocks.push(BlockId(0));
-        //}
-
         scope.last_value = Some(v);
 
         self.code.push(code);
         self.types.push(ty);
         v
     }
-
-    /*
-    pub fn get_block_id(&self, v: ValueId) -> BlockId {
-        self.blocks[v.0 as usize]
-    }
-    */
 
     pub fn resolve_block_label<E: Extra>(&self, k: ValueId, b: &NodeBuilder<E>) -> String {
         if let Some(key) = self.names.get(&k) {
@@ -446,12 +448,10 @@ impl Blockify {
     }
 
     pub fn add_pred(&mut self, v: ValueId, pred: ValueId) {
-        //let block_id = self.get_block_id(v);
         self.env.get_block_mut(v).pred.insert(pred);
     }
 
     pub fn add_succ(&mut self, v: ValueId, succ: ValueId) {
-        //let block_id = self.get_block_id(v);
         self.env.get_block_mut(v).succ.insert(succ);
     }
 
@@ -462,7 +462,6 @@ impl Blockify {
         args: &[AstType],
         kwargs: &[ParameterNode<E>],
     ) -> ValueId {
-        //let block_id = self.env.new_block();
         let label_id = self.push_code(
             LCode::Label(args.len() as u8, kwargs.len() as u8),
             scope_id,
@@ -471,7 +470,6 @@ impl Blockify {
         );
         self.env.new_block(label_id);
         self.entries[label_id.0 as usize] = label_id;
-        //self.blocks[label_id.0 as usize] = label_id;
         self.names.insert(label_id, name);
         self.block_name(scope_id, name, label_id);
         let block = self.env.get_block_mut(label_id);
@@ -508,26 +506,32 @@ impl Blockify {
             }
         }
 
-        let last_value = self.env.get_block(block_id).last_value.unwrap();
-        let mut last_code = self.code.get(last_value.0 as usize).unwrap();
-        /*
-        if exprs.first().unwrap().node.is_label() {
-            let last_value = self.env.get_block(block_id).last_value.unwrap();
-            let last_code = self.code.get(last_value.0 as usize).unwrap();
-            if last_code.is_start() {
-            }
-        }
-        */
-
         let mut value_id = None;
         let mut current_block_id = Some(block_id); //None;
         let mut iter = exprs.into_iter().peekable();
         loop {
             if let Some(expr) = iter.next() {
+                let last_value = self
+                    .env
+                    .get_block(current_block_id.unwrap())
+                    .last_value
+                    .unwrap();
+                let last_code = self.code.get(last_value.0 as usize).unwrap();
+                println!(
+                    "x: {:?}",
+                    (
+                        last_code,
+                        b.resolve_label(*self.names.get(&last_value).unwrap()),
+                        &expr.node
+                    )
+                );
+
                 // double label
+                /*
                 if last_code.is_start() {
                     if let Some(key) = expr.node.get_label() {
                         if let Some(target_value_id) = self.env.resolve_block(key.into()) {
+                            unreachable!();
                             let code = LCode::Jump(target_value_id, 0);
                             self.push_code(
                                 code,
@@ -540,14 +544,15 @@ impl Blockify {
                         }
                     }
                 }
+                */
 
                 let (is_term, next_state) = NextSeqState::get(&expr, iter.peek());
                 match (is_term, next_state) {
                     (true, NextSeqState::NextLabel(key)) => {
                         if let Some(target_value_id) = self.env.resolve_block(key.into()) {
-                            let scope = self.env.get_scope_mut(scope_id);
-                            scope.next_block = Some(target_value_id);
-                            current_block_id = Some(target_value_id);
+                            //let scope = self.env.get_scope_mut(scope_id);
+                            //scope.next_block = Some(target_value_id);
+                            //current_block_id = Some(target_value_id);
                         } else {
                             unreachable!()
                         }
@@ -594,7 +599,8 @@ impl Blockify {
 
                 let v = self.add(current_block_id.unwrap(), expr, b, d)?;
                 current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
-                last_code = self.code.get(v.0 as usize).unwrap();
+                //last_value = v;
+                //last_code = self.code.get(v.0 as usize).unwrap();
                 value_id = Some(v);
             } else {
                 break;

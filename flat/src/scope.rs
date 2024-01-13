@@ -203,8 +203,8 @@ impl Environment {
 
     pub fn dump<E: Extra>(&self, b: &NodeBuilder<E>) {
         println!("current scope: {:?}", self.current_scope());
-        for (index, block) in self.blocks.iter().enumerate() {
-            println!("block({:?}, {:?})", index, block);
+        for (block_id, block) in self.blocks.iter() {
+            println!("block({:?}, {:?})", block_id, block);
         }
         for (index, layer) in self.scopes.iter().enumerate() {
             println!("scope({})", index);
