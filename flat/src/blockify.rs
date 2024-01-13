@@ -1,6 +1,5 @@
 use anyhow::Error;
 use anyhow::Result;
-//use codespan_reporting::diagnostic::{Diagnostic, Label};
 use indexmap::IndexMap;
 use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
@@ -15,18 +14,15 @@ use lower::{
     AstNode,
     AstType,
     BinaryOperation,
-    //BlockId,
+    Definition,
     Diagnostic,
     Diagnostics,
     Extra,
-    //IRPlaceTable,
     Label,
     Literal,
     NodeBuilder,
     ParameterNode,
     ParseError,
-    //PlaceId,
-    //PlaceNode, None,
     Span,
     StringKey,
     //StringLabel,
@@ -173,7 +169,6 @@ impl Blockify {
                     b.r(*self.names.get(&v).unwrap()),
                     self.get_type(v)
                 )
-                //.names.get(block_id).unwrap_or(format!("{:?}", block_id))) //b.resolve_block_label(*block_id))
             }
             LCode::DeclareFunction(maybe_entry) => {
                 let name = b.r(*self.names.get(&v).unwrap());
@@ -221,7 +216,6 @@ impl Blockify {
 
     pub fn dump_codes<E: Extra>(&self, b: &NodeBuilder<E>) {
         let mut pos = 0;
-        //let depth = 0;
         let mut out = vec![];
         loop {
             let code = self.code.get(pos).unwrap();
@@ -261,6 +255,20 @@ impl Blockify {
     pub fn dump<E: Extra>(&self, b: &NodeBuilder<E>) {
         self.dump_codes(b);
         self.env.dump(b);
+    }
+
+    pub fn push_code_with_name(
+        &mut self,
+        code: LCode,
+        scope_id: ScopeId,
+        block_id: ValueId,
+        ty: AstType,
+        name: StringKey,
+    ) -> ValueId {
+        let value_id = self.push_code(code, scope_id, block_id, ty.clone());
+        self.env.scope_define(scope_id, name, value_id, ty);
+        self.names.insert(value_id, name.into());
+        value_id
     }
 
     pub fn push_code(
@@ -319,14 +327,11 @@ impl Blockify {
     ) -> Result<ValueId> {
         match node.node {
             Ast::Module(name, body) => {
-                //let block_id = self.env.new_block();
                 let static_scope = self.env.new_scope();
                 let block_id = self.push_label::<E>(name, static_scope, &[], &[]);
-                //self.block_id = Some(block_id);
                 self.env.enter_scope(static_scope);
                 self.add(block_id, *body, b, d)?;
                 self.env.exit_scope();
-                //self.add(self.env.static_scope, block_id, body, b, d)?;
                 self.build_edges(b, d)?;
                 Ok(block_id)
             }
@@ -436,9 +441,87 @@ impl Blockify {
         label_id
     }
 
+    pub fn emit_sequence<E: Extra>(
+        &mut self,
+        block_id: ValueId,
+        node: AstNode<E>,
+        b: &mut NodeBuilder<E>,
+        d: &mut Diagnostics,
+    ) -> Result<ValueId> {
+        let scope_id = self.env.current_scope().unwrap();
+        // flatten
+        let exprs = node.to_vec();
+
+        // generate blocks for all predefined labels
+        // this needs to be done first as a forward declaration
+        for expr in exprs.iter() {
+            if let Ast::Label(name, params) = &expr.node {
+                let _ = self.push_label(*name, scope_id, &[], &params);
+            }
+        }
+
+        let mut value_id = None;
+        let mut current_block_id = block_id;
+        let mut iter = exprs.into_iter().peekable();
+        loop {
+            if let Some(expr) = iter.next() {
+                if let Some(next_expr) = iter.peek() {}
+
+                let v = self.add(current_block_id, expr, b, d)?;
+                current_block_id = *self.entries.get(v.0 as usize).unwrap();
+                value_id = Some(v);
+            } else {
+                break;
+            }
+        }
+
+        Ok(value_id.unwrap())
+    }
+
+    pub fn emit_function<E: Extra>(
+        &mut self,
+        block_id: ValueId,
+        def: Definition<E>,
+        b: &mut NodeBuilder<E>,
+        d: &mut Diagnostics,
+    ) -> Result<ValueId> {
+        let scope_id = self.env.current_scope().unwrap();
+
+        let params = def.params.iter().map(|p| p.ty.clone()).collect();
+        let ty = AstType::Func(params, def.return_type);
+
+        if let Some(body) = def.body {
+            let body_scope_id = self.env.new_scope();
+
+            self.env.enter_scope(body_scope_id);
+            let entry_id = self.push_label(def.name, body_scope_id, &[], &def.params);
+            let v_decl = self.push_code_with_name(
+                LCode::DeclareFunction(Some(entry_id)),
+                scope_id,
+                block_id,
+                ty.clone(),
+                def.name,
+            );
+
+            self.add(entry_id, *body, b, d)?;
+            self.env.exit_scope();
+
+            // replace declaration with entry_id
+            self.code[v_decl.0 as usize] = LCode::DeclareFunction(Some(entry_id));
+            Ok(v_decl)
+        } else {
+            Ok(self.push_code_with_name(
+                LCode::DeclareFunction(None),
+                scope_id,
+                block_id,
+                ty.clone(),
+                def.name,
+            ))
+        }
+    }
+
     pub fn add<E: Extra>(
         &mut self,
-        //scope_id: ScopeId,
         block_id: ValueId,
         node: AstNode<E>,
         b: &mut NodeBuilder<E>,
@@ -451,60 +534,9 @@ impl Blockify {
                 unimplemented!()
             }
 
-            Ast::Sequence(ref _exprs) => {
-                // flatten
-                let exprs = node.to_vec();
+            Ast::Sequence(ref _exprs) => self.emit_sequence(block_id, node, b, d),
 
-                // generate blocks for all predefined labels
-                // this needs to be done first as a forward declaration
-                for expr in exprs.iter() {
-                    if let Ast::Label(name, params) = &expr.node {
-                        //let new_block_id = self.env.new_block();
-                        let _ = self.push_label(*name, scope_id, &[], &params);
-                    }
-                }
-
-                let mut value_id = None;
-                let mut current_block_id = block_id;
-                for c in exprs.into_iter() {
-                    let v = self.add(current_block_id, c, b, d)?;
-                    current_block_id = *self.entries.get(v.0 as usize).unwrap();
-                    value_id = Some(v);
-                }
-                Ok(value_id.unwrap())
-            }
-
-            Ast::Definition(def) => {
-                let params = def.params.iter().map(|p| p.ty.clone()).collect();
-                let ty = AstType::Func(params, def.return_type);
-                let v_decl =
-                    self.push_code(LCode::DeclareFunction(None), scope_id, block_id, ty.clone());
-                self.env
-                    .scope_define(scope_id, def.name, v_decl, ty.clone());
-                self.names.insert(v_decl, def.name.into());
-
-                let maybe_entry = if let Some(body) = def.body {
-                    let body_scope_id = self.env.new_scope();
-
-                    //let new_block_id = self.env.new_block();
-
-                    self.env.enter_scope(body_scope_id);
-                    let entry_id = self.push_label(def.name, body_scope_id, &[], &def.params);
-
-                    self.add(entry_id, *body, b, d)?;
-                    self.env.exit_scope();
-
-                    self.code[v_decl.0 as usize] = LCode::DeclareFunction(Some(entry_id));
-                    Some(entry_id)
-                } else {
-                    None
-                };
-                //let v = self.push_code(LCode::DeclareFunction(maybe_entry), scope_id, ty.clone());
-                //self.env
-                //.scope_define(self.env.static_scope, def.name, v, ty.clone());
-                self.names.insert(v_decl, def.name.into());
-                Ok(v_decl)
-            }
+            Ast::Definition(def) => self.emit_function(block_id, def, b, d),
 
             Ast::Call(expr, args, _ret_ty) => {
                 let (v_func, ty, f_args, name) = match &expr.node {
@@ -598,9 +630,8 @@ impl Blockify {
                 //println!("expr: {:?}", expr);
                 let v_expr = self.add(block_id, *expr, b, d)?;
                 let ty = self.get_type(v_expr);
-                let v_decl = self.push_code(LCode::Declare, scope_id, block_id, ty.clone());
-                self.env.define(name, v_decl, ty.clone());
-                self.names.insert(v_decl, name);
+                let v_decl =
+                    self.push_code_with_name(LCode::Declare, scope_id, block_id, ty.clone(), name);
                 self.push_code(
                     LCode::Store(v_decl, v_expr),
                     scope_id,
