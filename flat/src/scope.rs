@@ -1,3 +1,4 @@
+use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
 
 use lower::{AstType, Extra, NodeBuilder, StringKey, StringLabel};
@@ -32,9 +33,6 @@ impl std::fmt::Display for ScopeId {
 pub struct ScopeLayer {
     names: HashMap<StringKey, Data>,
     pub(crate) labels: HashMap<StringLabel, ValueId>,
-    //pub(crate) last_value: Option<ValueId>,
-    //pub(crate) succ: HashSet<ValueId>,
-    //pub(crate) pred: HashSet<ValueId>,
     pub(crate) return_block: Option<ValueId>,
     pub(crate) next_block: Vec<ValueId>,
     pub(crate) entry_block: Option<ValueId>,
@@ -45,18 +43,11 @@ impl ScopeLayer {
         Self {
             labels: HashMap::new(),
             names: HashMap::new(),
-            //last_value: None,
-            //pred: HashSet::new(),
-            //succ: HashSet::new(),
             return_block: None,
             next_block: vec![],
             entry_block: None,
         }
     }
-
-    //pub fn add_pred(&mut self, parent_id: ValueId) {
-    //self.pred.insert(parent_id);
-    //}
 }
 
 #[derive(Debug)]
@@ -90,7 +81,7 @@ impl Block {
 pub struct Environment {
     pub(crate) stack: Vec<ScopeId>,
     pub(crate) scopes: Vec<ScopeLayer>,
-    pub(crate) blocks: HashMap<ValueId, Block>,
+    pub(crate) blocks: IndexMap<ValueId, Block>,
 }
 
 impl Environment {
@@ -98,7 +89,7 @@ impl Environment {
         Self {
             stack: vec![],
             scopes: vec![],
-            blocks: HashMap::new(),
+            blocks: IndexMap::new(),
         }
     }
 

@@ -4,6 +4,7 @@ use indexmap::IndexMap;
 use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
 use std::collections::HashMap;
+use std::collections::VecDeque;
 use tabled::{Table, Tabled};
 
 use lower::{
@@ -182,8 +183,10 @@ impl Blockify {
 
     pub fn get_next(&self, value_id: ValueId) -> Option<ValueId> {
         let next = self.next_pos[value_id.0 as usize];
+        println!("X: {:?}", (next, value_id));
+        //return None;
         if next != value_id {
-            Some(value_id)
+            Some(next)
         } else {
             None
         }
@@ -245,9 +248,10 @@ impl Blockify {
     }
 
     pub fn dump_codes<E: Extra>(&self, b: &NodeBuilder<E>, filter_block_id: Option<ValueId>) {
-        let mut pos = 0;
-        let mut out = vec![];
-
+        use tabled::{
+            settings::{object::Rows, Border, Style},
+            Table,
+        };
         #[derive(Tabled)]
         struct CodeRow<'a> {
             pos: usize,
@@ -263,6 +267,61 @@ impl Blockify {
             term: bool,
         }
 
+        //#[derive(Tabled)]
+        //enum Row<'a> {
+        //#[tabled(inline)]
+        //#[tabled(inline)] Code(CodeRow<'a>)
+        //}
+
+        if filter_block_id.is_none() {
+            let mut out = vec![];
+            let mut labels = vec![];
+            let iter = LCodeIterator::new(self);
+            for (i, value_id) in iter.enumerate() {
+                let pos = value_id.0 as usize;
+                let code = self.code.get(pos).unwrap();
+                let ty = self.types.get(pos).unwrap();
+                let next = self.next_pos[pos].0 as usize;
+                let scope_id = self.scopes[pos];
+                let block_id = self.entries[pos];
+                //let v = ValueId(pos as u32);
+
+                if code.is_start() {
+                    labels.push(i + 1);
+                }
+
+                out.push(CodeRow {
+                    pos,
+                    next,
+                    prev: self.prev_pos[pos].0 as usize,
+                    value: self.code_to_string(value_id, b),
+                    ty,
+                    name: self
+                        .names
+                        .get(&value_id)
+                        .map(|key| b.resolve_label(*key))
+                        .unwrap_or("".to_string())
+                        .to_string(),
+                    scope_id: scope_id.0 as usize,
+                    block_id: block_id.0 as usize,
+                    term: code.is_term(),
+                });
+            }
+
+            let mut t = Table::new(out);
+
+            t.with(Style::sharp());
+
+            for i in labels {
+                let rows = Rows::single(i);
+                t.modify(rows, Border::new().set_top('-'));
+            }
+            let s = t.to_string();
+            println!("{}", s);
+        }
+
+        let mut out = vec![];
+        let mut pos = 0;
         loop {
             let code = self.code.get(pos).unwrap();
             let ty = self.types.get(pos).unwrap();
@@ -303,7 +362,6 @@ impl Blockify {
                 break;
             }
         }
-        use tabled::settings::Style;
         println!("{}", Table::new(out).with(Style::sharp()).to_string());
     }
 
@@ -1312,7 +1370,18 @@ impl Blockify {
 pub struct LCodeIterator<'a> {
     blockify: &'a Blockify,
     blocks: Vec<ValueId>,
-    values: Vec<ValueId>,
+    values: VecDeque<ValueId>,
+}
+
+impl<'a> LCodeIterator<'a> {
+    pub fn new(blockify: &'a Blockify) -> Self {
+        let blocks = blockify.env.blocks.keys().rev().cloned().collect();
+        Self {
+            blockify,
+            blocks,
+            values: VecDeque::new(),
+        }
+    }
 }
 
 impl<'a> Iterator for LCodeIterator<'a> {
@@ -1326,14 +1395,73 @@ impl<'a> Iterator for LCodeIterator<'a> {
 
             let block_id = self.blocks.pop().unwrap();
             let mut current = block_id;
+            self.values.push_back(block_id);
             loop {
                 if let Some(next) = self.blockify.get_next(current) {
-                    self.values.push(next);
+                    self.values.push_back(next);
+                    current = next;
                 } else {
                     break;
                 }
             }
         }
-        self.values.pop()
+        self.values.pop_front()
     }
 }
+
+/*
+pub struct LCodeIterator2<'a> {
+    blockify: &'a Blockify,
+    values: VecDeque<ValueId>,
+}
+
+impl<'a> LCodeIterator2<'a> {
+    pub fn new(blockify: &'a Blockify) -> Self {
+        let mut values = VecDeque::new();
+        let mut out = Self { blockify, values };
+        if blockify.code.len() > 0 {
+            out.add_block(ValueId(0));
+        }
+        out
+    }
+
+    pub fn add_block(&mut self, block_id: ValueId) {
+        let mut current = block_id;
+        self.values.push_back(block_id);
+        loop {
+            if let Some(next) = self.blockify.get_next(current) {
+                self.values.push_back(next);
+                current = next;
+            } else {
+                break;
+            }
+        }
+    }
+
+}
+
+impl<'a> Iterator for LCodeIterator2<'a> {
+    type Item = ValueId;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.values.len() == 0 {
+            if self.blocks.len() == 0 {
+                return None;
+            }
+
+            let block_id = self.blocks.pop().unwrap();
+            let mut current = block_id;
+            self.values.push_back(block_id);
+            loop {
+                if let Some(next) = self.blockify.get_next(current) {
+                    self.values.push_back(next);
+                    current = next;
+                } else {
+                    break;
+                }
+            }
+        }
+        self.values.pop_front()
+    }
+}
+*/
