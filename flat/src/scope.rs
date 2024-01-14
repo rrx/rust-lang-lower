@@ -33,8 +33,8 @@ pub struct ScopeLayer {
     names: HashMap<StringKey, Data>,
     pub(crate) labels: HashMap<StringLabel, ValueId>,
     pub(crate) last_value: Option<ValueId>,
-    pub(crate) succ: HashSet<ValueId>,
-    pub(crate) pred: HashSet<ValueId>,
+    //pub(crate) succ: HashSet<ValueId>,
+    //pub(crate) pred: HashSet<ValueId>,
     pub(crate) return_block: Option<ValueId>,
     pub(crate) next_block: Vec<ValueId>,
     pub(crate) entry_block: Option<ValueId>,
@@ -46,17 +46,17 @@ impl ScopeLayer {
             labels: HashMap::new(),
             names: HashMap::new(),
             last_value: None,
-            pred: HashSet::new(),
-            succ: HashSet::new(),
+            //pred: HashSet::new(),
+            //succ: HashSet::new(),
             return_block: None,
             next_block: vec![],
             entry_block: None,
         }
     }
 
-    pub fn add_pred(&mut self, parent_id: ValueId) {
-        self.pred.insert(parent_id);
-    }
+    //pub fn add_pred(&mut self, parent_id: ValueId) {
+    //self.pred.insert(parent_id);
+    //}
 }
 
 #[derive(Debug)]

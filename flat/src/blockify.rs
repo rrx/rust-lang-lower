@@ -249,8 +249,8 @@ impl Blockify {
             name: String,
             scope_id: usize,
             block_id: usize,
-            pred: String,
-            succ: String,
+            //pred: String,
+            //succ: String,
             term: bool,
         }
 
@@ -283,8 +283,8 @@ impl Blockify {
                         .to_string(),
                     scope_id: scope_id.0 as usize,
                     block_id: block_id.0 as usize,
-                    pred: format!("{:?}", self.env.scopes[scope_id.0 as usize].pred),
-                    succ: format!("{:?}", self.env.scopes[scope_id.0 as usize].succ),
+                    //pred: format!("{:?}", self.env.blocks[&block_id].pred),
+                    //succ: format!("{:?}", self.env.blocks[&block_id].succ),
                     term: code.is_term(),
                 });
             }
@@ -326,9 +326,10 @@ impl Blockify {
         let block_id = self._push_code(code, scope_id, ValueId(0), ty);
         self.env.new_block(block_id);
         self.entries[block_id.0 as usize] = block_id;
-        let block = self.env.get_block_mut(block_id);
-        block.count += 1;
-        block.last_value = Some(block_id);
+        self._update_code(block_id, block_id);
+        //let block = self.env.get_block_mut(block_id);
+        //block.count += 1;
+        //block.last_value = Some(block_id);
         block_id
     }
 
@@ -340,10 +341,30 @@ impl Blockify {
         ty: AstType,
     ) -> ValueId {
         let v = self._push_code(code, scope_id, block_id, ty);
+        self._update_code(v, block_id);
+        //let block = self.env.get_block_mut(block_id);
+        //block.count += 1;
+        //block.last_value = Some(v);
+        v
+    }
+
+    pub fn _update_code(
+        &mut self,
+        value_id: ValueId,
+        //scope_id: ScopeId,
+        block_id: ValueId,
+        //ty: AstType,
+    ) {
+        let offset = value_id.0 as usize;
+        let block = self.env.get_block(block_id);
+        if let Some(last_value) = block.last_value {
+            self.prev_pos[offset] = last_value;
+            self.next_pos[last_value.0 as usize] = value_id;
+        }
+
         let block = self.env.get_block_mut(block_id);
         block.count += 1;
-        block.last_value = Some(v);
-        v
+        block.last_value = Some(value_id);
     }
 
     pub fn _push_code(
@@ -354,18 +375,26 @@ impl Blockify {
         ty: AstType,
     ) -> ValueId {
         let offset = self.code.len();
-        let scope = self.env.get_scope_mut(scope_id);
+
+        //let block = self.env.get_block_mut(block_id);
+        //let scope = self.env.get_scope_mut(scope_id);
         let v = ValueId(offset as u32);
-        if let Some(last_value) = scope.last_value {
+        self.prev_pos.push(v);
+        self.next_pos.push(v);
+
+        /*
+        if let Some(last_value) = block.last_value {
             self.prev_pos.push(last_value);
             self.next_pos[last_value.0 as usize] = v;
         } else {
             self.prev_pos.push(v);
         }
         self.next_pos.push(v);
+        */
         self.scopes.push(scope_id);
         self.entries.push(block_id);
-        scope.last_value = Some(v);
+        //scope.last_value = Some(v);
+        //block.last_value = Some(v);
         self.code.push(code);
         self.types.push(ty);
         v
