@@ -32,6 +32,7 @@ pub use types::{AstType, TypeBuilder, TypeUnify};
 pub use codespan_reporting::diagnostic::{Diagnostic, Label};
 
 // re-export melior structs
+pub use melior;
 pub use melior::{
     ir::operation::OperationPrintingFlags,
     ir::{Location, Module},

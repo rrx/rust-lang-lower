@@ -155,7 +155,7 @@ pub struct Blockify {
     prev_pos: Vec<ValueId>,
     loop_stack: Vec<LoopLayer>,
     env: Environment,
-    names: IndexMap<ValueId, StringLabel>,
+    pub(crate) names: IndexMap<ValueId, StringLabel>,
     entries: Vec<ValueId>,
     //blocks: Vec<BlockId>,
 }
@@ -181,10 +181,16 @@ impl Blockify {
         self.env.get_scope_mut(scope_id).labels.insert(name, v);
     }
 
+    pub fn get_code(&self, value_id: ValueId) -> &LCode {
+        self.code.get(value_id.0 as usize).unwrap()
+    }
+
+    pub fn get_block_id(&self, value_id: ValueId) -> ValueId {
+        *self.entries.get(value_id.0 as usize).unwrap()
+    }
+
     pub fn get_next(&self, value_id: ValueId) -> Option<ValueId> {
         let next = self.next_pos[value_id.0 as usize];
-        println!("X: {:?}", (next, value_id));
-        //return None;
         if next != value_id {
             Some(next)
         } else {
@@ -1215,134 +1221,6 @@ impl Blockify {
             }
         }
 
-        /*
-        let mut ids = HashMap::new();
-        let mut values = vec![];
-        for (offset, code) in self.code.iter().enumerate() {
-            if let LCode::Label(_,_) = code {
-                let v = ValueId(offset as u32);
-                let name = self.names.get(&v).unwrap();
-                let id = g.add_node(Node::new_block(b.r(*name).to_string(), v));
-                ids.insert(v, id);
-                values.push(v);
-            }
-        }
-
-        for v in values {
-            let block_id = self.get_block_id(v);
-            let block = self.env.get_block(block_id);
-            for succ in block.succ.iter() {
-                g.add_edge(*ids.get(&v).unwrap(), *ids.get(succ).unwrap(), ());
-            }
-
-            for pred in block.pred.iter() {
-                g.add_edge(*ids.get(pred).unwrap(), *ids.get(&v).unwrap(), ());
-            }
-        }
-        */
-
-        /*
-        for (offset, code) in self.code.iter().enumerate() {
-            if let LCode::Label(_,_) = code {
-                let v = ValueId(offset as u32);
-                let block_id = self.get_block_id(v);
-                let block = self.env.get_block(block_id);
-                for succ in block.succ.iter() {
-                    g.add_edge(*ids.get(&v).unwrap(), *ids.get(succ).unwrap(), ());
-                }
-
-                for pred in block.pred.iter() {
-                    g.add_edge(*ids.get(pred).unwrap(), *ids.get(&v).unwrap(), ());
-                }
-            }
-        }
-
-        for (offset, block) in self.env.blocks.iter().enumerate() {
-            let block_id = BlockId(offset as u32);
-            for succ in block.succ.iter() {
-                g.add_edge(*ids.get(&block_id).unwrap(), *ids.get(&target_id).unwrap(), ());
-            }
-        }
-
-        for (offset, code) in self.code.iter().enumerate() {
-            match code {
-                LCode::Jump(target_id,_) => {
-                    //let value_id = ValueId(offset as u32);
-                    let block_id = self.entries.get(offset).unwrap();
-                    g.add_edge(*ids.get(&block_id).unwrap(), *ids.get(&target_id).unwrap(), ());
-                }
-                LCode::Branch(_, x, y) => {
-                    let block_id = self.entries.get(offset).unwrap();
-                    g.add_edge(*ids.get(&block_id).unwrap(), *ids.get(&x).unwrap(), ());
-                    g.add_edge(*ids.get(&block_id).unwrap(), *ids.get(&y).unwrap(), ());
-                }
-                LCode::DeclareFunction(Some(entry_id)) => {
-                    let block_id = self.entries.get(offset).unwrap();
-                    g.add_edge(*ids.get(&block_id).unwrap(), *ids.get(&entry_id).unwrap(), ());
-                }
-                LCode::Ternary(_, x, y) => {
-                    let block_id = self.entries.get(offset).unwrap();
-                    g.add_edge(*ids.get(&block_id).unwrap(), *ids.get(&x).unwrap(), ());
-                    g.add_edge(*ids.get(&block_id).unwrap(), *ids.get(&y).unwrap(), ());
-                }
-                LCode::Goto(_) => unreachable!(),
-                _ => ()
-            }
-        }
-        */
-
-        /*
-        for node_index in self.g.node_indices() {
-            let _label = self.block_names_index.get(&node_index).unwrap();
-            //let block_name = format!("b{}", label.offset());
-            let block_name = b
-                .resolve_block_label(*self.block_names_index.get(&node_index).unwrap())
-                .clone();
-            g_out.add_node(Node::new_block(block_name, node_index));
-        }
-        for block_node_index in self.g.node_indices() {
-            let data = self.blocks.get(&block_node_index).unwrap();
-
-            let mut x = HashMap::new();
-            for (name, symbol_index) in data.symbols.iter() {
-                let name = b.resolve_label(*name).clone();
-                let name = match symbol_index {
-                    SymIndex::Op(_, _) => {
-                        format!("op:{}", name)
-                    }
-                    SymIndex::Arg(_, _) => {
-                        format!("arg:{}", name)
-                    }
-                    SymIndex::Def(_, _) => {
-                        format!("def:{}", name)
-                    }
-                };
-
-                let symbol_node_index = g_out.add_node(Node::new_symbol(
-                    name,
-                    //b.strings.resolve(name).clone(),
-                    //format!("{}{:?}", b.strings.resolve(name), symbol_index),
-                    block_node_index,
-                ));
-                g_out.add_edge(block_node_index, symbol_node_index, ());
-                x.insert(symbol_index, symbol_node_index);
-            }
-
-            for n in self
-                .g
-                .neighbors_directed(block_node_index, petgraph::Direction::Outgoing)
-            {
-                let block = self.blocks.get(&n).unwrap();
-                if let Some(parent) = block.parent_symbol {
-                    let symbol_node_index = x.get(&parent).unwrap();
-                    g_out.add_edge(*symbol_node_index, n, ());
-                } else {
-                    g_out.add_edge(block_node_index, n, ());
-                }
-            }
-        }
-
-        */
         let s = format!(
             "{:?}",
             Dot::with_attr_getters(
@@ -1359,12 +1237,14 @@ impl Blockify {
                 }
             )
         );
-        //let path = std::fs::canonicalize(filename).unwrap();
         println!("saved graph {:?}", filename);
-        //println!("{}", path.clone().into_os_string().into_string().unwrap());
         println!("{}", s);
         std::fs::write(filename, s).unwrap();
     }
+
+    //pub fn lower(&self, context: &lower::Context, module: &mut lower::Module) {
+    //let lower = crate::mlir::Lower::new(context);
+    //}
 }
 
 pub struct LCodeIterator<'a> {

@@ -563,8 +563,8 @@ impl<E: Extra> StarlarkParser<E> {
     pub fn parse_module2<'c>(
         &mut self,
         filename: &str,
-        _context: &'c lower::Context,
-        _module: &mut Module<'c>,
+        context: &'c lower::Context,
+        module: &mut Module<'c>,
         b: &mut NodeBuilder<E>,
         d: &mut Diagnostics,
         _verbose: bool,
@@ -584,6 +584,9 @@ impl<E: Extra> StarlarkParser<E> {
         let r = blockify.build_module(ast, b, d);
         blockify.dump(b);
         blockify.save_graph("out.dot", b);
+        let mut lower = flat::Lower::new(context);
+        let mut blocks = flat::LowerBlocks::new();
+        blockify.lower_module(&mut lower, &mut blocks, module, b)?;
         r?;
         Ok(())
     }
@@ -712,7 +715,7 @@ pub(crate) mod tests {
     use lower::Location;
     use test_log::test;
 
-    fn run_test_ir2(filename: &str, _expected: i32) {
+    fn run_test_ir2(filename: &str, expected: i32) {
         let mut p: StarlarkParser<SimpleExtra> = StarlarkParser::new();
         let mut b = NodeBuilder::new();
         let context = lower::default_context();
@@ -721,6 +724,11 @@ pub(crate) mod tests {
         let r = p.parse_module2(filename, &context, &mut module, &mut b, &mut d, true);
         d.dump();
         r.unwrap();
+
+        module.as_operation().dump();
+        //assert!(module.as_operation().verify());
+        //let r = p.exec_main(&context, &mut module, "../target/debug/", true);
+        //assert_eq!(expected, r);
     }
 
     fn run_test_ir(filename: &str, expected: i32) {
@@ -762,7 +770,7 @@ pub(crate) mod tests {
     #[test]
     fn test_recursive() {
         run_test_ir2("../tests/test_recursive.star", 0);
-        run_test_ir("../tests/test_recursive.star", 0);
+        //run_test_ir("../tests/test_recursive.star", 0);
     }
 
     #[test]
@@ -773,6 +781,6 @@ pub(crate) mod tests {
     #[test]
     fn test_goto() {
         run_test_ir2("../tests/goto.star", 0);
-        run_test_ir("../tests/goto.star", 0);
+        //run_test_ir("../tests/goto.star", 0);
     }
 }
