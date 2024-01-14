@@ -871,8 +871,9 @@ impl Blockify {
                 // all blocks should have been forward declared in the sequence
                 let value_id = self.env.resolve_block(name.into()).unwrap();
 
-                let scope = self.env.get_scope(scope_id);
-                if let Some(last_value) = scope.last_value {
+                let block = self.env.get_block(block_id);
+                //let scope = self.env.get_scope(scope_id);
+                if let Some(last_value) = block.last_value {
                     // check to ensure that the previous block was terminated
 
                     let code = self.code.get(last_value.0 as usize).unwrap();

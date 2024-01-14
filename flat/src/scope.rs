@@ -32,7 +32,7 @@ impl std::fmt::Display for ScopeId {
 pub struct ScopeLayer {
     names: HashMap<StringKey, Data>,
     pub(crate) labels: HashMap<StringLabel, ValueId>,
-    pub(crate) last_value: Option<ValueId>,
+    //pub(crate) last_value: Option<ValueId>,
     //pub(crate) succ: HashSet<ValueId>,
     //pub(crate) pred: HashSet<ValueId>,
     pub(crate) return_block: Option<ValueId>,
@@ -45,7 +45,7 @@ impl ScopeLayer {
         Self {
             labels: HashMap::new(),
             names: HashMap::new(),
-            last_value: None,
+            //last_value: None,
             //pred: HashSet::new(),
             //succ: HashSet::new(),
             return_block: None,
