@@ -1,5 +1,3 @@
-b.use("prelude")
-
 def main() -> int:
   b.goto("a")
   b.label("a")

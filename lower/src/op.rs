@@ -901,3 +901,20 @@ pub fn from_type<'c>(context: &'c Context, ty: &AstType) -> Type<'c> {
         _ => unimplemented!("{:?}", ty),
     }
 }
+
+pub fn emit_literal_const<'c>(
+    context: &'c Context,
+    lit: &Literal,
+    location: Location<'c>,
+) -> (Operation<'c>, AstType) {
+    match lit {
+        Literal::Float(f) => (build_float_op(context, *f, location), AstType::Float),
+
+        Literal::Int(x) => (build_int_op(context, *x, location), AstType::Int),
+
+        Literal::Index(x) => (build_index_op(context, *x as i64, location), AstType::Index),
+
+        Literal::Bool(x) => (build_bool_op(context, *x, location), AstType::Bool),
+        _ => unimplemented!("{:?}", lit),
+    }
+}

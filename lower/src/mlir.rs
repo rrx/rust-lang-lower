@@ -530,19 +530,7 @@ impl IRNode {
             IRKind::Literal(lit) => {
                 let current_block = stack.last().unwrap().clone();
                 let current = blocks.blocks.get_mut(&current_block).unwrap();
-                let (op, ast_ty) = match lit {
-                    Literal::Float(f) => (op::build_float_op(context, f, location), AstType::Float),
-
-                    Literal::Int(x) => (op::build_int_op(context, x, location), AstType::Int),
-
-                    Literal::Index(x) => (
-                        op::build_index_op(context, x as i64, location),
-                        AstType::Index,
-                    ),
-
-                    Literal::Bool(x) => (op::build_bool_op(context, x, location), AstType::Bool),
-                    _ => unimplemented!("{:?}", lit),
-                };
+                let (op, ast_ty) = op::emit_literal_const(context, &lit, location);
                 let index = current.push(op);
                 types.set_type(index, ast_ty, VarDefinitionSpace::Reg);
                 Ok(index)

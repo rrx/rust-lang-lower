@@ -1,5 +1,6 @@
 use crate::{Blockify, LCode, ValueId};
 use anyhow::Result;
+use indexmap::IndexMap;
 use lower::melior::ir::Location;
 use lower::melior::{
     dialect::{
@@ -22,7 +23,7 @@ use lower::melior::{
             TypeAttribute,
         },
         r#type::{FunctionType, IntegerType, MemRefType, RankedTensorType},
-        Attribute, Block, Identifier, Operation, Region, Type, TypeLike, ValueLike,
+        Attribute, Block, Identifier, Operation, Region, Type, TypeLike, Value, ValueLike,
     },
     Context,
 };
@@ -97,20 +98,35 @@ impl<'c> LowerBlocks<'c> {
         //let op = c.op_ref(index);
         op.region(region_index).unwrap().append_block(block);
     }
+
+    pub fn values(&self, values: Vec<SymIndex>) -> Vec<Value<'c, '_>> {
+        let mut rs = vec![];
+        for index in values {
+            let c = self.blocks.get(&index.block()).unwrap();
+            let r: Value<'c, '_> = match index {
+                SymIndex::Op(_, pos) => {
+                    let op = c.ops.get(pos).expect("Op missing");
+                    op.result(0).unwrap().into()
+                }
+                SymIndex::Arg(_, pos) => c.block.as_ref().unwrap().argument(pos).unwrap().into(),
+                _ => unimplemented!(),
+            };
+            rs.push(r);
+        }
+        rs
+    }
 }
 
 pub struct Lower<'c> {
     context: &'c Context,
-    //blocks: HashMap<ValueId, OpCollection<'c>>,
-    index: HashMap<SymIndex, ValueId>,
+    index: IndexMap<ValueId, SymIndex>,
 }
 
 impl<'c> Lower<'c> {
     pub fn new(context: &'c Context) -> Self {
         Self {
             context,
-            //blocks: HashMap::new(),
-            index: HashMap::new(),
+            index: IndexMap::new(),
         }
     }
 }
@@ -122,10 +138,6 @@ pub struct OpCollection<'c> {
     arg_count: usize,
     block: Option<Block<'c>>,
     ops: Vec<Operation<'c>>,
-    //parent_symbol: Option<SymIndex>,
-    //block_index: NodeIndex,
-    //symbols: HashMap<StringLabel, SymIndex>,
-    //places: HashMap<PlaceId, SymIndex>,
 }
 
 impl<'c> OpCollection<'c> {
@@ -174,6 +186,20 @@ impl<'c> OpCollection<'c> {
             _ => unimplemented!(),
         }
     }
+
+    pub fn values(&self, values: Vec<SymIndex>) -> Vec<Value<'c, '_>> {
+        let mut rs = vec![];
+        for index in values {
+            //let index = lower.index.get(&value_id).unwrap();
+            let op = self.ops.get(index.offset()).expect("Op missing");
+            let r = op.result(0).unwrap();
+            //let block_id = self.get_block_id(value_id);
+            //let c = blocks.blocks.get_mut(&block_id).unwrap();
+            //let index = c.push(op);
+            rs.push(r.into());
+        }
+        rs
+    }
 }
 
 impl Blockify {
@@ -181,11 +207,18 @@ impl Blockify {
         &self,
         context: &'c Context,
         v: ValueId,
-        num: usize,
+        num_args: usize,
+        num_kwargs: usize,
     ) -> Vec<(Type<'c>, Location<'c>)> {
         let mut current = v;
         let mut out = vec![];
-        for i in 0..num {
+        for i in 0..num_args {
+            let next = self.get_next(current).unwrap();
+            let ty = op::from_type(context, &self.get_type(next));
+            current = next;
+            out.push((ty, Location::unknown(context)));
+        }
+        for i in 0..num_kwargs {
             let next = self.get_next(current).unwrap();
             let ty = op::from_type(context, &self.get_type(next));
             current = next;
@@ -194,10 +227,39 @@ impl Blockify {
         out
     }
 
+    pub fn get_previous_values(&self, v: ValueId, num: usize) -> Vec<ValueId> {
+        let mut values = vec![];
+        for i in 0..num {
+            let v = ValueId((v.0 as usize - num + i) as u32);
+            let code = self.get_code(v);
+            println!("code: {:?}", (code, self.names.get(&v)));
+            //blocks.blocks.get(
+            if let LCode::Value(value_id) = code {
+                values.push(*value_id);
+            }
+        }
+        values
+    }
+
+    pub fn get_or_lower_block<'c, E: Extra>(
+        &self,
+        lower: &mut Lower<'c>,
+        blocks: &mut LowerBlocks<'c>,
+        block_list: &mut Vec<ValueId>,
+        block_id: ValueId,
+        b: &NodeBuilder<E>,
+    ) -> Result<()> {
+        if !blocks.blocks.contains_key(&block_id) {
+            self.lower_block(block_id, lower, blocks, block_list, b)?;
+        }
+        Ok(())
+    }
+
     pub fn lower_code<'c, E: Extra>(
         &self,
         lower: &mut Lower<'c>,
         blocks: &mut LowerBlocks<'c>,
+        block_list: &mut Vec<ValueId>,
         v: ValueId,
         b: &NodeBuilder<E>,
     ) -> Result<()> {
@@ -205,11 +267,61 @@ impl Blockify {
         let location = Location::unknown(lower.context);
 
         match code {
-            LCode::Label(num_args, _) => {
-                let args = self.get_label_args(lower.context, v, *num_args as usize);
+            LCode::Label(num_args, num_kwargs) => {
+                let args =
+                    self.get_label_args(lower.context, v, *num_args as usize, *num_kwargs as usize);
                 let block = Block::new(&args);
                 let c = OpCollection::new(v, block);
                 blocks.blocks.insert(v, c);
+                block_list.push(v);
+            }
+
+            LCode::Arg(pos) => {
+                let block_id = self.get_block_id(v);
+                let index = SymIndex::Arg(block_id, *pos as usize);
+                lower.index.insert(v, index);
+            }
+
+            LCode::Jump(target, num_args) => {
+                let block_id = self.get_block_id(v);
+                self.get_or_lower_block(lower, blocks, block_list, *target, b)?;
+                let values = self.get_previous_values(v, *num_args as usize);
+                let indicies = values
+                    .iter()
+                    .map(|value_id| lower.index.get(value_id).unwrap())
+                    .cloned()
+                    .collect();
+                let rs = blocks.values(indicies);
+                let c = blocks.blocks.get(&target).unwrap();
+                let op = cf::br(&c.block.as_ref().unwrap(), &rs, location);
+                let c = blocks.blocks.get_mut(&block_id).unwrap();
+                let index = c.push(op);
+                lower.index.insert(v, index);
+            }
+
+            LCode::Const(lit) => {
+                let block_id = self.get_block_id(v);
+                let (op, ast_ty) = op::emit_literal_const(lower.context, lit, location);
+                let c = blocks.blocks.get_mut(&block_id).unwrap();
+                let index = c.push(op);
+                lower.index.insert(v, index);
+            }
+
+            LCode::Return(num_args) => {
+                let num = *num_args as usize;
+                let values = self.get_previous_values(v, *num_args as usize);
+                println!("code: {:?}", (values));
+                let indicies = values
+                    .iter()
+                    .map(|value_id| lower.index.get(value_id).unwrap())
+                    .cloned()
+                    .collect();
+                let rs = blocks.values(indicies);
+                let op = func::r#return(&rs, location);
+                let block_id = self.get_block_id(v);
+                let c = blocks.blocks.get_mut(&block_id).unwrap();
+                let index = c.push(op);
+                lower.index.insert(v, index);
             }
 
             LCode::DeclareFunction(maybe_entry_id) => {
@@ -218,12 +330,15 @@ impl Blockify {
                 let ty = self.get_type(v);
                 let c = blocks.blocks.get_mut(&block_id).unwrap();
                 let index = emit_declare_function(lower.context, c, *key, ty, location, b)?;
-                lower.index.insert(index, v);
+                lower.index.insert(v, index);
                 if let Some(entry_id) = maybe_entry_id {
                     let op = blocks.op_ref(index);
                     op.set_attribute("llvm.emit_c_interface", &Attribute::unit(lower.context));
-                    self.lower_block(*entry_id, lower, blocks, b)?;
-                    blocks.append_op(index, *entry_id, 0);
+                    let mut block_list = vec![];
+                    self.lower_block(*entry_id, lower, blocks, &mut block_list, b)?;
+                    for block_id in block_list {
+                        blocks.append_op(index, block_id, 0);
+                    }
                 }
             }
             _ => (),
@@ -236,13 +351,14 @@ impl Blockify {
         block_id: ValueId,
         lower: &mut Lower<'c>,
         blocks: &mut LowerBlocks<'c>,
+        block_list: &mut Vec<ValueId>,
         b: &NodeBuilder<E>,
     ) -> Result<()> {
         let mut current = block_id;
         loop {
-            self.lower_code(lower, blocks, current, b)?;
-            //let code = self.get_code(v);
-            //println!("X: {:?}", (v, code));
+            self.lower_code(lower, blocks, block_list, current, b)?;
+            let code = self.get_code(current);
+            println!("X: {:?}", (current, code));
             if let Some(next) = self.get_next(current) {
                 current = next;
             } else {
@@ -260,7 +376,8 @@ impl Blockify {
         b: &NodeBuilder<E>,
     ) -> Result<()> {
         let block_id = ValueId(0);
-        self.lower_block(block_id, lower, blocks, b)?;
+        let mut block_list = vec![];
+        self.lower_block(block_id, lower, blocks, &mut block_list, b)?;
         let block = blocks.blocks.get_mut(&block_id).unwrap();
         for op in block.take_ops() {
             module.body().append_operation(op);
