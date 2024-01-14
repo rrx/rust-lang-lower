@@ -36,7 +36,7 @@ pub struct ScopeLayer {
     pub(crate) succ: HashSet<ValueId>,
     pub(crate) pred: HashSet<ValueId>,
     pub(crate) return_block: Option<ValueId>,
-    pub(crate) next_block: Option<ValueId>,
+    pub(crate) next_block: Vec<ValueId>,
     pub(crate) entry_block: Option<ValueId>,
 }
 
@@ -49,7 +49,7 @@ impl ScopeLayer {
             pred: HashSet::new(),
             succ: HashSet::new(),
             return_block: None,
-            next_block: None,
+            next_block: vec![],
             entry_block: None,
         }
     }
@@ -164,10 +164,22 @@ impl Environment {
         self.get_block_mut(block_id).succ.insert(succ);
     }
 
+    pub fn push_next_block(&mut self, next_id: ValueId) {
+        let scope_id = self.current_scope().unwrap();
+        let scope = self.get_scope_mut(scope_id);
+        scope.next_block.push(next_id);
+    }
+
+    pub fn pop_next_block(&mut self) -> Option<ValueId> {
+        let scope_id = self.current_scope().unwrap();
+        let scope = self.get_scope_mut(scope_id);
+        scope.next_block.pop()
+    }
+
     pub fn get_next_block(&self) -> Option<ValueId> {
         let scope_id = self.current_scope().unwrap();
         let scope = self.get_scope(scope_id);
-        scope.next_block
+        scope.next_block.last().cloned()
     }
 
     pub fn resolve_return_block(&self) -> Option<ValueId> {
@@ -206,6 +218,7 @@ impl Environment {
         for (block_id, block) in self.blocks.iter() {
             println!("block({:?}, {:?})", block_id, block);
         }
+
         for (index, layer) in self.scopes.iter().enumerate() {
             println!("scope({})", index);
             for (key, data) in layer.names.iter() {
@@ -213,6 +226,9 @@ impl Environment {
             }
             for (key, data) in layer.labels.iter() {
                 println!("  label {} = {:?}", b.resolve_label(*key), data);
+            }
+            for next_id in layer.next_block.iter() {
+                println!("  next {:?}", next_id);
             }
         }
     }

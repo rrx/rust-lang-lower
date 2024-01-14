@@ -594,6 +594,9 @@ impl Blockify {
                     (false, NextSeqState::Empty) => {
                         //println!("{:?}", &expr);
                         //self.env.dump(b);
+                        // end of sequence, with non-terminal node
+                        // implicit jump to next
+                        //let target_value_id = self.env.pop_next_block().unwrap();
                         if let Some(target_value_id) = self.env.get_next_block() {
                             let code = LCode::Jump(target_value_id, 0);
                             self.push_code(
@@ -602,19 +605,26 @@ impl Blockify {
                                 current_block_id.unwrap(),
                                 AstType::Unit,
                             );
+                            current_block_id = Some(target_value_id);
+                        } else {
+                            let v = self.add(current_block_id.unwrap(), expr, b, d)?;
+                            current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
+                            value_id = Some(v);
                         }
-                        let v = self.add(current_block_id.unwrap(), expr, b, d)?;
-                        current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
-                        value_id = Some(v);
                     }
 
                     (true, NextSeqState::Other) => {
                         let name = b.s("next");
                         let v_next = self.push_label::<E>(name.into(), scope_id, &[], &[]);
-                        let scope = self.env.get_scope_mut(scope_id);
-                        scope.next_block = Some(v_next);
+                        self.env.push_next_block(v_next);
+                        //let scope = self.env.get_scope_mut(scope_id);
+                        //scope.next_block = Some(v_next);
                         let v = self.add(current_block_id.unwrap(), expr, b, d)?;
-                        current_block_id = Some(v_next); //Some(*self.entries.get(v.0 as usize).unwrap());
+                        //let scope = self.env.get_scope_mut(scope_id);
+                        //scope.next_block = None;
+                        self.env.pop_next_block();
+                        // next block is the next block
+                        current_block_id = Some(v_next);
                         value_id = Some(v);
                     }
                 }
@@ -691,7 +701,7 @@ impl Blockify {
             let entry_id = self.push_label(def.name.into(), body_scope_id, &[], &def.params);
             let scope = self.env.get_scope_mut(body_scope_id);
             scope.return_block = Some(return_block);
-            scope.next_block = Some(return_block);
+            //scope.ne = Some(return_block);
             scope.entry_block = Some(entry_id);
 
             // declare function before adding the body, for recursion
@@ -704,12 +714,17 @@ impl Blockify {
             );
 
             self.env.enter_scope(body_scope_id);
+            // next block in body scope
+            self.env.push_next_block(return_block);
 
             //let label = b.block_start(def.name, def.params);
             //let seq = b.seq(vec![label, *body]);
             //let _ = self.emit_sequence(entry_id, *body, b, d)?;
 
             self.add(entry_id, *body, b, d)?;
+            //self.dump(b);
+            //self.env.dump(b);
+            self.env.pop_next_block().unwrap();
             self.env.exit_scope();
 
             // replace declaration with entry_id
@@ -888,11 +903,6 @@ impl Blockify {
 
             Ast::Conditional(condition, then_expr, maybe_else_expr) => {
                 let v_next = self.env.get_next_block().unwrap();
-                //let next_scope_id = self.env.new_scope();
-                //let next_block_id = self.env.new_block();
-                //let name = b.s("next");
-
-                //let v_next = self.push_label::<E>(name.into(), next_scope_id, &[], &[]);
 
                 //let then_scope_id = self.env.new_scope();
                 //let then_block_id = self.env.new_block();
