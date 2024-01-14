@@ -61,6 +61,7 @@ impl ScopeLayer {
 
 #[derive(Debug)]
 pub struct Block {
+    pub(crate) count: usize,
     pub(crate) last_value: Option<ValueId>,
     pub(crate) succ: HashSet<ValueId>,
     pub(crate) pred: HashSet<ValueId>,
@@ -69,6 +70,7 @@ pub struct Block {
 impl Block {
     pub fn new() -> Self {
         Self {
+            count: 0,
             last_value: None,
             pred: HashSet::new(),
             succ: HashSet::new(),

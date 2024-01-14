@@ -322,7 +322,31 @@ impl Blockify {
         value_id
     }
 
+    pub fn push_code_new_block(&mut self, code: LCode, scope_id: ScopeId, ty: AstType) -> ValueId {
+        let block_id = self._push_code(code, scope_id, ValueId(0), ty);
+        self.env.new_block(block_id);
+        self.entries[block_id.0 as usize] = block_id;
+        let block = self.env.get_block_mut(block_id);
+        block.count += 1;
+        block.last_value = Some(block_id);
+        block_id
+    }
+
     pub fn push_code(
+        &mut self,
+        code: LCode,
+        scope_id: ScopeId,
+        block_id: ValueId,
+        ty: AstType,
+    ) -> ValueId {
+        let v = self._push_code(code, scope_id, block_id, ty);
+        let block = self.env.get_block_mut(block_id);
+        block.count += 1;
+        block.last_value = Some(v);
+        v
+    }
+
+    pub fn _push_code(
         &mut self,
         code: LCode,
         scope_id: ScopeId,
@@ -342,10 +366,41 @@ impl Blockify {
         self.scopes.push(scope_id);
         self.entries.push(block_id);
         scope.last_value = Some(v);
-
         self.code.push(code);
         self.types.push(ty);
         v
+    }
+
+    pub fn push_label<E: Extra>(
+        &mut self,
+        name: StringLabel,
+        scope_id: ScopeId,
+        args: &[AstType],
+        kwargs: &[ParameterNode<E>],
+    ) -> ValueId {
+        let block_id = self.push_code_new_block(
+            LCode::Label(args.len() as u8, kwargs.len() as u8),
+            scope_id,
+            //ValueId(0),
+            AstType::Unit,
+        );
+        //self.env.new_block(block_id);
+        //self.entries[block_id.0 as usize] = block_id;
+        self.names.insert(block_id, name);
+        self.block_name(scope_id, name, block_id);
+        let block = self.env.get_block_mut(block_id);
+        block.last_value = Some(block_id);
+        for p in kwargs {
+            let v = self.push_code(
+                LCode::NamedParameter(p.name),
+                scope_id,
+                block_id,
+                p.ty.clone(),
+            );
+            self.names.insert(v, p.name.into());
+            self.env.define(p.name, v, p.ty.clone());
+        }
+        block_id
     }
 
     pub fn resolve_block_label<E: Extra>(&self, k: ValueId, b: &NodeBuilder<E>) -> String {
@@ -455,38 +510,6 @@ impl Blockify {
         self.env.get_block_mut(v).succ.insert(succ);
     }
 
-    pub fn push_label<E: Extra>(
-        &mut self,
-        name: StringLabel,
-        scope_id: ScopeId,
-        args: &[AstType],
-        kwargs: &[ParameterNode<E>],
-    ) -> ValueId {
-        let label_id = self.push_code(
-            LCode::Label(args.len() as u8, kwargs.len() as u8),
-            scope_id,
-            ValueId(0),
-            AstType::Unit,
-        );
-        self.env.new_block(label_id);
-        self.entries[label_id.0 as usize] = label_id;
-        self.names.insert(label_id, name);
-        self.block_name(scope_id, name, label_id);
-        let block = self.env.get_block_mut(label_id);
-        block.last_value = Some(label_id);
-        for p in kwargs {
-            let v = self.push_code(
-                LCode::NamedParameter(p.name),
-                scope_id,
-                label_id,
-                p.ty.clone(),
-            );
-            self.names.insert(v, p.name.into());
-            self.env.define(p.name, v, p.ty.clone());
-        }
-        label_id
-    }
-
     pub fn emit_sequence<E: Extra>(
         &mut self,
         block_id: ValueId,
@@ -517,6 +540,7 @@ impl Blockify {
                     .last_value
                     .unwrap();
                 let last_code = self.code.get(last_value.0 as usize).unwrap();
+                /*
                 println!(
                     "x: {:?}",
                     (
@@ -525,6 +549,7 @@ impl Blockify {
                         &expr.node
                     )
                 );
+                */
 
                 // double label
                 /*
