@@ -556,6 +556,9 @@ impl Blockify {
                         } else {
                             unreachable!()
                         }
+                        let v = self.add(current_block_id.unwrap(), expr, b, d)?;
+                        current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
+                        value_id = Some(v);
                     }
 
                     (false, NextSeqState::NextLabel(key)) => {
@@ -571,10 +574,22 @@ impl Blockify {
                         } else {
                             unreachable!()
                         }
+                        let v = self.add(current_block_id.unwrap(), expr, b, d)?;
+                        current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
+                        value_id = Some(v);
                     }
 
-                    (true, NextSeqState::Empty) => (),
-                    (false, NextSeqState::Other) => (),
+                    (true, NextSeqState::Empty) => {
+                        let v = self.add(current_block_id.unwrap(), expr, b, d)?;
+                        current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
+                        value_id = Some(v);
+                    }
+
+                    (false, NextSeqState::Other) => {
+                        let v = self.add(current_block_id.unwrap(), expr, b, d)?;
+                        current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
+                        value_id = Some(v);
+                    }
 
                     (false, NextSeqState::Empty) => {
                         //println!("{:?}", &expr);
@@ -588,20 +603,27 @@ impl Blockify {
                                 AstType::Unit,
                             );
                         }
+                        let v = self.add(current_block_id.unwrap(), expr, b, d)?;
+                        current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
+                        value_id = Some(v);
                     }
+
                     (true, NextSeqState::Other) => {
                         let name = b.s("next");
                         let v_next = self.push_label::<E>(name.into(), scope_id, &[], &[]);
                         let scope = self.env.get_scope_mut(scope_id);
                         scope.next_block = Some(v_next);
-                    } //NextSeqState::NextReturn => (),
+                        let v = self.add(current_block_id.unwrap(), expr, b, d)?;
+                        current_block_id = Some(v_next); //Some(*self.entries.get(v.0 as usize).unwrap());
+                        value_id = Some(v);
+                    }
                 }
 
-                let v = self.add(current_block_id.unwrap(), expr, b, d)?;
-                current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
+                //let v = self.add(current_block_id.unwrap(), expr, b, d)?;
+                //current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
                 //last_value = v;
                 //last_code = self.code.get(v.0 as usize).unwrap();
-                value_id = Some(v);
+                //value_id = Some(v);
             } else {
                 break;
             }
@@ -1022,6 +1044,7 @@ impl Blockify {
 
         let mut g: DiGraph<Node, ()> = DiGraph::new();
         let mut ids = HashMap::new();
+        let mut last = HashMap::new();
         for (offset, code) in self.code.iter().enumerate() {
             let go = match code {
                 LCode::Jump(_, _) => true,
@@ -1043,8 +1066,11 @@ impl Blockify {
 
         for (offset, code) in self.code.iter().enumerate() {
             let v = ValueId(offset as u32);
-            let v_block = self.entries[v.0 as usize];
+            let v_block = self.entries[offset];
             match code {
+                LCode::Label(_, _) => {
+                    last.insert(v, v);
+                }
                 LCode::Return(_) => {
                     g.add_edge(*ids.get(&v_block).unwrap(), *ids.get(&v).unwrap(), ());
                 }
