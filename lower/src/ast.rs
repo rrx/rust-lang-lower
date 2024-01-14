@@ -70,12 +70,12 @@ impl From<&Literal> for AstType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum UnaryOperation {
     Minus,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum BinaryOperation {
     Add,
     Subtract,

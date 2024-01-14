@@ -586,7 +586,7 @@ impl<E: Extra> StarlarkParser<E> {
         blockify.save_graph("out.dot", b);
         let mut lower = flat::Lower::new(context);
         let mut blocks = flat::LowerBlocks::new();
-        blockify.lower_module(&mut lower, &mut blocks, module, b)?;
+        blockify.lower_module(&mut lower, &mut blocks, module, b, d)?;
         r?;
         Ok(())
     }
