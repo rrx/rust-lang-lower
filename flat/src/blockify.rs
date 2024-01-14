@@ -180,6 +180,15 @@ impl Blockify {
         self.env.get_scope_mut(scope_id).labels.insert(name, v);
     }
 
+    pub fn get_next(&self, value_id: ValueId) -> Option<ValueId> {
+        let next = self.next_pos[value_id.0 as usize];
+        if next != value_id {
+            Some(value_id)
+        } else {
+            None
+        }
+    }
+
     pub fn code_to_string<E: Extra>(&self, v: ValueId, b: &NodeBuilder<E>) -> String {
         let offset = v.0 as usize;
         let code = self.code.get(offset).unwrap();
@@ -872,10 +881,8 @@ impl Blockify {
                 let value_id = self.env.resolve_block(name.into()).unwrap();
 
                 let block = self.env.get_block(block_id);
-                //let scope = self.env.get_scope(scope_id);
                 if let Some(last_value) = block.last_value {
                     // check to ensure that the previous block was terminated
-
                     let code = self.code.get(last_value.0 as usize).unwrap();
                     if !code.is_term() {
                         //if params.len() > 0 {
@@ -883,10 +890,7 @@ impl Blockify {
                         //unreachable!()
                         //}
 
-                        //println!("label: {}", b.r(name));
-                        //println!("code: {:?}", self.code_to_string(last_value, b));
                         self.push_code(LCode::Jump(value_id, 0), scope_id, block_id, AstType::Unit);
-                        //self.env.exit_scope();
                     }
                 }
 
@@ -1302,5 +1306,34 @@ impl Blockify {
         //println!("{}", path.clone().into_os_string().into_string().unwrap());
         println!("{}", s);
         std::fs::write(filename, s).unwrap();
+    }
+}
+
+pub struct LCodeIterator<'a> {
+    blockify: &'a Blockify,
+    blocks: Vec<ValueId>,
+    values: Vec<ValueId>,
+}
+
+impl<'a> Iterator for LCodeIterator<'a> {
+    type Item = ValueId;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.values.len() == 0 {
+            if self.blocks.len() == 0 {
+                return None;
+            }
+
+            let block_id = self.blocks.pop().unwrap();
+            let mut current = block_id;
+            loop {
+                if let Some(next) = self.blockify.get_next(current) {
+                    self.values.push(next);
+                } else {
+                    break;
+                }
+            }
+        }
+        self.values.pop()
     }
 }
