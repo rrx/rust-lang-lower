@@ -1,7 +1,7 @@
 use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
 
-use lower::{AstType, Extra, NodeBuilder, StringKey, StringLabel};
+use lower::{AstType, Extra, NodeBuilder, StringKey, StringLabel, VarDefinitionSpace};
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 pub struct ValueId(pub(crate) u32);
@@ -12,12 +12,13 @@ pub struct BlockId(pub(crate) u32);
 #[derive(Debug, Clone)]
 pub struct Data {
     pub(crate) ty: AstType,
+    pub(crate) mem: VarDefinitionSpace,
     pub(crate) value_id: ValueId,
 }
 
 impl Data {
-    pub fn new(value_id: ValueId, ty: AstType) -> Self {
-        Data { value_id, ty }
+    pub fn new(value_id: ValueId, ty: AstType, mem: VarDefinitionSpace) -> Self {
+        Data { value_id, ty, mem }
     }
 }
 
@@ -33,6 +34,7 @@ impl std::fmt::Display for ScopeId {
 pub struct ScopeLayer {
     names: HashMap<StringKey, Data>,
     pub(crate) labels: HashMap<StringLabel, ValueId>,
+    pub(crate) blocks: Vec<ValueId>,
     pub(crate) return_block: Option<ValueId>,
     pub(crate) next_block: Vec<ValueId>,
     pub(crate) entry_block: Option<ValueId>,
@@ -42,6 +44,7 @@ impl ScopeLayer {
     pub fn new() -> Self {
         Self {
             labels: HashMap::new(),
+            blocks: vec![],
             names: HashMap::new(),
             return_block: None,
             next_block: vec![],
@@ -100,7 +103,9 @@ impl Environment {
         ScopeId(offset as u32)
     }
 
-    pub fn new_block(&mut self, value_id: ValueId) {
+    pub fn new_block(&mut self, value_id: ValueId, scope_id: ScopeId) {
+        let scope = self.get_scope_mut(scope_id);
+        scope.blocks.push(value_id);
         let block = Block::new();
         self.blocks.insert(value_id, block);
     }
@@ -119,8 +124,9 @@ impl Environment {
         name: StringKey,
         value_id: ValueId,
         ty: AstType,
+        mem: VarDefinitionSpace,
     ) {
-        let data = Data::new(value_id, ty);
+        let data = Data::new(value_id, ty, mem);
         self.scopes
             .get_mut(scope_id.0 as usize)
             .unwrap()
@@ -128,9 +134,15 @@ impl Environment {
             .insert(name, data);
     }
 
-    pub fn define(&mut self, name: StringKey, value_id: ValueId, ty: AstType) {
+    pub fn define(
+        &mut self,
+        name: StringKey,
+        value_id: ValueId,
+        ty: AstType,
+        mem: VarDefinitionSpace,
+    ) {
         let scope_id = self.current_scope().unwrap();
-        self.scope_define(scope_id, name, value_id, ty);
+        self.scope_define(scope_id, name, value_id, ty, mem);
     }
 
     pub fn get_scope(&self, scope_id: ScopeId) -> &ScopeLayer {
@@ -221,7 +233,10 @@ impl Environment {
                 println!("  label {} = {:?}", b.resolve_label(*key), data);
             }
             for next_id in layer.next_block.iter() {
-                println!("  next {:?}", next_id);
+                println!("  next  {:?}", next_id);
+            }
+            for block_id in layer.blocks.iter() {
+                println!("  block {:?}", block_id);
             }
         }
     }
