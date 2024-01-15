@@ -95,12 +95,12 @@ impl<'c> LowerBlocks<'c> {
         let block = self.blocks.get_mut(&block_id).unwrap().take_block();
         let op = self.blocks.get_mut(&index.block()).unwrap().op_ref(index);
         op.region(region_index).unwrap().append_block(block);
-        println!("b:{:?}", block_id);
-        println!("x:{:?}", op);
+        //println!("b:{:?}", block_id);
+        //println!("x:{:?}", op);
     }
 
     pub fn value0(&self, index: SymIndex) -> Value<'c, '_> {
-        println!("value0: {:?}", index);
+        //println!("value0: {:?}", index);
         let c = self.blocks.get(&index.block()).unwrap();
         match index {
             SymIndex::Op(_, pos) => {
@@ -329,7 +329,7 @@ impl Blockify {
     ) -> Result<()> {
         let code = self.get_code(v);
         let location = Location::unknown(lower.context);
-        println!("lower: {:?}", (v, self.code_to_string(v, b)));
+        //println!("lower: {:?}", (v, self.code_to_string(v, b)));
 
         match code {
             LCode::Label(_num_args, _num_kwargs) => {
@@ -352,7 +352,7 @@ impl Blockify {
                 let block_id = self.get_block_id(v);
                 self.get_or_lower_block(lower, blocks, v, *target, stack, b, d)?;
                 let values = self.get_previous_values(v, *num_args as usize);
-                println!("jump: {:?}", (values));
+                //println!("jump: {:?}", (values));
                 let indicies = values
                     .iter()
                     .map(|value_id| self.resolve_value(lower, *value_id).unwrap())
@@ -363,9 +363,9 @@ impl Blockify {
                 let arg_count = c.block.as_ref().unwrap().argument_count();
                 assert_eq!(arg_count, *num_args as usize);
 
-                println!("jump: {:?}", (&c.block.as_ref().unwrap(), &rs));
+                //println!("jump: {:?}", (&c.block.as_ref().unwrap(), &rs));
                 let op = cf::br(&c.block.as_ref().unwrap(), &rs, location);
-                println!("jump: {:?}", op);
+                //println!("jump: {:?}", op);
                 let c = blocks.blocks.get_mut(&block_id).unwrap();
 
                 let index = c.push(op);
@@ -407,7 +407,7 @@ impl Blockify {
                 let key = self.names.get(&v).unwrap();
                 let ty = self.get_type(v);
 
-                println!("declare");
+                //println!("declare");
                 let op = build_declare_function(lower.context, *key, ty, location, b)?;
                 let c = blocks.blocks.get_mut(&block_id).unwrap();
                 let index = c.push(op);
@@ -417,7 +417,7 @@ impl Blockify {
                     let scope_id = self.get_scope_id(*entry_id);
                     let scope = self.env.get_scope(scope_id);
                     // create blocks
-                    println!("body");
+                    //println!("body");
                     for block_id in scope.blocks.iter() {
                         self.create_block(lower, blocks, *block_id);
                     }
@@ -428,7 +428,7 @@ impl Blockify {
                     let op = blocks.op_ref(index);
                     op.set_attribute("llvm.emit_c_interface", &Attribute::unit(lower.context));
 
-                    println!("body:{:?}", op);
+                    //println!("body:{:?}", op);
 
                     for block_id in scope.blocks.iter() {
                         blocks.append_op(index, *block_id, 0);
@@ -511,9 +511,9 @@ impl Blockify {
 
                 let decl_index = self.resolve_value(lower, *v_decl).unwrap();
                 let r_addr = blocks.value0(decl_index);
-                println!("load: {:?}", (v_decl, decl_index, r_addr));
+                //println!("load: {:?}", (v_decl, decl_index, r_addr));
                 let op = memref::load(r_addr, &[], location);
-                println!("loadop: {:?}", (op));
+                //println!("loadop: {:?}", (op));
                 let c = blocks.blocks.get_mut(&block_id).unwrap();
                 let index = c.push(op);
                 lower.index.insert(v, index);
@@ -637,7 +637,7 @@ impl Blockify {
 
             _ => unimplemented!("{:?}", (v, code)),
         }
-        println!("f: {:?}", (v, code));
+        //println!("f: {:?}", (v, code));
         Ok(())
     }
 
@@ -650,7 +650,7 @@ impl Blockify {
         b: &NodeBuilder<E>,
         d: &mut Diagnostics,
     ) -> Result<()> {
-        println!("lowering block {:?}", block_id);
+        //println!("lowering block {:?}", block_id);
         let mut current = block_id;
         stack.push(block_id);
         loop {
@@ -680,13 +680,13 @@ impl Blockify {
         let mut stack = vec![];
         self.create_block(lower, blocks, block_id);
         self.lower_block(block_id, lower, blocks, &mut stack, b, d)?;
-        println!("finished lower module");
+        //println!("finished lower module");
         let block = blocks.blocks.get_mut(&block_id).unwrap();
         for op in block.take_ops() {
             //println!("op: {:?}", op);
             module.body().append_operation(op);
         }
-        println!("finished lower module:{:?}", module);
+        //println!("finished lower module:{:?}", module);
         Ok(())
     }
 }
@@ -724,10 +724,10 @@ pub fn build_declare_function<'c, E: Extra>(
         let func_name_attr = StringAttribute::new(context, &b.resolve_label(key));
         let func_ty_attr = TypeAttribute::new(func_type.into());
 
-        println!(
-            "func: {:?}",
-            (func_name_attr, func_ty_attr, &region, &attributes)
-        );
+        //println!(
+        //"func: {:?}",
+        //(func_name_attr, func_ty_attr, &region, &attributes)
+        //);
         let op = func::func(
             context,
             func_name_attr,
@@ -736,7 +736,7 @@ pub fn build_declare_function<'c, E: Extra>(
             &attributes,
             location,
         );
-        println!("func: {:?}", op);
+        //println!("func: {:?}", op);
         Ok(op)
     } else {
         unreachable!()

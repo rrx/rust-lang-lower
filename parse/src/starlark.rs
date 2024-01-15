@@ -724,7 +724,6 @@ pub(crate) mod tests {
         let r = p.parse_module2(filename, &context, &mut module, &mut b, &mut d, true);
         d.dump();
         r.unwrap();
-
         module.as_operation().dump();
         assert!(module.as_operation().verify());
         let r = p.exec_main(&context, &mut module, "../target/debug/", true);
@@ -781,12 +780,12 @@ pub(crate) mod tests {
     #[test]
     fn test_goto() {
         run_test_ir2("../tests/goto.star", 0);
-        //run_test_ir("../tests/goto.star", 0);
+        run_test_ir("../tests/goto.star", 0);
     }
 
     #[test]
     fn test_bare() {
         run_test_ir2("../tests/bare.star", 0);
-        //run_test_ir("../tests/goto.star", 0);
+        run_test_ir("../tests/bare.star", 0);
     }
 }

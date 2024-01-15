@@ -624,16 +624,16 @@ impl Blockify {
         }
 
         let mut value_id = None;
-        let mut current_block_id = Some(block_id); //None;
+        let mut current_block_id = Some(block_id);
         let mut iter = exprs.into_iter().peekable();
         loop {
             if let Some(expr) = iter.next() {
-                let last_value = self
-                    .env
-                    .get_block(current_block_id.unwrap())
-                    .last_value
-                    .unwrap();
-                let last_code = self.code.get(last_value.0 as usize).unwrap();
+                //let last_value = self
+                //.env
+                //.get_block(current_block_id.unwrap())
+                //.last_value
+                //.unwrap();
+                //let last_code = self.code.get(last_value.0 as usize).unwrap();
                 /*
                 println!(
                     "x: {:?}",
@@ -682,6 +682,7 @@ impl Blockify {
 
                     (false, NextSeqState::NextLabel(key)) => {
                         if let Some(target_value_id) = self.env.resolve_block(key.into()) {
+                            unreachable!();
                             let code = LCode::Jump(target_value_id, 0);
                             self.push_code(
                                 code,
@@ -718,6 +719,7 @@ impl Blockify {
                         // implicit jump to next
                         //let target_value_id = self.env.pop_next_block().unwrap();
                         if let Some(target_value_id) = self.env.get_next_block() {
+                            unreachable!();
                             let code = LCode::Jump(target_value_id, 0);
                             self.push_code(
                                 code,
@@ -828,7 +830,6 @@ impl Blockify {
 
             let scope = self.env.get_scope_mut(body_scope_id);
             scope.return_block = Some(return_block);
-            //scope.ne = Some(return_block);
             scope.entry_block = Some(entry_id);
 
             // declare function before adding the body, for recursion
@@ -844,21 +845,9 @@ impl Blockify {
             self.env.enter_scope(body_scope_id);
             // next block in body scope
             self.env.push_next_block(return_block);
-
-            //let label = b.block_start(def.name, def.params);
-            //let seq = b.seq(vec![label, *body]);
-            //let _ = self.emit_sequence(entry_id, *body, b, d)?;
-
             self.add(entry_id, *body, b, d)?;
-            //self.dump(b);
-            //self.env.dump(b);
             self.env.pop_next_block().unwrap();
             self.env.exit_scope();
-
-            // replace declaration with entry_id
-            //let scope = self.env.get_scope(body_scope_id);
-            //let entry_id = scope.entry_block.unwrap();
-            //self.code[v_decl.0 as usize] = LCode::DeclareFunction(Some(entry_id));
             Ok(v_decl)
         } else {
             Ok(self.push_code_with_name(
@@ -966,6 +955,7 @@ impl Blockify {
                         //unreachable!()
                         //}
 
+                        unreachable!();
                         self.push_code(
                             LCode::Jump(value_id, 0),
                             scope_id,
@@ -1076,29 +1066,50 @@ impl Blockify {
                 let v_next = self.env.get_next_block().unwrap();
 
                 let name = b.s("then");
-                let v_then = self.push_label::<E>(name.into(), scope_id, &[], &[]);
-                let _v_then_result = self.add(v_then, *then_expr, b, d)?;
-                //let then_ty = self.get_type(v_then_result);
-                self.push_code(
-                    LCode::Jump(v_next, 0),
-                    scope_id,
-                    v_then,
-                    AstType::Unit,
-                    VarDefinitionSpace::Reg,
-                );
+                let then_scope_id = self.env.new_scope();
+                let v_then = self.push_label::<E>(name.into(), then_scope_id, &[], &[]);
+                self.env.enter_scope(then_scope_id);
+                let _ = self.add(v_then, *then_expr, b, d)?;
+                self.env.exit_scope();
+                let last_value = self.env.get_block(v_then).last_value.unwrap();
+                let last_code = self.get_code(last_value);
+                //let last_value = self.env.get_block(v_then).last_value;
 
-                let v_else = if let Some(else_expr) = maybe_else_expr {
-                    let name = b.s("else");
-                    let v_else = self.push_label::<E>(name.into(), scope_id, &[], &[]);
-                    let _v_else_result = self.add(v_else, *else_expr, b, d)?;
-                    //let else_ty = self.get_type(v_else_result);
+                if !last_code.is_term() {
+                    //let then_ty = self.get_type(v_then_result);
                     self.push_code(
                         LCode::Jump(v_next, 0),
                         scope_id,
-                        v_else,
+                        v_then,
                         AstType::Unit,
                         VarDefinitionSpace::Reg,
                     );
+                }
+
+                let v_else = if let Some(else_expr) = maybe_else_expr {
+                    let name = b.s("else");
+                    let else_scope_id = self.env.new_scope();
+                    let v_else = self.push_label::<E>(name.into(), else_scope_id, &[], &[]);
+                    println!("else: {:?}", else_expr);
+                    let v_else_result = self.add(v_else, *else_expr, b, d)?;
+                    self.env.exit_scope();
+                    let last_value = self.env.get_block(v_else).last_value.unwrap();
+                    let last_code = self.get_code(last_value);
+                    println!(
+                        "else: {:?}",
+                        (last_code.is_term(), self.code_to_string(v_else_result, b))
+                    );
+                    self.dump_codes(b, Some(v_else));
+                    //let else_ty = self.get_type(v_else_result);
+                    if !last_code.is_term() {
+                        self.push_code(
+                            LCode::Jump(v_next, 0),
+                            scope_id,
+                            v_else,
+                            AstType::Unit,
+                            VarDefinitionSpace::Reg,
+                        );
+                    }
                     v_else
                 } else {
                     v_next
@@ -1189,7 +1200,6 @@ impl Blockify {
                         );
                     }
 
-                    //let code = LCode::Return(count);
                     let code = LCode::Jump(v_return, count);
                     let v = self.push_code(
                         code,
@@ -1198,7 +1208,6 @@ impl Blockify {
                         AstType::Unit,
                         VarDefinitionSpace::Reg,
                     );
-                    //self.env.exit_scope();
                     Ok(v)
                 } else {
                     d.push_diagnostic(error(
