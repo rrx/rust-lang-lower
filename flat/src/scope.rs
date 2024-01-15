@@ -185,6 +185,15 @@ impl Environment {
         let scope_id = self.current_scope().unwrap();
         let scope = self.get_scope(scope_id);
         scope.next_block.last().cloned()
+        /*
+        for scope_id in self.stack.iter().rev() {
+            let scope = self.get_scope(*scope_id);
+            if let Some(value_id) = scope.next_block.last().cloned() {
+                return Some(value_id);
+            }
+        }
+        */
+        //None
     }
 
     pub fn resolve_return_block(&self) -> Option<ValueId> {

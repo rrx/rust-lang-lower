@@ -107,7 +107,10 @@ impl<'c> LowerBlocks<'c> {
                 let op = c.ops.get(pos).expect("Op missing");
                 op.result(0).unwrap().into()
             }
-            SymIndex::Arg(_, pos) => c.block.as_ref().unwrap().argument(pos).unwrap().into(),
+            SymIndex::Arg(_, pos) => {
+                println!("b: {:?}", c.block.as_ref().unwrap());
+                c.block.as_ref().unwrap().argument(pos).unwrap().into()
+            }
             _ => unimplemented!(),
         }
     }
@@ -116,17 +119,6 @@ impl<'c> LowerBlocks<'c> {
         let mut rs = vec![];
         for index in values {
             let r = self.value0(index);
-            /*
-            let c = self.blocks.get(&index.block()).unwrap();
-            let r: Value<'c, '_> = match index {
-                SymIndex::Op(_, pos) => {
-                    let op = c.ops.get(pos).expect("Op missing");
-                    op.result(0).unwrap().into()
-                }
-                SymIndex::Arg(_, pos) => c.block.as_ref().unwrap().argument(pos).unwrap().into(),
-                _ => unimplemented!(),
-            };
-            */
             rs.push(r);
         }
         rs
@@ -329,7 +321,7 @@ impl Blockify {
     ) -> Result<()> {
         let code = self.get_code(v);
         let location = Location::unknown(lower.context);
-        //println!("lower: {:?}", (v, self.code_to_string(v, b)));
+        println!("code: {:?}", (v, self.code_to_string(v, b)));
 
         match code {
             LCode::Label(_num_args, _num_kwargs) => {
@@ -350,7 +342,7 @@ impl Blockify {
 
             LCode::Jump(target, num_args) => {
                 let block_id = self.get_block_id(v);
-                self.get_or_lower_block(lower, blocks, v, *target, stack, b, d)?;
+                //self.get_or_lower_block(lower, blocks, v, *target, stack, b, d)?;
                 let values = self.get_previous_values(v, *num_args as usize);
                 //println!("jump: {:?}", (values));
                 let indicies = values
@@ -414,25 +406,49 @@ impl Blockify {
                 lower.index.insert(v, index);
 
                 if let Some(entry_id) = maybe_entry_id {
+                    let op = blocks.op_ref(index);
+                    op.set_attribute("llvm.emit_c_interface", &Attribute::unit(lower.context));
+
+                    let (ids, g) = self.get_graph(*entry_id, b);
                     let scope_id = self.get_scope_id(*entry_id);
                     let scope = self.env.get_scope(scope_id);
                     // create blocks
                     //println!("body");
-                    for block_id in scope.blocks.iter() {
-                        self.create_block(lower, blocks, *block_id);
+                    use petgraph::visit::Bfs;
+                    let mut bfs = Bfs::new(&g, *ids.get(entry_id).unwrap());
+                    while let Some(nx) = bfs.next(&g) {
+                        let node = g.node_weight(nx).unwrap();
+                        self.create_block(lower, blocks, node.block_id);
+                        println!("create: {:?}", (nx, node));
+                    }
+                    //for block_id in scope.blocks.iter() {
+                    //self.create_block(lower, blocks, *block_id);
+                    //}
+
+                    let mut bfs = Bfs::new(&g, *ids.get(entry_id).unwrap());
+                    while let Some(nx) = bfs.next(&g) {
+                        let node = g.node_weight(nx).unwrap();
+                        //self.get_or_lower_block(lower, blocks, v, node.block_id, stack, b, d)?;
+                        println!("lower: {:?}", (nx, node));
+                        self.lower_block(node.block_id, lower, blocks, stack, b, d)?;
                     }
 
-                    for block_id in scope.blocks.iter() {
-                        self.get_or_lower_block(lower, blocks, v, *block_id, stack, b, d)?;
+                    let mut bfs = Bfs::new(&g, *ids.get(entry_id).unwrap());
+                    while let Some(nx) = bfs.next(&g) {
+                        let node = g.node_weight(nx).unwrap();
+                        blocks.append_op(index, node.block_id, 0);
                     }
-                    let op = blocks.op_ref(index);
-                    op.set_attribute("llvm.emit_c_interface", &Attribute::unit(lower.context));
+
+                    //for block_id in scope.blocks.iter() {
+                    //self.get_or_lower_block(lower, blocks, v, *block_id, stack, b, d)?;
+                    //}
+                    //
 
                     //println!("body:{:?}", op);
 
-                    for block_id in scope.blocks.iter() {
-                        blocks.append_op(index, *block_id, 0);
-                    }
+                    //for block_id in scope.blocks.iter() {
+                    //blocks.append_op(index, *block_id, 0);
+                    //}
                 }
             }
 
@@ -489,6 +505,7 @@ impl Blockify {
                 //let rhs_ty = self.get_type(*v_value);
                 let decl_index = self.resolve_value(lower, *v_decl).unwrap();
                 let value_index = self.resolve_value(lower, *v_value).unwrap();
+                println!("v: {:?}", value_index);
                 let r_addr = blocks.value0(decl_index);
                 let r_value = blocks.value0(value_index);
 
@@ -503,7 +520,7 @@ impl Blockify {
 
             LCode::Load(v_decl) => {
                 let block_id = self.get_block_id(*v_decl);
-                self.get_or_lower_block(lower, blocks, v, block_id, stack, b, d)?;
+                //self.get_or_lower_block(lower, blocks, v, block_id, stack, b, d)?;
 
                 let block_id = self.get_block_id(v);
                 let ast_ty = self.get_type(v);
@@ -544,10 +561,10 @@ impl Blockify {
 
             LCode::Branch(condition, v_then, v_else) => {
                 let then_block_id = self.get_block_id(*v_then);
-                self.get_or_lower_block(lower, blocks, v, then_block_id, stack, b, d)?;
+                //self.get_or_lower_block(lower, blocks, v, then_block_id, stack, b, d)?;
 
                 let else_block_id = self.get_block_id(*v_else);
-                self.get_or_lower_block(lower, blocks, v, else_block_id, stack, b, d)?;
+                //self.get_or_lower_block(lower, blocks, v, else_block_id, stack, b, d)?;
 
                 let c_index = self.resolve_value(lower, *condition).unwrap();
                 let r_c = blocks.value0(c_index);
@@ -567,6 +584,7 @@ impl Blockify {
                     &[], //else_args,
                     location,
                 );
+                //println!("op: {:?}", (op));
                 let block_id = self.get_block_id(v);
                 let c = blocks.blocks.get_mut(&block_id).unwrap();
                 let index = c.push(op);
@@ -656,7 +674,7 @@ impl Blockify {
         loop {
             self.lower_code(lower, blocks, current, stack, b, d)?;
             //let code = self.get_code(current);
-            //println!("X: {:?}", (current, code));
+            //println!("X: {:?}", (current, self.code_to_string(current, b)));
             if let Some(next) = self.get_next(current) {
                 current = next;
             } else {

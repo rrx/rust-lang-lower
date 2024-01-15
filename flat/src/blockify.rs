@@ -2,7 +2,7 @@ use anyhow::Error;
 use anyhow::Result;
 use indexmap::IndexMap;
 use petgraph::graph::DiGraph;
-//use petgraph::graph::NodeIndex;
+use petgraph::graph::NodeIndex;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 
@@ -1063,20 +1063,24 @@ impl Blockify {
             }
 
             Ast::Conditional(condition, then_expr, maybe_else_expr) => {
-                let v_next = self.env.get_next_block().unwrap();
+                //println!("x: {:?}", (scope_id));
+                //self.env.dump(b);
+                //let v_next = self.env.get_next_block().unwrap();
 
+                let v_next = self.env.get_next_block().unwrap();
+                //.get_next(v);
                 let name = b.s("then");
                 let then_scope_id = self.env.new_scope();
                 let v_then = self.push_label::<E>(name.into(), then_scope_id, &[], &[]);
                 self.env.enter_scope(then_scope_id);
+                self.env.push_next_block(v_next);
                 let _ = self.add(v_then, *then_expr, b, d)?;
+                self.env.pop_next_block();
                 self.env.exit_scope();
                 let last_value = self.env.get_block(v_then).last_value.unwrap();
                 let last_code = self.get_code(last_value);
-                //let last_value = self.env.get_block(v_then).last_value;
 
                 if !last_code.is_term() {
-                    //let then_ty = self.get_type(v_then_result);
                     self.push_code(
                         LCode::Jump(v_next, 0),
                         scope_id,
@@ -1091,7 +1095,10 @@ impl Blockify {
                     let else_scope_id = self.env.new_scope();
                     let v_else = self.push_label::<E>(name.into(), else_scope_id, &[], &[]);
                     println!("else: {:?}", else_expr);
+                    self.env.enter_scope(else_scope_id);
+                    self.env.push_next_block(v_next);
                     let v_else_result = self.add(v_else, *else_expr, b, d)?;
+                    self.env.pop_next_block();
                     self.env.exit_scope();
                     let last_value = self.env.get_block(v_else).last_value.unwrap();
                     let last_code = self.get_code(last_value);
@@ -1100,7 +1107,6 @@ impl Blockify {
                         (last_code.is_term(), self.code_to_string(v_else_result, b))
                     );
                     self.dump_codes(b, Some(v_else));
-                    //let else_ty = self.get_type(v_else_result);
                     if !last_code.is_term() {
                         self.push_code(
                             LCode::Jump(v_next, 0),
@@ -1323,6 +1329,101 @@ impl Blockify {
         println!("saved graph {:?}", filename);
         println!("{}", s);
         std::fs::write(filename, s).unwrap();
+    }
+
+    pub fn get_graph<E: Extra>(
+        &self,
+        block_id: ValueId,
+        b: &NodeBuilder<E>,
+    ) -> (HashMap<ValueId, NodeIndex>, DiGraph<Node, ()>) {
+        let mut g: DiGraph<Node, ()> = DiGraph::new();
+        let mut ids = HashMap::new();
+
+        let mut stack = VecDeque::new();
+        stack.push_back(block_id);
+
+        loop {
+            if let Some(block_id) = stack.pop_front() {
+                if ids.contains_key(&block_id) {
+                    continue;
+                }
+                let name = self.code_to_string(block_id, b);
+                let c = g.add_node(Node::new_block(name, block_id));
+                ids.insert(block_id, c);
+
+                let block = self.env.get_block(block_id);
+                for next_block_id in block.succ.iter() {
+                    //if !ids.contains_key(next_block_id) {
+                    stack.push_back(*next_block_id);
+                    //}
+                }
+            } else {
+                break;
+            }
+        }
+
+        for block_id in ids.keys() {
+            let block = self.env.get_block(*block_id);
+            let id = ids.get(block_id).unwrap();
+            for next_block_id in block.succ.iter() {
+                let child_id = ids.get(next_block_id).unwrap();
+                g.add_edge(*id, *child_id, ());
+            }
+        }
+        (ids, g)
+    }
+
+    pub fn save_graph2<E: Extra>(&self, filename: &str, b: &NodeBuilder<E>) {
+        use petgraph::dot::{Config, Dot};
+        let (ids, g) = self.get_graph(ValueId(0), b);
+        let s = format!(
+            "{:?}",
+            Dot::with_attr_getters(
+                &g,
+                &[Config::EdgeNoLabel, Config::NodeNoLabel],
+                &|_, _er| String::new(),
+                &|_, (_index, data)| {
+                    format!(
+                        "label = \"[{}]{}\" shape={:?}",
+                        data.block_id.0,
+                        &data.name,
+                        &data.ty.to_string()
+                    )
+                }
+            )
+        );
+        println!("saved graph {:?}", filename);
+        println!("{}", s);
+        std::fs::write(filename, s).unwrap();
+    }
+}
+
+#[derive(Debug)]
+pub enum Shape {
+    Box,
+    Ellipsis,
+}
+impl Shape {
+    fn to_string(&self) -> &str {
+        match self {
+            Self::Box => "box",
+            Self::Ellipsis => "circle",
+        }
+    }
+}
+#[derive(Debug)]
+pub struct Node {
+    ty: Shape,
+    pub(crate) name: String,
+    pub(crate) block_id: ValueId,
+}
+impl Node {
+    fn new_block(name: String, block_id: ValueId) -> Self {
+        Self {
+            ty: Shape::Box,
+            name,
+            block_id,
+        }
     }
 }
 

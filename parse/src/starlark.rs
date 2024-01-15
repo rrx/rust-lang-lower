@@ -583,7 +583,7 @@ impl<E: Extra> StarlarkParser<E> {
         let mut blockify = Blockify::new();
         let r = blockify.build_module(ast, b, d);
         blockify.dump(b);
-        blockify.save_graph("out.dot", b);
+        blockify.save_graph2("out.dot", b);
         let mut lower = flat::Lower::new(context);
         let mut blocks = flat::LowerBlocks::new();
         blockify.lower_module(&mut lower, &mut blocks, module, b, d)?;
@@ -724,8 +724,9 @@ pub(crate) mod tests {
         let r = p.parse_module2(filename, &context, &mut module, &mut b, &mut d, true);
         d.dump();
         r.unwrap();
+        let verify = module.as_operation().verify();
         module.as_operation().dump();
-        assert!(module.as_operation().verify());
+        assert!(verify);
         let r = p.exec_main(&context, &mut module, "../target/debug/", true);
         assert_eq!(expected, r);
     }
@@ -739,8 +740,9 @@ pub(crate) mod tests {
         let r = p.parse_module(filename, &context, &mut module, &mut b, &mut d, true);
         d.dump();
         r.unwrap();
+        let verify = module.as_operation().verify();
         module.as_operation().dump();
-        assert!(module.as_operation().verify());
+        assert!(verify);
         let r = p.exec_main(&context, &mut module, "../target/debug/", true);
         assert_eq!(expected, r);
     }
@@ -768,7 +770,7 @@ pub(crate) mod tests {
 
     #[test]
     fn test_recursive() {
-        //run_test_ir2("../tests/test_recursive.star", 0);
+        run_test_ir2("../tests/test_recursive.star", 0);
         run_test_ir("../tests/test_recursive.star", 0);
     }
 
