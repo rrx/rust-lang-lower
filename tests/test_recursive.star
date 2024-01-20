@@ -23,7 +23,7 @@ def fibonacci(a:int, c:int, n:int)->int:
 def main() -> int:
   r = fibonacci_recursive(2,0,1)
   r = fibonacci(0,1,2)
-  b.check(r == 0)
   b.print(r)
+  b.check(r == 2)
   return 0
 
