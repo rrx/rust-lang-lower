@@ -20,6 +20,7 @@ use lower::{
     Diagnostics,
     Extra,
     Label,
+    LinkOptions,
     Literal,
     NodeBuilder,
     ParameterNode,
@@ -63,6 +64,7 @@ pub struct LoopLayer {
 #[derive(Debug)]
 pub enum LCode {
     Label(u8, u8), // BlockId, number of positional arguments, number of named arguments
+    Noop,
     Declare,
     DeclareFunction(Option<ValueId>), // optional entry block
     Value(ValueId),
@@ -158,6 +160,7 @@ pub struct Blockify {
     pub(crate) env: Environment,
     pub(crate) names: IndexMap<ValueId, StringLabel>,
     entries: Vec<ValueId>,
+    link: LinkOptions,
 }
 
 impl Blockify {
@@ -173,7 +176,12 @@ impl Blockify {
             loop_stack: vec![],
             env: Environment::new(),
             entries: vec![],
+            link: LinkOptions::new(),
         }
+    }
+
+    pub fn shared_libraries(&self) -> Vec<String> {
+        self.link.shared_libraries()
     }
 
     pub fn block_name(&mut self, scope_id: ScopeId, name: StringLabel, v: ValueId) {
@@ -912,38 +920,58 @@ impl Blockify {
                 Ok(v_decl)
             }
 
-            Ast::Builtin(bi, args) => {
-                let _ty = bi.get_return_type();
-                let args_size = args.len();
-                assert_eq!(args_size, bi.arity());
-                let mut values = vec![];
-                for a in args.into_iter() {
-                    let Argument::Positional(expr) = a;
-                    let v = self.add(block_id, *expr, b, d)?;
-                    let ty = self.get_type(v);
-                    values.push((v, ty));
-                }
+            Ast::Builtin(bi, mut args) => match bi {
+                Builtin::Import => {
+                    let arg = args.pop().unwrap();
+                    if let Some(s) = arg.try_string() {
+                        self.link.add_library(&s);
+                    } else {
+                        d.push_diagnostic(error("Expected string", node.extra.get_span()));
+                    }
 
-                for (v, ty) in values {
-                    self.push_code(
-                        LCode::Value(v),
+                    let code = LCode::Noop;
+                    let value_id = self.push_code(
+                        code,
+                        scope_id,
+                        block_id,
+                        AstType::Unit,
+                        VarDefinitionSpace::Reg,
+                    );
+                    Ok(value_id)
+                }
+                _ => {
+                    let _ty = bi.get_return_type();
+                    let args_size = args.len();
+                    assert_eq!(args_size, bi.arity());
+                    let mut values = vec![];
+                    for a in args.into_iter() {
+                        let Argument::Positional(expr) = a;
+                        let v = self.add(block_id, *expr, b, d)?;
+                        let ty = self.get_type(v);
+                        values.push((v, ty));
+                    }
+
+                    for (v, ty) in values {
+                        self.push_code(
+                            LCode::Value(v),
+                            scope_id,
+                            block_id,
+                            ty,
+                            VarDefinitionSpace::Reg,
+                        );
+                    }
+
+                    let ty = bi.get_return_type();
+                    let value_id = self.push_code(
+                        LCode::Builtin(bi, args_size as u8, 0),
                         scope_id,
                         block_id,
                         ty,
                         VarDefinitionSpace::Reg,
                     );
+                    Ok(value_id)
                 }
-
-                let ty = bi.get_return_type();
-                let value_id = self.push_code(
-                    LCode::Builtin(bi, args_size as u8, 0),
-                    scope_id,
-                    block_id,
-                    ty,
-                    VarDefinitionSpace::Reg,
-                );
-                Ok(value_id)
-            }
+            },
 
             Ast::Literal(lit) => {
                 let ty: AstType = lit.clone().into();

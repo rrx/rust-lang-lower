@@ -1,3 +1,5 @@
+b.use("prelude")
+
 def fibonacci_recursive(n: int, a:int, c:int) -> int:
   out = 0
   if n == 0:
@@ -21,5 +23,7 @@ def fibonacci(a:int, c:int, n:int)->int:
 def main() -> int:
   r = fibonacci_recursive(2,0,1)
   r = fibonacci(0,1,2)
+  b.check(r == 0)
+  b.print(r)
   return 0
 

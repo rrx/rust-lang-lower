@@ -587,6 +587,9 @@ impl<E: Extra> StarlarkParser<E> {
         let mut lower = flat::Lower::new(context);
         let mut blocks = flat::LowerBlocks::new();
         blockify.lower_module(&mut lower, &mut blocks, module, b, d)?;
+        for lib in blockify.shared_libraries() {
+            self.link.add_library(&lib);
+        }
         r?;
         Ok(())
     }

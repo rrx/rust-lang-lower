@@ -14,7 +14,7 @@ pub mod sort;
 pub mod types;
 
 pub use ast::{
-    Argument, Ast, AstNode, AstNodeBlock, BinaryOperation, Definition, Extra, Literal,
+    Argument, Ast, AstNode, AstNodeBlock, BinaryOperation, Builtin, Definition, Extra, Literal,
     ParameterNode, SimpleExtra, Span, UnaryOperation, VarDefinitionSpace,
 };
 //pub use blockify::{BlockId, Blockify};

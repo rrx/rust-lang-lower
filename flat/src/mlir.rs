@@ -28,23 +28,15 @@ use lower::melior::{
             MemRefType,
             //RankedTensorType
         },
-        Attribute,
-        Block,
-        Identifier,
-        Operation,
-        Region,
-        Type,
-        //TypeLike,
-        Value,
-        ValueLike,
+        Attribute, Block, Identifier, Operation, Region, Type, TypeLike, Value, ValueLike,
     },
     Context,
 };
-use petgraph::visit::Bfs;
 
 use lower::{
     op,
     AstType,
+    Builtin,
     Diagnostics,
     Extra,
     NodeBuilder,
@@ -478,12 +470,6 @@ impl Blockify {
 
             LCode::Store(v_decl, v_value) => {
                 let block_id = self.get_block_id(v);
-                /*
-                let block_id = self.get_block_id(*v_decl);
-                self.get_or_lower_block(lower, blocks, block_list, block_id, b)?;
-                let block_id = self.get_block_id(*v_value);
-                self.get_or_lower_block(lower, blocks, block_list, block_id, b)?;
-                */
 
                 //let lhs_ty = self.get_type(*v_decl);
                 //let rhs_ty = self.get_type(*v_value);
@@ -641,6 +627,76 @@ impl Blockify {
             }
 
             LCode::Value(_) => (),
+            LCode::Noop => (),
+
+            LCode::Builtin(bi, num_args, num_kwargs) => {
+                let arity = bi.arity();
+                assert_eq!(arity, *num_args as usize);
+                let current_block = stack.last().unwrap().clone();
+                match bi {
+                    Builtin::Import => {
+                        let values = self.get_previous_values(v, *num_args as usize);
+                        let indicies = values
+                            .iter()
+                            .map(|value_id| self.resolve_value(lower, *value_id).unwrap())
+                            .collect();
+                        let rs = blocks.values(indicies);
+
+                        //let arg = args.pop().unwrap();
+                        //if let Some(s) = arg.try_string() {
+                        //self.link.add_library(&s);
+                        //} else {
+                        //d.push_diagnostic(ir::error("Expected string", self.span));
+                        //}
+                        //op::emit_noop(context, location, current_block, blocks)
+                    }
+                    Builtin::Assert => {
+                        let values = self.get_previous_values(v, *num_args as usize);
+                        let indicies = values
+                            .iter()
+                            .map(|value_id| self.resolve_value(lower, *value_id).unwrap())
+                            .collect();
+                        let rs = blocks.values(indicies);
+
+                        let msg = "assert";
+                        //let msg = d.emit_string(error(msg, self.span));
+                        let op = cf::assert(lower.context, rs[0], &msg, location);
+                        let block_id = self.get_block_id(v);
+                        let c = blocks.blocks.get_mut(&block_id).unwrap();
+                        let index = c.push(op);
+                        lower.index.insert(v, index);
+                    }
+                    Builtin::Print => {
+                        let values = self.get_previous_values(v, *num_args as usize);
+                        let indicies = values
+                            .iter()
+                            .map(|value_id| self.resolve_value(lower, *value_id).unwrap())
+                            .collect();
+                        let rs = blocks.values(indicies);
+                        let r = rs[0];
+                        let ty = r.r#type();
+
+                        // Select the baked version based on parameters
+                        // TODO: A more dynamic way of doing this
+                        // TODO: We only want to import these if they are referenced
+                        let ident = if ty.is_index() || ty.is_integer() {
+                            "print_index"
+                        } else if ty.is_f64() {
+                            "print_float"
+                        } else {
+                            unimplemented!("{:?}", (&ty, ty))
+                        };
+
+                        let f = FlatSymbolRefAttribute::new(lower.context, ident);
+                        let op = func::call(lower.context, f, &[r], &[], location);
+                        let block_id = self.get_block_id(v);
+                        let c = blocks.blocks.get_mut(&block_id).unwrap();
+                        let index = c.push(op);
+                        lower.index.insert(v, index);
+                    }
+                    _ => unreachable!("{:?}", bi),
+                }
+            }
 
             _ => unimplemented!("{:?}", (v, code)),
         }
