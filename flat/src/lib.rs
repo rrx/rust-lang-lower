@@ -4,4 +4,4 @@ pub mod scope;
 
 pub use blockify::{Blockify, LCode};
 pub use mlir::{Lower, LowerBlocks};
-pub use scope::{BlockId, Environment, ScopeId, ScopeLayer, ValueId};
+pub use scope::{BlockId, Environment, ScopeId, ScopeLayer, Successor, ValueId};

@@ -51,13 +51,24 @@ impl ScopeLayer {
             entry_block: None,
         }
     }
+
+    pub fn lookup(&self, name: StringKey) -> Option<ValueId> {
+        self.names.get(&name).cloned().map(|data| data.value_id)
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum Successor {
+    BlockScope,
+    Operation,
+    FunctionDeclaration,
 }
 
 #[derive(Debug)]
 pub struct Block {
     pub(crate) count: usize,
     pub(crate) last_value: Option<ValueId>,
-    pub(crate) succ: HashSet<ValueId>,
+    pub(crate) succ: HashSet<(Successor, ValueId)>,
     pub(crate) pred: HashSet<ValueId>,
 }
 
@@ -165,8 +176,28 @@ impl Environment {
         self.get_block_mut(block_id).pred.insert(pred);
     }
 
-    pub fn add_succ(&mut self, block_id: ValueId, succ: ValueId) {
-        self.get_block_mut(block_id).succ.insert(succ);
+    pub fn add_succ_op(&mut self, block_id: ValueId, succ: ValueId) {
+        self.get_block_mut(block_id)
+            .succ
+            .insert((Successor::Operation, succ));
+    }
+
+    pub fn add_succ_block(&mut self, block_id: ValueId, succ: ValueId) {
+        self.get_block_mut(block_id)
+            .succ
+            .insert((Successor::BlockScope, succ));
+    }
+
+    pub fn add_succ_static(&mut self, block_id: ValueId, succ: ValueId) {
+        self.get_block_mut(block_id)
+            .succ
+            .insert((Successor::FunctionDeclaration, succ));
+    }
+
+    pub fn add_succ(&mut self, block_id: ValueId, succ: ValueId, successor_type: Successor) {
+        self.get_block_mut(block_id)
+            .succ
+            .insert((successor_type, succ));
     }
 
     pub fn push_next_block(&mut self, next_id: ValueId) {

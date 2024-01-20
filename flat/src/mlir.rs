@@ -4,7 +4,7 @@ use indexmap::IndexMap;
 use lower::melior::ir::Location;
 use lower::melior::{
     dialect::{
-        arith,
+        //arith,
         cf,
         func,
         //llvm,
@@ -15,19 +15,42 @@ use lower::melior::{
     ir::{
         attribute::FlatSymbolRefAttribute,
         attribute::{
-            DenseElementsAttribute,
+            //DenseElementsAttribute,
             //FlatSymbolRefAttribute,
-            FloatAttribute,
-            IntegerAttribute,
+            //FloatAttribute,
+            //IntegerAttribute,
             StringAttribute,
             TypeAttribute,
         },
-        r#type::{FunctionType, IntegerType, MemRefType, RankedTensorType},
-        Attribute, Block, Identifier, Operation, Region, Type, TypeLike, Value, ValueLike,
+        r#type::{
+            FunctionType,
+            //IntegerType,
+            MemRefType,
+            //RankedTensorType
+        },
+        Attribute,
+        Block,
+        Identifier,
+        Operation,
+        Region,
+        Type,
+        //TypeLike,
+        Value,
+        ValueLike,
     },
     Context,
 };
-use lower::{op, AstType, Diagnostics, Extra, NodeBuilder, StringKey, StringLabel};
+use petgraph::visit::Bfs;
+
+use lower::{
+    op,
+    AstType,
+    Diagnostics,
+    Extra,
+    NodeBuilder,
+    //StringKey,
+    StringLabel,
+};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
@@ -95,12 +118,9 @@ impl<'c> LowerBlocks<'c> {
         let block = self.blocks.get_mut(&block_id).unwrap().take_block();
         let op = self.blocks.get_mut(&index.block()).unwrap().op_ref(index);
         op.region(region_index).unwrap().append_block(block);
-        //println!("b:{:?}", block_id);
-        //println!("x:{:?}", op);
     }
 
     pub fn value0(&self, index: SymIndex) -> Value<'c, '_> {
-        //println!("value0: {:?}", index);
         let c = self.blocks.get(&index.block()).unwrap();
         match index {
             SymIndex::Op(_, pos) => {
@@ -174,7 +194,6 @@ impl<'c> OpCollection<'c> {
 
     pub fn take_ops(&mut self) -> Vec<Operation<'c>> {
         assert_eq!(self.op_count, self.ops.len());
-        //self.symbols.clear();
         self.ops.drain(..).collect()
     }
 
@@ -256,8 +275,6 @@ impl Blockify {
         for i in 0..num {
             let v = ValueId((v.0 as usize - num + i) as u32);
             let code = self.get_code(v);
-            //println!("code: {:?}", (code, self.names.get(&v)));
-            //blocks.blocks.get(
             if let LCode::Value(value_id) = code {
                 values.push(*value_id);
             }
@@ -325,13 +342,8 @@ impl Blockify {
 
         match code {
             LCode::Label(_num_args, _num_kwargs) => {
+                // should already exist
                 assert!(blocks.blocks.get(&v).is_some());
-                //let args =
-                //self.get_label_args(lower.context, v, *num_args as usize, *num_kwargs as usize);
-                //let block = Block::new(&args);
-                //let c = OpCollection::new(v, block);
-                //blocks.blocks.insert(v, c);
-                //block_list.push(v);
             }
 
             LCode::Arg(pos) | LCode::NamedParameter(pos) => {
@@ -342,9 +354,7 @@ impl Blockify {
 
             LCode::Jump(target, num_args) => {
                 let block_id = self.get_block_id(v);
-                //self.get_or_lower_block(lower, blocks, v, *target, stack, b, d)?;
                 let values = self.get_previous_values(v, *num_args as usize);
-                //println!("jump: {:?}", (values));
                 let indicies = values
                     .iter()
                     .map(|value_id| self.resolve_value(lower, *value_id).unwrap())
@@ -355,9 +365,7 @@ impl Blockify {
                 let arg_count = c.block.as_ref().unwrap().argument_count();
                 assert_eq!(arg_count, *num_args as usize);
 
-                //println!("jump: {:?}", (&c.block.as_ref().unwrap(), &rs));
                 let op = cf::br(&c.block.as_ref().unwrap(), &rs, location);
-                //println!("jump: {:?}", op);
                 let c = blocks.blocks.get_mut(&block_id).unwrap();
 
                 let index = c.push(op);
@@ -366,22 +374,15 @@ impl Blockify {
 
             LCode::Const(lit) => {
                 let block_id = self.get_block_id(v);
-                let (op, ast_ty) = op::emit_literal_const(lower.context, lit, location);
+                let (op, _ast_ty) = op::emit_literal_const(lower.context, lit, location);
                 let c = blocks.blocks.get_mut(&block_id).unwrap();
                 let index = c.push(op);
                 lower.index.insert(v, index);
             }
 
             LCode::Return(num_args) => {
-                //let op = func::r#return(&[], location);
-                //let block_id = self.get_block_id(v);
-                //let c = blocks.blocks.get_mut(&block_id).unwrap();
-                //let index = c.push(op);
-                //lower.index.insert(v, index);
-                //return Ok(());
                 let num = *num_args as usize;
                 let values = self.get_previous_values(v, *num_args as usize);
-                //println!("code: {:?}", (values));
                 let indicies = values
                     .iter()
                     .map(|value_id| self.resolve_value(lower, *value_id).unwrap())
@@ -399,7 +400,6 @@ impl Blockify {
                 let key = self.names.get(&v).unwrap();
                 let ty = self.get_type(v);
 
-                //println!("declare");
                 let op = build_declare_function(lower.context, *key, ty, location, b)?;
                 let c = blocks.blocks.get_mut(&block_id).unwrap();
                 let index = c.push(op);
@@ -409,45 +409,29 @@ impl Blockify {
                     let op = blocks.op_ref(index);
                     op.set_attribute("llvm.emit_c_interface", &Attribute::unit(lower.context));
 
-                    let (ids, g) = self.get_graph(*entry_id, b);
-                    let scope_id = self.get_scope_id(*entry_id);
-                    let scope = self.env.get_scope(scope_id);
+                    let cfg = self.get_graph(*entry_id, b);
+                    let block_ids = cfg.blocks(*entry_id);
+                    //let scope_id = self.get_scope_id(*entry_id);
+                    //let scope = self.env.get_scope(scope_id);
+
                     // create blocks
-                    //println!("body");
-                    use petgraph::visit::Bfs;
-                    let mut bfs = Bfs::new(&g, *ids.get(entry_id).unwrap());
-                    while let Some(nx) = bfs.next(&g) {
-                        let node = g.node_weight(nx).unwrap();
-                        self.create_block(lower, blocks, node.block_id);
-                        println!("create: {:?}", (nx, node));
-                    }
-                    //for block_id in scope.blocks.iter() {
-                    //self.create_block(lower, blocks, *block_id);
-                    //}
-
-                    let mut bfs = Bfs::new(&g, *ids.get(entry_id).unwrap());
-                    while let Some(nx) = bfs.next(&g) {
-                        let node = g.node_weight(nx).unwrap();
-                        //self.get_or_lower_block(lower, blocks, v, node.block_id, stack, b, d)?;
-                        println!("lower: {:?}", (nx, node));
-                        self.lower_block(node.block_id, lower, blocks, stack, b, d)?;
+                    for block_id in block_ids.iter() {
+                        self.create_block(lower, blocks, *block_id);
                     }
 
-                    let mut bfs = Bfs::new(&g, *ids.get(entry_id).unwrap());
-                    while let Some(nx) = bfs.next(&g) {
-                        let node = g.node_weight(nx).unwrap();
-                        blocks.append_op(index, node.block_id, 0);
+                    // lower
+                    for block_id in block_ids.iter() {
+                        self.lower_block(*block_id, lower, blocks, stack, b, d)?;
                     }
 
-                    //for block_id in scope.blocks.iter() {
-                    //self.get_or_lower_block(lower, blocks, v, *block_id, stack, b, d)?;
-                    //}
-                    //
-
-                    //println!("body:{:?}", op);
-
-                    //for block_id in scope.blocks.iter() {
-                    //blocks.append_op(index, *block_id, 0);
+                    // append blocks to region
+                    for block_id in block_ids.iter() {
+                        blocks.append_op(index, *block_id, 0);
+                    }
+                    //let mut bfs = Bfs::new(&cfg.g, *cfg.ids.get(entry_id).unwrap());
+                    //while let Some(nx) = bfs.next(&cfg.g) {
+                    //let node = cfg.g.node_weight(nx).unwrap();
+                    //blocks.append_op(index, node.block_id, 0);
                     //}
                 }
             }
@@ -519,18 +503,14 @@ impl Blockify {
             }
 
             LCode::Load(v_decl) => {
-                let block_id = self.get_block_id(*v_decl);
-                //self.get_or_lower_block(lower, blocks, v, block_id, stack, b, d)?;
-
+                //let block_id = self.get_block_id(*v_decl);
                 let block_id = self.get_block_id(v);
                 let ast_ty = self.get_type(v);
-                let ty = op::from_type(lower.context, &ast_ty);
+                //let ty = op::from_type(lower.context, &ast_ty);
 
                 let decl_index = self.resolve_value(lower, *v_decl).unwrap();
                 let r_addr = blocks.value0(decl_index);
-                //println!("load: {:?}", (v_decl, decl_index, r_addr));
                 let op = memref::load(r_addr, &[], location);
-                //println!("loadop: {:?}", (op));
                 let c = blocks.blocks.get_mut(&block_id).unwrap();
                 let index = c.push(op);
                 lower.index.insert(v, index);
@@ -561,10 +541,7 @@ impl Blockify {
 
             LCode::Branch(condition, v_then, v_else) => {
                 let then_block_id = self.get_block_id(*v_then);
-                //self.get_or_lower_block(lower, blocks, v, then_block_id, stack, b, d)?;
-
                 let else_block_id = self.get_block_id(*v_else);
-                //self.get_or_lower_block(lower, blocks, v, else_block_id, stack, b, d)?;
 
                 let c_index = self.resolve_value(lower, *condition).unwrap();
                 let r_c = blocks.value0(c_index);
@@ -592,32 +569,45 @@ impl Blockify {
             }
 
             LCode::Ternary(condition, v_then, v_else) => {
+                // THEN
                 let then_block_id = self.get_block_id(*v_then);
                 let scope_id = self.get_scope_id(*v_then);
                 let then_scope = self.env.get_scope(scope_id);
-                for block_id in then_scope.blocks.iter() {
+
+                let cfg = self.get_graph(then_block_id, b);
+                let then_block_ids = cfg.blocks(then_block_id);
+
+                for block_id in then_block_ids.iter() {
                     self.create_block(lower, blocks, *block_id);
                 }
-                for block_id in then_scope.blocks.iter() {
-                    self.get_or_lower_block(lower, blocks, v, *block_id, stack, b, d)?;
+                for block_id in then_block_ids.iter() {
+                    self.lower_block(*block_id, lower, blocks, stack, b, d)?;
                 }
 
                 let c = blocks.blocks.get_mut(&then_block_id).unwrap();
+                println!("ops: {:?}", c.ops);
                 let r: Value<'c, '_> = c.ops.last().unwrap().result(0).unwrap().into();
                 let then_ty = r.r#type();
                 let op = scf::r#yield(&[r], location);
                 let c = blocks.blocks.get_mut(&then_block_id).unwrap();
                 c.push(op);
 
+                // ELSE
                 let else_block_id = self.get_block_id(*v_else);
                 let scope_id = self.get_scope_id(*v_else);
                 let else_scope = self.env.get_scope(scope_id);
-                for block_id in else_scope.blocks.iter() {
+
+                let cfg = self.get_graph(else_block_id, b);
+                let else_block_ids = cfg.blocks(else_block_id);
+
+                for block_id in else_block_ids.iter() {
                     self.create_block(lower, blocks, *block_id);
                 }
-                for block_id in else_scope.blocks.iter() {
-                    self.get_or_lower_block(lower, blocks, v, *block_id, stack, b, d)?;
+                for block_id in else_block_ids.iter() {
+                    self.lower_block(*block_id, lower, blocks, stack, b, d)?;
+                    //self.get_or_lower_block(lower, blocks, v, *block_id, stack, b, d)?;
                 }
+
                 let c = blocks.blocks.get_mut(&else_block_id).unwrap();
                 let r: Value<'c, '_> = c.ops.last().unwrap().result(0).unwrap().into();
                 let else_ty = r.r#type();
@@ -626,13 +616,13 @@ impl Blockify {
                 c.push(op);
 
                 let then_region = Region::new();
-                for block_id in then_scope.blocks.iter() {
+                for block_id in then_block_ids.iter() {
                     let block = blocks.take_block(*block_id);
                     then_region.append_block(block);
                 }
 
                 let else_region = Region::new();
-                for block_id in else_scope.blocks.iter() {
+                for block_id in else_block_ids.iter() {
                     let block = blocks.take_block(*block_id);
                     else_region.append_block(block);
                 }
@@ -643,7 +633,6 @@ impl Blockify {
                 assert_eq!(then_ty, else_ty);
                 let r_types = &[then_ty];
 
-                //println!("res: {:?}", (r_types, v_then));
                 let op = scf::r#if(r_c, r_types, then_region, else_region, location);
                 let block_id = self.get_block_id(v);
                 let c = blocks.blocks.get_mut(&block_id).unwrap();
@@ -698,13 +687,10 @@ impl Blockify {
         let mut stack = vec![];
         self.create_block(lower, blocks, block_id);
         self.lower_block(block_id, lower, blocks, &mut stack, b, d)?;
-        //println!("finished lower module");
         let block = blocks.blocks.get_mut(&block_id).unwrap();
         for op in block.take_ops() {
-            //println!("op: {:?}", op);
             module.body().append_operation(op);
         }
-        //println!("finished lower module:{:?}", module);
         Ok(())
     }
 }
@@ -742,10 +728,6 @@ pub fn build_declare_function<'c, E: Extra>(
         let func_name_attr = StringAttribute::new(context, &b.resolve_label(key));
         let func_ty_attr = TypeAttribute::new(func_type.into());
 
-        //println!(
-        //"func: {:?}",
-        //(func_name_attr, func_ty_attr, &region, &attributes)
-        //);
         let op = func::func(
             context,
             func_name_attr,
@@ -754,82 +736,8 @@ pub fn build_declare_function<'c, E: Extra>(
             &attributes,
             location,
         );
-        //println!("func: {:?}", op);
         Ok(op)
     } else {
         unreachable!()
     }
 }
-
-/*
-pub fn emit_set_function<'c, E: Extra>(
-    context: &'c Context,
-    //place: &mut IRPlaceTable,
-    sym_index: SymIndex,
-    expr: IRNode,
-    //current_block: NodeIndex,
-    //types: &mut TypeBuilder,
-    //blocks: &mut CFGBlocks<'c>,
-    //stack: &mut Vec<NodeIndex>,
-    //d: &mut Diagnostics,
-    b: &mut NodeBuilder<E>,
-    //link: &mut LinkOptions,
-) -> Result<SymIndex> {
-    match expr.kind {
-        IRKind::Func(func_blocks, _ast_ty) => {
-            let mut block_seq = vec![];
-
-            // create blocks, so they can be referenced when lowering
-            for (i, block) in func_blocks.into_iter().enumerate() {
-                let block_index = blocks.update_block_ir(
-                    context,
-                    block.index,
-                    block.label,
-                    &block.params,
-                    types,
-                    d,
-                    //cfg_g,
-                );
-                if 0 == i {
-                    //cfg_g.add_edge(current_block, block_index, ());
-                }
-                block_seq.push((block, block_index));
-            }
-
-            // lower to mlir
-            let mut block_indicies = vec![];
-            for (block, block_index) in block_seq.into_iter() {
-                block_indicies.push(block_index);
-
-                for c in block.children.into_iter() {
-                    stack.push(block_index);
-                    if let Ok(_index) =
-                        c.lower_mlir(context, place, d, types, blocks, stack, b, link)
-                    {
-                        stack.pop();
-                    } else {
-                        stack.pop();
-                        return Err(Error::new(ParseError::Invalid));
-                    }
-                }
-            }
-
-            // build region and add it to the declared function
-            for block_index in block_indicies {
-                let block = blocks.take_block(block_index);
-                let current = blocks.get_mut(&current_block).unwrap();
-                let op = current.op_ref(sym_index);
-                op.region(0).unwrap().append_block(block);
-            }
-
-            let current = blocks.get_mut(&current_block).unwrap();
-            let op = current.op_ref(sym_index);
-            op.set_attribute("llvm.emit_c_interface", &Attribute::unit(context));
-
-            Ok(sym_index)
-        }
-        _ => unreachable!(),
-    }
-}
-
-*/
