@@ -793,13 +793,14 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn test_cond() {
-        run_test_ir("../tests/test_cond.star", 0);
+    fn test_float() {
+        run_test_ir2("../tests/test_float.star", 0);
+        run_test_ir("../tests/test_float.star", 0);
     }
 
     #[test]
-    fn test_float() {
-        //run_test_ir2("../tests/test_float.star", 0);
-        run_test_ir("../tests/test_float.star", 0);
+    fn test_cond() {
+        run_test_ir2("../tests/test_cond.star", 0);
+        run_test_ir("../tests/test_cond.star", 0);
     }
 }
