@@ -158,7 +158,7 @@ impl<E: Extra> AstBlockTransform<E> {
             }
 
             Ast::Label(name) => {
-                let mut args = vec![];
+                let args = vec![];
                 /*
                 for p in params {
                     args.push(IRArg {

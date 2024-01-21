@@ -1216,7 +1216,7 @@ impl<E: Extra> AstNode<E> {
                 //unreachable!();
                 //env.block_names
 
-                let mut args = vec![];
+                let args = vec![];
                 /*
                 for a in &ast_args {
                     args.push(IRArg {
@@ -1238,7 +1238,7 @@ impl<E: Extra> AstNode<E> {
             }
 
             Ast::Goto(name) => {
-                let mut args = vec![];
+                let args = vec![];
                 //for a in ast_args.into_iter() {
                 //let Argument::Positional(expr) = a;
                 //let (ir, _ty) = a.lower_ir_expr(env, place, d, b)?;

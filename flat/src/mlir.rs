@@ -241,13 +241,13 @@ impl Blockify {
     ) -> Vec<(Type<'c>, Location<'c>)> {
         let mut current = v;
         let mut out = vec![];
-        for i in 0..num_args {
+        for _ in 0..num_args {
             let next = self.get_next(current).unwrap();
             let ty = op::from_type(context, &self.get_type(next));
             current = next;
             out.push((ty, Location::unknown(context)));
         }
-        for i in 0..num_kwargs {
+        for _ in 0..num_kwargs {
             let next = self.get_next(current).unwrap();
             let ty = op::from_type(context, &self.get_type(next));
             current = next;
@@ -268,6 +268,7 @@ impl Blockify {
         values
     }
 
+    /*
     pub fn get_or_lower_block<'c, E: Extra>(
         &self,
         lower: &mut Lower<'c>,
@@ -279,7 +280,7 @@ impl Blockify {
         d: &mut Diagnostics,
     ) -> Result<()> {
         assert!(blocks.blocks.contains_key(&block_id));
-        let from_block_id = self.get_block_id(v);
+        //let from_block_id = self.get_block_id(v);
 
         if stack.contains(&block_id) {
             return Ok(());
@@ -290,6 +291,7 @@ impl Blockify {
         }
         Ok(())
     }
+    */
 
     pub fn create_block<'c>(
         &self,
@@ -324,7 +326,6 @@ impl Blockify {
     ) -> Result<()> {
         let code = self.get_code(v);
         let location = Location::unknown(lower.context);
-        //println!("code: {:?}", (v, self.code_to_string(v, b)));
 
         match code {
             LCode::Label(_num_args, _num_kwargs) => {
@@ -387,7 +388,7 @@ impl Blockify {
                         location,
                     );
 
-                    let c = blocks.blocks.get_mut(&block_id).unwrap();
+                    //let c = blocks.blocks.get_mut(&block_id).unwrap();
                     //let index = c.push(op);
 
                     let ty = op::from_type(lower.context, &ast_ty);
@@ -422,7 +423,7 @@ impl Blockify {
             }
 
             LCode::Return(num_args) => {
-                let num = *num_args as usize;
+                //let num = *num_args as usize;
                 let values = self.get_previous_values(v, *num_args as usize);
                 let indicies = values
                     .iter()
@@ -452,8 +453,6 @@ impl Blockify {
 
                     let cfg = self.get_graph(*entry_id, b);
                     let block_ids = cfg.blocks(*entry_id);
-                    //let scope_id = self.get_scope_id(*entry_id);
-                    //let scope = self.env.get_scope(scope_id);
 
                     // create blocks
                     for block_id in block_ids.iter() {
@@ -469,11 +468,6 @@ impl Blockify {
                     for block_id in block_ids.iter() {
                         blocks.append_op(index, *block_id, 0);
                     }
-                    //let mut bfs = Bfs::new(&cfg.g, *cfg.ids.get(entry_id).unwrap());
-                    //while let Some(nx) = bfs.next(&cfg.g) {
-                    //let node = cfg.g.node_weight(nx).unwrap();
-                    //blocks.append_op(index, node.block_id, 0);
-                    //}
                 }
             }
 
@@ -533,7 +527,7 @@ impl Blockify {
                     false
                 };
 
-                println!("x: {:?}", (decl_is_static, &self.env.stack));
+                //println!("x: {:?}", (decl_is_static, &self.env.stack));
                 let addr_index = if decl_is_static {
                     let name = self.get_name(*v_decl);
                     let lhs_ty = self.get_type(*v_decl);
@@ -560,9 +554,7 @@ impl Blockify {
                     decl_index
                 };
 
-                //let decl_index = self.resolve_value(lower, *v_decl).unwrap();
                 let value_index = self.resolve_value(lower, *v_value).unwrap();
-                //println!("v: {:?}", value_index);
                 let r_addr = blocks.value0(addr_index);
                 let r_value = blocks.value0(value_index);
 
@@ -576,14 +568,11 @@ impl Blockify {
             }
 
             LCode::Load(v_decl) => {
-                //let block_id = self.get_block_id(*v_decl);
                 let block_id = self.get_block_id(v);
                 let decl_scope_id = self.get_scope_id(*v_decl);
                 let ast_ty = self.get_type(v);
                 let scope = self.env.get_scope(decl_scope_id);
                 let name = self.get_name(*v_decl);
-
-                //let ty = op::from_type(lower.context, &ast_ty);
 
                 if let ScopeType::Static = scope.scope_type {
                     let lower_ty = op::from_type(lower.context, &ast_ty);
@@ -610,7 +599,6 @@ impl Blockify {
 
             LCode::Op1(op, x) => {
                 let block_id = self.get_block_id(v);
-                //let x_extra = b.extra();
                 let x_index = self.resolve_value(lower, *x).unwrap();
                 let ast_ty = self.get_type(*x);
                 let ty = op::from_type(lower.context, &ast_ty);
@@ -632,7 +620,6 @@ impl Blockify {
                             lower.index.insert(v, index);
                         } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
                             // arith has an op for negation
-                            //let r_rhs = current.value0(index).unwrap();
                             let r_x = blocks.value0(x_index);
                             let op = arith::negf(r_x, location);
                             let c = blocks.blocks.get_mut(&block_id).unwrap();
@@ -653,7 +640,7 @@ impl Blockify {
                 let r_x = blocks.value0(x_index);
                 let y_index = self.resolve_value(lower, *y).unwrap();
                 let r_y = blocks.value0(y_index);
-                let (op, ast_ty) = op::build_binop(
+                let (op, _ast_ty) = op::build_binop(
                     lower.context,
                     op.clone(),
                     r_x,
@@ -700,8 +687,6 @@ impl Blockify {
             LCode::Ternary(condition, v_then, v_else) => {
                 // THEN
                 let then_block_id = self.get_block_id(*v_then);
-                let scope_id = self.get_scope_id(*v_then);
-                let then_scope = self.env.get_scope(scope_id);
 
                 let cfg = self.get_graph(then_block_id, b);
                 let then_block_ids = cfg.blocks(then_block_id);
@@ -714,7 +699,6 @@ impl Blockify {
                 }
 
                 let c = blocks.blocks.get_mut(&then_block_id).unwrap();
-                //println!("ops: {:?}", c.ops);
                 let r: Value<'c, '_> = c.ops.last().unwrap().result(0).unwrap().into();
                 let then_ty = r.r#type();
                 let op = scf::r#yield(&[r], location);
@@ -723,8 +707,6 @@ impl Blockify {
 
                 // ELSE
                 let else_block_id = self.get_block_id(*v_else);
-                let scope_id = self.get_scope_id(*v_else);
-                let else_scope = self.env.get_scope(scope_id);
 
                 let cfg = self.get_graph(else_block_id, b);
                 let else_block_ids = cfg.blocks(else_block_id);
@@ -734,7 +716,6 @@ impl Blockify {
                 }
                 for block_id in else_block_ids.iter() {
                     self.lower_block(*block_id, lower, blocks, stack, b, d)?;
-                    //self.get_or_lower_block(lower, blocks, v, *block_id, stack, b, d)?;
                 }
 
                 let c = blocks.blocks.get_mut(&else_block_id).unwrap();
@@ -772,26 +753,12 @@ impl Blockify {
             LCode::Value(_) => (),
             LCode::Noop => (),
 
-            LCode::Builtin(bi, num_args, num_kwargs) => {
+            LCode::Builtin(bi, num_args, _num_kwargs) => {
                 let arity = bi.arity();
                 assert_eq!(arity, *num_args as usize);
-                let current_block = stack.last().unwrap().clone();
                 match bi {
                     Builtin::Import => {
-                        let values = self.get_previous_values(v, *num_args as usize);
-                        let indicies = values
-                            .iter()
-                            .map(|value_id| self.resolve_value(lower, *value_id).unwrap())
-                            .collect();
-                        let rs = blocks.values(indicies);
-
-                        //let arg = args.pop().unwrap();
-                        //if let Some(s) = arg.try_string() {
-                        //self.link.add_library(&s);
-                        //} else {
-                        //d.push_diagnostic(ir::error("Expected string", self.span));
-                        //}
-                        //op::emit_noop(context, location, current_block, blocks)
+                        unreachable!()
                     }
                     Builtin::Assert => {
                         let values = self.get_previous_values(v, *num_args as usize);
@@ -836,14 +803,12 @@ impl Blockify {
                         let c = blocks.blocks.get_mut(&block_id).unwrap();
                         let index = c.push(op);
                         lower.index.insert(v, index);
-                    }
-                    _ => unreachable!("{:?}", bi),
+                    } //_ => unreachable!("{:?}", bi),
                 }
             }
 
             _ => unimplemented!("{:?}", (v, code)),
         }
-        //println!("f: {:?}", (v, code));
         Ok(())
     }
 
@@ -856,13 +821,10 @@ impl Blockify {
         b: &NodeBuilder<E>,
         d: &mut Diagnostics,
     ) -> Result<()> {
-        //println!("lowering block {:?}", block_id);
         let mut current = block_id;
         stack.push(block_id);
         loop {
             self.lower_code(lower, blocks, current, stack, b, d)?;
-            //let code = self.get_code(current);
-            //println!("X: {:?}", (current, self.code_to_string(current, b)));
             if let Some(next) = self.get_next(current) {
                 current = next;
             } else {

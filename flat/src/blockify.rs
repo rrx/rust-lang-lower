@@ -10,7 +10,7 @@ use std::collections::VecDeque;
 use lower::{
     ast::AssignTarget,
     ast::Builtin,
-    op,
+    //op,
     Argument,
     Ast,
     AstNode,
@@ -518,18 +518,14 @@ impl Blockify {
                 self.env.enter_scope(static_scope);
                 self.add(block_id, *body, b, d)?;
                 self.env.exit_scope();
-                self.build_edges(b, d)?;
+                self.build_edges()?;
                 Ok(block_id)
             }
             _ => unreachable!(),
         }
     }
 
-    pub fn build_edges<E: Extra>(
-        &mut self,
-        b: &mut NodeBuilder<E>,
-        d: &mut Diagnostics,
-    ) -> Result<()> {
+    pub fn build_edges(&mut self) -> Result<()> {
         for (i, code) in self.code.iter().enumerate() {
             match code {
                 LCode::Ternary(_, x, y) => {
@@ -595,11 +591,11 @@ impl Blockify {
         let mut iter = exprs.into_iter().peekable();
         loop {
             if let Some(expr) = iter.next() {
-                let span = expr.extra.get_span();
+                //let span = expr.extra.get_span();
                 let (is_term, next_state) = NextSeqState::get(&expr, iter.peek());
                 match (is_term, next_state) {
                     (true, NextSeqState::NextLabel(key)) => {
-                        if let Some(target_value_id) = self.env.resolve_block(key.into()) {
+                        if let Some(_target_value_id) = self.env.resolve_block(key.into()) {
                             //let scope = self.env.get_scope_mut(scope_id);
                             //scope.next_block = Some(target_value_id);
                             //current_block_id = Some(target_value_id);
@@ -611,9 +607,10 @@ impl Blockify {
                         value_id = Some(v);
                     }
 
-                    (false, NextSeqState::NextLabel(key)) => {
+                    (false, NextSeqState::NextLabel(_key)) => {
+                        unreachable!();
+                        /*
                         if let Some(target_value_id) = self.env.resolve_block(key.into()) {
-                            unreachable!();
                             let code = LCode::Jump(target_value_id, 0);
                             self.push_code(
                                 code,
@@ -629,6 +626,7 @@ impl Blockify {
                         let v = self.add(current_block_id.unwrap(), expr, b, d)?.unwrap();
                         current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
                         value_id = Some(v);
+                        */
                     }
 
                     (true, NextSeqState::Empty) => {
@@ -796,6 +794,11 @@ impl Blockify {
         }
     }
 
+    pub fn error<E: Extra>(msg: &str, extra: &E, d: &mut Diagnostics) -> Result<Option<ValueId>> {
+        d.push_diagnostic(error(msg, extra.get_span()));
+        return Err(Error::new(ParseError::Invalid));
+    }
+
     pub fn add<E: Extra>(
         &mut self,
         block_id: ValueId,
@@ -822,19 +825,18 @@ impl Blockify {
                             if let AstType::Func(f_args, _) = data.ty.clone() {
                                 (data.value_id, data.ty.clone(), f_args, name)
                             } else {
-                                d.push_diagnostic(error(
+                                return Self::error(
                                     &format!("Type not function: {}, {:?}", name, data.ty),
-                                    node.extra.get_span(),
-                                ));
-                                return Err(Error::new(ParseError::Invalid));
+                                    &node.extra,
+                                    d,
+                                );
                             }
                         } else {
-                            //self.env.dump(b);
-                            d.push_diagnostic(error(
+                            return Self::error(
                                 &format!("Call name not found: {}", name),
-                                node.extra.get_span(),
-                            ));
-                            return Err(Error::new(ParseError::Invalid));
+                                &node.extra,
+                                d,
+                            );
                         }
                     }
                     _ => {
@@ -844,11 +846,11 @@ impl Blockify {
 
                 if let AstType::Func(func_arg_types, ret) = &ty {
                     if f_args.len() != args.len() {
-                        d.push_diagnostic(error(
+                        return Self::error(
                             &format!("Call arity mismatch: {}", name),
-                            node.extra.get_span(),
-                        ));
-                        return Err(Error::new(ParseError::Invalid));
+                            &node.extra,
+                            d,
+                        );
                     }
 
                     let args_size = args.len() as u8;
@@ -886,6 +888,7 @@ impl Blockify {
                     let code = self.code.get(last_value.0 as usize).unwrap();
                     if !code.is_term() {
                         unreachable!();
+                        /*
                         self.push_code(
                             LCode::Jump(value_id, 0),
                             scope_id,
@@ -893,6 +896,7 @@ impl Blockify {
                             AstType::Unit,
                             VarDefinitionSpace::Reg,
                         );
+                        */
                     }
                 }
 
@@ -962,18 +966,7 @@ impl Blockify {
                     } else {
                         d.push_diagnostic(error("Expected string", node.extra.get_span()));
                     }
-
-                    /*
-                    let code = LCode::Noop;
-                    let value_id = self.push_code(
-                        code,
-                        scope_id,
-                        block_id,
-                        AstType::Unit,
-                        VarDefinitionSpace::Reg,
-                    );
-                    */
-                    Ok(None) //Some(value_id))
+                    Ok(None)
                 }
                 _ => {
                     let _ty = bi.get_return_type();
@@ -1033,9 +1026,6 @@ impl Blockify {
             }
 
             Ast::Conditional(condition, then_expr, maybe_else_expr) => {
-                //println!("x: {:?}", (scope_id));
-                //self.env.dump(b);
-
                 let v_next = self.env.get_next_block().unwrap();
 
                 let name = b.s("then");
@@ -1233,29 +1223,6 @@ impl Blockify {
                 } else {
                     unreachable!()
                 }
-
-                /*
-                // evaluate expr at compile time
-                if let IRKind::Literal(lit) = expr.kind {
-                    let (value, ast_ty) = build_static_attribute(context, lit);
-                    let ty = from_type(context, &ast_ty);
-                    let attribute =
-                        DenseElementsAttribute::new(RankedTensorType::new(&[], ty, None).into(), &[value]).unwrap();
-
-                    let current = blocks.blocks.get_mut(&block_index).unwrap();
-                    let op = current.op_ref(sym_index);
-                    op.set_attribute("initial_value", &attribute.into());
-                    if !is_current_static {
-                        // STATIC VARIABLE IN FUNCTION CONTEXT
-                        // TODO: FIXME
-                        //cfg.static_names
-                        //.insert(sym_index, b.strings.intern(global_name.clone()));
-                    }
-                    Ok(sym_index)
-                } else {
-                    unreachable!()
-                }
-                */
             }
 
             Ast::Error => {
@@ -1364,50 +1331,6 @@ impl Blockify {
         println!("{}", s);
         std::fs::write(filename, s).unwrap();
     }
-
-    /*
-    pub fn get_graph2<E: Extra>(
-        &self,
-        block_id: ValueId,
-        b: &NodeBuilder<E>,
-    ) -> (HashMap<ValueId, NodeIndex>, DiGraph<Node, ()>) {
-        let mut g: DiGraph<Node, ()> = DiGraph::new();
-        let mut ids = HashMap::new();
-
-        let mut stack = VecDeque::new();
-        stack.push_back(block_id);
-
-        loop {
-            if let Some(block_id) = stack.pop_front() {
-                if ids.contains_key(&block_id) {
-                    continue;
-                }
-                let name = self.code_to_string(block_id, b);
-                let c = g.add_node(Node::new_block(name, block_id));
-                ids.insert(block_id, c);
-
-                let block = self.env.get_block(block_id);
-                for next_block_id in block.succ.iter() {
-                    //if !ids.contains_key(next_block_id) {
-                    stack.push_back(*next_block_id);
-                    //}
-                }
-            } else {
-                break;
-            }
-        }
-
-        for block_id in ids.keys() {
-            let block = self.env.get_block(*block_id);
-            let id = ids.get(block_id).unwrap();
-            for next_block_id in block.succ.iter() {
-                let child_id = ids.get(next_block_id).unwrap();
-                g.add_edge(*id, *child_id, ());
-            }
-        }
-        (ids, g)
-    }
-    */
 
     pub fn save_graph2<E: Extra>(&self, filename: &str, b: &NodeBuilder<E>) {
         use petgraph::dot::{Config, Dot};
@@ -1550,10 +1473,8 @@ impl Blockify {
                 let block = self.env.get_block(block_id);
                 for (succ_type, next_block_id) in block.succ.iter() {
                     if let Successor::BlockScope = succ_type {
-                        //if !ids.contains_key(next_block_id) {
                         stack.push_back(*next_block_id);
                     }
-                    //}
                 }
             } else {
                 break;
@@ -1573,60 +1494,3 @@ impl Blockify {
         cfg
     }
 }
-
-/*
-pub struct LCodeIterator2<'a> {
-    blockify: &'a Blockify,
-    values: VecDeque<ValueId>,
-}
-
-impl<'a> LCodeIterator2<'a> {
-    pub fn new(blockify: &'a Blockify) -> Self {
-        let mut values = VecDeque::new();
-        let mut out = Self { blockify, values };
-        if blockify.code.len() > 0 {
-            out.add_block(ValueId(0));
-        }
-        out
-    }
-
-    pub fn add_block(&mut self, block_id: ValueId) {
-        let mut current = block_id;
-        self.values.push_back(block_id);
-        loop {
-            if let Some(next) = self.blockify.get_next(current) {
-                self.values.push_back(next);
-                current = next;
-            } else {
-                break;
-            }
-        }
-    }
-
-}
-
-impl<'a> Iterator for LCodeIterator2<'a> {
-    type Item = ValueId;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.values.len() == 0 {
-            if self.blocks.len() == 0 {
-                return None;
-            }
-
-            let block_id = self.blocks.pop().unwrap();
-            let mut current = block_id;
-            self.values.push_back(block_id);
-            loop {
-                if let Some(next) = self.blockify.get_next(current) {
-                    self.values.push_back(next);
-                    current = next;
-                } else {
-                    break;
-                }
-            }
-        }
-        self.values.pop_front()
-    }
-}
-*/
