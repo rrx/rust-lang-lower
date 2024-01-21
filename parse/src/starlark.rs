@@ -751,35 +751,9 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn test_global() {
-        run_test_ir("../tests/test_global.star", 0);
-    }
-
-    #[test]
-    fn test_static() {
-        run_test_ir("../tests/test_static.star", 0);
-    }
-
-    #[test]
-    fn test_cond() {
-        run_test_ir("../tests/test_cond.star", 0);
-    }
-
-    #[test]
-    fn test_float() {
-        //run_test_ir2("../tests/test_float.star", 0);
-        run_test_ir("../tests/test_float.star", 0);
-    }
-
-    #[test]
     fn test_recursive() {
         run_test_ir2("../tests/test_recursive.star", 0);
         run_test_ir("../tests/test_recursive.star", 0);
-    }
-
-    #[test]
-    fn test_nothing() {
-        run_test_ir("../tests/test.star", 0);
     }
 
     #[test]
@@ -798,5 +772,34 @@ pub(crate) mod tests {
     fn test_fix() {
         run_test_ir2("../tests/fix.star", 0);
         run_test_ir("../tests/fix.star", 0);
+    }
+
+    #[test]
+    fn test_nothing() {
+        run_test_ir2("../tests/test.star", 0);
+        run_test_ir("../tests/test.star", 0);
+    }
+
+    #[test]
+    fn test_global() {
+        run_test_ir2("../tests/test_global.star", 0);
+        run_test_ir("../tests/test_global.star", 0);
+    }
+
+    #[test]
+    fn test_static() {
+        run_test_ir2("../tests/test_static.star", 0);
+        run_test_ir("../tests/test_static.star", 0);
+    }
+
+    #[test]
+    fn test_cond() {
+        run_test_ir("../tests/test_cond.star", 0);
+    }
+
+    #[test]
+    fn test_float() {
+        //run_test_ir2("../tests/test_float.star", 0);
+        run_test_ir("../tests/test_float.star", 0);
     }
 }

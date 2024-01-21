@@ -10,6 +10,7 @@ use std::collections::VecDeque;
 use lower::{
     ast::AssignTarget,
     ast::Builtin,
+    op,
     Argument,
     Ast,
     AstNode,
@@ -33,7 +34,7 @@ use lower::{
     VarDefinitionSpace,
 };
 
-use crate::{Environment, ScopeId, Successor, ValueId};
+use crate::{Environment, ScopeId, ScopeType, Successor, ValueId};
 
 #[derive(Debug)]
 pub struct AstBlock {
@@ -512,7 +513,7 @@ impl Blockify {
     ) -> Result<ValueId> {
         match node.node {
             Ast::Module(name, body) => {
-                let static_scope = self.env.new_scope();
+                let static_scope = self.env.new_scope(ScopeType::Static);
                 let block_id = self.push_label::<E>(name.into(), static_scope, &[], &[]);
                 self.env.enter_scope(static_scope);
                 self.add(block_id, *body, b, d)?;
@@ -712,7 +713,7 @@ impl Blockify {
         let ty = AstType::Func(params, def.return_type.clone());
 
         if let Some(body) = def.body {
-            let body_scope_id = self.env.new_scope();
+            let body_scope_id = self.env.new_scope(ScopeType::Function);
 
             // entry first
             let entry_id = self.push_label(def.name.into(), body_scope_id, &[], &def.params);
@@ -899,20 +900,24 @@ impl Blockify {
             }
 
             Ast::Identifier(key) => {
-                let data = self.env.resolve(key).unwrap();
-                let ty = data.ty.clone();
-                let code = if let VarDefinitionSpace::Arg = data.mem {
-                    LCode::Value(data.value_id)
+                if let Some(data) = self.env.resolve(key) {
+                    let ty = data.ty.clone();
+                    let code = if let VarDefinitionSpace::Arg = data.mem {
+                        LCode::Value(data.value_id)
+                    } else {
+                        LCode::Load(data.value_id)
+                    };
+                    Ok(Some(self.push_code(
+                        code,
+                        scope_id,
+                        block_id,
+                        ty,
+                        data.mem.clone(),
+                    )))
                 } else {
-                    LCode::Load(data.value_id)
-                };
-                Ok(Some(self.push_code(
-                    code,
-                    scope_id,
-                    block_id,
-                    ty,
-                    data.mem.clone(),
-                )))
+                    d.push_diagnostic(error("Name not found", node.extra.get_span()));
+                    Err(Error::new(ParseError::Invalid))
+                }
             }
 
             Ast::Assign(target, expr) => {
@@ -1034,7 +1039,7 @@ impl Blockify {
                 let v_next = self.env.get_next_block().unwrap();
 
                 let name = b.s("then");
-                let then_scope_id = self.env.new_scope();
+                let then_scope_id = self.env.new_scope(ScopeType::Function);
                 let v_then = self.push_label::<E>(name.into(), then_scope_id, &[], &[]);
                 self.env.enter_scope(then_scope_id);
                 self.env.push_next_block(v_next);
@@ -1057,7 +1062,7 @@ impl Blockify {
 
                 let v_else = if let Some(else_expr) = maybe_else_expr {
                     let name = b.s("else");
-                    let else_scope_id = self.env.new_scope();
+                    let else_scope_id = self.env.new_scope(ScopeType::Function);
                     let v_else = self.push_label::<E>(name.into(), else_scope_id, &[], &[]);
                     println!("else: {:?}", else_expr);
                     self.env.enter_scope(else_scope_id);
@@ -1101,7 +1106,7 @@ impl Blockify {
             Ast::Ternary(c, x, y) => {
                 let v_c = self.add(block_id, *c, b, d)?.unwrap();
 
-                let then_scope_id = self.env.new_scope();
+                let then_scope_id = self.env.new_scope(ScopeType::Function);
                 let name = b.s("then");
                 self.env.enter_scope(then_scope_id);
                 let v_then = self.push_label::<E>(name.into(), then_scope_id, &[], &[]);
@@ -1109,7 +1114,7 @@ impl Blockify {
                 self.env.exit_scope();
                 let then_ty = self.get_type(v_then_result);
 
-                let else_scope_id = self.env.new_scope();
+                let else_scope_id = self.env.new_scope(ScopeType::Function);
                 let name = b.s("else");
                 self.env.enter_scope(else_scope_id);
                 let v_else = self.push_label::<E>(name.into(), else_scope_id, &[], &[]);
@@ -1200,6 +1205,57 @@ impl Blockify {
                     ));
                     Err(Error::new(ParseError::Invalid))
                 }
+            }
+
+            Ast::Global(name, expr) => {
+                if let Ast::Literal(lit) = expr.node {
+                    let scope = self.env.get_scope(scope_id);
+                    let global_name = if let ScopeType::Static = scope.scope_type {
+                        b.r(name).to_string()
+                    } else {
+                        let unique_name = b.unique_static_name();
+                        let base = b.r(name);
+                        format!("{}{}", base, unique_name).clone()
+                    };
+
+                    let ast_ty: AstType = lit.clone().into();
+
+                    let code = LCode::Const(lit);
+                    let v = self.push_code_with_name(
+                        code,
+                        scope_id,
+                        block_id,
+                        ast_ty,
+                        VarDefinitionSpace::Static,
+                        b.s(&global_name),
+                    );
+                    Ok(Some(v))
+                } else {
+                    unreachable!()
+                }
+
+                /*
+                // evaluate expr at compile time
+                if let IRKind::Literal(lit) = expr.kind {
+                    let (value, ast_ty) = build_static_attribute(context, lit);
+                    let ty = from_type(context, &ast_ty);
+                    let attribute =
+                        DenseElementsAttribute::new(RankedTensorType::new(&[], ty, None).into(), &[value]).unwrap();
+
+                    let current = blocks.blocks.get_mut(&block_index).unwrap();
+                    let op = current.op_ref(sym_index);
+                    op.set_attribute("initial_value", &attribute.into());
+                    if !is_current_static {
+                        // STATIC VARIABLE IN FUNCTION CONTEXT
+                        // TODO: FIXME
+                        //cfg.static_names
+                        //.insert(sym_index, b.strings.intern(global_name.clone()));
+                    }
+                    Ok(sym_index)
+                } else {
+                    unreachable!()
+                }
+                */
             }
 
             Ast::Error => {

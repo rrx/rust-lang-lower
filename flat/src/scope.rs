@@ -22,6 +22,12 @@ impl Data {
     }
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum ScopeType {
+    Static,
+    Function,
+}
+
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct ScopeId(pub(crate) u32);
 impl std::fmt::Display for ScopeId {
@@ -38,10 +44,11 @@ pub struct ScopeLayer {
     pub(crate) return_block: Option<ValueId>,
     pub(crate) next_block: Vec<ValueId>,
     pub(crate) entry_block: Option<ValueId>,
+    pub(crate) scope_type: ScopeType,
 }
 
 impl ScopeLayer {
-    pub fn new() -> Self {
+    pub fn new(scope_type: ScopeType) -> Self {
         Self {
             labels: HashMap::new(),
             blocks: vec![],
@@ -49,6 +56,7 @@ impl ScopeLayer {
             return_block: None,
             next_block: vec![],
             entry_block: None,
+            scope_type,
         }
     }
 
@@ -107,9 +115,9 @@ impl Environment {
         }
     }
 
-    pub fn new_scope(&mut self) -> ScopeId {
+    pub fn new_scope(&mut self, scope_type: ScopeType) -> ScopeId {
         let offset = self.scopes.len();
-        let scope = ScopeLayer::new();
+        let scope = ScopeLayer::new(scope_type);
         self.scopes.push(scope);
         ScopeId(offset as u32)
     }

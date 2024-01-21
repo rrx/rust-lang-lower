@@ -1,10 +1,10 @@
-use crate::{Blockify, LCode, ValueId};
+use crate::{Blockify, LCode, ScopeType, ValueId};
 use anyhow::Result;
 use indexmap::IndexMap;
 use lower::melior::ir::Location;
 use lower::melior::{
     dialect::{
-        //arith,
+        arith,
         cf,
         func,
         //llvm,
@@ -15,19 +15,14 @@ use lower::melior::{
     ir::{
         attribute::FlatSymbolRefAttribute,
         attribute::{
-            //DenseElementsAttribute,
+            DenseElementsAttribute,
             //FlatSymbolRefAttribute,
             //FloatAttribute,
-            //IntegerAttribute,
+            IntegerAttribute,
             StringAttribute,
             TypeAttribute,
         },
-        r#type::{
-            FunctionType,
-            //IntegerType,
-            MemRefType,
-            //RankedTensorType
-        },
+        r#type::{FunctionType, IntegerType, MemRefType, RankedTensorType},
         Attribute, Block, Identifier, Operation, Region, Type, TypeLike, Value, ValueLike,
     },
     Context,
@@ -42,7 +37,9 @@ use lower::{
     NodeBuilder,
     //StringKey,
     StringLabel,
+    UnaryOperation,
 };
+
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
@@ -362,11 +359,66 @@ impl Blockify {
             }
 
             LCode::Const(lit) => {
+                let scope_id = self.get_scope_id(v);
+                let scope = self.env.get_scope(scope_id);
                 let block_id = self.get_block_id(v);
-                let (op, _ast_ty) = op::emit_literal_const(lower.context, lit, location);
-                let c = blocks.blocks.get_mut(&block_id).unwrap();
-                let index = c.push(op);
-                lower.index.insert(v, index);
+
+                if let ScopeType::Static = scope.scope_type {
+                    let (value, ast_ty) = op::build_static_attribute(lower.context, lit);
+
+                    let name = self.get_name(v);
+
+                    // declare
+                    let integer_type = IntegerType::new(lower.context, 64).into();
+                    let ty = op::from_type(lower.context, &ast_ty);
+                    let alignment = IntegerAttribute::new(8, integer_type);
+                    let memspace = IntegerAttribute::new(0, integer_type).into();
+                    let constant = false;
+
+                    let mut op = memref::global(
+                        lower.context,
+                        &b.resolve_label(name),
+                        Some("private"),
+                        MemRefType::new(ty, &[], None, Some(memspace)),
+                        // initial value is not set
+                        None,
+                        constant,
+                        Some(alignment),
+                        location,
+                    );
+
+                    let c = blocks.blocks.get_mut(&block_id).unwrap();
+                    //let index = c.push(op);
+
+                    let ty = op::from_type(lower.context, &ast_ty);
+                    let attribute = DenseElementsAttribute::new(
+                        RankedTensorType::new(&[], ty, None).into(),
+                        &[value],
+                    )
+                    .unwrap();
+
+                    let c = blocks.blocks.get_mut(&block_id).unwrap();
+                    //let index = lower.index.get(&v).unwrap();
+                    //let op = c.op_ref(index);
+                    //let current = blocks.blocks.get_mut(&block_index).unwrap();
+                    //let op = current.op_ref(sym_index);
+                    op.set_attribute("initial_value", &attribute.into());
+                    let index = c.push(op);
+                    //if !is_current_static {
+                    // STATIC VARIABLE IN FUNCTION CONTEXT
+                    // TODO: FIXME
+                    //cfg.static_names
+                    //.insert(sym_index, b.strings.intern(global_name.clone()));
+                    //}
+                    //Ok(index)
+                    lower.index.insert(v, index);
+                } else {
+                    //let block_id = self.get_block_id(v);
+                    let (op, _ast_ty) = op::emit_literal_const(lower.context, lit, location);
+                    let c = blocks.blocks.get_mut(&block_id).unwrap();
+                    let index = c.push(op);
+                    lower.index.insert(v, index);
+                }
             }
 
             LCode::Return(num_args) => {
@@ -473,13 +525,45 @@ impl Blockify {
 
             LCode::Store(v_decl, v_value) => {
                 let block_id = self.get_block_id(v);
+                let decl_scope_id = self.get_scope_id(*v_decl);
+                let decl_scope = self.env.get_scope(decl_scope_id);
+                let decl_is_static = if let ScopeType::Static = decl_scope.scope_type {
+                    true
+                } else {
+                    false
+                };
 
-                //let lhs_ty = self.get_type(*v_decl);
-                //let rhs_ty = self.get_type(*v_value);
-                let decl_index = self.resolve_value(lower, *v_decl).unwrap();
+                println!("x: {:?}", (decl_is_static, &self.env.stack));
+                let addr_index = if decl_is_static {
+                    let name = self.get_name(*v_decl);
+                    let lhs_ty = self.get_type(*v_decl);
+                    let rhs_ty = self.get_type(*v_value);
+                    assert_eq!(lhs_ty, rhs_ty);
+
+                    let lower_ty = op::from_type(lower.context, &lhs_ty);
+                    let memref_ty = MemRefType::new(lower_ty, &[], None, None);
+                    let static_name = b.resolve_label(name);
+                    // TODO: FIXME
+                    //let static_name = b
+                    //.strings
+                    //.resolve(&cfg.static_names.get(&sym_index).cloned().unwrap_or(name));
+                    let op = memref::get_global(lower.context, &static_name, memref_ty, location);
+                    //let current = blocks.get_mut(&block_index).unwrap();
+                    //let addr_index = current.push(op);
+                    //addr_index
+                    let c = blocks.blocks.get_mut(&block_id).unwrap();
+                    let index = c.push(op);
+                    lower.index.insert(v, index);
+                    index
+                } else {
+                    let decl_index = self.resolve_value(lower, *v_decl).unwrap();
+                    decl_index
+                };
+
+                //let decl_index = self.resolve_value(lower, *v_decl).unwrap();
                 let value_index = self.resolve_value(lower, *v_value).unwrap();
                 //println!("v: {:?}", value_index);
-                let r_addr = blocks.value0(decl_index);
+                let r_addr = blocks.value0(addr_index);
                 let r_value = blocks.value0(value_index);
 
                 // emit store
@@ -494,15 +578,71 @@ impl Blockify {
             LCode::Load(v_decl) => {
                 //let block_id = self.get_block_id(*v_decl);
                 let block_id = self.get_block_id(v);
+                let decl_scope_id = self.get_scope_id(*v_decl);
                 let ast_ty = self.get_type(v);
+                let scope = self.env.get_scope(decl_scope_id);
+                let name = self.get_name(*v_decl);
+
                 //let ty = op::from_type(lower.context, &ast_ty);
 
-                let decl_index = self.resolve_value(lower, *v_decl).unwrap();
-                let r_addr = blocks.value0(decl_index);
-                let op = memref::load(r_addr, &[], location);
-                let c = blocks.blocks.get_mut(&block_id).unwrap();
-                let index = c.push(op);
-                lower.index.insert(v, index);
+                if let ScopeType::Static = scope.scope_type {
+                    let lower_ty = op::from_type(lower.context, &ast_ty);
+                    let memref_ty = MemRefType::new(lower_ty, &[], None, None);
+                    // TODO: FIXME
+                    let static_name = b.resolve_label(name);
+                    let op = memref::get_global(lower.context, &static_name, memref_ty, location);
+                    let c = blocks.blocks.get_mut(&block_id).unwrap();
+                    let addr_index = c.push(op);
+                    let r_addr = blocks.value0(addr_index);
+                    let op = memref::load(r_addr, &[], location);
+                    let c = blocks.blocks.get_mut(&block_id).unwrap();
+                    let index = c.push(op);
+                    lower.index.insert(v, index);
+                } else {
+                    let decl_index = self.resolve_value(lower, *v_decl).unwrap();
+                    let r_addr = blocks.value0(decl_index);
+                    let op = memref::load(r_addr, &[], location);
+                    let c = blocks.blocks.get_mut(&block_id).unwrap();
+                    let index = c.push(op);
+                    lower.index.insert(v, index);
+                }
+            }
+
+            LCode::Op1(op, x) => {
+                let block_id = self.get_block_id(v);
+                //let x_extra = b.extra();
+                let x_index = self.resolve_value(lower, *x).unwrap();
+                let ast_ty = self.get_type(*x);
+                let ty = op::from_type(lower.context, &ast_ty);
+
+                match op {
+                    UnaryOperation::Minus => {
+                        if ty.is_index() {
+                            unreachable!("Unable to negate index type");
+                        } else if ty.is_integer() {
+                            // Multiply by -1
+                            let int_op = op::build_int_op(lower.context, -1, location);
+                            let c = blocks.blocks.get_mut(&block_id).unwrap();
+                            let index = c.push(int_op);
+                            let r = blocks.value0(index);
+                            let r_x = blocks.value0(x_index);
+                            let op = arith::muli(r, r_x, location);
+                            let c = blocks.blocks.get_mut(&block_id).unwrap();
+                            let index = c.push(op);
+                            lower.index.insert(v, index);
+                        } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
+                            // arith has an op for negation
+                            //let r_rhs = current.value0(index).unwrap();
+                            let r_x = blocks.value0(x_index);
+                            let op = arith::negf(r_x, location);
+                            let c = blocks.blocks.get_mut(&block_id).unwrap();
+                            let index = c.push(op);
+                            lower.index.insert(v, index);
+                        } else {
+                            unimplemented!()
+                        }
+                    }
+                }
             }
 
             LCode::Op2(op, x, y) => {

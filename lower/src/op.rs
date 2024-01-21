@@ -484,21 +484,26 @@ pub fn emit_set_static<'c, E: Extra>(
     };
 
     // evaluate expr at compile time
-    let (value, ast_ty) = build_static_attribute(context, expr);
-    let ty = from_type(context, &ast_ty);
-    let attribute =
-        DenseElementsAttribute::new(RankedTensorType::new(&[], ty, None).into(), &[value]).unwrap();
+    if let IRKind::Literal(lit) = expr.kind {
+        let (value, ast_ty) = build_static_attribute(context, &lit);
+        let ty = from_type(context, &ast_ty);
+        let attribute =
+            DenseElementsAttribute::new(RankedTensorType::new(&[], ty, None).into(), &[value])
+                .unwrap();
 
-    let current = blocks.blocks.get_mut(&block_index).unwrap();
-    let op = current.op_ref(sym_index);
-    op.set_attribute("initial_value", &attribute.into());
-    if !is_current_static {
-        // STATIC VARIABLE IN FUNCTION CONTEXT
-        // TODO: FIXME
-        //cfg.static_names
-        //.insert(sym_index, b.strings.intern(global_name.clone()));
+        let current = blocks.blocks.get_mut(&block_index).unwrap();
+        let op = current.op_ref(sym_index);
+        op.set_attribute("initial_value", &attribute.into());
+        if !is_current_static {
+            // STATIC VARIABLE IN FUNCTION CONTEXT
+            // TODO: FIXME
+            //cfg.static_names
+            //.insert(sym_index, b.strings.intern(global_name.clone()));
+        }
+        Ok(sym_index)
+    } else {
+        unreachable!()
     }
-    Ok(sym_index)
 }
 
 pub fn emit_declare_function<'c, E: Extra>(
@@ -646,38 +651,38 @@ pub fn emit_static<'c, E: Extra>(
     (op, ast_ty)
 }
 
-pub fn build_static_attribute<'c>(context: &'c Context, expr: IRNode) -> (Attribute<'c>, AstType) {
+pub fn build_static_attribute<'c>(context: &'c Context, lit: &Literal) -> (Attribute<'c>, AstType) {
     // evaluate expr at compile time
-    match expr.kind {
-        IRKind::Literal(Literal::Bool(x)) => {
+    match lit {
+        Literal::Bool(x) => {
             let ast_ty = AstType::Bool;
             let ty = from_type(context, &ast_ty);
-            let v = if x { 1 } else { 0 };
+            let v = if *x { 1 } else { 0 };
             let value = IntegerAttribute::new(v, ty).into();
             (value, ast_ty)
         }
 
-        IRKind::Literal(Literal::Int(x)) => {
+        Literal::Int(x) => {
             let ast_ty = AstType::Int;
             let ty = from_type(context, &ast_ty);
-            let value = IntegerAttribute::new(x, ty).into();
+            let value = IntegerAttribute::new(*x, ty).into();
             (value, ast_ty)
         }
 
-        IRKind::Literal(Literal::Index(x)) => {
+        Literal::Index(x) => {
             let ast_ty = AstType::Int;
             let ty = from_type(context, &ast_ty);
-            let value = IntegerAttribute::new(x as i64, ty).into();
+            let value = IntegerAttribute::new(*x as i64, ty).into();
             (value, ast_ty)
         }
 
-        IRKind::Literal(Literal::Float(x)) => {
+        Literal::Float(x) => {
             let ast_ty = AstType::Float;
             let ty = from_type(context, &ast_ty);
-            let value = FloatAttribute::new(context, x, ty).into();
+            let value = FloatAttribute::new(context, *x, ty).into();
             (value, ast_ty)
         }
-        _ => unreachable!("{:?}", expr.kind),
+        _ => unreachable!("{:?}", lit),
     }
 }
 
