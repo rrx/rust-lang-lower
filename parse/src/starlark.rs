@@ -793,4 +793,10 @@ pub(crate) mod tests {
         run_test_ir2("../tests/bare.star", 0);
         run_test_ir("../tests/bare.star", 0);
     }
+
+    #[test]
+    fn test_fix() {
+        run_test_ir2("../tests/fix.star", 0);
+        run_test_ir("../tests/fix.star", 0);
+    }
 }

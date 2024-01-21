@@ -505,13 +505,13 @@ impl IRNode {
                         .map(|index| blocks.values_in_scope(index)[0])
                         .collect::<Vec<_>>();
 
-                    let op = func::call(
-                        context,
-                        f,
-                        call_args.as_slice(),
-                        &[ret_type.clone()],
-                        location,
-                    );
+                    let return_values = if ret_type.is_none() {
+                        vec![]
+                    } else {
+                        vec![ret_type.clone()]
+                    };
+
+                    let op = func::call(context, f, call_args.as_slice(), &return_values, location);
                     //let current = cfg_g.node_weight_mut(current_block).unwrap();
                     let current = blocks.get_mut(&current_block).unwrap();
 

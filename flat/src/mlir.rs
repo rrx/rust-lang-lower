@@ -119,10 +119,7 @@ impl<'c> LowerBlocks<'c> {
                 let op = c.ops.get(pos).expect("Op missing");
                 op.result(0).unwrap().into()
             }
-            SymIndex::Arg(_, pos) => {
-                println!("b: {:?}", c.block.as_ref().unwrap());
-                c.block.as_ref().unwrap().argument(pos).unwrap().into()
-            }
+            SymIndex::Arg(_, pos) => c.block.as_ref().unwrap().argument(pos).unwrap().into(),
             _ => unimplemented!(),
         }
     }
@@ -330,7 +327,7 @@ impl Blockify {
     ) -> Result<()> {
         let code = self.get_code(v);
         let location = Location::unknown(lower.context);
-        println!("code: {:?}", (v, self.code_to_string(v, b)));
+        //println!("code: {:?}", (v, self.code_to_string(v, b)));
 
         match code {
             LCode::Label(_num_args, _num_kwargs) => {
@@ -446,7 +443,13 @@ impl Blockify {
                         .collect();
                     let rs = blocks.values(indicies);
 
-                    let op = func::call(lower.context, f, &rs, &[ret_type.clone()], location);
+                    let ret = if ret_type.is_none() {
+                        vec![]
+                    } else {
+                        vec![ret_type.clone()]
+                    };
+
+                    let op = func::call(lower.context, f, &rs, &ret, location);
 
                     let block_id = self.get_block_id(v);
                     let c = blocks.blocks.get_mut(&block_id).unwrap();
@@ -475,7 +478,7 @@ impl Blockify {
                 //let rhs_ty = self.get_type(*v_value);
                 let decl_index = self.resolve_value(lower, *v_decl).unwrap();
                 let value_index = self.resolve_value(lower, *v_value).unwrap();
-                println!("v: {:?}", value_index);
+                //println!("v: {:?}", value_index);
                 let r_addr = blocks.value0(decl_index);
                 let r_value = blocks.value0(value_index);
 
@@ -571,7 +574,7 @@ impl Blockify {
                 }
 
                 let c = blocks.blocks.get_mut(&then_block_id).unwrap();
-                println!("ops: {:?}", c.ops);
+                //println!("ops: {:?}", c.ops);
                 let r: Value<'c, '_> = c.ops.last().unwrap().result(0).unwrap().into();
                 let then_ty = r.r#type();
                 let op = scf::r#yield(&[r], location);

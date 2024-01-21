@@ -576,7 +576,7 @@ impl Blockify {
         node: AstNode<E>,
         b: &mut NodeBuilder<E>,
         d: &mut Diagnostics,
-    ) -> Result<ValueId> {
+    ) -> Result<Option<ValueId>> {
         let scope_id = self.env.current_scope().unwrap();
         // flatten
         let exprs = node.to_vec();
@@ -594,6 +594,7 @@ impl Blockify {
         let mut iter = exprs.into_iter().peekable();
         loop {
             if let Some(expr) = iter.next() {
+                let span = expr.extra.get_span();
                 let (is_term, next_state) = NextSeqState::get(&expr, iter.peek());
                 match (is_term, next_state) {
                     (true, NextSeqState::NextLabel(key)) => {
@@ -604,7 +605,7 @@ impl Blockify {
                         } else {
                             unreachable!()
                         }
-                        let v = self.add(current_block_id.unwrap(), expr, b, d)?;
+                        let v = self.add(current_block_id.unwrap(), expr, b, d)?.unwrap();
                         current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
                         value_id = Some(v);
                     }
@@ -624,52 +625,66 @@ impl Blockify {
                         } else {
                             unreachable!()
                         }
-                        let v = self.add(current_block_id.unwrap(), expr, b, d)?;
+                        let v = self.add(current_block_id.unwrap(), expr, b, d)?.unwrap();
                         current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
                         value_id = Some(v);
                     }
 
                     (true, NextSeqState::Empty) => {
-                        let v = self.add(current_block_id.unwrap(), expr, b, d)?;
+                        let v = self.add(current_block_id.unwrap(), expr, b, d)?.unwrap();
                         current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
                         value_id = Some(v);
                     }
 
                     (false, NextSeqState::Other) => {
-                        let v = self.add(current_block_id.unwrap(), expr, b, d)?;
-                        current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
-                        value_id = Some(v);
+                        if let Some(v) = self.add(current_block_id.unwrap(), expr, b, d)? {
+                            current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
+                            value_id = Some(v);
+                        }
                     }
 
                     (false, NextSeqState::Empty) => {
-                        //println!("{:?}", &expr);
+                        //println!("{:?}", (&expr, &self.env.stack));
                         //self.env.dump(b);
                         // end of sequence, with non-terminal node
                         // implicit jump to next
                         //let target_value_id = self.env.pop_next_block().unwrap();
+                        /*
                         if let Some(target_value_id) = self.env.get_next_block() {
-                            unreachable!();
+                            let v = self.add(current_block_id.unwrap(), expr, b, d)?.unwrap();
+                            current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
+                            d.push_diagnostic(error(
+                                    &format!("Implicit Jump required: {:?}", (block_id, v, target_value_id, current_block_id, &self.env.stack)),
+                                    span,
+                                    ));
+                            value_id = Some(v);
+
+                            //return Err(Error::new(ParseError::Invalid));
+                            //unreachable!();
+                            /*
                             let code = LCode::Jump(target_value_id, 0);
                             self.push_code(
                                 code,
                                 scope_id,
                                 current_block_id.unwrap(),
                                 AstType::Unit,
-                                VarDefinitionSpace::Reg,
+                                VarDefinitionSpace::Static,
                             );
                             current_block_id = Some(target_value_id);
+                            */
                         } else {
-                            let v = self.add(current_block_id.unwrap(), expr, b, d)?;
-                            current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
-                            value_id = Some(v);
-                        }
+                        */
+                        let v = self.add(current_block_id.unwrap(), expr, b, d)?.unwrap();
+                        current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
+                        value_id = Some(v);
+                        //}
                     }
 
                     (true, NextSeqState::Other) => {
                         let name = b.s("next");
                         let v_next = self.push_label::<E>(name.into(), scope_id, &[], &[]);
                         self.env.push_next_block(v_next);
-                        let v = self.add(current_block_id.unwrap(), expr, b, d)?;
+                        let v = self.add(current_block_id.unwrap(), expr, b, d)?.unwrap();
                         self.env.pop_next_block();
                         // next block is the next block
                         current_block_id = Some(v_next);
@@ -681,7 +696,7 @@ impl Blockify {
             }
         }
 
-        Ok(value_id.unwrap())
+        Ok(value_id)
     }
 
     pub fn emit_function<E: Extra>(
@@ -690,7 +705,7 @@ impl Blockify {
         def: Definition<E>,
         b: &mut NodeBuilder<E>,
         d: &mut Diagnostics,
-    ) -> Result<ValueId> {
+    ) -> Result<Option<ValueId>> {
         let scope_id = self.env.current_scope().unwrap();
 
         let params = def.params.iter().map(|p| p.ty.clone()).collect();
@@ -767,16 +782,16 @@ impl Blockify {
             self.add(entry_id, *body, b, d)?;
             self.env.pop_next_block().unwrap();
             self.env.exit_scope();
-            Ok(v_decl)
+            Ok(Some(v_decl))
         } else {
-            Ok(self.push_code_with_name(
+            Ok(Some(self.push_code_with_name(
                 LCode::DeclareFunction(None),
                 scope_id,
                 block_id,
                 ty.clone(),
                 VarDefinitionSpace::Static,
                 def.name,
-            ))
+            )))
         }
     }
 
@@ -786,7 +801,7 @@ impl Blockify {
         node: AstNode<E>,
         b: &mut NodeBuilder<E>,
         d: &mut Diagnostics,
-    ) -> Result<ValueId> {
+    ) -> Result<Option<ValueId>> {
         let scope_id = self.env.current_scope().unwrap();
         match node.node {
             Ast::Module(_, _) => {
@@ -840,7 +855,7 @@ impl Blockify {
                     for (a, ty) in args.into_iter().zip(func_arg_types.iter()) {
                         match a {
                             Argument::Positional(expr) => {
-                                let v = self.add(block_id, *expr, b, d)?;
+                                let v = self.add(block_id, *expr, b, d)?.unwrap();
                                 values.push((LCode::Value(v), ty.clone()));
                             }
                         }
@@ -848,13 +863,13 @@ impl Blockify {
                     for (code, ty) in values {
                         self.push_code(code, scope_id, block_id, ty, VarDefinitionSpace::Reg);
                     }
-                    Ok(self.push_code(
+                    Ok(Some(self.push_code(
                         LCode::Call(v_func, args_size, 0),
                         scope_id,
                         block_id,
                         *ret.clone(),
                         VarDefinitionSpace::Reg,
-                    ))
+                    )))
                 } else {
                     unimplemented!("calling non function type: {:?}", ty);
                 }
@@ -880,7 +895,7 @@ impl Blockify {
                     }
                 }
 
-                Ok(value_id)
+                Ok(Some(value_id))
             }
 
             Ast::Identifier(key) => {
@@ -891,7 +906,13 @@ impl Blockify {
                 } else {
                     LCode::Load(data.value_id)
                 };
-                Ok(self.push_code(code, scope_id, block_id, ty, data.mem.clone()))
+                Ok(Some(self.push_code(
+                    code,
+                    scope_id,
+                    block_id,
+                    ty,
+                    data.mem.clone(),
+                )))
             }
 
             Ast::Assign(target, expr) => {
@@ -899,25 +920,33 @@ impl Blockify {
                     AssignTarget::Identifier(name) | AssignTarget::Alloca(name) => name,
                 };
 
-                //println!("expr: {:?}", expr);
-                let v_expr = self.add(block_id, *expr, b, d)?;
-                let ty = self.get_type(v_expr);
-                let v_decl = self.push_code_with_name(
-                    LCode::Declare,
-                    scope_id,
-                    block_id,
-                    ty.clone(),
-                    VarDefinitionSpace::Stack,
-                    name,
-                );
-                self.push_code(
+                println!("assign: {}, {:?}", b.r(name), (block_id));
+
+                let v_expr = self.add(block_id, *expr, b, d)?.unwrap();
+                let expr_ty = self.get_type(v_expr);
+
+                let v_decl = if let Some(data) = self.env.resolve(name) {
+                    assert_eq!(data.ty, expr_ty);
+                    data.value_id
+                } else {
+                    self.push_code_with_name(
+                        LCode::Declare,
+                        scope_id,
+                        block_id,
+                        expr_ty.clone(),
+                        VarDefinitionSpace::Stack,
+                        name,
+                    )
+                };
+
+                let index = self.push_code(
                     LCode::Store(v_decl, v_expr),
                     scope_id,
                     block_id,
                     AstType::Unit,
                     VarDefinitionSpace::Stack,
                 );
-                Ok(v_decl)
+                Ok(Some(index))
             }
 
             Ast::Builtin(bi, mut args) => match bi {
@@ -929,6 +958,7 @@ impl Blockify {
                         d.push_diagnostic(error("Expected string", node.extra.get_span()));
                     }
 
+                    /*
                     let code = LCode::Noop;
                     let value_id = self.push_code(
                         code,
@@ -937,7 +967,8 @@ impl Blockify {
                         AstType::Unit,
                         VarDefinitionSpace::Reg,
                     );
-                    Ok(value_id)
+                    */
+                    Ok(None) //Some(value_id))
                 }
                 _ => {
                     let _ty = bi.get_return_type();
@@ -946,7 +977,7 @@ impl Blockify {
                     let mut values = vec![];
                     for a in args.into_iter() {
                         let Argument::Positional(expr) = a;
-                        let v = self.add(block_id, *expr, b, d)?;
+                        let v = self.add(block_id, *expr, b, d)?.unwrap();
                         let ty = self.get_type(v);
                         values.push((v, ty));
                     }
@@ -969,40 +1000,39 @@ impl Blockify {
                         ty,
                         VarDefinitionSpace::Reg,
                     );
-                    Ok(value_id)
+                    Ok(Some(value_id))
                 }
             },
 
             Ast::Literal(lit) => {
                 let ty: AstType = lit.clone().into();
-                Ok(self.push_code(
+                Ok(Some(self.push_code(
                     LCode::Const(lit),
                     scope_id,
                     block_id,
                     ty,
                     VarDefinitionSpace::Reg,
-                ))
+                )))
             }
 
             Ast::UnaryOp(op, x) => {
-                let vx = self.add(block_id, *x, b, d)?;
+                let vx = self.add(block_id, *x, b, d)?.unwrap();
                 let code = LCode::Op1(op, vx);
-                Ok(self.push_code(
+                Ok(Some(self.push_code(
                     code,
                     scope_id,
                     block_id,
                     self.get_type(vx),
                     VarDefinitionSpace::Reg,
-                ))
+                )))
             }
 
             Ast::Conditional(condition, then_expr, maybe_else_expr) => {
                 //println!("x: {:?}", (scope_id));
                 //self.env.dump(b);
-                //let v_next = self.env.get_next_block().unwrap();
 
                 let v_next = self.env.get_next_block().unwrap();
-                //.get_next(v);
+
                 let name = b.s("then");
                 let then_scope_id = self.env.new_scope();
                 let v_then = self.push_label::<E>(name.into(), then_scope_id, &[], &[]);
@@ -1011,9 +1041,10 @@ impl Blockify {
                 let _ = self.add(v_then, *then_expr, b, d)?;
                 self.env.pop_next_block();
                 self.env.exit_scope();
+
+                // ensure last code is terminal
                 let last_value = self.env.get_block(v_then).last_value.unwrap();
                 let last_code = self.get_code(last_value);
-
                 if !last_code.is_term() {
                     self.push_code(
                         LCode::Jump(v_next, 0),
@@ -1031,7 +1062,7 @@ impl Blockify {
                     println!("else: {:?}", else_expr);
                     self.env.enter_scope(else_scope_id);
                     self.env.push_next_block(v_next);
-                    let v_else_result = self.add(v_else, *else_expr, b, d)?;
+                    let v_else_result = self.add(v_else, *else_expr, b, d)?.unwrap();
                     self.env.pop_next_block();
                     self.env.exit_scope();
                     let last_value = self.env.get_block(v_else).last_value.unwrap();
@@ -1055,7 +1086,7 @@ impl Blockify {
                     v_next
                 };
 
-                let v = self.add(block_id, *condition, b, d)?;
+                let v = self.add(block_id, *condition, b, d)?.unwrap();
                 let code = LCode::Branch(v, v_then, v_else);
                 self.push_code(
                     code,
@@ -1064,17 +1095,17 @@ impl Blockify {
                     AstType::Unit,
                     VarDefinitionSpace::Reg,
                 );
-                Ok(v)
+                Ok(Some(v))
             }
 
             Ast::Ternary(c, x, y) => {
-                let v_c = self.add(block_id, *c, b, d)?;
+                let v_c = self.add(block_id, *c, b, d)?.unwrap();
 
                 let then_scope_id = self.env.new_scope();
                 let name = b.s("then");
                 self.env.enter_scope(then_scope_id);
                 let v_then = self.push_label::<E>(name.into(), then_scope_id, &[], &[]);
-                let v_then_result = self.add(v_then, *x, b, d)?;
+                let v_then_result = self.add(v_then, *x, b, d)?.unwrap();
                 self.env.exit_scope();
                 let then_ty = self.get_type(v_then_result);
 
@@ -1082,21 +1113,33 @@ impl Blockify {
                 let name = b.s("else");
                 self.env.enter_scope(else_scope_id);
                 let v_else = self.push_label::<E>(name.into(), else_scope_id, &[], &[]);
-                let v_else_result = self.add(v_else, *y, b, d)?;
+                let v_else_result = self.add(v_else, *y, b, d)?.unwrap();
                 self.env.exit_scope();
                 let else_ty = self.get_type(v_else_result);
                 assert_eq!(then_ty, else_ty);
 
                 let code = LCode::Ternary(v_c, v_then, v_else);
-                Ok(self.push_code(code, scope_id, block_id, then_ty, VarDefinitionSpace::Reg))
+                Ok(Some(self.push_code(
+                    code,
+                    scope_id,
+                    block_id,
+                    then_ty,
+                    VarDefinitionSpace::Reg,
+                )))
             }
 
             Ast::BinaryOp(op, x, y) => {
-                let vx = self.add(block_id, *x, b, d)?;
-                let vy = self.add(block_id, *y, b, d)?;
+                let vx = self.add(block_id, *x, b, d)?.unwrap();
+                let vy = self.add(block_id, *y, b, d)?.unwrap();
                 let code = LCode::Op2(op.node, vx, vy);
                 let ty = self.get_type(vx);
-                Ok(self.push_code(code, scope_id, block_id, ty, VarDefinitionSpace::Reg))
+                Ok(Some(self.push_code(
+                    code,
+                    scope_id,
+                    block_id,
+                    ty,
+                    VarDefinitionSpace::Reg,
+                )))
             }
 
             Ast::Goto(label) => {
@@ -1116,7 +1159,7 @@ impl Blockify {
                     AstType::Unit,
                     VarDefinitionSpace::Reg,
                 );
-                Ok(jump_value)
+                Ok(Some(jump_value))
             }
 
             Ast::Return(maybe_expr) => {
@@ -1124,7 +1167,7 @@ impl Blockify {
                     let count = if maybe_expr.is_some() { 1 } else { 0 };
 
                     let maybe_ret_value = if let Some(expr) = maybe_expr {
-                        let expr_value_id = self.add(block_id, *expr, b, d)?;
+                        let expr_value_id = self.add(block_id, *expr, b, d)?.unwrap();
                         Some(expr_value_id)
                     } else {
                         None
@@ -1149,7 +1192,7 @@ impl Blockify {
                         AstType::Unit,
                         VarDefinitionSpace::Reg,
                     );
-                    Ok(v)
+                    Ok(Some(v))
                 } else {
                     d.push_diagnostic(error(
                         &format!("Return without function context"),
