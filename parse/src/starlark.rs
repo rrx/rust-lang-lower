@@ -1,7 +1,8 @@
 use std::collections::HashMap;
+//use std::collections::VecDeque;
 use std::path::Path;
 
-use anyhow::Error;
+//use anyhow::Error;
 use anyhow::Result;
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 
@@ -13,11 +14,82 @@ use starlark_syntax::syntax::module::AstModuleFields;
 
 use flat::Blockify;
 use lower::ast;
-use lower::ast::{Ast, AstNode, CodeLocation, Extra};
+use lower::ast::{Ast, AstNode, CodeLocation};
 use lower::{
-    AstType, CFGBlocks, Diagnostics, IRPlaceTable, LinkOptions, Module, NodeBuilder, ParseError,
-    StringKey, TypeBuilder, TypeUnify,
+    Argument,
+    AstType,
+    //CFGBlocks,
+    Diagnostics,
+    Extra,
+    IRPlaceTable,
+    LinkOptions,
+    Module,
+    NodeBuilder,
+    //ParseError,
+    StringKey,
+    //TypeBuilder,
+    TypeUnify,
 };
+
+#[derive(Debug, Clone)]
+pub enum ExtraAst {
+    LoopStart(Option<StringKey>),
+    LoopBreak(Option<StringKey>),
+    LoopContinue(Option<StringKey>),
+    BlockEnd,
+}
+
+impl ExtraAst {
+    pub fn is_extra(name: &str) -> bool {
+        name == "loop" || name == "loop_break" || name == "loop_continue" || name == "end"
+    }
+
+    pub fn from_name<E: Extra>(
+        name: &str,
+        mut args: Vec<Argument<E>>,
+        b: &mut NodeBuilder<E>,
+    ) -> Option<ExtraAst> {
+        if name == "loop" {
+            if args.len() == 0 {
+                Some(Self::LoopStart(None))
+            } else if args.len() == 1 {
+                let Argument::Positional(arg) = args.pop().unwrap();
+                let s = arg.try_string().unwrap();
+                let key = b.s(&s);
+                Some(Self::LoopStart(Some(key)))
+            } else {
+                unreachable!()
+            }
+        } else if name == "loop_break" {
+            if args.len() == 0 {
+                Some(Self::LoopBreak(None))
+            } else if args.len() == 1 {
+                let Argument::Positional(arg) = args.pop().unwrap();
+                let s = arg.try_string().unwrap();
+                let key = b.s(&s);
+                Some(Self::LoopBreak(Some(key)))
+            } else {
+                unreachable!()
+            }
+        } else if name == "loop_continue" {
+            if args.len() == 0 {
+                Some(Self::LoopContinue(None))
+            } else if args.len() == 1 {
+                let Argument::Positional(arg) = args.pop().unwrap();
+                let s = arg.try_string().unwrap();
+                let key = b.s(&s);
+                Some(Self::LoopContinue(Some(key)))
+            } else {
+                unreachable!()
+            }
+        } else if name == "end" {
+            assert_eq!(args.len(), 0);
+            Some(ExtraAst::BlockEnd)
+        } else {
+            None
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum DataType {
@@ -45,11 +117,13 @@ impl Data {
 #[derive(Debug)]
 pub struct Layer {
     names: HashMap<StringKey, Data>,
+    loops: Vec<StringKey>,
 }
 impl Default for Layer {
     fn default() -> Self {
         Self {
             names: HashMap::new(),
+            loops: vec![],
         }
     }
 }
@@ -60,6 +134,7 @@ pub struct Environment<'a> {
     in_func: bool,
     layers: Vec<Layer>,
     file_id: usize,
+    unique: usize,
 }
 
 impl<'a> Environment<'a> {
@@ -70,6 +145,7 @@ impl<'a> Environment<'a> {
             in_func: false,
             layers: vec![start],
             file_id,
+            unique: 0,
         }
     }
 
@@ -81,6 +157,17 @@ impl<'a> Environment<'a> {
             pos: span.end().get(),
         };
         E::new(self.file_id, begin, end)
+    }
+
+    pub fn push_loop(&mut self, name: StringKey) {
+        self.layers.last_mut().unwrap().loops.push(name);
+    }
+
+    pub fn pop_loop(&mut self) -> StringKey {
+        for layer in self.layers.iter_mut().rev() {
+            return layer.loops.pop().unwrap();
+        }
+        unreachable!()
     }
 
     pub fn enter_func(&mut self) {
@@ -293,13 +380,8 @@ impl<E: Extra> Parser<E> {
 
         match item.node {
             StmtP::Statements(stmts) => {
-                let mut exprs = vec![];
-                for stmt in stmts {
-                    exprs.push(self.from_stmt(stmt, env, d, b)?);
-                }
-
-                let extra = env.extra(item.span);
-                Ok(b.seq(exprs).set_extra(extra))
+                let mut reader = StatementReader::new();
+                reader.build(self, stmts, env, d, b)
             }
 
             StmtP::Def(def) => {
@@ -320,7 +402,6 @@ impl<E: Extra> Parser<E> {
                     env.define(p.name);
                 }
 
-                //let mut body = vec![b.label(name, params.clone())];
                 let mut body = vec![];
                 body.extend(self.from_stmt(*def.body, env, d, b)?.to_vec());
 
@@ -411,6 +492,82 @@ impl<E: Extra> Parser<E> {
         }
     }
 
+    fn is_extra<P: syntax::ast::AstPayload>(&mut self, item: &syntax::ast::AstStmtP<P>) -> bool {
+        use syntax::ast::ExprP;
+        use syntax::ast::StmtP;
+
+        if let StmtP::Expression(expr) = &item.node {
+            match &expr.node {
+                ExprP::Dot(expr, name) => {
+                    if let ExprP::Identifier(ident) = &expr.node {
+                        if &ident.node.ident == "q" && ExtraAst::is_extra(&name) {
+                            return true;
+                        }
+                    } else {
+                        unimplemented!("{:?}", (expr, name))
+                    }
+                }
+                ExprP::Call(expr, _) => match &expr.node {
+                    ExprP::Dot(expr, name) => {
+                        if let ExprP::Identifier(ident) = &expr.node {
+                            if &ident.node.ident == "q" && ExtraAst::is_extra(&name) {
+                                return true;
+                            }
+                        }
+                    }
+                    _ => (),
+                },
+                _ => (),
+            };
+        }
+        false
+    }
+
+    fn read_extra<P: syntax::ast::AstPayload>(
+        &mut self,
+        item: syntax::ast::AstStmtP<P>,
+        env: &mut Environment,
+        d: &mut Diagnostics,
+        b: &mut NodeBuilder<E>,
+    ) -> Result<ExtraAst> {
+        use syntax::ast::ExprP;
+        use syntax::ast::StmtP;
+
+        if let StmtP::Expression(expr) = item.node {
+            let maybe_item = match expr.node {
+                ExprP::Dot(expr, name) => {
+                    if let ExprP::Identifier(ident) = &expr.node {
+                        if &ident.node.ident == "q" && ExtraAst::is_extra(&name) {
+                            if let Some(extra) = ExtraAst::from_name(&name, vec![], b) {
+                                return Ok(extra);
+                            }
+                        }
+                    } else {
+                        unimplemented!("{:?}", (expr, name))
+                    }
+                }
+                ExprP::Call(expr, expr_args) => match expr.node {
+                    ExprP::Dot(expr, name) => {
+                        if let ExprP::Identifier(ident) = &expr.node {
+                            if &ident.node.ident == "q" && ExtraAst::is_extra(&name) {
+                                let mut args = vec![];
+                                for arg in expr_args {
+                                    args.push(self.from_argument(arg, env, d, b)?.into());
+                                }
+                                if let Some(extra) = ExtraAst::from_name(&name, args, b) {
+                                    return Ok(extra);
+                                }
+                            }
+                        }
+                    }
+                    _ => (),
+                },
+                _ => (),
+            };
+        }
+        unreachable!()
+    }
+
     fn from_expr<P: syntax::ast::AstPayload>(
         &mut self,
         item: syntax::ast::AstExprP<P>,
@@ -421,6 +578,30 @@ impl<E: Extra> Parser<E> {
         use syntax::ast::ExprP;
 
         match item.node {
+            ExprP::Dot(expr, name) => {
+                if let ExprP::Identifier(ident) = &expr.node {
+                    if &ident.node.ident == "q" {
+                        // builtin namespace
+                        if let Some(mut ast) = b.build_builtin_from_name(&name, vec![]) {
+                            let extra = env.extra(item.span);
+                            ast.extra = extra;
+                            Ok(ast)
+                        } else {
+                            d.push_diagnostic(env.error(name.span, "Builtin not found"));
+                            Ok(b.error())
+                        }
+                    } else {
+                        d.push_diagnostic(env.error(
+                            name.span,
+                            &format!("Variable not in scope: {}", ident.node.ident),
+                        ));
+                        Ok(b.error())
+                    }
+                } else {
+                    unimplemented!("{:?}", (expr, name))
+                }
+            }
+
             ExprP::Op(lhs, op, rhs) => {
                 let node_a = self.from_expr(*lhs, env, d, b)?.into();
                 let node_b = self.from_expr(*rhs, env, d, b)?.into();
@@ -451,10 +632,10 @@ impl<E: Extra> Parser<E> {
                         if let Some(_data) = env.resolve(name) {
                             let extra: E = env.extra(item.span);
                             Ok(b.apply(name.into(), args, AstType::Int).set_extra(extra))
-                        } else if let Some(bi) = ast::Builtin::from_name(&ident.node.ident) {
-                            let extra = env.extra(item.span);
-                            assert_eq!(args.len(), bi.arity());
-                            Ok(b.build(Ast::Builtin(bi, args), extra))
+                        //} else if let Some(bi) = ast::Builtin::from_name(&ident.node.ident) {
+                        //let extra = env.extra(item.span);
+                        //assert_eq!(args.len(), bi.arity());
+                        //Ok(b.build(Ast::Builtin(bi, args), extra))
                         } else {
                             d.push_diagnostic(env.error(ident.span, "Not found"));
                             Ok(b.error())
@@ -538,6 +719,103 @@ impl<E: Extra> Parser<E> {
             ArgumentP::Positional(expr) => Ok(self.from_expr(expr, env, d, b)?.into()),
             _ => unimplemented!(),
         }
+    }
+}
+
+struct StatementReader<E, P: syntax::ast::AstPayload> {
+    //stmts: Vec<syntax::ast::AstStmtP<P>>,
+    names: Vec<StringKey>,
+    loops: Vec<Vec<AstNode<E>>>,
+    seq: Vec<AstNode<E>>,
+    _e: std::marker::PhantomData<E>,
+    _p: std::marker::PhantomData<P>,
+}
+
+impl<E: Extra, P: syntax::ast::AstPayload> StatementReader<E, P> {
+    fn new() -> Self {
+        //stmts: Vec<syntax::ast::AstStmtP<P>>) -> Self {
+        Self {
+            //stmts: stmts.into(),
+            names: vec![],
+            loops: vec![],
+            seq: vec![],
+            _e: std::marker::PhantomData::default(),
+            _p: std::marker::PhantomData::default(),
+        }
+    }
+
+    fn start_loop(&mut self, key: StringKey) {
+        self.names.push(key);
+        self.loops.push(vec![]);
+    }
+
+    fn end_loop(&mut self, b: &mut NodeBuilder<E>) -> AstNode<E> {
+        let seq = self.loops.pop().unwrap();
+        let key = self.names.pop().unwrap();
+        b.node(Ast::Loop(key, b.seq(seq).into()))
+    }
+
+    fn push_ast(&mut self, ast: AstNode<E>) {
+        if self.loops.len() == 0 {
+            self.seq.push(ast);
+        } else {
+            self.loops.last_mut().unwrap().push(ast);
+        }
+    }
+
+    fn push_stmt(
+        &mut self,
+        stmt: syntax::ast::AstStmtP<P>,
+        parse: &mut Parser<E>,
+        env: &mut Environment,
+        d: &mut Diagnostics,
+        b: &mut NodeBuilder<E>,
+    ) -> Result<()> {
+        let ast = parse.from_stmt(stmt, env, d, b)?;
+        self.push_ast(ast);
+        Ok(())
+    }
+
+    fn build(
+        &mut self,
+        parse: &mut Parser<E>,
+        stmts: Vec<syntax::ast::AstStmtP<P>>,
+        env: &mut Environment,
+        d: &mut Diagnostics,
+        b: &mut NodeBuilder<E>,
+    ) -> Result<AstNode<E>> {
+        for stmt in stmts {
+            if parse.is_extra(&stmt) {
+                let extra = parse.read_extra(stmt, env, d, b)?;
+                println!("extra: {:?}", extra);
+                match extra {
+                    ExtraAst::LoopStart(maybe_key) => {
+                        let key = if let Some(key) = maybe_key {
+                            key
+                        } else {
+                            b.fresh_loop_name()
+                        };
+                        self.start_loop(key);
+                    }
+                    ExtraAst::LoopBreak(maybe_key) => {
+                        self.push_ast(b.loop_break(maybe_key));
+                    }
+                    ExtraAst::LoopContinue(maybe_key) => {
+                        self.push_ast(b.loop_continue(maybe_key));
+                    }
+                    ExtraAst::BlockEnd => {
+                        let ast = self.end_loop(b);
+                        self.push_ast(ast);
+                    } //_ => unimplemented!()
+                }
+            } else {
+                self.push_stmt(stmt, parse, env, d, b);
+            }
+        }
+        //let mut exprs = vec![];
+        //let extra = env.extra(item.span);
+        //Ok(b.seq(exprs).set_extra(extra))
+        Ok(b.seq(self.seq.drain(..).collect()))
     }
 }
 
@@ -803,5 +1081,10 @@ pub(crate) mod tests {
     fn test_cond() {
         //run_test_ir2("../tests/test_cond.star", 0);
         run_test_ir("../tests/test_cond.star", 0);
+    }
+
+    #[test]
+    fn test_loop() {
+        run_test_ir("../tests/loop.star", 0);
     }
 }

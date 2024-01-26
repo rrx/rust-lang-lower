@@ -1029,7 +1029,7 @@ impl Blockify {
                 let v_next = self.env.get_next_block().unwrap();
 
                 let name = b.s("then");
-                let then_scope_id = self.env.new_scope(ScopeType::Function);
+                let then_scope_id = self.env.new_scope(ScopeType::Block);
                 let v_then = self.push_label::<E>(name.into(), then_scope_id, &[], &[]);
                 self.env.enter_scope(then_scope_id);
                 self.env.push_next_block(v_next);
@@ -1052,7 +1052,7 @@ impl Blockify {
 
                 let v_else = if let Some(else_expr) = maybe_else_expr {
                     let name = b.s("else");
-                    let else_scope_id = self.env.new_scope(ScopeType::Function);
+                    let else_scope_id = self.env.new_scope(ScopeType::Block);
                     let v_else = self.push_label::<E>(name.into(), else_scope_id, &[], &[]);
                     println!("else: {:?}", else_expr);
                     self.env.enter_scope(else_scope_id);
@@ -1096,7 +1096,7 @@ impl Blockify {
             Ast::Ternary(c, x, y) => {
                 let v_c = self.add(block_id, *c, b, d)?.unwrap();
 
-                let then_scope_id = self.env.new_scope(ScopeType::Function);
+                let then_scope_id = self.env.new_scope(ScopeType::Block);
                 let name = b.s("then");
                 self.env.enter_scope(then_scope_id);
                 let v_then = self.push_label::<E>(name.into(), then_scope_id, &[], &[]);
@@ -1104,7 +1104,7 @@ impl Blockify {
                 self.env.exit_scope();
                 let then_ty = self.get_type(v_then_result);
 
-                let else_scope_id = self.env.new_scope(ScopeType::Function);
+                let else_scope_id = self.env.new_scope(ScopeType::Block);
                 let name = b.s("else");
                 self.env.enter_scope(else_scope_id);
                 let v_else = self.push_label::<E>(name.into(), else_scope_id, &[], &[]);
@@ -1222,6 +1222,81 @@ impl Blockify {
                     Ok(Some(v))
                 } else {
                     unreachable!()
+                }
+            }
+
+            Ast::Loop(name, body) => {
+                let v_next = self.env.get_next_block().unwrap();
+
+                let loop_scope_id = self.env.new_scope(ScopeType::Loop);
+                let v_loop = self.push_label::<E>(name.into(), loop_scope_id, &[], &[]);
+                self.env.push_loop_blocks(Some(name), v_next, v_loop);
+                self.env.enter_scope(loop_scope_id);
+                self.env.push_next_block(v_next);
+                let _ = self.add(v_loop, *body, b, d)?;
+                self.env.pop_next_block();
+                self.env.exit_scope();
+
+                // ensure last code is terminal
+                let last_value = self.env.get_block(v_loop).last_value.unwrap();
+                let last_code = self.get_code(last_value);
+                if !last_code.is_term() {
+                    self.push_code(
+                        LCode::Jump(v_loop, 0),
+                        scope_id,
+                        v_loop,
+                        AstType::Unit,
+                        VarDefinitionSpace::Reg,
+                    );
+                }
+
+                //let v = self.add(block_id, *condition, b, d)?.unwrap();
+                let code = LCode::Jump(v_loop, 0);
+                let v = self.push_code(
+                    code,
+                    scope_id,
+                    block_id,
+                    AstType::Unit,
+                    VarDefinitionSpace::Reg,
+                );
+                Ok(Some(v))
+            }
+
+            Ast::Break(maybe_name, args) => {
+                // args not implemented yet
+                assert_eq!(args.len(), 0);
+                if let Some(v_next) = self.env.get_loop_next_block(maybe_name) {
+                    let code = LCode::Jump(v_next, 0);
+                    let v = self.push_code(
+                        code,
+                        scope_id,
+                        block_id,
+                        AstType::Unit,
+                        VarDefinitionSpace::Reg,
+                    );
+                    Ok(Some(v))
+                } else {
+                    // mismatch name
+                    unimplemented!()
+                }
+            }
+
+            Ast::Continue(maybe_name, args) => {
+                // args not implemented yet
+                assert_eq!(args.len(), 0);
+                if let Some(v_start) = self.env.get_loop_start_block(maybe_name) {
+                    let code = LCode::Jump(v_start, 0);
+                    let v = self.push_code(
+                        code,
+                        scope_id,
+                        block_id,
+                        AstType::Unit,
+                        VarDefinitionSpace::Reg,
+                    );
+                    Ok(Some(v))
+                } else {
+                    // mismatch name
+                    unimplemented!()
                 }
             }
 

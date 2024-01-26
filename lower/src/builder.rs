@@ -93,6 +93,7 @@ pub struct NodeBuilder<E> {
     current_node_id: u32,
     current_def_id: u32,
     static_count: usize,
+    loop_count: usize,
     pub labels: LabelBuilder,
     _e: std::marker::PhantomData<E>,
 }
@@ -106,6 +107,7 @@ impl<E: Extra> NodeBuilder<E> {
             current_node_id: 0,
             current_def_id: 0,
             static_count: 0,
+            loop_count: 0,
             labels: LabelBuilder::new(),
             _e: std::marker::PhantomData::default(),
         }
@@ -154,6 +156,14 @@ impl<E: Extra> NodeBuilder<E> {
         } else {
             None
         }
+    }
+
+    pub fn fresh_loop_name(&mut self) -> StringKey {
+        let unique = self.loop_count;
+        self.loop_count += 1;
+        let s = format!("_loop{}", unique);
+        let key = self.s(&s);
+        key
     }
 
     fn fresh_def_arg(&mut self) -> DefinitionId {
@@ -362,6 +372,14 @@ impl<E: Extra> NodeBuilder<E> {
 
     pub fn while_loop(&self, condition: AstNode<E>, body: AstNode<E>) -> AstNode<E> {
         self.node(Ast::While(condition.into(), body.into()))
+    }
+
+    pub fn loop_break(&self, key: Option<StringKey>) -> AstNode<E> {
+        self.node(Ast::Break(key, vec![]))
+    }
+
+    pub fn loop_continue(&self, key: Option<StringKey>) -> AstNode<E> {
+        self.node(Ast::Continue(key, vec![]))
     }
 
     pub fn func(

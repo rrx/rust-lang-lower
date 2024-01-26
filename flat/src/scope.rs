@@ -26,6 +26,8 @@ impl Data {
 pub enum ScopeType {
     Static,
     Function,
+    Block,
+    Loop,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
@@ -36,6 +38,13 @@ impl std::fmt::Display for ScopeId {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct LoopScope {
+    name: Option<StringKey>,
+    next_block: ValueId,
+    start_block: ValueId,
+}
+
 #[derive(Debug)]
 pub struct ScopeLayer {
     names: HashMap<StringKey, Data>,
@@ -44,6 +53,7 @@ pub struct ScopeLayer {
     pub(crate) return_block: Option<ValueId>,
     pub(crate) next_block: Vec<ValueId>,
     pub(crate) entry_block: Option<ValueId>,
+    pub(crate) loop_block: Option<LoopScope>,
     pub(crate) scope_type: ScopeType,
 }
 
@@ -56,6 +66,7 @@ impl ScopeLayer {
             return_block: None,
             next_block: vec![],
             entry_block: None,
+            loop_block: None,
             scope_type,
         }
     }
@@ -233,6 +244,48 @@ impl Environment {
         }
         */
         //None
+    }
+
+    pub fn push_loop_blocks(
+        &mut self,
+        maybe_name: Option<StringKey>,
+        next_id: ValueId,
+        restart_id: ValueId,
+    ) {
+        let scope_id = self.current_scope().unwrap();
+        let scope = self.get_scope_mut(scope_id);
+        let loop_scope = LoopScope {
+            name: maybe_name,
+            next_block: next_id,
+            start_block: restart_id,
+        };
+        scope.loop_block = Some(loop_scope);
+    }
+
+    pub fn get_loop_scope(&self, maybe_name: Option<StringKey>) -> Option<LoopScope> {
+        for scope_id in self.stack.iter().rev() {
+            let scope = self.get_scope(*scope_id);
+            if let Some(loop_scope) = scope.loop_block {
+                if maybe_name.is_none() || loop_scope.name == maybe_name {
+                    return Some(loop_scope);
+                }
+            }
+        }
+        None
+    }
+
+    pub fn get_loop_next_block(&self, maybe_name: Option<StringKey>) -> Option<ValueId> {
+        if let Some(loop_scope) = self.get_loop_scope(maybe_name) {
+            return Some(loop_scope.next_block);
+        }
+        None
+    }
+
+    pub fn get_loop_start_block(&self, maybe_name: Option<StringKey>) -> Option<ValueId> {
+        if let Some(loop_scope) = self.get_loop_scope(maybe_name) {
+            return Some(loop_scope.start_block);
+        }
+        None
     }
 
     pub fn resolve_return_block(&self) -> Option<ValueId> {
