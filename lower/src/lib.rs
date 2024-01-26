@@ -7,7 +7,7 @@ pub mod first_pass;
 pub mod intern;
 pub mod ir;
 pub mod link;
-pub mod mlir;
+//pub mod mlir;
 pub mod op;
 pub mod place;
 pub mod sort;

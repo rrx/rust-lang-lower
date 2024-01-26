@@ -23,8 +23,8 @@ use crate::{
     CFGBlocks,
     Diagnostics,
     Extra,
-    IRPlaceTable,
-    LinkOptions,
+    //IRPlaceTable,
+    //LinkOptions,
     Literal,
     NodeBuilder,
     NodeIndex,
@@ -164,6 +164,7 @@ pub fn build_reserved<'c>(
     }
 }
 
+/*
 pub fn emit_binop<'c, E: Extra>(
     context: &'c Context,
     place: &mut IRPlaceTable,
@@ -240,6 +241,7 @@ pub fn emit_binop<'c, E: Extra>(
     types.set_type(index, ast_ty, VarDefinitionSpace::Reg);
     Ok(index)
 }
+*/
 
 pub fn emit_deref<'c>(
     index: SymIndex,
@@ -277,6 +279,7 @@ pub fn emit_deref<'c>(
     //}
 }
 
+/*
 pub fn emit_set_alloca<'c, E: Extra>(
     context: &'c Context,
     place: &mut IRPlaceTable,
@@ -351,6 +354,7 @@ pub fn emit_set_alloca<'c, E: Extra>(
     //println!("current: {:?}", current);
     Ok(sym_index)
 }
+*/
 
 pub fn emit_noop<'c>(
     context: &'c Context,
@@ -363,6 +367,7 @@ pub fn emit_noop<'c>(
     Ok(current.push(op))
 }
 
+/*
 pub fn emit_set_function<'c, E: Extra>(
     context: &'c Context,
     place: &mut IRPlaceTable,
@@ -447,6 +452,7 @@ pub fn emit_set_function<'c, E: Extra>(
         _ => unreachable!(),
     }
 }
+*/
 
 pub fn emit_set_static<'c, E: Extra>(
     context: &'c Context,

@@ -803,7 +803,8 @@ impl Blockify {
                         let c = blocks.blocks.get_mut(&block_id).unwrap();
                         let index = c.push(op);
                         lower.index.insert(v, index);
-                    } //_ => unreachable!("{:?}", bi),
+                    }
+                    _ => unreachable!("{:?}", bi),
                 }
             }
 

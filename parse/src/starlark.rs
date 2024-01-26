@@ -557,7 +557,7 @@ impl<E: Extra> StarlarkParser<E> {
         }
     }
 
-    pub fn parse_module2<'c>(
+    pub fn parse_module<'c>(
         &mut self,
         filename: &str,
         context: &'c lower::Context,
@@ -591,7 +591,8 @@ impl<E: Extra> StarlarkParser<E> {
         Ok(())
     }
 
-    pub fn parse_module<'c>(
+    /*
+    pub fn parse_module2<'c>(
         &mut self,
         filename: &str,
         context: &'c lower::Context,
@@ -670,6 +671,7 @@ impl<E: Extra> StarlarkParser<E> {
         }
         Ok(())
     }
+    */
 
     pub fn exec_main<'c>(
         &self,
@@ -715,6 +717,7 @@ pub(crate) mod tests {
     use lower::Location;
     use test_log::test;
 
+    /*
     fn run_test_ir2(filename: &str, expected: i32) {
         let mut p: StarlarkParser<SimpleExtra> = StarlarkParser::new();
         let mut b = NodeBuilder::new();
@@ -730,6 +733,7 @@ pub(crate) mod tests {
         let r = p.exec_main(&context, &mut module, "../target/debug/", true);
         assert_eq!(expected, r);
     }
+    */
 
     fn run_test_ir(filename: &str, expected: i32) {
         let mut p: StarlarkParser<SimpleExtra> = StarlarkParser::new();
@@ -749,55 +753,55 @@ pub(crate) mod tests {
 
     #[test]
     fn test_recursive() {
-        run_test_ir2("../tests/test_recursive.star", 0);
+        //run_test_ir2("../tests/test_recursive.star", 0);
         run_test_ir("../tests/test_recursive.star", 0);
     }
 
     #[test]
     fn test_goto() {
-        run_test_ir2("../tests/goto.star", 0);
+        //run_test_ir2("../tests/goto.star", 0);
         run_test_ir("../tests/goto.star", 0);
     }
 
     #[test]
     fn test_bare() {
-        run_test_ir2("../tests/bare.star", 0);
+        //run_test_ir2("../tests/bare.star", 0);
         run_test_ir("../tests/bare.star", 0);
     }
 
     #[test]
     fn test_fix() {
-        run_test_ir2("../tests/fix.star", 0);
+        //run_test_ir2("../tests/fix.star", 0);
         run_test_ir("../tests/fix.star", 0);
     }
 
     #[test]
     fn test_nothing() {
-        run_test_ir2("../tests/test.star", 0);
+        //run_test_ir2("../tests/test.star", 0);
         run_test_ir("../tests/test.star", 0);
     }
 
     #[test]
     fn test_global() {
-        run_test_ir2("../tests/test_global.star", 0);
+        //run_test_ir2("../tests/test_global.star", 0);
         run_test_ir("../tests/test_global.star", 0);
     }
 
     #[test]
     fn test_static() {
-        run_test_ir2("../tests/test_static.star", 0);
+        //run_test_ir2("../tests/test_static.star", 0);
         run_test_ir("../tests/test_static.star", 0);
     }
 
     #[test]
     fn test_float() {
-        run_test_ir2("../tests/test_float.star", 0);
+        //run_test_ir2("../tests/test_float.star", 0);
         run_test_ir("../tests/test_float.star", 0);
     }
 
     #[test]
     fn test_cond() {
-        run_test_ir2("../tests/test_cond.star", 0);
+        //run_test_ir2("../tests/test_cond.star", 0);
         run_test_ir("../tests/test_cond.star", 0);
     }
 }

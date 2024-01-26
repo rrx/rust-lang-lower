@@ -145,6 +145,8 @@ pub enum Builtin {
     Assert,
     Print,
     Import,
+    LoopStart,
+    BlockEnd,
 }
 
 impl Builtin {
@@ -155,6 +157,10 @@ impl Builtin {
             Some(Builtin::Print)
         } else if name == "use" {
             Some(Builtin::Import)
+        } else if name == "loop" {
+            Some(Builtin::LoopStart)
+        } else if name == "end" {
+            Some(Builtin::BlockEnd)
         } else {
             None
         }
@@ -165,6 +171,8 @@ impl Builtin {
             Self::Assert => 1,
             Self::Print => 1,
             Self::Import => 1,
+            Self::LoopStart => 0,
+            Self::BlockEnd => 0,
         }
     }
 
