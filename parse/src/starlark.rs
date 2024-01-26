@@ -170,7 +170,6 @@ fn from_binop(item: syntax::ast::BinOp) -> ast::BinaryOperation {
 }
 
 fn from_type<P: syntax::ast::AstPayload>(item: &syntax::ast::TypeExprP<P>) -> Option<AstType> {
-    //log::debug!("type: {:?}", item);
     match &item.expr.node {
         syntax::ast::ExprP::Identifier(name) => match name.ident.as_str() {
             "float" => Some(AstType::Float),
@@ -242,7 +241,6 @@ impl<E: Extra> Parser<E> {
     ) -> ast::ParameterNode<E> {
         use syntax::ast::ParameterP;
 
-        //log::debug!("p: {:?}", item);
         match item.node {
             ParameterP::Normal(ident, maybe_type) => {
                 let extra = env.extra(item.span);
@@ -382,7 +380,6 @@ impl<E: Extra> Parser<E> {
                 let rhs = self.from_expr(assign.rhs, env, d, b)?;
                 match assign.lhs.node {
                     AssignTargetP::Identifier(ident) => {
-                        //log::debug!("parse ident: {}", ident.node.ident);
                         let name = &ident.node.ident;
                         if let Some(node) = b.build_literal_from_identifier(name) {
                             return Ok(node);
@@ -470,7 +467,7 @@ impl<E: Extra> Parser<E> {
                             if let Some(_data) = env.resolve(key) {
                                 let extra: E = env.extra(item.span);
                                 Ok(b.apply(key.into(), args, AstType::Int).set_extra(extra))
-                            } else if &ident.node.ident == "b" {
+                            } else if &ident.node.ident == "q" {
                                 // builtin namespace
                                 if let Some(mut ast) = b.build_builtin_from_name(&name, args) {
                                     let extra = env.extra(item.span);

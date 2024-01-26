@@ -1,4 +1,4 @@
-b.use("prelude")
+q.use("prelude")
 
 def cond(n: int) -> int:
   out = 0
@@ -12,7 +12,7 @@ def cond(n: int) -> int:
   return out
 
 def main() -> int:
-  b.print(cond(0))
-  b.print(cond(1))
-  b.print(cond(2))
+  q.print(cond(0))
+  q.print(cond(1))
+  q.print(cond(2))
   return 0

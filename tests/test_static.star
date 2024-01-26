@@ -1,24 +1,24 @@
 z = 10
 
-b.use("prelude")
+q.use("prelude")
 
 def main() -> int:
   y = 0 + 1
   y = y + 1
-  b.print(y)
+  q.print(y)
 
   # this should mutate the global variable
-  b.print(z)
-  b.print(z + 1)
+  q.print(z)
+  q.print(z + 1)
 
   z = z + 1
-  b.print(z)
-  b.check(z == 11)
+  q.print(z)
+  q.check(z == 11)
 
   z0 = z
   z = z0
-  b.print(z)
-  b.check(z == 11)
+  q.print(z)
+  q.check(z == 11)
 
   # unary integer
   xi = -10

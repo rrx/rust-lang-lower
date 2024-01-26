@@ -1,8 +1,8 @@
 def main() -> int:
-  b.goto("a")
-  b.label("a")
+  q.goto("a")
+  q.label("a")
   x = 0 if True else (0 if True else 1)
-  b.goto("ret")
-  b.label("ret")
+  q.goto("ret")
+  q.label("ret")
   return 0
 

@@ -1,4 +1,4 @@
-b.use("prelude")
+q.use("prelude")
 
 def fibonacci_recursive(n: int, a:int, c:int) -> int:
   out = 0
@@ -17,8 +17,8 @@ def fib(n: int) -> int:
 
 def main() -> int:
   r1 = fib(10)
-  b.check(r1 == 55)
+  q.check(r1 == 55)
   r1 = fib(19)
-  b.check(r1 == 4181)
+  q.check(r1 == 4181)
   return 0
 
