@@ -16,6 +16,7 @@ def main() -> int:
   if y == 0:
     q.loop_break
   y = y - 1
+  q.loop_continue
   q.end
 
   return y + z

@@ -420,8 +420,29 @@ impl Blockify {
         ty: AstType,
         mem: VarDefinitionSpace,
     ) -> ValueId {
+        // update successor blocks
+        match &code {
+            LCode::Jump(target, _) => {
+                // XXX: This is causing us to terminate the loop we are currently generating
+                // If it knows about the loop, then it tries to terminate it
+                //self.env.add_succ_block(block_id, *target);
+            }
+
+            LCode::Branch(_, v_then, v_else) => {
+                self.env.add_succ_block(block_id, *v_then);
+                self.env.add_succ_block(block_id, *v_else);
+            }
+
+            LCode::Ternary(_, v_then, v_else) => {
+                self.env.add_succ_op(block_id, *v_then);
+                self.env.add_succ_op(block_id, *v_else);
+            }
+            _ => (),
+        }
+
         let v = self._push_code(code, scope_id, block_id, ty, mem);
         self._update_code(v, block_id);
+
         v
     }
 
@@ -431,6 +452,8 @@ impl Blockify {
         if let Some(last_value) = block.last_value {
             self.prev_pos[offset] = last_value;
             self.next_pos[last_value.0 as usize] = value_id;
+            //let last_code = self.get_code(last_value);
+            //assert!(!last_code.is_term());
         }
 
         let block = self.env.get_block_mut(block_id);
@@ -528,23 +551,25 @@ impl Blockify {
     pub fn build_edges(&mut self) -> Result<()> {
         for (i, code) in self.code.iter().enumerate() {
             match code {
+                /*
                 LCode::Ternary(_, x, y) => {
-                    let block_id = self.entries[i];
-                    self.env.add_succ_op(block_id, *x);
-                    self.env.add_succ_op(block_id, *y);
+                    //let block_id = self.entries[i];
+                    //self.env.add_succ_op(block_id, *x);
+                    //self.env.add_succ_op(block_id, *y);
                 }
 
-                LCode::Branch(_, _x, _y) => {
+                LCode::Branch(_, x, y) => {
                     //let block_id = self.entries[i];
                     //self.env.add_succ_block(block_id, *x);
                     //self.env.add_succ_block(block_id, *y);
                 }
 
-                LCode::DeclareFunction(Some(entry_id)) => {
-                    let decl_block_id = self.entries[i];
-                    self.env.add_succ_static(decl_block_id, *entry_id);
+                LCode::DeclareFunction(Some(_entry_id)) => {
+                    //let decl_block_id = self.entries[i];
+                    //self.env.add_succ_static(decl_block_id, *entry_id);
                 }
 
+                */
                 LCode::Jump(target_id, _) => {
                     let block_id = self.entries[i];
                     self.env.add_succ_block(block_id, *target_id);
@@ -558,14 +583,6 @@ impl Blockify {
         }
         Ok(())
     }
-
-    pub fn add_pred(&mut self, v: ValueId, pred: ValueId) {
-        self.env.get_block_mut(v).pred.insert(pred);
-    }
-
-    //pub fn add_succ(&mut self, v: ValueId, succ: ValueId) {
-    //self.env.get_block_mut(v).succ.insert(succ);
-    //}
 
     pub fn emit_sequence<E: Extra>(
         &mut self,
@@ -787,6 +804,7 @@ impl Blockify {
             self.add(entry_id, *body, b, d)?;
             self.env.pop_next_block().unwrap();
             self.env.exit_scope();
+            self.env.add_succ_static(block_id, entry_id);
             Ok(Some(v_decl))
         } else {
             Ok(Some(self.push_code_with_name(
@@ -1094,7 +1112,13 @@ impl Blockify {
                 let else_ty = self.get_type(v_else_result);
                 assert_eq!(then_ty, else_ty);
 
+                // TODO: we need to ensure that the cfg terminates with a yield
+
                 let code = LCode::Ternary(v_c, v_then, v_else);
+
+                //self.env.add_succ_op(block_id, v_then);
+                //self.env.add_succ_op(block_id, v_else);
+
                 Ok(Some(self.push_code(
                     code,
                     scope_id,
@@ -1286,11 +1310,25 @@ impl Blockify {
         v_next: ValueId,
         b: &NodeBuilder<E>,
     ) {
-        let leafs = self.get_graph(v_block, b).leafs(v_block);
+        let leafs = self
+            .get_graph(v_block, Some(Successor::BlockScope), b)
+            .leafs(v_block);
         for block_id in leafs {
             let last_value = self.env.get_block(block_id).last_value.unwrap();
             let last_code = self.get_code(last_value);
+
+            // TODO: this shouldn't happen
+            if block_id == v_next {
+                continue;
+            }
+
+            // TODO: This is terminating blocks that haven't been completed yet
+            // because we are adding the successors in, it's following the loops
+            // and trying to terminate the loop it's trying to generate.
+
             if !last_code.is_term() {
+                //assert!(false);
+                //println!("adding jump: {:?}", (block_id, v_next));
                 self.push_code(
                     LCode::Jump(v_next, 0),
                     scope_id,
@@ -1302,6 +1340,7 @@ impl Blockify {
         }
     }
 
+    /*
     pub fn save_graph<E: Extra>(&self, filename: &str, b: &NodeBuilder<E>) {
         use petgraph::dot::{Config, Dot};
         #[derive(Debug)]
@@ -1399,10 +1438,11 @@ impl Blockify {
         println!("{}", s);
         std::fs::write(filename, s).unwrap();
     }
+    */
 
-    pub fn save_graph2<E: Extra>(&self, filename: &str, b: &NodeBuilder<E>) {
+    pub fn save_graph<E: Extra>(&self, filename: &str, b: &NodeBuilder<E>) {
         use petgraph::dot::{Config, Dot};
-        let cfg = self.get_graph(ValueId(0), b);
+        let cfg = self.get_graph(ValueId(0), None, b);
         let s = format!(
             "{:?}",
             Dot::with_attr_getters(
@@ -1539,7 +1579,16 @@ impl CFG {
 }
 
 impl Blockify {
-    pub fn get_graph<E: Extra>(&self, block_id: ValueId, b: &NodeBuilder<E>) -> CFG {
+    pub fn get_cfg<E: Extra>(&self, block_id: ValueId, b: &NodeBuilder<E>) -> CFG {
+        self.get_graph(block_id, Some(Successor::BlockScope), b)
+    }
+
+    pub fn get_graph<E: Extra>(
+        &self,
+        block_id: ValueId,
+        scope: Option<Successor>,
+        b: &NodeBuilder<E>,
+    ) -> CFG {
         let mut cfg = CFG::new();
 
         let mut stack = VecDeque::new();
@@ -1556,7 +1605,7 @@ impl Blockify {
 
                 let block = self.env.get_block(block_id);
                 for (succ_type, next_block_id) in block.succ.iter() {
-                    if let Successor::BlockScope = succ_type {
+                    if scope.is_none() || scope == Some(*succ_type) {
                         stack.push_back(*next_block_id);
                     }
                 }

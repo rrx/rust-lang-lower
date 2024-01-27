@@ -451,7 +451,7 @@ impl Blockify {
                     let op = blocks.op_ref(index);
                     op.set_attribute("llvm.emit_c_interface", &Attribute::unit(lower.context));
 
-                    let cfg = self.get_graph(*entry_id, b);
+                    let cfg = self.get_cfg(*entry_id, b);
                     let block_ids = cfg.blocks(*entry_id);
 
                     // create blocks
@@ -688,7 +688,7 @@ impl Blockify {
                 // THEN
                 let then_block_id = self.get_block_id(*v_then);
 
-                let cfg = self.get_graph(then_block_id, b);
+                let cfg = self.get_cfg(then_block_id, b);
                 let then_block_ids = cfg.blocks(then_block_id);
 
                 for block_id in then_block_ids.iter() {
@@ -708,7 +708,7 @@ impl Blockify {
                 // ELSE
                 let else_block_id = self.get_block_id(*v_else);
 
-                let cfg = self.get_graph(else_block_id, b);
+                let cfg = self.get_cfg(else_block_id, b);
                 let else_block_ids = cfg.blocks(else_block_id);
 
                 for block_id in else_block_ids.iter() {
