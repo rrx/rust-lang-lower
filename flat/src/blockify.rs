@@ -534,10 +534,10 @@ impl Blockify {
                     self.env.add_succ_op(block_id, *y);
                 }
 
-                LCode::Branch(_, x, y) => {
-                    let block_id = self.entries[i];
-                    self.env.add_succ_block(block_id, *x);
-                    self.env.add_succ_block(block_id, *y);
+                LCode::Branch(_, _x, _y) => {
+                    //let block_id = self.entries[i];
+                    //self.env.add_succ_block(block_id, *x);
+                    //self.env.add_succ_block(block_id, *y);
                 }
 
                 LCode::DeclareFunction(Some(entry_id)) => {
@@ -680,6 +680,12 @@ impl Blockify {
                     }
 
                     (true, NextSeqState::Other) => {
+                        /*
+                        let v = self.add(current_block_id.unwrap(), expr, b, d)?.unwrap();
+                        current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
+                        value_id = Some(v);
+                        */
+
                         let name = b.s("next");
                         let v_next = self.push_label::<E>(name.into(), scope_id, &[], &[]);
                         self.env.push_next_block(v_next);
@@ -929,7 +935,7 @@ impl Blockify {
                     AssignTarget::Identifier(name) | AssignTarget::Alloca(name) => name,
                 };
 
-                println!("assign: {}, {:?}", b.r(name), (block_id));
+                //println!("assign: {}, {:?}", b.r(name), (block_id));
 
                 let v_expr = self.add(block_id, *expr, b, d)?.unwrap();
                 let expr_ty = self.get_type(v_expr);
@@ -1054,18 +1060,18 @@ impl Blockify {
                     let name = b.s("else");
                     let else_scope_id = self.env.new_scope(ScopeType::Block);
                     let v_else = self.push_label::<E>(name.into(), else_scope_id, &[], &[]);
-                    println!("else: {:?}", else_expr);
+                    //println!("else: {:?}", else_expr);
                     self.env.enter_scope(else_scope_id);
                     self.env.push_next_block(v_next);
-                    let v_else_result = self.add(v_else, *else_expr, b, d)?.unwrap();
+                    let _v_else_result = self.add(v_else, *else_expr, b, d)?.unwrap();
                     self.env.pop_next_block();
                     self.env.exit_scope();
                     let last_value = self.env.get_block(v_else).last_value.unwrap();
                     let last_code = self.get_code(last_value);
-                    println!(
-                        "else: {:?}",
-                        (last_code.is_term(), self.code_to_string(v_else_result, b))
-                    );
+                    //println!(
+                    //"else: {:?}",
+                    //(last_code.is_term(), self.code_to_string(v_else_result, b))
+                    //);
                     self.dump_codes(b, Some(v_else));
                     if !last_code.is_term() {
                         self.push_code(
@@ -1090,6 +1096,9 @@ impl Blockify {
                     AstType::Unit,
                     VarDefinitionSpace::Reg,
                 );
+                self.env.add_succ_block(block_id, v_then);
+                self.env.add_succ_block(block_id, v_else);
+
                 Ok(Some(v))
             }
 
@@ -1226,6 +1235,7 @@ impl Blockify {
             }
 
             Ast::Loop(name, body) => {
+                //println!("asdf: {:#?}", body);
                 let v_next = self.env.get_next_block().unwrap();
 
                 let loop_scope_id = self.env.new_scope(ScopeType::Loop);
@@ -1238,19 +1248,23 @@ impl Blockify {
                 self.env.exit_scope();
 
                 // ensure last code is terminal
-                let last_value = self.env.get_block(v_loop).last_value.unwrap();
-                let last_code = self.get_code(last_value);
-                if !last_code.is_term() {
-                    self.push_code(
-                        LCode::Jump(v_loop, 0),
-                        scope_id,
-                        v_loop,
-                        AstType::Unit,
-                        VarDefinitionSpace::Reg,
-                    );
-                }
+                //let last_value = self.env.get_block(v_loop).last_value.unwrap();
+                //let last_code = self.get_code(last_value);
+                //println!("last: {:#?}", (last_code, last_code.is_term()));
 
-                //let v = self.add(block_id, *condition, b, d)?.unwrap();
+                // XXX: we need to check that the graph terminates, not just the entry block
+                //if !last_code.is_term() {
+                //self.push_code(
+                //LCode::Jump(v_loop, 0),
+                //scope_id,
+                //v_loop,
+                //AstType::Unit,
+                //VarDefinitionSpace::Reg,
+                //);
+                //}
+                self.ensure_next_in_cfg(scope_id, v_loop, v_loop, b);
+
+                // enter loop
                 let code = LCode::Jump(v_loop, 0);
                 let v = self.push_code(
                     code,
@@ -1306,6 +1320,29 @@ impl Blockify {
             }
 
             _ => unimplemented!("{:?}", node.node),
+        }
+    }
+
+    pub fn ensure_next_in_cfg<E: Extra>(
+        &mut self,
+        scope_id: ScopeId,
+        v_block: ValueId,
+        v_next: ValueId,
+        b: &NodeBuilder<E>,
+    ) {
+        let leafs = self.get_graph(v_block, b).leafs(v_block);
+        for block_id in leafs {
+            let last_value = self.env.get_block(block_id).last_value.unwrap();
+            let last_code = self.get_code(last_value);
+            if !last_code.is_term() {
+                self.push_code(
+                    LCode::Jump(v_next, 0),
+                    scope_id,
+                    block_id,
+                    AstType::Unit,
+                    VarDefinitionSpace::Reg,
+                );
+            }
         }
     }
 
@@ -1516,6 +1553,22 @@ impl CFG {
             ids: HashMap::new(),
             g: CFGGraph::new(),
         }
+    }
+
+    pub fn leafs(&self, block_id: ValueId) -> Vec<ValueId> {
+        let mut out = vec![];
+        let mut bfs = Bfs::new(&self.g, *self.ids.get(&block_id).unwrap());
+        while let Some(nx) = bfs.next(&self.g) {
+            let outgoing = self
+                .g
+                .edges_directed(nx, petgraph::Direction::Outgoing)
+                .collect::<Vec<_>>();
+            if outgoing.len() == 0 {
+                let node = self.g.node_weight(nx).unwrap();
+                out.push(node.block_id);
+            }
+        }
+        out
     }
 
     pub fn blocks(&self, block_id: ValueId) -> Vec<ValueId> {
