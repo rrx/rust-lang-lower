@@ -1042,46 +1042,18 @@ impl Blockify {
                 let _ = self.add(v_then, *then_expr, b, d)?;
                 self.env.pop_next_block();
                 self.env.exit_scope();
-
-                // ensure last code is terminal
-                let last_value = self.env.get_block(v_then).last_value.unwrap();
-                let last_code = self.get_code(last_value);
-                if !last_code.is_term() {
-                    self.push_code(
-                        LCode::Jump(v_next, 0),
-                        scope_id,
-                        v_then,
-                        AstType::Unit,
-                        VarDefinitionSpace::Reg,
-                    );
-                }
+                self.ensure_next_in_cfg(then_scope_id, v_then, v_next, b);
 
                 let v_else = if let Some(else_expr) = maybe_else_expr {
                     let name = b.s("else");
                     let else_scope_id = self.env.new_scope(ScopeType::Block);
                     let v_else = self.push_label::<E>(name.into(), else_scope_id, &[], &[]);
-                    //println!("else: {:?}", else_expr);
                     self.env.enter_scope(else_scope_id);
                     self.env.push_next_block(v_next);
                     let _v_else_result = self.add(v_else, *else_expr, b, d)?.unwrap();
                     self.env.pop_next_block();
                     self.env.exit_scope();
-                    let last_value = self.env.get_block(v_else).last_value.unwrap();
-                    let last_code = self.get_code(last_value);
-                    //println!(
-                    //"else: {:?}",
-                    //(last_code.is_term(), self.code_to_string(v_else_result, b))
-                    //);
-                    self.dump_codes(b, Some(v_else));
-                    if !last_code.is_term() {
-                        self.push_code(
-                            LCode::Jump(v_next, 0),
-                            scope_id,
-                            v_else,
-                            AstType::Unit,
-                            VarDefinitionSpace::Reg,
-                        );
-                    }
+                    self.ensure_next_in_cfg(else_scope_id, v_else, v_next, b);
                     v_else
                 } else {
                     v_next
@@ -1235,7 +1207,6 @@ impl Blockify {
             }
 
             Ast::Loop(name, body) => {
-                //println!("asdf: {:#?}", body);
                 let v_next = self.env.get_next_block().unwrap();
 
                 let loop_scope_id = self.env.new_scope(ScopeType::Loop);
@@ -1247,21 +1218,6 @@ impl Blockify {
                 self.env.pop_next_block();
                 self.env.exit_scope();
 
-                // ensure last code is terminal
-                //let last_value = self.env.get_block(v_loop).last_value.unwrap();
-                //let last_code = self.get_code(last_value);
-                //println!("last: {:#?}", (last_code, last_code.is_term()));
-
-                // XXX: we need to check that the graph terminates, not just the entry block
-                //if !last_code.is_term() {
-                //self.push_code(
-                //LCode::Jump(v_loop, 0),
-                //scope_id,
-                //v_loop,
-                //AstType::Unit,
-                //VarDefinitionSpace::Reg,
-                //);
-                //}
                 self.ensure_next_in_cfg(scope_id, v_loop, v_loop, b);
 
                 // enter loop
