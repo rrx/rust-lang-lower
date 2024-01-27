@@ -433,10 +433,8 @@ impl<E: Extra> Parser<E> {
 
             StmtP::IfElse(expr, options) => {
                 let condition = self.from_expr(expr, env, d, b)?;
-                let truestmt_seq = self.from_stmt(options.0, env, d, b)?.to_vec();
-                let elsestmt_seq = self.from_stmt(options.1, env, d, b)?.to_vec();
-                let truestmt = b.seq(truestmt_seq);
-                let elsestmt = b.seq(elsestmt_seq);
+                let truestmt = self.from_stmt(options.0, env, d, b)?;
+                let elsestmt = self.from_stmt(options.1, env, d, b)?;
                 let extra = env.extra(item.span);
                 Ok(b.build(
                     Ast::Conditional(condition.into(), truestmt.into(), Some(elsestmt.into())),
@@ -617,10 +615,8 @@ impl<E: Extra> Parser<E> {
             ExprP::If(args) => {
                 let (condition, then_expr, else_expr) = *args;
                 let condition = self.from_expr(condition, env, d, b)?;
-                let then_expr_seq = self.from_expr(then_expr, env, d, b)?.to_vec();
-                let then_expr = b.seq(then_expr_seq);
-                let else_expr_seq = self.from_expr(else_expr, env, d, b)?.to_vec();
-                let else_expr = b.seq(else_expr_seq);
+                let then_expr = self.from_expr(then_expr, env, d, b)?;
+                let else_expr = self.from_expr(else_expr, env, d, b)?;
                 let extra = env.extra(item.span);
                 Ok(b.build(
                     Ast::Ternary(condition.into(), then_expr.into(), else_expr.into()),
