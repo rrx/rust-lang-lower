@@ -379,10 +379,7 @@ impl<E: Extra> Parser<E> {
         use syntax::ast::StmtP;
 
         match item.node {
-            StmtP::Statements(stmts) => {
-                let mut reader = StatementReader::new();
-                reader.build(self, stmts, env, d, b)
-            }
+            StmtP::Statements(stmts) => StatementReader::build(self, stmts, env, d, b),
 
             StmtP::Def(def) => {
                 let name = b.s(&def.name.ident);
@@ -643,10 +640,6 @@ impl<E: Extra> Parser<E> {
                         if let Some(_data) = env.resolve(name) {
                             let extra: E = env.extra(item.span);
                             Ok(b.apply(name.into(), args, AstType::Int).set_extra(extra))
-                        //} else if let Some(bi) = ast::Builtin::from_name(&ident.node.ident) {
-                        //let extra = env.extra(item.span);
-                        //assert_eq!(args.len(), bi.arity());
-                        //Ok(b.build(Ast::Builtin(bi, args), extra))
                         } else {
                             d.push_diagnostic(env.error(ident.span, "Not found"));
                             Ok(b.error())
@@ -749,7 +742,6 @@ impl<E: Extra> Parser<E> {
 }
 
 struct StatementReader<E, P: syntax::ast::AstPayload> {
-    //stmts: Vec<syntax::ast::AstStmtP<P>>,
     names: Vec<StringKey>,
     loops: Vec<Vec<AstNode<E>>>,
     seq: Vec<AstNode<E>>,
@@ -759,9 +751,7 @@ struct StatementReader<E, P: syntax::ast::AstPayload> {
 
 impl<E: Extra, P: syntax::ast::AstPayload> StatementReader<E, P> {
     fn new() -> Self {
-        //stmts: Vec<syntax::ast::AstStmtP<P>>) -> Self {
         Self {
-            //stmts: stmts.into(),
             names: vec![],
             loops: vec![],
             seq: vec![],
@@ -803,13 +793,14 @@ impl<E: Extra, P: syntax::ast::AstPayload> StatementReader<E, P> {
     }
 
     fn build(
-        &mut self,
+        //&mut self,
         parse: &mut Parser<E>,
         stmts: Vec<syntax::ast::AstStmtP<P>>,
         env: &mut Environment,
         d: &mut Diagnostics,
         b: &mut NodeBuilder<E>,
     ) -> Result<AstNode<E>> {
+        let mut reader = Self::new();
         for stmt in stmts {
             if parse.is_extra(&stmt) {
                 let extra = parse.read_extra(stmt, env, d, b)?;
@@ -821,27 +812,27 @@ impl<E: Extra, P: syntax::ast::AstPayload> StatementReader<E, P> {
                         } else {
                             b.fresh_loop_name()
                         };
-                        self.start_loop(key);
+                        reader.start_loop(key);
                     }
                     ExtraAst::LoopBreak(maybe_key) => {
-                        self.push_ast(b.loop_break(maybe_key));
+                        reader.push_ast(b.loop_break(maybe_key));
                     }
                     ExtraAst::LoopContinue(maybe_key) => {
-                        self.push_ast(b.loop_continue(maybe_key));
+                        reader.push_ast(b.loop_continue(maybe_key));
                     }
                     ExtraAst::BlockEnd => {
-                        let ast = self.end_loop(b);
-                        self.push_ast(ast);
+                        let ast = reader.end_loop(b);
+                        reader.push_ast(ast);
                     } //_ => unimplemented!()
                 }
             } else {
-                self.push_stmt(stmt, parse, env, d, b)?;
+                reader.push_stmt(stmt, parse, env, d, b)?;
             }
         }
         //let mut exprs = vec![];
         //let extra = env.extra(item.span);
         //Ok(b.seq(exprs).set_extra(extra))
-        Ok(b.seq(self.seq.drain(..).collect()))
+        Ok(b.seq(reader.seq.drain(..).collect()))
     }
 }
 
