@@ -1132,7 +1132,6 @@ impl Blockify {
                 self.env.enter_scope(then_scope_id);
                 let _ = self.add_with_next(v_then, *then_expr, v_next, b, d)?;
                 self.env.exit_scope();
-                //self.ensure_next_in_cfg(then_scope_id, v_then, v_next, b);
 
                 let v_else = if let Some(else_expr) = maybe_else_expr {
                     let name = b.s("else");
@@ -1143,7 +1142,6 @@ impl Blockify {
                         .add_with_next(v_else, *else_expr, v_next, b, d)?
                         .unwrap();
                     self.env.exit_scope();
-                    //self.ensure_next_in_cfg(else_scope_id, v_else, v_next, b);
                     v_else
                 } else {
                     v_next
