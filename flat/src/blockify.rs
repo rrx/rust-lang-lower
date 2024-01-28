@@ -151,16 +151,20 @@ impl NextSeqState {
 
 #[derive(Debug)]
 pub struct Blockify {
+    // table entries
     code: Vec<LCode>,
     types: Vec<AstType>,
     mem: Vec<VarDefinitionSpace>,
     scopes: Vec<ScopeId>,
     next_pos: Vec<ValueId>,
     prev_pos: Vec<ValueId>,
-    loop_stack: Vec<LoopLayer>,
-    pub(crate) env: Environment,
-    pub(crate) names: IndexMap<ValueId, StringLabel>,
     entries: Vec<ValueId>,
+    loop_stack: Vec<LoopLayer>,
+
+    // other
+    pub(crate) env: Environment,
+    // sparse names
+    pub(crate) names: IndexMap<ValueId, StringLabel>,
     link: LinkOptions,
 }
 
@@ -171,12 +175,13 @@ impl Blockify {
             types: vec![],
             mem: vec![],
             scopes: vec![],
-            names: IndexMap::new(),
             next_pos: vec![],
             prev_pos: vec![],
             loop_stack: vec![],
-            env: Environment::new(),
             entries: vec![],
+
+            names: IndexMap::new(),
+            env: Environment::new(),
             link: LinkOptions::new(),
         }
     }
@@ -425,7 +430,7 @@ impl Blockify {
             LCode::Jump(target, _) => {
                 // XXX: This is causing us to terminate the loop we are currently generating
                 // If it knows about the loop, then it tries to terminate it
-                //self.env.add_succ_block(block_id, *target);
+                self.env.add_succ_block(block_id, *target);
             }
 
             LCode::Branch(_, v_then, v_else) => {
@@ -449,14 +454,21 @@ impl Blockify {
     pub fn _update_code(&mut self, value_id: ValueId, block_id: ValueId) {
         let offset = value_id.0 as usize;
         let block = self.env.get_block(block_id);
+        let is_term = self.get_code(value_id).is_term();
+
         if let Some(last_value) = block.last_value {
             self.prev_pos[offset] = last_value;
             self.next_pos[last_value.0 as usize] = value_id;
-            //let last_code = self.get_code(last_value);
-            //assert!(!last_code.is_term());
+            // check to ensure that nothing follows the terminator
+            //assert!(!block.has_term());
         }
 
         let block = self.env.get_block_mut(block_id);
+
+        if is_term {
+            block.set_term(value_id);
+        }
+
         block.count += 1;
         block.last_value = Some(value_id);
     }
@@ -541,17 +553,17 @@ impl Blockify {
                 self.env.enter_scope(static_scope);
                 self.add(block_id, *body, b, d)?;
                 self.env.exit_scope();
-                self.build_edges()?;
+                //self.build_edges()?;
                 Ok(block_id)
             }
             _ => unreachable!(),
         }
     }
 
+    /*
     pub fn build_edges(&mut self) -> Result<()> {
         for (i, code) in self.code.iter().enumerate() {
             match code {
-                /*
                 LCode::Ternary(_, x, y) => {
                     //let block_id = self.entries[i];
                     //self.env.add_succ_op(block_id, *x);
@@ -569,7 +581,6 @@ impl Blockify {
                     //self.env.add_succ_static(decl_block_id, *entry_id);
                 }
 
-                */
                 LCode::Jump(target_id, _) => {
                     let block_id = self.entries[i];
                     self.env.add_succ_block(block_id, *target_id);
@@ -583,6 +594,7 @@ impl Blockify {
         }
         Ok(())
     }
+                */
 
     pub fn emit_sequence<E: Extra>(
         &mut self,
@@ -823,6 +835,37 @@ impl Blockify {
         return Err(Error::new(ParseError::Invalid));
     }
 
+    pub fn add_with_next<E: Extra>(
+        &mut self,
+        block_id: ValueId,
+        node: AstNode<E>,
+        v_next: ValueId,
+        b: &mut NodeBuilder<E>,
+        d: &mut Diagnostics,
+    ) -> Result<Option<ValueId>> {
+        self.env.push_next_block(v_next);
+        let result = self.add(block_id, node, b, d)?.unwrap();
+        self.env.pop_next_block();
+        let last_block_id = self.get_block_id(result);
+        let block = self.env.get_block(last_block_id);
+        println!(
+            "addnext: {:?}",
+            (block_id, last_block_id, block.last_value, block.terminator)
+        );
+        if !block.has_term() {
+            let scope_id = self.env.current_scope().unwrap();
+            self.push_code(
+                LCode::Jump(v_next, 0),
+                scope_id,
+                block_id,
+                AstType::Unit,
+                VarDefinitionSpace::Reg,
+            );
+        }
+
+        Ok(Some(result))
+    }
+
     pub fn add<E: Extra>(
         &mut self,
         block_id: ValueId,
@@ -1056,22 +1099,20 @@ impl Blockify {
                 let then_scope_id = self.env.new_scope(ScopeType::Block);
                 let v_then = self.push_label::<E>(name.into(), then_scope_id, &[], &[]);
                 self.env.enter_scope(then_scope_id);
-                self.env.push_next_block(v_next);
-                let _ = self.add(v_then, *then_expr, b, d)?;
-                self.env.pop_next_block();
+                let _ = self.add_with_next(v_then, *then_expr, v_next, b, d)?;
                 self.env.exit_scope();
-                self.ensure_next_in_cfg(then_scope_id, v_then, v_next, b);
+                //self.ensure_next_in_cfg(then_scope_id, v_then, v_next, b);
 
                 let v_else = if let Some(else_expr) = maybe_else_expr {
                     let name = b.s("else");
                     let else_scope_id = self.env.new_scope(ScopeType::Block);
                     let v_else = self.push_label::<E>(name.into(), else_scope_id, &[], &[]);
                     self.env.enter_scope(else_scope_id);
-                    self.env.push_next_block(v_next);
-                    let _v_else_result = self.add(v_else, *else_expr, b, d)?.unwrap();
-                    self.env.pop_next_block();
+                    let _v_else_result = self
+                        .add_with_next(v_else, *else_expr, v_next, b, d)?
+                        .unwrap();
                     self.env.exit_scope();
-                    self.ensure_next_in_cfg(else_scope_id, v_else, v_next, b);
+                    //self.ensure_next_in_cfg(else_scope_id, v_else, v_next, b);
                     v_else
                 } else {
                     v_next
@@ -1242,8 +1283,6 @@ impl Blockify {
                 self.env.pop_next_block();
                 self.env.exit_scope();
 
-                self.ensure_next_in_cfg(scope_id, v_loop, v_loop, b);
-
                 // enter loop
                 let code = LCode::Jump(v_loop, 0);
                 let v = self.push_code(
@@ -1253,6 +1292,9 @@ impl Blockify {
                     AstType::Unit,
                     VarDefinitionSpace::Reg,
                 );
+
+                //self.ensure_next_in_cfg(scope_id, v_loop, v_loop, b);
+
                 Ok(Some(v))
             }
 
@@ -1313,6 +1355,7 @@ impl Blockify {
         let leafs = self
             .get_graph(v_block, Some(Successor::BlockScope), b)
             .leafs(v_block);
+        println!("leafs: {:?}", (v_block, v_next, &leafs));
         for block_id in leafs {
             let last_value = self.env.get_block(block_id).last_value.unwrap();
             let last_code = self.get_code(last_value);

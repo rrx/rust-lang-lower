@@ -87,6 +87,7 @@ pub enum Successor {
 pub struct Block {
     pub(crate) count: usize,
     pub(crate) last_value: Option<ValueId>,
+    pub(crate) terminator: Option<ValueId>,
     pub(crate) succ: HashSet<(Successor, ValueId)>,
     pub(crate) pred: HashSet<ValueId>,
 }
@@ -96,9 +97,18 @@ impl Block {
         Self {
             count: 0,
             last_value: None,
+            terminator: None,
             pred: HashSet::new(),
             succ: HashSet::new(),
         }
+    }
+
+    pub fn has_term(&self) -> bool {
+        self.terminator.is_some()
+    }
+
+    pub fn set_term(&mut self, value_id: ValueId) {
+        self.terminator = Some(value_id);
     }
 
     pub fn add_pred(&mut self, parent_id: ValueId) {
