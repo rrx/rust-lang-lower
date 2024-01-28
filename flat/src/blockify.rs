@@ -835,6 +835,37 @@ impl Blockify {
         return Err(Error::new(ParseError::Invalid));
     }
 
+    pub fn add_loop<E: Extra>(
+        &mut self,
+        block_id: ValueId,
+        name: StringKey,
+        body: AstNode<E>,
+        b: &mut NodeBuilder<E>,
+        d: &mut Diagnostics,
+    ) -> Result<Option<ValueId>> {
+        let v_next = self.env.get_next_block().unwrap();
+
+        let loop_scope_id = self.env.new_scope(ScopeType::Loop);
+        let v_loop = self.push_label::<E>(name.into(), loop_scope_id, &[], &[]);
+        self.env.push_loop_blocks(Some(name), v_next, v_loop);
+        self.env.enter_scope(loop_scope_id);
+        let _ = self.add_with_next(v_loop, body, v_next, b, d)?;
+        self.env.exit_scope();
+
+        // enter loop
+        let code = LCode::Jump(v_loop, 0);
+        let scope_id = self.env.current_scope().unwrap();
+        let v = self.push_code(
+            code,
+            scope_id,
+            block_id,
+            AstType::Unit,
+            VarDefinitionSpace::Reg,
+        );
+
+        Ok(Some(v))
+    }
+
     pub fn add_with_next<E: Extra>(
         &mut self,
         block_id: ValueId,
@@ -1157,9 +1188,6 @@ impl Blockify {
 
                 let code = LCode::Ternary(v_c, v_then, v_else);
 
-                //self.env.add_succ_op(block_id, v_then);
-                //self.env.add_succ_op(block_id, v_else);
-
                 Ok(Some(self.push_code(
                     code,
                     scope_id,
@@ -1271,32 +1299,7 @@ impl Blockify {
                 }
             }
 
-            Ast::Loop(name, body) => {
-                let v_next = self.env.get_next_block().unwrap();
-
-                let loop_scope_id = self.env.new_scope(ScopeType::Loop);
-                let v_loop = self.push_label::<E>(name.into(), loop_scope_id, &[], &[]);
-                self.env.push_loop_blocks(Some(name), v_next, v_loop);
-                self.env.enter_scope(loop_scope_id);
-                self.env.push_next_block(v_next);
-                let _ = self.add(v_loop, *body, b, d)?;
-                self.env.pop_next_block();
-                self.env.exit_scope();
-
-                // enter loop
-                let code = LCode::Jump(v_loop, 0);
-                let v = self.push_code(
-                    code,
-                    scope_id,
-                    block_id,
-                    AstType::Unit,
-                    VarDefinitionSpace::Reg,
-                );
-
-                //self.ensure_next_in_cfg(scope_id, v_loop, v_loop, b);
-
-                Ok(Some(v))
-            }
+            Ast::Loop(name, body) => self.add_loop(block_id, name, *body, b, d),
 
             Ast::Break(maybe_name, args) => {
                 // args not implemented yet
@@ -1312,8 +1315,8 @@ impl Blockify {
                     );
                     Ok(Some(v))
                 } else {
-                    // mismatch name
-                    unimplemented!()
+                    d.push_diagnostic(error(&format!("Break without loop"), node.extra.get_span()));
+                    Err(Error::new(ParseError::Invalid))
                 }
             }
 
@@ -1332,7 +1335,11 @@ impl Blockify {
                     Ok(Some(v))
                 } else {
                     // mismatch name
-                    unimplemented!()
+                    d.push_diagnostic(error(
+                        &format!("Continue without loop"),
+                        node.extra.get_span(),
+                    ));
+                    Err(Error::new(ParseError::Invalid))
                 }
             }
 
@@ -1345,6 +1352,7 @@ impl Blockify {
         }
     }
 
+    /*
     pub fn ensure_next_in_cfg<E: Extra>(
         &mut self,
         scope_id: ScopeId,
@@ -1382,6 +1390,7 @@ impl Blockify {
             }
         }
     }
+    */
 
     /*
     pub fn save_graph<E: Extra>(&self, filename: &str, b: &NodeBuilder<E>) {
