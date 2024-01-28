@@ -313,6 +313,12 @@ impl<E: Extra> Ast<E> {
             let s = args.pop().unwrap().try_string().unwrap();
             let key = b.s(&s);
             Some(Self::Goto(key.into()))
+        } else if name == "static" {
+            println!("args: {:?}", args);
+            let Argument::Positional(value) = args.pop().unwrap();
+            let Argument::Positional(name_node) = args.pop().unwrap();
+            let name = b.s(&name_node.try_string().unwrap());
+            Some(Self::global(name, *value))
         } else if name == "label" {
             let rest = args.split_off(1);
             let s = args.pop().unwrap().try_string().unwrap();

@@ -131,7 +131,7 @@ impl Default for Layer {
 #[derive(Debug)]
 pub struct Environment<'a> {
     codemap: &'a CodeMap,
-    in_func: bool,
+    in_func: Vec<bool>,
     layers: Vec<Layer>,
     file_id: usize,
     unique: usize,
@@ -142,7 +142,7 @@ impl<'a> Environment<'a> {
         let start = Layer::default();
         Self {
             codemap,
-            in_func: false,
+            in_func: vec![],
             layers: vec![start],
             file_id,
             unique: 0,
@@ -171,16 +171,19 @@ impl<'a> Environment<'a> {
     }
 
     pub fn enter_func(&mut self) {
-        self.in_func = true;
+        self.in_func.push(true);
     }
 
     pub fn exit_func(&mut self) {
-        assert_eq!(self.in_func, true);
-        self.in_func = false;
+        self.in_func.pop().unwrap();
+    }
+
+    pub fn is_in_func(&self) -> bool {
+        self.in_func.len() > 0
     }
 
     pub fn define(&mut self, name: StringKey) {
-        let data = if self.in_func {
+        let data = if self.is_in_func() {
             Data::new_local()
         } else {
             Data::new_global()
@@ -472,7 +475,7 @@ impl<E: Extra> Parser<E> {
                             // name does not exist in scope
                             // Either create a global or do local, depending on context
                             env.define(name);
-                            if env.in_func {
+                            if env.is_in_func() {
                                 Ok(b.assign(name.into(), rhs))
                             } else {
                                 Ok(b.global(name, rhs))
@@ -665,11 +668,17 @@ impl<E: Extra> Parser<E> {
                                 }
 
                                 if let Some(mut ast) = b.build_builtin_from_name(&name, args) {
+                                    // define things appropriately
+                                    match ast.node {
+                                        Ast::Global(name, _) => {
+                                            env.define(name);
+                                        }
+                                        _ => (),
+                                    }
                                     let extra = env.extra(item.span);
                                     ast.extra = extra;
                                     Ok(ast)
                                 } else {
-                                    assert!(false);
                                     d.push_diagnostic(env.error(name.span, "Builtin not found"));
                                     Ok(b.error())
                                 }
@@ -872,13 +881,13 @@ impl<E: Extra> StarlarkParser<E> {
         let r = blockify.build_module(ast, b, d);
         blockify.dump(b);
         blockify.save_graph("out.dot", b);
-        let mut lower = flat::Lower::new(context);
+        let module_block_id = r?;
+        let mut lower = flat::Lower::new(context, module_block_id);
         let mut blocks = flat::LowerBlocks::new();
         blockify.lower_module(&mut lower, &mut blocks, module, b, d)?;
         for lib in blockify.shared_libraries() {
             self.link.add_library(&lib);
         }
-        r?;
         Ok(())
     }
 
@@ -1099,5 +1108,15 @@ pub(crate) mod tests {
     #[test]
     fn test_loop() {
         run_test_ir("../tests/loop.star", 0);
+    }
+
+    #[test]
+    fn test_nested_func() {
+        run_test_ir("../tests/nested_func.star", 0);
+    }
+
+    #[test]
+    fn test_static_var() {
+        run_test_ir("../tests/static_var.star", 0);
     }
 }

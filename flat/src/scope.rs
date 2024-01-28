@@ -185,6 +185,16 @@ impl Environment {
         self.scope_define(scope_id, name, value_id, ty, mem);
     }
 
+    pub fn static_scope_id(&self) -> ScopeId {
+        self.stack.get(0).unwrap().clone()
+    }
+
+    pub fn static_block_id(&self) -> ValueId {
+        let scope_id = self.stack.get(0).unwrap().clone();
+        let scope = self.get_scope(scope_id);
+        scope.blocks.get(0).unwrap().clone()
+    }
+
     pub fn get_scope(&self, scope_id: ScopeId) -> &ScopeLayer {
         self.scopes.get(scope_id.0 as usize).unwrap()
     }
@@ -294,6 +304,16 @@ impl Environment {
     pub fn get_loop_start_block(&self, maybe_name: Option<StringKey>) -> Option<ValueId> {
         if let Some(loop_scope) = self.get_loop_scope(maybe_name) {
             return Some(loop_scope.start_block);
+        }
+        None
+    }
+
+    pub fn resolve_static_block(&self) -> Option<ValueId> {
+        for scope_id in self.stack.iter().rev() {
+            let scope = self.get_scope(*scope_id);
+            if scope.scope_type == ScopeType::Static {
+                return scope.blocks.get(0).cloned();
+            }
         }
         None
     }

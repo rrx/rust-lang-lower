@@ -27,6 +27,7 @@ use lower::melior::{
     },
     Context,
 };
+use std::collections::VecDeque;
 
 use lower::{
     op,
@@ -38,6 +39,7 @@ use lower::{
     //StringKey,
     StringLabel,
     UnaryOperation,
+    VarDefinitionSpace,
 };
 
 use std::collections::HashMap;
@@ -134,13 +136,15 @@ impl<'c> LowerBlocks<'c> {
 pub struct Lower<'c> {
     context: &'c Context,
     index: IndexMap<ValueId, SymIndex>,
+    module_block_id: ValueId,
 }
 
 impl<'c> Lower<'c> {
-    pub fn new(context: &'c Context) -> Self {
+    pub fn new(context: &'c Context, module_block_id: ValueId) -> Self {
         Self {
             context,
             index: IndexMap::new(),
+            module_block_id,
         }
     }
 }
@@ -218,18 +222,37 @@ impl<'c> OpCollection<'c> {
 }
 
 impl Blockify {
-    pub fn resolve_value<'c>(&self, lower: &Lower<'c>, value_id: ValueId) -> Option<SymIndex> {
+    pub fn resolve_declaration<'c>(&self, value_id: ValueId) -> Option<ValueId> {
         let mut current = value_id;
         loop {
             let code = self.get_code(current);
             if let LCode::Value(next_value_id) = code {
                 current = *next_value_id;
-                continue;
             } else {
-                break;
+                return Some(current);
             }
         }
-        lower.index.get(&current).cloned()
+    }
+
+    pub fn resolve_value<'c>(&self, lower: &Lower<'c>, value_id: ValueId) -> Option<SymIndex> {
+        if let Some(v_decl) = self.resolve_declaration(value_id) {
+            //println!("resolve: {:?}", value_id);
+            let mut current = v_decl;
+            loop {
+                let code = self.get_code(current);
+                if let LCode::Value(next_value_id) = code {
+                    //println!("resolve: {:?}", next_value_id);
+                    current = *next_value_id;
+                    continue;
+                } else {
+                    break;
+                }
+            }
+            println!(":{:?}", lower.index);
+            lower.index.get(&current).cloned()
+        } else {
+            None
+        }
     }
 
     pub fn get_label_args<'c>(
@@ -438,15 +461,18 @@ impl Blockify {
             }
 
             LCode::DeclareFunction(maybe_entry_id) => {
+                self.env.dump(b);
+                let static_block_id = lower.module_block_id;
                 let block_id = self.get_block_id(v);
                 let key = self.names.get(&v).unwrap();
                 let ty = self.get_type(v);
 
+                //if static_block_id == block_id {
+                // global context
                 let op = build_declare_function(lower.context, *key, ty, location, b)?;
-                let c = blocks.blocks.get_mut(&block_id).unwrap();
+                let c = blocks.blocks.get_mut(&static_block_id).unwrap();
                 let index = c.push(op);
                 lower.index.insert(v, index);
-
                 if let Some(entry_id) = maybe_entry_id {
                     let op = blocks.op_ref(index);
                     op.set_attribute("llvm.emit_c_interface", &Attribute::unit(lower.context));
@@ -469,6 +495,16 @@ impl Blockify {
                         blocks.append_op(index, *block_id, 0);
                     }
                 }
+
+                //} else {
+                // local context
+                // nothing to do?
+                //let entry_id = maybe_entry_id.unwrap();
+                //let index = lower.index.get(&entry_id).unwrap();
+                //let code = LCode::Value(entry_id);
+                //self.push_code(code, scope_id, block_id, ty, VarDefinitionSpace::Reg);
+                //lower.index.insert(v, index);
+                //}
             }
 
             LCode::Call(v_f, args, _kwargs) => {
@@ -569,16 +605,17 @@ impl Blockify {
 
             LCode::Load(v_decl) => {
                 let block_id = self.get_block_id(v);
-                let decl_scope_id = self.get_scope_id(*v_decl);
-                let ast_ty = self.get_type(v);
+                let v_decl = self.resolve_declaration(*v_decl).unwrap();
+                let decl_scope_id = self.get_scope_id(v_decl);
                 let scope = self.env.get_scope(decl_scope_id);
-                let name = self.get_name(*v_decl);
 
                 if let ScopeType::Static = scope.scope_type {
+                    let ast_ty = self.get_type(v);
                     let lower_ty = op::from_type(lower.context, &ast_ty);
                     let memref_ty = MemRefType::new(lower_ty, &[], None, None);
                     // TODO: FIXME
-                    let static_name = b.resolve_label(name);
+                    let decl_name = self.get_name(v_decl);
+                    let static_name = b.resolve_label(decl_name);
                     let op = memref::get_global(lower.context, &static_name, memref_ty, location);
                     let c = blocks.blocks.get_mut(&block_id).unwrap();
                     let addr_index = c.push(op);
@@ -588,7 +625,7 @@ impl Blockify {
                     let index = c.push(op);
                     lower.index.insert(v, index);
                 } else {
-                    let decl_index = self.resolve_value(lower, *v_decl).unwrap();
+                    let decl_index = self.resolve_value(lower, v_decl).unwrap();
                     let r_addr = blocks.value0(decl_index);
                     let op = memref::load(r_addr, &[], location);
                     let c = blocks.blocks.get_mut(&block_id).unwrap();
@@ -836,6 +873,41 @@ impl Blockify {
         Ok(())
     }
 
+    pub fn lower_static_block<'c, E: Extra>(
+        &self,
+        module_block_id: ValueId,
+        lower: &mut Lower<'c>,
+        blocks: &mut LowerBlocks<'c>,
+        stack: &mut Vec<ValueId>,
+        b: &NodeBuilder<E>,
+        d: &mut Diagnostics,
+    ) -> Result<()> {
+        let mut current = module_block_id;
+        stack.push(module_block_id);
+        let mut values = VecDeque::new();
+        loop {
+            let code = self.get_code(current);
+            if let LCode::DeclareFunction(Some(_)) = code {
+                values.push_back(current);
+            } else {
+                values.push_front(current);
+            }
+            if let Some(next) = self.get_next(current) {
+                current = next;
+            } else {
+                break;
+            }
+        }
+
+        for current in values {
+            self.lower_code(lower, blocks, current, stack, b, d)?;
+        }
+
+        blocks.blocks.get_mut(&module_block_id).unwrap().complete = true;
+        stack.pop();
+        Ok(())
+    }
+
     pub fn lower_module<'c, E: Extra>(
         &self,
         lower: &mut Lower<'c>,
@@ -844,11 +916,12 @@ impl Blockify {
         b: &NodeBuilder<E>,
         d: &mut Diagnostics,
     ) -> Result<()> {
-        let block_id = ValueId(0);
+        //let block_id = ValueId(0);
+        let module_block_id = lower.module_block_id;
         let mut stack = vec![];
-        self.create_block(lower, blocks, block_id);
-        self.lower_block(block_id, lower, blocks, &mut stack, b, d)?;
-        let block = blocks.blocks.get_mut(&block_id).unwrap();
+        self.create_block(lower, blocks, module_block_id);
+        self.lower_static_block(module_block_id, lower, blocks, &mut stack, b, d)?;
+        let block = blocks.blocks.get_mut(&module_block_id).unwrap();
         for op in block.take_ops() {
             module.body().append_operation(op);
         }

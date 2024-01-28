@@ -1271,7 +1271,11 @@ impl Blockify {
 
             Ast::Global(name, expr) => {
                 if let Ast::Literal(lit) = expr.node {
+                    let static_scope_id = self.env.static_scope_id();
+                    let static_block_id = self.env.static_block_id();
+                    //let static_scope = self.env.get_scope(static_scope_id);
                     let scope = self.env.get_scope(scope_id);
+
                     let global_name = if let ScopeType::Static = scope.scope_type {
                         b.r(name).to_string()
                     } else {
@@ -1285,12 +1289,22 @@ impl Blockify {
                     let code = LCode::Const(lit);
                     let v = self.push_code_with_name(
                         code,
+                        static_scope_id,
+                        static_block_id,
+                        ast_ty.clone(),
+                        VarDefinitionSpace::Static,
+                        b.s(&global_name),
+                    );
+
+                    let v = self.push_code_with_name(
+                        LCode::Value(v),
                         scope_id,
                         block_id,
                         ast_ty,
                         VarDefinitionSpace::Static,
-                        b.s(&global_name),
+                        name,
                     );
+
                     Ok(Some(v))
                 } else {
                     unreachable!()
