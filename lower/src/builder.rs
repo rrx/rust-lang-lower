@@ -262,6 +262,7 @@ impl<E: Extra> NodeBuilder<E> {
         params: &[(StringKey, AstType)],
         return_type: AstType,
         body: Option<AstNode<E>>,
+        lambda: bool,
     ) -> AstNode<E> {
         let params = params
             .into_iter()
@@ -275,6 +276,7 @@ impl<E: Extra> NodeBuilder<E> {
         self.node(Ast::Definition(Definition {
             name,
             params,
+            lambda,
             return_type: return_type.into(),
             body: body.map(|b| b.into()),
         }))
@@ -291,8 +293,20 @@ impl<E: Extra> NodeBuilder<E> {
         let print_index = self.s("print_index".into());
         let print_float = self.s("print_float".into());
         vec![
-            self.definition(print_index, &[(a, AstType::Int)], AstType::Unit, None),
-            self.definition(print_float, &[(a, AstType::Float)], AstType::Unit, None),
+            self.definition(
+                print_index,
+                &[(a, AstType::Int)],
+                AstType::Unit,
+                None,
+                false,
+            ),
+            self.definition(
+                print_float,
+                &[(a, AstType::Float)],
+                AstType::Unit,
+                None,
+                false,
+            ),
         ]
     }
 
@@ -389,7 +403,7 @@ impl<E: Extra> NodeBuilder<E> {
         return_type: AstType,
         body: AstNode<E>,
     ) -> AstNode<E> {
-        self.definition(name, params, return_type, Some(body))
+        self.definition(name, params, return_type, Some(body), false)
     }
 
     pub fn ret(&self, node: Option<AstNode<E>>) -> AstNode<E> {

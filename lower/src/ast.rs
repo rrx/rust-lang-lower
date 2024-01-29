@@ -87,7 +87,7 @@ pub enum BinaryOperation {
     GTE,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BinOpNode<E> {
     pub node: BinaryOperation,
     extra: E,
@@ -98,7 +98,7 @@ impl<E> BinOpNode<E> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Argument<E> {
     Positional(Box<AstNode<E>>),
 }
@@ -131,16 +131,17 @@ pub struct ParameterNode<E> {
     pub extra: E,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Definition<E> {
     pub name: StringKey,
     pub params: Vec<ParameterNode<E>>,
     pub return_type: Box<AstType>,
     pub body: Option<Box<AstNode<E>>>,
+    pub lambda: bool,
     //pub payload: P::DefPayload,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Builtin {
     Assert,
     Print,
@@ -173,7 +174,7 @@ impl Builtin {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum DerefTarget {
     Offset(usize),
     Field(String),
@@ -186,7 +187,7 @@ pub enum Terminator {
     Return,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AstNodeBlock<E> {
     pub name: BlockId,
     //pub(crate) label: BlockLabel,
@@ -194,7 +195,7 @@ pub struct AstNodeBlock<E> {
     pub children: Vec<AstNode<E>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Ast<E> {
     BinaryOp(BinOpNode<E>, Box<AstNode<E>>, Box<AstNode<E>>),
     UnaryOp(UnaryOperation, Box<AstNode<E>>),
@@ -436,7 +437,7 @@ pub struct Span {
     pub end: CodeLocation,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AstNode<E> {
     pub node_id: NodeID,
     pub node: Ast<E>,
@@ -502,6 +503,17 @@ impl<E: Extra> AstNode<E> {
             Ast::Sequence(exprs) => exprs
                 .into_iter()
                 .map(|expr| expr.to_vec())
+                .flatten()
+                .collect(),
+            _ => vec![self],
+        }
+    }
+
+    pub fn to_vec_ref(&self) -> Vec<&AstNode<E>> {
+        match self.node {
+            Ast::Sequence(ref exprs) => exprs
+                .iter()
+                .map(|expr| expr.to_vec_ref())
                 .flatten()
                 .collect(),
             _ => vec![self],
@@ -824,7 +836,7 @@ impl<E> From<Argument<E>> for AstNode<E> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum AssignTarget {
     Identifier(StringKey),
     Alloca(StringKey),

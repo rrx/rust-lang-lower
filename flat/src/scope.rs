@@ -1,7 +1,7 @@
 use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
 
-use lower::{AstType, Definition, Extra, NodeBuilder, StringKey, StringLabel, VarDefinitionSpace};
+use lower::{AstType, Extra, NodeBuilder, StringKey, StringLabel, VarDefinitionSpace};
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 pub struct ValueId(pub(crate) u32);
@@ -45,6 +45,9 @@ pub struct LoopScope {
     start_block: ValueId,
 }
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+pub struct TemplateId(pub(crate) u32);
+
 #[derive(Debug)]
 pub struct ScopeLayer<E> {
     names: HashMap<StringKey, Data>,
@@ -55,7 +58,8 @@ pub struct ScopeLayer<E> {
     pub(crate) entry_block: Option<ValueId>,
     pub(crate) loop_block: Option<LoopScope>,
     pub(crate) scope_type: ScopeType,
-    pub(crate) lambdas: HashMap<StringLabel, Definition<E>>,
+    pub(crate) lambdas: HashMap<StringLabel, TemplateId>,
+    _e: std::marker::PhantomData<E>,
 }
 
 impl<E> ScopeLayer<E> {
@@ -70,6 +74,7 @@ impl<E> ScopeLayer<E> {
             loop_block: None,
             scope_type,
             lambdas: HashMap::new(),
+            _e: std::marker::PhantomData::default(),
         }
     }
 
@@ -353,12 +358,12 @@ impl<E: Extra> Environment<E> {
         None
     }
 
-    pub fn resolve_lambda(&self, name: StringLabel) -> Option<&Definition<E>> {
+    pub fn resolve_lambda_scope(&self, name: StringLabel) -> Option<ScopeId> {
         // resolve scope through the tree, starting at the current scope
         for scope_id in self.stack.iter().rev() {
             let scope = self.get_scope(*scope_id);
-            if let Some(data) = scope.lambdas.get(&name) {
-                return Some(data);
+            if let Some(_data) = scope.lambdas.get(&name) {
+                return Some(*scope_id);
             }
         }
         None
