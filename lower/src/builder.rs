@@ -2,8 +2,10 @@ use crate::ast::*;
 use crate::intern::StringPool;
 use crate::Diagnostics;
 use crate::{
-    ir::{IRArg, IRBlock, IRKind, IRNode, IRTypeSelect},
-    AstType, NodeIndex, PlaceId, StringKey,
+    //ir::{IRArg, IRBlock, IRKind, IRNode, IRTypeSelect},
+    AstType,
+    //NodeIndex, PlaceId,
+    StringKey,
 };
 use melior::{ir::Location, Context};
 
@@ -35,6 +37,7 @@ impl BlockId {
     }
 }
 
+/*
 #[derive(Debug, Clone, Copy)]
 pub struct NodeID(Option<u32>);
 impl NodeID {
@@ -42,6 +45,7 @@ impl NodeID {
         self.0.is_some()
     }
 }
+*/
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone, Copy)]
 pub enum StringLabel {
@@ -184,6 +188,7 @@ impl<E: Extra> NodeBuilder<E> {
         s
     }
 
+    /*
     pub fn identify_node(&mut self, ast: &mut AstNode<E>) {
         if let NodeID(Some(_)) = ast.node_id {
         } else {
@@ -196,6 +201,7 @@ impl<E: Extra> NodeBuilder<E> {
         self.current_node_id += 1;
         node_id
     }
+    */
 
     pub fn enter(&mut self, file_id: usize, filename: &str) {
         let begin = CodeLocation { pos: 0 };
@@ -238,7 +244,7 @@ impl<E: Extra> NodeBuilder<E> {
         AstNode {
             node,
             extra,
-            node_id: NodeID(None),
+            //node_id: NodeID(None),
         }
     }
 
@@ -478,11 +484,6 @@ impl<E: Extra> NodeBuilder<E> {
 
     pub fn module(&self, name: StringKey, body: AstNode<E>) -> AstNode<E> {
         let extra = body.extra.clone();
-        //let nb = AstNodeBlock {
-        //name: name.into(),
-        //params: vec![],
-        //children: vec![body.into()],
-        //};
         self.build(Ast::Module(name, body.into()), extra)
     }
 
@@ -510,6 +511,7 @@ impl<E: Extra> NodeBuilder<E> {
         self.build(Ast::Block(nb), extra)
     }
 
+    /*
     pub fn ir_module(&self, label: BlockId, index: NodeIndex, seq: Vec<IRNode>) -> IRNode {
         IRNode::new(
             IRKind::Module(IRBlock::new(index, label, vec![], seq)),
@@ -644,6 +646,7 @@ impl<E: Extra> NodeBuilder<E> {
             self.span.clone().unwrap(),
         )
     }
+    */
 }
 
 /*

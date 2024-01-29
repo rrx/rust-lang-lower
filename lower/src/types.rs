@@ -1,7 +1,7 @@
-use crate::{StringKey, SymIndex, VarDefinitionSpace};
+use crate::StringKey;
 use anyhow::Result;
 use ena::unify::*;
-use std::collections::HashMap;
+//use std::collections::HashMap;
 use thiserror::Error;
 
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
@@ -100,6 +100,7 @@ impl AstType {
     }
 }
 
+/*
 #[derive(Default)]
 pub struct TypeBuilder {
     types: HashMap<SymIndex, (AstType, VarDefinitionSpace)>,
@@ -118,6 +119,7 @@ impl TypeBuilder {
         self.types.insert(index, (ty, mem));
     }
 }
+*/
 
 impl UnifyKey for IntKey {
     type Value = AstType;

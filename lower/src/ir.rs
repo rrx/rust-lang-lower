@@ -968,29 +968,8 @@ impl IRNode {
     }
 }
 
+
 impl<E: Extra> AstNode<E> {
-    pub fn normalize<'c>(mut self, d: &mut Diagnostics, b: &mut NodeBuilder<E>) -> Self {
-        self.preprocess(d, b);
-        self.analyze(b);
-        self
-    }
-
-    pub fn preprocess<'c>(&mut self, d: &mut Diagnostics, b: &mut NodeBuilder<E>) {
-        match &mut self.node {
-            _ => (),
-        }
-        for child in self.children_mut() {
-            child.preprocess(d, b);
-        }
-    }
-
-    pub fn analyze<'c>(&mut self, b: &mut NodeBuilder<E>) {
-        b.identify_node(self);
-        for child in self.children_mut() {
-            child.analyze(b);
-        }
-    }
-
     pub fn lower_ir_module<'c>(
         self,
         env: &mut IREnvironment,

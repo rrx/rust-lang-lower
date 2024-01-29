@@ -1,16 +1,16 @@
 pub mod ast;
 pub mod builder;
-pub mod cfg;
+//pub mod cfg;
 pub mod compile;
 pub mod diagnostics;
-pub mod first_pass;
+//pub mod first_pass;
 pub mod intern;
-pub mod ir;
+//pub mod ir;
 pub mod link;
 //pub mod mlir;
 pub mod op;
-pub mod place;
-pub mod sort;
+//pub mod place;
+//pub mod sort;
 pub mod types;
 
 pub use ast::{
@@ -18,15 +18,27 @@ pub use ast::{
     ParameterNode, SimpleExtra, Span, UnaryOperation, VarDefinitionSpace,
 };
 //pub use blockify::{BlockId, Blockify};
-pub use builder::{BlockId, NodeBuilder, NodeID, StringLabel};
-pub use cfg::{CFGBlocks, CFGGraph, SymIndex};
+pub use builder::{
+    BlockId,
+    NodeBuilder,
+    //NodeID,
+    StringLabel,
+};
+//pub use cfg::{
+//CFGBlocks,
+//CFGGraph,
+//SymIndex};
 pub use compile::{default_context, default_pass_manager};
 pub use diagnostics::{Diagnostics, FileDB, ParseError};
 pub use intern::{InternKey, StringKey};
-pub use ir::{IRArg, IRBlockGraph, IRControlBlock, IREnvironment};
+//pub use ir::{IRArg, IRBlockGraph, IRControlBlock, IREnvironment};
 pub use link::LinkOptions;
-pub use place::{IRPlaceTable, PlaceId, PlaceNode};
-pub use types::{AstType, TypeBuilder, TypeUnify};
+//pub use place::{IRPlaceTable, PlaceId, PlaceNode};
+pub use types::{
+    AstType,
+    //TypeBuilder,
+    TypeUnify,
+};
 
 // re-export codespan
 pub use codespan_reporting::diagnostic::{Diagnostic, Label};

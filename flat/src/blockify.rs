@@ -817,7 +817,7 @@ impl<E: Extra> Blockify<E> {
         let entry_id = self.push_label(label_name, body_scope_id, &[], &def.params);
 
         // jump to entry
-        let v = self.push_code(
+        let _v = self.push_code(
             LCode::Jump(entry_id, args_size),
             scope_id,
             block_id,

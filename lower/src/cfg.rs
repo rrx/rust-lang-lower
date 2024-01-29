@@ -1,49 +1,57 @@
 //use crate::intern::StringKey;
-use crate::op;
-use crate::types::TypeBuilder;
+//use crate::op;
+//use crate::types::TypeBuilder;
 use crate::{
-    AstType, BlockId, Diagnostics, Extra, IRArg, IRBlockGraph, IRControlBlock, IRPlaceTable,
-    NodeBuilder, PlaceId, PlaceNode, StringLabel, VarDefinitionSpace,
+    AstType,
+    //BlockId, Diagnostics,
+    //Extra,
+    //IRArg, IRBlockGraph, IRControlBlock, IRPlaceTable,
+    //NodeBuilder,
+    //PlaceId,
+    //PlaceNode,
+    //StringLabel,
+    //VarDefinitionSpace,
 };
-use melior::ir::Location;
-use melior::{
-    ir::{Block, Operation, Value},
-    Context,
-};
-use petgraph::algo::dominators::simple_fast;
-use petgraph::graph::DiGraph;
-use petgraph::graph::NodeIndex;
-use std::collections::HashMap;
+//use melior::ir::Location;
+//use melior::{
+    //ir::{Block, Operation, Value},
+    //Context,
+//};
+//use petgraph::algo::dominators::simple_fast;
+//use petgraph::graph::DiGraph;
+//use petgraph::graph::NodeIndex;
+//use std::collections::HashMap;
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
-pub struct BlockIndex(NodeIndex, usize);
+//#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+//pub struct BlockIndex(NodeIndex, usize);
 
+/*
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
-pub enum SymIndex {
+pub enum SymIndex2 {
     Op(NodeIndex, usize),
     Arg(NodeIndex, usize),
     Def(NodeIndex, usize),
 }
 
-impl SymIndex {
+impl SymIndex2 {
     pub fn block(&self) -> NodeIndex {
         match self {
-            SymIndex::Op(block_index, _)
-            | SymIndex::Arg(block_index, _)
-            | SymIndex::Def(block_index, _) => *block_index,
+            SymIndex2::Op(block_index, _)
+            | SymIndex2::Arg(block_index, _)
+            | SymIndex2::Def(block_index, _) => *block_index,
         }
     }
 
     pub fn offset(&self) -> usize {
         match self {
-            SymIndex::Op(_, offset) | SymIndex::Arg(_, offset) | SymIndex::Def(_, offset) => {
+            SymIndex2::Op(_, offset) | SymIndex2::Arg(_, offset) | SymIndex2::Def(_, offset) => {
                 *offset
             }
         }
     }
 
     pub fn is_op(&self) -> bool {
-        if let SymIndex::Op(_, _) = self {
+        if let SymIndex2::Op(_, _) = self {
             true
         } else {
             false
@@ -51,7 +59,7 @@ impl SymIndex {
     }
 
     pub fn is_arg(&self) -> bool {
-        if let SymIndex::Arg(_, _) = self {
+        if let SymIndex2::Arg(_, _) = self {
             true
         } else {
             false
@@ -59,15 +67,18 @@ impl SymIndex {
     }
 }
 
+
 #[derive(Debug, Clone, Copy)]
 pub enum NodeType {
     Module,
     Function,
     Block,
 }
+*/
 
+/*
 #[derive(Debug)]
-pub struct OpCollection<'c> {
+pub struct OpCollection2<'c> {
     op_count: usize,
     arg_count: usize,
     pub(crate) block: Option<Block<'c>>,
@@ -78,7 +89,7 @@ pub struct OpCollection<'c> {
     places: HashMap<PlaceId, SymIndex>,
 }
 
-impl<'c> OpCollection<'c> {
+impl<'c> OpCollection2<'c> {
     pub fn new(block: Block<'c>) -> Self {
         Self {
             op_count: 0,
@@ -234,8 +245,9 @@ impl SymbolData {
         Self { ty }
     }
 }
+*/
 
-pub type CFGGraph<'c> = DiGraph<OpCollection<'c>, ()>;
+//pub type CFGGraph<'c> = DiGraph<OpCollection2<'c>, ()>;
 
 /*
 pub fn values_in_scope<'c, 'a>(
@@ -247,6 +259,7 @@ pub fn values_in_scope<'c, 'a>(
 }
 */
 
+/*
 pub struct CFGBlocks<'c> {
     root: NodeIndex,
     pub(crate) blocks: HashMap<NodeIndex, OpCollection<'c>>,
@@ -518,6 +531,7 @@ impl<'c> CFGBlocks<'c> {
         std::fs::write(filename, s).unwrap();
     }
 }
+*/
 
 /*
 pub struct CFG<E> {

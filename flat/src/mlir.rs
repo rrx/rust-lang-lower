@@ -464,7 +464,7 @@ impl<E: Extra> Blockify<E> {
             LCode::DeclareFunction(maybe_entry_id) => {
                 //self.env.dump(b);
                 let static_block_id = lower.module_block_id;
-                let block_id = self.get_block_id(v);
+                let _block_id = self.get_block_id(v);
                 let key = self.names.get(&v).unwrap();
                 let ty = self.get_type(v);
 

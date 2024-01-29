@@ -1,39 +1,31 @@
-use crate::ast::{
-    //BinOpNode,
-    BinaryOperation,
-    //Argument, AssignTarget, Ast, AstNode,
-    //Literal,
-    //Parameter, ParameterNode,
-    DerefTarget,
-    //Terminator,
-    VarDefinitionSpace,
-    //Builtin,
-};
+use crate::ast::BinaryOperation;
 //use crate::cfg::{values_in_scope};
 //use crate::ir;
+/*
 use crate::ir::{
     //IRGraph,
-    IRKind,
-    IRNode,
+    //IRKind,
+    //IRNode,
 };
+*/
 use crate::{
     Ast,
     AstNode,
     AstType,
-    CFGBlocks,
+    //CFGBlocks,
     Diagnostics,
     Extra,
     //IRPlaceTable,
     //LinkOptions,
     Literal,
-    NodeBuilder,
-    NodeIndex,
+    //NodeBuilder,
+    //NodeIndex,
     ParseError,
-    PlaceId,
-    StringLabel,
+    //PlaceId,
+    //StringLabel,
     //StringKey,
-    SymIndex,
-    TypeBuilder,
+    //SymIndex,
+    //TypeBuilder,
 };
 
 use anyhow::Error;
@@ -44,7 +36,7 @@ use melior::{
     dialect::{
         arith,
         //cf,
-        func,
+        //func,
         //llvm,
         memref,
         //ods, scf,
@@ -55,16 +47,21 @@ use melior::{
             //FlatSymbolRefAttribute,
             FloatAttribute,
             IntegerAttribute,
-            StringAttribute,
-            TypeAttribute,
+            //StringAttribute,
+            //TypeAttribute,
         },
-        r#type::{FunctionType, IntegerType, MemRefType, RankedTensorType},
+        r#type::{
+            //FunctionType,
+            IntegerType,
+            MemRefType,
+            RankedTensorType,
+        },
         Attribute,
         //Block,
-        Identifier,
+        //Identifier,
         //Module,
         Operation,
-        Region,
+        //Region,
         Type,
         TypeLike,
         Value,
@@ -243,6 +240,7 @@ pub fn emit_binop<'c, E: Extra>(
 }
 */
 
+/*
 pub fn emit_deref<'c>(
     index: SymIndex,
     location: Location<'c>,
@@ -278,6 +276,7 @@ pub fn emit_deref<'c>(
     //Err(Error::new(ParseError::Invalid))
     //}
 }
+*/
 
 /*
 pub fn emit_set_alloca<'c, E: Extra>(
@@ -356,6 +355,7 @@ pub fn emit_set_alloca<'c, E: Extra>(
 }
 */
 
+/*
 pub fn emit_noop<'c>(
     context: &'c Context,
     location: Location<'c>,
@@ -366,6 +366,7 @@ pub fn emit_noop<'c>(
     let current = blocks.blocks.get_mut(&block_index).unwrap();
     Ok(current.push(op))
 }
+*/
 
 /*
 pub fn emit_set_function<'c, E: Extra>(
@@ -454,6 +455,7 @@ pub fn emit_set_function<'c, E: Extra>(
 }
 */
 
+/*
 pub fn emit_set_static<'c, E: Extra>(
     context: &'c Context,
     sym_index: SymIndex,
@@ -511,7 +513,9 @@ pub fn emit_set_static<'c, E: Extra>(
         unreachable!()
     }
 }
+*/
 
+/*
 pub fn emit_declare_function<'c, E: Extra>(
     context: &'c Context,
     place_id: PlaceId,
@@ -610,6 +614,7 @@ pub fn emit_declare_static<'c, E: Extra>(
     types.set_type(index, ast_ty, VarDefinitionSpace::Static);
     Ok(index)
 }
+*/
 
 pub fn emit_static<'c, E: Extra>(
     context: &'c Context,
@@ -692,6 +697,7 @@ pub fn build_static_attribute<'c>(context: &'c Context, lit: &Literal) -> (Attri
     }
 }
 
+/*
 pub fn emit_static_ir<'c>(
     context: &'c Context,
     global_name: String,
@@ -737,6 +743,7 @@ pub fn emit_static_ir<'c>(
     };
     (op, ast_ty)
 }
+*/
 
 pub fn build_binop<'c, E: Extra>(
     context: &'c Context,

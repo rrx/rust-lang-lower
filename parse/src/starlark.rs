@@ -1,8 +1,6 @@
 use std::collections::HashMap;
-//use std::collections::VecDeque;
 use std::path::Path;
 
-//use anyhow::Error;
 use anyhow::Result;
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 
@@ -18,16 +16,13 @@ use lower::ast::{Ast, AstNode, CodeLocation};
 use lower::{
     Argument,
     AstType,
-    //CFGBlocks,
     Diagnostics,
     Extra,
-    IRPlaceTable,
+    //IRPlaceTable,
     LinkOptions,
     Module,
     NodeBuilder,
-    //ParseError,
     StringKey,
-    //TypeBuilder,
     TypeUnify,
 };
 
@@ -801,7 +796,6 @@ impl<E: Extra, P: syntax::ast::AstPayload> StatementReader<E, P> {
     }
 
     fn build(
-        //&mut self,
         parse: &mut Parser<E>,
         stmts: Vec<syntax::ast::AstStmtP<P>>,
         env: &mut Environment,
@@ -837,9 +831,6 @@ impl<E: Extra, P: syntax::ast::AstPayload> StatementReader<E, P> {
                 reader.push_stmt(stmt, parse, env, d, b)?;
             }
         }
-        //let mut exprs = vec![];
-        //let extra = env.extra(item.span);
-        //Ok(b.seq(exprs).set_extra(extra))
         Ok(b.seq(reader.seq.drain(..).collect()))
     }
 }
@@ -848,7 +839,7 @@ impl<E: Extra, P: syntax::ast::AstPayload> StatementReader<E, P> {
 pub struct StarlarkParser<E> {
     _e: std::marker::PhantomData<E>,
     link: LinkOptions,
-    place: IRPlaceTable,
+    //place: IRPlaceTable,
 }
 
 impl<E: Extra> StarlarkParser<E> {
@@ -856,7 +847,7 @@ impl<E: Extra> StarlarkParser<E> {
         Self {
             _e: std::marker::PhantomData::default(),
             link: LinkOptions::new(),
-            place: IRPlaceTable::new(),
+            //place: IRPlaceTable::new(),
         }
     }
 
@@ -893,88 +884,6 @@ impl<E: Extra> StarlarkParser<E> {
         }
         Ok(())
     }
-
-    /*
-    pub fn parse_module2<'c>(
-        &mut self,
-        filename: &str,
-        context: &'c lower::Context,
-        module: &mut Module<'c>,
-        b: &mut NodeBuilder<E>,
-        d: &mut Diagnostics,
-        verbose: bool,
-    ) -> Result<()> {
-        log::debug!("parsing: {}", filename);
-        use lower::IREnvironment;
-
-        let file_id = d.add_source(filename.to_string(), std::fs::read_to_string(filename)?);
-
-        b.enter(file_id, &filename);
-
-        let mut parser = Parser::new();
-        let module_key = b.s("module");
-        let ast: AstNode<E> = parser
-            .parse(Path::new(filename), None, module_key, file_id, d, b)?
-            .normalize(d, b);
-
-        ast.dump(b, 0);
-        let ast = ast.first_pass(b, d)?;
-        ast.dump(b, 0);
-
-        let mut env = IREnvironment::new();
-
-        // lower ast to ir
-        let r = ast.lower_ir_module(&mut env, &mut self.place, d, b);
-        d.dump();
-
-        if d.has_errors {
-            return Err(Error::new(ParseError::Invalid));
-        }
-
-        let (ir, _ty, root) = r?;
-
-        // Analyze
-        if verbose {
-            ir.dump(&self.place, &b, 0);
-            env.blocks.save_graph("lower.dot", b);
-        }
-
-        assert_eq!(0, env.stack_size());
-
-        let r = ir.build_graph(&mut self.place, &mut env, d, b);
-        d.dump();
-        let ir = r?;
-
-        if verbose {
-            env.blocks.save_graph("build.dot", b);
-        }
-
-        // lower to mlir
-        let mut types = TypeBuilder::new();
-        let mut blocks = CFGBlocks::new(root, env.blocks.g);
-        blocks.update_block_ir(context, root, b.s("module").into(), &[], &mut types, d);
-
-        let mut stack = vec![blocks.root()];
-        let r = ir.lower_mlir(
-            context,
-            &mut self.place,
-            d,
-            &mut types,
-            &mut blocks,
-            &mut stack,
-            b,
-            &mut self.link,
-        );
-        d.dump();
-        r?;
-
-        let data = blocks.get_mut(&blocks.root()).unwrap();
-        for op in data.take_ops() {
-            module.body().append_operation(op);
-        }
-        Ok(())
-    }
-    */
 
     pub fn exec_main<'c>(
         &self,
@@ -1020,24 +929,6 @@ pub(crate) mod tests {
     use lower::Location;
     use test_log::test;
 
-    /*
-    fn run_test_ir2(filename: &str, expected: i32) {
-        let mut p: StarlarkParser<SimpleExtra> = StarlarkParser::new();
-        let mut b = NodeBuilder::new();
-        let context = lower::default_context();
-        let mut d = Diagnostics::new();
-        let mut module = Module::new(Location::unknown(&context));
-        let r = p.parse_module2(filename, &context, &mut module, &mut b, &mut d, true);
-        d.dump();
-        r.unwrap();
-        let verify = module.as_operation().verify();
-        module.as_operation().dump();
-        assert!(verify);
-        let r = p.exec_main(&context, &mut module, "../target/debug/", true);
-        assert_eq!(expected, r);
-    }
-    */
-
     fn run_test_ir(filename: &str, expected: i32) {
         let mut p: StarlarkParser<SimpleExtra> = StarlarkParser::new();
         let mut b = NodeBuilder::new();
@@ -1056,55 +947,46 @@ pub(crate) mod tests {
 
     #[test]
     fn test_recursive() {
-        //run_test_ir2("../tests/test_recursive.star", 0);
         run_test_ir("../tests/test_recursive.star", 0);
     }
 
     #[test]
     fn test_goto() {
-        //run_test_ir2("../tests/goto.star", 0);
         run_test_ir("../tests/goto.star", 0);
     }
 
     #[test]
     fn test_bare() {
-        //run_test_ir2("../tests/bare.star", 0);
         run_test_ir("../tests/bare.star", 0);
     }
 
     #[test]
     fn test_fix() {
-        //run_test_ir2("../tests/fix.star", 0);
         run_test_ir("../tests/fix.star", 0);
     }
 
     #[test]
     fn test_nothing() {
-        //run_test_ir2("../tests/test.star", 0);
         run_test_ir("../tests/test.star", 0);
     }
 
     #[test]
     fn test_global() {
-        //run_test_ir2("../tests/test_global.star", 0);
         run_test_ir("../tests/test_global.star", 0);
     }
 
     #[test]
     fn test_static() {
-        //run_test_ir2("../tests/test_static.star", 0);
         run_test_ir("../tests/test_static.star", 0);
     }
 
     #[test]
     fn test_float() {
-        //run_test_ir2("../tests/test_float.star", 0);
         run_test_ir("../tests/test_float.star", 0);
     }
 
     #[test]
     fn test_cond() {
-        //run_test_ir2("../tests/test_cond.star", 0);
         run_test_ir("../tests/test_cond.star", 0);
     }
 
