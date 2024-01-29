@@ -1,7 +1,7 @@
 use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
 
-use lower::{AstType, Extra, NodeBuilder, StringKey, StringLabel, VarDefinitionSpace};
+use lower::{AstType, Definition, Extra, NodeBuilder, StringKey, StringLabel, VarDefinitionSpace};
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 pub struct ValueId(pub(crate) u32);
@@ -46,7 +46,7 @@ pub struct LoopScope {
 }
 
 #[derive(Debug)]
-pub struct ScopeLayer {
+pub struct ScopeLayer<E> {
     names: HashMap<StringKey, Data>,
     pub(crate) labels: HashMap<StringLabel, ValueId>,
     pub(crate) blocks: Vec<ValueId>,
@@ -55,9 +55,10 @@ pub struct ScopeLayer {
     pub(crate) entry_block: Option<ValueId>,
     pub(crate) loop_block: Option<LoopScope>,
     pub(crate) scope_type: ScopeType,
+    pub(crate) lambdas: HashMap<StringLabel, Definition<E>>,
 }
 
-impl ScopeLayer {
+impl<E> ScopeLayer<E> {
     pub fn new(scope_type: ScopeType) -> Self {
         Self {
             labels: HashMap::new(),
@@ -68,6 +69,7 @@ impl ScopeLayer {
             entry_block: None,
             loop_block: None,
             scope_type,
+            lambdas: HashMap::new(),
         }
     }
 
@@ -121,18 +123,20 @@ impl Block {
 }
 
 #[derive(Debug)]
-pub struct Environment {
+pub struct Environment<E> {
     pub(crate) stack: Vec<ScopeId>,
-    pub(crate) scopes: Vec<ScopeLayer>,
+    pub(crate) scopes: Vec<ScopeLayer<E>>,
     pub(crate) blocks: IndexMap<ValueId, Block>,
+    _e: std::marker::PhantomData<E>,
 }
 
-impl Environment {
+impl<E: Extra> Environment<E> {
     pub fn new() -> Self {
         Self {
             stack: vec![],
             scopes: vec![],
             blocks: IndexMap::new(),
+            _e: std::marker::PhantomData::default(),
         }
     }
 
@@ -195,11 +199,11 @@ impl Environment {
         scope.blocks.get(0).unwrap().clone()
     }
 
-    pub fn get_scope(&self, scope_id: ScopeId) -> &ScopeLayer {
+    pub fn get_scope(&self, scope_id: ScopeId) -> &ScopeLayer<E> {
         self.scopes.get(scope_id.0 as usize).unwrap()
     }
 
-    pub fn get_scope_mut(&mut self, scope_id: ScopeId) -> &mut ScopeLayer {
+    pub fn get_scope_mut(&mut self, scope_id: ScopeId) -> &mut ScopeLayer<E> {
         self.scopes.get_mut(scope_id.0 as usize).unwrap()
     }
 
@@ -349,7 +353,18 @@ impl Environment {
         None
     }
 
-    pub fn dump<E: Extra>(&self, b: &NodeBuilder<E>) {
+    pub fn resolve_lambda(&self, name: StringLabel) -> Option<&Definition<E>> {
+        // resolve scope through the tree, starting at the current scope
+        for scope_id in self.stack.iter().rev() {
+            let scope = self.get_scope(*scope_id);
+            if let Some(data) = scope.lambdas.get(&name) {
+                return Some(data);
+            }
+        }
+        None
+    }
+
+    pub fn dump(&self, b: &NodeBuilder<E>) {
         println!("current scope: {:?}", self.current_scope());
         for (block_id, block) in self.blocks.iter() {
             println!("block({:?}, {:?})", block_id, block);
@@ -368,6 +383,9 @@ impl Environment {
             }
             for block_id in layer.blocks.iter() {
                 println!("  block {:?}", block_id);
+            }
+            for (name, def) in layer.lambdas.iter() {
+                println!("  def {:?}", (b.resolve_label(*name), def));
             }
         }
     }

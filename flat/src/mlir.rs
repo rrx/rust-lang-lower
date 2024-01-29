@@ -221,7 +221,7 @@ impl<'c> OpCollection<'c> {
     }
 }
 
-impl Blockify {
+impl<E: Extra> Blockify<E> {
     pub fn resolve_declaration<'c>(&self, value_id: ValueId) -> Option<ValueId> {
         let mut current = value_id;
         loop {
@@ -248,7 +248,7 @@ impl Blockify {
                     break;
                 }
             }
-            println!(":{:?}", lower.index);
+            //println!(":{:?}", lower.index);
             lower.index.get(&current).cloned()
         } else {
             None
@@ -338,7 +338,7 @@ impl Blockify {
         }
     }
 
-    pub fn lower_code<'c, E: Extra>(
+    pub fn lower_code<'c>(
         &self,
         lower: &mut Lower<'c>,
         blocks: &mut LowerBlocks<'c>,
@@ -363,6 +363,7 @@ impl Blockify {
             }
 
             LCode::Jump(target, num_args) => {
+                //println!("jump: {:?}", (target, num_args));
                 let block_id = self.get_block_id(v);
                 let values = self.get_previous_values(v, *num_args as usize);
                 let indicies = values
@@ -461,7 +462,7 @@ impl Blockify {
             }
 
             LCode::DeclareFunction(maybe_entry_id) => {
-                self.env.dump(b);
+                //self.env.dump(b);
                 let static_block_id = lower.module_block_id;
                 let block_id = self.get_block_id(v);
                 let key = self.names.get(&v).unwrap();
@@ -508,6 +509,13 @@ impl Blockify {
             }
 
             LCode::Call(v_f, args, _kwargs) => {
+                // ensure calling static
+                if let VarDefinitionSpace::Static = self.get_mem(*v_f) {
+                } else {
+                    // not supported
+                    unreachable!()
+                }
+
                 // function to call
                 let key = self.get_name(*v_f);
                 let name = b.resolve_label(key);
@@ -849,7 +857,7 @@ impl Blockify {
         Ok(())
     }
 
-    pub fn lower_block<'c, E: Extra>(
+    pub fn lower_block<'c>(
         &self,
         block_id: ValueId,
         lower: &mut Lower<'c>,
@@ -873,7 +881,7 @@ impl Blockify {
         Ok(())
     }
 
-    pub fn lower_static_block<'c, E: Extra>(
+    pub fn lower_static_block<'c>(
         &self,
         module_block_id: ValueId,
         lower: &mut Lower<'c>,
@@ -908,7 +916,7 @@ impl Blockify {
         Ok(())
     }
 
-    pub fn lower_module<'c, E: Extra>(
+    pub fn lower_module<'c>(
         &self,
         lower: &mut Lower<'c>,
         blocks: &mut LowerBlocks<'c>,
