@@ -6,8 +6,8 @@ def main() -> int:
     return 1
   #r = f()
   #r = r - 1
-  r = f()
+  r = -f()
   #y = 1 + f()
-  #x = f() + 1
+  x = 1 + f() + 1
   return 0
   #return r

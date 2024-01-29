@@ -651,7 +651,7 @@ impl<E: Extra> Blockify<E> {
                         assert_eq!(current_is_term, is_term);
                         current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
                         value_id = Some(v);
-                        //println!("r5: {:?}", r);
+                        println!("r5: {:?}", r);
                     }
 
                     (false, NextSeqState::NextLabel(_key)) => {
@@ -683,7 +683,7 @@ impl<E: Extra> Blockify<E> {
                         assert_eq!(current_is_term, is_term);
                         current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
                         value_id = Some(v);
-                        //println!("r4: {:?}", r);
+                        println!("r4: {:?}", r);
                     }
 
                     (false, NextSeqState::Other) => {
@@ -692,10 +692,11 @@ impl<E: Extra> Blockify<E> {
                             //let v = r.value_id.unwrap();
                             current_is_term = r.is_term;
                             assert_eq!(current_is_term, is_term);
-                            current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
+                            current_block_id = Some(r.block_id);
+                            //current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
                             value_id = Some(v);
                         }
-                        //println!("r3: {:?}", r);
+                        println!("r3: {:?}", r);
                     }
 
                     (false, NextSeqState::Empty) => {
@@ -735,7 +736,7 @@ impl<E: Extra> Blockify<E> {
                         assert_eq!(current_is_term, is_term);
                         current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
                         value_id = Some(v);
-                        //println!("r2: {:?}", r);
+                        println!("r2: {:?}", r);
                         //}
                     }
 
@@ -747,7 +748,7 @@ impl<E: Extra> Blockify<E> {
                             self.add_with_next(current_block_id.unwrap(), expr, v_next, b, d)?;
                         let v = r.value_id.unwrap();
                         current_is_term = r.is_term;
-                        //println!("r1: {:?}", r);
+                        println!("r1: {:?}", r);
                         assert_eq!(current_is_term, is_term);
                         //self.env.pop_next_block();
                         // next block is the next block
@@ -771,7 +772,7 @@ impl<E: Extra> Blockify<E> {
         ))
     }
 
-    pub fn add_lambda(
+    pub fn add_lambda_and_call(
         &mut self,
         block_id: ValueId,
         template_id: TemplateId,
@@ -834,7 +835,7 @@ impl<E: Extra> Blockify<E> {
         //let v_next = if let Some(v_next) = self.env.get_next_block() {
         //v_next
         //} else {
-        let name = b.s("after_lambda");
+        let name = b.s("lambda_result");
         let v_next = self.push_label(name.into(), scope_id, &return_type_args, &[]);
         //v_next
         //};
@@ -998,24 +999,27 @@ impl<E: Extra> Blockify<E> {
     ) -> Result<AddResult> {
         self.env.push_next_block(v_next);
         let r = self.add(block_id, node, b, d)?;
+        let v_block = r.block_id;
         let v = r.value_id.unwrap();
         self.env.pop_next_block();
         let last_block_id = self.get_block_id(v);
+        assert_eq!(last_block_id, r.block_id);
         let block = self.env.get_block(last_block_id);
-        println!(
-            "addnext: {:?}",
-            (block_id, last_block_id, block.last_value, block.terminator)
-        );
+        //println!(
+        //"addnext: {:?}",
+        //(block_id, last_block_id, block.last_value, block.terminator)
+        //);
         if !block.has_term() {
+            //if r.is_term {
             let scope_id = self.env.current_scope().unwrap();
             let v = self.push_code(
                 LCode::Jump(v_next, 0),
                 scope_id,
-                block_id,
+                v_block,
                 AstType::Unit,
                 VarDefinitionSpace::Reg,
             );
-            Ok(AddResult::new(Some(v), true, block_id))
+            Ok(AddResult::new(Some(v), true, v_block))
         } else {
             Ok(r)
         }
@@ -1094,10 +1098,10 @@ impl<E: Extra> Blockify<E> {
     ) -> Result<AddResult> {
         let scope_id = self.env.current_scope().unwrap();
         let r = self.add(block_id, node, b, d)?;
-        println!("r: {:?}", r);
+        let v_block = r.block_id;
+        println!("rcheck: {:?}", r);
 
         let (v_block, v_expr) = if r.is_term {
-            let v_block = r.value_id.unwrap();
             let ty = AstType::Int;
             let v_expr = self.push_code(
                 LCode::Arg(0),
@@ -1109,9 +1113,11 @@ impl<E: Extra> Blockify<E> {
             (v_block, v_expr)
         } else {
             let v_expr = r.value_id.unwrap();
-            (block_id, v_expr)
+            (v_block, v_expr)
         };
-        Ok(AddResult::new(Some(v_expr), r.is_term, v_block))
+        let r = AddResult::new(Some(v_expr), r.is_term, v_block);
+        println!("rcheck2: {:?}", r);
+        Ok(r)
     }
 
     pub fn add(
@@ -1161,7 +1167,7 @@ impl<E: Extra> Blockify<E> {
                         let scope = self.env.get_scope(scope_id);
                         let label: StringLabel = (*ident).into();
                         let template_id = scope.lambdas.get(&label).unwrap();
-                        return self.add_lambda(block_id, *template_id, args, b, d);
+                        return self.add_lambda_and_call(block_id, *template_id, args, b, d);
                     }
 
                     return Self::error(&format!("Call name not found: {}", name), &node.extra, d);
@@ -1398,15 +1404,7 @@ impl<E: Extra> Blockify<E> {
                 let code = LCode::Op2(op.node, vx, vy);
                 let ty = self.get_type(vx);
                 let v = self.push_code(code, scope_id, v_block, ty, VarDefinitionSpace::Reg);
-                let v_next = self.env.get_next_block();
-                println!("next: {:?}", (v, v_next));
-                //if let Some(v_next) = v_next {
-                //self.push_code(LCode::Value(v), scope_id, v_block, self.get_type(v), VarDefinitionSpace::Reg);
-                //let v = self.push_code(LCode::Jump(v_next, 1), scope_id, v_block, AstType::Unit, VarDefinitionSpace::Reg);
-                //Ok(AddResult::new(Some(v), false, v_block))
-                //} else {
                 Ok(AddResult::new(Some(v), false, v_block))
-                //}
             }
 
             Ast::Goto(label) => {
