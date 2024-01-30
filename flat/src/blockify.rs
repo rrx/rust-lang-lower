@@ -1438,8 +1438,25 @@ impl<E: Extra> Blockify<E> {
             }
 
             Ast::Goto(label) => {
+                // Goto is terminal
                 let code = if let Some(target_value_id) = self.env.resolve_block(label.into()) {
-                    LCode::Jump(target_value_id, 0)
+                    let code = self.get_code(target_value_id);
+                    if let LCode::Label(args, _) = code {
+                        if *args > 0 {
+                            d.push_diagnostic(error(
+                                &format!(
+                                    "Goto target block {} requires {} arguments",
+                                    b.r(label),
+                                    args
+                                ),
+                                node.extra.get_span(),
+                            ));
+                            return Err(Error::new(ParseError::Invalid));
+                        }
+                        LCode::Jump(target_value_id, 0)
+                    } else {
+                        unreachable!()
+                    }
                 } else {
                     d.push_diagnostic(error(
                         &format!("Block name not found: {}", b.r(label)),
@@ -1458,6 +1475,8 @@ impl<E: Extra> Blockify<E> {
             }
 
             Ast::Return(maybe_expr) => {
+                // return is terminal, anything after it should be ignored.
+
                 if let Some(v_return) = self.env.resolve_return_block() {
                     let count = if maybe_expr.is_some() { 1 } else { 0 };
 
@@ -1541,12 +1560,14 @@ impl<E: Extra> Blockify<E> {
             }
 
             Ast::Loop(name, body) => {
+                // loop is a terminal, so we are expecting a next block
                 self.add_loop(block_id, maybe_next.unwrap(), name, *body, b, d)
             }
 
             Ast::Break(maybe_name, args) => {
                 // args not implemented yet
                 assert_eq!(args.len(), 0);
+                // loop up loop blocks by name
                 if let Some(v_next) = self.env.get_loop_next_block(maybe_name) {
                     let code = LCode::Jump(v_next, 0);
                     let v = self.push_code(
@@ -1566,6 +1587,7 @@ impl<E: Extra> Blockify<E> {
             Ast::Continue(maybe_name, args) => {
                 // args not implemented yet
                 assert_eq!(args.len(), 0);
+                // loop up loop blocks by name
                 if let Some(v_start) = self.env.get_loop_start_block(maybe_name) {
                     let code = LCode::Jump(v_start, 0);
                     let v = self.push_code(
