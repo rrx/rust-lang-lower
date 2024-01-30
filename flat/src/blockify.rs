@@ -8,29 +8,9 @@ use std::collections::HashMap;
 use std::collections::VecDeque;
 
 use lower::{
-    ast::AssignTarget,
-    ast::Builtin,
-    //op,
-    Argument,
-    Ast,
-    AstNode,
-    AstType,
-    BinaryOperation,
-    Definition,
-    Diagnostic,
-    Diagnostics,
-    Extra,
-    Label,
-    LinkOptions,
-    Literal,
-    NodeBuilder,
-    ParameterNode,
-    ParseError,
-    Span,
-    StringKey,
-    StringLabel,
-    UnaryOperation,
-    VarDefinitionSpace,
+    ast::AssignTarget, ast::Builtin, Argument, Ast, AstNode, AstType, BinaryOperation, Definition,
+    Diagnostic, Diagnostics, Extra, Label, LinkOptions, Literal, NodeBuilder, ParameterNode,
+    ParseError, Span, StringKey, StringLabel, UnaryOperation, VarDefinitionSpace,
 };
 
 use crate::{Environment, ScopeId, ScopeType, Successor, TemplateId, ValueId};
@@ -649,7 +629,9 @@ impl<E: Extra> Blockify<E> {
                         let v = r.value_id.unwrap();
                         current_is_term = r.is_term;
                         assert_eq!(current_is_term, is_term);
-                        current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
+                        //current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
+                        current_block_id = Some(r.block_id);
+                        //assert_eq!(current_block_id.unwrap(), r.block_id);
                         value_id = Some(v);
                         println!("r5: {:?}", r);
                     }
@@ -681,7 +663,9 @@ impl<E: Extra> Blockify<E> {
                         let v = r.value_id.unwrap();
                         current_is_term = r.is_term;
                         assert_eq!(current_is_term, is_term);
-                        current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
+                        //current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
+                        current_block_id = Some(r.block_id);
+                        //assert_eq!(current_block_id.unwrap(), r.block_id);
                         value_id = Some(v);
                         println!("r4: {:?}", r);
                     }
@@ -691,9 +675,11 @@ impl<E: Extra> Blockify<E> {
                         if let Some(v) = r.value_id {
                             //let v = r.value_id.unwrap();
                             current_is_term = r.is_term;
-                            assert_eq!(current_is_term, is_term);
-                            current_block_id = Some(r.block_id);
+                            //assert_eq!(current_is_term, is_term);
+                            //current_block_id = Some(r.block_id);
                             //current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
+                            current_block_id = Some(r.block_id);
+                            //assert_eq!(current_block_id.unwrap(), r.block_id);
                             value_id = Some(v);
                         }
                         println!("r3: {:?}", r);
@@ -734,7 +720,9 @@ impl<E: Extra> Blockify<E> {
                         let v = r.value_id.unwrap();
                         current_is_term = r.is_term;
                         assert_eq!(current_is_term, is_term);
-                        current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
+                        //current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
+                        current_block_id = Some(r.block_id);
+                        //assert_eq!(current_block_id.unwrap(), r.block_id);
                         value_id = Some(v);
                         println!("r2: {:?}", r);
                         //}
@@ -743,16 +731,16 @@ impl<E: Extra> Blockify<E> {
                     (true, NextSeqState::Other) => {
                         let name = b.s("next");
                         let v_next = self.push_label(name.into(), scope_id, &[], &[]);
-                        //self.env.push_next_block(v_next);
                         let r =
                             self.add_with_next(current_block_id.unwrap(), expr, v_next, b, d)?;
                         let v = r.value_id.unwrap();
                         current_is_term = r.is_term;
                         println!("r1: {:?}", r);
                         assert_eq!(current_is_term, is_term);
-                        //self.env.pop_next_block();
                         // next block is the next block
                         current_block_id = Some(v_next);
+                        //current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
+                        //assert_eq!(current_block_id.unwrap(), r.block_id);
                         value_id = Some(v);
                     }
                 }
@@ -1003,7 +991,7 @@ impl<E: Extra> Blockify<E> {
         let v = r.value_id.unwrap();
         self.env.pop_next_block();
         let last_block_id = self.get_block_id(v);
-        assert_eq!(last_block_id, r.block_id);
+        //assert_eq!(last_block_id, r.block_id);
         let block = self.env.get_block(last_block_id);
         //println!(
         //"addnext: {:?}",
@@ -1327,13 +1315,18 @@ impl<E: Extra> Blockify<E> {
             }
 
             Ast::Conditional(condition, then_expr, maybe_else_expr) => {
+                //let name = b.s("next");
+                //let v_next = self.push_label(name.into(), scope_id, &[], &[]);
+                //self.env.push_next_block(v_next);
+
                 let v_next = self.env.get_next_block().unwrap();
 
                 let name = b.s("then");
                 let then_scope_id = self.env.new_scope(ScopeType::Block);
                 let v_then = self.push_label(name.into(), then_scope_id, &[], &[]);
                 self.env.enter_scope(then_scope_id);
-                let _ = self.add_with_next(v_then, *then_expr, v_next, b, d)?;
+                let r = self.add_with_next(v_then, *then_expr, v_next, b, d)?;
+                let _ = r.value_id.unwrap();
                 self.env.exit_scope();
 
                 let v_else = if let Some(else_expr) = maybe_else_expr {
@@ -1360,7 +1353,7 @@ impl<E: Extra> Blockify<E> {
                     VarDefinitionSpace::Reg,
                 );
 
-                Ok(AddResult::new(Some(v), true, block_id))
+                Ok(AddResult::new(Some(v), true, v_next))
             }
 
             Ast::Ternary(c, x, y) => {
