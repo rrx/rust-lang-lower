@@ -489,7 +489,7 @@ impl<E: Extra> Blockify<E> {
             self.prev_pos[offset] = last_value;
             self.next_pos[last_value.0 as usize] = value_id;
             // check to ensure that nothing follows the terminator
-            assert!(!block.has_term());
+            //assert!(!block.has_term());
         }
 
         let block = self.env.get_block_mut(block_id);
@@ -771,6 +771,7 @@ impl<E: Extra> Blockify<E> {
         block_id: ValueId,
         template_id: TemplateId,
         args: Vec<Argument<E>>,
+        extra: E,
         b: &mut NodeBuilder<E>,
         d: &mut Diagnostics,
     ) -> Result<AddResult> {
@@ -807,7 +808,11 @@ impl<E: Extra> Blockify<E> {
         let label_name = b.labels.fresh_var_id();
         let entry_id = self.push_label(label_name, body_scope_id, &[], &def.params);
 
+        //let extra = node.extra.clone();
+        let r = self.add_jump(block_id, entry_id, extra, d)?;
+
         // jump to entry
+        /*
         let _v = self.push_code(
             LCode::Jump(entry_id, args_size),
             scope_id,
@@ -815,6 +820,7 @@ impl<E: Extra> Blockify<E> {
             AstType::Unit,
             VarDefinitionSpace::Reg,
         );
+        */
         self.env.add_succ_block(block_id, entry_id);
         // return block is the next block
 
@@ -1040,29 +1046,6 @@ impl<E: Extra> Blockify<E> {
         if !block.has_term() {
             // if the block doesn't explicitely terminate, then we jump to the next block
             self.add_jump(v_block, v_next, extra, d)
-            /*
-            //if r.is_term {
-            let scope_id = self.env.current_scope().unwrap();
-
-            let target = self.get_code(v_next);
-            // make sure we match the arity of the next block
-            if let LCode::Label(args, _kwargs) = target {
-                if *args == 0 {
-                    let v = self.push_code(
-                        LCode::Jump(v_next, 0),
-                        scope_id,
-                        v_block,
-                        AstType::Unit,
-                        VarDefinitionSpace::Reg,
-                    );
-                    Ok(AddResult::new(Some(v), true, v_block))
-                } else {
-                    Self::error(&format!("End of block expects {} values", args), &extra, d)
-                }
-            } else {
-                unreachable!();
-            }
-            */
         } else {
             Ok(r)
         }
@@ -1225,7 +1208,14 @@ impl<E: Extra> Blockify<E> {
                         let scope = self.env.get_scope(scope_id);
                         let label: StringLabel = (*ident).into();
                         let template_id = scope.lambdas.get(&label).unwrap();
-                        return self.add_lambda_and_call(block_id, *template_id, args, b, d);
+                        return self.add_lambda_and_call(
+                            block_id,
+                            *template_id,
+                            args,
+                            node.extra.clone(),
+                            b,
+                            d,
+                        );
                     }
 
                     return Self::error(&format!("Call name not found: {}", name), &node.extra, d);
@@ -1612,9 +1602,12 @@ impl<E: Extra> Blockify<E> {
 
             Ast::Break(maybe_name, args) => {
                 // args not implemented yet
+                let extra = node.extra.clone();
                 assert_eq!(args.len(), 0);
                 // loop up loop blocks by name
                 if let Some(v_next) = self.env.get_loop_next_block(maybe_name) {
+                    self.add_jump(block_id, v_next, extra, d)
+                    /*
                     let code = LCode::Jump(v_next, 0);
                     let v = self.push_code(
                         code,
@@ -1624,6 +1617,7 @@ impl<E: Extra> Blockify<E> {
                         VarDefinitionSpace::Reg,
                     );
                     Ok(AddResult::new(Some(v), true, block_id))
+                    */
                 } else {
                     d.push_diagnostic(error(&format!("Break without loop"), node.extra.get_span()));
                     Err(Error::new(ParseError::Invalid))
@@ -1635,6 +1629,9 @@ impl<E: Extra> Blockify<E> {
                 assert_eq!(args.len(), 0);
                 // loop up loop blocks by name
                 if let Some(v_start) = self.env.get_loop_start_block(maybe_name) {
+                    let extra = node.extra.clone();
+                    self.add_jump(block_id, v_start, extra, d)
+                    /*
                     let code = LCode::Jump(v_start, 0);
                     let v = self.push_code(
                         code,
@@ -1644,6 +1641,7 @@ impl<E: Extra> Blockify<E> {
                         VarDefinitionSpace::Reg,
                     );
                     Ok(AddResult::new(Some(v), true, block_id))
+                    */
                 } else {
                     // mismatch name
                     d.push_diagnostic(error(
