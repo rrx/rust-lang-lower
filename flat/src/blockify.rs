@@ -1096,6 +1096,7 @@ impl<E: Extra> Blockify<E> {
         )))
     }
 
+    /*
     pub fn add_check(
         &mut self,
         block_id: ValueId,
@@ -1135,6 +1136,7 @@ impl<E: Extra> Blockify<E> {
         println!("rcheck2: {:?}", r);
         Ok(r)
     }
+    */
 
     pub fn add(
         &mut self,
@@ -1242,7 +1244,7 @@ impl<E: Extra> Blockify<E> {
                     AssignTarget::Identifier(name) | AssignTarget::Alloca(name) => name,
                 };
 
-                let r = self.add_check(block_id, maybe_next, *expr, b, d)?;
+                let r = self.add(block_id, maybe_next, *expr, b, d)?;
 
                 let v_expr = r.value_id.unwrap();
                 let v_block = r.block_id;
@@ -1331,7 +1333,7 @@ impl<E: Extra> Blockify<E> {
             }
 
             Ast::UnaryOp(op, x) => {
-                let r = self.add_check(block_id, maybe_next, *x, b, d)?;
+                let r = self.add(block_id, maybe_next, *x, b, d)?;
                 let v_block = r.block_id;
                 let vx = r.value_id.unwrap();
                 let code = LCode::Op1(op, vx);
@@ -1420,10 +1422,10 @@ impl<E: Extra> Blockify<E> {
             }
 
             Ast::BinaryOp(op, x, y) => {
-                let r = self.add_check(block_id, maybe_next, *x, b, d)?;
+                let r = self.add(block_id, maybe_next, *x, b, d)?;
                 let vx = r.value_id.unwrap();
                 let v_block = r.block_id;
-                let r = self.add_check(v_block, maybe_next, *y, b, d)?;
+                let r = self.add(v_block, maybe_next, *y, b, d)?;
                 let vy = r.value_id.unwrap();
                 let v_block = r.block_id;
                 let code = LCode::Op2(op.node, vx, vy);
