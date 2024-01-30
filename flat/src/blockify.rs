@@ -101,7 +101,7 @@ pub enum NextSeqState {
 
 impl NextSeqState {
     pub fn get<E: Extra>(
-        env: &Environment<E>,
+        _env: &Environment<E>,
         node: &AstNode<E>,
         next_node: Option<&AstNode<E>>,
     ) -> (bool, Self) {
@@ -116,6 +116,8 @@ impl NextSeqState {
             Ast::Break(_, _) => true,
             Ast::Continue(_, _) => true,
             Ast::Goto(_) => true,
+            /*
+            //Ast::Call(_, _, _) => famatch expr.node {
             Ast::Call(ref expr, _, _) => match expr.node {
                 Ast::Identifier(ident) => {
                     if let Some(_) = env.resolve(ident) {
@@ -130,7 +132,7 @@ impl NextSeqState {
                     unimplemented!("{:?}", expr.node);
                 }
             },
-
+            */
             _ => false,
         };
 
