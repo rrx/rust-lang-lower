@@ -48,8 +48,8 @@ pub enum LCode {
     Declare,
     DeclareFunction(Option<ValueId>), // optional entry block
     Value(ValueId),
-    Arg(u8),            // get the value of a positional arg
-    NamedParameter(u8), // get the value of a positional arg
+    Arg(u8), // get the value of a positional arg
+    //NamedParameter(u8), // get the value of a positional arg
     Const(Literal),
     Op1(UnaryOperation, ValueId),
     Op2(BinaryOperation, ValueId, ValueId),
@@ -278,11 +278,10 @@ impl<E: Extra> Blockify<E> {
                 format!("jump({}, {})", value_id.0, args,)
             }
 
-            LCode::NamedParameter(pos) => {
-                let key = self.names.get(&v).unwrap();
-                format!("namedparam({}, {})", pos, b.resolve_label(*key))
-            }
-
+            //LCode::NamedParameter(pos) => {
+            //let key = self.names.get(&v).unwrap();
+            //format!("namedparam({}, {})", pos, b.resolve_label(*key))
+            //}
             LCode::Const(Literal::String(s)) => {
                 format!("String({})", s)
             }
@@ -541,7 +540,7 @@ impl<E: Extra> Blockify<E> {
         block.last_value = Some(block_id);
         for (i, p) in kwargs.iter().enumerate() {
             let v = self.push_code(
-                LCode::NamedParameter(i as u8),
+                LCode::Arg(i as u8),
                 scope_id,
                 block_id,
                 p.ty.clone(),

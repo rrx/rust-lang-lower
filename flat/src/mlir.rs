@@ -356,7 +356,8 @@ impl<E: Extra> Blockify<E> {
                 assert!(blocks.blocks.get(&v).is_some());
             }
 
-            LCode::Arg(pos) | LCode::NamedParameter(pos) => {
+            LCode::Arg(pos) => {
+                //| LCode::NamedParameter(pos) => {
                 let block_id = self.get_block_id(v);
                 let index = SymIndex::Arg(block_id, *pos as usize);
                 lower.index.insert(v, index);
