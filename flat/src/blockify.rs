@@ -49,7 +49,6 @@ pub enum LCode {
     DeclareFunction(Option<ValueId>), // optional entry block
     Value(ValueId),
     Arg(u8), // get the value of a positional arg
-    //NamedParameter(u8), // get the value of a positional arg
     Const(Literal),
     Op1(UnaryOperation, ValueId),
     Op2(BinaryOperation, ValueId, ValueId),
@@ -256,6 +255,7 @@ impl<E: Extra> Blockify<E> {
                     self.get_type(v)
                 )
             }
+
             LCode::DeclareFunction(maybe_entry) => {
                 let name = b.resolve_label(*self.names.get(&v).unwrap());
                 if let Some(entry_id) = maybe_entry {
@@ -264,6 +264,7 @@ impl<E: Extra> Blockify<E> {
                     format!("declare_function({})", name)
                 }
             }
+
             LCode::Label(args, kwargs) => {
                 if let Some(key) = self.names.get(&v) {
                     format!("label({}, {}, {})", b.resolve_label(*key), args, kwargs,)
@@ -271,17 +272,15 @@ impl<E: Extra> Blockify<E> {
                     format!("label(-, {}, {})", args, kwargs,)
                 }
             }
+
             LCode::Goto(block_id) => {
                 format!("goto({})", b.r(*block_id))
             }
+
             LCode::Jump(value_id, args) => {
                 format!("jump({}, {})", value_id.0, args,)
             }
 
-            //LCode::NamedParameter(pos) => {
-            //let key = self.names.get(&v).unwrap();
-            //format!("namedparam({}, {})", pos, b.resolve_label(*key))
-            //}
             LCode::Const(Literal::String(s)) => {
                 format!("String({})", s)
             }
@@ -782,24 +781,9 @@ impl<E: Extra> Blockify<E> {
         // get clone and push back
         let mut def = self.get_template(template_id).clone();
 
-        let params = def.params.iter().map(|p| p.ty.clone()).collect::<Vec<_>>();
+        //let params = def.params.iter().map(|p| p.ty.clone()).collect::<Vec<_>>();
 
         let args_size = args.len() as u8;
-        let mut values = vec![];
-        let mut v_block = block_id;
-        for (a, ty) in args.into_iter().zip(params.iter()) {
-            match a {
-                Argument::Positional(expr) => {
-                    let r = self.add(v_block, None, *expr, b, d)?;
-                    let v = r.value_id.unwrap();
-                    v_block = r.block_id;
-                    values.push((LCode::Value(v), ty.clone(), r.block_id));
-                }
-            }
-        }
-        for (code, ty, _v_block) in values {
-            self.push_code(code, scope_id, block_id, ty, VarDefinitionSpace::Reg);
-        }
 
         let body = def.body.take().unwrap();
         let body_scope_id = self.env.new_scope(ScopeType::Block);
@@ -808,19 +792,16 @@ impl<E: Extra> Blockify<E> {
         let label_name = b.labels.fresh_var_id();
         let entry_id = self.push_label(label_name, body_scope_id, &[], &def.params);
 
-        //let extra = node.extra.clone();
-        let r = self.add_jump(block_id, entry_id, extra, d)?;
+        let mut jump_args = vec![];
+        for a in args.into_iter() {
+            let Argument::Positional(expr) = a;
+            jump_args.push(*expr);
+        }
 
+        //let extra = node.extra.clone();
+        assert_eq!(args_size as usize, jump_args.len());
         // jump to entry
-        /*
-        let _v = self.push_code(
-            LCode::Jump(entry_id, args_size),
-            scope_id,
-            v_block,
-            AstType::Unit,
-            VarDefinitionSpace::Reg,
-        );
-        */
+        let _r = self.add_jump(block_id, entry_id, jump_args, extra, b, d)?;
         self.env.add_succ_block(block_id, entry_id);
         // return block is the next block
 
@@ -831,10 +812,6 @@ impl<E: Extra> Blockify<E> {
             _ => vec![return_type.clone()],
         };
 
-        // next block
-        //let v_next = if let Some(v_next) = self.env.get_next_block() {
-        //v_next
-        //} else {
         let name = b.s("lambda_result");
         let v_next = self.push_label(name.into(), scope_id, &return_type_args, &[]);
 
@@ -985,18 +962,7 @@ impl<E: Extra> Blockify<E> {
         self.env.exit_scope();
 
         // enter loop
-        let r = self.add_jump(block_id, v_loop, extra, d)?;
-        /*
-        let code = LCode::Jump(v_loop, 0);
-        let scope_id = self.env.current_scope().unwrap();
-        let v = self.push_code(
-            code,
-            scope_id,
-            block_id,
-            AstType::Unit,
-            VarDefinitionSpace::Reg,
-        );
-        */
+        let r = self.add_jump(block_id, v_loop, vec![], extra, b, d)?;
         Ok(AddResult::new(Some(r.value_id.unwrap()), true, v_next))
     }
 
@@ -1004,27 +970,66 @@ impl<E: Extra> Blockify<E> {
         &mut self,
         block_id: ValueId,
         target_id: ValueId,
+        jump_args: Vec<AstNode<E>>,
         extra: E,
+        b: &mut NodeBuilder<E>,
+        d: &mut Diagnostics,
+    ) -> Result<AddResult> {
+        let target = self.get_code(target_id);
+        // make sure we match the arity of the next block
+        let args = if let LCode::Label(args, _) = target {
+            args
+        } else {
+            unreachable!();
+        };
+        self._add_jump(block_id, target_id, *args as usize, jump_args, extra, b, d)
+    }
+
+    pub fn _add_jump(
+        &mut self,
+        block_id: ValueId,
+        target_id: ValueId,
+        num_args: usize,
+        jump_args: Vec<AstNode<E>>,
+        extra: E,
+        b: &mut NodeBuilder<E>,
         d: &mut Diagnostics,
     ) -> Result<AddResult> {
         let scope_id = self.env.current_scope().unwrap();
-        let target = self.get_code(target_id);
-        // make sure we match the arity of the next block
-        if let LCode::Label(args, _kwargs) = target {
-            if *args == 0 {
-                let v = self.push_code(
-                    LCode::Jump(target_id, 0),
-                    scope_id,
-                    block_id,
-                    AstType::Unit,
-                    VarDefinitionSpace::Reg,
-                );
-                Ok(AddResult::new(Some(v), true, target_id))
-            } else {
-                Self::error(&format!("End of block expects {} values", args), &extra, d)
-            }
+        let count = jump_args.len();
+
+        let mut values = vec![];
+        for arg in jump_args.into_iter() {
+            let r = self.add(block_id, None, arg, b, d)?;
+            let expr_value_id = r.value_id.unwrap();
+            values.push(expr_value_id);
+        }
+
+        for value_id in values {
+            self.push_code(
+                LCode::Value(value_id),
+                scope_id,
+                block_id,
+                self.get_type(value_id),
+                VarDefinitionSpace::Reg,
+            );
+        }
+
+        if num_args as usize == count {
+            let v = self.push_code(
+                LCode::Jump(target_id, num_args as u8),
+                scope_id,
+                block_id,
+                AstType::Unit,
+                VarDefinitionSpace::Reg,
+            );
+            Ok(AddResult::new(Some(v), true, block_id))
         } else {
-            unreachable!();
+            Self::error(
+                &format!("End of block expects {} values", num_args),
+                &extra,
+                d,
+            )
         }
     }
 
@@ -1048,7 +1053,7 @@ impl<E: Extra> Blockify<E> {
 
         if !block.has_term() {
             // if the block doesn't explicitely terminate, then we jump to the next block
-            self.add_jump(v_block, v_next, extra, d)
+            self.add_jump(v_block, v_next, vec![], extra, b, d)
         } else {
             Ok(r)
         }
@@ -1117,48 +1122,6 @@ impl<E: Extra> Blockify<E> {
             VarDefinitionSpace::Reg,
         )))
     }
-
-    /*
-    pub fn add_check(
-        &mut self,
-        block_id: ValueId,
-        maybe_next: Option<ValueId>,
-        node: AstNode<E>,
-        b: &mut NodeBuilder<E>,
-        d: &mut Diagnostics,
-    ) -> Result<AddResult> {
-        let scope_id = self.env.current_scope().unwrap();
-        let r = self.add(block_id, maybe_next, node, b, d)?;
-        return Ok(r);
-        let v_block = r.block_id;
-        println!("rcheck: {:?}", r);
-
-        let (v_block, v_expr) = if r.is_term {
-            // this handles nested functions
-            self.dump(b);
-            assert!(false);
-            // an expression is terminal
-            // point the return expression at the argument
-            // add the appropriate number of arguments to the label
-            // TODO: type is hardwired
-            let ty = AstType::Int;
-            let v_expr = self.push_code(
-                LCode::Arg(0),
-                scope_id,
-                v_block,
-                ty,
-                VarDefinitionSpace::Reg,
-            );
-            (v_block, v_expr)
-        } else {
-            let v_expr = r.value_id.unwrap();
-            (v_block, v_expr)
-        };
-        let r = AddResult::new(Some(v_expr), r.is_term, v_block);
-        println!("rcheck2: {:?}", r);
-        Ok(r)
-    }
-    */
 
     pub fn add(
         &mut self,
@@ -1240,15 +1203,6 @@ impl<E: Extra> Blockify<E> {
                         // TODO: add implicit jump to this block
                         // Ast labels have no arguments, so this should be trivial
                         unreachable!();
-                        /*
-                        self.push_code(
-                            LCode::Jump(value_id, 0),
-                            scope_id,
-                            block_id,
-                            AstType::Unit,
-                            VarDefinitionSpace::Reg,
-                        );
-                        */
                     }
                 }
 
@@ -1386,10 +1340,6 @@ impl<E: Extra> Blockify<E> {
             Ast::Conditional(condition, then_expr, maybe_else_expr) => {
                 // conditional is terminal
 
-                //let name = b.s("next");
-                //let v_next = self.push_label(name.into(), scope_id, &[], &[]);
-                //self.env.push_next_block(v_next);
-
                 //let v_next = self.env.get_next_block().unwrap();
                 let v_next = maybe_next.unwrap();
                 assert_eq!(v_next, maybe_next.unwrap());
@@ -1477,76 +1427,27 @@ impl<E: Extra> Blockify<E> {
 
             Ast::Goto(label) => {
                 // Goto is terminal
-                let code = if let Some(target_value_id) = self.env.resolve_block(label.into()) {
-                    // check to ensure the jump matches the label args
-                    let code = self.get_code(target_value_id);
-                    if let LCode::Label(args, _) = code {
-                        if *args > 0 {
-                            d.push_diagnostic(error(
-                                &format!(
-                                    "Goto target block {} requires {} arguments",
-                                    b.r(label),
-                                    args
-                                ),
-                                node.extra.get_span(),
-                            ));
-                            return Err(Error::new(ParseError::Invalid));
-                        }
-                        LCode::Jump(target_value_id, 0)
-                    } else {
-                        unreachable!()
-                    }
+                if let Some(target_value_id) = self.env.resolve_block(label.into()) {
+                    let extra = node.extra.clone();
+                    self.add_jump(block_id, target_value_id, vec![], extra, b, d)
                 } else {
                     d.push_diagnostic(error(
                         &format!("Block name not found: {}", b.r(label)),
                         node.extra.get_span(),
                     ));
-                    LCode::Goto(label)
-                };
-                let jump_value = self.push_code(
-                    code,
-                    scope_id,
-                    block_id,
-                    AstType::Unit,
-                    VarDefinitionSpace::Reg,
-                );
-                Ok(AddResult::new(Some(jump_value), true, block_id))
+                    Err(Error::new(ParseError::Invalid))
+                }
             }
 
             Ast::Return(maybe_expr) => {
                 // return is terminal, anything after it should be ignored.
-
                 if let Some(v_return) = self.env.resolve_return_block() {
-                    let count = if maybe_expr.is_some() { 1 } else { 0 };
-
-                    let maybe_ret_value = if let Some(expr) = maybe_expr {
-                        let r = self.add(block_id, None, *expr, b, d)?;
-                        let expr_value_id = r.value_id.unwrap();
-                        Some(expr_value_id)
+                    let args = if let Some(expr) = maybe_expr {
+                        vec![*expr]
                     } else {
-                        None
+                        vec![]
                     };
-
-                    // args
-                    if let Some(ret_value) = maybe_ret_value {
-                        self.push_code(
-                            LCode::Value(ret_value),
-                            scope_id,
-                            block_id,
-                            self.get_type(ret_value),
-                            VarDefinitionSpace::Reg,
-                        );
-                    }
-
-                    let code = LCode::Jump(v_return, count);
-                    let v = self.push_code(
-                        code,
-                        scope_id,
-                        block_id,
-                        AstType::Unit,
-                        VarDefinitionSpace::Reg,
-                    );
-                    Ok(AddResult::new(Some(v), true, block_id))
+                    self.add_jump(block_id, v_return, args, node.extra, b, d)
                 } else {
                     d.push_diagnostic(error(
                         &format!("Return without function context"),
@@ -1560,7 +1461,6 @@ impl<E: Extra> Blockify<E> {
                 if let Ast::Literal(lit) = expr.node {
                     let static_scope_id = self.env.static_scope_id();
                     let static_block_id = self.env.static_block_id();
-                    //let static_scope = self.env.get_scope(static_scope_id);
                     let scope = self.env.get_scope(scope_id);
 
                     let global_name = if let ScopeType::Static = scope.scope_type {
@@ -1605,22 +1505,11 @@ impl<E: Extra> Blockify<E> {
 
             Ast::Break(maybe_name, args) => {
                 // args not implemented yet
-                let extra = node.extra.clone();
                 assert_eq!(args.len(), 0);
                 // loop up loop blocks by name
                 if let Some(v_next) = self.env.get_loop_next_block(maybe_name) {
-                    self.add_jump(block_id, v_next, extra, d)
-                    /*
-                    let code = LCode::Jump(v_next, 0);
-                    let v = self.push_code(
-                        code,
-                        scope_id,
-                        block_id,
-                        AstType::Unit,
-                        VarDefinitionSpace::Reg,
-                    );
-                    Ok(AddResult::new(Some(v), true, block_id))
-                    */
+                    let extra = node.extra.clone();
+                    self.add_jump(block_id, v_next, vec![], extra, b, d)
                 } else {
                     d.push_diagnostic(error(&format!("Break without loop"), node.extra.get_span()));
                     Err(Error::new(ParseError::Invalid))
@@ -1633,18 +1522,7 @@ impl<E: Extra> Blockify<E> {
                 // loop up loop blocks by name
                 if let Some(v_start) = self.env.get_loop_start_block(maybe_name) {
                     let extra = node.extra.clone();
-                    self.add_jump(block_id, v_start, extra, d)
-                    /*
-                    let code = LCode::Jump(v_start, 0);
-                    let v = self.push_code(
-                        code,
-                        scope_id,
-                        block_id,
-                        AstType::Unit,
-                        VarDefinitionSpace::Reg,
-                    );
-                    Ok(AddResult::new(Some(v), true, block_id))
-                    */
+                    self.add_jump(block_id, v_start, vec![], extra, b, d)
                 } else {
                     // mismatch name
                     d.push_diagnostic(error(
@@ -1663,46 +1541,6 @@ impl<E: Extra> Blockify<E> {
             _ => unimplemented!("{:?}", node.node),
         }
     }
-
-    /*
-    pub fn ensure_next_in_cfg<E: Extra>(
-        &mut self,
-        scope_id: ScopeId,
-        v_block: ValueId,
-        v_next: ValueId,
-        b: &NodeBuilder<E>,
-    ) {
-        let leafs = self
-            .get_graph(v_block, Some(Successor::BlockScope), b)
-            .leafs(v_block);
-        println!("leafs: {:?}", (v_block, v_next, &leafs));
-        for block_id in leafs {
-            let last_value = self.env.get_block(block_id).last_value.unwrap();
-            let last_code = self.get_code(last_value);
-
-            // TODO: this shouldn't happen
-            if block_id == v_next {
-                continue;
-            }
-
-            // TODO: This is terminating blocks that haven't been completed yet
-            // because we are adding the successors in, it's following the loops
-            // and trying to terminate the loop it's trying to generate.
-
-            if !last_code.is_term() {
-                //assert!(false);
-                //println!("adding jump: {:?}", (block_id, v_next));
-                self.push_code(
-                    LCode::Jump(v_next, 0),
-                    scope_id,
-                    block_id,
-                    AstType::Unit,
-                    VarDefinitionSpace::Reg,
-                );
-            }
-        }
-    }
-    */
 
     /*
     pub fn save_graph<E: Extra>(&self, filename: &str, b: &NodeBuilder<E>) {
