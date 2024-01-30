@@ -706,8 +706,9 @@ impl<E: Extra> Blockify<E> {
 
                     (false, NextSeqState::Empty) => {
                         // end of sequence, with non-terminal node
-                        //let r = if let Some(v_next) = maybe_next {
-                        let r = if let Some(v_next) = self.env.get_next_block() {
+                        let r = if let Some(v_next) = maybe_next {
+                            //let r = if let Some(v_next) = self.env.get_next_block() {
+                            assert_eq!(v_next, maybe_next.unwrap());
                             // terminates with a jump to next
                             self.add_with_next(current_block_id.unwrap(), expr, v_next, b, d)?
                         } else {
@@ -964,7 +965,8 @@ impl<E: Extra> Blockify<E> {
         b: &mut NodeBuilder<E>,
         d: &mut Diagnostics,
     ) -> Result<AddResult> {
-        let v_next = self.env.get_next_block().unwrap();
+        //let v_next = self.env.get_next_block().unwrap();
+        //assert_eq!(v_next, _v_next);
 
         let loop_scope_id = self.env.new_scope(ScopeType::Loop);
         let v_loop = self.push_label(name.into(), loop_scope_id, &[], &[]);
@@ -996,11 +998,11 @@ impl<E: Extra> Blockify<E> {
         d: &mut Diagnostics,
     ) -> Result<AddResult> {
         let extra = node.extra.clone();
-        self.env.push_next_block(v_next);
+        //self.env.push_next_block(v_next);
         let r = self.add(block_id, Some(v_next), node, b, d)?;
         let v_block = r.block_id;
         let v = r.value_id.unwrap();
-        self.env.pop_next_block();
+        //self.env.pop_next_block();
         let last_block_id = self.get_block_id(v);
         //assert_eq!(last_block_id, r.block_id);
         let block = self.env.get_block(last_block_id);
@@ -1244,7 +1246,7 @@ impl<E: Extra> Blockify<E> {
                     AssignTarget::Identifier(name) | AssignTarget::Alloca(name) => name,
                 };
 
-                let r = self.add(block_id, maybe_next, *expr, b, d)?;
+                let r = self.add(block_id, None, *expr, b, d)?;
 
                 let v_expr = r.value_id.unwrap();
                 let v_block = r.block_id;
@@ -1292,7 +1294,7 @@ impl<E: Extra> Blockify<E> {
                     let mut values = vec![];
                     for a in args.into_iter() {
                         let Argument::Positional(expr) = a;
-                        let r = self.add(block_id, maybe_next, *expr, b, d)?;
+                        let r = self.add(block_id, None, *expr, b, d)?;
                         let v = r.value_id.unwrap();
                         let ty = self.get_type(v);
                         values.push((v, ty));
@@ -1333,7 +1335,7 @@ impl<E: Extra> Blockify<E> {
             }
 
             Ast::UnaryOp(op, x) => {
-                let r = self.add(block_id, maybe_next, *x, b, d)?;
+                let r = self.add(block_id, None, *x, b, d)?;
                 let v_block = r.block_id;
                 let vx = r.value_id.unwrap();
                 let code = LCode::Op1(op, vx);
@@ -1352,8 +1354,9 @@ impl<E: Extra> Blockify<E> {
                 //let v_next = self.push_label(name.into(), scope_id, &[], &[]);
                 //self.env.push_next_block(v_next);
 
-                let v_next = self.env.get_next_block().unwrap();
-                //let v_next = maybe_next.unwrap();
+                //let v_next = self.env.get_next_block().unwrap();
+                let v_next = maybe_next.unwrap();
+                assert_eq!(v_next, maybe_next.unwrap());
 
                 let name = b.s("then");
                 let then_scope_id = self.env.new_scope(ScopeType::Block);
@@ -1376,7 +1379,7 @@ impl<E: Extra> Blockify<E> {
                     v_next
                 };
 
-                let r = self.add(block_id, maybe_next, *condition, b, d)?;
+                let r = self.add(block_id, None, *condition, b, d)?;
                 let v = r.value_id.unwrap();
                 let code = LCode::Branch(v, v_then, v_else);
                 let v = self.push_code(
@@ -1391,14 +1394,14 @@ impl<E: Extra> Blockify<E> {
             }
 
             Ast::Ternary(c, x, y) => {
-                let r = self.add(block_id, maybe_next, *c, b, d)?;
+                let r = self.add(block_id, None, *c, b, d)?;
                 let v_c = r.value_id.unwrap();
 
                 let then_scope_id = self.env.new_scope(ScopeType::Block);
                 let name = b.s("then");
                 self.env.enter_scope(then_scope_id);
                 let v_then = self.push_label(name.into(), then_scope_id, &[], &[]);
-                let r = self.add(v_then, maybe_next, *x, b, d)?;
+                let r = self.add(v_then, None, *x, b, d)?;
                 let v_then_result = r.value_id.unwrap();
                 self.env.exit_scope();
                 let then_ty = self.get_type(v_then_result);
@@ -1407,7 +1410,7 @@ impl<E: Extra> Blockify<E> {
                 let name = b.s("else");
                 self.env.enter_scope(else_scope_id);
                 let v_else = self.push_label(name.into(), else_scope_id, &[], &[]);
-                let r = self.add(v_else, maybe_next, *y, b, d)?;
+                let r = self.add(v_else, None, *y, b, d)?;
                 let v_else_result = r.value_id.unwrap();
                 self.env.exit_scope();
                 let else_ty = self.get_type(v_else_result);
@@ -1422,10 +1425,10 @@ impl<E: Extra> Blockify<E> {
             }
 
             Ast::BinaryOp(op, x, y) => {
-                let r = self.add(block_id, maybe_next, *x, b, d)?;
+                let r = self.add(block_id, None, *x, b, d)?;
                 let vx = r.value_id.unwrap();
                 let v_block = r.block_id;
-                let r = self.add(v_block, maybe_next, *y, b, d)?;
+                let r = self.add(v_block, None, *y, b, d)?;
                 let vy = r.value_id.unwrap();
                 let v_block = r.block_id;
                 let code = LCode::Op2(op.node, vx, vy);
@@ -1459,7 +1462,7 @@ impl<E: Extra> Blockify<E> {
                     let count = if maybe_expr.is_some() { 1 } else { 0 };
 
                     let maybe_ret_value = if let Some(expr) = maybe_expr {
-                        let r = self.add(block_id, maybe_next, *expr, b, d)?;
+                        let r = self.add(block_id, None, *expr, b, d)?;
                         let expr_value_id = r.value_id.unwrap();
                         Some(expr_value_id)
                     } else {
