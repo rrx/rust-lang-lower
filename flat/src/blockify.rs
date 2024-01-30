@@ -828,8 +828,15 @@ impl<E: Extra> Blockify<E> {
         //} else {
         let name = b.s("lambda_result");
         let v_next = self.push_label(name.into(), scope_id, &return_type_args, &[]);
-        //v_next
-        //};
+
+        // push Arg to next block
+        let v_expr = self.push_code(
+            LCode::Arg(0),
+            scope_id,
+            v_next,
+            return_type,
+            VarDefinitionSpace::Reg,
+        );
 
         let scope = self.env.get_scope_mut(body_scope_id);
         scope.return_block = Some(v_next);
@@ -838,7 +845,8 @@ impl<E: Extra> Blockify<E> {
         let r1 = self.add_with_next(entry_id, *body, v_next, b, d)?;
         self.env.exit_scope();
 
-        let r2 = AddResult::new(Some(v_next), true, v_next);
+        // we return the value of the arg in the next block
+        let r2 = AddResult::new(Some(v_expr), false, v_next);
         println!("lambda: {:?}", (&r1, &r2));
         Ok(r2)
     }
@@ -1098,10 +1106,16 @@ impl<E: Extra> Blockify<E> {
     ) -> Result<AddResult> {
         let scope_id = self.env.current_scope().unwrap();
         let r = self.add(block_id, maybe_next, node, b, d)?;
+        return Ok(r);
         let v_block = r.block_id;
         println!("rcheck: {:?}", r);
 
         let (v_block, v_expr) = if r.is_term {
+            // this handles nested functions
+            self.dump(b);
+            assert!(false);
+            // an expression is terminal
+            // point the return expression at the argument
             // add the appropriate number of arguments to the label
             // TODO: type is hardwired
             let ty = AstType::Int;
