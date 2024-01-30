@@ -975,6 +975,7 @@ impl<E: Extra> Blockify<E> {
     ) -> Result<AddResult> {
         //let v_next = self.env.get_next_block().unwrap();
         //assert_eq!(v_next, _v_next);
+        let extra = body.extra.clone();
 
         let loop_scope_id = self.env.new_scope(ScopeType::Loop);
         let v_loop = self.push_label(name.into(), loop_scope_id, &[], &[]);
@@ -984,6 +985,8 @@ impl<E: Extra> Blockify<E> {
         self.env.exit_scope();
 
         // enter loop
+        let r = self.add_jump(block_id, v_loop, extra, d)?;
+        /*
         let code = LCode::Jump(v_loop, 0);
         let scope_id = self.env.current_scope().unwrap();
         let v = self.push_code(
@@ -993,8 +996,8 @@ impl<E: Extra> Blockify<E> {
             AstType::Unit,
             VarDefinitionSpace::Reg,
         );
-
-        Ok(AddResult::new(Some(v), true, v_next))
+        */
+        Ok(AddResult::new(Some(r.value_id.unwrap()), true, v_next))
     }
 
     pub fn add_jump(
@@ -1016,7 +1019,7 @@ impl<E: Extra> Blockify<E> {
                     AstType::Unit,
                     VarDefinitionSpace::Reg,
                 );
-                Ok(AddResult::new(Some(v), true, block_id))
+                Ok(AddResult::new(Some(v), true, target_id))
             } else {
                 Self::error(&format!("End of block expects {} values", args), &extra, d)
             }
