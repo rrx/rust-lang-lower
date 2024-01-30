@@ -680,17 +680,6 @@ impl<E: Extra> Blockify<E> {
                             */
                         }
                     */
-                    (true, NextSeqState::Empty) => {
-                        let r = self.add(current_block_id.unwrap(), maybe_next, expr, b, d)?;
-                        let v = r.value_id.unwrap();
-                        current_is_term = r.is_term;
-                        assert!(r.is_term);
-                        assert_eq!(current_is_term, is_term);
-                        current_block_id = Some(r.block_id);
-                        value_id = Some(v);
-                        println!("r4: {:?}", r);
-                    }
-
                     (false, NextSeqState::Other) => {
                         let r = self.add(current_block_id.unwrap(), maybe_next, expr, b, d)?;
                         // skip noops
@@ -704,6 +693,20 @@ impl<E: Extra> Blockify<E> {
                         println!("r3: {:?}", r);
                     }
 
+                    (true, NextSeqState::Empty) => {
+                        // terminal at the end of the sequence, nothing special here
+                        // but we do need to pass the next block in, so that it knows
+                        // what to do for sub expressions
+                        let r = self.add(current_block_id.unwrap(), maybe_next, expr, b, d)?;
+                        let v = r.value_id.unwrap();
+                        current_is_term = r.is_term;
+                        assert!(r.is_term);
+                        assert_eq!(current_is_term, is_term);
+                        current_block_id = Some(r.block_id);
+                        value_id = Some(v);
+                        println!("r4: {:?}", r);
+                    }
+
                     (false, NextSeqState::Empty) => {
                         // end of sequence, with non-terminal node
                         let r = if let Some(v_next) = maybe_next {
@@ -713,7 +716,7 @@ impl<E: Extra> Blockify<E> {
                             self.add_with_next(current_block_id.unwrap(), expr, v_next, b, d)?
                         } else {
                             // must terminate, unless it's at the static level
-                            self.add(current_block_id.unwrap(), maybe_next, expr, b, d)?
+                            self.add(current_block_id.unwrap(), None, expr, b, d)?
                         };
 
                         let v = r.value_id.unwrap();
@@ -728,13 +731,10 @@ impl<E: Extra> Blockify<E> {
                     }
 
                     (true, NextSeqState::Other) => {
-                        //let v_next = if let Some(v_next) = maybe_next {
-                        //v_next
-                        //} else {
+                        // a terminal, followed by other statements
+                        // we create a next block for the statements to follow
                         let name = b.s("next");
                         let v_next = self.push_label(name.into(), scope_id, &[], &[]);
-                        //v_next
-                        //};
                         let r =
                             self.add_with_next(current_block_id.unwrap(), expr, v_next, b, d)?;
                         let v = r.value_id.unwrap();
@@ -757,6 +757,8 @@ impl<E: Extra> Blockify<E> {
         //"x: {:?}",
         //(value_id, current_is_term, block_id, current_block_id)
         //);
+        // sequence is terminal, unless it's the module sequence
+        assert!(current_is_term || self.env.static_block_id() == current_block_id.unwrap());
         Ok(AddResult::new(
             value_id,
             current_is_term,
@@ -989,6 +991,34 @@ impl<E: Extra> Blockify<E> {
         Ok(AddResult::new(Some(v), true, v_next))
     }
 
+    pub fn add_jump(
+        &mut self,
+        block_id: ValueId,
+        target_id: ValueId,
+        extra: E,
+        d: &mut Diagnostics,
+    ) -> Result<AddResult> {
+        let scope_id = self.env.current_scope().unwrap();
+        let target = self.get_code(target_id);
+        // make sure we match the arity of the next block
+        if let LCode::Label(args, _kwargs) = target {
+            if *args == 0 {
+                let v = self.push_code(
+                    LCode::Jump(target_id, 0),
+                    scope_id,
+                    block_id,
+                    AstType::Unit,
+                    VarDefinitionSpace::Reg,
+                );
+                Ok(AddResult::new(Some(v), true, block_id))
+            } else {
+                Self::error(&format!("End of block expects {} values", args), &extra, d)
+            }
+        } else {
+            unreachable!();
+        }
+    }
+
     pub fn add_with_next(
         &mut self,
         block_id: ValueId,
@@ -1008,6 +1038,9 @@ impl<E: Extra> Blockify<E> {
         let block = self.env.get_block(last_block_id);
 
         if !block.has_term() {
+            // if the block doesn't explicitely terminate, then we jump to the next block
+            self.add_jump(v_block, v_next, extra, d)
+            /*
             //if r.is_term {
             let scope_id = self.env.current_scope().unwrap();
 
@@ -1029,6 +1062,7 @@ impl<E: Extra> Blockify<E> {
             } else {
                 unreachable!();
             }
+            */
         } else {
             Ok(r)
         }
@@ -1158,6 +1192,7 @@ impl<E: Extra> Blockify<E> {
             Ast::Sequence(ref _exprs) => self.add_sequence(block_id, maybe_next, node, b, d),
 
             Ast::Definition(def) => {
+                // definition is non-terminal
                 if block_id == self.env.static_block_id() {
                     self.add_function(block_id, def, b, d)
                 } else {
@@ -1170,6 +1205,8 @@ impl<E: Extra> Blockify<E> {
             }
 
             Ast::Call(expr, args, _ret_ty) => match &expr.node {
+                // call is an expression, it's non-terminal
+                // lambdas should also be non-terminal
                 Ast::Identifier(ident) => {
                     let name = b.resolve_label(ident.into());
                     if let Some(data) = self.env.resolve(*ident) {
@@ -1226,6 +1263,7 @@ impl<E: Extra> Blockify<E> {
             }
 
             Ast::Identifier(key) => {
+                // identifier is expression, non-terminal
                 if let Some(data) = self.env.resolve(key) {
                     let ty = data.ty.clone();
                     let code = if let VarDefinitionSpace::Arg = data.mem {
@@ -1242,6 +1280,7 @@ impl<E: Extra> Blockify<E> {
             }
 
             Ast::Assign(target, expr) => {
+                // assign is expression, non-terminal
                 let name = match target {
                     AssignTarget::Identifier(name) | AssignTarget::Alloca(name) => name,
                 };
@@ -1323,6 +1362,7 @@ impl<E: Extra> Blockify<E> {
             },
 
             Ast::Literal(lit) => {
+                // literal is expression, non-terminal
                 let ty: AstType = lit.clone().into();
                 let v = self.push_code(
                     LCode::Const(lit),
@@ -1335,6 +1375,7 @@ impl<E: Extra> Blockify<E> {
             }
 
             Ast::UnaryOp(op, x) => {
+                // op1 is expression, non-terminal
                 let r = self.add(block_id, None, *x, b, d)?;
                 let v_block = r.block_id;
                 let vx = r.value_id.unwrap();
@@ -1350,6 +1391,8 @@ impl<E: Extra> Blockify<E> {
             }
 
             Ast::Conditional(condition, then_expr, maybe_else_expr) => {
+                // conditional is terminal
+
                 //let name = b.s("next");
                 //let v_next = self.push_label(name.into(), scope_id, &[], &[]);
                 //self.env.push_next_block(v_next);
@@ -1394,6 +1437,7 @@ impl<E: Extra> Blockify<E> {
             }
 
             Ast::Ternary(c, x, y) => {
+                // expression, non-terminal
                 let r = self.add(block_id, None, *c, b, d)?;
                 let v_c = r.value_id.unwrap();
 
@@ -1425,6 +1469,7 @@ impl<E: Extra> Blockify<E> {
             }
 
             Ast::BinaryOp(op, x, y) => {
+                // expression, non-terminal
                 let r = self.add(block_id, None, *x, b, d)?;
                 let vx = r.value_id.unwrap();
                 let v_block = r.block_id;
@@ -1440,6 +1485,7 @@ impl<E: Extra> Blockify<E> {
             Ast::Goto(label) => {
                 // Goto is terminal
                 let code = if let Some(target_value_id) = self.env.resolve_block(label.into()) {
+                    // check to ensure the jump matches the label args
                     let code = self.get_code(target_value_id);
                     if let LCode::Label(args, _) = code {
                         if *args > 0 {

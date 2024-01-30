@@ -1,5 +1,9 @@
 q.use("prelude")
 
+def x1():
+  if True:
+    t = 0
+
 def main() -> int:
   #r = 0
   def f() -> int:
