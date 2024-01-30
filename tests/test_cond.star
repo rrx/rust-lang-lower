@@ -9,6 +9,7 @@ def cond(n: int) -> int:
     out = 2
   else:
     out = 3
+  q.print(0)
   return out
 
 def main() -> int:

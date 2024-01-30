@@ -891,9 +891,11 @@ impl<E: Extra> Blockify<E> {
         b: &NodeBuilder<E>,
         d: &mut Diagnostics,
     ) -> Result<()> {
+        // reorder things, so we lower declarations last
         let mut current = module_block_id;
         stack.push(module_block_id);
         let mut values = VecDeque::new();
+
         loop {
             let code = self.get_code(current);
             if let LCode::DeclareFunction(Some(_)) = code {

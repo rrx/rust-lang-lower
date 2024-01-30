@@ -371,12 +371,14 @@ impl<E: Extra> Environment<E> {
 
     pub fn dump(&self, b: &NodeBuilder<E>) {
         println!("current scope: {:?}", self.current_scope());
+        //println!("static block: {:?}", self.static_block_id());
+        //println!("static scope: {:?}", self.static_scope_id());
         for (block_id, block) in self.blocks.iter() {
             println!("block({:?}, {:?})", block_id, block);
         }
 
         for (index, layer) in self.scopes.iter().enumerate() {
-            println!("scope({})", index);
+            println!("scope({},{:?})", index, layer.scope_type);
             for (key, data) in layer.names.iter() {
                 println!("  name  {} = {:?}", b.r(*key), data);
             }

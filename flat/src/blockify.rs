@@ -489,7 +489,7 @@ impl<E: Extra> Blockify<E> {
             self.prev_pos[offset] = last_value;
             self.next_pos[last_value.0 as usize] = value_id;
             // check to ensure that nothing follows the terminator
-            //assert!(!block.has_term());
+            assert!(!block.has_term());
         }
 
         let block = self.env.get_block_mut(block_id);
@@ -580,7 +580,7 @@ impl<E: Extra> Blockify<E> {
                 let static_scope = self.env.new_scope(ScopeType::Static);
                 let block_id = self.push_label(name.into(), static_scope, &[], &[]);
                 self.env.enter_scope(static_scope);
-                self.add(block_id, *body, b, d)?;
+                self.add(block_id, None, *body, b, d)?;
                 self.env.exit_scope();
                 Ok(block_id)
             }
@@ -591,6 +591,7 @@ impl<E: Extra> Blockify<E> {
     pub fn add_sequence(
         &mut self,
         block_id: ValueId,
+        maybe_next: Option<ValueId>,
         node: AstNode<E>,
         b: &mut NodeBuilder<E>,
         d: &mut Diagnostics,
@@ -616,67 +617,86 @@ impl<E: Extra> Blockify<E> {
                 //let span = expr.extra.get_span();
                 let (is_term, next_state) = NextSeqState::get(&self.env, &expr, iter.peek());
                 match (is_term, next_state) {
-                    (true, NextSeqState::NextLabel(key)) => {
-                        if let Some(_target_value_id) = self.env.resolve_block(key.into()) {
+                    (_, NextSeqState::NextLabel(key)) => {
+                        // next label handles implicit jumps
+                        if let Some(target_value_id) = self.env.resolve_block(key.into()) {
+                            // ensure target block exists
                             //let scope = self.env.get_scope_mut(scope_id);
                             //scope.next_block = Some(target_value_id);
                             //current_block_id = Some(target_value_id);
-                        } else {
-                            unreachable!()
-                        }
-                        let r = self.add(current_block_id.unwrap(), expr, b, d)?;
-                        let v = r.value_id.unwrap();
-                        current_is_term = r.is_term;
-                        assert_eq!(current_is_term, is_term);
-                        //current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
-                        current_block_id = Some(r.block_id);
-                        //assert_eq!(current_block_id.unwrap(), r.block_id);
-                        value_id = Some(v);
-                        println!("r5: {:?}", r);
-                    }
-
-                    (false, NextSeqState::NextLabel(_key)) => {
-                        unreachable!();
-                        /*
-                        if let Some(target_value_id) = self.env.resolve_block(key.into()) {
-                            let code = LCode::Jump(target_value_id, 0);
-                            self.push_code(
-                                code,
-                                scope_id,
+                            let r = self.add(
                                 current_block_id.unwrap(),
-                                AstType::Unit,
-                                VarDefinitionSpace::Reg,
-                            );
-                            current_block_id = Some(target_value_id);
+                                Some(target_value_id),
+                                expr,
+                                b,
+                                d,
+                            )?;
+                            let v = r.value_id.unwrap();
+                            current_is_term = r.is_term;
+                            assert_eq!(current_is_term, is_term);
+                            //current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
+                            current_block_id = Some(r.block_id);
+                            //assert_eq!(current_block_id.unwrap(), r.block_id);
+                            value_id = Some(v);
+                            println!("r6: {:?}", r);
+                            //
                         } else {
                             unreachable!()
                         }
-                        let v = self.add(current_block_id.unwrap(), expr, b, d)?.unwrap();
-                        current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
-                        value_id = Some(v);
-                        */
                     }
 
+                    /*
+                        (false, NextSeqState::NextLabel(_key)) => {
+                            // TODO: Add implicit jump to the next label
+                            // alternatively, we can perform the jump when we add the label
+                            // we just have to check if the last item was terminal
+                            let r = self.add(current_block_id.unwrap(), None, expr, b, d)?;
+                            let v = r.value_id.unwrap();
+                            current_is_term = r.is_term;
+                            assert_eq!(current_is_term, is_term);
+                            //current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
+                            current_block_id = Some(r.block_id);
+                            //assert_eq!(current_block_id.unwrap(), r.block_id);
+                            value_id = Some(v);
+                            println!("r5: {:?}", r);
+                            //unreachable!();
+                            /*
+                            if let Some(target_value_id) = self.env.resolve_block(key.into()) {
+                                let code = LCode::Jump(target_value_id, 0);
+                                self.push_code(
+                                    code,
+                                    scope_id,
+                                    current_block_id.unwrap(),
+                                    AstType::Unit,
+                                    VarDefinitionSpace::Reg,
+                                );
+                                current_block_id = Some(target_value_id);
+                            } else {
+                                unreachable!()
+                            }
+                            let v = self.add(current_block_id.unwrap(), expr, b, d)?.unwrap();
+                            current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
+                            value_id = Some(v);
+                            */
+                        }
+                    */
                     (true, NextSeqState::Empty) => {
-                        let r = self.add(current_block_id.unwrap(), expr, b, d)?;
+                        let r = self.add(current_block_id.unwrap(), maybe_next, expr, b, d)?;
                         let v = r.value_id.unwrap();
                         current_is_term = r.is_term;
+                        assert!(r.is_term);
                         assert_eq!(current_is_term, is_term);
-                        //current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
                         current_block_id = Some(r.block_id);
-                        //assert_eq!(current_block_id.unwrap(), r.block_id);
                         value_id = Some(v);
                         println!("r4: {:?}", r);
                     }
 
                     (false, NextSeqState::Other) => {
-                        let r = self.add(current_block_id.unwrap(), expr, b, d)?;
+                        let r = self.add(current_block_id.unwrap(), maybe_next, expr, b, d)?;
+                        // skip noops
                         if let Some(v) = r.value_id {
-                            //let v = r.value_id.unwrap();
                             current_is_term = r.is_term;
                             //assert_eq!(current_is_term, is_term);
-                            //current_block_id = Some(r.block_id);
-                            //current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
                             current_block_id = Some(r.block_id);
                             //assert_eq!(current_block_id.unwrap(), r.block_id);
                             value_id = Some(v);
@@ -685,60 +705,44 @@ impl<E: Extra> Blockify<E> {
                     }
 
                     (false, NextSeqState::Empty) => {
-                        //println!("{:?}", (&expr, &self.env.stack));
-                        //self.env.dump(b);
                         // end of sequence, with non-terminal node
-                        // implicit jump to next
-                        //let target_value_id = self.env.pop_next_block().unwrap();
-                        /*
-                        if let Some(target_value_id) = self.env.get_next_block() {
-                            let v = self.add(current_block_id.unwrap(), expr, b, d)?.unwrap();
-                            current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
-                            d.push_diagnostic(error(
-                                    &format!("Implicit Jump required: {:?}", (block_id, v, target_value_id, current_block_id, &self.env.stack)),
-                                    span,
-                                    ));
-                            value_id = Some(v);
-
-                            //return Err(Error::new(ParseError::Invalid));
-                            //unreachable!();
-                            /*
-                            let code = LCode::Jump(target_value_id, 0);
-                            self.push_code(
-                                code,
-                                scope_id,
-                                current_block_id.unwrap(),
-                                AstType::Unit,
-                                VarDefinitionSpace::Static,
-                            );
-                            current_block_id = Some(target_value_id);
-                            */
+                        //let r = if let Some(v_next) = maybe_next {
+                        let r = if let Some(v_next) = self.env.get_next_block() {
+                            // terminates with a jump to next
+                            self.add_with_next(current_block_id.unwrap(), expr, v_next, b, d)?
                         } else {
-                        */
-                        let r = self.add(current_block_id.unwrap(), expr, b, d)?;
+                            // must terminate, unless it's at the static level
+                            self.add(current_block_id.unwrap(), maybe_next, expr, b, d)?
+                        };
+
                         let v = r.value_id.unwrap();
                         current_is_term = r.is_term;
-                        assert_eq!(current_is_term, is_term);
-                        //current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
                         current_block_id = Some(r.block_id);
-                        //assert_eq!(current_block_id.unwrap(), r.block_id);
                         value_id = Some(v);
                         println!("r2: {:?}", r);
-                        //}
+
+                        // check that this terminates correctly
+                        // exception for module level
+                        assert!(r.is_term || self.env.static_block_id() == r.block_id);
                     }
 
                     (true, NextSeqState::Other) => {
+                        //let v_next = if let Some(v_next) = maybe_next {
+                        //v_next
+                        //} else {
                         let name = b.s("next");
                         let v_next = self.push_label(name.into(), scope_id, &[], &[]);
+                        //v_next
+                        //};
                         let r =
                             self.add_with_next(current_block_id.unwrap(), expr, v_next, b, d)?;
                         let v = r.value_id.unwrap();
                         current_is_term = r.is_term;
                         println!("r1: {:?}", r);
+                        assert!(r.is_term);
                         assert_eq!(current_is_term, is_term);
                         // next block is the next block
-                        current_block_id = Some(v_next);
-                        //current_block_id = Some(*self.entries.get(v.0 as usize).unwrap());
+                        current_block_id = Some(r.block_id);
                         //assert_eq!(current_block_id.unwrap(), r.block_id);
                         value_id = Some(v);
                     }
@@ -782,7 +786,7 @@ impl<E: Extra> Blockify<E> {
         for (a, ty) in args.into_iter().zip(params.iter()) {
             match a {
                 Argument::Positional(expr) => {
-                    let r = self.add(v_block, *expr, b, d)?;
+                    let r = self.add(v_block, None, *expr, b, d)?;
                     let v = r.value_id.unwrap();
                     v_block = r.block_id;
                     values.push((LCode::Value(v), ty.clone(), r.block_id));
@@ -918,9 +922,7 @@ impl<E: Extra> Blockify<E> {
 
             self.env.enter_scope(body_scope_id);
             // next block in body scope
-            //self.env.push_next_block(return_block);
             self.add_with_next(entry_id, *body, return_block, b, d)?;
-            //self.env.pop_next_block().unwrap();
             self.env.exit_scope();
             self.env.add_succ_static(block_id, entry_id);
             Ok(AddResult::new(Some(v_decl), false, block_id))
@@ -948,6 +950,7 @@ impl<E: Extra> Blockify<E> {
     pub fn add_loop(
         &mut self,
         block_id: ValueId,
+        v_next: ValueId,
         name: StringKey,
         body: AstNode<E>,
         b: &mut NodeBuilder<E>,
@@ -973,7 +976,7 @@ impl<E: Extra> Blockify<E> {
             VarDefinitionSpace::Reg,
         );
 
-        Ok(AddResult::new(Some(v), true, block_id))
+        Ok(AddResult::new(Some(v), true, v_next))
     }
 
     pub fn add_with_next(
@@ -986,7 +989,7 @@ impl<E: Extra> Blockify<E> {
     ) -> Result<AddResult> {
         let extra = node.extra.clone();
         self.env.push_next_block(v_next);
-        let r = self.add(block_id, node, b, d)?;
+        let r = self.add(block_id, Some(v_next), node, b, d)?;
         let v_block = r.block_id;
         let v = r.value_id.unwrap();
         self.env.pop_next_block();
@@ -1051,7 +1054,7 @@ impl<E: Extra> Blockify<E> {
             for (a, ty) in args.into_iter().zip(func_arg_types.iter()) {
                 match a {
                     Argument::Positional(expr) => {
-                        let r = self.add(block_id, *expr, b, d)?;
+                        let r = self.add(block_id, None, *expr, b, d)?;
                         let v = r.value_id.unwrap();
                         values.push((LCode::Value(v), ty.clone()));
                     }
@@ -1088,16 +1091,19 @@ impl<E: Extra> Blockify<E> {
     pub fn add_check(
         &mut self,
         block_id: ValueId,
+        maybe_next: Option<ValueId>,
         node: AstNode<E>,
         b: &mut NodeBuilder<E>,
         d: &mut Diagnostics,
     ) -> Result<AddResult> {
         let scope_id = self.env.current_scope().unwrap();
-        let r = self.add(block_id, node, b, d)?;
+        let r = self.add(block_id, maybe_next, node, b, d)?;
         let v_block = r.block_id;
         println!("rcheck: {:?}", r);
 
         let (v_block, v_expr) = if r.is_term {
+            // add the appropriate number of arguments to the label
+            // TODO: type is hardwired
             let ty = AstType::Int;
             let v_expr = self.push_code(
                 LCode::Arg(0),
@@ -1119,6 +1125,7 @@ impl<E: Extra> Blockify<E> {
     pub fn add(
         &mut self,
         block_id: ValueId,
+        maybe_next: Option<ValueId>,
         node: AstNode<E>,
         b: &mut NodeBuilder<E>,
         d: &mut Diagnostics,
@@ -1130,7 +1137,7 @@ impl<E: Extra> Blockify<E> {
                 unimplemented!()
             }
 
-            Ast::Sequence(ref _exprs) => self.add_sequence(block_id, node, b, d),
+            Ast::Sequence(ref _exprs) => self.add_sequence(block_id, maybe_next, node, b, d),
 
             Ast::Definition(def) => {
                 if block_id == self.env.static_block_id() {
@@ -1182,6 +1189,8 @@ impl<E: Extra> Blockify<E> {
                     // check to ensure that the previous block was terminated
                     let code = self.code.get(last_value.0 as usize).unwrap();
                     if !code.is_term() {
+                        // TODO: add implicit jump to this block
+                        // Ast labels have no arguments, so this should be trivial
                         unreachable!();
                         /*
                         self.push_code(
@@ -1219,7 +1228,7 @@ impl<E: Extra> Blockify<E> {
                     AssignTarget::Identifier(name) | AssignTarget::Alloca(name) => name,
                 };
 
-                let r = self.add_check(block_id, *expr, b, d)?;
+                let r = self.add_check(block_id, maybe_next, *expr, b, d)?;
 
                 let v_expr = r.value_id.unwrap();
                 let v_block = r.block_id;
@@ -1267,7 +1276,7 @@ impl<E: Extra> Blockify<E> {
                     let mut values = vec![];
                     for a in args.into_iter() {
                         let Argument::Positional(expr) = a;
-                        let r = self.add(block_id, *expr, b, d)?;
+                        let r = self.add(block_id, maybe_next, *expr, b, d)?;
                         let v = r.value_id.unwrap();
                         let ty = self.get_type(v);
                         values.push((v, ty));
@@ -1308,7 +1317,7 @@ impl<E: Extra> Blockify<E> {
             }
 
             Ast::UnaryOp(op, x) => {
-                let r = self.add_check(block_id, *x, b, d)?;
+                let r = self.add_check(block_id, maybe_next, *x, b, d)?;
                 let v_block = r.block_id;
                 let vx = r.value_id.unwrap();
                 let code = LCode::Op1(op, vx);
@@ -1328,6 +1337,7 @@ impl<E: Extra> Blockify<E> {
                 //self.env.push_next_block(v_next);
 
                 let v_next = self.env.get_next_block().unwrap();
+                //let v_next = maybe_next.unwrap();
 
                 let name = b.s("then");
                 let then_scope_id = self.env.new_scope(ScopeType::Block);
@@ -1350,13 +1360,13 @@ impl<E: Extra> Blockify<E> {
                     v_next
                 };
 
-                let r = self.add(block_id, *condition, b, d)?;
+                let r = self.add(block_id, maybe_next, *condition, b, d)?;
                 let v = r.value_id.unwrap();
                 let code = LCode::Branch(v, v_then, v_else);
-                self.push_code(
+                let v = self.push_code(
                     code,
                     scope_id,
-                    block_id,
+                    r.block_id,
                     AstType::Unit,
                     VarDefinitionSpace::Reg,
                 );
@@ -1365,14 +1375,14 @@ impl<E: Extra> Blockify<E> {
             }
 
             Ast::Ternary(c, x, y) => {
-                let r = self.add(block_id, *c, b, d)?;
+                let r = self.add(block_id, maybe_next, *c, b, d)?;
                 let v_c = r.value_id.unwrap();
 
                 let then_scope_id = self.env.new_scope(ScopeType::Block);
                 let name = b.s("then");
                 self.env.enter_scope(then_scope_id);
                 let v_then = self.push_label(name.into(), then_scope_id, &[], &[]);
-                let r = self.add(v_then, *x, b, d)?;
+                let r = self.add(v_then, maybe_next, *x, b, d)?;
                 let v_then_result = r.value_id.unwrap();
                 self.env.exit_scope();
                 let then_ty = self.get_type(v_then_result);
@@ -1381,7 +1391,7 @@ impl<E: Extra> Blockify<E> {
                 let name = b.s("else");
                 self.env.enter_scope(else_scope_id);
                 let v_else = self.push_label(name.into(), else_scope_id, &[], &[]);
-                let r = self.add(v_else, *y, b, d)?;
+                let r = self.add(v_else, maybe_next, *y, b, d)?;
                 let v_else_result = r.value_id.unwrap();
                 self.env.exit_scope();
                 let else_ty = self.get_type(v_else_result);
@@ -1396,10 +1406,10 @@ impl<E: Extra> Blockify<E> {
             }
 
             Ast::BinaryOp(op, x, y) => {
-                let r = self.add_check(block_id, *x, b, d)?;
+                let r = self.add_check(block_id, maybe_next, *x, b, d)?;
                 let vx = r.value_id.unwrap();
                 let v_block = r.block_id;
-                let r = self.add_check(v_block, *y, b, d)?;
+                let r = self.add_check(v_block, maybe_next, *y, b, d)?;
                 let vy = r.value_id.unwrap();
                 let v_block = r.block_id;
                 let code = LCode::Op2(op.node, vx, vy);
@@ -1433,7 +1443,7 @@ impl<E: Extra> Blockify<E> {
                     let count = if maybe_expr.is_some() { 1 } else { 0 };
 
                     let maybe_ret_value = if let Some(expr) = maybe_expr {
-                        let r = self.add(block_id, *expr, b, d)?;
+                        let r = self.add(block_id, maybe_next, *expr, b, d)?;
                         let expr_value_id = r.value_id.unwrap();
                         Some(expr_value_id)
                     } else {
@@ -1511,7 +1521,9 @@ impl<E: Extra> Blockify<E> {
                 }
             }
 
-            Ast::Loop(name, body) => self.add_loop(block_id, name, *body, b, d),
+            Ast::Loop(name, body) => {
+                self.add_loop(block_id, maybe_next.unwrap(), name, *body, b, d)
+            }
 
             Ast::Break(maybe_name, args) => {
                 // args not implemented yet
