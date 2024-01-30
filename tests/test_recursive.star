@@ -10,9 +10,18 @@ def fibonacci_recursive(n: int, a:int, c:int) -> int:
     out = fibonacci_recursive(n - 1, c, a + c)
   return out
 
+def fibonacci_recursive2(n: int, a:int, c:int) -> int:
+  out = 0
+  if n == 0:
+    return a
+  elif n == 1:
+    return c
+  else:
+    return fibonacci_recursive(n - 1, c, a + c)
+  return out
 
 def fib(n: int) -> int:
-  return fibonacci_recursive(n, 0, 1)
+  return fibonacci_recursive2(n, 0, 1)
 
 
 def main() -> int:

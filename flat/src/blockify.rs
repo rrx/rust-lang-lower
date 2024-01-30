@@ -919,9 +919,9 @@ impl<E: Extra> Blockify<E> {
 
             self.env.enter_scope(body_scope_id);
             // next block in body scope
-            self.env.push_next_block(return_block);
-            self.add(entry_id, *body, b, d)?;
-            self.env.pop_next_block().unwrap();
+            //self.env.push_next_block(return_block);
+            self.add_with_next(entry_id, *body, return_block, b, d)?;
+            //self.env.pop_next_block().unwrap();
             self.env.exit_scope();
             self.env.add_succ_static(block_id, entry_id);
             Ok(AddResult::new(Some(v_decl), false, block_id))
@@ -985,6 +985,7 @@ impl<E: Extra> Blockify<E> {
         b: &mut NodeBuilder<E>,
         d: &mut Diagnostics,
     ) -> Result<AddResult> {
+        let extra = node.extra.clone();
         self.env.push_next_block(v_next);
         let r = self.add(block_id, node, b, d)?;
         let v_block = r.block_id;
@@ -993,21 +994,29 @@ impl<E: Extra> Blockify<E> {
         let last_block_id = self.get_block_id(v);
         //assert_eq!(last_block_id, r.block_id);
         let block = self.env.get_block(last_block_id);
-        //println!(
-        //"addnext: {:?}",
-        //(block_id, last_block_id, block.last_value, block.terminator)
-        //);
+
         if !block.has_term() {
             //if r.is_term {
             let scope_id = self.env.current_scope().unwrap();
-            let v = self.push_code(
-                LCode::Jump(v_next, 0),
-                scope_id,
-                v_block,
-                AstType::Unit,
-                VarDefinitionSpace::Reg,
-            );
-            Ok(AddResult::new(Some(v), true, v_block))
+
+            let target = self.get_code(v_next);
+            // make sure we match the arity of the next block
+            if let LCode::Label(args, _kwargs) = target {
+                if *args == 0 {
+                    let v = self.push_code(
+                        LCode::Jump(v_next, 0),
+                        scope_id,
+                        v_block,
+                        AstType::Unit,
+                        VarDefinitionSpace::Reg,
+                    );
+                    Ok(AddResult::new(Some(v), true, v_block))
+                } else {
+                    Self::error(&format!("End of block expects {} values", args), &extra, d)
+                }
+            } else {
+                unreachable!();
+            }
         } else {
             Ok(r)
         }
