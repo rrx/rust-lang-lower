@@ -159,6 +159,7 @@ impl<E: Extra> NodeBuilder<E> {
         &mut self,
         name: &str,
         args: Vec<Argument<E>>,
+        span_id: SpanId,
     ) -> Option<AstNode<E>> {
         if let Some(b) = Builtin::from_name(name) {
             assert_eq!(b.arity(), args.len());
@@ -437,7 +438,7 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn call(&self, f: AstNode<E>, args: Vec<Argument<E>>, ty: AstType) -> AstNode<E> {
-        let extra = f.extra.clone();
+        //let extra = f.extra.clone();
         self.build(Ast::Call(f.into(), args, ty), self.span_id.clone()) //extra)
     }
 

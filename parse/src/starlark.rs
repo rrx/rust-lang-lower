@@ -158,6 +158,7 @@ impl<'a> Environment<'a> {
         }
     }
 
+    /*
     pub fn extra<E: Extra>(&self, span: codemap::Span, d: &mut Diagnostics) -> E {
         let begin = CodeLocation {
             pos: span.begin().get(),
@@ -168,6 +169,7 @@ impl<'a> Environment<'a> {
         let span = d.get_span(self.file_id, begin.clone(), end.clone());
         E::span(span)
     }
+    */
 
     pub fn span_id(&self, span: codemap::Span, d: &mut Diagnostics) -> SpanId {
         let begin = CodeLocation {
@@ -405,6 +407,7 @@ impl<E: Extra> Parser<E> {
         d: &mut Diagnostics,
     ) -> Result<ast::AstNode<E>> {
         use syntax::ast::StmtP;
+        let span_id = env.span_id(item.span, d);
 
         match item.node {
             StmtP::Statements(stmts) => StatementReader::build(self, stmts, env, d, b),
@@ -473,16 +476,13 @@ impl<E: Extra> Parser<E> {
                 ))
             }
 
-            StmtP::Return(maybe_expr) => {
-                let extra = env.extra(item.span, d);
-                Ok(match maybe_expr {
-                    Some(expr) => {
-                        let node = self.from_expr(expr, env, d, b)?;
-                        b.ret(Some(node)).set_extra(extra)
-                    }
-                    None => b.ret(None),
-                })
-            }
+            StmtP::Return(maybe_expr) => Ok(match maybe_expr {
+                Some(expr) => {
+                    let node = self.from_expr(expr, env, d, b)?;
+                    b.build(Ast::Return(Some(node.into())), span_id)
+                }
+                None => b.ret(None),
+            }),
 
             StmtP::Assign(assign) => {
                 use syntax::ast::AssignTargetP;
@@ -604,15 +604,14 @@ impl<E: Extra> Parser<E> {
         b: &mut NodeBuilder<E>,
     ) -> Result<AstNode<E>> {
         use syntax::ast::ExprP;
+        let span_id = env.span_id(item.span, d);
 
         match item.node {
             ExprP::Dot(expr, name) => {
                 if let ExprP::Identifier(ident) = &expr.node {
                     if &ident.node.ident == "q" {
                         // builtin namespace
-                        if let Some(mut ast) = b.build_builtin_from_name(&name, vec![]) {
-                            let extra = env.extra(item.span, d);
-                            ast.extra = extra;
+                        if let Some(ast) = b.build_builtin_from_name(&name, vec![], span_id) {
                             Ok(ast)
                         } else if let Some(extra) = ExtraAst::from_name(&name, vec![], b) {
                             match extra {
@@ -648,7 +647,6 @@ impl<E: Extra> Parser<E> {
                 let condition = self.from_expr(condition, env, d, b)?;
                 let then_expr = self.from_expr(then_expr, env, d, b)?;
                 let else_expr = self.from_expr(else_expr, env, d, b)?;
-                //let extra = env.extra(item.span, d);
                 Ok(b.build(
                     Ast::Ternary(condition.into(), then_expr.into(), else_expr.into()),
                     env.span_id(item.span, d),
@@ -665,8 +663,13 @@ impl<E: Extra> Parser<E> {
                     ExprP::Identifier(ident) => {
                         let name = b.s(&ident.node.ident);
                         if let Some(_data) = env.resolve(name) {
-                            let extra: E = env.extra(item.span, d);
-                            Ok(b.apply(name.into(), args, AstType::Int).set_extra(extra))
+                            let ident_span_id = env.span_id(ident.span, d);
+                            let ident = b.build(Ast::Identifier(name), ident_span_id);
+                            let ast = b.build(
+                                Ast::Call(ident.into(), args, AstType::Int),
+                                span_id.clone(),
+                            );
+                            Ok(ast)
                         } else {
                             d.push_diagnostic(env.error(ident.span, "Not found"));
                             Ok(b.error(env.span_id(item.span, d)))
@@ -677,11 +680,15 @@ impl<E: Extra> Parser<E> {
                         if let ExprP::Identifier(ident) = &expr.node {
                             let key = b.s(&ident.node.ident);
                             if let Some(_data) = env.resolve(key) {
-                                let extra: E = env.extra(item.span, d);
-                                Ok(b.apply(key.into(), args, AstType::Int).set_extra(extra))
+                                let ident_span_id = env.span_id(ident.span, d);
+                                let ident = b.build(Ast::Identifier(key), ident_span_id);
+                                let ast = b.build(
+                                    Ast::Call(ident.into(), args, AstType::Int),
+                                    span_id.clone(),
+                                );
+                                Ok(ast)
                             } else if &ident.node.ident == "q" {
                                 // builtin namespace
-
                                 if ExtraAst::is_extra(&name) {
                                     let extra = ExtraAst::from_name(&name, args, b).unwrap();
                                     return match extra {
@@ -695,7 +702,7 @@ impl<E: Extra> Parser<E> {
                                     };
                                 }
 
-                                if let Some(mut ast) = b.build_builtin_from_name(&name, args) {
+                                if let Some(ast) = b.build_builtin_from_name(&name, args, span_id) {
                                     // define things appropriately
                                     match ast.node {
                                         Ast::Global(name, _) => {
@@ -703,8 +710,6 @@ impl<E: Extra> Parser<E> {
                                         }
                                         _ => (),
                                     }
-                                    let extra = env.extra(item.span, d);
-                                    ast.extra = extra;
                                     Ok(ast)
                                 } else {
                                     d.push_diagnostic(env.error(name.span, "Builtin not found"));
@@ -746,12 +751,11 @@ impl<E: Extra> Parser<E> {
             ExprP::Literal(lit) => Ok(from_literal(lit, item.span, env, b, d)),
 
             ExprP::Minus(expr) => {
-                //let extra = env.extra(item.span, d);
                 let ast = Ast::UnaryOp(
                     ast::UnaryOperation::Minus,
                     self.from_expr(*expr, env, d, b)?.into(),
                 );
-                Ok(b.build(ast, env.span_id(item.span, d)))
+                Ok(b.build(ast, span_id))
             }
 
             _ => unimplemented!("{:?}", item.node),
@@ -835,7 +839,7 @@ impl<E: Extra, P: syntax::ast::AstPayload> StatementReader<E, P> {
         for stmt in stmts {
             if parse.is_extra(&stmt) {
                 let extra = parse.read_extra(stmt, env, d, b)?;
-                println!("extra: {:?}", extra);
+                //println!("extra: {:?}", extra);
                 match extra {
                     ExtraAst::LoopStart(maybe_key) => {
                         let key = if let Some(key) = maybe_key {
