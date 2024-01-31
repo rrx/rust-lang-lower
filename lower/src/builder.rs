@@ -242,8 +242,9 @@ impl<E: Extra> NodeBuilder<E> {
         AstNode {
             node,
             span_id, //: E::get_span(&extra).span_id,
-            extra: self.extra_unknown.clone(),
+            //extra: self.extra_unknown.clone(),
             //node_id: NodeID(None),
+            _e: std::marker::PhantomData::default(),
         }
     }
 
@@ -448,8 +449,9 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn mutate(&self, lhs: AstNode<E>, rhs: AstNode<E>) -> AstNode<E> {
-        let extra = lhs.extra.clone();
-        self.build(Ast::Mutate(lhs.into(), rhs.into()), self.span_id.clone()) //extra)
+        //let extra = lhs.extra.clone();
+        let span_id = lhs.span_id;
+        self.build(Ast::Mutate(lhs.into(), rhs.into()), span_id)
     }
 
     pub fn assign(&self, name: StringKey, rhs: AstNode<E>) -> AstNode<E> {
@@ -496,8 +498,8 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn module(&self, name: StringKey, body: AstNode<E>) -> AstNode<E> {
-        let extra = body.extra.clone();
-        self.build(Ast::Module(name, body.into()), self.span_id.clone()) //extra)
+        let span_id = body.span_id;
+        self.build(Ast::Module(name, body.into()), span_id)
     }
 
     pub fn block(
@@ -506,7 +508,7 @@ impl<E: Extra> NodeBuilder<E> {
         params: &[(StringKey, AstType)],
         body: AstNode<E>,
     ) -> AstNode<E> {
-        let extra = body.extra.clone();
+        //let extra = body.extra.clone();
         let params = params
             .iter()
             .map(|(name, ty)| ParameterNode {

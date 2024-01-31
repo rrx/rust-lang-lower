@@ -10,7 +10,7 @@ use std::collections::VecDeque;
 use lower::{
     ast::AssignTarget, ast::Builtin, Argument, Ast, AstNode, AstType, BinaryOperation, Definition,
     Diagnostic, Diagnostics, Extra, Label, LinkOptions, Literal, NodeBuilder, ParameterNode,
-    ParseError, Span, StringKey, StringLabel, UnaryOperation, VarDefinitionSpace,
+    ParseError, Span, SpanId, StringKey, StringLabel, UnaryOperation, VarDefinitionSpace,
 };
 
 use crate::{Environment, ScopeId, ScopeType, Successor, TemplateId, ValueId};
@@ -772,7 +772,8 @@ impl<E: Extra> Blockify<E> {
         block_id: ValueId,
         template_id: TemplateId,
         args: Vec<Argument<E>>,
-        extra: E,
+        span_id: SpanId,
+        //extra: E,
         b: &mut NodeBuilder<E>,
         d: &mut Diagnostics,
     ) -> Result<AddResult> {
@@ -803,7 +804,7 @@ impl<E: Extra> Blockify<E> {
         //let extra = node.extra.clone();
         assert_eq!(args_size as usize, jump_args.len());
         // jump to entry
-        let _r = self.add_jump(block_id, entry_id, jump_args, extra, b, d)?;
+        let _r = self.add_jump(block_id, entry_id, jump_args, span_id, b, d)?;
         self.env.add_succ_block(block_id, entry_id);
         // return block is the next block
 
@@ -938,8 +939,9 @@ impl<E: Extra> Blockify<E> {
         }
     }
 
-    pub fn error(msg: &str, extra: &E, d: &mut Diagnostics) -> Result<AddResult> {
-        d.push_diagnostic(error(msg, extra.get_span()));
+    pub fn error(msg: &str, span_id: SpanId, d: &mut Diagnostics) -> Result<AddResult> {
+        let span = d.lookup(span_id);
+        d.push_diagnostic(error(msg, span));
         return Err(Error::new(ParseError::Invalid));
     }
 
@@ -952,9 +954,10 @@ impl<E: Extra> Blockify<E> {
         b: &mut NodeBuilder<E>,
         d: &mut Diagnostics,
     ) -> Result<AddResult> {
+        let span_id = body.span_id;
         //let v_next = self.env.get_next_block().unwrap();
         //assert_eq!(v_next, _v_next);
-        let extra = body.extra.clone();
+        //let extra = body.extra.clone();
 
         let loop_scope_id = self.env.new_scope(ScopeType::Loop);
         let v_loop = self.push_label(name.into(), loop_scope_id, &[], &[]);
@@ -964,7 +967,7 @@ impl<E: Extra> Blockify<E> {
         self.env.exit_scope();
 
         // enter loop
-        let r = self.add_jump(block_id, v_loop, vec![], extra, b, d)?;
+        let r = self.add_jump(block_id, v_loop, vec![], span_id, b, d)?;
         Ok(AddResult::new(Some(r.value_id.unwrap()), true, v_next))
     }
 
@@ -973,7 +976,8 @@ impl<E: Extra> Blockify<E> {
         block_id: ValueId,
         target_id: ValueId,
         jump_args: Vec<AstNode<E>>,
-        extra: E,
+        span_id: SpanId,
+        //extra: E,
         b: &mut NodeBuilder<E>,
         d: &mut Diagnostics,
     ) -> Result<AddResult> {
@@ -984,7 +988,15 @@ impl<E: Extra> Blockify<E> {
         } else {
             unreachable!();
         };
-        self._add_jump(block_id, target_id, *args as usize, jump_args, extra, b, d)
+        self._add_jump(
+            block_id,
+            target_id,
+            *args as usize,
+            jump_args,
+            span_id,
+            b,
+            d,
+        )
     }
 
     pub fn _add_jump(
@@ -993,7 +1005,8 @@ impl<E: Extra> Blockify<E> {
         target_id: ValueId,
         num_args: usize,
         jump_args: Vec<AstNode<E>>,
-        extra: E,
+        span_id: SpanId,
+        //extra: E,
         b: &mut NodeBuilder<E>,
         d: &mut Diagnostics,
     ) -> Result<AddResult> {
@@ -1029,7 +1042,7 @@ impl<E: Extra> Blockify<E> {
         } else {
             Self::error(
                 &format!("End of block expects {} values", num_args),
-                &extra,
+                span_id,
                 d,
             )
         }
@@ -1043,7 +1056,8 @@ impl<E: Extra> Blockify<E> {
         b: &mut NodeBuilder<E>,
         d: &mut Diagnostics,
     ) -> Result<AddResult> {
-        let extra = node.extra.clone();
+        let span_id = node.span_id;
+        //let extra = node.extra.clone();
         //self.env.push_next_block(v_next);
         let r = self.add(block_id, Some(v_next), node, b, d)?;
         let v_block = r.block_id;
@@ -1055,7 +1069,7 @@ impl<E: Extra> Blockify<E> {
 
         if !block.has_term() {
             // if the block doesn't explicitely terminate, then we jump to the next block
-            self.add_jump(v_block, v_next, vec![], extra, b, d)
+            self.add_jump(v_block, v_next, vec![], span_id, b, d)
         } else {
             Ok(r)
         }
@@ -1067,7 +1081,8 @@ impl<E: Extra> Blockify<E> {
         block_id: ValueId,
         v_func: ValueId,
         args: Vec<Argument<E>>,
-        extra: &E,
+        span_id: SpanId,
+        //extra: &E,
         b: &mut NodeBuilder<E>,
         d: &mut Diagnostics,
     ) -> Result<AddResult> {
@@ -1081,7 +1096,7 @@ impl<E: Extra> Blockify<E> {
                         func_arg_types.len(),
                         args.len()
                     ),
-                    extra,
+                    span_id,
                     d,
                 );
             }
@@ -1110,7 +1125,11 @@ impl<E: Extra> Blockify<E> {
             Ok(AddResult::new(Some(v), false, block_id))
         } else {
             let name = b.resolve_label(self.get_name(v_func));
-            return Self::error(&format!("Type not function: {}, {:?}", name, ty), extra, d);
+            return Self::error(
+                &format!("Type not function: {}, {:?}", name, ty),
+                span_id,
+                d,
+            );
         }
     }
 
@@ -1166,7 +1185,7 @@ impl<E: Extra> Blockify<E> {
                             block_id,
                             data.value_id,
                             args,
-                            &node.extra,
+                            node.span_id,
                             b,
                             d,
                         );
@@ -1180,13 +1199,13 @@ impl<E: Extra> Blockify<E> {
                             block_id,
                             *template_id,
                             args,
-                            node.extra.clone(),
+                            node.span_id,
                             b,
                             d,
                         );
                     }
 
-                    return Self::error(&format!("Call name not found: {}", name), &node.extra, d);
+                    return Self::error(&format!("Call name not found: {}", name), node.span_id, d);
                 }
                 _ => {
                     unimplemented!("{:?}", expr.node);
@@ -1223,7 +1242,8 @@ impl<E: Extra> Blockify<E> {
                     let v = self.push_code(code, scope_id, block_id, ty, data.mem.clone());
                     Ok(AddResult::new(Some(v), false, block_id))
                 } else {
-                    d.push_diagnostic(error("Name not found", node.extra.get_span()));
+                    let span = d.lookup(node.span_id);
+                    d.push_diagnostic(error("Name not found", span));
                     Err(Error::new(ParseError::Invalid))
                 }
             }
@@ -1271,7 +1291,8 @@ impl<E: Extra> Blockify<E> {
                     if let Some(s) = arg.try_string() {
                         self.link.add_library(&s);
                     } else {
-                        d.push_diagnostic(error("Expected string", node.extra.get_span()));
+                        let span = d.lookup(node.span_id);
+                        d.push_diagnostic(error("Expected string", span));
                     }
                     Ok(AddResult::new(None, false, block_id))
                 }
@@ -1430,12 +1451,14 @@ impl<E: Extra> Blockify<E> {
             Ast::Goto(label) => {
                 // Goto is terminal
                 if let Some(target_value_id) = self.env.resolve_block(label.into()) {
-                    let extra = node.extra.clone();
-                    self.add_jump(block_id, target_value_id, vec![], extra, b, d)
+                    //let extra = node.extra.clone();
+                    self.add_jump(block_id, target_value_id, vec![], node.span_id, b, d)
                 } else {
+                    let span = d.lookup(node.span_id);
                     d.push_diagnostic(error(
                         &format!("Block name not found: {}", b.r(label)),
-                        node.extra.get_span(),
+                        span,
+                        //node.extra.get_span(),
                     ));
                     Err(Error::new(ParseError::Invalid))
                 }
@@ -1449,11 +1472,13 @@ impl<E: Extra> Blockify<E> {
                     } else {
                         vec![]
                     };
-                    self.add_jump(block_id, v_return, args, node.extra, b, d)
+                    self.add_jump(block_id, v_return, args, node.span_id, b, d)
                 } else {
+                    let span = d.lookup(node.span_id);
                     d.push_diagnostic(error(
                         &format!("Return without function context"),
-                        node.extra.get_span(),
+                        span,
+                        //node.extra.get_span(),
                     ));
                     Err(Error::new(ParseError::Invalid))
                 }
@@ -1510,10 +1535,11 @@ impl<E: Extra> Blockify<E> {
                 assert_eq!(args.len(), 0);
                 // loop up loop blocks by name
                 if let Some(v_next) = self.env.get_loop_next_block(maybe_name) {
-                    let extra = node.extra.clone();
-                    self.add_jump(block_id, v_next, vec![], extra, b, d)
+                    //let extra = node.extra.clone();
+                    self.add_jump(block_id, v_next, vec![], node.span_id, b, d)
                 } else {
-                    d.push_diagnostic(error(&format!("Break without loop"), node.extra.get_span()));
+                    let span = d.lookup(node.span_id);
+                    d.push_diagnostic(error(&format!("Break without loop"), span)); //node.extra.get_span()));
                     Err(Error::new(ParseError::Invalid))
                 }
             }
@@ -1523,20 +1549,23 @@ impl<E: Extra> Blockify<E> {
                 assert_eq!(args.len(), 0);
                 // loop up loop blocks by name
                 if let Some(v_start) = self.env.get_loop_start_block(maybe_name) {
-                    let extra = node.extra.clone();
-                    self.add_jump(block_id, v_start, vec![], extra, b, d)
+                    //let extra = node.extra.clone();
+                    self.add_jump(block_id, v_start, vec![], node.span_id, b, d)
                 } else {
                     // mismatch name
+                    let span = d.lookup(node.span_id);
                     d.push_diagnostic(error(
                         &format!("Continue without loop"),
-                        node.extra.get_span(),
+                        span,
+                        //node.extra.get_span(),
                     ));
                     Err(Error::new(ParseError::Invalid))
                 }
             }
 
             Ast::Error => {
-                d.push_diagnostic(error(&format!("AST Error"), node.extra.get_span()));
+                let span = d.lookup(node.span_id);
+                d.push_diagnostic(error(&format!("AST Error"), span)); //node.extra.get_span()));
                 Err(Error::new(ParseError::Invalid))
             }
 
