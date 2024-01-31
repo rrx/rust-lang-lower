@@ -344,9 +344,9 @@ impl<E: Extra> Parser<E> {
         let mut env = Environment::new(&codemap, file_id);
         let mut seq = b.prelude();
         let ast: ast::AstNode<E> = self.from_stmt(stmt, &mut env, b, d)?;
-        let extra = ast.extra.clone();
+        let span_id = ast.span_id.clone();
         seq.push(ast);
-        Ok(b.module(module_key.into(), b.seq(seq).set_extra(extra)))
+        Ok(b.build(Ast::Module(module_key, b.seq(seq).into()), span_id))
     }
 
     fn from_parameter<'a, P: syntax::ast::AstPayload>(
@@ -360,7 +360,6 @@ impl<E: Extra> Parser<E> {
 
         match item.node {
             ParameterP::Normal(ident, maybe_type) => {
-                //let extra = env.extra(item.span, d);
                 let ty = if let Some(ty) = maybe_type.map(|ty| from_type(&ty)) {
                     ty
                 } else {
@@ -378,7 +377,6 @@ impl<E: Extra> Parser<E> {
             /*
 
             ParameterP::WithDefaultValue(ident, maybe_type, expr) => {
-                let extra = env.extra(item.span);
                 let ty = if let Some(ty) = maybe_type.map(|ty| from_type(&ty)) {
                     ty
                 } else {
@@ -451,14 +449,12 @@ impl<E: Extra> Parser<E> {
                 });
 
                 env.define(name);
-                //let extra = env.extra(item.span, d);
                 Ok(b.build(def_ast, env.span_id(item.span, d)))
             }
 
             StmtP::If(expr, truestmt) => {
                 let condition = self.from_expr(expr, env, d, b)?;
                 let truestmt = self.from_stmt(*truestmt, env, b, d)?;
-                //let extra = env.extra(item.span, d);
                 Ok(b.build(
                     Ast::Conditional(condition.into(), truestmt.into(), None),
                     env.span_id(item.span, d),
@@ -469,7 +465,6 @@ impl<E: Extra> Parser<E> {
                 let condition = self.from_expr(expr, env, d, b)?;
                 let truestmt = self.from_stmt(options.0, env, b, d)?;
                 let elsestmt = self.from_stmt(options.1, env, b, d)?;
-                //let extra = env.extra(item.span, d);
                 Ok(b.build(
                     Ast::Conditional(condition.into(), truestmt.into(), Some(elsestmt.into())),
                     env.span_id(item.span, d),

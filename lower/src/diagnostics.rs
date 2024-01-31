@@ -43,7 +43,7 @@ impl Span {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct SpanId(u32);
 impl SpanId {
     pub fn index(&self) -> usize {
