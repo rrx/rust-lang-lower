@@ -5,6 +5,7 @@ use crate::{
     //ir::{IRArg, IRBlock, IRKind, IRNode, IRTypeSelect},
     AstType,
     Span,
+    SpanId,
     //CodeLocation,
     //NodeIndex, PlaceId,
     StringKey,
@@ -101,6 +102,7 @@ pub struct NodeBuilder<E> {
     static_count: usize,
     loop_count: usize,
     pub extra_unknown: E,
+    pub span_id: SpanId,
     pub labels: LabelBuilder,
     _e: std::marker::PhantomData<E>,
 }
@@ -117,6 +119,7 @@ impl<E: Extra> NodeBuilder<E> {
             static_count: 0,
             loop_count: 0,
             labels: LabelBuilder::new(),
+            span_id: span_unknown.span_id.clone(),
             extra_unknown: E::span(span_unknown),
             _e: std::marker::PhantomData::default(),
         }
@@ -272,6 +275,7 @@ impl<E: Extra> NodeBuilder<E> {
                 name: *name,
                 ty: ty.clone(),
                 node: Parameter::Normal,
+                span_id: self.span_id.clone(),
                 extra: self.extra_unknown.clone(),
             })
             .collect();
@@ -481,6 +485,7 @@ impl<E: Extra> NodeBuilder<E> {
             ty: ty.clone(),
             node: Parameter::Normal,
             extra: self.extra_unknown.clone(),
+            span_id: self.span_id.clone(),
         }
     }
 
@@ -503,6 +508,7 @@ impl<E: Extra> NodeBuilder<E> {
                 ty: ty.clone(),
                 node: Parameter::Normal,
                 extra: self.extra_unknown.clone(),
+                span_id: self.span_id.clone(),
             })
             .collect();
         let nb = AstNodeBlock {

@@ -138,6 +138,7 @@ pub struct ParameterNode<E> {
     pub name: StringKey,
     pub ty: AstType,
     pub node: Parameter,
+    pub span_id: SpanId,
     pub extra: E,
 }
 
@@ -345,6 +346,7 @@ impl<E: Extra> Ast<E> {
                     ty: AstType::Unit,
                     node: Parameter::Normal,
                     extra: node.extra,
+                    span_id: b.span_id.clone(),
                 });
             }
             Some(Self::Label(key.into()))

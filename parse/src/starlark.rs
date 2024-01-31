@@ -24,6 +24,7 @@ use lower::{
     Module,
     NodeBuilder,
     Span,
+    SpanId,
     StringKey,
     TypeUnify,
 };
@@ -144,6 +145,17 @@ impl<'a> Environment<'a> {
             file_id,
             unique: 0,
         }
+    }
+
+    pub fn get_span(&self, span: codemap::Span, d: &mut Diagnostics) -> SpanId {
+        let begin = CodeLocation {
+            pos: span.begin().get(),
+        };
+        let end = CodeLocation {
+            pos: span.end().get(),
+        };
+        let span = d.get_span(self.file_id, begin.clone(), end.clone());
+        span.span_id
     }
 
     pub fn extra<E: Extra>(&self, span: codemap::Span, d: &mut Diagnostics) -> E {
@@ -344,6 +356,7 @@ impl<E: Extra> Parser<E> {
                     name: b.s(&ident.node.ident),
                     ty: ty.unwrap(),
                     node: ast::Parameter::Normal,
+                    span_id: env.get_span(item.span, d),
                     extra,
                 }
             }
