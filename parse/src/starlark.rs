@@ -623,14 +623,14 @@ impl<E: Extra> Parser<E> {
                         } else {
                             assert!(false);
                             d.push_diagnostic(env.error(name.span, "Builtin not found"));
-                            Ok(b.error(env.extra(item.span, d)))
+                            Ok(b.error(env.span_id(item.span, d)))
                         }
                     } else {
                         d.push_diagnostic(env.error(
                             name.span,
                             &format!("Variable not in scope: {}", ident.node.ident),
                         ));
-                        Ok(b.error(env.extra(item.span, d)))
+                        Ok(b.error(env.span_id(item.span, d)))
                     }
                 } else {
                     unimplemented!("{:?}", (expr, name))
@@ -669,7 +669,7 @@ impl<E: Extra> Parser<E> {
                             Ok(b.apply(name.into(), args, AstType::Int).set_extra(extra))
                         } else {
                             d.push_diagnostic(env.error(ident.span, "Not found"));
-                            Ok(b.error(env.extra(item.span, d)))
+                            Ok(b.error(env.span_id(item.span, d)))
                         }
                     }
 
@@ -708,14 +708,14 @@ impl<E: Extra> Parser<E> {
                                     Ok(ast)
                                 } else {
                                     d.push_diagnostic(env.error(name.span, "Builtin not found"));
-                                    Ok(b.error(env.extra(item.span, d)))
+                                    Ok(b.error(env.span_id(item.span, d)))
                                 }
                             } else {
                                 d.push_diagnostic(env.error(
                                     name.span,
                                     &format!("Variable not in scope: {}", ident.node.ident),
                                 ));
-                                Ok(b.error(env.extra(item.span, d)))
+                                Ok(b.error(env.span_id(item.span, d)))
                             }
                         } else {
                             unimplemented!("{:?}", (expr, name))
@@ -732,15 +732,14 @@ impl<E: Extra> Parser<E> {
 
                 let name = b.s(&ident.node.ident);
                 if let Some(_data) = env.resolve(name) {
-                    let extra = env.extra(item.span, d);
-                    let ast = b.ident(name.into()).set_extra(extra);
+                    let ast = b.build(Ast::Identifier(name), env.span_id(item.span, d));
                     Ok(ast)
                 } else {
                     d.push_diagnostic(env.error(
                         ident.span,
                         &format!("Variable not in scope: {}", ident.node.ident),
                     ));
-                    Ok(b.error(env.extra(item.span, d)))
+                    Ok(b.error(env.span_id(item.span, d)))
                 }
             }
 

@@ -258,8 +258,8 @@ impl<E: Extra> NodeBuilder<E> {
     }
     */
 
-    pub fn error(&self, extra: E) -> AstNode<E> {
-        self.node(Ast::Error)
+    pub fn error(&self, span_id: SpanId) -> AstNode<E> {
+        self.build(Ast::Error, span_id)
     }
 
     pub fn definition(
