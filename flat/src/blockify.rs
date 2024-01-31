@@ -528,7 +528,7 @@ impl<E: Extra> Blockify<E> {
         name: StringLabel,
         scope_id: ScopeId,
         args: &[AstType],
-        kwargs: &[ParameterNode<E>],
+        kwargs: &[ParameterNode],
     ) -> ValueId {
         let block_id = self.push_code_new_block(
             LCode::Label(args.len() as u8, kwargs.len() as u8),

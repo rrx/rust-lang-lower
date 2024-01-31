@@ -134,18 +134,18 @@ pub enum Parameter {
 }
 
 #[derive(Debug, Clone)]
-pub struct ParameterNode<E> {
+pub struct ParameterNode {
     pub name: StringKey,
     pub ty: AstType,
     pub node: Parameter,
     pub span_id: SpanId,
-    pub extra: E,
+    //pub extra: E,
 }
 
 #[derive(Debug, Clone)]
 pub struct Definition<E> {
     pub name: StringKey,
-    pub params: Vec<ParameterNode<E>>,
+    pub params: Vec<ParameterNode>,
     pub return_type: Box<AstType>,
     pub body: Option<Box<AstNode<E>>>,
     pub lambda: bool,
@@ -202,7 +202,7 @@ pub enum Terminator {
 pub struct AstNodeBlock<E> {
     pub name: BlockId,
     //pub(crate) label: BlockLabel,
-    pub params: Vec<ParameterNode<E>>,
+    pub params: Vec<ParameterNode>,
     pub children: Vec<AstNode<E>>,
 }
 
@@ -234,7 +234,7 @@ pub enum Ast<E> {
     Break(Option<StringKey>, Vec<AstNode<E>>),
     Continue(Option<StringKey>, Vec<AstNode<E>>),
     Goto(StringKey),
-    BlockStart(StringKey, Vec<ParameterNode<E>>),
+    BlockStart(StringKey, Vec<ParameterNode>),
     Label(StringKey),
     Noop,
     Error,
@@ -345,7 +345,7 @@ impl<E: Extra> Ast<E> {
                     name: key,
                     ty: AstType::Unit,
                     node: Parameter::Normal,
-                    extra: node.extra,
+                    //extra: node.extra,
                     span_id: b.span_id.clone(),
                 });
             }

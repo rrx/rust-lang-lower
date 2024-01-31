@@ -276,7 +276,7 @@ impl<E: Extra> NodeBuilder<E> {
                 ty: ty.clone(),
                 node: Parameter::Normal,
                 span_id: self.span_id.clone(),
-                extra: self.extra_unknown.clone(),
+                //extra: self.extra_unknown.clone(),
             })
             .collect();
         self.node(Ast::Definition(Definition {
@@ -471,7 +471,7 @@ impl<E: Extra> NodeBuilder<E> {
         self.build(Ast::Label(name), self.extra_unknown.clone())
     }
 
-    pub fn block_start(&self, name: StringKey, params: Vec<ParameterNode<E>>) -> AstNode<E> {
+    pub fn block_start(&self, name: StringKey, params: Vec<ParameterNode>) -> AstNode<E> {
         self.build(Ast::BlockStart(name, params), self.extra_unknown.clone())
     }
 
@@ -479,12 +479,12 @@ impl<E: Extra> NodeBuilder<E> {
         self.build(Ast::Goto(name), self.extra_unknown.clone())
     }
 
-    pub fn param(&self, name: StringKey, ty: AstType) -> ParameterNode<E> {
+    pub fn param(&self, name: StringKey, ty: AstType) -> ParameterNode {
         ParameterNode {
             name,
             ty: ty.clone(),
             node: Parameter::Normal,
-            extra: self.extra_unknown.clone(),
+            //extra: self.extra_unknown.clone(),
             span_id: self.span_id.clone(),
         }
     }
@@ -507,7 +507,7 @@ impl<E: Extra> NodeBuilder<E> {
                 name: *name,
                 ty: ty.clone(),
                 node: Parameter::Normal,
-                extra: self.extra_unknown.clone(),
+                //extra: self.extra_unknown.clone(),
                 span_id: self.span_id.clone(),
             })
             .collect();

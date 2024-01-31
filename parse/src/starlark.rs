@@ -339,12 +339,12 @@ impl<E: Extra> Parser<E> {
         env: &mut Environment<'a>,
         b: &mut NodeBuilder<E>,
         d: &mut Diagnostics,
-    ) -> ast::ParameterNode<E> {
+    ) -> ast::ParameterNode {
         use syntax::ast::ParameterP;
 
         match item.node {
             ParameterP::Normal(ident, maybe_type) => {
-                let extra = env.extra(item.span, d);
+                //let extra = env.extra(item.span, d);
                 let ty = if let Some(ty) = maybe_type.map(|ty| from_type(&ty)) {
                     ty
                 } else {
@@ -357,7 +357,7 @@ impl<E: Extra> Parser<E> {
                     ty: ty.unwrap(),
                     node: ast::Parameter::Normal,
                     span_id: env.get_span(item.span, d),
-                    extra,
+                    //extra,
                 }
             }
             /*
