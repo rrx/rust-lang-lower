@@ -23,7 +23,7 @@ use lower::{
     LinkOptions,
     Module,
     NodeBuilder,
-    Span,
+    //Span,
     SpanId,
     StringKey,
     TypeUnify,
@@ -135,6 +135,17 @@ pub struct Environment<'a> {
     unique: usize,
 }
 
+pub fn get_span_id(file_id: usize, span: codemap::Span, d: &mut Diagnostics) -> SpanId {
+    let begin = CodeLocation {
+        pos: span.begin().get(),
+    };
+    let end = CodeLocation {
+        pos: span.end().get(),
+    };
+    let span = d.get_span(file_id, begin.clone(), end.clone());
+    span.span_id
+}
+
 impl<'a> Environment<'a> {
     pub fn new(codemap: &'a CodeMap, file_id: usize) -> Self {
         let start = Layer::default();
@@ -145,17 +156,6 @@ impl<'a> Environment<'a> {
             file_id,
             unique: 0,
         }
-    }
-
-    pub fn get_span(&self, span: codemap::Span, d: &mut Diagnostics) -> SpanId {
-        let begin = CodeLocation {
-            pos: span.begin().get(),
-        };
-        let end = CodeLocation {
-            pos: span.end().get(),
-        };
-        let span = d.get_span(self.file_id, begin.clone(), end.clone());
-        span.span_id
     }
 
     pub fn extra<E: Extra>(&self, span: codemap::Span, d: &mut Diagnostics) -> E {
@@ -356,8 +356,7 @@ impl<E: Extra> Parser<E> {
                     name: b.s(&ident.node.ident),
                     ty: ty.unwrap(),
                     node: ast::Parameter::Normal,
-                    span_id: env.get_span(item.span, d),
-                    //extra,
+                    span_id: get_span_id(env.file_id, item.span, d),
                 }
             }
             /*
@@ -965,7 +964,7 @@ pub(crate) mod tests {
             )
             .unwrap()
             .normalize(&mut d, &mut b);
-        ast.dump_html(&mut b);
+        ast.dump_html(&mut b, &mut d).unwrap();
     }
 
     fn run_test_ir(filename: &str, expected: i32) {

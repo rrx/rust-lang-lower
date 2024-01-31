@@ -45,6 +45,11 @@ impl Span {
 
 #[derive(Debug, Clone)]
 pub struct SpanId(u32);
+impl SpanId {
+    pub fn index(&self) -> usize {
+        self.0 as usize
+    }
+}
 
 pub struct Diagnostics {
     pub files: FileDB,
@@ -67,6 +72,11 @@ impl Diagnostics {
 
     pub fn get_span_unknown(&mut self) -> Span {
         self.get_span(0, CodeLocation::default(), CodeLocation::default())
+    }
+
+    pub fn lookup(&self, span_id: SpanId) -> Span {
+        let (file_id, begin, end) = self.spans.get_index(span_id.0 as usize).unwrap();
+        Span::new(span_id, *file_id, *begin, *end)
     }
 
     pub fn get_span(&mut self, file_id: usize, begin: CodeLocation, end: CodeLocation) -> Span {

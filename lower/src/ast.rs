@@ -98,13 +98,14 @@ pub enum BinaryOperation {
 }
 
 #[derive(Debug, Clone)]
-pub struct BinOpNode<E> {
+pub struct BinOpNode {
     pub node: BinaryOperation,
-    extra: E,
+    span_id: SpanId,
+    //extra: E,
 }
-impl<E> BinOpNode<E> {
-    pub fn new(node: BinaryOperation, extra: E) -> Self {
-        Self { node, extra }
+impl BinOpNode {
+    pub fn new(node: BinaryOperation, span_id: SpanId) -> Self {
+        Self { node, span_id }
     }
 }
 
@@ -208,7 +209,7 @@ pub struct AstNodeBlock<E> {
 
 #[derive(Debug, Clone)]
 pub enum Ast<E> {
-    BinaryOp(BinOpNode<E>, Box<AstNode<E>>, Box<AstNode<E>>),
+    BinaryOp(BinOpNode, Box<AstNode<E>>, Box<AstNode<E>>),
     UnaryOp(UnaryOperation, Box<AstNode<E>>),
     Call(Box<AstNode<E>>, Vec<Argument<E>>, AstType),
     Identifier(StringKey),
@@ -617,16 +618,19 @@ impl<E: Extra> AstNode<E> {
         }
     }
 
-    pub fn dump_html(&self, b: &NodeBuilder<E>) -> Result<()> {
+    pub fn dump_html(&self, b: &NodeBuilder<E>, d: &Diagnostics) -> Result<()> {
         let mut file = std::fs::File::create("out.html")?;
         use std::io::prelude::*;
         let mut out = vec![];
         self.dump_strings(b, &mut out, 0);
         file.write_all(b"<pre>\n")?;
-        for (depth, s, _span) in out {
+        for (depth, s, span) in out {
             file.write_fmt(format_args!(
-                "{:width$}<span id=\"0\">{}</span>\n",
+                "{:width$}<span id=\"{:?}\" begin=\"{}\" end=\"{}\">{}</span>\n",
                 "",
+                span.span_id.index(),
+                span.begin.pos,
+                span.end.pos,
                 s,
                 width = depth * 2
             ))?;
@@ -854,8 +858,9 @@ impl<E: Extra> AstNode<E> {
 
 pub fn print_html(s: &str, depth: usize, span: &Span) {
     println!(
-        "{:width$}<span id=\"0\">{}</span>",
+        "{:width$}<span class=\"span{}\">{}</span>",
         "",
+        span.span_id.index(),
         s,
         width = depth * 2
     );

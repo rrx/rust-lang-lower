@@ -333,7 +333,7 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn binop(&self, op: BinaryOperation, a: AstNode<E>, b: AstNode<E>) -> AstNode<E> {
-        let op_node = BinOpNode::new(op, self.extra_unknown.clone());
+        let op_node = BinOpNode::new(op, self.span_id.clone());
         let ast = Ast::BinaryOp(op_node, a.into(), b.into());
         self.node(ast)
     }
