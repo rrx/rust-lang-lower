@@ -163,9 +163,9 @@ impl<E: Extra> NodeBuilder<E> {
     ) -> Option<AstNode<E>> {
         if let Some(b) = Builtin::from_name(name) {
             assert_eq!(b.arity(), args.len());
-            Some(self.node(Ast::Builtin(b, args)))
+            Some(self.build(Ast::Builtin(b, args), span_id))
         } else if let Some(ast) = Ast::from_name(name, args, self) {
-            Some(self.node(ast))
+            Some(self.build(ast, span_id))
         } else {
             None
         }

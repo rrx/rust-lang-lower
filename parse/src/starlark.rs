@@ -14,6 +14,8 @@ use flat::Blockify;
 use lower::ast;
 use lower::ast::{Ast, AstNode};
 use lower::{
+    ast::AssignTarget,
+    ast::BinOpNode,
     Argument,
     AstType,
     CodeLocation,
@@ -357,6 +359,7 @@ impl<E: Extra> Parser<E> {
         d: &mut Diagnostics,
     ) -> ast::ParameterNode {
         use syntax::ast::ParameterP;
+        let span_id = get_span_id(env.file_id, item.span, d);
 
         match item.node {
             ParameterP::Normal(ident, maybe_type) => {
@@ -371,7 +374,7 @@ impl<E: Extra> Parser<E> {
                     name: b.s(&ident.node.ident),
                     ty: ty.unwrap(),
                     node: ast::Parameter::Normal,
-                    span_id: get_span_id(env.file_id, item.span, d),
+                    span_id,
                 }
             }
             /*
@@ -449,7 +452,7 @@ impl<E: Extra> Parser<E> {
                 });
 
                 env.define(name);
-                Ok(b.build(def_ast, env.span_id(item.span, d)))
+                Ok(b.build(def_ast, span_id))
             }
 
             StmtP::If(expr, truestmt) => {
@@ -493,15 +496,21 @@ impl<E: Extra> Parser<E> {
 
                         // lookup
                         if let Some(_data) = env.resolve(name) {
-                            Ok(b.assign(name.into(), rhs))
+                            Ok(b.build(
+                                Ast::Assign(AssignTarget::Identifier(name), rhs.into()),
+                                span_id,
+                            ))
                         } else {
                             // name does not exist in scope
                             // Either create a global or do local, depending on context
                             env.define(name);
                             if env.is_in_func() {
-                                Ok(b.assign(name.into(), rhs))
+                                Ok(b.build(
+                                    Ast::Assign(AssignTarget::Identifier(name), rhs.into()),
+                                    span_id,
+                                ))
                             } else {
-                                Ok(b.global(name, rhs))
+                                Ok(b.build(Ast::Global(name, rhs.into()), span_id))
                             }
                         }
                     }
@@ -632,9 +641,12 @@ impl<E: Extra> Parser<E> {
             }
 
             ExprP::Op(lhs, op, rhs) => {
-                let node_a = self.from_expr(*lhs, env, d, b)?.into();
-                let node_b = self.from_expr(*rhs, env, d, b)?.into();
-                Ok(b.binop(from_binop(op), node_a, node_b))
+                let node_a = self.from_expr(*lhs, env, d, b)?;
+                let node_b = self.from_expr(*rhs, env, d, b)?;
+
+                let op_node = BinOpNode::new(from_binop(op), node_a.span_id.clone());
+                let ast = Ast::BinaryOp(op_node, node_a.into(), node_b.into());
+                Ok(b.build(ast, span_id))
             }
 
             ExprP::If(args) => {
@@ -1057,6 +1069,6 @@ pub(crate) mod tests {
 
     #[test]
     fn test_dump() {
-        dump("../tests/static_var.star");
+        dump("../tests/test_recursive.star");
     }
 }

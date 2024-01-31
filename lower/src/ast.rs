@@ -345,7 +345,6 @@ impl<E: Extra> Ast<E> {
                     name: key,
                     ty: AstType::Unit,
                     node: Parameter::Normal,
-                    //extra: node.extra,
                     span_id: b.span_id.clone(),
                 });
             }
@@ -442,26 +441,15 @@ pub trait Extra: Debug + Clone {
 pub struct AstNode<E> {
     //pub node_id: NodeID,
     pub node: Ast<E>,
-    //pub extra: E,
     pub span_id: SpanId,
     pub(crate) _e: std::marker::PhantomData<E>,
 }
 
 impl<E: Extra> AstNode<E> {
-    pub fn set_extra(mut self, extra: E) -> Self {
-        //self.extra = extra;
-        self
-    }
-
     pub fn location<'c>(&self, context: &'c Context, d: &Diagnostics) -> Location<'c> {
         let span = d.lookup(self.span_id);
         d.location(context, &span)
-        //self.extra.location(context, d)
     }
-
-    //pub fn new(node: Ast<E>, extra: E) -> Self {
-    //Self { node, extra }
-    //}
 
     pub fn try_string(&self) -> Option<String> {
         if let Ast::Literal(Literal::String(s)) = &self.node {
@@ -524,30 +512,6 @@ impl<E: Extra> AstNode<E> {
             _ => vec![self],
         }
     }
-
-    /*
-    pub fn to_blocks(self) -> Vec<NodeBlock<E>> {
-        //let mut out = vec![];
-        for expr in self.to_vec() {
-            match &expr.node {
-                // should be flattened already
-                Ast::Sequence(_) => unreachable!(),
-                Ast::Goto(_, _) => (),
-                Ast::Label(_, _) => (),
-                _ => unimplemented!(),
-            }
-        }
-        //let mut out = vec![];
-        //match self.node {
-        //Ast::Sequence(_exprs) => {
-        //}
-        //_ => ()
-        //}
-
-        //out
-        vec![]
-    }
-    */
 
     pub fn children_mut<'a>(&'a mut self) -> AstNodeIterator<'a, E> {
         let mut values = vec![];

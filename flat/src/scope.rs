@@ -248,32 +248,35 @@ impl<E: Extra> Environment<E> {
             .insert((successor_type, succ));
     }
 
-    pub fn push_next_block(&mut self, next_id: ValueId) {
-        let scope_id = self.current_scope().unwrap();
-        let scope = self.get_scope_mut(scope_id);
-        scope.next_block.push(next_id);
-    }
-
-    pub fn pop_next_block(&mut self) -> Option<ValueId> {
-        let scope_id = self.current_scope().unwrap();
-        let scope = self.get_scope_mut(scope_id);
-        scope.next_block.pop()
-    }
-
-    pub fn get_next_block(&self) -> Option<ValueId> {
-        let scope_id = self.current_scope().unwrap();
-        let scope = self.get_scope(scope_id);
-        scope.next_block.last().cloned()
-        /*
-        for scope_id in self.stack.iter().rev() {
-            let scope = self.get_scope(*scope_id);
-            if let Some(value_id) = scope.next_block.last().cloned() {
-                return Some(value_id);
-            }
+    /*
+        pub fn push_next_block(&mut self, next_id: ValueId) {
+            let scope_id = self.current_scope().unwrap();
+            let scope = self.get_scope_mut(scope_id);
+            scope.next_block.push(next_id);
         }
-        */
-        //None
-    }
+
+        pub fn pop_next_block(&mut self) -> Option<ValueId> {
+            let scope_id = self.current_scope().unwrap();
+            let scope = self.get_scope_mut(scope_id);
+            scope.next_block.pop()
+        }
+
+
+        pub fn get_next_block(&self) -> Option<ValueId> {
+            let scope_id = self.current_scope().unwrap();
+            let scope = self.get_scope(scope_id);
+            scope.next_block.last().cloned()
+            /*
+            for scope_id in self.stack.iter().rev() {
+                let scope = self.get_scope(*scope_id);
+                if let Some(value_id) = scope.next_block.last().cloned() {
+                    return Some(value_id);
+                }
+            }
+            */
+            //None
+        }
+    */
 
     pub fn push_loop_blocks(
         &mut self,
