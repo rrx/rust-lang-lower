@@ -237,16 +237,17 @@ impl<E: Extra> NodeBuilder<E> {
     }
     */
 
-    pub fn build(&self, node: Ast<E>, extra: E) -> AstNode<E> {
+    pub fn build(&self, node: Ast<E>, span_id: SpanId) -> AstNode<E> {
         AstNode {
             node,
-            extra,
+            span_id, //: E::get_span(&extra).span_id,
+            extra: self.extra_unknown.clone(),
             //node_id: NodeID(None),
         }
     }
 
     pub fn node(&self, ast: Ast<E>) -> AstNode<E> {
-        self.build(ast, self.extra_unknown.clone())
+        self.build(ast, self.span_id.clone()) //self.extra_unknown.clone())
     }
 
     /*
@@ -373,7 +374,7 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn ident(&self, name: StringKey) -> AstNode<E> {
-        self.build(Ast::Identifier(name), self.extra_unknown.clone())
+        self.build(Ast::Identifier(name), self.span_id.clone()) //self.extra_unknown.clone())
     }
 
     pub fn deref_offset(&self, value: AstNode<E>, offset: usize) -> AstNode<E> {
@@ -381,13 +382,16 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn global(&self, name: StringKey, value: AstNode<E>) -> AstNode<E> {
-        let extra = value.extra.clone();
-        self.build(Ast::Global(name, value.into()), extra)
+        //let extra = value.extra.clone();
+        self.build(Ast::Global(name, value.into()), self.span_id.clone()) //extra)
     }
 
     pub fn test(&self, condition: AstNode<E>, body: AstNode<E>) -> AstNode<E> {
-        let extra = body.extra.clone();
-        self.build(Ast::Test(condition.into(), body.into()), extra)
+        //let extra = body.extra.clone();
+        self.build(
+            Ast::Test(condition.into(), body.into()),
+            self.span_id.clone(),
+        ) //extra)
     }
 
     pub fn while_loop(&self, condition: AstNode<E>, body: AstNode<E>) -> AstNode<E> {
@@ -415,7 +419,7 @@ impl<E: Extra> NodeBuilder<E> {
     pub fn ret(&self, node: Option<AstNode<E>>) -> AstNode<E> {
         self.build(
             Ast::Return(node.map(|n| n.into())),
-            self.extra_unknown.clone(),
+            self.span_id.clone(), //self.extra_unknown.clone(),
         )
     }
 
@@ -427,13 +431,14 @@ impl<E: Extra> NodeBuilder<E> {
         let ident = self.ident(name);
         self.build(
             Ast::Call(ident.into(), args, ty),
-            self.extra_unknown.clone(),
+            //self.extra_unknown.clone(),
+            self.span_id.clone(),
         )
     }
 
     pub fn call(&self, f: AstNode<E>, args: Vec<Argument<E>>, ty: AstType) -> AstNode<E> {
         let extra = f.extra.clone();
-        self.build(Ast::Call(f.into(), args, ty), extra)
+        self.build(Ast::Call(f.into(), args, ty), self.span_id.clone()) //extra)
     }
 
     pub fn main(&mut self, body: AstNode<E>) -> AstNode<E> {
@@ -443,7 +448,7 @@ impl<E: Extra> NodeBuilder<E> {
 
     pub fn mutate(&self, lhs: AstNode<E>, rhs: AstNode<E>) -> AstNode<E> {
         let extra = lhs.extra.clone();
-        self.build(Ast::Mutate(lhs.into(), rhs.into()), extra)
+        self.build(Ast::Mutate(lhs.into(), rhs.into()), self.span_id.clone()) //extra)
     }
 
     pub fn assign(&self, name: StringKey, rhs: AstNode<E>) -> AstNode<E> {
@@ -468,15 +473,15 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn label(&self, name: StringKey) -> AstNode<E> {
-        self.build(Ast::Label(name), self.extra_unknown.clone())
+        self.build(Ast::Label(name), self.span_id.clone()) //self.extra_unknown.clone())
     }
 
     pub fn block_start(&self, name: StringKey, params: Vec<ParameterNode>) -> AstNode<E> {
-        self.build(Ast::BlockStart(name, params), self.extra_unknown.clone())
+        self.build(Ast::BlockStart(name, params), self.span_id.clone()) //self.extra_unknown.clone())
     }
 
     pub fn goto(&self, name: StringKey) -> AstNode<E> {
-        self.build(Ast::Goto(name), self.extra_unknown.clone())
+        self.build(Ast::Goto(name), self.span_id.clone()) //self.extra_unknown.clone())
     }
 
     pub fn param(&self, name: StringKey, ty: AstType) -> ParameterNode {
@@ -491,7 +496,7 @@ impl<E: Extra> NodeBuilder<E> {
 
     pub fn module(&self, name: StringKey, body: AstNode<E>) -> AstNode<E> {
         let extra = body.extra.clone();
-        self.build(Ast::Module(name, body.into()), extra)
+        self.build(Ast::Module(name, body.into()), self.span_id.clone()) //extra)
     }
 
     pub fn block(
@@ -516,7 +521,7 @@ impl<E: Extra> NodeBuilder<E> {
             params,
             children: vec![body],
         };
-        self.build(Ast::Block(nb), extra)
+        self.build(Ast::Block(nb), self.span_id.clone()) //extra)
     }
 
     /*

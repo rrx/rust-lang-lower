@@ -169,6 +169,18 @@ impl<'a> Environment<'a> {
         E::span(span)
     }
 
+    pub fn span_id(&self, span: codemap::Span, d: &mut Diagnostics) -> SpanId {
+        let begin = CodeLocation {
+            pos: span.begin().get(),
+        };
+        let end = CodeLocation {
+            pos: span.end().get(),
+        };
+        let span = d.get_span(self.file_id, begin.clone(), end.clone());
+        span.span_id
+        //E::span(span)
+    }
+
     pub fn push_loop(&mut self, name: StringKey) {
         self.layers.last_mut().unwrap().loops.push(name);
     }
@@ -251,8 +263,10 @@ fn from_literal<E: Extra>(
         //_ => env.unimplemented(span),
         _ => unimplemented!("{:?}", item),
     };
-    let extra = env.extra(span, d);
-    b.build(Ast::Literal(lit), extra)
+    //let extra = env.extra(span, d);
+    //get_span_id(
+
+    b.build(Ast::Literal(lit), env.span_id(span, d))
 }
 
 fn from_binop(item: syntax::ast::BinOp) -> ast::BinaryOperation {
@@ -434,17 +448,17 @@ impl<E: Extra> Parser<E> {
                 });
 
                 env.define(name);
-                let extra = env.extra(item.span, d);
-                Ok(b.build(def_ast, extra))
+                //let extra = env.extra(item.span, d);
+                Ok(b.build(def_ast, env.span_id(item.span, d)))
             }
 
             StmtP::If(expr, truestmt) => {
                 let condition = self.from_expr(expr, env, d, b)?;
                 let truestmt = self.from_stmt(*truestmt, env, b, d)?;
-                let extra = env.extra(item.span, d);
+                //let extra = env.extra(item.span, d);
                 Ok(b.build(
                     Ast::Conditional(condition.into(), truestmt.into(), None),
-                    extra,
+                    env.span_id(item.span, d),
                 ))
             }
 
@@ -452,10 +466,10 @@ impl<E: Extra> Parser<E> {
                 let condition = self.from_expr(expr, env, d, b)?;
                 let truestmt = self.from_stmt(options.0, env, b, d)?;
                 let elsestmt = self.from_stmt(options.1, env, b, d)?;
-                let extra = env.extra(item.span, d);
+                //let extra = env.extra(item.span, d);
                 Ok(b.build(
                     Ast::Conditional(condition.into(), truestmt.into(), Some(elsestmt.into())),
-                    extra,
+                    env.span_id(item.span, d),
                 ))
             }
 
@@ -634,10 +648,10 @@ impl<E: Extra> Parser<E> {
                 let condition = self.from_expr(condition, env, d, b)?;
                 let then_expr = self.from_expr(then_expr, env, d, b)?;
                 let else_expr = self.from_expr(else_expr, env, d, b)?;
-                let extra = env.extra(item.span, d);
+                //let extra = env.extra(item.span, d);
                 Ok(b.build(
                     Ast::Ternary(condition.into(), then_expr.into(), else_expr.into()),
-                    extra,
+                    env.span_id(item.span, d),
                 ))
             }
 
@@ -733,12 +747,12 @@ impl<E: Extra> Parser<E> {
             ExprP::Literal(lit) => Ok(from_literal(lit, item.span, env, b, d)),
 
             ExprP::Minus(expr) => {
-                let extra = env.extra(item.span, d);
+                //let extra = env.extra(item.span, d);
                 let ast = Ast::UnaryOp(
                     ast::UnaryOperation::Minus,
                     self.from_expr(*expr, env, d, b)?.into(),
                 );
-                Ok(b.build(ast, extra))
+                Ok(b.build(ast, env.span_id(item.span, d)))
             }
 
             _ => unimplemented!("{:?}", item.node),

@@ -101,8 +101,8 @@ pub enum BinaryOperation {
 pub struct BinOpNode {
     pub node: BinaryOperation,
     span_id: SpanId,
-    //extra: E,
 }
+
 impl BinOpNode {
     pub fn new(node: BinaryOperation, span_id: SpanId) -> Self {
         Self { node, span_id }
@@ -140,7 +140,6 @@ pub struct ParameterNode {
     pub ty: AstType,
     pub node: Parameter,
     pub span_id: SpanId,
-    //pub extra: E,
 }
 
 #[derive(Debug, Clone)]
@@ -444,6 +443,7 @@ pub struct AstNode<E> {
     //pub node_id: NodeID,
     pub node: Ast<E>,
     pub extra: E,
+    pub span_id: SpanId,
 }
 
 impl<E: Extra> AstNode<E> {
