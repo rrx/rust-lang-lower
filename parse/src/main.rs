@@ -67,7 +67,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut module = lower::Module::new(location);
     let mut p: StarlarkParser<SimpleExtra> = StarlarkParser::new();
     let mut d = Diagnostics::new();
-    let mut b: NodeBuilder<SimpleExtra> = NodeBuilder::new();
+    let mut b: NodeBuilder<SimpleExtra> = NodeBuilder::new(&mut d);
 
     for filename in config.inputs {
         p.parse_module(

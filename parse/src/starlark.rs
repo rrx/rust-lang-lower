@@ -12,16 +12,18 @@ use starlark_syntax::syntax::module::AstModuleFields;
 
 use flat::Blockify;
 use lower::ast;
-use lower::ast::{Ast, AstNode, CodeLocation};
+use lower::ast::{Ast, AstNode};
 use lower::{
     Argument,
     AstType,
+    CodeLocation,
     Diagnostics,
     Extra,
     //IRPlaceTable,
     LinkOptions,
     Module,
     NodeBuilder,
+    Span,
     StringKey,
     TypeUnify,
 };
@@ -144,14 +146,15 @@ impl<'a> Environment<'a> {
         }
     }
 
-    pub fn extra<E: Extra>(&self, span: codemap::Span) -> E {
+    pub fn extra<E: Extra>(&self, span: codemap::Span, d: &mut Diagnostics) -> E {
         let begin = CodeLocation {
             pos: span.begin().get(),
         };
         let end = CodeLocation {
             pos: span.end().get(),
         };
-        E::new(self.file_id, begin, end)
+        let span = d.get_span(self.file_id, begin.clone(), end.clone());
+        E::span(span)
     }
 
     pub fn push_loop(&mut self, name: StringKey) {
@@ -219,6 +222,7 @@ fn from_literal<E: Extra>(
     span: codemap::Span,
     env: &Environment,
     b: &mut NodeBuilder<E>,
+    d: &mut Diagnostics,
 ) -> ast::AstNode<E> {
     use syntax::ast::AstLiteral;
     let lit = match &item {
@@ -235,7 +239,7 @@ fn from_literal<E: Extra>(
         //_ => env.unimplemented(span),
         _ => unimplemented!("{:?}", item),
     };
-    let extra = env.extra(span);
+    let extra = env.extra(span, d);
     b.build(Ast::Literal(lit), extra)
 }
 
@@ -300,7 +304,7 @@ impl<E: Extra> Parser<E> {
         d: &mut Diagnostics,
         b: &mut NodeBuilder<E>,
     ) -> Result<ast::AstNode<E>> {
-        b.enter(file_id, path.to_str().unwrap());
+        //b.enter(file_id, path.to_str().unwrap());
         let dialect = syntax::Dialect::Extended;
         let m = match content {
             Some(content) => {
@@ -311,7 +315,7 @@ impl<E: Extra> Parser<E> {
         let (codemap, stmt, _dialect, _typecheck) = m.into_parts();
         let mut env = Environment::new(&codemap, file_id);
         let mut seq = b.prelude();
-        let ast: ast::AstNode<E> = self.from_stmt(stmt, &mut env, d, b)?;
+        let ast: ast::AstNode<E> = self.from_stmt(stmt, &mut env, b, d)?;
         let extra = ast.extra.clone();
         seq.push(ast);
         Ok(b.module(module_key.into(), b.seq(seq).set_extra(extra)))
@@ -321,14 +325,14 @@ impl<E: Extra> Parser<E> {
         &mut self,
         item: syntax::ast::AstParameterP<P>,
         env: &mut Environment<'a>,
-        _d: &mut Diagnostics,
         b: &mut NodeBuilder<E>,
+        d: &mut Diagnostics,
     ) -> ast::ParameterNode<E> {
         use syntax::ast::ParameterP;
 
         match item.node {
             ParameterP::Normal(ident, maybe_type) => {
-                let extra = env.extra(item.span);
+                let extra = env.extra(item.span, d);
                 let ty = if let Some(ty) = maybe_type.map(|ty| from_type(&ty)) {
                     ty
                 } else {
@@ -371,8 +375,8 @@ impl<E: Extra> Parser<E> {
         &mut self,
         item: syntax::ast::AstStmtP<P>,
         env: &mut Environment<'a>,
-        d: &mut Diagnostics,
         b: &mut NodeBuilder<E>,
+        d: &mut Diagnostics,
     ) -> Result<ast::AstNode<E>> {
         use syntax::ast::StmtP;
 
@@ -391,7 +395,7 @@ impl<E: Extra> Parser<E> {
                 let params = def
                     .params
                     .into_iter()
-                    .map(|p| self.from_parameter(p, env, d, b))
+                    .map(|p| self.from_parameter(p, env, b, d))
                     .collect::<Vec<_>>();
 
                 // push name to environment
@@ -400,7 +404,7 @@ impl<E: Extra> Parser<E> {
                 }
 
                 let mut body = vec![];
-                body.extend(self.from_stmt(*def.body, env, d, b)?.to_vec());
+                body.extend(self.from_stmt(*def.body, env, b, d)?.to_vec());
 
                 env.exit_func();
                 let return_type = def
@@ -418,14 +422,14 @@ impl<E: Extra> Parser<E> {
                 });
 
                 env.define(name);
-                let extra = env.extra(item.span);
+                let extra = env.extra(item.span, d);
                 Ok(b.build(def_ast, extra))
             }
 
             StmtP::If(expr, truestmt) => {
                 let condition = self.from_expr(expr, env, d, b)?;
-                let truestmt = self.from_stmt(*truestmt, env, d, b)?;
-                let extra = env.extra(item.span);
+                let truestmt = self.from_stmt(*truestmt, env, b, d)?;
+                let extra = env.extra(item.span, d);
                 Ok(b.build(
                     Ast::Conditional(condition.into(), truestmt.into(), None),
                     extra,
@@ -434,9 +438,9 @@ impl<E: Extra> Parser<E> {
 
             StmtP::IfElse(expr, options) => {
                 let condition = self.from_expr(expr, env, d, b)?;
-                let truestmt = self.from_stmt(options.0, env, d, b)?;
-                let elsestmt = self.from_stmt(options.1, env, d, b)?;
-                let extra = env.extra(item.span);
+                let truestmt = self.from_stmt(options.0, env, b, d)?;
+                let elsestmt = self.from_stmt(options.1, env, b, d)?;
+                let extra = env.extra(item.span, d);
                 Ok(b.build(
                     Ast::Conditional(condition.into(), truestmt.into(), Some(elsestmt.into())),
                     extra,
@@ -444,7 +448,7 @@ impl<E: Extra> Parser<E> {
             }
 
             StmtP::Return(maybe_expr) => {
-                let extra = env.extra(item.span);
+                let extra = env.extra(item.span, d);
                 Ok(match maybe_expr {
                     Some(expr) => {
                         let node = self.from_expr(expr, env, d, b)?;
@@ -581,7 +585,7 @@ impl<E: Extra> Parser<E> {
                     if &ident.node.ident == "q" {
                         // builtin namespace
                         if let Some(mut ast) = b.build_builtin_from_name(&name, vec![]) {
-                            let extra = env.extra(item.span);
+                            let extra = env.extra(item.span, d);
                             ast.extra = extra;
                             Ok(ast)
                         } else if let Some(extra) = ExtraAst::from_name(&name, vec![], b) {
@@ -593,14 +597,14 @@ impl<E: Extra> Parser<E> {
                         } else {
                             assert!(false);
                             d.push_diagnostic(env.error(name.span, "Builtin not found"));
-                            Ok(b.error())
+                            Ok(b.error(env.extra(item.span, d)))
                         }
                     } else {
                         d.push_diagnostic(env.error(
                             name.span,
                             &format!("Variable not in scope: {}", ident.node.ident),
                         ));
-                        Ok(b.error())
+                        Ok(b.error(env.extra(item.span, d)))
                     }
                 } else {
                     unimplemented!("{:?}", (expr, name))
@@ -618,7 +622,7 @@ impl<E: Extra> Parser<E> {
                 let condition = self.from_expr(condition, env, d, b)?;
                 let then_expr = self.from_expr(then_expr, env, d, b)?;
                 let else_expr = self.from_expr(else_expr, env, d, b)?;
-                let extra = env.extra(item.span);
+                let extra = env.extra(item.span, d);
                 Ok(b.build(
                     Ast::Ternary(condition.into(), then_expr.into(), else_expr.into()),
                     extra,
@@ -635,11 +639,11 @@ impl<E: Extra> Parser<E> {
                     ExprP::Identifier(ident) => {
                         let name = b.s(&ident.node.ident);
                         if let Some(_data) = env.resolve(name) {
-                            let extra: E = env.extra(item.span);
+                            let extra: E = env.extra(item.span, d);
                             Ok(b.apply(name.into(), args, AstType::Int).set_extra(extra))
                         } else {
                             d.push_diagnostic(env.error(ident.span, "Not found"));
-                            Ok(b.error())
+                            Ok(b.error(env.extra(item.span, d)))
                         }
                     }
 
@@ -647,7 +651,7 @@ impl<E: Extra> Parser<E> {
                         if let ExprP::Identifier(ident) = &expr.node {
                             let key = b.s(&ident.node.ident);
                             if let Some(_data) = env.resolve(key) {
-                                let extra: E = env.extra(item.span);
+                                let extra: E = env.extra(item.span, d);
                                 Ok(b.apply(key.into(), args, AstType::Int).set_extra(extra))
                             } else if &ident.node.ident == "q" {
                                 // builtin namespace
@@ -673,19 +677,19 @@ impl<E: Extra> Parser<E> {
                                         }
                                         _ => (),
                                     }
-                                    let extra = env.extra(item.span);
+                                    let extra = env.extra(item.span, d);
                                     ast.extra = extra;
                                     Ok(ast)
                                 } else {
                                     d.push_diagnostic(env.error(name.span, "Builtin not found"));
-                                    Ok(b.error())
+                                    Ok(b.error(env.extra(item.span, d)))
                                 }
                             } else {
                                 d.push_diagnostic(env.error(
                                     name.span,
                                     &format!("Variable not in scope: {}", ident.node.ident),
                                 ));
-                                Ok(b.error())
+                                Ok(b.error(env.extra(item.span, d)))
                             }
                         } else {
                             unimplemented!("{:?}", (expr, name))
@@ -702,7 +706,7 @@ impl<E: Extra> Parser<E> {
 
                 let name = b.s(&ident.node.ident);
                 if let Some(_data) = env.resolve(name) {
-                    let extra = env.extra(item.span);
+                    let extra = env.extra(item.span, d);
                     let ast = b.ident(name.into()).set_extra(extra);
                     Ok(ast)
                 } else {
@@ -710,14 +714,14 @@ impl<E: Extra> Parser<E> {
                         ident.span,
                         &format!("Variable not in scope: {}", ident.node.ident),
                     ));
-                    Ok(b.error())
+                    Ok(b.error(env.extra(item.span, d)))
                 }
             }
 
-            ExprP::Literal(lit) => Ok(from_literal(lit, item.span, env, b)),
+            ExprP::Literal(lit) => Ok(from_literal(lit, item.span, env, b, d)),
 
             ExprP::Minus(expr) => {
-                let extra = env.extra(item.span);
+                let extra = env.extra(item.span, d);
                 let ast = Ast::UnaryOp(
                     ast::UnaryOperation::Minus,
                     self.from_expr(*expr, env, d, b)?.into(),
@@ -790,7 +794,7 @@ impl<E: Extra, P: syntax::ast::AstPayload> StatementReader<E, P> {
         d: &mut Diagnostics,
         b: &mut NodeBuilder<E>,
     ) -> Result<()> {
-        let ast = parse.from_stmt(stmt, env, d, b)?;
+        let ast = parse.from_stmt(stmt, env, b, d)?;
         self.push_ast(ast);
         Ok(())
     }
@@ -839,7 +843,6 @@ impl<E: Extra, P: syntax::ast::AstPayload> StatementReader<E, P> {
 pub struct StarlarkParser<E> {
     _e: std::marker::PhantomData<E>,
     link: LinkOptions,
-    //place: IRPlaceTable,
 }
 
 impl<E: Extra> StarlarkParser<E> {
@@ -847,7 +850,6 @@ impl<E: Extra> StarlarkParser<E> {
         Self {
             _e: std::marker::PhantomData::default(),
             link: LinkOptions::new(),
-            //place: IRPlaceTable::new(),
         }
     }
 
@@ -863,13 +865,14 @@ impl<E: Extra> StarlarkParser<E> {
         log::debug!("parsing: {}", filename);
         let file_id = d.add_source(filename.to_string(), std::fs::read_to_string(filename)?);
 
-        b.enter(file_id, &filename);
+        //b.enter(file_id, &filename);
 
         let mut parser = Parser::new();
         let module_key = b.s("module");
         let ast: AstNode<E> = parser
             .parse(Path::new(filename), None, module_key, file_id, d, b)?
             .normalize(d, b);
+        ast.dump(b);
 
         let mut blockify = Blockify::new();
         let r = blockify.build_module(ast, b, d);
@@ -917,8 +920,7 @@ impl<E: Extra> StarlarkParser<E> {
             );
         }
 
-        use lower::compile::exec_main;
-        exec_main(&self.link.shared_libraries(), module, libpath)
+        lower::compile::exec_main(&self.link.shared_libraries(), module, libpath)
     }
 }
 
@@ -929,11 +931,35 @@ pub(crate) mod tests {
     use lower::Location;
     use test_log::test;
 
+    fn dump(filename: &str) {
+        let mut d = Diagnostics::new();
+        let mut b = NodeBuilder::new(&mut d);
+        let file_id = d.add_source(
+            filename.to_string(),
+            std::fs::read_to_string(filename).unwrap(),
+        );
+        //b.enter(file_id, &filename);
+        let mut parser = Parser::new();
+        let module_key = b.s("module");
+        let ast: AstNode<SimpleExtra> = parser
+            .parse(
+                Path::new(filename),
+                None,
+                module_key,
+                file_id,
+                &mut d,
+                &mut b,
+            )
+            .unwrap()
+            .normalize(&mut d, &mut b);
+        ast.dump_html(&mut b);
+    }
+
     fn run_test_ir(filename: &str, expected: i32) {
         let mut p: StarlarkParser<SimpleExtra> = StarlarkParser::new();
-        let mut b = NodeBuilder::new();
-        let context = lower::default_context();
         let mut d = Diagnostics::new();
+        let mut b = NodeBuilder::new(&mut d);
+        let context = lower::default_context();
         let mut module = Module::new(Location::unknown(&context));
         let r = p.parse_module(filename, &context, &mut module, &mut b, &mut d, true);
         d.dump();
@@ -1003,5 +1029,10 @@ pub(crate) mod tests {
     #[test]
     fn test_static_var() {
         run_test_ir("../tests/static_var.star", 0);
+    }
+
+    #[test]
+    fn test_dump() {
+        dump("../tests/static_var.star");
     }
 }

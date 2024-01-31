@@ -680,8 +680,8 @@ impl<E: Extra> Blockify<E> {
 
             LCode::Op2(op, x, y) => {
                 let block_id = self.get_block_id(v);
-                let x_extra = b.extra();
-                let y_extra = b.extra();
+                let x_extra = b.extra_unknown.clone();
+                let y_extra = b.extra_unknown.clone();
                 let x_index = self.resolve_value(lower, *x).unwrap();
                 let r_x = blocks.value0(x_index);
                 let y_index = self.resolve_value(lower, *y).unwrap();

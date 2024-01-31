@@ -4,6 +4,8 @@ use crate::Diagnostics;
 use crate::{
     //ir::{IRArg, IRBlock, IRKind, IRNode, IRTypeSelect},
     AstType,
+    Span,
+    //CodeLocation,
     //NodeIndex, PlaceId,
     StringKey,
 };
@@ -98,13 +100,15 @@ pub struct NodeBuilder<E> {
     current_def_id: u32,
     static_count: usize,
     loop_count: usize,
+    pub extra_unknown: E,
     pub labels: LabelBuilder,
     _e: std::marker::PhantomData<E>,
 }
 
 impl<E: Extra> NodeBuilder<E> {
-    pub fn new() -> Self {
+    pub fn new(d: &mut Diagnostics) -> Self {
         let filename = "";
+        let span_unknown = d.get_span_unknown();
         Self {
             span: None,
             filename: filename.to_string(),
@@ -113,6 +117,7 @@ impl<E: Extra> NodeBuilder<E> {
             static_count: 0,
             loop_count: 0,
             labels: LabelBuilder::new(),
+            extra_unknown: E::span(span_unknown),
             _e: std::marker::PhantomData::default(),
         }
     }
@@ -189,20 +194,6 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     /*
-    pub fn identify_node(&mut self, ast: &mut AstNode<E>) {
-        if let NodeID(Some(_)) = ast.node_id {
-        } else {
-            ast.node_id = self.fresh_node_id();
-        }
-    }
-
-    fn fresh_node_id(&mut self) -> NodeID {
-        let node_id = NodeID(Some(self.current_node_id));
-        self.current_node_id += 1;
-        node_id
-    }
-    */
-
     pub fn enter(&mut self, file_id: usize, filename: &str) {
         let begin = CodeLocation { pos: 0 };
         let end = CodeLocation { pos: 0 };
@@ -214,6 +205,7 @@ impl<E: Extra> NodeBuilder<E> {
         self.span = Some(span);
         self.filename = filename.to_string();
     }
+    */
 
     pub fn with_loc(&mut self, span: Span) {
         self.span = Some(span);
@@ -231,6 +223,7 @@ impl<E: Extra> NodeBuilder<E> {
         }
     }
 
+    /*
     pub fn extra(&self) -> E {
         if let Some(span) = self.span.as_ref() {
             E::span(span.clone())
@@ -239,6 +232,7 @@ impl<E: Extra> NodeBuilder<E> {
             E::new(0, CodeLocation::default(), CodeLocation::default())
         }
     }
+    */
 
     pub fn build(&self, node: Ast<E>, extra: E) -> AstNode<E> {
         AstNode {
@@ -249,16 +243,18 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn node(&self, ast: Ast<E>) -> AstNode<E> {
-        self.build(ast, self.extra())
+        self.build(ast, self.extra_unknown.clone())
     }
 
+    /*
     pub fn extra_unknown(&self) -> E {
         let begin = CodeLocation { pos: 0 };
         let end = CodeLocation { pos: 0 };
         E::new(self.current_file_id(), begin, end)
     }
+    */
 
-    pub fn error(&self) -> AstNode<E> {
+    pub fn error(&self, extra: E) -> AstNode<E> {
         self.node(Ast::Error)
     }
 
@@ -276,7 +272,7 @@ impl<E: Extra> NodeBuilder<E> {
                 name: *name,
                 ty: ty.clone(),
                 node: Parameter::Normal,
-                extra: self.extra_unknown(),
+                extra: self.extra_unknown.clone(),
             })
             .collect();
         self.node(Ast::Definition(Definition {
@@ -333,7 +329,7 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn binop(&self, op: BinaryOperation, a: AstNode<E>, b: AstNode<E>) -> AstNode<E> {
-        let op_node = BinOpNode::new(op, self.extra());
+        let op_node = BinOpNode::new(op, self.extra_unknown.clone());
         let ast = Ast::BinaryOp(op_node, a.into(), b.into());
         self.node(ast)
     }
@@ -373,7 +369,7 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn ident(&self, name: StringKey) -> AstNode<E> {
-        self.build(Ast::Identifier(name), self.extra_unknown())
+        self.build(Ast::Identifier(name), self.extra_unknown.clone())
     }
 
     pub fn deref_offset(&self, value: AstNode<E>, offset: usize) -> AstNode<E> {
@@ -413,7 +409,10 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn ret(&self, node: Option<AstNode<E>>) -> AstNode<E> {
-        self.build(Ast::Return(node.map(|n| n.into())), self.extra_unknown())
+        self.build(
+            Ast::Return(node.map(|n| n.into())),
+            self.extra_unknown.clone(),
+        )
     }
 
     pub fn arg(&self, node: AstNode<E>) -> Argument<E> {
@@ -422,7 +421,10 @@ impl<E: Extra> NodeBuilder<E> {
 
     pub fn apply(&self, name: StringKey, args: Vec<Argument<E>>, ty: AstType) -> AstNode<E> {
         let ident = self.ident(name);
-        self.build(Ast::Call(ident.into(), args, ty), self.extra_unknown())
+        self.build(
+            Ast::Call(ident.into(), args, ty),
+            self.extra_unknown.clone(),
+        )
     }
 
     pub fn call(&self, f: AstNode<E>, args: Vec<Argument<E>>, ty: AstType) -> AstNode<E> {
@@ -462,15 +464,15 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn label(&self, name: StringKey) -> AstNode<E> {
-        self.build(Ast::Label(name), self.extra_unknown())
+        self.build(Ast::Label(name), self.extra_unknown.clone())
     }
 
     pub fn block_start(&self, name: StringKey, params: Vec<ParameterNode<E>>) -> AstNode<E> {
-        self.build(Ast::BlockStart(name, params), self.extra_unknown())
+        self.build(Ast::BlockStart(name, params), self.extra_unknown.clone())
     }
 
     pub fn goto(&self, name: StringKey) -> AstNode<E> {
-        self.build(Ast::Goto(name), self.extra_unknown())
+        self.build(Ast::Goto(name), self.extra_unknown.clone())
     }
 
     pub fn param(&self, name: StringKey, ty: AstType) -> ParameterNode<E> {
@@ -478,7 +480,7 @@ impl<E: Extra> NodeBuilder<E> {
             name,
             ty: ty.clone(),
             node: Parameter::Normal,
-            extra: self.extra_unknown(),
+            extra: self.extra_unknown.clone(),
         }
     }
 
@@ -500,7 +502,7 @@ impl<E: Extra> NodeBuilder<E> {
                 name: *name,
                 ty: ty.clone(),
                 node: Parameter::Normal,
-                extra: self.extra_unknown(),
+                extra: self.extra_unknown.clone(),
             })
             .collect();
         let nb = AstNodeBlock {

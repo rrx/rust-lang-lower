@@ -15,7 +15,7 @@ pub mod types;
 
 pub use ast::{
     Argument, Ast, AstNode, AstNodeBlock, BinaryOperation, Builtin, Definition, Extra, Literal,
-    ParameterNode, SimpleExtra, Span, UnaryOperation, VarDefinitionSpace,
+    ParameterNode, SimpleExtra, UnaryOperation, VarDefinitionSpace,
 };
 //pub use blockify::{BlockId, Blockify};
 pub use builder::{
@@ -29,7 +29,7 @@ pub use builder::{
 //CFGGraph,
 //SymIndex};
 pub use compile::{default_context, default_pass_manager};
-pub use diagnostics::{Diagnostics, FileDB, ParseError};
+pub use diagnostics::{CodeLocation, Diagnostics, FileDB, ParseError, Span, SpanId};
 pub use intern::{InternKey, StringKey};
 //pub use ir::{IRArg, IRBlockGraph, IRControlBlock, IREnvironment};
 pub use link::LinkOptions;
