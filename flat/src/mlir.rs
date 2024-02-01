@@ -255,26 +255,42 @@ impl<E: Extra> Blockify<E> {
         }
     }
 
+    pub fn get_location<'c>(
+        &self,
+        value_id: ValueId,
+        context: &'c Context,
+        d: &Diagnostics,
+    ) -> Location<'c> {
+        let span_id = self.get_span_id(value_id);
+        let span = d.lookup(span_id);
+        let location = d.location(context, &span);
+        location
+    }
+
     pub fn get_label_args<'c>(
         &self,
         context: &'c Context,
         v: ValueId,
         num_args: usize,
         num_kwargs: usize,
+        d: &Diagnostics,
     ) -> Vec<(Type<'c>, Location<'c>)> {
         let mut current = v;
         let mut out = vec![];
         for _ in 0..num_args {
+            let location = self.get_location(current, context, d);
+
             let next = self.get_next(current).unwrap();
             let ty = op::from_type(context, &self.get_type(next));
             current = next;
-            out.push((ty, Location::unknown(context)));
+            out.push((ty, location));
         }
         for _ in 0..num_kwargs {
+            let location = self.get_location(current, context, d);
             let next = self.get_next(current).unwrap();
             let ty = op::from_type(context, &self.get_type(next));
             current = next;
-            out.push((ty, Location::unknown(context)));
+            out.push((ty, location));
         }
         out
     }
@@ -321,6 +337,7 @@ impl<E: Extra> Blockify<E> {
         lower: &mut Lower<'c>,
         blocks: &mut LowerBlocks<'c>,
         block_id: ValueId,
+        d: &Diagnostics,
     ) {
         let code = self.get_code(block_id);
         if let LCode::Label(num_args, num_kwargs) = code {
@@ -329,6 +346,7 @@ impl<E: Extra> Blockify<E> {
                 block_id,
                 *num_args as usize,
                 *num_kwargs as usize,
+                d,
             );
             let block = Block::new(&args);
             let c = OpCollection::new(block_id, block);
@@ -485,7 +503,7 @@ impl<E: Extra> Blockify<E> {
 
                     // create blocks
                     for block_id in block_ids.iter() {
-                        self.create_block(lower, blocks, *block_id);
+                        self.create_block(lower, blocks, *block_id, d);
                     }
 
                     // lower
@@ -740,7 +758,7 @@ impl<E: Extra> Blockify<E> {
                 let then_block_ids = cfg.blocks(then_block_id);
 
                 for block_id in then_block_ids.iter() {
-                    self.create_block(lower, blocks, *block_id);
+                    self.create_block(lower, blocks, *block_id, d);
                 }
                 for block_id in then_block_ids.iter() {
                     self.lower_block(*block_id, lower, blocks, stack, b, d)?;
@@ -760,7 +778,7 @@ impl<E: Extra> Blockify<E> {
                 let else_block_ids = cfg.blocks(else_block_id);
 
                 for block_id in else_block_ids.iter() {
-                    self.create_block(lower, blocks, *block_id);
+                    self.create_block(lower, blocks, *block_id, d);
                 }
                 for block_id in else_block_ids.iter() {
                     self.lower_block(*block_id, lower, blocks, stack, b, d)?;
@@ -932,7 +950,7 @@ impl<E: Extra> Blockify<E> {
         //let block_id = ValueId(0);
         let module_block_id = lower.module_block_id;
         let mut stack = vec![];
-        self.create_block(lower, blocks, module_block_id);
+        self.create_block(lower, blocks, module_block_id, d);
         self.lower_static_block(module_block_id, lower, blocks, &mut stack, b, d)?;
         let block = blocks.blocks.get_mut(&module_block_id).unwrap();
         for op in block.take_ops() {
