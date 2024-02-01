@@ -319,6 +319,7 @@ impl<E: Extra> Blockify<E> {
             ty: &'a AstType,
             mem: String,
             name: String,
+            span_id: usize,
             scope_id: usize,
             block_id: usize,
             term: bool,
@@ -354,6 +355,7 @@ impl<E: Extra> Blockify<E> {
                         .map(|key| b.resolve_label(*key))
                         .unwrap_or("".to_string())
                         .to_string(),
+                    span_id: self.get_span_id(value_id).index(),
                     scope_id: scope_id.0 as usize,
                     block_id: block_id.0 as usize,
                     term: code.is_term(),
@@ -403,6 +405,7 @@ impl<E: Extra> Blockify<E> {
                         .map(|key| b.resolve_label(*key))
                         .unwrap_or("".to_string())
                         .to_string(),
+                    span_id: self.get_span_id(v).index(),
                     scope_id: scope_id.0 as usize,
                     block_id: block_id.0 as usize,
                     term: code.is_term(),
@@ -862,17 +865,19 @@ impl<E: Extra> Blockify<E> {
         &mut self,
         block_id: ValueId,
         def: Definition<E>,
+        span_id: SpanId,
         b: &mut NodeBuilder<E>,
         d: &mut Diagnostics,
     ) -> Result<AddResult> {
         let scope_id = self.env.current_scope().unwrap();
 
         let params = def.params.iter().map(|p| p.ty.clone()).collect();
+        //let spans = def.params.iter().map(|p| p.span_id).collect::<Vec<_>>();
         let ty = AstType::Func(params, def.return_type.clone());
 
         if let Some(body) = def.body {
             let body_scope_id = self.env.new_scope(ScopeType::Function);
-            let span_id = body.span_id;
+            //let body_span_id = body.span_id;
 
             // entry first
             let entry_id =
@@ -951,7 +956,7 @@ impl<E: Extra> Blockify<E> {
             Ok(AddResult::new(
                 Some(self.push_code_with_name(
                     LCode::DeclareFunction(None),
-                    d.get_span_unknown().span_id,
+                    span_id,
                     scope_id,
                     block_id,
                     ty.clone(),
@@ -1190,7 +1195,7 @@ impl<E: Extra> Blockify<E> {
             Ast::Definition(def) => {
                 // definition is non-terminal
                 if block_id == self.env.static_block_id() {
-                    self.add_function(block_id, def, b, d)
+                    self.add_function(block_id, def, node.span_id, b, d)
                 } else {
                     let name = def.name.into();
                     let template_id = self.push_template(def);
@@ -1620,106 +1625,6 @@ impl<E: Extra> Blockify<E> {
             _ => unimplemented!("{:?}", node.node),
         }
     }
-
-    /*
-    pub fn save_graph<E: Extra>(&self, filename: &str, b: &NodeBuilder<E>) {
-        use petgraph::dot::{Config, Dot};
-        #[derive(Debug)]
-        enum Shape {
-            Box,
-            Ellipsis,
-        }
-        impl Shape {
-            fn to_string(&self) -> &str {
-                match self {
-                    Self::Box => "box",
-                    Self::Ellipsis => "circle",
-                }
-            }
-        }
-        #[derive(Debug)]
-        struct Node {
-            ty: Shape,
-            name: String,
-            block_id: ValueId,
-        }
-        impl Node {
-            fn new_block(name: String, block_id: ValueId) -> Self {
-                Self {
-                    ty: Shape::Box,
-                    name,
-                    block_id,
-                }
-            }
-        }
-
-        let mut g: DiGraph<Node, ()> = DiGraph::new();
-        let mut ids = HashMap::new();
-        let mut last = HashMap::new();
-        for (offset, code) in self.code.iter().enumerate() {
-            let go = match code {
-                LCode::Jump(_, _) => true,
-                LCode::Branch(_, _, _) => true,
-                LCode::Ternary(_, _, _) => true,
-                LCode::Label(_, _) => true,
-                LCode::DeclareFunction(Some(_)) => true,
-                LCode::Return(_) => true,
-                _ => false,
-            };
-
-            if go {
-                let v = ValueId(offset as u32);
-                let name = self.code_to_string(v, b);
-                let id = g.add_node(Node::new_block(name, v));
-                ids.insert(v, id);
-            }
-        }
-
-        for (offset, code) in self.code.iter().enumerate() {
-            let v = ValueId(offset as u32);
-            let v_block = self.entries[offset];
-            match code {
-                LCode::Label(_, _) => {
-                    last.insert(v, v);
-                }
-                LCode::Return(_) => {
-                    g.add_edge(*ids.get(&v_block).unwrap(), *ids.get(&v).unwrap(), ());
-                }
-                LCode::Jump(target_id, _) | LCode::DeclareFunction(Some(target_id)) => {
-                    g.add_edge(*ids.get(&v_block).unwrap(), *ids.get(&v).unwrap(), ());
-                    g.add_edge(*ids.get(&v).unwrap(), *ids.get(&target_id).unwrap(), ());
-                }
-
-                LCode::Branch(_, x, y) | LCode::Ternary(_, x, y) => {
-                    g.add_edge(*ids.get(&v_block).unwrap(), *ids.get(&v).unwrap(), ());
-                    g.add_edge(*ids.get(&v).unwrap(), *ids.get(&x).unwrap(), ());
-                    g.add_edge(*ids.get(&v).unwrap(), *ids.get(&y).unwrap(), ());
-                }
-                _ => (),
-            }
-        }
-
-        let s = format!(
-            "{:?}",
-            Dot::with_attr_getters(
-                &g,
-                &[Config::EdgeNoLabel, Config::NodeNoLabel],
-                &|_, _er| String::new(),
-                &|_, (_index, data)| {
-                    format!(
-                        "label = \"[{}]{}\" shape={:?}",
-                        data.block_id.0,
-                        &data.name,
-                        &data.ty.to_string()
-                    )
-                }
-            )
-        );
-        println!("saved graph {:?}", filename);
-        println!("{}", s);
-        std::fs::write(filename, s).unwrap();
-    }
-    */
 
     pub fn save_graph(&self, filename: &str, b: &NodeBuilder<E>) {
         use petgraph::dot::{Config, Dot};
