@@ -81,7 +81,7 @@ impl Diagnostics {
 
     pub fn get_span(&mut self, file_id: usize, begin: CodeLocation, end: CodeLocation) -> Span {
         let v = (file_id, begin, end);
-        let (index, x) = self.spans.insert_full(v);
+        let (index, _) = self.spans.insert_full(v);
         let span_id = SpanId(index as u32);
         Span::new(span_id, file_id, begin, end)
     }

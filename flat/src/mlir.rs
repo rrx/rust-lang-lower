@@ -1,4 +1,4 @@
-use crate::{Blockify, LCode, ScopeType, ValueId};
+use crate::{Blockify, LCode, ValueId};
 use anyhow::Result;
 use indexmap::IndexMap;
 use lower::melior::ir::Location;
