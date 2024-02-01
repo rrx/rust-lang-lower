@@ -1,8 +1,9 @@
-use codespan_reporting::diagnostic::{Diagnostic, Severity};
+use codespan_reporting::diagnostic::{Diagnostic, Label, Severity};
 use codespan_reporting::files::Files;
 use codespan_reporting::files::SimpleFiles;
 use codespan_reporting::term;
 use codespan_reporting::term::termcolor::{BufferWriter, ColorChoice, StandardStream};
+
 use indexmap::IndexSet;
 use melior::ir;
 use melior::Context;
@@ -88,6 +89,23 @@ impl Diagnostics {
 
     pub fn add_source(&mut self, filename: String, content: String) -> usize {
         self.files.add(filename, content)
+    }
+
+    pub fn error(&self, msg: &str, span: &Span) -> Diagnostic<usize> {
+        let r = span.begin.pos as usize..span.end.pos as usize;
+        Diagnostic::error()
+            .with_labels(vec![Label::primary(span.file_id, r).with_message(msg)])
+            .with_message("error")
+    }
+
+    pub fn primary(&self, msg: &str, span: &Span) -> Label<usize> {
+        let r = span.begin.pos as usize..span.end.pos as usize;
+        Label::primary(span.file_id, r).with_message(msg)
+    }
+
+    pub fn secondary(&self, msg: &str, span: &Span) -> Label<usize> {
+        let r = span.begin.pos as usize..span.end.pos as usize;
+        Label::secondary(span.file_id, r).with_message(msg)
     }
 
     pub fn push_diagnostic(&mut self, d: Diagnostic<usize>) {

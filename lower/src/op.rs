@@ -26,6 +26,7 @@ use crate::{
     //StringKey,
     //SymIndex,
     //TypeBuilder,
+    Span,
 };
 
 use anyhow::Error;
@@ -745,13 +746,13 @@ pub fn emit_static_ir<'c>(
 }
 */
 
-pub fn build_binop<'c, E: Extra>(
+pub fn build_binop<'c>(
     context: &'c Context,
     op: BinaryOperation,
     a: Value<'c, '_>,
-    a_extra: &E,
+    a_span: &Span,
     b: Value<'c, '_>,
-    b_extra: &E,
+    b_span: &Span,
     location: Location<'c>,
     d: &mut Diagnostics,
 ) -> Result<(Operation<'c>, AstType)> {
@@ -769,7 +770,7 @@ pub fn build_binop<'c, E: Extra>(
             } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
                 (arith::divf(a, b, location), AstType::Float)
             } else {
-                d.push_diagnostic(a_extra.error(&format!("Invalid Type")));
+                d.error(&format!("Invalid Type"), a_span);
                 return Err(Error::new(ParseError::Invalid));
             }
         }
@@ -781,7 +782,7 @@ pub fn build_binop<'c, E: Extra>(
             } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
                 (arith::mulf(a, b, location), AstType::Float)
             } else {
-                d.push_diagnostic(a_extra.error(&format!("Invalid Type")));
+                d.error(&format!("Invalid Type"), a_span);
                 return Err(Error::new(ParseError::Invalid));
             }
         }
@@ -793,7 +794,7 @@ pub fn build_binop<'c, E: Extra>(
             } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
                 (arith::addf(a, b, location), AstType::Float)
             } else {
-                d.push_diagnostic(a_extra.error(&format!("Invalid Type")));
+                d.error(&format!("Invalid Type"), a_span);
                 return Err(Error::new(ParseError::Invalid));
             }
         }
@@ -808,8 +809,8 @@ pub fn build_binop<'c, E: Extra>(
                 d.push_diagnostic(
                     Diagnostic::error()
                         .with_labels(vec![
-                            a_extra.primary(&format!("Type {:?}", a.r#type())),
-                            b_extra.secondary(&format!("Type: {:?}", b.r#type())),
+                            d.primary(&format!("Type {:?}", a.r#type()), a_span),
+                            d.secondary(&format!("Type: {:?}", b.r#type()), b_span),
                         ])
                         .with_message("Type Mispatch"),
                 );
@@ -831,7 +832,7 @@ pub fn build_binop<'c, E: Extra>(
                     AstType::Bool,
                 )
             } else {
-                d.push_diagnostic(a_extra.error(&format!("Invalid Type")));
+                d.error(&format!("Invalid Type"), a_span);
                 return Err(Error::new(ParseError::Invalid));
             }
         }
@@ -849,7 +850,7 @@ pub fn build_binop<'c, E: Extra>(
                     AstType::Bool,
                 )
             } else {
-                d.push_diagnostic(a_extra.error(&format!("Invalid Type")));
+                d.error(&format!("Invalid Type"), a_span);
                 return Err(Error::new(ParseError::Invalid));
             }
         }
@@ -866,7 +867,7 @@ pub fn build_binop<'c, E: Extra>(
                     AstType::Bool,
                 )
             } else {
-                d.push_diagnostic(a_extra.error(&format!("Invalid Type")));
+                d.error(&format!("Invalid Type"), a_span);
                 return Err(Error::new(ParseError::Invalid));
             }
         }
@@ -883,7 +884,7 @@ pub fn build_binop<'c, E: Extra>(
                     AstType::Bool,
                 )
             } else {
-                d.push_diagnostic(a_extra.error(&format!("Invalid Type")));
+                d.error(&format!("Invalid Type"), a_span);
                 return Err(Error::new(ParseError::Invalid));
             }
         } //_ => unimplemented!("{:?}", op)

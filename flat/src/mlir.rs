@@ -366,7 +366,7 @@ impl<E: Extra> Blockify<E> {
         d: &mut Diagnostics,
     ) -> Result<()> {
         let code = self.get_code(v);
-        let location = Location::unknown(lower.context);
+        let location = self.get_location(v, lower.context, d);
 
         match code {
             LCode::Label(_num_args, _num_kwargs) => {
@@ -700,8 +700,10 @@ impl<E: Extra> Blockify<E> {
 
             LCode::Op2(op, x, y) => {
                 let block_id = self.get_block_id(v);
-                let x_extra = b.extra_unknown.clone();
-                let y_extra = b.extra_unknown.clone();
+                let x_span_id = self.get_span_id(*x);
+                let y_span_id = self.get_span_id(*y);
+                let x_span = d.lookup(x_span_id);
+                let y_span = d.lookup(y_span_id);
                 let x_index = self.resolve_value(lower, *x).unwrap();
                 let r_x = blocks.value0(x_index);
                 let y_index = self.resolve_value(lower, *y).unwrap();
@@ -710,9 +712,9 @@ impl<E: Extra> Blockify<E> {
                     lower.context,
                     op.clone(),
                     r_x,
-                    &x_extra,
+                    &x_span,
                     r_y,
-                    &y_extra,
+                    &y_span,
                     location,
                     d,
                 )?;
