@@ -307,31 +307,6 @@ impl<E: Extra> Blockify<E> {
         values
     }
 
-    /*
-    pub fn get_or_lower_block<'c, E: Extra>(
-        &self,
-        lower: &mut Lower<'c>,
-        blocks: &mut LowerBlocks<'c>,
-        v: ValueId,
-        block_id: ValueId,
-        stack: &mut Vec<ValueId>,
-        b: &NodeBuilder<E>,
-        d: &mut Diagnostics,
-    ) -> Result<()> {
-        assert!(blocks.blocks.contains_key(&block_id));
-        //let from_block_id = self.get_block_id(v);
-
-        if stack.contains(&block_id) {
-            return Ok(());
-        }
-
-        if !blocks.blocks.get(&block_id).unwrap().is_complete() {
-            self.lower_block(block_id, lower, blocks, stack, b, d)?;
-        }
-        Ok(())
-    }
-    */
-
     pub fn create_block<'c>(
         &self,
         lower: &mut Lower<'c>,
@@ -403,12 +378,9 @@ impl<E: Extra> Blockify<E> {
             }
 
             LCode::Const(lit) => {
-                //let scope_id = self.get_scope_id(v);
-                //let scope = self.env.get_scope(scope_id);
                 let block_id = self.get_block_id(v);
 
                 if self.is_in_static_scope(v) {
-                    //if let ScopeType::Static = scope.scope_type {
                     let (value, ast_ty) = op::build_static_attribute(lower.context, lit);
 
                     let name = self.get_name(v);
@@ -431,9 +403,6 @@ impl<E: Extra> Blockify<E> {
                         Some(alignment),
                         location,
                     );
-
-                    //let c = blocks.blocks.get_mut(&block_id).unwrap();
-                    //let index = c.push(op);
 
                     let ty = op::from_type(lower.context, &ast_ty);
                     let attribute = DenseElementsAttribute::new(
@@ -458,7 +427,6 @@ impl<E: Extra> Blockify<E> {
                     //Ok(index)
                     lower.index.insert(v, index);
                 } else {
-                    //let block_id = self.get_block_id(v);
                     let (op, _ast_ty) = op::emit_literal_const(lower.context, lit, location);
                     let c = blocks.blocks.get_mut(&block_id).unwrap();
                     let index = c.push(op);
@@ -482,7 +450,6 @@ impl<E: Extra> Blockify<E> {
             }
 
             LCode::DeclareFunction(maybe_entry_id) => {
-                //self.env.dump(b);
                 let static_block_id = lower.module_block_id;
                 let _block_id = self.get_block_id(v);
                 let key = self.get_name(v);
@@ -583,16 +550,8 @@ impl<E: Extra> Blockify<E> {
 
             LCode::Store(v_decl, v_value) => {
                 let block_id = self.get_block_id(v);
-                //let decl_scope_id = self.get_scope_id(*v_decl);
-                //let decl_scope = self.env.get_scope(decl_scope_id);
                 let decl_is_static = self.is_in_static_scope(*v_decl);
-                //if let ScopeType::Static = decl_scope.scope_type {
-                //true
-                //} else {
-                //false
-                //};
 
-                //println!("x: {:?}", (decl_is_static, &self.env.stack));
                 let addr_index = if decl_is_static {
                     let name = self.get_name(*v_decl);
                     let lhs_ty = self.get_type(*v_decl);
@@ -635,10 +594,7 @@ impl<E: Extra> Blockify<E> {
             LCode::Load(v_decl) => {
                 let block_id = self.get_block_id(v);
                 let v_decl = self.resolve_declaration(*v_decl).unwrap();
-                //let decl_scope_id = self.get_scope_id(v_decl);
-                //let scope = self.env.get_scope(decl_scope_id);
                 if self.is_in_static_scope(v_decl) {
-                    //if let ScopeType::Static = scope.scope_type {
                     let ast_ty = self.get_type(v);
                     let lower_ty = op::from_type(lower.context, &ast_ty);
                     let memref_ty = MemRefType::new(lower_ty, &[], None, None);
@@ -949,7 +905,6 @@ impl<E: Extra> Blockify<E> {
         b: &NodeBuilder<E>,
         d: &mut Diagnostics,
     ) -> Result<()> {
-        //let block_id = ValueId(0);
         let module_block_id = lower.module_block_id;
         let mut stack = vec![];
         self.create_block(lower, blocks, module_block_id, d);
