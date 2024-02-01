@@ -6,6 +6,12 @@ use lower::{AstType, Extra, NodeBuilder, StringKey, StringLabel, VarDefinitionSp
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 pub struct ValueId(pub(crate) u32);
 
+impl ValueId {
+    pub fn index(&self) -> usize {
+        self.0 as usize
+    }
+}
+
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 pub struct BlockId(pub(crate) u32);
 

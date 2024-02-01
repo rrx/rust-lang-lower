@@ -789,7 +789,9 @@ dependencies = [
  "anyhow",
  "indexmap",
  "lower",
+ "minijinja",
  "petgraph",
+ "serde",
  "tabled",
  "thiserror",
 ]
@@ -1113,6 +1115,7 @@ dependencies = [
  "melior",
  "miette",
  "petgraph",
+ "serde",
  "test-log",
  "thiserror",
 ]
@@ -1191,6 +1194,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.39",
+]
+
+[[package]]
+name = "minijinja"
+version = "1.0.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6fe0ff215195a22884d867b547c70a0c4815cbbcc70991f281dca604b20d10ce"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
@@ -1352,6 +1364,7 @@ dependencies = [
  "flat",
  "log",
  "lower",
+ "minijinja",
  "simple_logger",
  "starlark_syntax",
  "test-log",

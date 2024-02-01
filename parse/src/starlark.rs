@@ -901,19 +901,30 @@ impl<E: Extra> StarlarkParser<E> {
         log::debug!("parsing: {}", filename);
         let file_id = d.add_source(filename.to_string(), std::fs::read_to_string(filename)?);
 
-        //b.enter(file_id, &filename);
-
         let mut parser = Parser::new();
         let module_key = b.s("module");
         let ast: AstNode<E> = parser
             .parse(Path::new(filename), None, module_key, file_id, d, b)?
             .normalize(d, b);
         ast.dump(b);
+        let ast_html = ast.dump_html(b, d);
 
         let mut blockify = Blockify::new();
         let r = blockify.build_module(ast, b, d);
         blockify.dump(b);
         blockify.save_graph("out.dot", b);
+
+        let rows = blockify.get_code_rows(b);
+        use minijinja::{context, Environment};
+        use std::io::prelude::*;
+        let mut env = Environment::new();
+        env.add_template("template", include_str!("template.html"))
+            .unwrap();
+        let tmpl = env.get_template("template").unwrap();
+        let html = tmpl.render(context!(code=> ast_html, header => flat::block_format::CodeRow::header(), rows => rows)).unwrap();
+        let mut file = std::fs::File::create("blocks.html").unwrap();
+        file.write_all(html.as_bytes()).unwrap();
+
         let module_block_id = r?;
         let mut lower = flat::Lower::new(context, module_block_id);
         let mut blocks = flat::LowerBlocks::new();
@@ -966,30 +977,6 @@ pub(crate) mod tests {
     use lower::ast::SimpleExtra;
     use lower::Location;
     use test_log::test;
-
-    fn dump(filename: &str) {
-        let mut d = Diagnostics::new();
-        let mut b = NodeBuilder::new(&mut d);
-        let file_id = d.add_source(
-            filename.to_string(),
-            std::fs::read_to_string(filename).unwrap(),
-        );
-        //b.enter(file_id, &filename);
-        let mut parser = Parser::new();
-        let module_key = b.s("module");
-        let ast: AstNode<SimpleExtra> = parser
-            .parse(
-                Path::new(filename),
-                None,
-                module_key,
-                file_id,
-                &mut d,
-                &mut b,
-            )
-            .unwrap()
-            .normalize(&mut d, &mut b);
-        ast.dump_html(&mut b, &mut d).unwrap();
-    }
 
     fn run_test_ir(filename: &str, expected: i32) {
         let mut p: StarlarkParser<SimpleExtra> = StarlarkParser::new();
@@ -1065,10 +1052,5 @@ pub(crate) mod tests {
     #[test]
     fn test_static_var() {
         run_test_ir("../tests/static_var.star", 0);
-    }
-
-    #[test]
-    fn test_dump() {
-        dump("../tests/test_recursive.star");
     }
 }

@@ -162,7 +162,7 @@ pub struct Blockify<E> {
     templates: Vec<Definition<E>>,
 
     // other
-    env: Environment<E>,
+    pub(crate) env: Environment<E>,
     // sparse names
     names: IndexMap<ValueId, StringLabel>,
     link: LinkOptions,
@@ -186,6 +186,10 @@ impl<E: Extra> Blockify<E> {
             env: Environment::new(),
             link: LinkOptions::new(),
         }
+    }
+
+    pub fn code_count(&self) -> usize {
+        self.code.len()
     }
 
     pub fn shared_libraries(&self) -> Vec<String> {
@@ -226,8 +230,8 @@ impl<E: Extra> Blockify<E> {
         *self.scopes.get(value_id.0 as usize).unwrap()
     }
 
-    pub fn get_name(&self, v: ValueId) -> StringLabel {
-        self.names.get(&v).unwrap().clone()
+    pub fn get_name(&self, v: ValueId) -> Option<StringLabel> {
+        self.names.get(&v).cloned()
     }
 
     pub fn is_in_static_scope(&self, v: ValueId) -> bool {
@@ -241,7 +245,7 @@ impl<E: Extra> Blockify<E> {
     }
 
     pub fn get_next(&self, value_id: ValueId) -> Option<ValueId> {
-        let next = self.next_pos[value_id.0 as usize];
+        let next = self.next_pos[value_id.index()];
         if next != value_id {
             Some(next)
         } else {
@@ -249,184 +253,12 @@ impl<E: Extra> Blockify<E> {
         }
     }
 
-    pub fn code_to_string(&self, v: ValueId, b: &NodeBuilder<E>) -> String {
-        let offset = v.0 as usize;
-        let code = self.code.get(offset).unwrap();
-        match code {
-            LCode::Declare => {
-                format!(
-                    "declare {}: {:?}",
-                    b.resolve_label(*self.names.get(&v).unwrap()),
-                    self.get_type(v)
-                )
-            }
-
-            LCode::DeclareFunction(maybe_entry) => {
-                let name = b.resolve_label(*self.names.get(&v).unwrap());
-                if let Some(entry_id) = maybe_entry {
-                    format!("declare_function({},{})", name, entry_id.0)
-                } else {
-                    format!("declare_function({})", name)
-                }
-            }
-
-            LCode::Label(args, kwargs) => {
-                if let Some(key) = self.names.get(&v) {
-                    format!("label({}, {}, {})", b.resolve_label(*key), args, kwargs,)
-                } else {
-                    format!("label(-, {}, {})", args, kwargs,)
-                }
-            }
-
-            LCode::Goto(block_id) => {
-                format!("goto({})", b.r(*block_id))
-            }
-
-            LCode::Jump(value_id, args) => {
-                format!("jump({}, {})", value_id.0, args,)
-            }
-
-            LCode::Const(Literal::String(s)) => {
-                format!("String({})", s)
-            }
-
-            LCode::Ternary(c, x, y) => {
-                format!("Ternary({},{},{})", c.0, x.0, y.0)
-            }
-
-            LCode::Branch(c, x, y) => {
-                format!("Branch({},{},{})", c.0, x.0, y.0)
-            }
-
-            _ => {
-                format!("{:?}", code)
-            }
-        }
-    }
-
-    pub fn dump_codes(&self, b: &NodeBuilder<E>, filter_block_id: Option<ValueId>) {
-        use tabled::{
-            settings::{object::Rows, Border, Style},
-            Table, Tabled,
-        };
-
-        #[derive(Tabled)]
-        struct CodeRow<'a> {
-            pos: usize,
-            next: usize,
-            prev: usize,
-            value: String,
-            ty: &'a AstType,
-            mem: String,
-            name: String,
-            span_id: usize,
-            scope_id: usize,
-            block_id: usize,
-            term: bool,
-        }
-
-        if filter_block_id.is_none() {
-            let mut out = vec![];
-            let mut labels = vec![];
-            let iter = LCodeIterator::new(self);
-            for (i, value_id) in iter.enumerate() {
-                let pos = value_id.0 as usize;
-                let code = self.code.get(pos).unwrap();
-                let ty = self.types.get(pos).unwrap();
-                let mem = self.mem.get(pos).unwrap();
-                let next = self.next_pos[pos].0 as usize;
-                let scope_id = self.scopes[pos];
-                let block_id = self.entries[pos];
-
-                if code.is_start() {
-                    labels.push(i + 1);
-                }
-
-                out.push(CodeRow {
-                    pos,
-                    next,
-                    prev: self.prev_pos[pos].0 as usize,
-                    value: self.code_to_string(value_id, b),
-                    ty,
-                    mem: format!("{:?}", mem),
-                    name: self
-                        .names
-                        .get(&value_id)
-                        .map(|key| b.resolve_label(*key))
-                        .unwrap_or("".to_string())
-                        .to_string(),
-                    span_id: self.get_span_id(value_id).index(),
-                    scope_id: scope_id.0 as usize,
-                    block_id: block_id.0 as usize,
-                    term: code.is_term(),
-                });
-            }
-
-            let mut t = Table::new(out);
-
-            t.with(Style::sharp());
-
-            for i in labels {
-                let rows = Rows::single(i);
-                t.modify(rows, Border::new().set_top('-'));
-            }
-            let s = t.to_string();
-            println!("{}", s);
-        }
-
-        let mut out = vec![];
-        let mut pos = 0;
-        loop {
-            let code = self.code.get(pos).unwrap();
-            let ty = self.types.get(pos).unwrap();
-            let mem = self.mem.get(pos).unwrap();
-            let next = self.next_pos[pos].0 as usize;
-            let scope_id = self.scopes[pos];
-            let block_id = self.entries[pos];
-            let v = ValueId(pos as u32);
-            let mut display = true;
-            if let Some(filter_block_id) = filter_block_id {
-                if filter_block_id != block_id {
-                    display = false;
-                }
-            }
-
-            if display {
-                out.push(CodeRow {
-                    pos,
-                    next,
-                    prev: self.prev_pos[pos].0 as usize,
-                    value: self.code_to_string(v, b),
-                    ty,
-                    mem: format!("{:?}", mem),
-                    name: self
-                        .names
-                        .get(&v)
-                        .map(|key| b.resolve_label(*key))
-                        .unwrap_or("".to_string())
-                        .to_string(),
-                    span_id: self.get_span_id(v).index(),
-                    scope_id: scope_id.0 as usize,
-                    block_id: block_id.0 as usize,
-                    term: code.is_term(),
-                });
-            }
-
-            pos += 1;
-            if pos == self.code.len() {
-                break;
-            }
-        }
-        println!("{}", Table::new(out).with(Style::sharp()).to_string());
-    }
-
-    pub fn dump(&self, b: &NodeBuilder<E>) {
-        //self.dump_codes(b, None);
-        self.env.dump(b);
-
-        for (block_id, block) in self.env.blocks.iter() {
-            println!("block({:?}, {:?})", block_id, block);
-            self.dump_codes(b, Some(*block_id));
+    pub fn get_prev(&self, value_id: ValueId) -> Option<ValueId> {
+        let prev = self.prev_pos[value_id.index()];
+        if prev != value_id {
+            Some(prev)
+        } else {
+            None
         }
     }
 
@@ -1154,7 +986,7 @@ impl<E: Extra> Blockify<E> {
             );
             Ok(AddResult::new(Some(v), false, block_id))
         } else {
-            let name = b.resolve_label(self.get_name(v_func));
+            let name = b.resolve_label(self.get_name(v_func).unwrap());
             return Self::error(
                 &format!("Type not function: {}, {:?}", name, ty),
                 span_id,
@@ -1677,48 +1509,6 @@ impl Node {
             name,
             block_id,
         }
-    }
-}
-
-pub struct LCodeIterator<'a, E> {
-    blockify: &'a Blockify<E>,
-    blocks: Vec<ValueId>,
-    values: VecDeque<ValueId>,
-}
-
-impl<'a, E> LCodeIterator<'a, E> {
-    pub fn new(blockify: &'a Blockify<E>) -> Self {
-        let blocks = blockify.env.blocks.keys().rev().cloned().collect();
-        Self {
-            blockify,
-            blocks,
-            values: VecDeque::new(),
-        }
-    }
-}
-
-impl<'a, E: Extra> Iterator for LCodeIterator<'a, E> {
-    type Item = ValueId;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.values.len() == 0 {
-            if self.blocks.len() == 0 {
-                return None;
-            }
-
-            let block_id = self.blocks.pop().unwrap();
-            let mut current = block_id;
-            self.values.push_back(block_id);
-            loop {
-                if let Some(next) = self.blockify.get_next(current) {
-                    self.values.push_back(next);
-                    current = next;
-                } else {
-                    break;
-                }
-            }
-        }
-        self.values.pop_front()
     }
 }
 

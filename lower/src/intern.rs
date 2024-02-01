@@ -1,4 +1,5 @@
 //use crate::StringLabel;
+use serde::Serialize;
 use std::fmt::Debug;
 use std::hash::Hash;
 
@@ -38,7 +39,7 @@ impl<K: InternKey, V: InternValue> InternPool<K, V> {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Copy, Hash, PartialOrd, Ord)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Hash, PartialOrd, Ord, Serialize)]
 pub struct StringKey(usize);
 impl InternValue for String {}
 impl InternKey for StringKey {

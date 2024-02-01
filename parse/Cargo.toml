@@ -15,6 +15,7 @@ anyhow = "*"
 thiserror = "*"
 codespan-reporting = "*"
 argh = "0.1.12"
+minijinja = "1.0.12"
 
 [dev-dependencies]
 criterion = "0.3"

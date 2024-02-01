@@ -585,26 +585,26 @@ impl<E: Extra> AstNode<E> {
         }
     }
 
-    pub fn dump_html(&self, b: &NodeBuilder<E>, d: &Diagnostics) -> Result<()> {
-        let mut file = std::fs::File::create("out.html")?;
-        use std::io::prelude::*;
+    pub fn dump_html(&self, b: &NodeBuilder<E>, d: &Diagnostics) -> String {
         let mut out = vec![];
         self.dump_strings(b, &mut out, 0);
-        file.write_all(b"<pre>\n")?;
-        for (depth, s, span_id) in out {
+        let mut s = String::new();
+        s.push_str("<pre>\n");
+        for (depth, content, span_id) in out {
             let span = d.lookup(span_id);
-            file.write_fmt(format_args!(
-                "{:width$}<span id=\"{:?}\" begin=\"{}\" end=\"{}\">{}</span>\n",
+            s.push_str(&format!(
+                "{:width$}<span span_id=\"{}\" class=\"s{}\" begin=\"{}\" end=\"{}\">{}</span>\n",
                 "",
+                span_id.index(),
                 span_id.index(),
                 span.begin.pos,
                 span.end.pos,
-                s,
+                content,
                 width = depth * 2
-            ))?;
+            ));
         }
-        file.write_all(b"</pre>\n")?;
-        Ok(())
+        s.push_str("</pre>\n");
+        s
     }
 
     pub fn dump_strings(

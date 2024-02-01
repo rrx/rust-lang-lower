@@ -383,7 +383,7 @@ impl<E: Extra> Blockify<E> {
                 if self.is_in_static_scope(v) {
                     let (value, ast_ty) = op::build_static_attribute(lower.context, lit);
 
-                    let name = self.get_name(v);
+                    let name = self.get_name(v).unwrap();
 
                     // declare
                     let integer_type = IntegerType::new(lower.context, 64).into();
@@ -452,7 +452,7 @@ impl<E: Extra> Blockify<E> {
             LCode::DeclareFunction(maybe_entry_id) => {
                 let static_block_id = lower.module_block_id;
                 let _block_id = self.get_block_id(v);
-                let key = self.get_name(v);
+                let key = self.get_name(v).unwrap();
                 let ty = self.get_type(v);
 
                 //if static_block_id == block_id {
@@ -504,7 +504,7 @@ impl<E: Extra> Blockify<E> {
                 }
 
                 // function to call
-                let key = self.get_name(*v_f);
+                let key = self.get_name(*v_f).unwrap();
                 let name = b.resolve_label(key);
                 let ty = self.get_type(*v_f);
                 let f = FlatSymbolRefAttribute::new(lower.context, &name);
@@ -553,7 +553,7 @@ impl<E: Extra> Blockify<E> {
                 let decl_is_static = self.is_in_static_scope(*v_decl);
 
                 let addr_index = if decl_is_static {
-                    let name = self.get_name(*v_decl);
+                    let name = self.get_name(*v_decl).unwrap();
                     let lhs_ty = self.get_type(*v_decl);
                     let rhs_ty = self.get_type(*v_value);
                     assert_eq!(lhs_ty, rhs_ty);
@@ -599,7 +599,7 @@ impl<E: Extra> Blockify<E> {
                     let lower_ty = op::from_type(lower.context, &ast_ty);
                     let memref_ty = MemRefType::new(lower_ty, &[], None, None);
                     // TODO: FIXME
-                    let decl_name = self.get_name(v_decl);
+                    let decl_name = self.get_name(v_decl).unwrap();
                     let static_name = b.resolve_label(decl_name);
                     let op = memref::get_global(lower.context, &static_name, memref_ty, location);
                     let c = blocks.blocks.get_mut(&block_id).unwrap();
