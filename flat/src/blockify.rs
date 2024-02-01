@@ -116,23 +116,6 @@ impl NextSeqState {
             Ast::Break(_, _) => true,
             Ast::Continue(_, _) => true,
             Ast::Goto(_) => true,
-            /*
-            //Ast::Call(_, _, _) => famatch expr.node {
-            Ast::Call(ref expr, _, _) => match expr.node {
-                Ast::Identifier(ident) => {
-                    if let Some(_) = env.resolve(ident) {
-                        false
-                    } else if let Some(_) = env.resolve_lambda_scope(ident.into()) {
-                        true
-                    } else {
-                        unreachable!()
-                    }
-                }
-                _ => {
-                    unimplemented!("{:?}", expr.node);
-                }
-            },
-            */
             _ => false,
         };
 
@@ -178,9 +161,9 @@ pub struct Blockify<E> {
     templates: Vec<Definition<E>>,
 
     // other
-    pub(crate) env: Environment<E>,
+    env: Environment<E>,
     // sparse names
-    pub(crate) names: IndexMap<ValueId, StringLabel>,
+    names: IndexMap<ValueId, StringLabel>,
     link: LinkOptions,
 }
 
@@ -235,6 +218,20 @@ impl<E: Extra> Blockify<E> {
 
     pub fn get_scope_id(&self, value_id: ValueId) -> ScopeId {
         *self.scopes.get(value_id.0 as usize).unwrap()
+    }
+
+    pub fn get_name(&self, v: ValueId) -> StringLabel {
+        self.names.get(&v).unwrap().clone()
+    }
+
+    pub fn is_in_static_scope(&self, v: ValueId) -> bool {
+        let scope_id = self.get_scope_id(v);
+        let scope = self.env.get_scope(scope_id);
+        if let ScopeType::Static = scope.scope_type {
+            true
+        } else {
+            false
+        }
     }
 
     pub fn get_next(&self, value_id: ValueId) -> Option<ValueId> {
@@ -564,10 +561,6 @@ impl<E: Extra> Blockify<E> {
 
     pub fn get_type(&self, v: ValueId) -> AstType {
         self.types.get(v.0 as usize).unwrap().clone()
-    }
-
-    pub fn get_name(&self, v: ValueId) -> StringLabel {
-        self.names.get(&v).unwrap().clone()
     }
 
     pub fn build_module(

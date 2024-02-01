@@ -385,11 +385,12 @@ impl<E: Extra> Blockify<E> {
             }
 
             LCode::Const(lit) => {
-                let scope_id = self.get_scope_id(v);
-                let scope = self.env.get_scope(scope_id);
+                //let scope_id = self.get_scope_id(v);
+                //let scope = self.env.get_scope(scope_id);
                 let block_id = self.get_block_id(v);
 
-                if let ScopeType::Static = scope.scope_type {
+                if self.is_in_static_scope(v) {
+                    //if let ScopeType::Static = scope.scope_type {
                     let (value, ast_ty) = op::build_static_attribute(lower.context, lit);
 
                     let name = self.get_name(v);
@@ -466,12 +467,12 @@ impl<E: Extra> Blockify<E> {
                 //self.env.dump(b);
                 let static_block_id = lower.module_block_id;
                 let _block_id = self.get_block_id(v);
-                let key = self.names.get(&v).unwrap();
+                let key = self.get_name(v);
                 let ty = self.get_type(v);
 
                 //if static_block_id == block_id {
                 // global context
-                let op = build_declare_function(lower.context, *key, ty, location, b)?;
+                let op = build_declare_function(lower.context, key, ty, location, b)?;
                 let c = blocks.blocks.get_mut(&static_block_id).unwrap();
                 let index = c.push(op);
                 lower.index.insert(v, index);
@@ -564,13 +565,14 @@ impl<E: Extra> Blockify<E> {
 
             LCode::Store(v_decl, v_value) => {
                 let block_id = self.get_block_id(v);
-                let decl_scope_id = self.get_scope_id(*v_decl);
-                let decl_scope = self.env.get_scope(decl_scope_id);
-                let decl_is_static = if let ScopeType::Static = decl_scope.scope_type {
-                    true
-                } else {
-                    false
-                };
+                //let decl_scope_id = self.get_scope_id(*v_decl);
+                //let decl_scope = self.env.get_scope(decl_scope_id);
+                let decl_is_static = self.is_in_static_scope(*v_decl);
+                //if let ScopeType::Static = decl_scope.scope_type {
+                //true
+                //} else {
+                //false
+                //};
 
                 //println!("x: {:?}", (decl_is_static, &self.env.stack));
                 let addr_index = if decl_is_static {
@@ -615,10 +617,10 @@ impl<E: Extra> Blockify<E> {
             LCode::Load(v_decl) => {
                 let block_id = self.get_block_id(v);
                 let v_decl = self.resolve_declaration(*v_decl).unwrap();
-                let decl_scope_id = self.get_scope_id(v_decl);
-                let scope = self.env.get_scope(decl_scope_id);
-
-                if let ScopeType::Static = scope.scope_type {
+                //let decl_scope_id = self.get_scope_id(v_decl);
+                //let scope = self.env.get_scope(decl_scope_id);
+                if self.is_in_static_scope(v_decl) {
+                    //if let ScopeType::Static = scope.scope_type {
                     let ast_ty = self.get_type(v);
                     let lower_ty = op::from_type(lower.context, &ast_ty);
                     let memref_ty = MemRefType::new(lower_ty, &[], None, None);
