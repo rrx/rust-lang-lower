@@ -388,6 +388,7 @@ impl<E: Extra> NodeBuilder<E> {
         self.build(Ast::Global(name, value.into()), self.span_id.clone()) //extra)
     }
 
+    /*
     pub fn test(&self, condition: AstNode<E>, body: AstNode<E>) -> AstNode<E> {
         //let extra = body.extra.clone();
         self.build(
@@ -395,6 +396,7 @@ impl<E: Extra> NodeBuilder<E> {
             self.span_id.clone(),
         ) //extra)
     }
+    */
 
     pub fn while_loop(&self, condition: AstNode<E>, body: AstNode<E>) -> AstNode<E> {
         self.node(Ast::While(condition.into(), body.into()))

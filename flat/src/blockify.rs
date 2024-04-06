@@ -108,7 +108,7 @@ impl NextSeqState {
         let is_term = match node.node {
             Ast::Branch(_, _, _) => true,
             Ast::Conditional(_, _, _) => true,
-            Ast::Test(_, _) => true,
+            //Ast::Test(_, _) => true,
             Ast::While(_, _) => true,
             Ast::Return(_) => true,
             Ast::Loop(_, _) => true,

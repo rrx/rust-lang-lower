@@ -218,13 +218,13 @@ pub enum Ast<E> {
     //Variable(Definition<E>),
     Global(StringKey, Box<AstNode<E>>),
     Assign(AssignTarget, Box<AstNode<E>>),
-    Replace(AssignTarget, Box<AstNode<E>>),
+    //Replace(AssignTarget, Box<AstNode<E>>),
     //Mutate(Box<AstNode<E>>, Box<AstNode<E>>),
     Branch(Box<AstNode<E>>, StringKey, StringKey),
     Conditional(Box<AstNode<E>>, Box<AstNode<E>>, Option<Box<AstNode<E>>>),
     Ternary(Box<AstNode<E>>, Box<AstNode<E>>, Box<AstNode<E>>),
     Return(Option<Box<AstNode<E>>>),
-    Test(Box<AstNode<E>>, Box<AstNode<E>>),
+    //Test(Box<AstNode<E>>, Box<AstNode<E>>),
     While(Box<AstNode<E>>, Box<AstNode<E>>),
     Builtin(Builtin, Vec<Argument<E>>),
     //Deref(Box<AstNode<E>>, DerefTarget),
@@ -292,7 +292,7 @@ impl<E: Extra> Ast<E> {
             Self::Break(_, _) => true,
             Self::Continue(_, _) => true,
             Self::While(_, _) => true,
-            Self::Test(_, _) => true,
+            //Self::Test(_, _) => true,
             _ => false,
         }
     }
@@ -528,13 +528,14 @@ impl<E: Extra> AstNode<E> {
             }
             Ast::BinaryOp(_, a, b)
                 //| Ast::Mutate(a, b) 
-                | Ast::Test(a, b) | Ast::While(a, b) => {
+                //| Ast::Test(a, b)
+                | Ast::While(a, b) => {
                 values.push(a);
                 values.push(b);
             }
             Ast::UnaryOp(_, a)
             | Ast::Assign(_, a)
-            | Ast::Replace(_, a)
+            //| Ast::Replace(_, a)
             //| Ast::Deref(a, _)
             | Ast::Loop(_, a) => {
                 values.push(a);
