@@ -506,6 +506,7 @@ impl<E: Extra> NodeBuilder<E> {
         self.build(Ast::Module(name, body.into()), span_id)
     }
 
+    /*
     pub fn block(
         &self,
         name: StringKey,
@@ -530,6 +531,7 @@ impl<E: Extra> NodeBuilder<E> {
         };
         self.build(Ast::Block(nb), self.span_id.clone()) //extra)
     }
+    */
 
     /*
     pub fn ir_module(&self, label: BlockId, index: NodeIndex, seq: Vec<IRNode>) -> IRNode {

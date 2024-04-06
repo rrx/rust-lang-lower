@@ -14,8 +14,19 @@ pub mod op;
 pub mod types;
 
 pub use ast::{
-    Argument, Ast, AstNode, AstNodeBlock, BinaryOperation, Builtin, Definition, Extra, Literal,
-    ParameterNode, SimpleExtra, UnaryOperation, VarDefinitionSpace,
+    Argument,
+    Ast,
+    AstNode,
+    //AstNodeBlock,
+    BinaryOperation,
+    Builtin,
+    Definition,
+    Extra,
+    Literal,
+    ParameterNode,
+    SimpleExtra,
+    UnaryOperation,
+    VarDefinitionSpace,
 };
 //pub use blockify::{BlockId, Blockify};
 pub use builder::{
@@ -56,27 +67,6 @@ pub use petgraph::graph::NodeIndex;
 pub(crate) mod tests {
     use super::*;
 
-    /*
-    pub fn gen_test<'c, E: Extra>(b: &mut NodeBuilder<E>) -> AstNode<E> {
-        let mut seq = vec![b.import_prelude()];
-        let x = b.s("x").into();
-        seq.push(b.main(b.seq(vec![
-            b.assign(x, b.integer(123)),
-            b.test(
-                b.bool(false),
-                b.seq(vec![
-                    b.subtract(b.integer(2), b.integer(1)),
-                    b.subtract(b.ident(x.into()), b.integer(1)),
-                    b.index(1),
-                ]),
-            ),
-            b.ret(Some(b.integer(0))),
-        ])));
-
-        b.seq(seq)
-    }
-    */
-
     pub fn gen_block<'c, E: Extra>(b: &mut NodeBuilder<E>) -> AstNode<E> {
         // global variable x = 10
         //seq.push(b.global("z", b.integer(10)));
@@ -86,47 +76,19 @@ pub(crate) mod tests {
         let asdf2 = b.s("asdf2").into();
         let entry = b.s("entry").into();
         let main = b.main(b.seq(vec![
-            b.block(
-                entry,
-                &[],
-                b.seq(vec![
-                    b.label(entry),
-                    b.assign(yy, b.integer(1)),
-                    b.alloca(y, b.integer(999)),
-                    //b.mutate(b.ident("y"), b.integer(998)),
-                    //b.ret(Some(b.integer(0))),
-                    // branch to asdf
-                    b.goto(asdf.into()),
-                ]),
-            ),
-            b.block(
-                asdf,
-                &[],
-                b.seq(vec![
-                    b.label(asdf),
-                    //b.ident("y"),
-                    //b.ident("z"),
-                    b.assign(yy, b.integer(2)),
-                    //b.mutate(b.ident("z"), b.integer(997)),
-                    // entry dominates "asdf", so y should be visible
-                    //b.mutate(b.ident("y"), b.integer(997)),
-                    //b.mutate(b.ident("z_static"), b.integer(10)),
-                    //b.subtract(b.deref_offset(b.ident("y"), 0), b.integer(1)),
-                    b.goto(asdf2),
-                    // branch to asdf2
-                ]),
-            ),
-            // final block
-            b.block(
-                asdf2,
-                &[],
-                b.seq(vec![
-                    b.label(asdf2),
-                    b.assign(yy, b.integer(3)),
-                    //b.mutate(b.ident("y"), b.integer(996)),
-                    b.ret(Some(b.integer(0))),
-                ]),
-            ),
+            // entry
+            b.label(entry),
+            b.assign(yy, b.integer(1)),
+            b.alloca(y, b.integer(999)),
+            b.goto(asdf.into()),
+            // asdf
+            b.label(asdf),
+            b.assign(yy, b.integer(2)),
+            b.goto(asdf2),
+            // asdf2
+            b.label(asdf2),
+            b.assign(yy, b.integer(3)),
+            b.ret(Some(b.integer(0))),
         ]));
         b.seq(vec![b.import_prelude(), main])
     }

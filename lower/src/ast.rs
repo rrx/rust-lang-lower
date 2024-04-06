@@ -1,7 +1,7 @@
 use crate::Diagnostics;
 use crate::{
     AstType,
-    BlockId,
+    //BlockId,
     CodeLocation,
     NodeBuilder,
     Span,
@@ -198,6 +198,7 @@ pub enum Terminator {
     Return,
 }
 
+/*
 #[derive(Debug, Clone)]
 pub struct AstNodeBlock<E> {
     pub name: BlockId,
@@ -205,6 +206,7 @@ pub struct AstNodeBlock<E> {
     pub params: Vec<ParameterNode>,
     pub children: Vec<AstNode<E>>,
 }
+*/
 
 #[derive(Debug, Clone)]
 pub enum Ast<E> {
@@ -228,7 +230,7 @@ pub enum Ast<E> {
     While(Box<AstNode<E>>, Box<AstNode<E>>),
     Builtin(Builtin, Vec<Argument<E>>),
     //Deref(Box<AstNode<E>>, DerefTarget),
-    Block(AstNodeBlock<E>),
+    //Block(AstNodeBlock<E>),
     Module(StringKey, Box<AstNode<E>>),
     Loop(StringKey, Box<AstNode<E>>),
     Break(Option<StringKey>, Vec<AstNode<E>>),
@@ -285,7 +287,7 @@ impl<E: Extra> Ast<E> {
     pub fn is_terminator(&self) -> bool {
         match self {
             Self::Sequence(exprs) => exprs.last().unwrap().node.is_terminator(),
-            Self::Block(_) => true,
+            //Self::Block(_) => true,
             Self::Goto(_) => true,
             Self::Return(_) => true,
             //Self::Conditional(_, _, _) => true,
@@ -300,7 +302,7 @@ impl<E: Extra> Ast<E> {
     pub fn terminator(&self) -> Option<Terminator> {
         match self {
             Self::Sequence(exprs) => exprs.last().unwrap().node.terminator(),
-            Self::Block(nb) => nb.children.last().unwrap().node.terminator(),
+            //Self::Block(nb) => nb.children.last().unwrap().node.terminator(),
             Self::Goto(key) => Some(Terminator::Jump(*key)),
             Self::Return(_) => Some(Terminator::Return),
             _ => None,
@@ -459,6 +461,7 @@ impl<E: Extra> AstNode<E> {
         }
     }
 
+    /*
     pub fn is_block(&self) -> bool {
         if let Ast::Block(_nb) = &self.node {
             true
@@ -474,6 +477,7 @@ impl<E: Extra> AstNode<E> {
             None
         }
     }
+    */
 
     pub fn is_seq(&self) -> bool {
         if let Ast::Sequence(_) = self.node {
@@ -562,9 +566,11 @@ impl<E: Extra> AstNode<E> {
                     values.push(a);
                 }
             }
+            /*
             Ast::Block(ref mut nb) => {
                 values.extend(&mut nb.children);
             }
+            */
             Ast::Module(_name, ref mut body) => {
                 values.push(body);
                 //values.extend(&mut body.to_vec());
@@ -684,6 +690,7 @@ impl<E: Extra> AstNode<E> {
                 }
             }
 
+            /*
             Ast::Block(block) => {
                 let s = format!("block({})", b.resolve_block_label(block.name),);
                 out.push((depth, s, self.span_id));
@@ -696,7 +703,7 @@ impl<E: Extra> AstNode<E> {
                     a.dump_strings(b, out, depth);
                 }
             }
-
+            */
             Ast::Global(key, value) => {
                 let s = format!("global: {}", b.r(*key));
                 out.push((depth, s, self.span_id));
