@@ -379,9 +379,9 @@ impl<E: Extra> NodeBuilder<E> {
         self.build(Ast::Identifier(name), self.span_id.clone()) //self.extra_unknown.clone())
     }
 
-    pub fn deref_offset(&self, value: AstNode<E>, offset: usize) -> AstNode<E> {
-        self.node(Ast::Deref(value.into(), DerefTarget::Offset(offset)))
-    }
+    //pub fn deref_offset(&self, value: AstNode<E>, offset: usize) -> AstNode<E> {
+    //self.node(Ast::Deref(value.into(), DerefTarget::Offset(offset)))
+    //}
 
     pub fn global(&self, name: StringKey, value: AstNode<E>) -> AstNode<E> {
         //let extra = value.extra.clone();

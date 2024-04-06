@@ -216,23 +216,26 @@ impl<E: Extra> Blockify<E> {
             println!("{}", s);
         }
 
-        use minijinja::{context, Environment};
-        use std::io::prelude::*;
-        let mut env = Environment::new();
-        env.add_template("template", include_str!("template.html"))
-            .unwrap();
-        let tmpl = env.get_template("template").unwrap();
         let rows = self.get_code_rows(b);
-        let html = tmpl
-            .render(context!(header => CodeRow::header(), rows => rows))
-            .unwrap();
-        let mut file = std::fs::File::create("blocks.html").unwrap();
-        file.write_all(html.as_bytes()).unwrap();
-        println!(
-            "{}",
-            tmpl.render(context!(header => CodeRow::header(), rows => rows))
-                .unwrap()
-        );
+
+        if false {
+            use minijinja::{context, Environment};
+            use std::io::prelude::*;
+            let mut env = Environment::new();
+            env.add_template("template", include_str!("template.html"))
+                .unwrap();
+            let tmpl = env.get_template("template").unwrap();
+            let html = tmpl
+                .render(context!(header => CodeRow::header(), rows => rows))
+                .unwrap();
+            let mut file = std::fs::File::create("blocks.html").unwrap();
+            file.write_all(html.as_bytes()).unwrap();
+            println!(
+                "{}",
+                tmpl.render(context!(header => CodeRow::header(), rows => rows))
+                    .unwrap()
+            );
+        }
     }
 }
 

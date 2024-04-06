@@ -146,7 +146,8 @@ pub(crate) mod tests {
             b.assign(x, b.integer(123)),
             b.alloca(x2, b.integer(10)),
             b.while_loop(
-                b.ne(b.deref_offset(b.ident(x2.into()), 0), b.integer(0)),
+                //b.ne(b.deref_offset(b.ident(x2.into()), 0), b.integer(0)),
+                b.ne(b.ident(x2.into()), b.integer(0)),
                 b.seq(vec![
                     // static variable with local scope
                     b.global(z_static, b.integer(10)),
@@ -154,23 +155,27 @@ pub(crate) mod tests {
                     // mutate global variable
                     b.mutate(
                         b.ident(z.into()),
-                        b.subtract(b.deref_offset(b.ident(z.into()), 0), b.integer(1)),
+                        //b.subtract(b.deref_offset(b.ident(z.into()), 0), b.integer(1)),
+                        b.subtract(b.ident(z.into()), b.integer(1)),
                     ),
                     // mutate scoped variable
                     b.mutate(
                         b.ident(x2.into()),
-                        b.subtract(b.deref_offset(b.ident(x2.into()), 0), b.integer(1)),
+                        //b.subtract(b.deref_offset(b.ident(x2.into()), 0), b.integer(1)),
+                        b.subtract(b.ident(x2.into()), b.integer(1)),
                     ),
                     b.mutate(
                         b.ident(z_static.into()),
-                        b.subtract(b.deref_offset(b.ident(z_static.into()), 0), b.integer(1)),
+                        //b.subtract(b.deref_offset(b.ident(z_static.into()), 0), b.integer(1)),
+                        b.subtract(b.ident(z_static.into()), b.integer(1)),
                     ),
                     // assign local
                     b.assign(
                         y,
                         b.subtract(
                             b.ident(x.into()),
-                            b.deref_offset(b.ident(z_static.into()), 0),
+                            //b.deref_offset(b.ident(z_static.into()), 0),
+                            b.ident(z_static.into()),
                         ),
                     ),
                 ]),
@@ -199,17 +204,20 @@ pub(crate) mod tests {
                 // using an alloca
                 b.alloca(y, b.ident(arg0.into())),
                 b.cond(
-                    b.ne(b.deref_offset(b.ident(y.into()), 0), b.integer(0)),
+                    //b.ne(b.deref_offset(b.ident(y.into()), 0), b.integer(0)),
+                    b.ne(b.ident(y.into()), b.integer(0)),
                     b.seq(vec![
                         b.mutate(
                             b.ident(y.into()),
-                            b.subtract(b.deref_offset(b.ident(y.into()), 0), b.integer(1)),
+                            //b.subtract(b.deref_offset(b.ident(y.into()), 0), b.integer(1)),
+                            b.subtract(b.ident(y.into()), b.integer(1)),
                         ),
                         b.mutate(
                             b.ident(y.into()),
                             b.apply(
                                 x1.into(),
-                                vec![b.deref_offset(b.ident(y.into()), 0).into()],
+                                //vec![b.deref_offset(b.ident(y.into()), 0).into()],
+                                vec![b.ident(y.into()).into()],
                                 AstType::Int,
                             ),
                         ),
@@ -229,7 +237,8 @@ pub(crate) mod tests {
                     )]),
                     None,
                 ),
-                b.ret(Some(b.deref_offset(b.ident(y.into()), 0))),
+                //b.ret(Some(b.deref_offset(b.ident(y.into()), 0))),
+                b.ret(Some(b.ident(y.into()))),
             ]),
         ));
 

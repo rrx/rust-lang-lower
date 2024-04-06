@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::io::prelude::Write;
 use std::path::Path;
 
 use anyhow::Result;
@@ -915,15 +916,17 @@ impl<E: Extra> StarlarkParser<E> {
         blockify.save_graph("out.dot", b);
 
         let rows = blockify.get_code_rows(b);
-        use minijinja::{context, Environment};
-        use std::io::prelude::*;
-        let mut env = Environment::new();
-        env.add_template("template", include_str!("template.html"))
-            .unwrap();
-        let tmpl = env.get_template("template").unwrap();
-        let html = tmpl.render(context!(code=> ast_html, header => flat::block_format::CodeRow::header(), rows => rows)).unwrap();
-        let mut file = std::fs::File::create("blocks.html").unwrap();
-        file.write_all(html.as_bytes()).unwrap();
+
+        {
+            // write html for debugging
+            let mut env = minijinja::Environment::new();
+            env.add_template("template", include_str!("template.html"))
+                .unwrap();
+            let tmpl = env.get_template("template").unwrap();
+            let html = tmpl.render(minijinja::context!(code=> ast_html, header => flat::block_format::CodeRow::header(), rows => rows)).unwrap();
+            let mut file = std::fs::File::create("blocks.html").unwrap();
+            file.write_all(html.as_bytes()).unwrap();
+        }
 
         let module_block_id = r?;
         let mut lower = flat::Lower::new(context, module_block_id);

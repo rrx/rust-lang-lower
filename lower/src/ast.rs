@@ -9,7 +9,7 @@ use crate::{
     //NodeID,
     StringKey,
 };
-use anyhow::Result;
+//use anyhow::Result;
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use melior::{ir::Location, Context};
 use std::fmt::Debug;
@@ -227,7 +227,7 @@ pub enum Ast<E> {
     Test(Box<AstNode<E>>, Box<AstNode<E>>),
     While(Box<AstNode<E>>, Box<AstNode<E>>),
     Builtin(Builtin, Vec<Argument<E>>),
-    Deref(Box<AstNode<E>>, DerefTarget),
+    //Deref(Box<AstNode<E>>, DerefTarget),
     Block(AstNodeBlock<E>),
     Module(StringKey, Box<AstNode<E>>),
     Loop(StringKey, Box<AstNode<E>>),
@@ -533,7 +533,7 @@ impl<E: Extra> AstNode<E> {
             Ast::UnaryOp(_, a)
             | Ast::Assign(_, a)
             | Ast::Replace(_, a)
-            | Ast::Deref(a, _)
+            //| Ast::Deref(a, _)
             | Ast::Loop(_, a) => {
                 values.push(a);
             }
@@ -782,8 +782,7 @@ impl<E: Extra> AstNode<E> {
                 }
             }
 
-            Ast::Deref(a, _) => a.dump_strings(b, out, depth),
-
+            //Ast::Deref(a, _) => a.dump_strings(b, out, depth),
             Ast::Mutate(lhs, rhs) => {
                 let s = format!("mutate");
                 out.push((depth, s, self.span_id));
@@ -824,6 +823,7 @@ impl<E: Extra> AstNode<E> {
     }
 }
 
+/*
 pub fn print_html(s: &str, depth: usize, span: &Span) {
     println!(
         "{:width$}<span class=\"span{}\">{}</span>",
@@ -833,6 +833,7 @@ pub fn print_html(s: &str, depth: usize, span: &Span) {
         width = depth * 2
     );
 }
+*/
 
 pub fn print_with_indent(s: &str, depth: usize) {
     println!("{:width$}{}", "", s, width = depth * 2);

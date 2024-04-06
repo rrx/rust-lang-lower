@@ -1027,8 +1027,10 @@ impl<E: Extra> Blockify<E> {
             Ast::Definition(def) => {
                 // definition is non-terminal
                 if block_id == self.env.static_block_id() {
+                    // static function
                     self.add_function(block_id, def, node.span_id, b, d)
                 } else {
+                    // lambda block in current scope, called by name
                     let name = def.name.into();
                     let template_id = self.push_template(def);
                     let scope = self.env.get_scope_mut(scope_id);
