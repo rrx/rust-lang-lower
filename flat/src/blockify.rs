@@ -122,7 +122,7 @@ impl NextSeqState {
         if let Some(next_node) = next_node {
             match next_node.node {
                 //Ast::Return(_) => Self::NextReturn,
-                Ast::Label(key) => (is_term, Self::NextLabel(key)),
+                Ast::BlockStart(key, _) => (is_term, Self::NextLabel(key)),
                 _ => (is_term, Self::Other),
             }
         } else {
@@ -458,7 +458,8 @@ impl<E: Extra> Blockify<E> {
         // generate blocks for all predefined labels
         // this needs to be done first as a forward declaration
         for expr in exprs.iter() {
-            if let Ast::Label(name) = &expr.node {
+            if let Ast::BlockStart(name, args) = &expr.node {
+                assert_eq!(0, args.len());
                 let _ = self.push_label(name.into(), expr.span_id, scope_id, &[], &[]);
             }
         }
@@ -1077,9 +1078,11 @@ impl<E: Extra> Blockify<E> {
                 }
             },
 
-            Ast::Label(name) => {
+            Ast::BlockStart(name, args) => {
+                //Ast::Label(name) => {
                 // all blocks should have been forward declared in the sequence
                 let value_id = self.env.resolve_block(name.into()).unwrap();
+                assert_eq!(0, args.len());
 
                 let block = self.env.get_block(block_id);
                 if let Some(last_value) = block.last_value {

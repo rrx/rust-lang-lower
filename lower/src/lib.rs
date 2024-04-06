@@ -151,21 +151,24 @@ pub(crate) mod tests {
                 b.seq(vec![
                     // static variable with local scope
                     b.global(z_static, b.integer(10)),
-                    b.mutate(b.ident(z_static.into()), b.integer(10)),
+                    //b.mutate(b.ident(z_static.into()), b.integer(10)),
+                    b.assign(z_static, b.integer(10)),
                     // mutate global variable
-                    b.mutate(
-                        b.ident(z.into()),
+                    b.assign(
+                        z,
                         //b.subtract(b.deref_offset(b.ident(z.into()), 0), b.integer(1)),
                         b.subtract(b.ident(z.into()), b.integer(1)),
                     ),
                     // mutate scoped variable
-                    b.mutate(
-                        b.ident(x2.into()),
+                    b.assign(
+                        //b.ident(x2.into()),
+                        x2,
                         //b.subtract(b.deref_offset(b.ident(x2.into()), 0), b.integer(1)),
                         b.subtract(b.ident(x2.into()), b.integer(1)),
                     ),
-                    b.mutate(
-                        b.ident(z_static.into()),
+                    b.assign(
+                        //b.ident(z_static.into()),
+                        z_static,
                         //b.subtract(b.deref_offset(b.ident(z_static.into()), 0), b.integer(1)),
                         b.subtract(b.ident(z_static.into()), b.integer(1)),
                     ),
@@ -207,13 +210,15 @@ pub(crate) mod tests {
                     //b.ne(b.deref_offset(b.ident(y.into()), 0), b.integer(0)),
                     b.ne(b.ident(y.into()), b.integer(0)),
                     b.seq(vec![
-                        b.mutate(
-                            b.ident(y.into()),
+                        b.assign(
+                            y,
+                            //b.ident(y.into()),
                             //b.subtract(b.deref_offset(b.ident(y.into()), 0), b.integer(1)),
                             b.subtract(b.ident(y.into()), b.integer(1)),
                         ),
-                        b.mutate(
-                            b.ident(y.into()),
+                        b.assign(
+                            y,
+                            //b.ident(y.into()),
                             b.apply(
                                 x1.into(),
                                 //vec![b.deref_offset(b.ident(y.into()), 0).into()],
@@ -227,8 +232,9 @@ pub(crate) mod tests {
                 // using args
                 b.cond(
                     b.ne(b.ident(arg0.into()), b.integer(0)),
-                    b.seq(vec![b.mutate(
-                        b.ident(y.into()),
+                    b.seq(vec![b.assign(
+                        y,
+                        //b.ident(y.into()),
                         b.apply(
                             x1.into(),
                             vec![b.subtract(b.ident(arg0.into()), b.integer(1).into()).into()],

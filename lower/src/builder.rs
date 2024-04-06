@@ -448,11 +448,13 @@ impl<E: Extra> NodeBuilder<E> {
         self.func(key, &[], AstType::Int, body)
     }
 
+    /*
     pub fn mutate(&self, lhs: AstNode<E>, rhs: AstNode<E>) -> AstNode<E> {
         //let extra = lhs.extra.clone();
         let span_id = lhs.span_id;
         self.build(Ast::Mutate(lhs.into(), rhs.into()), span_id)
     }
+    */
 
     pub fn assign(&self, name: StringKey, rhs: AstNode<E>) -> AstNode<E> {
         self.node(Ast::Assign(AssignTarget::Identifier(name), rhs.into()))
@@ -476,7 +478,7 @@ impl<E: Extra> NodeBuilder<E> {
     }
 
     pub fn label(&self, name: StringKey) -> AstNode<E> {
-        self.build(Ast::Label(name), self.span_id.clone()) //self.extra_unknown.clone())
+        self.build(Ast::BlockStart(name, vec![]), self.span_id.clone()) //self.extra_unknown.clone())
     }
 
     pub fn block_start(&self, name: StringKey, params: Vec<ParameterNode>) -> AstNode<E> {

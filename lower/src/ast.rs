@@ -219,7 +219,7 @@ pub enum Ast<E> {
     Global(StringKey, Box<AstNode<E>>),
     Assign(AssignTarget, Box<AstNode<E>>),
     Replace(AssignTarget, Box<AstNode<E>>),
-    Mutate(Box<AstNode<E>>, Box<AstNode<E>>),
+    //Mutate(Box<AstNode<E>>, Box<AstNode<E>>),
     Branch(Box<AstNode<E>>, StringKey, StringKey),
     Conditional(Box<AstNode<E>>, Box<AstNode<E>>, Option<Box<AstNode<E>>>),
     Ternary(Box<AstNode<E>>, Box<AstNode<E>>, Box<AstNode<E>>),
@@ -235,7 +235,7 @@ pub enum Ast<E> {
     Continue(Option<StringKey>, Vec<AstNode<E>>),
     Goto(StringKey),
     BlockStart(StringKey, Vec<ParameterNode>),
-    Label(StringKey),
+    //Label(StringKey),
     Noop,
     Error,
 }
@@ -254,7 +254,7 @@ impl<E: Extra> Ast<E> {
     }
 
     pub fn is_label(&self) -> bool {
-        if let Ast::Label(_) = self {
+        if let Ast::BlockStart(_, _) = self {
             true
         } else {
             false
@@ -262,7 +262,7 @@ impl<E: Extra> Ast<E> {
     }
 
     pub fn get_label(&self) -> Option<StringKey> {
-        if let Ast::Label(key) = self {
+        if let Ast::BlockStart(key, _) = self {
             Some(*key)
         } else {
             None
@@ -348,7 +348,7 @@ impl<E: Extra> Ast<E> {
                     span_id: b.span_id.clone(),
                 });
             }
-            Some(Self::Label(key.into()))
+            Some(Self::BlockStart(key.into(), vec![]))
         } else if name == "ternary" {
             let Argument::Positional(else_expr) = args.pop().unwrap();
             let Argument::Positional(then_expr) = args.pop().unwrap();
@@ -526,7 +526,9 @@ impl<E: Extra> AstNode<E> {
                     values.push(body);
                 }
             }
-            Ast::BinaryOp(_, a, b) | Ast::Mutate(a, b) | Ast::Test(a, b) | Ast::While(a, b) => {
+            Ast::BinaryOp(_, a, b)
+                //| Ast::Mutate(a, b) 
+                | Ast::Test(a, b) | Ast::While(a, b) => {
                 values.push(a);
                 values.push(b);
             }
@@ -658,11 +660,10 @@ impl<E: Extra> AstNode<E> {
                 }
             }
 
-            Ast::Label(name) => {
-                let s = format!("label: {}", b.r(*name));
-                out.push((depth, s, self.span_id));
-            }
-
+            //Ast::Label(name) => {
+            //let s = format!("label: {}", b.r(*name));
+            //out.push((depth, s, self.span_id));
+            //}
             Ast::Goto(key) => {
                 let s = format!("goto: {}", b.r(*key),);
                 out.push((depth, s, self.span_id));
@@ -783,13 +784,14 @@ impl<E: Extra> AstNode<E> {
             }
 
             //Ast::Deref(a, _) => a.dump_strings(b, out, depth),
+            /*
             Ast::Mutate(lhs, rhs) => {
                 let s = format!("mutate");
                 out.push((depth, s, self.span_id));
                 lhs.dump_strings(b, out, depth + 1);
                 rhs.dump_strings(b, out, depth + 1);
             }
-
+            */
             Ast::Loop(key, body) => {
                 let s = format!("loop({})", b.r(*key));
                 out.push((depth, s, self.span_id));
