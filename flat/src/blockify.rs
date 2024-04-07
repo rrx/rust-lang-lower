@@ -218,7 +218,7 @@ impl<E: Extra> Blockify<E> {
         self.mem.get(value_id.index()).unwrap()
     }
 
-    pub fn get_block_id(&self, value_id: ValueId) -> ValueId {
+    pub fn get_entry_id(&self, value_id: ValueId) -> ValueId {
         *self.entries.get(value_id.index()).unwrap()
     }
 
@@ -931,7 +931,7 @@ impl<E: Extra> Blockify<E> {
         let r = self.add(block_id, Some(v_next), node, b, d)?;
         let v_block = r.block_id;
         let v = r.value_id.unwrap();
-        let last_block_id = self.get_block_id(v);
+        let last_block_id = self.get_entry_id(v);
         //assert_eq!(last_block_id, r.block_id);
         let block = self.env.get_block(last_block_id);
 

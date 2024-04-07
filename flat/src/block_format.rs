@@ -121,7 +121,7 @@ impl<E: Extra> Blockify<E> {
         let next = self.get_next(v).unwrap_or(v).index();
         let prev = self.get_prev(v).unwrap_or(v).index();
         let scope_id = self.get_scope_id(v);
-        let entry_id = self.get_block_id(v);
+        let entry_id = self.get_entry_id(v);
         let block_id = self.env.block_map.get(&entry_id).unwrap();
 
         CodeRow {
@@ -144,16 +144,16 @@ impl<E: Extra> Blockify<E> {
         }
     }
 
-    pub fn dump_codes_filter(&self, b: &NodeBuilder<E>, filter_block_id: ValueId) -> Vec<CodeRow> {
+    pub fn dump_codes_filter(&self, b: &NodeBuilder<E>, filter_entry_id: ValueId) -> Vec<CodeRow> {
         let mut pos = 0;
         let mut out = vec![];
         loop {
             let v = ValueId(pos as u32);
             let row = self.get_code_row(v, b);
-            let block_id = self.get_block_id(v);
+            let entry_id = self.get_entry_id(v);
 
             let mut display = true;
-            if filter_block_id != block_id {
+            if filter_entry_id != entry_id {
                 display = false;
             }
 
@@ -172,9 +172,9 @@ impl<E: Extra> Blockify<E> {
     pub fn get_code_rows(&self, b: &NodeBuilder<E>) -> Vec<CodeRow> {
         let mut out = vec![];
         let iter = LCodeIterator::new(self);
-        for (i, v) in iter.enumerate() {
+        for (_i, v) in iter.enumerate() {
             let row = self.get_code_row(v, b);
-            let code = self.get_code(v);
+            let _code = self.get_code(v);
             out.push(row);
         }
         out
