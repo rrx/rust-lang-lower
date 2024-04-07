@@ -33,6 +33,12 @@ impl std::fmt::Display for ScopeId {
     }
 }
 
+impl ScopeId {
+    pub fn index(&self) -> usize {
+        self.0 as usize
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct LoopScope {
     name: Option<StringKey>,
@@ -42,11 +48,17 @@ pub struct LoopScope {
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct TemplateId(pub(crate) u32);
+impl TemplateId {
+    pub fn index(&self) -> usize {
+        self.0 as usize
+    }
+}
 
 #[derive(Debug)]
 pub struct ScopeLayer<E> {
     names: HashMap<StringKey, Data>,
     pub(crate) labels: HashMap<StringLabel, ValueId>,
+    pub(crate) block_labels: HashMap<StringLabel, BlockId>,
     pub(crate) blocks: Vec<ValueId>,
     pub(crate) return_block: Option<ValueId>,
     pub(crate) next_block: Vec<ValueId>,
@@ -61,6 +73,7 @@ impl<E> ScopeLayer<E> {
     pub fn new(scope_type: ScopeType) -> Self {
         Self {
             labels: HashMap::new(),
+            block_labels: HashMap::new(),
             blocks: vec![],
             names: HashMap::new(),
             return_block: None,
@@ -223,6 +236,19 @@ impl<E: Extra> Environment<E> {
         self.block_map.insert(entry_id, block_id);
     }
 
+    pub fn block_name(
+        &mut self,
+        scope_id: ScopeId,
+        name: StringLabel,
+        v: ValueId,
+        block_id: BlockId,
+    ) {
+        self.get_scope_mut(scope_id).labels.insert(name, v);
+        self.get_scope_mut(scope_id)
+            .block_labels
+            .insert(name, block_id);
+    }
+
     pub fn get_block_by_block_id(&self, block_id: BlockId) -> &Block {
         self.blocks.get(block_id.index()).unwrap()
     }
@@ -366,6 +392,16 @@ impl<E: Extra> Environment<E> {
             let scope = self.get_scope(*scope_id);
             if let Some(value_id) = scope.labels.get(&name) {
                 return Some(*value_id);
+            }
+        }
+        None
+    }
+
+    pub fn resolve_block_id(&self, name: StringLabel) -> Option<BlockId> {
+        for scope_id in self.stack.iter().rev() {
+            let scope = self.get_scope(*scope_id);
+            if let Some(block_id) = scope.block_labels.get(&name) {
+                return Some(*block_id);
             }
         }
         None

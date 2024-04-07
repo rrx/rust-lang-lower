@@ -22,6 +22,7 @@ pub struct CodeRow {
     span_id: usize,
     scope_id: usize,
     block_id: usize,
+    entry_id: usize,
     term: bool,
 }
 
@@ -120,7 +121,8 @@ impl<E: Extra> Blockify<E> {
         let next = self.get_next(v).unwrap_or(v).index();
         let prev = self.get_prev(v).unwrap_or(v).index();
         let scope_id = self.get_scope_id(v);
-        let block_id = self.get_block_id(v);
+        let entry_id = self.get_block_id(v);
+        let block_id = self.env.block_map.get(&entry_id).unwrap();
 
         CodeRow {
             pos: v.index(),
@@ -136,7 +138,8 @@ impl<E: Extra> Blockify<E> {
                 .to_string(),
             span_id: self.get_span_id(v).index(),
             scope_id: scope_id.0 as usize,
-            block_id: block_id.0 as usize,
+            entry_id: entry_id.index(),
+            block_id: block_id.index(),
             term: code.is_term(),
         }
     }

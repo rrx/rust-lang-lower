@@ -13,7 +13,7 @@ use lower::{
     ParseError, Span, SpanId, StringKey, StringLabel, UnaryOperation, VarDefinitionSpace,
 };
 
-use crate::{CodeOffset, Environment, ScopeId, ScopeType, Successor, TemplateId, ValueId};
+use crate::{BlockId, CodeOffset, Environment, ScopeId, ScopeType, Successor, TemplateId, ValueId};
 
 #[derive(Debug)]
 pub struct AstBlock {
@@ -196,10 +196,6 @@ impl<E: Extra> Blockify<E> {
         self.link.shared_libraries()
     }
 
-    pub fn block_name(&mut self, scope_id: ScopeId, name: StringLabel, v: ValueId) {
-        self.env.get_scope_mut(scope_id).labels.insert(name, v);
-    }
-
     pub fn push_template(&mut self, def: Definition<E>) -> TemplateId {
         let offset = self.templates.len();
         self.templates.push(def);
@@ -207,27 +203,27 @@ impl<E: Extra> Blockify<E> {
     }
 
     pub fn get_template(&mut self, template_id: TemplateId) -> &Definition<E> {
-        self.templates.get(template_id.0 as usize).unwrap()
+        self.templates.get(template_id.index()).unwrap()
     }
 
     pub fn get_code(&self, value_id: ValueId) -> &LCode {
-        self.code.get(value_id.0 as usize).unwrap()
+        self.code.get(value_id.index()).unwrap()
     }
 
     pub fn get_span_id(&self, value_id: ValueId) -> SpanId {
-        self.span.get(value_id.0 as usize).unwrap().clone()
+        self.span.get(value_id.index()).unwrap().clone()
     }
 
     pub fn get_mem(&self, value_id: ValueId) -> &VarDefinitionSpace {
-        self.mem.get(value_id.0 as usize).unwrap()
+        self.mem.get(value_id.index()).unwrap()
     }
 
     pub fn get_block_id(&self, value_id: ValueId) -> ValueId {
-        *self.entries.get(value_id.0 as usize).unwrap()
+        *self.entries.get(value_id.index()).unwrap()
     }
 
     pub fn get_scope_id(&self, value_id: ValueId) -> ScopeId {
-        *self.scopes.get(value_id.0 as usize).unwrap()
+        *self.scopes.get(value_id.index()).unwrap()
     }
 
     pub fn get_name(&self, v: ValueId) -> Option<StringLabel> {
@@ -284,7 +280,7 @@ impl<E: Extra> Blockify<E> {
         span_id: SpanId,
         scope_id: ScopeId,
         ty: AstType,
-    ) -> ValueId {
+    ) -> (BlockId, ValueId) {
         let v_block = self._push_code(
             code,
             span_id,
@@ -300,7 +296,7 @@ impl<E: Extra> Blockify<E> {
 
         self.entries[v_block.index()] = v_block;
         self._update_code(v_block, v_block);
-        v_block
+        (block_id, v_block)
     }
 
     pub fn push_code(
@@ -395,22 +391,22 @@ impl<E: Extra> Blockify<E> {
         args: &[AstType],
         kwargs: &[ParameterNode],
     ) -> ValueId {
-        let block_id = self.push_code_new_block(
+        let (block_id, v_block) = self.push_code_new_block(
             LCode::Label(args.len() as u8, kwargs.len() as u8),
             span_id,
             scope_id,
             AstType::Unit,
         );
-        self.names.insert(block_id, name);
-        self.block_name(scope_id, name, block_id);
-        let block = self.env.get_block_mut(block_id);
-        block.last_value = Some(block_id);
+        self.names.insert(v_block, name);
+        self.env.block_name(scope_id, name, v_block, block_id);
+        let block = self.env.get_block_mut(v_block);
+        block.last_value = Some(v_block);
         for (i, p) in kwargs.iter().enumerate() {
             let v = self.push_code(
                 LCode::Arg(i as u8),
                 span_id,
                 scope_id,
-                block_id,
+                v_block,
                 p.ty.clone(),
                 VarDefinitionSpace::Arg,
             );
@@ -418,7 +414,7 @@ impl<E: Extra> Blockify<E> {
             self.env
                 .define(p.name, v, p.ty.clone(), VarDefinitionSpace::Arg);
         }
-        block_id
+        v_block
     }
 
     pub fn resolve_block_label(&self, k: ValueId, b: &NodeBuilder<E>) -> String {
