@@ -1045,7 +1045,7 @@ impl<E: Extra> Blockify<E> {
 
     pub fn add(
         &mut self,
-        block_id: ValueId,
+        entry_id: ValueId,
         maybe_next: Option<ValueId>,
         node: AstNode<E>,
         b: &mut NodeBuilder<E>,
@@ -1058,7 +1058,7 @@ impl<E: Extra> Blockify<E> {
                 unimplemented!()
             }
 
-            Ast::Sequence(ref _exprs) => self.add_sequence(block_id, maybe_next, node, b, d),
+            Ast::Sequence(ref _exprs) => self.add_sequence(entry_id, maybe_next, node, b, d),
 
             Ast::Definition(_def) => {
                 unreachable!();
@@ -1084,7 +1084,7 @@ impl<E: Extra> Blockify<E> {
                     if let Some(data) = self.env.resolve(*ident) {
                         return self.add_function_call(
                             scope_id,
-                            block_id,
+                            entry_id,
                             data.value_id,
                             args,
                             node.span_id,
@@ -1098,7 +1098,7 @@ impl<E: Extra> Blockify<E> {
                         let label: StringLabel = (*ident).into();
                         let template_id = scope.lambdas.get(&label).unwrap();
                         return self.add_lambda_and_call(
-                            block_id,
+                            entry_id,
                             *template_id,
                             args,
                             node.span_id,
@@ -1120,7 +1120,7 @@ impl<E: Extra> Blockify<E> {
                 let value_id = self.env.resolve_block(name.into()).unwrap();
                 assert_eq!(0, args.len());
 
-                let block = self.env.get_block(block_id);
+                let block = self.env.get_block(entry_id);
                 if let Some(last_value) = block.last_value {
                     // check to ensure that the previous block was terminated
                     let code = self.code.get(last_value.0 as usize).unwrap();
@@ -1147,11 +1147,11 @@ impl<E: Extra> Blockify<E> {
                         code,
                         node.span_id,
                         scope_id,
-                        block_id,
+                        entry_id,
                         ty,
                         data.mem.clone(),
                     );
-                    Ok(AddResult::new(Some(v), false, block_id))
+                    Ok(AddResult::new(Some(v), false, entry_id))
                 } else {
                     let span = d.lookup(node.span_id);
                     d.push_diagnostic(error("Name not found", span));
@@ -1170,10 +1170,10 @@ impl<E: Extra> Blockify<E> {
                     let template_id = self.push_template(def);
                     let scope = self.env.get_scope_mut(scope_id);
                     scope.lambdas.insert(name.into(), template_id);
-                    return Ok(AddResult::new(None, false, block_id));
+                    return Ok(AddResult::new(None, false, entry_id));
                 }
 
-                let r = self.add(block_id, None, *expr, b, d)?;
+                let r = self.add(entry_id, None, *expr, b, d)?;
 
                 let v_expr = r.value_id.unwrap();
                 let v_block = r.block_id;
@@ -1215,7 +1215,7 @@ impl<E: Extra> Blockify<E> {
                         let span = d.lookup(node.span_id);
                         d.push_diagnostic(error("Expected string", span));
                     }
-                    Ok(AddResult::new(None, false, block_id))
+                    Ok(AddResult::new(None, false, entry_id))
                 }
                 _ => {
                     let _ty = bi.get_return_type();
@@ -1224,7 +1224,7 @@ impl<E: Extra> Blockify<E> {
                     let mut values = vec![];
                     for a in args.into_iter() {
                         let Argument::Positional(expr) = a;
-                        let r = self.add(block_id, None, *expr, b, d)?;
+                        let r = self.add(entry_id, None, *expr, b, d)?;
                         let v = r.value_id.unwrap();
                         let ty = self.get_type(v);
                         values.push((v, ty));
@@ -1235,7 +1235,7 @@ impl<E: Extra> Blockify<E> {
                             LCode::Value(v),
                             node.span_id,
                             scope_id,
-                            block_id,
+                            entry_id,
                             ty,
                             VarDefinitionSpace::Reg,
                         );
@@ -1246,11 +1246,11 @@ impl<E: Extra> Blockify<E> {
                         LCode::Builtin(bi, args_size as u8, 0),
                         node.span_id,
                         scope_id,
-                        block_id,
+                        entry_id,
                         ty,
                         VarDefinitionSpace::Reg,
                     );
-                    Ok(AddResult::new(Some(value_id), false, block_id))
+                    Ok(AddResult::new(Some(value_id), false, entry_id))
                 }
             },
 
@@ -1261,16 +1261,16 @@ impl<E: Extra> Blockify<E> {
                     LCode::Const(lit),
                     node.span_id,
                     scope_id,
-                    block_id,
+                    entry_id,
                     ty,
                     VarDefinitionSpace::Reg,
                 );
-                Ok(AddResult::new(Some(v), false, block_id))
+                Ok(AddResult::new(Some(v), false, entry_id))
             }
 
             Ast::UnaryOp(op, x) => {
                 // op1 is expression, non-terminal
-                let r = self.add(block_id, None, *x, b, d)?;
+                let r = self.add(entry_id, None, *x, b, d)?;
                 let v_block = r.block_id;
                 let vx = r.value_id.unwrap();
                 let code = LCode::Op1(op, vx);
@@ -1316,7 +1316,7 @@ impl<E: Extra> Blockify<E> {
                 };
 
                 let span_id = condition.span_id;
-                let r = self.add(block_id, None, *condition, b, d)?;
+                let r = self.add(entry_id, None, *condition, b, d)?;
                 let v = r.value_id.unwrap();
                 let code = LCode::Branch(v, v_then, v_else);
                 let v = self.push_code(
@@ -1334,7 +1334,7 @@ impl<E: Extra> Blockify<E> {
             Ast::Ternary(c, x, y) => {
                 // expression, non-terminal
                 let condition_span_id = c.span_id;
-                let r = self.add(block_id, None, *c, b, d)?;
+                let r = self.add(entry_id, None, *c, b, d)?;
                 let v_c = r.value_id.unwrap();
 
                 let then_scope_id = self.env.new_scope(ScopeType::Block);
@@ -1364,16 +1364,16 @@ impl<E: Extra> Blockify<E> {
                     code,
                     condition_span_id,
                     scope_id,
-                    block_id,
+                    entry_id,
                     then_ty,
                     VarDefinitionSpace::Reg,
                 );
-                Ok(AddResult::new(Some(v), false, block_id))
+                Ok(AddResult::new(Some(v), false, entry_id))
             }
 
             Ast::BinaryOp(op, x, y) => {
                 // expression, non-terminal
-                let r = self.add(block_id, None, *x, b, d)?;
+                let r = self.add(entry_id, None, *x, b, d)?;
                 let vx = r.value_id.unwrap();
                 let v_block = r.block_id;
                 let r = self.add(v_block, None, *y, b, d)?;
@@ -1395,7 +1395,7 @@ impl<E: Extra> Blockify<E> {
             Ast::Goto(label) => {
                 // Goto is terminal
                 if let Some(target_block_id) = self.env.resolve_block_id(label.into()) {
-                    self.add_jump_by_block(block_id, target_block_id, vec![], node.span_id, b, d)
+                    self.add_jump_by_block(entry_id, target_block_id, vec![], node.span_id, b, d)
                 } else {
                     let span = d.lookup(node.span_id);
                     d.push_diagnostic(error(
@@ -1414,7 +1414,7 @@ impl<E: Extra> Blockify<E> {
                     } else {
                         vec![]
                     };
-                    self.add_jump(block_id, v_return, args, node.span_id, b, d)
+                    self.add_jump(entry_id, v_return, args, node.span_id, b, d)
                 } else {
                     let span = d.lookup(node.span_id);
                     d.push_diagnostic(error(&format!("Return without function context"), span));
@@ -1423,7 +1423,7 @@ impl<E: Extra> Blockify<E> {
             }
 
             Ast::Global(name, expr) => match expr.node {
-                Ast::Definition(def) => self.add_function(block_id, name, def, node.span_id, b, d),
+                Ast::Definition(def) => self.add_function(entry_id, name, def, node.span_id, b, d),
                 Ast::Literal(lit) => {
                     let static_scope_id = self.env.static_scope_id();
                     let static_block_id = self.env.static_block_id();
@@ -1454,20 +1454,20 @@ impl<E: Extra> Blockify<E> {
                         LCode::Value(v),
                         expr.span_id,
                         scope_id,
-                        block_id,
+                        entry_id,
                         ast_ty,
                         VarDefinitionSpace::Static,
                         name,
                     );
 
-                    Ok(AddResult::new(Some(v), false, block_id))
+                    Ok(AddResult::new(Some(v), false, entry_id))
                 }
                 _ => unreachable!(),
             },
 
             Ast::Loop(name, body) => {
                 // loop is a terminal, so we are expecting a next block
-                self.add_loop(block_id, maybe_next.unwrap(), name, *body, b, d)
+                self.add_loop(entry_id, maybe_next.unwrap(), name, *body, b, d)
             }
 
             Ast::Break(maybe_name, args) => {
@@ -1475,7 +1475,7 @@ impl<E: Extra> Blockify<E> {
                 assert_eq!(args.len(), 0);
                 // loop up loop blocks by name
                 if let Some(v_next) = self.env.get_loop_next_block(maybe_name) {
-                    self.add_jump(block_id, v_next, vec![], node.span_id, b, d)
+                    self.add_jump(entry_id, v_next, vec![], node.span_id, b, d)
                 } else {
                     let span = d.lookup(node.span_id);
                     d.push_diagnostic(error(&format!("Break without loop"), span));
@@ -1488,7 +1488,7 @@ impl<E: Extra> Blockify<E> {
                 assert_eq!(args.len(), 0);
                 // loop up loop blocks by name
                 if let Some(v_start) = self.env.get_loop_start_block(maybe_name) {
-                    self.add_jump(block_id, v_start, vec![], node.span_id, b, d)
+                    self.add_jump(entry_id, v_start, vec![], node.span_id, b, d)
                 } else {
                     // mismatch name
                     let span = d.lookup(node.span_id);
