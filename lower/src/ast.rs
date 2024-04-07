@@ -148,7 +148,7 @@ pub struct Definition<E> {
     pub params: Vec<ParameterNode>,
     pub return_type: Box<AstType>,
     pub body: Option<Box<AstNode<E>>>,
-    pub lambda: bool,
+    //pub lambda: bool,
     //pub payload: P::DefPayload,
 }
 

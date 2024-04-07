@@ -416,7 +416,7 @@ impl<E: Extra> Parser<E> {
 
             StmtP::Def(def) => {
                 let name = b.s(&def.name.ident);
-                let is_lambda = env.is_in_func();
+                //let is_lambda = env.is_in_func();
 
                 env.enter_func();
 
@@ -449,7 +449,7 @@ impl<E: Extra> Parser<E> {
                     body: Some(b.seq(body).into()),
                     return_type,
                     params,
-                    lambda: is_lambda,
+                    //lambda: is_lambda,
                 });
 
                 env.define(name);

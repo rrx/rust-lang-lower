@@ -270,7 +270,7 @@ impl<E: Extra> NodeBuilder<E> {
         params: &[(StringKey, AstType)],
         return_type: AstType,
         body: Option<AstNode<E>>,
-        lambda: bool,
+        //lambda: bool,
     ) -> AstNode<E> {
         let params = params
             .into_iter()
@@ -288,7 +288,7 @@ impl<E: Extra> NodeBuilder<E> {
             self.node(Ast::Definition(Definition {
                 //name,
                 params,
-                lambda,
+                //lambda,
                 return_type: return_type.into(),
                 body: body.map(|b| b.into()),
             })),
@@ -311,14 +311,14 @@ impl<E: Extra> NodeBuilder<E> {
                 &[(a, AstType::Int)],
                 AstType::Unit,
                 None,
-                false,
+                //false,
             ),
             self.definition(
                 print_float,
                 &[(a, AstType::Float)],
                 AstType::Unit,
                 None,
-                false,
+                //false,
             ),
         ]
     }
@@ -421,7 +421,7 @@ impl<E: Extra> NodeBuilder<E> {
         return_type: AstType,
         body: AstNode<E>,
     ) -> AstNode<E> {
-        self.definition(name, params, return_type, Some(body), false)
+        self.definition(name, params, return_type, Some(body)) //, false)
     }
 
     pub fn ret(&self, node: Option<AstNode<E>>) -> AstNode<E> {
