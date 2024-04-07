@@ -13,7 +13,7 @@ use lower::{
     ParseError, Span, SpanId, StringKey, StringLabel, UnaryOperation, VarDefinitionSpace,
 };
 
-use crate::{Environment, ScopeId, ScopeType, Successor, TemplateId, ValueId};
+use crate::{CodeOffset, Environment, ScopeId, ScopeType, Successor, TemplateId, ValueId};
 
 #[derive(Debug)]
 pub struct AstBlock {
@@ -56,7 +56,7 @@ pub enum LCode {
     Store(ValueId, ValueId), // memref, value to store
     Return(u8),              // return values
     Goto(StringKey),
-    Jump(ValueId, u8),
+    Jump(CodeOffset, u8),
     Branch(ValueId, ValueId, ValueId),
     Ternary(ValueId, ValueId, ValueId), // condition, then_entry, else_entry
     Builtin(Builtin, u8, u8),
@@ -285,7 +285,7 @@ impl<E: Extra> Blockify<E> {
         scope_id: ScopeId,
         ty: AstType,
     ) -> ValueId {
-        let block_id = self._push_code(
+        let v_block = self._push_code(
             code,
             span_id,
             scope_id,
@@ -293,10 +293,13 @@ impl<E: Extra> Blockify<E> {
             ty,
             VarDefinitionSpace::Reg,
         );
-        self.env.new_block(block_id, scope_id);
-        self.entries[block_id.0 as usize] = block_id;
-        self._update_code(block_id, block_id);
-        block_id
+        self.env.new_block(v_block);
+        let scope = self.env.get_scope_mut(scope_id);
+        scope.blocks.push(v_block);
+
+        self.entries[v_block.index()] = v_block;
+        self._update_code(v_block, v_block);
+        v_block
     }
 
     pub fn push_code(
@@ -313,7 +316,12 @@ impl<E: Extra> Blockify<E> {
             LCode::Jump(target, _) => {
                 // XXX: This is causing us to terminate the loop we are currently generating
                 // If it knows about the loop, then it tries to terminate it
-                self.env.add_succ_block(block_id, *target);
+                match target {
+                    CodeOffset::Value(value_id) => {
+                        self.env.add_succ_block(block_id, *value_id);
+                    }
+                    _ => unimplemented!(),
+                }
             }
 
             LCode::Branch(_, v_then, v_else) => {
@@ -897,7 +905,7 @@ impl<E: Extra> Blockify<E> {
 
         if num_args as usize == count {
             let v = self.push_code(
-                LCode::Jump(target_id, num_args as u8),
+                LCode::Jump(target_id.into(), num_args as u8),
                 span_id,
                 scope_id,
                 block_id,

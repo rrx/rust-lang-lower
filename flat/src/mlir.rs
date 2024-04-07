@@ -1,4 +1,4 @@
-use crate::{Blockify, LCode, ValueId};
+use crate::{Blockify, CodeOffset, LCode, ValueId};
 use anyhow::Result;
 use indexmap::IndexMap;
 use lower::melior::ir::Location;
@@ -357,24 +357,29 @@ impl<E: Extra> Blockify<E> {
             }
 
             LCode::Jump(target, num_args) => {
-                //println!("jump: {:?}", (target, num_args));
-                let block_id = self.get_block_id(v);
-                let values = self.get_previous_values(v, *num_args as usize);
-                let indicies = values
-                    .iter()
-                    .map(|value_id| self.resolve_value(lower, *value_id).unwrap())
-                    .collect();
-                let rs = blocks.values(indicies);
+                match target {
+                    CodeOffset::Value(target) => {
+                        //println!("jump: {:?}", (target, num_args));
+                        let block_id = self.get_block_id(v);
+                        let values = self.get_previous_values(v, *num_args as usize);
+                        let indicies = values
+                            .iter()
+                            .map(|value_id| self.resolve_value(lower, *value_id).unwrap())
+                            .collect();
+                        let rs = blocks.values(indicies);
 
-                let c = blocks.blocks.get(&target).unwrap();
-                let arg_count = c.block.as_ref().unwrap().argument_count();
-                assert_eq!(arg_count, *num_args as usize);
+                        let c = blocks.blocks.get(&target).unwrap();
+                        let arg_count = c.block.as_ref().unwrap().argument_count();
+                        assert_eq!(arg_count, *num_args as usize);
 
-                let op = cf::br(&c.block.as_ref().unwrap(), &rs, location);
-                let c = blocks.blocks.get_mut(&block_id).unwrap();
+                        let op = cf::br(&c.block.as_ref().unwrap(), &rs, location);
+                        let c = blocks.blocks.get_mut(&block_id).unwrap();
 
-                let index = c.push(op);
-                lower.index.insert(v, index);
+                        let index = c.push(op);
+                        lower.index.insert(v, index);
+                    }
+                    _ => unimplemented!(),
+                }
             }
 
             LCode::Const(lit) => {

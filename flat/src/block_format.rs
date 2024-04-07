@@ -92,7 +92,7 @@ impl<E: Extra> Blockify<E> {
             }
 
             LCode::Jump(value_id, args) => {
-                format!("jump({}, {})", value_id.0, args,)
+                format!("jump({:?}, {})", value_id, args,)
             }
 
             LCode::Const(Literal::String(s)) => {

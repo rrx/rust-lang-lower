@@ -1,31 +1,8 @@
 use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
 
+use crate::{BlockId, ValueId};
 use lower::{AstType, Extra, NodeBuilder, StringKey, StringLabel, VarDefinitionSpace};
-
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
-pub struct BlockId(pub(crate) u32);
-
-impl BlockId {
-    pub fn index(&self) -> usize {
-        self.0 as usize
-    }
-}
-
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
-pub struct ValueId(pub(crate) u32);
-
-impl ValueId {
-    pub fn index(&self) -> usize {
-        self.0 as usize
-    }
-}
-
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
-pub enum CodeOffset {
-    Value(ValueId),
-    Block(BlockId),
-}
 
 #[derive(Debug, Clone)]
 pub struct Data {
@@ -170,11 +147,10 @@ impl<E: Extra> Environment<E> {
         ScopeId(offset as u32)
     }
 
-    pub fn new_block(&mut self, value_id: ValueId, scope_id: ScopeId) {
-        let scope = self.get_scope_mut(scope_id);
-        scope.blocks.push(value_id);
+    pub fn new_block(&mut self, value_id: ValueId) -> BlockId {
         let block = Block::new();
-        self.blocks.insert(value_id, block);
+        let (block_id, _) = self.blocks.insert_full(value_id, block);
+        BlockId(block_id as u32)
     }
 
     pub fn enter_scope(&mut self, scope_id: ScopeId) {
