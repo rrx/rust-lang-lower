@@ -293,7 +293,8 @@ impl<E: Extra> Blockify<E> {
             ty,
             VarDefinitionSpace::Reg,
         );
-        self.env.new_block(v_block);
+        let block_id = self.env.new_block();
+        self.env.block_entry(block_id, v_block);
         let scope = self.env.get_scope_mut(scope_id);
         scope.blocks.push(v_block);
 

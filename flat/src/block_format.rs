@@ -209,9 +209,9 @@ impl<E: Extra> Blockify<E> {
         //self.dump_codes(b, None);
         self.env.dump(b);
 
-        for (block_id, block) in self.env.blocks.iter() {
-            println!("block({:?}, {:?})", block_id, block);
-            let rows = self.dump_codes_filter(b, *block_id);
+        for block in self.env.blocks.iter() {
+            println!("block({:?}, {:?})", block.entry_id, block);
+            let rows = self.dump_codes_filter(b, block.entry_id.unwrap());
             let s = Table::new(rows).with(Style::sharp()).to_string();
             println!("{}", s);
         }
@@ -247,7 +247,13 @@ pub struct LCodeIterator<'a, E> {
 
 impl<'a, E> LCodeIterator<'a, E> {
     pub fn new(blockify: &'a Blockify<E>) -> Self {
-        let blocks = blockify.env.blocks.keys().rev().cloned().collect();
+        let blocks = blockify
+            .env
+            .blocks
+            .iter()
+            .rev()
+            .map(|block| block.entry_id.unwrap())
+            .collect();
         Self {
             blockify,
             blocks,

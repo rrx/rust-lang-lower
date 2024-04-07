@@ -88,6 +88,7 @@ pub enum Successor {
 #[derive(Debug)]
 pub struct Block {
     pub(crate) count: usize,
+    pub(crate) entry_id: Option<ValueId>,
     pub(crate) last_value: Option<ValueId>,
     pub(crate) terminator: Option<ValueId>,
     pub(crate) succ: HashSet<(Successor, ValueId)>,
@@ -98,6 +99,7 @@ impl Block {
     pub fn new() -> Self {
         Self {
             count: 0,
+            entry_id: None,
             last_value: None,
             terminator: None,
             pred: HashSet::new(),
@@ -107,6 +109,10 @@ impl Block {
 
     pub fn has_term(&self) -> bool {
         self.terminator.is_some()
+    }
+
+    pub fn set_entry(&mut self, value_id: ValueId) {
+        self.entry_id = Some(value_id);
     }
 
     pub fn set_term(&mut self, value_id: ValueId) {
@@ -126,7 +132,8 @@ impl Block {
 pub struct Environment<E> {
     pub(crate) stack: Vec<ScopeId>,
     pub(crate) scopes: Vec<ScopeLayer<E>>,
-    pub(crate) blocks: IndexMap<ValueId, Block>,
+    pub(crate) blocks: Vec<Block>,
+    pub(crate) block_map: IndexMap<ValueId, BlockId>,
     _e: std::marker::PhantomData<E>,
 }
 
@@ -135,7 +142,8 @@ impl<E: Extra> Environment<E> {
         Self {
             stack: vec![],
             scopes: vec![],
-            blocks: IndexMap::new(),
+            blocks: vec![],
+            block_map: IndexMap::new(),
             _e: std::marker::PhantomData::default(),
         }
     }
@@ -145,12 +153,6 @@ impl<E: Extra> Environment<E> {
         let scope = ScopeLayer::new(scope_type);
         self.scopes.push(scope);
         ScopeId(offset as u32)
-    }
-
-    pub fn new_block(&mut self, value_id: ValueId) -> BlockId {
-        let block = Block::new();
-        let (block_id, _) = self.blocks.insert_full(value_id, block);
-        BlockId(block_id as u32)
     }
 
     pub fn enter_scope(&mut self, scope_id: ScopeId) {
@@ -206,12 +208,37 @@ impl<E: Extra> Environment<E> {
         self.scopes.get_mut(scope_id.0 as usize).unwrap()
     }
 
-    pub fn get_block(&self, block_id: ValueId) -> &Block {
-        self.blocks.get(&block_id).unwrap()
+    pub fn new_block(&mut self) -> BlockId {
+        let block = Block::new();
+        let offset = self.blocks.len();
+        self.blocks.push(block);
+        BlockId(offset as u32)
     }
 
-    pub fn get_block_mut(&mut self, block_id: ValueId) -> &mut Block {
-        self.blocks.get_mut(&block_id).unwrap()
+    pub fn block_entry(&mut self, block_id: BlockId, entry_id: ValueId) {
+        self.blocks
+            .get_mut(block_id.index())
+            .unwrap()
+            .set_entry(entry_id);
+        self.block_map.insert(entry_id, block_id);
+    }
+
+    pub fn get_block_by_block_id(&self, block_id: BlockId) -> &Block {
+        self.blocks.get(block_id.index()).unwrap()
+    }
+
+    pub fn get_block_mut_by_block_id(&mut self, block_id: BlockId) -> &mut Block {
+        self.blocks.get_mut(block_id.index()).unwrap()
+    }
+
+    pub fn get_block(&self, value_id: ValueId) -> &Block {
+        let block_id = self.block_map.get(&value_id).unwrap();
+        self.get_block_by_block_id(*block_id)
+    }
+
+    pub fn get_block_mut(&mut self, value_id: ValueId) -> &mut Block {
+        let block_id = self.block_map.get(&value_id).unwrap();
+        self.get_block_mut_by_block_id(*block_id)
     }
 
     pub fn add_pred(&mut self, block_id: ValueId, pred: ValueId) {
@@ -370,8 +397,9 @@ impl<E: Extra> Environment<E> {
         println!("current scope: {:?}", self.current_scope());
         //println!("static block: {:?}", self.static_block_id());
         //println!("static scope: {:?}", self.static_scope_id());
-        for (block_id, block) in self.blocks.iter() {
-            println!("block({:?}, {:?})", block_id, block);
+        for block in self.blocks.iter() {
+            //let block_id = BlockId(offset as u32);
+            println!("block({:?}, {:?})", block.entry_id, block);
         }
 
         for (index, layer) in self.scopes.iter().enumerate() {
