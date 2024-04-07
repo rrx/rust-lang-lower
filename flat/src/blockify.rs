@@ -1518,12 +1518,24 @@ impl<E: Extra> Blockify<E> {
                 &[Config::EdgeNoLabel, Config::NodeNoLabel],
                 &|_, _er| String::new(),
                 &|_, (_index, data)| {
-                    format!(
-                        "label = \"[{}]{}\" shape={:?}",
-                        data.entry_id.0,
-                        &data.name,
-                        &data.ty.to_string()
-                    )
+                    match data.code_offset {
+                        CodeOffset::Value(value_id) => {
+                            format!(
+                                "label = \"V{}:{}\" shape={:?}",
+                                value_id.index(),
+                                &data.name,
+                                &data.ty.to_string()
+                            )
+                        }
+                        CodeOffset::Block(block_id) => {
+                            format!(
+                                "label = \"B{}:{}\" shape={:?}",
+                                block_id.index(),
+                                &data.name,
+                                &data.ty.to_string()
+                            )
+                        }
+                    }
                 }
             )
         );
@@ -1550,14 +1562,14 @@ impl Shape {
 pub struct Node {
     ty: Shape,
     pub(crate) name: String,
-    pub(crate) entry_id: ValueId,
+    pub(crate) code_offset: CodeOffset,
 }
 impl Node {
-    fn new_block(name: String, entry_id: ValueId) -> Self {
+    fn new_block(name: String, code_offset: CodeOffset) -> Self {
         Self {
             ty: Shape::Box,
             name,
-            entry_id,
+            code_offset,
         }
     }
 }
@@ -1577,7 +1589,7 @@ impl CFG {
         }
     }
 
-    pub fn leafs(&self, entry_id: ValueId) -> Vec<ValueId> {
+    pub fn leafs(&self, entry_id: ValueId) -> Vec<CodeOffset> {
         let mut out = vec![];
         let mut bfs = Bfs::new(&self.g, *self.ids.get(&entry_id).unwrap());
         while let Some(nx) = bfs.next(&self.g) {
@@ -1587,18 +1599,18 @@ impl CFG {
                 .collect::<Vec<_>>();
             if outgoing.len() == 0 {
                 let node = self.g.node_weight(nx).unwrap();
-                out.push(node.entry_id);
+                out.push(node.code_offset);
             }
         }
         out
     }
 
-    pub fn blocks(&self, entry_id: ValueId) -> Vec<ValueId> {
+    pub fn blocks(&self, entry_id: ValueId) -> Vec<CodeOffset> {
         let mut blocks = vec![];
         let mut bfs = Bfs::new(&self.g, *self.ids.get(&entry_id).unwrap());
         while let Some(nx) = bfs.next(&self.g) {
             let node = self.g.node_weight(nx).unwrap();
-            blocks.push(node.entry_id);
+            blocks.push(node.code_offset);
         }
         blocks
     }
@@ -1626,7 +1638,7 @@ impl<E: Extra> Blockify<E> {
                     continue;
                 }
                 let name = self.code_to_string(entry_id, b);
-                let c = cfg.g.add_node(Node::new_block(name, entry_id));
+                let c = cfg.g.add_node(Node::new_block(name, entry_id.into()));
                 cfg.ids.insert(entry_id, c);
 
                 let block = self.env.get_block(entry_id);

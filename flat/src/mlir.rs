@@ -311,21 +311,21 @@ impl<E: Extra> Blockify<E> {
         &self,
         lower: &mut Lower<'c>,
         blocks: &mut LowerBlocks<'c>,
-        block_id: ValueId,
+        entry_id: ValueId,
         d: &Diagnostics,
     ) {
-        let code = self.get_code(block_id);
+        let code = self.get_code(entry_id);
         if let LCode::Label(num_args, num_kwargs) = code {
             let args = self.get_label_args(
                 lower.context,
-                block_id,
+                entry_id,
                 *num_args as usize,
                 *num_kwargs as usize,
                 d,
             );
             let block = Block::new(&args);
-            let c = OpCollection::new(block_id, block);
-            blocks.blocks.insert(block_id, c);
+            let c = OpCollection::new(entry_id, block);
+            blocks.blocks.insert(entry_id, c);
         } else {
             unreachable!()
         }
@@ -493,17 +493,20 @@ impl<E: Extra> Blockify<E> {
 
                     // create blocks
                     for block_id in block_ids.iter() {
-                        self.create_block(lower, blocks, *block_id, d);
+                        let entry_id = self.env.resolve_code_offset(*block_id);
+                        self.create_block(lower, blocks, entry_id, d);
                     }
 
                     // lower
                     for block_id in block_ids.iter() {
-                        self.lower_block(*block_id, lower, blocks, stack, b, d)?;
+                        let entry_id = self.env.resolve_code_offset(*block_id);
+                        self.lower_block(entry_id, lower, blocks, stack, b, d)?;
                     }
 
                     // append blocks to region
                     for block_id in block_ids.iter() {
-                        blocks.append_op(index, *block_id, 0);
+                        let entry_id = self.env.resolve_code_offset(*block_id);
+                        blocks.append_op(index, entry_id, 0);
                     }
                 }
 
@@ -739,10 +742,12 @@ impl<E: Extra> Blockify<E> {
                 let then_block_ids = cfg.blocks(then_block_id);
 
                 for block_id in then_block_ids.iter() {
-                    self.create_block(lower, blocks, *block_id, d);
+                    let entry_id = self.env.resolve_code_offset(*block_id);
+                    self.create_block(lower, blocks, entry_id, d);
                 }
                 for block_id in then_block_ids.iter() {
-                    self.lower_block(*block_id, lower, blocks, stack, b, d)?;
+                    let entry_id = self.env.resolve_code_offset(*block_id);
+                    self.lower_block(entry_id, lower, blocks, stack, b, d)?;
                 }
 
                 let c = blocks.blocks.get_mut(&then_block_id).unwrap();
@@ -759,10 +764,12 @@ impl<E: Extra> Blockify<E> {
                 let else_block_ids = cfg.blocks(else_block_id);
 
                 for block_id in else_block_ids.iter() {
-                    self.create_block(lower, blocks, *block_id, d);
+                    let entry_id = self.env.resolve_code_offset(*block_id);
+                    self.create_block(lower, blocks, entry_id, d);
                 }
                 for block_id in else_block_ids.iter() {
-                    self.lower_block(*block_id, lower, blocks, stack, b, d)?;
+                    let entry_id = self.env.resolve_code_offset(*block_id);
+                    self.lower_block(entry_id, lower, blocks, stack, b, d)?;
                 }
 
                 let c = blocks.blocks.get_mut(&else_block_id).unwrap();
@@ -774,13 +781,15 @@ impl<E: Extra> Blockify<E> {
 
                 let then_region = Region::new();
                 for block_id in then_block_ids.iter() {
-                    let block = blocks.take_block(*block_id);
+                    let entry_id = self.env.resolve_code_offset(*block_id);
+                    let block = blocks.take_block(entry_id);
                     then_region.append_block(block);
                 }
 
                 let else_region = Region::new();
                 for block_id in else_block_ids.iter() {
-                    let block = blocks.take_block(*block_id);
+                    let entry_id = self.env.resolve_code_offset(*block_id);
+                    let block = blocks.take_block(entry_id);
                     else_region.append_block(block);
                 }
 
