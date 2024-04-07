@@ -267,6 +267,16 @@ impl<E: Extra> Environment<E> {
         self.get_block_mut_by_block_id(*block_id)
     }
 
+    pub fn resolve_code_offset(&self, code_offset: CodeOffset) -> ValueId {
+        match code_offset {
+            CodeOffset::Value(v) => v,
+            CodeOffset::Block(block_id) => {
+                let block = self.get_block_by_block_id(block_id);
+                block.entry_id.unwrap()
+            }
+        }
+    }
+
     pub fn add_pred(&mut self, block_id: ValueId, pred: ValueId) {
         self.get_block_mut(block_id).pred.insert(pred);
     }

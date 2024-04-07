@@ -1608,16 +1608,6 @@ impl<E: Extra> Blockify<E> {
         self.get_graph(block_id, Some(Successor::BlockScope), b)
     }
 
-    pub fn resolve_code_offset(&self, code_offset: CodeOffset) -> ValueId {
-        match code_offset {
-            CodeOffset::Value(v) => v,
-            CodeOffset::Block(block_id) => {
-                let block = self.env.get_block_by_block_id(block_id);
-                block.entry_id.unwrap()
-            }
-        }
-    }
-
     pub fn get_graph(
         &self,
         block_id: ValueId,
@@ -1640,7 +1630,7 @@ impl<E: Extra> Blockify<E> {
 
                 let block = self.env.get_block(block_id);
                 for (succ_type, next_code_offset) in block.succ.iter() {
-                    let v = self.resolve_code_offset(*next_code_offset);
+                    let v = self.env.resolve_code_offset(*next_code_offset);
                     if scope.is_none() || scope == Some(*succ_type) {
                         stack.push_back(v);
                     }
@@ -1655,7 +1645,7 @@ impl<E: Extra> Blockify<E> {
             let id = cfg.ids.get(block_id).unwrap();
             for (succ_type, next_code_offset) in block.succ.iter() {
                 if let Successor::BlockScope = succ_type {
-                    let v = self.resolve_code_offset(*next_code_offset);
+                    let v = self.env.resolve_code_offset(*next_code_offset);
                     let child_id = cfg.ids.get(&v).unwrap();
                     cfg.g.add_edge(*id, *child_id, ());
                 }
