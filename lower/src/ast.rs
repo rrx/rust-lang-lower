@@ -144,7 +144,7 @@ pub struct ParameterNode {
 
 #[derive(Debug, Clone)]
 pub struct Definition<E> {
-    pub name: StringKey,
+    //pub name: StringKey,
     pub params: Vec<ParameterNode>,
     pub return_type: Box<AstType>,
     pub body: Option<Box<AstNode<E>>>,
@@ -217,29 +217,29 @@ pub enum Ast<E> {
     Literal(Literal),
     Sequence(Vec<AstNode<E>>),
     Definition(Definition<E>),
-    //Variable(Definition<E>),
     Global(StringKey, Box<AstNode<E>>),
     Assign(AssignTarget, Box<AstNode<E>>),
-    //Replace(AssignTarget, Box<AstNode<E>>),
-    //Mutate(Box<AstNode<E>>, Box<AstNode<E>>),
     Branch(Box<AstNode<E>>, StringKey, StringKey),
     Conditional(Box<AstNode<E>>, Box<AstNode<E>>, Option<Box<AstNode<E>>>),
     Ternary(Box<AstNode<E>>, Box<AstNode<E>>, Box<AstNode<E>>),
     Return(Option<Box<AstNode<E>>>),
-    //Test(Box<AstNode<E>>, Box<AstNode<E>>),
     While(Box<AstNode<E>>, Box<AstNode<E>>),
     Builtin(Builtin, Vec<Argument<E>>),
-    //Deref(Box<AstNode<E>>, DerefTarget),
-    //Block(AstNodeBlock<E>),
     Module(StringKey, Box<AstNode<E>>),
     Loop(StringKey, Box<AstNode<E>>),
     Break(Option<StringKey>, Vec<AstNode<E>>),
     Continue(Option<StringKey>, Vec<AstNode<E>>),
     Goto(StringKey),
     BlockStart(StringKey, Vec<ParameterNode>),
-    //Label(StringKey),
     Noop,
     Error,
+    //Variable(Definition<E>),
+    //Replace(AssignTarget, Box<AstNode<E>>),
+    //Mutate(Box<AstNode<E>>, Box<AstNode<E>>),
+    //Test(Box<AstNode<E>>, Box<AstNode<E>>),
+    //Deref(Box<AstNode<E>>, DerefTarget),
+    //Block(AstNodeBlock<E>),
+    //Label(StringKey),
 }
 
 impl<E: Extra> Ast<E> {
@@ -677,8 +677,9 @@ impl<E: Extra> AstNode<E> {
             }
 
             Ast::Definition(def) => {
-                let s = format!("func({}):", b.r(def.name));
-                out.push((depth, s, self.span_id));
+                //let s = format!("func({}):", b.r(def.name));
+                let s = "func:";
+                out.push((depth, s.into(), self.span_id));
                 depth += 1;
 
                 for a in &def.params {

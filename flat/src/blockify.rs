@@ -697,11 +697,13 @@ impl<E: Extra> Blockify<E> {
     pub fn add_function(
         &mut self,
         block_id: ValueId,
+        function_name: StringKey,
         def: Definition<E>,
         span_id: SpanId,
         b: &mut NodeBuilder<E>,
         d: &mut Diagnostics,
     ) -> Result<AddResult> {
+        println!("add_function: {}", b.r(function_name));
         let scope_id = self.env.current_scope().unwrap();
 
         let params = def.params.iter().map(|p| p.ty.clone()).collect();
@@ -713,8 +715,13 @@ impl<E: Extra> Blockify<E> {
             //let body_span_id = body.span_id;
 
             // entry first
-            let entry_id =
-                self.push_label(def.name.into(), span_id, body_scope_id, &[], &def.params);
+            let entry_id = self.push_label(
+                function_name.into(),
+                span_id,
+                body_scope_id,
+                &[],
+                &def.params,
+            );
 
             // return block
             let name = b.s("ret");
@@ -776,7 +783,7 @@ impl<E: Extra> Blockify<E> {
                 block_id,
                 ty.clone(),
                 VarDefinitionSpace::Static,
-                def.name,
+                function_name,
             );
 
             self.env.enter_scope(body_scope_id);
@@ -794,7 +801,7 @@ impl<E: Extra> Blockify<E> {
                     block_id,
                     ty.clone(),
                     VarDefinitionSpace::Static,
-                    def.name,
+                    function_name,
                 )),
                 false,
                 block_id,
@@ -1025,19 +1032,20 @@ impl<E: Extra> Blockify<E> {
 
             Ast::Sequence(ref _exprs) => self.add_sequence(block_id, maybe_next, node, b, d),
 
-            Ast::Definition(def) => {
+            Ast::Definition(_def) => {
+                unreachable!();
                 // definition is non-terminal
-                if block_id == self.env.static_block_id() {
-                    // static function
-                    self.add_function(block_id, def, node.span_id, b, d)
-                } else {
-                    // lambda block in current scope, called by name
-                    let name = def.name.into();
-                    let template_id = self.push_template(def);
-                    let scope = self.env.get_scope_mut(scope_id);
-                    scope.lambdas.insert(name, template_id);
-                    Ok(AddResult::new(None, false, block_id))
-                }
+                //if block_id == self.env.static_block_id() {
+                //static function
+                //self.add_function(block_id, def, node.span_id, b, d)
+                //} else {
+                // lambda block in current scope, called by name
+                //let name = def.name.into();
+                //let template_id = self.push_template(def);
+                //let scope = self.env.get_scope_mut(scope_id);
+                //scope.lambdas.insert(name, template_id);
+                //Ok(AddResult::new(None, false, block_id))
+                //}
             }
 
             Ast::Call(expr, args, _ret_ty) => match &expr.node {
@@ -1128,6 +1136,14 @@ impl<E: Extra> Blockify<E> {
                 let name = match target {
                     AssignTarget::Identifier(name) | AssignTarget::Alloca(name) => name,
                 };
+
+                // push the definition into the lambda list
+                if let Ast::Definition(def) = expr.node {
+                    let template_id = self.push_template(def);
+                    let scope = self.env.get_scope_mut(scope_id);
+                    scope.lambdas.insert(name.into(), template_id);
+                    return Ok(AddResult::new(None, false, block_id));
+                }
 
                 let r = self.add(block_id, None, *expr, b, d)?;
 
@@ -1378,8 +1394,9 @@ impl<E: Extra> Blockify<E> {
                 }
             }
 
-            Ast::Global(name, expr) => {
-                if let Ast::Literal(lit) = expr.node {
+            Ast::Global(name, expr) => match expr.node {
+                Ast::Definition(def) => self.add_function(block_id, name, def, node.span_id, b, d),
+                Ast::Literal(lit) => {
                     let static_scope_id = self.env.static_scope_id();
                     let static_block_id = self.env.static_block_id();
                     let scope = self.env.get_scope(scope_id);
@@ -1416,10 +1433,9 @@ impl<E: Extra> Blockify<E> {
                     );
 
                     Ok(AddResult::new(Some(v), false, block_id))
-                } else {
-                    unreachable!()
                 }
-            }
+                _ => unreachable!(),
+            },
 
             Ast::Loop(name, body) => {
                 // loop is a terminal, so we are expecting a next block

@@ -445,7 +445,7 @@ impl<E: Extra> Parser<E> {
                     .into();
 
                 let def_ast = Ast::Definition(ast::Definition {
-                    name,
+                    //name,
                     body: Some(b.seq(body).into()),
                     return_type,
                     params,
@@ -453,7 +453,9 @@ impl<E: Extra> Parser<E> {
                 });
 
                 env.define(name);
-                Ok(b.build(def_ast, span_id))
+                Ok(b.global(name, b.build(def_ast, span_id)))
+
+                //Ok(b.build(def_ast, span_id))
             }
 
             StmtP::If(expr, truestmt) => {

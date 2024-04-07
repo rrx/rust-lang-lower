@@ -282,13 +282,17 @@ impl<E: Extra> NodeBuilder<E> {
                 //extra: self.extra_unknown.clone(),
             })
             .collect();
-        self.node(Ast::Definition(Definition {
+
+        self.global(
             name,
-            params,
-            lambda,
-            return_type: return_type.into(),
-            body: body.map(|b| b.into()),
-        }))
+            self.node(Ast::Definition(Definition {
+                //name,
+                params,
+                lambda,
+                return_type: return_type.into(),
+                body: body.map(|b| b.into()),
+            })),
+        )
     }
 
     pub fn import_prelude(&self) -> AstNode<E> {
