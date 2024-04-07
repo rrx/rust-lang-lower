@@ -4,6 +4,15 @@ use std::collections::{HashMap, HashSet};
 use lower::{AstType, Extra, NodeBuilder, StringKey, StringLabel, VarDefinitionSpace};
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
+pub struct BlockId(pub(crate) u32);
+
+impl BlockId {
+    pub fn index(&self) -> usize {
+        self.0 as usize
+    }
+}
+
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 pub struct ValueId(pub(crate) u32);
 
 impl ValueId {
@@ -13,7 +22,10 @@ impl ValueId {
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
-pub struct BlockId(pub(crate) u32);
+pub enum CodeOffset {
+    Value(ValueId),
+    Block(BlockId),
+}
 
 #[derive(Debug, Clone)]
 pub struct Data {

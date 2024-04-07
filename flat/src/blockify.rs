@@ -43,7 +43,7 @@ pub struct LoopLayer {
 
 #[derive(Debug)]
 pub enum LCode {
-    Label(u8, u8), // BlockId, number of positional arguments, number of named arguments
+    Label(u8, u8), // number of positional arguments, number of named arguments
     Noop,
     Declare,
     DeclareFunction(Option<ValueId>), // optional entry block
