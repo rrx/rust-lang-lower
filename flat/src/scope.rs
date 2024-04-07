@@ -1,7 +1,7 @@
 use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
 
-use crate::{BlockId, ValueId};
+use crate::{BlockId, CodeOffset, ValueId};
 use lower::{AstType, Extra, NodeBuilder, StringKey, StringLabel, VarDefinitionSpace};
 
 #[derive(Debug, Clone)]
@@ -104,7 +104,7 @@ pub struct Block {
     pub(crate) entry_id: Option<ValueId>,
     pub(crate) last_value: Option<ValueId>,
     pub(crate) terminator: Option<ValueId>,
-    pub(crate) succ: HashSet<(Successor, ValueId)>,
+    pub(crate) succ: HashSet<(Successor, CodeOffset)>,
     pub(crate) pred: HashSet<ValueId>,
 }
 
@@ -274,10 +274,10 @@ impl<E: Extra> Environment<E> {
     pub fn add_succ_op(&mut self, block_id: ValueId, succ: ValueId) {
         self.get_block_mut(block_id)
             .succ
-            .insert((Successor::Operation, succ));
+            .insert((Successor::Operation, succ.into()));
     }
 
-    pub fn add_succ_block(&mut self, block_id: ValueId, succ: ValueId) {
+    pub fn add_succ_block(&mut self, block_id: ValueId, succ: CodeOffset) {
         self.get_block_mut(block_id)
             .succ
             .insert((Successor::BlockScope, succ));
@@ -286,10 +286,10 @@ impl<E: Extra> Environment<E> {
     pub fn add_succ_static(&mut self, block_id: ValueId, succ: ValueId) {
         self.get_block_mut(block_id)
             .succ
-            .insert((Successor::FunctionDeclaration, succ));
+            .insert((Successor::FunctionDeclaration, succ.into()));
     }
 
-    pub fn add_succ(&mut self, block_id: ValueId, succ: ValueId, successor_type: Successor) {
+    pub fn add_succ(&mut self, block_id: ValueId, succ: CodeOffset, successor_type: Successor) {
         self.get_block_mut(block_id)
             .succ
             .insert((successor_type, succ));

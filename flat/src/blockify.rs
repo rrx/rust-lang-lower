@@ -304,7 +304,7 @@ impl<E: Extra> Blockify<E> {
         code: LCode,
         span_id: SpanId,
         scope_id: ScopeId,
-        block_id: ValueId,
+        entry_id: ValueId,
         ty: AstType,
         mem: VarDefinitionSpace,
     ) -> ValueId {
@@ -315,26 +315,28 @@ impl<E: Extra> Blockify<E> {
                 // If it knows about the loop, then it tries to terminate it
                 match target {
                     CodeOffset::Value(value_id) => {
-                        self.env.add_succ_block(block_id, *value_id);
+                        self.env.add_succ_block(entry_id, (*value_id).into());
                     }
-                    _ => unimplemented!(),
+                    CodeOffset::Block(block_id) => {
+                        self.env.add_succ_block(entry_id, (*block_id).into());
+                    }
                 }
             }
 
             LCode::Branch(_, v_then, v_else) => {
-                self.env.add_succ_block(block_id, *v_then);
-                self.env.add_succ_block(block_id, *v_else);
+                self.env.add_succ_block(entry_id, (*v_then).into());
+                self.env.add_succ_block(entry_id, (*v_else).into());
             }
 
             LCode::Ternary(_, v_then, v_else) => {
-                self.env.add_succ_op(block_id, *v_then);
-                self.env.add_succ_op(block_id, *v_else);
+                self.env.add_succ_op(entry_id, *v_then);
+                self.env.add_succ_op(entry_id, *v_else);
             }
             _ => (),
         }
 
-        let v = self._push_code(code, span_id, scope_id, block_id, ty, mem);
-        self._update_code(v, block_id);
+        let v = self._push_code(code, span_id, scope_id, entry_id, ty, mem);
+        self._update_code(v, entry_id);
 
         v
     }
@@ -663,7 +665,7 @@ impl<E: Extra> Blockify<E> {
         assert_eq!(args_size as usize, jump_args.len());
         // jump to entry
         let _r = self.add_jump(block_id, entry_id, jump_args, span_id, b, d)?;
-        self.env.add_succ_block(block_id, entry_id);
+        self.env.add_succ_block(block_id, entry_id.into());
         // return block is the next block
 
         // handle body
@@ -842,9 +844,30 @@ impl<E: Extra> Blockify<E> {
         Ok(AddResult::new(Some(r.value_id.unwrap()), true, v_next))
     }
 
+    pub fn add_jump_by_block(
+        &mut self,
+        entry_id: ValueId,
+        target_block: BlockId,
+        jump_args: Vec<AstNode<E>>,
+        span_id: SpanId,
+        b: &mut NodeBuilder<E>,
+        d: &mut Diagnostics,
+    ) -> Result<AddResult> {
+        //let block = self.env.get_block_by_block_id(target_block);
+        self._add_jump(
+            entry_id,
+            target_block.into(),
+            jump_args.len(),
+            jump_args,
+            span_id,
+            b,
+            d,
+        )
+    }
+
     pub fn add_jump(
         &mut self,
-        block_id: ValueId,
+        entry_id: ValueId,
         target_id: ValueId,
         jump_args: Vec<AstNode<E>>,
         span_id: SpanId,
@@ -859,8 +882,8 @@ impl<E: Extra> Blockify<E> {
             unreachable!();
         };
         self._add_jump(
-            block_id,
-            target_id,
+            entry_id,
+            target_id.into(),
             *args as usize,
             jump_args,
             span_id,
@@ -871,8 +894,8 @@ impl<E: Extra> Blockify<E> {
 
     pub fn _add_jump(
         &mut self,
-        block_id: ValueId,
-        target_id: ValueId,
+        entry_id: ValueId,
+        target: CodeOffset,
         num_args: usize,
         jump_args: Vec<AstNode<E>>,
         span_id: SpanId,
@@ -884,7 +907,7 @@ impl<E: Extra> Blockify<E> {
 
         let mut values = vec![];
         for arg in jump_args.into_iter() {
-            let r = self.add(block_id, None, arg, b, d)?;
+            let r = self.add(entry_id, None, arg, b, d)?;
             let expr_value_id = r.value_id.unwrap();
             values.push(expr_value_id);
         }
@@ -894,7 +917,7 @@ impl<E: Extra> Blockify<E> {
                 LCode::Value(value_id),
                 span_id,
                 scope_id,
-                block_id,
+                entry_id,
                 self.get_type(value_id),
                 VarDefinitionSpace::Reg,
             );
@@ -902,14 +925,14 @@ impl<E: Extra> Blockify<E> {
 
         if num_args as usize == count {
             let v = self.push_code(
-                LCode::Jump(target_id.into(), num_args as u8),
+                LCode::Jump(target, num_args as u8),
                 span_id,
                 scope_id,
-                block_id,
+                entry_id,
                 AstType::Unit,
                 VarDefinitionSpace::Reg,
             );
-            Ok(AddResult::new(Some(v), true, block_id))
+            Ok(AddResult::new(Some(v), true, entry_id))
         } else {
             Self::error(
                 &format!("End of block expects {} values", num_args),
@@ -1371,8 +1394,8 @@ impl<E: Extra> Blockify<E> {
 
             Ast::Goto(label) => {
                 // Goto is terminal
-                if let Some(target_value_id) = self.env.resolve_block(label.into()) {
-                    self.add_jump(block_id, target_value_id, vec![], node.span_id, b, d)
+                if let Some(target_block_id) = self.env.resolve_block_id(label.into()) {
+                    self.add_jump_by_block(block_id, target_block_id, vec![], node.span_id, b, d)
                 } else {
                     let span = d.lookup(node.span_id);
                     d.push_diagnostic(error(
@@ -1585,6 +1608,16 @@ impl<E: Extra> Blockify<E> {
         self.get_graph(block_id, Some(Successor::BlockScope), b)
     }
 
+    pub fn resolve_code_offset(&self, code_offset: CodeOffset) -> ValueId {
+        match code_offset {
+            CodeOffset::Value(v) => v,
+            CodeOffset::Block(block_id) => {
+                let block = self.env.get_block_by_block_id(block_id);
+                block.entry_id.unwrap()
+            }
+        }
+    }
+
     pub fn get_graph(
         &self,
         block_id: ValueId,
@@ -1606,9 +1639,10 @@ impl<E: Extra> Blockify<E> {
                 cfg.ids.insert(block_id, c);
 
                 let block = self.env.get_block(block_id);
-                for (succ_type, next_block_id) in block.succ.iter() {
+                for (succ_type, next_code_offset) in block.succ.iter() {
+                    let v = self.resolve_code_offset(*next_code_offset);
                     if scope.is_none() || scope == Some(*succ_type) {
-                        stack.push_back(*next_block_id);
+                        stack.push_back(v);
                     }
                 }
             } else {
@@ -1619,9 +1653,10 @@ impl<E: Extra> Blockify<E> {
         for block_id in cfg.ids.keys() {
             let block = self.env.get_block(*block_id);
             let id = cfg.ids.get(block_id).unwrap();
-            for (succ_type, next_block_id) in block.succ.iter() {
+            for (succ_type, next_code_offset) in block.succ.iter() {
                 if let Successor::BlockScope = succ_type {
-                    let child_id = cfg.ids.get(next_block_id).unwrap();
+                    let v = self.resolve_code_offset(*next_code_offset);
+                    let child_id = cfg.ids.get(&v).unwrap();
                     cfg.g.add_edge(*id, *child_id, ());
                 }
             }
