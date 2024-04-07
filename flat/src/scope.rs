@@ -136,8 +136,8 @@ impl Block {
         self.pred.insert(parent_id);
     }
 
-    pub fn add_succ(&mut self, succ_block_id: ValueId) {
-        self.pred.insert(succ_block_id);
+    pub fn add_succ(&mut self, succ_entry_id: ValueId) {
+        self.pred.insert(succ_entry_id);
     }
 }
 
@@ -207,7 +207,7 @@ impl<E: Extra> Environment<E> {
         self.stack.get(0).unwrap().clone()
     }
 
-    pub fn static_block_id(&self) -> ValueId {
+    pub fn static_entry_id(&self) -> ValueId {
         let scope_id = self.stack.get(0).unwrap().clone();
         let scope = self.get_scope(scope_id);
         scope.blocks.get(0).unwrap().clone()
