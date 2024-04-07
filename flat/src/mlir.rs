@@ -331,6 +331,37 @@ impl<E: Extra> Blockify<E> {
         }
     }
 
+    pub fn lower_jump<'c>(
+        &self,
+        lower: &mut Lower<'c>,
+        blocks: &mut LowerBlocks<'c>,
+        v: ValueId,
+        target_value_id: ValueId,
+        num_args: u8,
+        d: &mut Diagnostics,
+    ) -> Result<()> {
+        //println!("jump: {:?}", (target, num_args));
+        let block_id = self.get_block_id(v);
+        let values = self.get_previous_values(v, num_args as usize);
+        let indicies = values
+            .iter()
+            .map(|value_id| self.resolve_value(lower, *value_id).unwrap())
+            .collect();
+        let rs = blocks.values(indicies);
+
+        let c = blocks.blocks.get(&target_value_id).unwrap();
+        let arg_count = c.block.as_ref().unwrap().argument_count();
+        assert_eq!(arg_count, num_args as usize);
+
+        let location = self.get_location(v, lower.context, d);
+        let op = cf::br(&c.block.as_ref().unwrap(), &rs, location);
+        let c = blocks.blocks.get_mut(&block_id).unwrap();
+
+        let index = c.push(op);
+        lower.index.insert(v, index);
+        Ok(())
+    }
+
     pub fn lower_code<'c>(
         &self,
         lower: &mut Lower<'c>,
@@ -358,7 +389,10 @@ impl<E: Extra> Blockify<E> {
 
             LCode::Jump(target, num_args) => {
                 match target {
-                    CodeOffset::Value(target) => {
+                    CodeOffset::Value(target_value_id) => {
+                        self.lower_jump(lower, blocks, v, *target_value_id, *num_args, d)?;
+
+                        /*
                         //println!("jump: {:?}", (target, num_args));
                         let block_id = self.get_block_id(v);
                         let values = self.get_previous_values(v, *num_args as usize);
@@ -377,8 +411,9 @@ impl<E: Extra> Blockify<E> {
 
                         let index = c.push(op);
                         lower.index.insert(v, index);
+                        */
                     }
-                    _ => unimplemented!(),
+                    CodeOffset::Block(block_id) => {}
                 }
             }
 
