@@ -1,5 +1,6 @@
 pub mod block_format;
 pub mod blockify;
+pub mod graph;
 pub mod mlir;
 pub mod scope;
 
