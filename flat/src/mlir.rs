@@ -386,16 +386,19 @@ impl<E: Extra> Blockify<E> {
                 lower.index.insert(v, index);
             }
 
-            LCode::Jump(target, num_args) => {
-                match target {
-                    CodeOffset::Value(target_value_id) => {
-                        self.lower_jump(lower, blocks, v, *target_value_id, *num_args, d)?;
-                    }
-                    CodeOffset::Block(target_block_id) => {
-                        //self.lower_jump(lower, blocks, v, *target_value_id, *num_args, d)?;
-                    }
+            LCode::Jump(target, num_args) => match target {
+                CodeOffset::Value(target_value_id) => {
+                    self.lower_jump(lower, blocks, v, *target_value_id, *num_args, d)?;
                 }
-            }
+                CodeOffset::Block(target_block_id) => {
+                    let target_entry_id = self
+                        .env
+                        .get_block_by_block_id(*target_block_id)
+                        .entry_id
+                        .unwrap();
+                    self.lower_jump(lower, blocks, v, target_entry_id, *num_args, d)?;
+                }
+            },
 
             LCode::Const(lit) => {
                 let block_id = self.get_block_id(v);
