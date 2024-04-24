@@ -909,17 +909,17 @@ impl<E: Extra> StarlarkParser<E> {
         let ast: AstNode<E> = parser
             .parse(Path::new(filename), None, module_key, file_id, d, b)?
             .normalize(d, b);
-        dump::dump(&ast, b);
+        dump::ast::dump(&ast, b);
 
-        let ast_html = dump::dump_html(&ast, b, d);
+        let ast_html = dump::ast::dump_html(&ast, b, d);
 
         let mut blockify = Blockify::new();
         let r = blockify.build_module(ast, b, d);
-        blockify.dump(b);
+        dump::env::blockify_dump(&blockify, b);
         blockify.save_graph("out.dot", b);
 
-        let rows = blockify.get_code_rows(b);
-        let j = blockify.get_json(b);
+        let rows = dump::code::get_code_rows(&blockify, b);
+        let j = dump::code::get_json(&blockify, b);
         let mut file = std::fs::File::create("blocks.json").unwrap();
         file.write_all(j.as_bytes()).unwrap();
 

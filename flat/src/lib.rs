@@ -12,6 +12,9 @@ pub use scope::{Environment, ScopeId, ScopeLayer, ScopeType, Successor, Template
 pub struct ValueId(pub(crate) u32);
 
 impl ValueId {
+    pub fn new(index: u32) -> Self {
+        Self(index)
+    }
     pub fn index(&self) -> usize {
         self.0 as usize
     }

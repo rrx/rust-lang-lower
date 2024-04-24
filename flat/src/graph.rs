@@ -14,7 +14,7 @@ pub enum Shape {
     Ellipsis,
 }
 impl Shape {
-    fn to_string(&self) -> &str {
+    pub fn to_string(&self) -> &str {
         match self {
             Self::Box => "box",
             Self::Ellipsis => "circle",
@@ -23,12 +23,12 @@ impl Shape {
 }
 #[derive(Debug)]
 pub struct Node {
-    ty: Shape,
-    pub(crate) name: String,
-    pub(crate) code_offset: CodeOffset,
+    pub ty: Shape,
+    pub name: String,
+    pub code_offset: CodeOffset,
 }
 impl Node {
-    fn new_block(name: String, code_offset: CodeOffset) -> Self {
+    pub fn new_block(name: String, code_offset: CodeOffset) -> Self {
         Self {
             ty: Shape::Box,
             name,
@@ -40,8 +40,8 @@ impl Node {
 pub type CFGGraph = DiGraph<Node, ()>;
 
 pub struct CFG {
-    pub(crate) ids: HashMap<ValueId, NodeIndex>,
-    pub(crate) g: CFGGraph,
+    pub ids: HashMap<ValueId, NodeIndex>,
+    pub g: CFGGraph,
 }
 
 impl CFG {

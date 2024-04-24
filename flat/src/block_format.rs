@@ -12,18 +12,18 @@ use crate::{Blockify, LCode, ValueId};
 
 #[derive(Tabled, Serialize)]
 pub struct CodeRow {
-    pos: usize,
-    next: usize,
-    prev: usize,
-    value: String,
-    ty: AstType,
-    mem: String,
-    name: String,
-    span_id: usize,
-    scope_id: usize,
-    block_id: usize,
-    entry_id: usize,
-    term: bool,
+    pub pos: usize,
+    pub next: usize,
+    pub prev: usize,
+    pub value: String,
+    pub ty: AstType,
+    pub mem: String,
+    pub name: String,
+    pub span_id: usize,
+    pub scope_id: usize,
+    pub block_id: usize,
+    pub entry_id: usize,
+    pub term: bool,
 }
 
 impl CodeRow {
@@ -32,33 +32,6 @@ impl CodeRow {
             "pos", "next", "prev", "value", "ty", "mem", "name", "span_id", "scope_id", "block_id",
             "term",
         ]
-    }
-
-    fn format_html_header() -> String {
-        let mut s = String::new();
-        s.push_str("<thead><tr>");
-        for row in Self::header() {
-            s.push_str(&format!("<td>{}</td>", row));
-        }
-        s
-    }
-
-    fn format_html_row(&self) -> String {
-        let mut s = String::new();
-        s.push_str(&format!("<tr class=\"s{}\">", self.span_id));
-        s.push_str(&format!("<td>{}</td>", self.pos));
-        s.push_str(&format!("<td>{}</td>", self.next));
-        s.push_str(&format!("<td>{}</td>", self.prev));
-        s.push_str(&format!("<td>{}</td>", self.value));
-        s.push_str(&format!("<td>{}</td>", self.ty));
-        s.push_str(&format!("<td>{}</td>", self.mem));
-        s.push_str(&format!("<td>{}</td>", self.name));
-        s.push_str(&format!("<td>{}</td>", self.span_id));
-        s.push_str(&format!("<td>{}</td>", self.scope_id));
-        s.push_str(&format!("<td>{}</td>", self.block_id));
-        s.push_str(&format!("<td>{}</td>", self.term));
-        s.push_str("</tr>");
-        s
     }
 }
 
@@ -113,7 +86,8 @@ impl<E: Extra> Blockify<E> {
             }
         }
     }
-
+}
+/*
     fn get_code_row(&self, v: ValueId, b: &NodeBuilder<E>) -> CodeRow {
         let code = self.get_code(v);
         let ty = self.get_type(v);
@@ -212,42 +186,8 @@ impl<E: Extra> Blockify<E> {
         println!("{}", s);
         s
     }
-
-    pub fn dump(&self, b: &NodeBuilder<E>) {
-        //self.dump_codes(b, None);
-        self.env.dump(b);
-
-        for block in self.env.blocks.iter() {
-            println!("block({:?}, {:?})", block.entry_id, block);
-            let rows = self.dump_codes_filter(b, block.entry_id.unwrap());
-            let s = Table::new(rows).with(Style::sharp()).to_string();
-            println!("{}", s);
-        }
-
-        /*
-        let rows = self.get_code_rows(b);
-
-        if false {
-            use minijinja::{context, Environment};
-            use std::io::prelude::*;
-            let mut env = Environment::new();
-            env.add_template("template", include_str!("template.html"))
-                .unwrap();
-            let tmpl = env.get_template("template").unwrap();
-            let html = tmpl
-                .render(context!(header => CodeRow::header(), rows => rows))
-                .unwrap();
-            let mut file = std::fs::File::create("blocks.html").unwrap();
-            file.write_all(html.as_bytes()).unwrap();
-            println!(
-                "{}",
-                tmpl.render(context!(header => CodeRow::header(), rows => rows))
-                    .unwrap()
-            );
-        }
-        */
-    }
 }
+*/
 
 pub struct LCodeIterator<'a, E> {
     blockify: &'a Blockify<E>,

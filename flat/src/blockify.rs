@@ -158,7 +158,7 @@ pub struct Blockify<E> {
     templates: Vec<Definition<E>>,
 
     // other
-    pub(crate) env: Environment<E>,
+    pub env: Environment<E>,
     // sparse names
     names: IndexMap<ValueId, StringLabel>,
     link: LinkOptions,

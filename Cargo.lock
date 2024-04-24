@@ -702,7 +702,12 @@ dependencies = [
 name = "dump"
 version = "0.1.0"
 dependencies = [
+ "flat",
  "lower",
+ "petgraph",
+ "serde",
+ "serde_json",
+ "tabled",
 ]
 
 [[package]]

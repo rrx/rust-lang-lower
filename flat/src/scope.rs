@@ -2,7 +2,7 @@ use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
 
 use crate::{BlockId, CodeOffset, ValueId};
-use lower::{AstType, Extra, NodeBuilder, StringKey, StringLabel, VarDefinitionSpace};
+use lower::{AstType, Extra, StringKey, StringLabel, VarDefinitionSpace};
 
 #[derive(Debug, Clone)]
 pub struct Data {
@@ -56,16 +56,16 @@ impl TemplateId {
 
 #[derive(Debug)]
 pub struct ScopeLayer<E> {
-    names: HashMap<StringKey, Data>,
-    pub(crate) labels: HashMap<StringLabel, ValueId>,
+    pub names: HashMap<StringKey, Data>,
+    pub labels: HashMap<StringLabel, ValueId>,
     pub(crate) block_labels: HashMap<StringLabel, BlockId>,
-    pub(crate) blocks: Vec<ValueId>,
-    pub(crate) return_block: Option<ValueId>,
-    pub(crate) next_block: Vec<ValueId>,
+    pub blocks: Vec<ValueId>,
+    pub return_block: Option<ValueId>,
+    pub next_block: Vec<ValueId>,
     pub(crate) entry_block: Option<ValueId>,
     pub(crate) loop_block: Option<LoopScope>,
-    pub(crate) scope_type: ScopeType,
-    pub(crate) lambdas: HashMap<StringLabel, TemplateId>,
+    pub scope_type: ScopeType,
+    pub lambdas: HashMap<StringLabel, TemplateId>,
     _e: std::marker::PhantomData<E>,
 }
 
@@ -101,11 +101,11 @@ pub enum Successor {
 #[derive(Debug)]
 pub struct Block {
     pub(crate) count: usize,
-    pub(crate) entry_id: Option<ValueId>,
+    pub entry_id: Option<ValueId>,
     pub(crate) last_value: Option<ValueId>,
     pub(crate) terminator: Option<ValueId>,
-    pub(crate) succ: HashSet<(Successor, CodeOffset)>,
-    pub(crate) pred: HashSet<ValueId>,
+    pub succ: HashSet<(Successor, CodeOffset)>,
+    pub pred: HashSet<ValueId>,
 }
 
 impl Block {
@@ -144,9 +144,9 @@ impl Block {
 #[derive(Debug)]
 pub struct Environment<E> {
     pub(crate) stack: Vec<ScopeId>,
-    pub(crate) scopes: Vec<ScopeLayer<E>>,
-    pub(crate) blocks: Vec<Block>,
-    pub(crate) block_map: IndexMap<ValueId, BlockId>,
+    pub scopes: Vec<ScopeLayer<E>>,
+    pub blocks: Vec<Block>,
+    pub block_map: IndexMap<ValueId, BlockId>,
     _e: std::marker::PhantomData<E>,
 }
 
@@ -437,35 +437,6 @@ impl<E: Extra> Environment<E> {
             }
         }
         None
-    }
-
-    pub fn dump(&self, b: &NodeBuilder<E>) {
-        println!("current scope: {:?}", self.current_scope());
-        //println!("static block: {:?}", self.static_block_id());
-        //println!("static scope: {:?}", self.static_scope_id());
-        for block in self.blocks.iter() {
-            //let block_id = BlockId(offset as u32);
-            println!("block({:?}, {:?})", block.entry_id, block);
-        }
-
-        for (index, layer) in self.scopes.iter().enumerate() {
-            println!("scope({},{:?})", index, layer.scope_type);
-            for (key, data) in layer.names.iter() {
-                println!("  name  {} = {:?}", b.r(*key), data);
-            }
-            for (key, data) in layer.labels.iter() {
-                println!("  label {} = {:?}", b.resolve_label(*key), data);
-            }
-            for next_id in layer.next_block.iter() {
-                println!("  next  {:?}", next_id);
-            }
-            for block_id in layer.blocks.iter() {
-                println!("  block {:?}", block_id);
-            }
-            for (name, def) in layer.lambdas.iter() {
-                println!("  def {:?}", (b.resolve_label(*name), def));
-            }
-        }
     }
 
     pub fn current_scope(&self) -> Option<ScopeId> {
