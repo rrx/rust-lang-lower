@@ -22,7 +22,6 @@ use lower::{
     CodeLocation,
     Diagnostics,
     Extra,
-    //IRPlaceTable,
     LinkOptions,
     Module,
     NodeBuilder,
@@ -916,7 +915,7 @@ impl<E: Extra> StarlarkParser<E> {
         let mut blockify = Blockify::new();
         let r = blockify.build_module(ast, b, d);
         dump::env::blockify_dump(&blockify, b);
-        blockify.save_graph("out.dot", b);
+        dump::code::save_graph(&blockify, "out.dot", b);
 
         let rows = dump::code::get_code_rows(&blockify, b);
         let j = dump::code::get_json(&blockify, b);
@@ -929,7 +928,7 @@ impl<E: Extra> StarlarkParser<E> {
             env.add_template("template", include_str!("template.html"))
                 .unwrap();
             let tmpl = env.get_template("template").unwrap();
-            let html = tmpl.render(minijinja::context!(code=> ast_html, header => flat::block_format::CodeRow::header(), rows => rows)).unwrap();
+            let html = tmpl.render(minijinja::context!(code=> ast_html, header => dump::code::CodeRow::header(), rows => rows)).unwrap();
             let mut file = std::fs::File::create("blocks.html").unwrap();
             file.write_all(html.as_bytes()).unwrap();
         }

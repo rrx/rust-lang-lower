@@ -80,6 +80,7 @@ impl CFG {
 }
 
 impl<E: Extra> Blockify<E> {
+    /*
     pub fn save_graph(&self, filename: &str, b: &NodeBuilder<E>) {
         use petgraph::dot::{Config, Dot};
         let cfg = self.get_graph(ValueId(0), None, b);
@@ -115,6 +116,7 @@ impl<E: Extra> Blockify<E> {
         println!("{}", s);
         std::fs::write(filename, s).unwrap();
     }
+    */
 
     pub fn get_cfg(&self, entry_id: ValueId, b: &NodeBuilder<E>) -> CFG {
         self.get_graph(entry_id, Some(Successor::BlockScope), b)

@@ -1,13 +1,41 @@
-use flat::block_format::{CodeRow, LCodeIterator};
-use flat::graph::{Node, CFG};
-use flat::{Blockify, CodeOffset, LCode, Successor, ValueId};
-use lower::{Extra, Literal, NodeBuilder};
-use std::collections::VecDeque;
+use flat::block_format::LCodeIterator;
+use serde::Serialize;
+use flat::{
+    Blockify,
+    CodeOffset,
+    LCode,
+    ValueId,
+};
+use lower::{AstType, Extra, Literal, NodeBuilder};
 use tabled::{
     settings::{object::Rows, Border, Style},
-    Table,
-    //Tabled,
+    Table, Tabled,
 };
+
+#[derive(Tabled, Serialize)]
+pub struct CodeRow {
+    pub pos: usize,
+    pub next: usize,
+    pub prev: usize,
+    pub value: String,
+    pub ty: AstType,
+    pub mem: String,
+    pub name: String,
+    pub span_id: usize,
+    pub scope_id: usize,
+    pub block_id: usize,
+    pub entry_id: usize,
+    pub term: bool,
+}
+
+impl CodeRow {
+    pub fn header() -> Vec<&'static str> {
+        vec![
+            "pos", "next", "prev", "value", "ty", "mem", "name", "span_id", "scope_id", "block_id",
+            "term",
+        ]
+    }
+}
 
 fn format_html_header() -> String {
     let mut s = String::new();
@@ -192,7 +220,7 @@ pub fn dump_codes<E: Extra>(blockify: &Blockify<E>, b: &NodeBuilder<E>) -> Strin
 
 pub fn save_graph<E: Extra>(blockify: &Blockify<E>, filename: &str, b: &NodeBuilder<E>) {
     use petgraph::dot::{Config, Dot};
-    let cfg = get_graph(ValueId::new(0), blockify, None, b);
+    let cfg = blockify.get_graph(ValueId::new(0), None, b);
     let s = format!(
         "{:?}",
         Dot::with_attr_getters(
@@ -224,53 +252,4 @@ pub fn save_graph<E: Extra>(blockify: &Blockify<E>, filename: &str, b: &NodeBuil
     println!("saved graph {:?}", filename);
     println!("{}", s);
     std::fs::write(filename, s).unwrap();
-}
-
-pub fn get_cfg<E: Extra>(entry_id: ValueId, blockify: &Blockify<E>, b: &NodeBuilder<E>) -> CFG {
-    get_graph(entry_id, blockify, Some(Successor::BlockScope), b)
-}
-
-pub fn get_graph<E: Extra>(
-    entry_id: ValueId,
-    blockify: &Blockify<E>,
-    scope: Option<Successor>,
-    b: &NodeBuilder<E>,
-) -> CFG {
-    let mut cfg = CFG::new();
-
-    let mut stack = VecDeque::new();
-    stack.push_back(entry_id);
-
-    loop {
-        if let Some(entry_id) = stack.pop_front() {
-            if cfg.ids.contains_key(&entry_id) {
-                continue;
-            }
-            let name = code_to_string(entry_id, blockify, b);
-            let c = cfg.g.add_node(Node::new_block(name, entry_id.into()));
-            cfg.ids.insert(entry_id, c);
-
-            let block = blockify.env.get_block(entry_id);
-            for (succ_type, next_code_offset) in block.succ.iter() {
-                let v = blockify.env.resolve_code_offset(*next_code_offset);
-                if scope.is_none() || scope == Some(*succ_type) {
-                    stack.push_back(v);
-                }
-            }
-        } else {
-            break;
-        }
-    }
-    for entry_id in cfg.ids.keys() {
-        let block = blockify.env.get_block(*entry_id);
-        let id = cfg.ids.get(entry_id).unwrap();
-        for (succ_type, next_code_offset) in block.succ.iter() {
-            if let Successor::BlockScope = succ_type {
-                let v = blockify.env.resolve_code_offset(*next_code_offset);
-                let child_id = cfg.ids.get(&v).unwrap();
-                cfg.g.add_edge(*id, *child_id, ());
-            }
-        }
-    }
-    cfg
 }
