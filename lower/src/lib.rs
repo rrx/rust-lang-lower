@@ -15,6 +15,7 @@ pub mod types;
 
 pub use ast::{
     Argument,
+    AssignTarget,
     Ast,
     AstNode,
     //AstNodeBlock,

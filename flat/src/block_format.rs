@@ -180,6 +180,11 @@ impl<E: Extra> Blockify<E> {
         out
     }
 
+    pub fn get_json(&self, b: &NodeBuilder<E>) -> String {
+        let out = self.get_code_rows(b);
+        serde_json::to_string(&out).unwrap()
+    }
+
     pub fn dump_codes(&self, b: &NodeBuilder<E>) -> String {
         let mut out = vec![];
         let mut labels = vec![];
@@ -219,6 +224,7 @@ impl<E: Extra> Blockify<E> {
             println!("{}", s);
         }
 
+        /*
         let rows = self.get_code_rows(b);
 
         if false {
@@ -239,6 +245,7 @@ impl<E: Extra> Blockify<E> {
                     .unwrap()
             );
         }
+        */
     }
 }
 

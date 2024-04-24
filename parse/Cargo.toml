@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 lower = { path = "../lower" }
 flat = { path = "../flat" }
+dump = { path = "../dump" }
 starlark_syntax = { git = "https://github.com/facebookexperimental/starlark-rust.git", branch = "main" }
 log = "*"
 simple_logger = "^4.3.0"

@@ -1,15 +1,5 @@
 use crate::Diagnostics;
-use crate::{
-    AstType,
-    //BlockId,
-    CodeLocation,
-    NodeBuilder,
-    Span,
-    SpanId,
-    //NodeID,
-    StringKey,
-};
-//use anyhow::Result;
+use crate::{AstType, CodeLocation, NodeBuilder, Span, SpanId, StringKey};
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use melior::{ir::Location, Context};
 use std::fmt::Debug;
@@ -144,12 +134,9 @@ pub struct ParameterNode {
 
 #[derive(Debug, Clone)]
 pub struct Definition<E> {
-    //pub name: StringKey,
     pub params: Vec<ParameterNode>,
     pub return_type: Box<AstType>,
     pub body: Option<Box<AstNode<E>>>,
-    //pub lambda: bool,
-    //pub payload: P::DefPayload,
 }
 
 #[derive(Debug, Clone)]
@@ -198,16 +185,6 @@ pub enum Terminator {
     Return,
 }
 
-/*
-#[derive(Debug, Clone)]
-pub struct AstNodeBlock<E> {
-    pub name: BlockId,
-    //pub(crate) label: BlockLabel,
-    pub params: Vec<ParameterNode>,
-    pub children: Vec<AstNode<E>>,
-}
-*/
-
 #[derive(Debug, Clone)]
 pub enum Ast<E> {
     BinaryOp(BinOpNode, Box<AstNode<E>>, Box<AstNode<E>>),
@@ -233,13 +210,6 @@ pub enum Ast<E> {
     BlockStart(StringKey, Vec<ParameterNode>),
     Noop,
     Error,
-    //Variable(Definition<E>),
-    //Replace(AssignTarget, Box<AstNode<E>>),
-    //Mutate(Box<AstNode<E>>, Box<AstNode<E>>),
-    //Test(Box<AstNode<E>>, Box<AstNode<E>>),
-    //Deref(Box<AstNode<E>>, DerefTarget),
-    //Block(AstNodeBlock<E>),
-    //Label(StringKey),
 }
 
 impl<E: Extra> Ast<E> {
@@ -441,7 +411,6 @@ pub trait Extra: Debug + Clone {
 
 #[derive(Debug, Clone)]
 pub struct AstNode<E> {
-    //pub node_id: NodeID,
     pub node: Ast<E>,
     pub span_id: SpanId,
     pub(crate) _e: std::marker::PhantomData<E>,
@@ -585,269 +554,6 @@ impl<E: Extra> AstNode<E> {
         }
         AstNodeIterator { values }
     }
-
-    pub fn dump(&self, b: &NodeBuilder<E>) {
-        let mut out = vec![];
-        self.dump_strings(b, &mut out, 0);
-        for (depth, s, _span) in out {
-            print_with_indent(&s, depth);
-        }
-    }
-
-    pub fn dump_html(&self, b: &NodeBuilder<E>, d: &Diagnostics) -> String {
-        let mut out = vec![];
-        self.dump_strings(b, &mut out, 0);
-        let mut s = String::new();
-        s.push_str("<pre>\n");
-        for (depth, content, span_id) in out {
-            let span = d.lookup(span_id);
-            s.push_str(&format!(
-                "{:width$}<span span_id=\"{}\" class=\"s{}\" begin=\"{}\" end=\"{}\">{}</span>\n",
-                "",
-                span_id.index(),
-                span_id.index(),
-                span.begin.pos,
-                span.end.pos,
-                content,
-                width = depth * 2
-            ));
-        }
-        s.push_str("</pre>\n");
-        s
-    }
-
-    pub fn dump_strings(
-        &self,
-        b: &NodeBuilder<E>,
-        out: &mut Vec<(usize, String, SpanId)>,
-        mut depth: usize,
-    ) {
-        match &self.node {
-            Ast::Module(name, body) => {
-                let s = format!("module({})", b.r(*name));
-                out.push((depth, s, self.span_id));
-                depth += 1;
-                body.dump_strings(b, out, depth);
-            }
-
-            Ast::Sequence(exprs) => {
-                for expr in exprs {
-                    expr.dump_strings(b, out, depth);
-                }
-            }
-
-            Ast::Return(maybe_result) => {
-                let s = format!("ret:");
-                out.push((depth, s, self.span_id));
-                if let Some(result) = maybe_result {
-                    result.dump_strings(b, out, depth + 1);
-                }
-            }
-
-            Ast::Builtin(bi, args) => {
-                let s = format!("builtin({:?})", bi);
-                out.push((depth, s, self.span_id));
-                for a in args {
-                    let Argument::Positional(expr) = a;
-                    expr.dump_strings(b, out, depth + 1);
-                }
-            }
-
-            Ast::Literal(lit) => {
-                let s = format!("{:?}", lit);
-                out.push((depth, s, self.span_id));
-            }
-
-            Ast::BlockStart(name, params) => {
-                let s = format!("block_start: {}", b.r(*name),);
-                out.push((depth, s, self.span_id));
-                for e in params {
-                    let s = format!("arg: {}, {:?}", b.resolve_label(e.name.into()), e.ty,);
-                    out.push((depth, s, self.span_id));
-                }
-            }
-
-            //Ast::Label(name) => {
-            //let s = format!("label: {}", b.r(*name));
-            //out.push((depth, s, self.span_id));
-            //}
-            Ast::Goto(key) => {
-                let s = format!("goto: {}", b.r(*key),);
-                out.push((depth, s, self.span_id));
-            }
-
-            Ast::Definition(def) => {
-                //let s = format!("func({}):", b.r(def.name));
-                let s = "func:";
-                out.push((depth, s.into(), self.span_id));
-                depth += 1;
-
-                for a in &def.params {
-                    let s = format!("arg: {}: {:?}", b.resolve_label(a.name.into()), a.ty,);
-                    out.push((depth, s, self.span_id));
-                }
-                if let Some(ref body) = def.body {
-                    body.dump_strings(b, out, depth);
-                }
-            }
-
-            /*
-            Ast::Block(block) => {
-                let s = format!("block({})", b.resolve_block_label(block.name),);
-                out.push((depth, s, self.span_id));
-                depth += 1;
-                for a in &block.params {
-                    let s = format!("arg: {}: {:?}", b.resolve_label(a.name.into()), a.ty,);
-                    out.push((depth, s, self.span_id));
-                }
-                for a in &block.children {
-                    a.dump_strings(b, out, depth);
-                }
-            }
-            */
-            Ast::Global(key, value) => {
-                let s = format!("global: {}", b.r(*key));
-                out.push((depth, s, self.span_id));
-                value.dump_strings(b, out, depth + 1);
-            }
-
-            Ast::Assign(target, value) => {
-                let s = format!("assign");
-                out.push((depth, s, self.span_id));
-                depth += 1;
-                match target {
-                    AssignTarget::Identifier(key) => {
-                        let s = format!("target identifier: {}", b.resolve_label(key.into()),);
-                        out.push((depth, s, self.span_id));
-                    }
-                    AssignTarget::Alloca(key) => {
-                        let s = format!("target alloca: {}", b.resolve_label(key.into()),);
-                        out.push((depth, s, self.span_id));
-                    }
-                }
-                value.dump_strings(b, out, depth);
-            }
-
-            Ast::BinaryOp(op, x, y) => {
-                let s = format!("binop: {:?}", op);
-                out.push((depth, s, self.span_id));
-                x.dump_strings(b, out, depth + 1);
-                y.dump_strings(b, out, depth + 1);
-            }
-
-            Ast::UnaryOp(op, expr) => {
-                let s = format!("unary: {:?}", op);
-                out.push((depth, s, self.span_id));
-                expr.dump_strings(b, out, depth + 1);
-            }
-
-            Ast::Identifier(key) => {
-                let s = format!("ident: {}", b.resolve_label(key.into()),);
-                out.push((depth, s, self.span_id));
-            }
-
-            Ast::Conditional(c, a, mb) => {
-                let s = format!("cond:");
-                out.push((depth, s, self.span_id));
-                depth += 1;
-                c.dump_strings(b, out, depth);
-                let s = format!("then:");
-                out.push((depth, s, self.span_id));
-                a.dump_strings(b, out, depth + 1);
-                if let Some(else_expr) = mb {
-                    let s = format!("else:");
-                    out.push((depth, s, self.span_id));
-                    else_expr.dump_strings(b, out, depth + 1);
-                }
-            }
-
-            Ast::Ternary(c, then_expr, else_expr) => {
-                let s = format!("ternary:");
-                out.push((depth, s, self.span_id));
-                depth += 1;
-                c.dump_strings(b, out, depth);
-                let s = format!("then:");
-                out.push((depth, s, self.span_id));
-                then_expr.dump_strings(b, out, depth + 1);
-                let s = format!("else:");
-                out.push((depth, s, self.span_id));
-                else_expr.dump_strings(b, out, depth + 1);
-            }
-
-            Ast::Branch(c, then_key, else_key) => {
-                let s = format!("branch: {}, {}", b.r(*then_key), b.r(*else_key),);
-                out.push((depth, s, self.span_id));
-                c.dump_strings(b, out, depth + 1);
-            }
-
-            Ast::Call(f, args, ret_ty) => {
-                let s = format!("call: {:?}", ret_ty);
-                out.push((depth, s, self.span_id));
-                f.dump_strings(b, out, depth + 1);
-                if args.len() > 0 {
-                    for a in args {
-                        let Argument::Positional(expr) = a;
-                        expr.dump_strings(b, out, depth + 1);
-                    }
-                }
-            }
-
-            //Ast::Deref(a, _) => a.dump_strings(b, out, depth),
-            /*
-            Ast::Mutate(lhs, rhs) => {
-                let s = format!("mutate");
-                out.push((depth, s, self.span_id));
-                lhs.dump_strings(b, out, depth + 1);
-                rhs.dump_strings(b, out, depth + 1);
-            }
-            */
-            Ast::Loop(key, body) => {
-                let s = format!("loop({})", b.r(*key));
-                out.push((depth, s, self.span_id));
-                body.dump_strings(b, out, depth + 1);
-            }
-
-            Ast::Break(maybe_key, args) => {
-                let s = format!(
-                    "break({})",
-                    maybe_key.map(|key| b.r(key)).or(Some("")).unwrap()
-                );
-                out.push((depth, s, self.span_id));
-                for expr in args {
-                    expr.dump_strings(b, out, depth + 1);
-                }
-            }
-
-            Ast::Continue(maybe_key, args) => {
-                let s = format!(
-                    "continue({})",
-                    maybe_key.map(|key| b.r(key)).or(Some("")).unwrap()
-                );
-                out.push((depth, s, self.span_id));
-                for expr in args {
-                    expr.dump_strings(b, out, depth + 1);
-                }
-            }
-
-            _ => unimplemented!("{:?}", self),
-        }
-    }
-}
-
-/*
-pub fn print_html(s: &str, depth: usize, span: &Span) {
-    println!(
-        "{:width$}<span class=\"span{}\">{}</span>",
-        "",
-        span.span_id.index(),
-        s,
-        width = depth * 2
-    );
-}
-*/
-
-pub fn print_with_indent(s: &str, depth: usize) {
-    println!("{:width$}{}", "", s, width = depth * 2);
 }
 
 impl<E: Extra> AstNode<E> {

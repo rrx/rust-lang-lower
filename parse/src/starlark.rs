@@ -909,8 +909,9 @@ impl<E: Extra> StarlarkParser<E> {
         let ast: AstNode<E> = parser
             .parse(Path::new(filename), None, module_key, file_id, d, b)?
             .normalize(d, b);
-        ast.dump(b);
-        let ast_html = ast.dump_html(b, d);
+        dump::dump(&ast, b);
+
+        let ast_html = dump::dump_html(&ast, b, d);
 
         let mut blockify = Blockify::new();
         let r = blockify.build_module(ast, b, d);
@@ -918,6 +919,9 @@ impl<E: Extra> StarlarkParser<E> {
         blockify.save_graph("out.dot", b);
 
         let rows = blockify.get_code_rows(b);
+        let j = blockify.get_json(b);
+        let mut file = std::fs::File::create("blocks.json").unwrap();
+        file.write_all(j.as_bytes()).unwrap();
 
         {
             // write html for debugging

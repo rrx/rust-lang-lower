@@ -1,5 +1,5 @@
 [package]
-name = "flat"
+name = "dump"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,11 +7,3 @@ edition = "2021"
 
 [dependencies]
 lower = { path = "../lower" }
-anyhow = "*"
-thiserror = "*"
-tabled = "0.15.0"
-indexmap = "2.1.0"
-petgraph = "0.6.4"
-minijinja = "1.0.12"
-serde = "1.0"
-serde_json = "*"

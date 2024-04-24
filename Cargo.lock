@@ -699,6 +699,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "dump"
+version = "0.1.0"
+dependencies = [
+ "lower",
+]
+
+[[package]]
 name = "dupe"
 version = "0.9.0"
 source = "git+https://github.com/facebookexperimental/starlark-rust.git?branch=main#8cb048d6942bc92b6e07cb2d5fb3deecdbed4530"
@@ -792,6 +799,7 @@ dependencies = [
  "minijinja",
  "petgraph",
  "serde",
+ "serde_json",
  "tabled",
  "thiserror",
 ]
@@ -1360,6 +1368,7 @@ dependencies = [
  "argh",
  "codespan-reporting",
  "criterion",
+ "dump",
  "env_logger",
  "flat",
  "log",
