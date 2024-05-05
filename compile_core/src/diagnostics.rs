@@ -7,40 +7,14 @@ use codespan_reporting::term::termcolor::{BufferWriter, ColorChoice, StandardStr
 use indexmap::IndexSet;
 use thiserror::Error;
 
-use crate::SpanId;
+use crate::{CodeLocation, Span, SpanId};
+
 pub type FileDB = SimpleFiles<String, String>;
 
 #[derive(Error, Debug)]
 pub enum ParseError {
     #[error("Invalid")]
     Invalid,
-}
-
-#[derive(Debug, Clone, Default, Copy, Hash, Eq, PartialEq)]
-pub struct CodeLocation {
-    pub pos: u32,
-}
-
-#[derive(Debug, Clone)]
-pub struct Span {
-    pub span_id: SpanId,
-    pub file_id: usize,
-    pub begin: CodeLocation,
-    pub end: CodeLocation,
-}
-
-impl Span {
-    pub fn new(span_id: SpanId, file_id: usize, begin: CodeLocation, end: CodeLocation) -> Self {
-        Self {
-            span_id,
-            file_id,
-            begin,
-            end,
-        }
-    }
-    pub fn to_string(&self) -> String {
-        format!("{:?}", self)
-    }
 }
 
 pub struct Diagnostics {
