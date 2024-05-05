@@ -33,16 +33,7 @@ use std::collections::VecDeque;
 use lower::op;
 
 use compile_core::{
-    AstNode,
-    AstType,
-    Builtin,
-    Diagnostics,
-    //Extra,
-    NodeBuilder,
-    Span,
-    //StringKey,
-    StringLabel,
-    UnaryOperation,
+    AstType, Builtin, Diagnostics, NodeBuilder, Span, StringLabel, UnaryOperation,
     VarDefinitionSpace,
 };
 
@@ -1006,33 +997,9 @@ pub fn diagnostics_location<'c>(
     span: &Span,
 ) -> ir::Location<'c> {
     if let Ok(name) = d.get_filename(span) {
-        //if let Ok(name) = d.files.name(span.file_id) {
         let loc = d.get_location(span).unwrap();
-        //let loc = d
-        //.files
-        //.location(span.file_id, span.begin.pos as usize)
-        //.unwrap();
         ir::Location::new(context, &name, loc.line_number, loc.column_number)
     } else {
         ir::Location::unknown(context)
     }
-}
-
-pub fn builder_get_location<'c>(
-    b: &NodeBuilder,
-    context: &'c Context,
-    d: &Diagnostics,
-) -> Location<'c> {
-    if let Some(span) = b.span.as_ref() {
-        diagnostics_location(d, context, span)
-        //d.location(context, span)
-    } else {
-        Location::unknown(context)
-    }
-}
-
-pub fn node_location<'c>(node: &AstNode, context: &'c Context, d: &Diagnostics) -> Location<'c> {
-    let span = d.lookup(node.span_id);
-    diagnostics_location(d, context, &span)
-    //d.location(context, &span)
 }

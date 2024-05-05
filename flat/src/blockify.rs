@@ -4,28 +4,9 @@ use indexmap::IndexMap;
 use std::collections::HashMap;
 
 use compile_core::{
-    Argument,
-    AssignTarget,
-    Ast,
-    AstNode,
-    AstType,
-    BinaryOperation,
-    Builtin,
-    Definition,
-    Diagnostic,
-    Diagnostics,
-    //Extra,
-    Label,
-    Literal,
-    NodeBuilder,
-    ParameterNode,
-    ParseError,
-    Span,
-    SpanId,
-    StringKey,
-    StringLabel,
-    UnaryOperation,
-    VarDefinitionSpace,
+    Argument, AssignTarget, Ast, AstNode, AstType, BinaryOperation, Builtin, Definition,
+    Diagnostic, Diagnostics, Label, Literal, NodeBuilder, ParameterNode, ParseError, Span, SpanId,
+    StringKey, StringLabel, UnaryOperation, VarDefinitionSpace,
 };
 
 use lower::LinkOptions;
@@ -867,7 +848,6 @@ impl Blockify {
         b: &mut NodeBuilder,
         d: &mut Diagnostics,
     ) -> Result<AddResult> {
-        //let block = self.env.get_block_by_block_id(target_block);
         self._add_jump(
             entry_id,
             target_block.into(),
