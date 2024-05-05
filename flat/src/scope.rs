@@ -2,13 +2,7 @@ use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
 
 use crate::{BlockId, CodeOffset, ValueId};
-use compile_core::{
-    AstType,
-    //Extra,
-    StringKey,
-    StringLabel,
-    VarDefinitionSpace,
-};
+use compile_core::{AstType, StringKey, StringLabel, VarDefinitionSpace};
 
 #[derive(Debug, Clone)]
 pub struct Data {
@@ -72,7 +66,6 @@ pub struct ScopeLayer {
     pub(crate) loop_block: Option<LoopScope>,
     pub scope_type: ScopeType,
     pub lambdas: HashMap<StringLabel, TemplateId>,
-    //_e: std::marker::PhantomData<E>,
 }
 
 impl ScopeLayer {
@@ -88,7 +81,6 @@ impl ScopeLayer {
             loop_block: None,
             scope_type,
             lambdas: HashMap::new(),
-            //_e: std::marker::PhantomData::default(),
         }
     }
 
@@ -153,7 +145,6 @@ pub struct Environment {
     pub scopes: Vec<ScopeLayer>,
     pub blocks: Vec<Block>,
     pub block_map: IndexMap<ValueId, BlockId>,
-    //_e: std::marker::PhantomData<E>,
 }
 
 impl Environment {
@@ -163,7 +154,6 @@ impl Environment {
             scopes: vec![],
             blocks: vec![],
             block_map: IndexMap::new(),
-            //_e: std::marker::PhantomData::default(),
         }
     }
 
