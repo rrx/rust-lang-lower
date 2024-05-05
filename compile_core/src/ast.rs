@@ -249,33 +249,6 @@ impl Ast {
         }
     }
 
-    pub fn is_terminator(&self) -> bool {
-        match self {
-            Self::Sequence(exprs) => exprs.last().unwrap().node.is_terminator(),
-            //Self::Block(_) => true,
-            Self::Goto(_) => true,
-            Self::Return(_) => true,
-            //Self::Conditional(_, _, _) => true,
-            Self::Break(_, _) => true,
-            Self::Continue(_, _) => true,
-            Self::While(_, _) => true,
-            //Self::Test(_, _) => true,
-            _ => false,
-        }
-    }
-
-    /*
-    pub fn terminator(&self) -> Option<Terminator> {
-        match self {
-            Self::Sequence(exprs) => exprs.last().unwrap().node.terminator(),
-            //Self::Block(nb) => nb.children.last().unwrap().node.terminator(),
-            Self::Goto(key) => Some(Terminator::Jump(*key)),
-            Self::Return(_) => Some(Terminator::Return),
-            _ => None,
-        }
-    }
-    */
-
     pub fn from_name(name: &str, mut args: Vec<Argument>, b: &mut NodeBuilder) -> Option<Self> {
         if name == "goto" {
             let rest = args

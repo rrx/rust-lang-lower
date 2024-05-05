@@ -1,7 +1,6 @@
 use crate::StringKey;
 use anyhow::Result;
 use ena::unify::*;
-//use std::collections::HashMap;
 use serde::Serialize;
 use thiserror::Error;
 
@@ -14,7 +13,6 @@ pub enum UError {
     Bad,
 }
 
-//#[derive(Debug, PartialEq, Clone)]
 #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub enum AstType {
     //Number,

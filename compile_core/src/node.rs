@@ -4,7 +4,6 @@ use crate::{Argument, Ast, Literal, SpanId};
 pub struct AstNode {
     pub node: Ast,
     pub span_id: SpanId,
-    //pub(crate) _e: std::marker::PhantomData<E>,
 }
 
 impl AstNode {
@@ -85,18 +84,11 @@ impl AstNode {
                     values.push(body);
                 }
             }
-            Ast::BinaryOp(_, a, b)
-                //| Ast::Mutate(a, b) 
-                //| Ast::Test(a, b)
-                | Ast::While(a, b) => {
+            Ast::BinaryOp(_, a, b) | Ast::While(a, b) => {
                 values.push(a);
                 values.push(b);
             }
-            Ast::UnaryOp(_, a)
-            | Ast::Assign(_, a)
-            //| Ast::Replace(_, a)
-            //| Ast::Deref(a, _)
-            | Ast::Loop(_, a) => {
+            Ast::UnaryOp(_, a) | Ast::Assign(_, a) | Ast::Loop(_, a) => {
                 values.push(a);
             }
             Ast::Call(f, args, _ty) => {
@@ -121,14 +113,8 @@ impl AstNode {
                     values.push(a);
                 }
             }
-            /*
-            Ast::Block(ref mut nb) => {
-                values.extend(&mut nb.children);
-            }
-            */
             Ast::Module(_name, ref mut body) => {
                 values.push(body);
-                //values.extend(&mut body.to_vec());
             }
             Ast::Builtin(_, args) => {
                 for a in args {

@@ -5,8 +5,6 @@ use codespan_reporting::term;
 use codespan_reporting::term::termcolor::{BufferWriter, ColorChoice, StandardStream};
 
 use indexmap::IndexSet;
-//use melior::ir;
-//use melior::Context;
 use thiserror::Error;
 
 use crate::SpanId;
@@ -64,7 +62,7 @@ impl Diagnostics {
         }
     }
 
-    pub fn get_name(&self, span: &Span) -> Result<String, codespan_reporting::files::Error> {
+    pub fn get_filename(&self, span: &Span) -> Result<String, codespan_reporting::files::Error> {
         self.files.name(span.file_id)
     }
 

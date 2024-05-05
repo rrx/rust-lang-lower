@@ -1005,7 +1005,7 @@ pub fn diagnostics_location<'c>(
     context: &'c Context,
     span: &Span,
 ) -> ir::Location<'c> {
-    if let Ok(name) = d.get_name(span) {
+    if let Ok(name) = d.get_filename(span) {
         //if let Ok(name) = d.files.name(span.file_id) {
         let loc = d.get_location(span).unwrap();
         //let loc = d
