@@ -906,8 +906,8 @@ impl<E: Extra> StarlarkParser<E> {
         let mut parser = Parser::new();
         let module_key = b.s("module");
         let ast: AstNode<E> = parser
-            .parse(Path::new(filename), None, module_key, file_id, d, b)?
-            .normalize(d, b);
+            .parse(Path::new(filename), None, module_key, file_id, d, b)?;
+            //.normalize(d, b);
         dump::ast::dump(&ast, b);
 
         let ast_html = dump::ast::dump_html(&ast, b, d);

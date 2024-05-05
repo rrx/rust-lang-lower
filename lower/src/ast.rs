@@ -556,6 +556,7 @@ impl<E: Extra> AstNode<E> {
     }
 }
 
+/*
 impl<E: Extra> AstNode<E> {
     pub fn normalize<'c>(mut self, d: &mut Diagnostics, b: &mut NodeBuilder<E>) -> Self {
         self.preprocess(d, b);
@@ -579,6 +580,7 @@ impl<E: Extra> AstNode<E> {
         }
     }
 }
+*/
 
 pub struct AstNodeIterator<'a, E> {
     values: Vec<&'a mut AstNode<E>>,
