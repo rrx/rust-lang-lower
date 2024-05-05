@@ -6,7 +6,7 @@ use tabled::{
     //Tabled,
 };
 
-pub fn dump<E: Extra>(env: &Environment<E>, b: &NodeBuilder<E>) {
+pub fn dump(env: &Environment, b: &NodeBuilder) {
     println!("current scope: {:?}", env.current_scope());
     //println!("static block: {:?}", self.static_block_id());
     //println!("static scope: {:?}", self.static_scope_id());
@@ -35,7 +35,7 @@ pub fn dump<E: Extra>(env: &Environment<E>, b: &NodeBuilder<E>) {
     }
 }
 
-pub fn blockify_dump<E: Extra>(blockify: &Blockify<E>, b: &NodeBuilder<E>) {
+pub fn blockify_dump(blockify: &Blockify, b: &NodeBuilder) {
     //self.dump_codes(b, None);
     dump(&blockify.env, b);
 

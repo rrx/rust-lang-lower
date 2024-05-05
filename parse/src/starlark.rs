@@ -21,7 +21,7 @@ use lower::{
     AstType,
     CodeLocation,
     Diagnostics,
-    Extra,
+    //Extra,
     LinkOptions,
     Module,
     NodeBuilder,
@@ -44,10 +44,10 @@ impl ExtraAst {
         name == "loop" || name == "loop_break" || name == "loop_continue" || name == "end"
     }
 
-    pub fn from_name<E: Extra>(
+    pub fn from_name(
         name: &str,
-        mut args: Vec<Argument<E>>,
-        b: &mut NodeBuilder<E>,
+        mut args: Vec<Argument>,
+        b: &mut NodeBuilder,
     ) -> Option<ExtraAst> {
         if name == "loop" {
             if args.len() == 0 {
@@ -245,13 +245,13 @@ impl<'a> Environment<'a> {
     }
 }
 
-fn from_literal<E: Extra>(
+fn from_literal(
     item: syntax::ast::AstLiteral,
     span: codemap::Span,
     env: &Environment,
-    b: &mut NodeBuilder<E>,
+    b: &mut NodeBuilder,
     d: &mut Diagnostics,
-) -> ast::AstNode<E> {
+) -> ast::AstNode {
     use syntax::ast::AstLiteral;
     let lit = match &item {
         AstLiteral::Int(x) => {
@@ -299,9 +299,9 @@ fn from_type<P: syntax::ast::AstPayload>(item: &syntax::ast::TypeExprP<P>) -> Op
     }
 }
 
-fn from_assign_target<E: Extra, P: syntax::ast::AstPayload>(
+fn from_assign_target<P: syntax::ast::AstPayload>(
     item: syntax::ast::AssignTargetP<P>,
-    b: &mut NodeBuilder<E>,
+    b: &mut NodeBuilder,
 ) -> ast::AssignTarget {
     use syntax::ast::AssignTargetP;
     match item {
@@ -312,16 +312,16 @@ fn from_assign_target<E: Extra, P: syntax::ast::AstPayload>(
     }
 }
 
-pub struct Parser<E> {
+pub struct Parser {
     u: TypeUnify,
-    _e: std::marker::PhantomData<E>,
+    //_e: std::marker::PhantomData<E>,
 }
 
-impl<E: Extra> Parser<E> {
+impl Parser {
     pub fn new() -> Self {
         Self {
             u: TypeUnify::new(),
-            _e: std::marker::PhantomData::default(),
+            //_e: std::marker::PhantomData::default(),
         }
     }
 
@@ -332,8 +332,8 @@ impl<E: Extra> Parser<E> {
         module_key: StringKey,
         file_id: usize,
         d: &mut Diagnostics,
-        b: &mut NodeBuilder<E>,
-    ) -> Result<ast::AstNode<E>> {
+        b: &mut NodeBuilder,
+    ) -> Result<ast::AstNode> {
         //b.enter(file_id, path.to_str().unwrap());
         let dialect = syntax::Dialect::Extended;
         let m = match content {
@@ -345,7 +345,7 @@ impl<E: Extra> Parser<E> {
         let (codemap, stmt, _dialect, _typecheck) = m.into_parts();
         let mut env = Environment::new(&codemap, file_id);
         let mut seq = b.prelude();
-        let ast: ast::AstNode<E> = self.from_stmt(stmt, &mut env, b, d)?;
+        let ast: ast::AstNode = self.from_stmt(stmt, &mut env, b, d)?;
         let span_id = ast.span_id.clone();
         seq.push(ast);
         Ok(b.build(Ast::Module(module_key, b.seq(seq).into()), span_id))
@@ -355,7 +355,7 @@ impl<E: Extra> Parser<E> {
         &mut self,
         item: syntax::ast::AstParameterP<P>,
         env: &mut Environment<'a>,
-        b: &mut NodeBuilder<E>,
+        b: &mut NodeBuilder,
         d: &mut Diagnostics,
     ) -> ast::ParameterNode {
         use syntax::ast::ParameterP;
@@ -404,9 +404,9 @@ impl<E: Extra> Parser<E> {
         &mut self,
         item: syntax::ast::AstStmtP<P>,
         env: &mut Environment<'a>,
-        b: &mut NodeBuilder<E>,
+        b: &mut NodeBuilder,
         d: &mut Diagnostics,
-    ) -> Result<ast::AstNode<E>> {
+    ) -> Result<ast::AstNode> {
         use syntax::ast::StmtP;
         let span_id = env.span_id(item.span, d);
 
@@ -562,7 +562,7 @@ impl<E: Extra> Parser<E> {
         item: syntax::ast::AstStmtP<P>,
         env: &mut Environment,
         d: &mut Diagnostics,
-        b: &mut NodeBuilder<E>,
+        b: &mut NodeBuilder,
     ) -> Result<ExtraAst> {
         use syntax::ast::ExprP;
         use syntax::ast::StmtP;
@@ -607,8 +607,8 @@ impl<E: Extra> Parser<E> {
         item: syntax::ast::AstExprP<P>,
         env: &mut Environment,
         d: &mut Diagnostics,
-        b: &mut NodeBuilder<E>,
-    ) -> Result<AstNode<E>> {
+        b: &mut NodeBuilder,
+    ) -> Result<AstNode> {
         use syntax::ast::ExprP;
         let span_id = env.span_id(item.span, d);
 
@@ -776,8 +776,8 @@ impl<E: Extra> Parser<E> {
         item: syntax::ast::AstArgumentP<P>,
         env: &mut Environment,
         d: &mut Diagnostics,
-        b: &mut NodeBuilder<E>,
-    ) -> Result<ast::Argument<E>> {
+        b: &mut NodeBuilder,
+    ) -> Result<ast::Argument> {
         use syntax::ast::ArgumentP;
         match item.node {
             ArgumentP::Positional(expr) => Ok(self.from_expr(expr, env, d, b)?.into()),
@@ -786,21 +786,21 @@ impl<E: Extra> Parser<E> {
     }
 }
 
-struct StatementReader<E, P: syntax::ast::AstPayload> {
+struct StatementReader<P: syntax::ast::AstPayload> {
     names: Vec<StringKey>,
-    loops: Vec<Vec<AstNode<E>>>,
-    seq: Vec<AstNode<E>>,
-    _e: std::marker::PhantomData<E>,
+    loops: Vec<Vec<AstNode>>,
+    seq: Vec<AstNode>,
+    //_e: std::marker::PhantomData<E>,
     _p: std::marker::PhantomData<P>,
 }
 
-impl<E: Extra, P: syntax::ast::AstPayload> StatementReader<E, P> {
+impl<P: syntax::ast::AstPayload> StatementReader<P> {
     fn new() -> Self {
         Self {
             names: vec![],
             loops: vec![],
             seq: vec![],
-            _e: std::marker::PhantomData::default(),
+            //_e: std::marker::PhantomData::default(),
             _p: std::marker::PhantomData::default(),
         }
     }
@@ -810,13 +810,13 @@ impl<E: Extra, P: syntax::ast::AstPayload> StatementReader<E, P> {
         self.loops.push(vec![]);
     }
 
-    fn end_loop(&mut self, b: &mut NodeBuilder<E>) -> AstNode<E> {
+    fn end_loop(&mut self, b: &mut NodeBuilder) -> AstNode {
         let seq = self.loops.pop().unwrap();
         let key = self.names.pop().unwrap();
         b.node(Ast::Loop(key, b.seq(seq).into()))
     }
 
-    fn push_ast(&mut self, ast: AstNode<E>) {
+    fn push_ast(&mut self, ast: AstNode) {
         if self.loops.len() == 0 {
             self.seq.push(ast);
         } else {
@@ -827,10 +827,10 @@ impl<E: Extra, P: syntax::ast::AstPayload> StatementReader<E, P> {
     fn push_stmt(
         &mut self,
         stmt: syntax::ast::AstStmtP<P>,
-        parse: &mut Parser<E>,
+        parse: &mut Parser,
         env: &mut Environment,
         d: &mut Diagnostics,
-        b: &mut NodeBuilder<E>,
+        b: &mut NodeBuilder,
     ) -> Result<()> {
         let ast = parse.from_stmt(stmt, env, b, d)?;
         self.push_ast(ast);
@@ -838,12 +838,12 @@ impl<E: Extra, P: syntax::ast::AstPayload> StatementReader<E, P> {
     }
 
     fn build(
-        parse: &mut Parser<E>,
+        parse: &mut Parser,
         stmts: Vec<syntax::ast::AstStmtP<P>>,
         env: &mut Environment,
         d: &mut Diagnostics,
-        b: &mut NodeBuilder<E>,
-    ) -> Result<AstNode<E>> {
+        b: &mut NodeBuilder,
+    ) -> Result<AstNode> {
         let mut reader = Self::new();
         for stmt in stmts {
             if parse.is_extra(&stmt) {
@@ -878,15 +878,15 @@ impl<E: Extra, P: syntax::ast::AstPayload> StatementReader<E, P> {
 }
 
 #[derive(Default)]
-pub struct StarlarkParser<E> {
-    _e: std::marker::PhantomData<E>,
+pub struct StarlarkParser {
+    //_e: std::marker::PhantomData<E>,
     link: LinkOptions,
 }
 
-impl<E: Extra> StarlarkParser<E> {
+impl StarlarkParser {
     pub fn new() -> Self {
         Self {
-            _e: std::marker::PhantomData::default(),
+            //_e: std::marker::PhantomData::default(),
             link: LinkOptions::new(),
         }
     }
@@ -896,7 +896,7 @@ impl<E: Extra> StarlarkParser<E> {
         filename: &str,
         context: &'c lower::Context,
         module: &mut Module<'c>,
-        b: &mut NodeBuilder<E>,
+        b: &mut NodeBuilder,
         d: &mut Diagnostics,
         _verbose: bool,
     ) -> Result<()> {
@@ -905,7 +905,7 @@ impl<E: Extra> StarlarkParser<E> {
 
         let mut parser = Parser::new();
         let module_key = b.s("module");
-        let ast: AstNode<E> = parser
+        let ast: AstNode = parser
             .parse(Path::new(filename), None, module_key, file_id, d, b)?;
             //.normalize(d, b);
         dump::ast::dump(&ast, b);
@@ -982,12 +982,12 @@ impl<E: Extra> StarlarkParser<E> {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use lower::ast::SimpleExtra;
+    //use lower::ast::SimpleExtra;
     use lower::Location;
     use test_log::test;
 
     fn run_test_ir(filename: &str, expected: i32) {
-        let mut p: StarlarkParser<SimpleExtra> = StarlarkParser::new();
+        let mut p: StarlarkParser = StarlarkParser::new();
         let mut d = Diagnostics::new();
         let mut b = NodeBuilder::new(&mut d);
         let context = lower::default_context();

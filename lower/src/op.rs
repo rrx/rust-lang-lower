@@ -137,7 +137,7 @@ pub fn build_reserved<'c>(
 pub fn emit_static<'c, E: Extra>(
     context: &'c Context,
     global_name: String,
-    expr: AstNode<E>,
+    expr: AstNode,
     location: Location<'c>,
 ) -> (Operation<'c>, AstType) {
     // evaluate expr at compile time

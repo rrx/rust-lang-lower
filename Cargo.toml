@@ -5,4 +5,5 @@ members = [
   "parse",
   "flat",
   "dump",
+  "core"
 ]

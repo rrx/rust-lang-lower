@@ -34,7 +34,7 @@ use lower::{
     AstType,
     Builtin,
     Diagnostics,
-    Extra,
+    //Extra,
     NodeBuilder,
     //StringKey,
     StringLabel,
@@ -221,7 +221,7 @@ impl<'c> OpCollection<'c> {
     }
 }
 
-impl<E: Extra> Blockify<E> {
+impl Blockify {
     pub fn resolve_declaration<'c>(&self, value_id: ValueId) -> Option<ValueId> {
         let mut current = value_id;
         loop {
@@ -367,7 +367,7 @@ impl<E: Extra> Blockify<E> {
         blocks: &mut LowerBlocks<'c>,
         v: ValueId,
         stack: &mut Vec<ValueId>,
-        b: &NodeBuilder<E>,
+        b: &NodeBuilder,
         d: &mut Diagnostics,
     ) -> Result<()> {
         let code = self.get_code(v);
@@ -874,7 +874,7 @@ impl<E: Extra> Blockify<E> {
         lower: &mut Lower<'c>,
         blocks: &mut LowerBlocks<'c>,
         stack: &mut Vec<ValueId>,
-        b: &NodeBuilder<E>,
+        b: &NodeBuilder,
         d: &mut Diagnostics,
     ) -> Result<()> {
         let mut current = block_id;
@@ -898,7 +898,7 @@ impl<E: Extra> Blockify<E> {
         lower: &mut Lower<'c>,
         blocks: &mut LowerBlocks<'c>,
         stack: &mut Vec<ValueId>,
-        b: &NodeBuilder<E>,
+        b: &NodeBuilder,
         d: &mut Diagnostics,
     ) -> Result<()> {
         // reorder things, so we lower declarations last
@@ -934,7 +934,7 @@ impl<E: Extra> Blockify<E> {
         lower: &mut Lower<'c>,
         blocks: &mut LowerBlocks<'c>,
         module: &mut lower::Module,
-        b: &NodeBuilder<E>,
+        b: &NodeBuilder,
         d: &mut Diagnostics,
     ) -> Result<()> {
         let module_block_id = lower.module_block_id;
@@ -949,12 +949,12 @@ impl<E: Extra> Blockify<E> {
     }
 }
 
-pub fn build_declare_function<'c, E: Extra>(
+pub fn build_declare_function<'c>(
     context: &'c Context,
     key: StringLabel,
     ast_ty: AstType,
     location: Location<'c>,
-    b: &NodeBuilder<E>,
+    b: &NodeBuilder,
 ) -> Result<Operation<'c>> {
     if let AstType::Func(params, ast_ret_type) = ast_ty.clone() {
         let mut type_list = vec![];

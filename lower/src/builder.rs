@@ -32,7 +32,7 @@ impl From<&StringKey> for BlockId {
 }
 
 impl BlockId {
-    pub fn to_string<E: Extra>(self, b: &NodeBuilder<E>) -> String {
+    pub fn to_string(self, b: &NodeBuilder) -> String {
         match self {
             Self::Name(key) => b.r(key).to_string(),
             Self::U(i) => format!("b{}", i),
@@ -94,20 +94,20 @@ impl LabelBuilder {
     }
 }
 
-pub struct NodeBuilder<E> {
+pub struct NodeBuilder {
     span: Option<Span>,
     filename: String,
     current_node_id: u32,
     current_def_id: u32,
     static_count: usize,
     loop_count: usize,
-    pub extra_unknown: E,
+    pub extra_unknown: SimpleExtra,
     pub span_id: SpanId,
     pub labels: LabelBuilder,
-    _e: std::marker::PhantomData<E>,
+    //_e: std::marker::PhantomData<E>,
 }
 
-impl<E: Extra> NodeBuilder<E> {
+impl NodeBuilder {
     pub fn new(d: &mut Diagnostics) -> Self {
         let filename = "";
         let span_unknown = d.get_span_unknown();
@@ -120,8 +120,8 @@ impl<E: Extra> NodeBuilder<E> {
             loop_count: 0,
             labels: LabelBuilder::new(),
             span_id: span_unknown.span_id.clone(),
-            extra_unknown: E::span(span_unknown),
-            _e: std::marker::PhantomData::default(),
+            extra_unknown: SimpleExtra::span(span_unknown),
+            //_e: std::marker::PhantomData::default(),
         }
     }
 
@@ -147,7 +147,7 @@ impl<E: Extra> NodeBuilder<E> {
         }
     }
 
-    pub fn build_literal_from_identifier(&self, name: &str) -> Option<AstNode<E>> {
+    pub fn build_literal_from_identifier(&self, name: &str) -> Option<AstNode> {
         match name {
             "True" => Some(self.bool(true)),
             "False" => Some(self.bool(false)),
@@ -158,9 +158,9 @@ impl<E: Extra> NodeBuilder<E> {
     pub fn build_builtin_from_name(
         &mut self,
         name: &str,
-        args: Vec<Argument<E>>,
+        args: Vec<Argument>,
         span_id: SpanId,
-    ) -> Option<AstNode<E>> {
+    ) -> Option<AstNode> {
         if let Some(b) = Builtin::from_name(name) {
             assert_eq!(b.arity(), args.len());
             Some(self.build(Ast::Builtin(b, args), span_id))
@@ -238,17 +238,17 @@ impl<E: Extra> NodeBuilder<E> {
     }
     */
 
-    pub fn build(&self, node: Ast<E>, span_id: SpanId) -> AstNode<E> {
+    pub fn build(&self, node: Ast, span_id: SpanId) -> AstNode {
         AstNode {
             node,
             span_id, //: E::get_span(&extra).span_id,
             //extra: self.extra_unknown.clone(),
             //node_id: NodeID(None),
-            _e: std::marker::PhantomData::default(),
+            //_e: std::marker::PhantomData::default(),
         }
     }
 
-    pub fn node(&self, ast: Ast<E>) -> AstNode<E> {
+    pub fn node(&self, ast: Ast) -> AstNode {
         self.build(ast, self.span_id.clone()) //self.extra_unknown.clone())
     }
 
@@ -260,7 +260,7 @@ impl<E: Extra> NodeBuilder<E> {
     }
     */
 
-    pub fn error(&self, span_id: SpanId) -> AstNode<E> {
+    pub fn error(&self, span_id: SpanId) -> AstNode {
         self.build(Ast::Error, span_id)
     }
 
@@ -269,9 +269,9 @@ impl<E: Extra> NodeBuilder<E> {
         name: StringKey,
         params: &[(StringKey, AstType)],
         return_type: AstType,
-        body: Option<AstNode<E>>,
+        body: Option<AstNode>,
         //lambda: bool,
-    ) -> AstNode<E> {
+    ) -> AstNode {
         let params = params
             .into_iter()
             .map(|(name, ty)| ParameterNode {
@@ -295,13 +295,13 @@ impl<E: Extra> NodeBuilder<E> {
         )
     }
 
-    pub fn import_prelude(&self) -> AstNode<E> {
+    pub fn import_prelude(&self) -> AstNode {
         let s = self.string("prelude");
         let arg = self.arg(s);
         self.node(Ast::Builtin(Builtin::Import, vec![arg]))
     }
 
-    pub fn prelude(&mut self) -> Vec<AstNode<E>> {
+    pub fn prelude(&mut self) -> Vec<AstNode> {
         let a = self.s("a".into());
         let print_index = self.s("print_index".into());
         let print_float = self.s("print_float".into());
@@ -323,49 +323,49 @@ impl<E: Extra> NodeBuilder<E> {
         ]
     }
 
-    pub fn string(&self, s: &str) -> AstNode<E> {
+    pub fn string(&self, s: &str) -> AstNode {
         self.node(Ast::Literal(Literal::String(s.to_string())))
     }
 
-    pub fn integer(&self, x: i64) -> AstNode<E> {
+    pub fn integer(&self, x: i64) -> AstNode {
         self.node(Ast::Literal(Literal::Int(x)))
     }
 
-    pub fn index(&self, x: i64) -> AstNode<E> {
+    pub fn index(&self, x: i64) -> AstNode {
         self.node(Ast::Literal(Literal::Index(x as usize)))
     }
 
-    pub fn bool(&self, x: bool) -> AstNode<E> {
+    pub fn bool(&self, x: bool) -> AstNode {
         self.node(Ast::Literal(Literal::Bool(x)))
     }
 
-    pub fn binop(&self, op: BinaryOperation, a: AstNode<E>, b: AstNode<E>) -> AstNode<E> {
+    pub fn binop(&self, op: BinaryOperation, a: AstNode, b: AstNode) -> AstNode {
         let op_node = BinOpNode::new(op, self.span_id.clone());
         let ast = Ast::BinaryOp(op_node, a.into(), b.into());
         self.node(ast)
     }
 
-    pub fn subtract(&self, a: AstNode<E>, b: AstNode<E>) -> AstNode<E> {
+    pub fn subtract(&self, a: AstNode, b: AstNode) -> AstNode {
         self.binop(BinaryOperation::Subtract, a, b)
     }
 
-    pub fn add(&self, a: AstNode<E>, b: AstNode<E>) -> AstNode<E> {
+    pub fn add(&self, a: AstNode, b: AstNode) -> AstNode {
         self.binop(BinaryOperation::Add, a, b)
     }
 
-    pub fn multiply(&self, a: AstNode<E>, b: AstNode<E>) -> AstNode<E> {
+    pub fn multiply(&self, a: AstNode, b: AstNode) -> AstNode {
         self.binop(BinaryOperation::Multiply, a, b)
     }
 
-    pub fn ne(&self, a: AstNode<E>, b: AstNode<E>) -> AstNode<E> {
+    pub fn ne(&self, a: AstNode, b: AstNode) -> AstNode {
         self.binop(BinaryOperation::NE, a, b)
     }
 
-    pub fn eq(&self, a: AstNode<E>, b: AstNode<E>) -> AstNode<E> {
+    pub fn eq(&self, a: AstNode, b: AstNode) -> AstNode {
         self.binop(BinaryOperation::EQ, a, b)
     }
 
-    pub fn seq(&self, nodes: Vec<AstNode<E>>) -> AstNode<E> {
+    pub fn seq(&self, nodes: Vec<AstNode>) -> AstNode {
         // flatten nodes
         let nodes = nodes
             .into_iter()
@@ -375,11 +375,11 @@ impl<E: Extra> NodeBuilder<E> {
         self.node(Ast::Sequence(nodes))
     }
 
-    pub fn v(&self, name: StringKey) -> AstNode<E> {
+    pub fn v(&self, name: StringKey) -> AstNode {
         self.ident(name)
     }
 
-    pub fn ident(&self, name: StringKey) -> AstNode<E> {
+    pub fn ident(&self, name: StringKey) -> AstNode {
         self.build(Ast::Identifier(name), self.span_id.clone()) //self.extra_unknown.clone())
     }
 
@@ -387,13 +387,13 @@ impl<E: Extra> NodeBuilder<E> {
     //self.node(Ast::Deref(value.into(), DerefTarget::Offset(offset)))
     //}
 
-    pub fn global(&self, name: StringKey, value: AstNode<E>) -> AstNode<E> {
+    pub fn global(&self, name: StringKey, value: AstNode) -> AstNode {
         //let extra = value.extra.clone();
         self.build(Ast::Global(name, value.into()), self.span_id.clone()) //extra)
     }
 
     /*
-    pub fn test(&self, condition: AstNode<E>, body: AstNode<E>) -> AstNode<E> {
+    pub fn test(&self, condition: AstNode, body: AstNode) -> AstNode {
         //let extra = body.extra.clone();
         self.build(
             Ast::Test(condition.into(), body.into()),
@@ -402,15 +402,15 @@ impl<E: Extra> NodeBuilder<E> {
     }
     */
 
-    pub fn while_loop(&self, condition: AstNode<E>, body: AstNode<E>) -> AstNode<E> {
+    pub fn while_loop(&self, condition: AstNode, body: AstNode) -> AstNode {
         self.node(Ast::While(condition.into(), body.into()))
     }
 
-    pub fn loop_break(&self, key: Option<StringKey>) -> AstNode<E> {
+    pub fn loop_break(&self, key: Option<StringKey>) -> AstNode {
         self.node(Ast::Break(key, vec![]))
     }
 
-    pub fn loop_continue(&self, key: Option<StringKey>) -> AstNode<E> {
+    pub fn loop_continue(&self, key: Option<StringKey>) -> AstNode {
         self.node(Ast::Continue(key, vec![]))
     }
 
@@ -419,23 +419,23 @@ impl<E: Extra> NodeBuilder<E> {
         name: StringKey,
         params: &[(StringKey, AstType)],
         return_type: AstType,
-        body: AstNode<E>,
-    ) -> AstNode<E> {
+        body: AstNode,
+    ) -> AstNode {
         self.definition(name, params, return_type, Some(body)) //, false)
     }
 
-    pub fn ret(&self, node: Option<AstNode<E>>) -> AstNode<E> {
+    pub fn ret(&self, node: Option<AstNode>) -> AstNode {
         self.build(
             Ast::Return(node.map(|n| n.into())),
             self.span_id.clone(), //self.extra_unknown.clone(),
         )
     }
 
-    pub fn arg(&self, node: AstNode<E>) -> Argument<E> {
+    pub fn arg(&self, node: AstNode) -> Argument {
         node.into()
     }
 
-    pub fn apply(&self, name: StringKey, args: Vec<Argument<E>>, ty: AstType) -> AstNode<E> {
+    pub fn apply(&self, name: StringKey, args: Vec<Argument>, ty: AstType) -> AstNode {
         let ident = self.ident(name);
         self.build(
             Ast::Call(ident.into(), args, ty),
@@ -444,12 +444,12 @@ impl<E: Extra> NodeBuilder<E> {
         )
     }
 
-    pub fn call(&self, f: AstNode<E>, args: Vec<Argument<E>>, ty: AstType) -> AstNode<E> {
+    pub fn call(&self, f: AstNode, args: Vec<Argument>, ty: AstType) -> AstNode {
         //let extra = f.extra.clone();
         self.build(Ast::Call(f.into(), args, ty), self.span_id.clone()) //extra)
     }
 
-    pub fn main(&mut self, body: AstNode<E>) -> AstNode<E> {
+    pub fn main(&mut self, body: AstNode) -> AstNode {
         let key = self.s("main".into());
         self.func(key, &[], AstType::Int, body)
     }
@@ -462,20 +462,20 @@ impl<E: Extra> NodeBuilder<E> {
     }
     */
 
-    pub fn assign(&self, name: StringKey, rhs: AstNode<E>) -> AstNode<E> {
+    pub fn assign(&self, name: StringKey, rhs: AstNode) -> AstNode {
         self.node(Ast::Assign(AssignTarget::Identifier(name), rhs.into()))
     }
 
-    pub fn alloca(&self, name: StringKey, rhs: AstNode<E>) -> AstNode<E> {
+    pub fn alloca(&self, name: StringKey, rhs: AstNode) -> AstNode {
         self.node(Ast::Assign(AssignTarget::Alloca(name), rhs.into()))
     }
 
     pub fn cond(
         &self,
-        condition: AstNode<E>,
-        then: AstNode<E>,
-        else_block: Option<AstNode<E>>,
-    ) -> AstNode<E> {
+        condition: AstNode,
+        then: AstNode,
+        else_block: Option<AstNode>,
+    ) -> AstNode {
         self.node(Ast::Conditional(
             condition.into(),
             then.into(),
@@ -483,15 +483,15 @@ impl<E: Extra> NodeBuilder<E> {
         ))
     }
 
-    pub fn label(&self, name: StringKey) -> AstNode<E> {
+    pub fn label(&self, name: StringKey) -> AstNode {
         self.build(Ast::BlockStart(name, vec![]), self.span_id.clone()) //self.extra_unknown.clone())
     }
 
-    pub fn block_start(&self, name: StringKey, params: Vec<ParameterNode>) -> AstNode<E> {
+    pub fn block_start(&self, name: StringKey, params: Vec<ParameterNode>) -> AstNode {
         self.build(Ast::BlockStart(name, params), self.span_id.clone()) //self.extra_unknown.clone())
     }
 
-    pub fn goto(&self, name: StringKey) -> AstNode<E> {
+    pub fn goto(&self, name: StringKey) -> AstNode {
         self.build(Ast::Goto(name), self.span_id.clone()) //self.extra_unknown.clone())
     }
 
@@ -505,7 +505,7 @@ impl<E: Extra> NodeBuilder<E> {
         }
     }
 
-    pub fn module(&self, name: StringKey, body: AstNode<E>) -> AstNode<E> {
+    pub fn module(&self, name: StringKey, body: AstNode) -> AstNode {
         let span_id = body.span_id;
         self.build(Ast::Module(name, body.into()), span_id)
     }
@@ -515,8 +515,8 @@ impl<E: Extra> NodeBuilder<E> {
         &self,
         name: StringKey,
         params: &[(StringKey, AstType)],
-        body: AstNode<E>,
-    ) -> AstNode<E> {
+        body: AstNode,
+    ) -> AstNode {
         //let extra = body.extra.clone();
         let params = params
             .iter()

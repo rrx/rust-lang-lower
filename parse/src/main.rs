@@ -16,7 +16,7 @@ use lower::{
     //Extra,
     //IREnvironment, IRGraph,
     NodeBuilder,
-    SimpleExtra,
+    //SimpleExtra,
 };
 //use parse::starlark::Parser;
 use parse::starlark::StarlarkParser;
@@ -65,9 +65,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let location = lower::Location::unknown(&context);
     let mut module = lower::Module::new(location);
-    let mut p: StarlarkParser<SimpleExtra> = StarlarkParser::new();
+    let mut p: StarlarkParser = StarlarkParser::new();
     let mut d = Diagnostics::new();
-    let mut b: NodeBuilder<SimpleExtra> = NodeBuilder::new(&mut d);
+    let mut b: NodeBuilder = NodeBuilder::new(&mut d);
 
     for filename in config.inputs {
         p.parse_module(

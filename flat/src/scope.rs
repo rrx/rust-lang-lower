@@ -2,7 +2,9 @@ use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
 
 use crate::{BlockId, CodeOffset, ValueId};
-use lower::{AstType, Extra, StringKey, StringLabel, VarDefinitionSpace};
+use lower::{AstType, 
+    //Extra,
+    StringKey, StringLabel, VarDefinitionSpace};
 
 #[derive(Debug, Clone)]
 pub struct Data {
@@ -55,7 +57,7 @@ impl TemplateId {
 }
 
 #[derive(Debug)]
-pub struct ScopeLayer<E> {
+pub struct ScopeLayer {
     pub names: HashMap<StringKey, Data>,
     pub labels: HashMap<StringLabel, ValueId>,
     pub(crate) block_labels: HashMap<StringLabel, BlockId>,
@@ -66,10 +68,10 @@ pub struct ScopeLayer<E> {
     pub(crate) loop_block: Option<LoopScope>,
     pub scope_type: ScopeType,
     pub lambdas: HashMap<StringLabel, TemplateId>,
-    _e: std::marker::PhantomData<E>,
+    //_e: std::marker::PhantomData<E>,
 }
 
-impl<E> ScopeLayer<E> {
+impl ScopeLayer {
     pub fn new(scope_type: ScopeType) -> Self {
         Self {
             labels: HashMap::new(),
@@ -82,7 +84,7 @@ impl<E> ScopeLayer<E> {
             loop_block: None,
             scope_type,
             lambdas: HashMap::new(),
-            _e: std::marker::PhantomData::default(),
+            //_e: std::marker::PhantomData::default(),
         }
     }
 
@@ -142,22 +144,22 @@ impl Block {
 }
 
 #[derive(Debug)]
-pub struct Environment<E> {
+pub struct Environment {
     pub(crate) stack: Vec<ScopeId>,
-    pub scopes: Vec<ScopeLayer<E>>,
+    pub scopes: Vec<ScopeLayer>,
     pub blocks: Vec<Block>,
     pub block_map: IndexMap<ValueId, BlockId>,
-    _e: std::marker::PhantomData<E>,
+    //_e: std::marker::PhantomData<E>,
 }
 
-impl<E: Extra> Environment<E> {
+impl Environment {
     pub fn new() -> Self {
         Self {
             stack: vec![],
             scopes: vec![],
             blocks: vec![],
             block_map: IndexMap::new(),
-            _e: std::marker::PhantomData::default(),
+            //_e: std::marker::PhantomData::default(),
         }
     }
 
@@ -213,11 +215,11 @@ impl<E: Extra> Environment<E> {
         scope.blocks.get(0).unwrap().clone()
     }
 
-    pub fn get_scope(&self, scope_id: ScopeId) -> &ScopeLayer<E> {
+    pub fn get_scope(&self, scope_id: ScopeId) -> &ScopeLayer {
         self.scopes.get(scope_id.0 as usize).unwrap()
     }
 
-    pub fn get_scope_mut(&mut self, scope_id: ScopeId) -> &mut ScopeLayer<E> {
+    pub fn get_scope_mut(&mut self, scope_id: ScopeId) -> &mut ScopeLayer {
         self.scopes.get_mut(scope_id.0 as usize).unwrap()
     }
 

@@ -68,7 +68,7 @@ pub use petgraph::graph::NodeIndex;
 pub(crate) mod tests {
     use super::*;
 
-    pub fn gen_block<'c, E: Extra>(b: &mut NodeBuilder<E>) -> AstNode<E> {
+    pub fn gen_block<'c, E: Extra>(b: &mut NodeBuilder) -> AstNode {
         // global variable x = 10
         //seq.push(b.global("z", b.integer(10)));
         let y = b.s("y").into();
@@ -94,7 +94,7 @@ pub(crate) mod tests {
         b.seq(vec![b.import_prelude(), main])
     }
 
-    pub fn gen_while<'c, E: Extra>(b: &mut NodeBuilder<E>) -> AstNode<E> {
+    pub fn gen_while<'c, E: Extra>(b: &mut NodeBuilder) -> AstNode {
         let mut seq = vec![b.import_prelude()];
 
         // global variable x = 10
@@ -154,7 +154,7 @@ pub(crate) mod tests {
         b.seq(seq)
     }
 
-    pub fn gen_function_call<'c, E: Extra>(b: &mut NodeBuilder<E>) -> AstNode<E> {
+    pub fn gen_function_call<'c>(b: &mut NodeBuilder) -> AstNode {
         let x = b.s("x").into();
         let x1 = b.s("x1").into();
         let z = b.s("z").into();

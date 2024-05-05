@@ -79,9 +79,9 @@ impl CFG {
     }
 }
 
-impl<E: Extra> Blockify<E> {
+impl Blockify {
     /*
-    pub fn save_graph(&self, filename: &str, b: &NodeBuilder<E>) {
+    pub fn save_graph(&self, filename: &str, b: &NodeBuilder) {
         use petgraph::dot::{Config, Dot};
         let cfg = self.get_graph(ValueId(0), None, b);
         let s = format!(
@@ -118,7 +118,7 @@ impl<E: Extra> Blockify<E> {
     }
     */
 
-    pub fn get_cfg(&self, entry_id: ValueId, b: &NodeBuilder<E>) -> CFG {
+    pub fn get_cfg(&self, entry_id: ValueId, b: &NodeBuilder) -> CFG {
         self.get_graph(entry_id, Some(Successor::BlockScope), b)
     }
 
@@ -126,7 +126,7 @@ impl<E: Extra> Blockify<E> {
         &self,
         entry_id: ValueId,
         scope: Option<Successor>,
-        b: &NodeBuilder<E>,
+        b: &NodeBuilder,
     ) -> CFG {
         let mut cfg = CFG::new();
 

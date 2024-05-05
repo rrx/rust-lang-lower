@@ -64,7 +64,7 @@ fn format_html_row(row: &CodeRow) -> String {
     s
 }
 
-pub fn code_to_string<E: Extra>(v: ValueId, blockify: &Blockify<E>, b: &NodeBuilder<E>) -> String {
+pub fn code_to_string(v: ValueId, blockify: &Blockify, b: &NodeBuilder) -> String {
     let code = blockify.get_code(v);
     match code {
         LCode::Declare => {
@@ -115,7 +115,7 @@ pub fn code_to_string<E: Extra>(v: ValueId, blockify: &Blockify<E>, b: &NodeBuil
     }
 }
 
-fn get_code_row<E: Extra>(v: ValueId, blockify: &Blockify<E>, b: &NodeBuilder<E>) -> CodeRow {
+fn get_code_row(v: ValueId, blockify: &Blockify, b: &NodeBuilder) -> CodeRow {
     let code = blockify.get_code(v);
     let ty = blockify.get_type(v);
     let mem = blockify.get_mem(v);
@@ -145,9 +145,9 @@ fn get_code_row<E: Extra>(v: ValueId, blockify: &Blockify<E>, b: &NodeBuilder<E>
     }
 }
 
-pub fn dump_codes_filter<E: Extra>(
-    blockify: &Blockify<E>,
-    b: &NodeBuilder<E>,
+pub fn dump_codes_filter(
+    blockify: &Blockify,
+    b: &NodeBuilder,
     filter_entry_id: ValueId,
 ) -> Vec<CodeRow> {
     let mut pos = 0;
@@ -174,7 +174,7 @@ pub fn dump_codes_filter<E: Extra>(
     out
 }
 
-pub fn get_code_rows<E: Extra>(blockify: &Blockify<E>, b: &NodeBuilder<E>) -> Vec<CodeRow> {
+pub fn get_code_rows(blockify: &Blockify, b: &NodeBuilder) -> Vec<CodeRow> {
     let mut out = vec![];
     let iter = LCodeIterator::new(blockify);
     for (_i, v) in iter.enumerate() {
@@ -185,12 +185,12 @@ pub fn get_code_rows<E: Extra>(blockify: &Blockify<E>, b: &NodeBuilder<E>) -> Ve
     out
 }
 
-pub fn get_json<E: Extra>(blockify: &Blockify<E>, b: &NodeBuilder<E>) -> String {
+pub fn get_json(blockify: &Blockify, b: &NodeBuilder) -> String {
     let out = get_code_rows(blockify, b);
     serde_json::to_string(&out).unwrap()
 }
 
-pub fn dump_codes<E: Extra>(blockify: &Blockify<E>, b: &NodeBuilder<E>) -> String {
+pub fn dump_codes(blockify: &Blockify, b: &NodeBuilder) -> String {
     let mut out = vec![];
     let mut labels = vec![];
     let iter = LCodeIterator::new(blockify);
@@ -218,7 +218,7 @@ pub fn dump_codes<E: Extra>(blockify: &Blockify<E>, b: &NodeBuilder<E>) -> Strin
     s
 }
 
-pub fn save_graph<E: Extra>(blockify: &Blockify<E>, filename: &str, b: &NodeBuilder<E>) {
+pub fn save_graph(blockify: &Blockify, filename: &str, b: &NodeBuilder) {
     use petgraph::dot::{Config, Dot};
     let cfg = blockify.get_graph(ValueId::new(0), None, b);
     let s = format!(

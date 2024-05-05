@@ -100,17 +100,17 @@ impl BinOpNode {
 }
 
 #[derive(Debug, Clone)]
-pub enum Argument<E> {
-    Positional(Box<AstNode<E>>),
+pub enum Argument {
+    Positional(Box<AstNode>),
 }
 
-impl<E> From<AstNode<E>> for Argument<E> {
-    fn from(item: AstNode<E>) -> Self {
+impl From<AstNode> for Argument {
+    fn from(item: AstNode) -> Self {
         Argument::Positional(item.into())
     }
 }
 
-impl<E: Extra> Argument<E> {
+impl Argument {
     pub fn try_string(self) -> Option<String> {
         let Self::Positional(node) = self;
         (*node).try_string()
@@ -120,8 +120,8 @@ impl<E: Extra> Argument<E> {
 #[derive(Debug, Clone)]
 pub enum Parameter {
     Normal,
-    //WithDefault(AstNode<E>),
-    //Dummy<std::marker::PhantomData<E>//(AstNode<E>),
+    //WithDefault(AstNode),
+    //Dummy<std::marker::PhantomData//(AstNode),
 }
 
 #[derive(Debug, Clone)]
@@ -133,10 +133,10 @@ pub struct ParameterNode {
 }
 
 #[derive(Debug, Clone)]
-pub struct Definition<E> {
+pub struct Definition {
     pub params: Vec<ParameterNode>,
     pub return_type: Box<AstType>,
-    pub body: Option<Box<AstNode<E>>>,
+    pub body: Option<Box<AstNode>>,
 }
 
 #[derive(Debug, Clone)]
@@ -186,38 +186,38 @@ pub enum Terminator {
 }
 
 #[derive(Debug, Clone)]
-pub enum Ast<E> {
-    BinaryOp(BinOpNode, Box<AstNode<E>>, Box<AstNode<E>>),
-    UnaryOp(UnaryOperation, Box<AstNode<E>>),
-    Call(Box<AstNode<E>>, Vec<Argument<E>>, AstType),
+pub enum Ast {
+    BinaryOp(BinOpNode, Box<AstNode>, Box<AstNode>),
+    UnaryOp(UnaryOperation, Box<AstNode>),
+    Call(Box<AstNode>, Vec<Argument>, AstType),
     Identifier(StringKey),
     Literal(Literal),
-    Sequence(Vec<AstNode<E>>),
-    Definition(Definition<E>),
-    Global(StringKey, Box<AstNode<E>>),
-    Assign(AssignTarget, Box<AstNode<E>>),
-    Branch(Box<AstNode<E>>, StringKey, StringKey),
-    Conditional(Box<AstNode<E>>, Box<AstNode<E>>, Option<Box<AstNode<E>>>),
-    Ternary(Box<AstNode<E>>, Box<AstNode<E>>, Box<AstNode<E>>),
-    Return(Option<Box<AstNode<E>>>),
-    While(Box<AstNode<E>>, Box<AstNode<E>>),
-    Builtin(Builtin, Vec<Argument<E>>),
-    Module(StringKey, Box<AstNode<E>>),
-    Loop(StringKey, Box<AstNode<E>>),
-    Break(Option<StringKey>, Vec<AstNode<E>>),
-    Continue(Option<StringKey>, Vec<AstNode<E>>),
+    Sequence(Vec<AstNode>),
+    Definition(Definition),
+    Global(StringKey, Box<AstNode>),
+    Assign(AssignTarget, Box<AstNode>),
+    Branch(Box<AstNode>, StringKey, StringKey),
+    Conditional(Box<AstNode>, Box<AstNode>, Option<Box<AstNode>>),
+    Ternary(Box<AstNode>, Box<AstNode>, Box<AstNode>),
+    Return(Option<Box<AstNode>>),
+    While(Box<AstNode>, Box<AstNode>),
+    Builtin(Builtin, Vec<Argument>),
+    Module(StringKey, Box<AstNode>),
+    Loop(StringKey, Box<AstNode>),
+    Break(Option<StringKey>, Vec<AstNode>),
+    Continue(Option<StringKey>, Vec<AstNode>),
     Goto(StringKey),
     BlockStart(StringKey, Vec<ParameterNode>),
     Noop,
     Error,
 }
 
-impl<E: Extra> Ast<E> {
-    pub fn global(name: StringKey, node: AstNode<E>) -> Self {
+impl Ast {
+    pub fn global(name: StringKey, node: AstNode) -> Self {
         Ast::Global(name, Box::new(node))
     }
 
-    pub fn assign(target: AssignTarget, node: AstNode<E>) -> Self {
+    pub fn assign(target: AssignTarget, node: AstNode) -> Self {
         Ast::Assign(target, Box::new(node))
     }
 
@@ -281,8 +281,8 @@ impl<E: Extra> Ast<E> {
 
     pub fn from_name(
         name: &str,
-        mut args: Vec<Argument<E>>,
-        b: &mut NodeBuilder<E>,
+        mut args: Vec<Argument>,
+        b: &mut NodeBuilder,
     ) -> Option<Self> {
         if name == "goto" {
             let rest = args
@@ -410,13 +410,13 @@ pub trait Extra: Debug + Clone {
 }
 
 #[derive(Debug, Clone)]
-pub struct AstNode<E> {
-    pub node: Ast<E>,
+pub struct AstNode {
+    pub node: Ast,
     pub span_id: SpanId,
-    pub(crate) _e: std::marker::PhantomData<E>,
+    //pub(crate) _e: std::marker::PhantomData<E>,
 }
 
-impl<E: Extra> AstNode<E> {
+impl AstNode {
     pub fn location<'c>(&self, context: &'c Context, d: &Diagnostics) -> Location<'c> {
         let span = d.lookup(self.span_id);
         d.location(context, &span)
@@ -456,7 +456,7 @@ impl<E: Extra> AstNode<E> {
         }
     }
 
-    pub fn try_seq(self) -> Option<Vec<AstNode<E>>> {
+    pub fn try_seq(self) -> Option<Vec<AstNode>> {
         if let Ast::Sequence(seq) = self.node {
             Some(seq)
         } else {
@@ -464,7 +464,7 @@ impl<E: Extra> AstNode<E> {
         }
     }
 
-    pub fn to_vec(self) -> Vec<AstNode<E>> {
+    pub fn to_vec(self) -> Vec<AstNode> {
         match self.node {
             Ast::Sequence(exprs) => exprs
                 .into_iter()
@@ -475,7 +475,7 @@ impl<E: Extra> AstNode<E> {
         }
     }
 
-    pub fn to_vec_ref(&self) -> Vec<&AstNode<E>> {
+    pub fn to_vec_ref(&self) -> Vec<&AstNode> {
         match self.node {
             Ast::Sequence(ref exprs) => exprs
                 .iter()
@@ -486,7 +486,7 @@ impl<E: Extra> AstNode<E> {
         }
     }
 
-    pub fn children_mut<'a>(&'a mut self) -> AstNodeIterator<'a, E> {
+    pub fn children_mut<'a>(&'a mut self) -> AstNodeIterator<'a> {
         let mut values = vec![];
         match &mut self.node {
             Ast::Sequence(ref mut exprs) => {
@@ -582,19 +582,19 @@ impl<E: Extra> AstNode<E> {
 }
 */
 
-pub struct AstNodeIterator<'a, E> {
-    values: Vec<&'a mut AstNode<E>>,
+pub struct AstNodeIterator<'a> {
+    values: Vec<&'a mut AstNode>,
 }
 
-impl<'a, E> Iterator for AstNodeIterator<'a, E> {
-    type Item = &'a mut AstNode<E>;
+impl<'a> Iterator for AstNodeIterator<'a> {
+    type Item = &'a mut AstNode;
     fn next(&mut self) -> Option<Self::Item> {
         self.values.pop()
     }
 }
 
-impl<E> From<Argument<E>> for AstNode<E> {
-    fn from(item: Argument<E>) -> Self {
+impl From<Argument> for AstNode {
+    fn from(item: Argument) -> Self {
         match item {
             Argument::Positional(x) => *x,
         }

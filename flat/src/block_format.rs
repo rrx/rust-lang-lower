@@ -1,15 +1,15 @@
 use std::collections::VecDeque;
 
 use lower::{
-    Extra,
+    //Extra,
     Literal,
     NodeBuilder,
 };
 
 use crate::{Blockify, LCode, ValueId};
 
-impl<E: Extra> Blockify<E> {
-    pub fn code_to_string(&self, v: ValueId, b: &NodeBuilder<E>) -> String {
+impl Blockify {
+    pub fn code_to_string(&self, v: ValueId, b: &NodeBuilder) -> String {
         let code = self.get_code(v);
         match code {
             LCode::Declare => {
@@ -61,14 +61,14 @@ impl<E: Extra> Blockify<E> {
     }
 }
 
-pub struct LCodeIterator<'a, E> {
-    blockify: &'a Blockify<E>,
+pub struct LCodeIterator<'a> {
+    blockify: &'a Blockify,
     blocks: Vec<ValueId>,
     values: VecDeque<ValueId>,
 }
 
-impl<'a, E> LCodeIterator<'a, E> {
-    pub fn new(blockify: &'a Blockify<E>) -> Self {
+impl<'a> LCodeIterator<'a> {
+    pub fn new(blockify: &'a Blockify) -> Self {
         let blocks = blockify
             .env
             .blocks
@@ -84,7 +84,7 @@ impl<'a, E> LCodeIterator<'a, E> {
     }
 }
 
-impl<'a, E: Extra> Iterator for LCodeIterator<'a, E> {
+impl<'a> Iterator for LCodeIterator<'a> {
     type Item = ValueId;
 
     fn next(&mut self) -> Option<Self::Item> {

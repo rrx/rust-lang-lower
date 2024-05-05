@@ -96,10 +96,10 @@ pub enum NextSeqState {
 }
 
 impl NextSeqState {
-    pub fn get<E: Extra>(
-        _env: &Environment<E>,
-        node: &AstNode<E>,
-        next_node: Option<&AstNode<E>>,
+    pub fn get(
+        _env: &Environment,
+        node: &AstNode,
+        next_node: Option<&AstNode>,
     ) -> (bool, Self) {
         let is_term = match node.node {
             Ast::Branch(_, _, _) => true,
@@ -144,7 +144,7 @@ impl AddResult {
 }
 
 #[derive(Debug)]
-pub struct Blockify<E> {
+pub struct Blockify {
     // table entries
     code: Vec<LCode>,
     types: Vec<AstType>,
@@ -155,16 +155,16 @@ pub struct Blockify<E> {
     entries: Vec<ValueId>,
     span: Vec<SpanId>,
     loop_stack: Vec<LoopLayer>,
-    templates: Vec<Definition<E>>,
+    templates: Vec<Definition>,
 
     // other
-    pub env: Environment<E>,
+    pub env: Environment,
     // sparse names
     names: IndexMap<ValueId, StringLabel>,
     link: LinkOptions,
 }
 
-impl<E: Extra> Blockify<E> {
+impl Blockify {
     pub fn new() -> Self {
         Self {
             code: vec![],
@@ -192,13 +192,13 @@ impl<E: Extra> Blockify<E> {
         self.link.shared_libraries()
     }
 
-    pub fn push_template(&mut self, def: Definition<E>) -> TemplateId {
+    pub fn push_template(&mut self, def: Definition) -> TemplateId {
         let offset = self.templates.len();
         self.templates.push(def);
         TemplateId(offset as u32)
     }
 
-    pub fn get_template(&mut self, template_id: TemplateId) -> &Definition<E> {
+    pub fn get_template(&mut self, template_id: TemplateId) -> &Definition {
         self.templates.get(template_id.index()).unwrap()
     }
 
@@ -415,7 +415,7 @@ impl<E: Extra> Blockify<E> {
         v_block
     }
 
-    pub fn resolve_block_label(&self, k: ValueId, b: &NodeBuilder<E>) -> String {
+    pub fn resolve_block_label(&self, k: ValueId, b: &NodeBuilder) -> String {
         if let Some(key) = self.names.get(&k) {
             b.resolve_label(*key).to_string()
         } else {
@@ -429,8 +429,8 @@ impl<E: Extra> Blockify<E> {
 
     pub fn build_module(
         &mut self,
-        node: AstNode<E>,
-        b: &mut NodeBuilder<E>,
+        node: AstNode,
+        b: &mut NodeBuilder,
         d: &mut Diagnostics,
     ) -> Result<ValueId> {
         match node.node {
@@ -450,8 +450,8 @@ impl<E: Extra> Blockify<E> {
         &mut self,
         entry_id: ValueId,
         maybe_next: Option<ValueId>,
-        node: AstNode<E>,
-        b: &mut NodeBuilder<E>,
+        node: AstNode,
+        b: &mut NodeBuilder,
         d: &mut Diagnostics,
     ) -> Result<AddResult> {
         let scope_id = self.env.current_scope().unwrap();
@@ -629,9 +629,9 @@ impl<E: Extra> Blockify<E> {
         &mut self,
         current_entry_id: ValueId,
         template_id: TemplateId,
-        args: Vec<Argument<E>>,
+        args: Vec<Argument>,
         span_id: SpanId,
-        b: &mut NodeBuilder<E>,
+        b: &mut NodeBuilder,
         d: &mut Diagnostics,
     ) -> Result<AddResult> {
         // TODO: Emit blocks for the definition, and jump to the entry block
@@ -702,9 +702,9 @@ impl<E: Extra> Blockify<E> {
         &mut self,
         current_entry_id: ValueId,
         function_name: StringKey,
-        def: Definition<E>,
+        def: Definition,
         span_id: SpanId,
-        b: &mut NodeBuilder<E>,
+        b: &mut NodeBuilder,
         d: &mut Diagnostics,
     ) -> Result<AddResult> {
         println!("add_function: {}", b.r(function_name));
@@ -824,8 +824,8 @@ impl<E: Extra> Blockify<E> {
         entry_id: ValueId,
         v_next: ValueId,
         name: StringKey,
-        body: AstNode<E>,
-        b: &mut NodeBuilder<E>,
+        body: AstNode,
+        b: &mut NodeBuilder,
         d: &mut Diagnostics,
     ) -> Result<AddResult> {
         let span_id = body.span_id;
@@ -845,9 +845,9 @@ impl<E: Extra> Blockify<E> {
         &mut self,
         entry_id: ValueId,
         target_block: BlockId,
-        jump_args: Vec<AstNode<E>>,
+        jump_args: Vec<AstNode>,
         span_id: SpanId,
-        b: &mut NodeBuilder<E>,
+        b: &mut NodeBuilder,
         d: &mut Diagnostics,
     ) -> Result<AddResult> {
         //let block = self.env.get_block_by_block_id(target_block);
@@ -866,9 +866,9 @@ impl<E: Extra> Blockify<E> {
         &mut self,
         entry_id: ValueId,
         target_id: ValueId,
-        jump_args: Vec<AstNode<E>>,
+        jump_args: Vec<AstNode>,
         span_id: SpanId,
-        b: &mut NodeBuilder<E>,
+        b: &mut NodeBuilder,
         d: &mut Diagnostics,
     ) -> Result<AddResult> {
         let target = self.get_code(target_id);
@@ -894,9 +894,9 @@ impl<E: Extra> Blockify<E> {
         entry_id: ValueId,
         target: CodeOffset,
         num_args: usize,
-        jump_args: Vec<AstNode<E>>,
+        jump_args: Vec<AstNode>,
         span_id: SpanId,
-        b: &mut NodeBuilder<E>,
+        b: &mut NodeBuilder,
         d: &mut Diagnostics,
     ) -> Result<AddResult> {
         let scope_id = self.env.current_scope().unwrap();
@@ -942,9 +942,9 @@ impl<E: Extra> Blockify<E> {
     pub fn add_with_next(
         &mut self,
         entry_id: ValueId,
-        node: AstNode<E>,
+        node: AstNode,
         v_next: ValueId,
-        b: &mut NodeBuilder<E>,
+        b: &mut NodeBuilder,
         d: &mut Diagnostics,
     ) -> Result<AddResult> {
         let span_id = node.span_id;
@@ -968,9 +968,9 @@ impl<E: Extra> Blockify<E> {
         scope_id: ScopeId,
         entry_id: ValueId,
         v_func: ValueId,
-        args: Vec<Argument<E>>,
+        args: Vec<Argument>,
         span_id: SpanId,
-        b: &mut NodeBuilder<E>,
+        b: &mut NodeBuilder,
         d: &mut Diagnostics,
     ) -> Result<AddResult> {
         let ty = self.get_type(v_func);
@@ -1044,8 +1044,8 @@ impl<E: Extra> Blockify<E> {
         &mut self,
         entry_id: ValueId,
         maybe_next: Option<ValueId>,
-        node: AstNode<E>,
-        b: &mut NodeBuilder<E>,
+        node: AstNode,
+        b: &mut NodeBuilder,
         d: &mut Diagnostics,
     ) -> Result<AddResult> {
         let scope_id = self.env.current_scope().unwrap();

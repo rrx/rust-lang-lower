@@ -1,6 +1,8 @@
-use lower::{Argument, AssignTarget, Ast, AstNode, Diagnostics, Extra, NodeBuilder, SpanId};
+use lower::{Argument, AssignTarget, Ast, AstNode, Diagnostics, 
+    //Extra,
+    NodeBuilder, SpanId};
 
-pub fn dump<E: Extra + Clone>(node: &AstNode<E>, b: &NodeBuilder<E>) {
+pub fn dump(node: &AstNode, b: &NodeBuilder) {
     let mut out = vec![];
     dump_strings(node, b, &mut out, 0);
     for (depth, s, _span) in out {
@@ -12,9 +14,9 @@ pub fn print_with_indent(s: &str, depth: usize) {
     println!("{:width$}{}", "", s, width = depth * 2);
 }
 
-pub fn dump_html<E: Extra + Clone>(
-    node: &AstNode<E>,
-    b: &NodeBuilder<E>,
+pub fn dump_html(
+    node: &AstNode,
+    b: &NodeBuilder,
     d: &Diagnostics,
 ) -> String {
     let mut out = vec![];
@@ -38,9 +40,9 @@ pub fn dump_html<E: Extra + Clone>(
     s
 }
 
-pub fn dump_strings<E: Extra + Clone>(
-    node: &AstNode<E>,
-    b: &NodeBuilder<E>,
+pub fn dump_strings(
+    node: &AstNode,
+    b: &NodeBuilder,
     out: &mut Vec<(usize, String, SpanId)>,
     mut depth: usize,
 ) {
