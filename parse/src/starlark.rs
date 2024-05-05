@@ -11,25 +11,27 @@ use starlark_syntax::lexer;
 use starlark_syntax::syntax;
 use starlark_syntax::syntax::module::AstModuleFields;
 
-use flat::Blockify;
-use lower::ast;
-use lower::ast::{Ast, AstNode};
-use lower::{
-    ast::AssignTarget,
-    ast::BinOpNode,
+use compile_core::ast;
+use compile_core::{
     Argument,
+    AssignTarget,
     AstType,
+    BinOpNode,
     CodeLocation,
     Diagnostics,
     //Extra,
-    LinkOptions,
-    Module,
+    //Module,
     NodeBuilder,
     //Span,
     SpanId,
     StringKey,
     TypeUnify,
 };
+use compile_core::{Ast, AstNode};
+use flat::Blockify;
+
+use lower::LinkOptions;
+use lower::Module;
 
 #[derive(Debug, Clone)]
 pub enum ExtraAst {
@@ -44,11 +46,7 @@ impl ExtraAst {
         name == "loop" || name == "loop_break" || name == "loop_continue" || name == "end"
     }
 
-    pub fn from_name(
-        name: &str,
-        mut args: Vec<Argument>,
-        b: &mut NodeBuilder,
-    ) -> Option<ExtraAst> {
+    pub fn from_name(name: &str, mut args: Vec<Argument>, b: &mut NodeBuilder) -> Option<ExtraAst> {
         if name == "loop" {
             if args.len() == 0 {
                 Some(Self::LoopStart(None))
@@ -251,7 +249,7 @@ fn from_literal(
     env: &Environment,
     b: &mut NodeBuilder,
     d: &mut Diagnostics,
-) -> ast::AstNode {
+) -> compile_core::AstNode {
     use syntax::ast::AstLiteral;
     let lit = match &item {
         AstLiteral::Int(x) => {
@@ -333,7 +331,7 @@ impl Parser {
         file_id: usize,
         d: &mut Diagnostics,
         b: &mut NodeBuilder,
-    ) -> Result<ast::AstNode> {
+    ) -> Result<compile_core::AstNode> {
         //b.enter(file_id, path.to_str().unwrap());
         let dialect = syntax::Dialect::Extended;
         let m = match content {
@@ -345,7 +343,7 @@ impl Parser {
         let (codemap, stmt, _dialect, _typecheck) = m.into_parts();
         let mut env = Environment::new(&codemap, file_id);
         let mut seq = b.prelude();
-        let ast: ast::AstNode = self.from_stmt(stmt, &mut env, b, d)?;
+        let ast: compile_core::AstNode = self.from_stmt(stmt, &mut env, b, d)?;
         let span_id = ast.span_id.clone();
         seq.push(ast);
         Ok(b.build(Ast::Module(module_key, b.seq(seq).into()), span_id))
@@ -406,7 +404,7 @@ impl Parser {
         env: &mut Environment<'a>,
         b: &mut NodeBuilder,
         d: &mut Diagnostics,
-    ) -> Result<ast::AstNode> {
+    ) -> Result<compile_core::AstNode> {
         use syntax::ast::StmtP;
         let span_id = env.span_id(item.span, d);
 
@@ -905,9 +903,8 @@ impl StarlarkParser {
 
         let mut parser = Parser::new();
         let module_key = b.s("module");
-        let ast: AstNode = parser
-            .parse(Path::new(filename), None, module_key, file_id, d, b)?;
-            //.normalize(d, b);
+        let ast: AstNode = parser.parse(Path::new(filename), None, module_key, file_id, d, b)?;
+        //.normalize(d, b);
         dump::ast::dump(&ast, b);
 
         let ast_html = dump::ast::dump_html(&ast, b, d);
@@ -981,17 +978,17 @@ impl StarlarkParser {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use super::*;
+    use super::StarlarkParser;
     //use lower::ast::SimpleExtra;
     use lower::Location;
-    use test_log::test;
+    //use test_log::test;
 
     fn run_test_ir(filename: &str, expected: i32) {
         let mut p: StarlarkParser = StarlarkParser::new();
-        let mut d = Diagnostics::new();
-        let mut b = NodeBuilder::new(&mut d);
+        let mut d = compile_core::Diagnostics::new();
+        let mut b = compile_core::NodeBuilder::new(&mut d);
         let context = lower::default_context();
-        let mut module = Module::new(Location::unknown(&context));
+        let mut module = lower::Module::new(Location::unknown(&context));
         let r = p.parse_module(filename, &context, &mut module, &mut b, &mut d, true);
         d.dump();
         r.unwrap();

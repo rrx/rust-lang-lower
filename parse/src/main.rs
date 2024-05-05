@@ -7,8 +7,9 @@ use argh::FromArgs;
 //use melior::ir;
 use simple_logger::{set_up_color_terminal, SimpleLogger};
 
-use lower::{
-    default_context,
+use lower::default_context;
+
+use compile_core::{
     //CFGGraph,
     Diagnostics,
     //CFG,

@@ -5,10 +5,11 @@ use codespan_reporting::term;
 use codespan_reporting::term::termcolor::{BufferWriter, ColorChoice, StandardStream};
 
 use indexmap::IndexSet;
-use melior::ir;
-use melior::Context;
+//use melior::ir;
+//use melior::Context;
 use thiserror::Error;
 
+use crate::SpanId;
 pub type FileDB = SimpleFiles<String, String>;
 
 #[derive(Error, Debug)]
@@ -44,14 +45,6 @@ impl Span {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct SpanId(u32);
-impl SpanId {
-    pub fn index(&self) -> usize {
-        self.0 as usize
-    }
-}
-
 pub struct Diagnostics {
     pub files: FileDB,
     diagnostics: Vec<Diagnostic<usize>>,
@@ -71,19 +64,30 @@ impl Diagnostics {
         }
     }
 
+    pub fn get_name(&self, span: &Span) -> Result<String, codespan_reporting::files::Error> {
+        self.files.name(span.file_id)
+    }
+
+    pub fn get_location(
+        &self,
+        span: &Span,
+    ) -> Result<codespan_reporting::files::Location, codespan_reporting::files::Error> {
+        self.files.location(span.file_id, span.begin.pos as usize)
+    }
+
     pub fn get_span_unknown(&mut self) -> Span {
         self.get_span(0, CodeLocation::default(), CodeLocation::default())
     }
 
     pub fn lookup(&self, span_id: SpanId) -> Span {
-        let (file_id, begin, end) = self.spans.get_index(span_id.0 as usize).unwrap();
+        let (file_id, begin, end) = self.spans.get_index(span_id.index()).unwrap();
         Span::new(span_id, *file_id, *begin, *end)
     }
 
     pub fn get_span(&mut self, file_id: usize, begin: CodeLocation, end: CodeLocation) -> Span {
         let v = (file_id, begin, end);
         let (index, _) = self.spans.insert_full(v);
-        let span_id = SpanId(index as u32);
+        let span_id = SpanId::new(index as u32);
         Span::new(span_id, file_id, begin, end)
     }
 
@@ -136,18 +140,6 @@ impl Diagnostics {
         let config = codespan_reporting::term::Config::default();
         for d in self.diagnostics.drain(..) {
             term::emit(&mut writer.lock(), &config, &self.files, &d).unwrap();
-        }
-    }
-
-    pub fn location<'c>(&self, context: &'c Context, span: &Span) -> ir::Location<'c> {
-        if let Ok(name) = self.files.name(span.file_id) {
-            let loc = self
-                .files
-                .location(span.file_id, span.begin.pos as usize)
-                .unwrap();
-            ir::Location::new(context, &name, loc.line_number, loc.column_number)
-        } else {
-            ir::Location::unknown(context)
         }
     }
 }

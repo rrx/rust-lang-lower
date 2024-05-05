@@ -1,8 +1,16 @@
 [package]
-name = "core"
+name = "compile_core"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = "*"
+thiserror = "*"
+ena = "*"
+serde = "1.0"
+indexmap = "2.1.0"
+codespan-reporting = "*"
+
+

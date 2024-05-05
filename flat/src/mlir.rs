@@ -13,6 +13,7 @@ use lower::melior::{
         scf,
     },
     ir::{
+        self,
         attribute::FlatSymbolRefAttribute,
         attribute::{
             DenseElementsAttribute,
@@ -29,13 +30,16 @@ use lower::melior::{
 };
 use std::collections::VecDeque;
 
-use lower::{
-    op,
+use lower::op;
+
+use compile_core::{
+    AstNode,
     AstType,
     Builtin,
     Diagnostics,
     //Extra,
     NodeBuilder,
+    Span,
     //StringKey,
     StringLabel,
     UnaryOperation,
@@ -263,7 +267,7 @@ impl Blockify {
     ) -> Location<'c> {
         let span_id = self.get_span_id(value_id);
         let span = d.lookup(span_id);
-        let location = d.location(context, &span);
+        let location = diagnostics_location(d, context, &span);
         location
     }
 
@@ -994,4 +998,41 @@ pub fn build_declare_function<'c>(
     } else {
         unreachable!()
     }
+}
+
+pub fn diagnostics_location<'c>(
+    d: &Diagnostics,
+    context: &'c Context,
+    span: &Span,
+) -> ir::Location<'c> {
+    if let Ok(name) = d.get_name(span) {
+        //if let Ok(name) = d.files.name(span.file_id) {
+        let loc = d.get_location(span).unwrap();
+        //let loc = d
+        //.files
+        //.location(span.file_id, span.begin.pos as usize)
+        //.unwrap();
+        ir::Location::new(context, &name, loc.line_number, loc.column_number)
+    } else {
+        ir::Location::unknown(context)
+    }
+}
+
+pub fn builder_get_location<'c>(
+    b: &NodeBuilder,
+    context: &'c Context,
+    d: &Diagnostics,
+) -> Location<'c> {
+    if let Some(span) = b.span.as_ref() {
+        diagnostics_location(d, context, span)
+        //d.location(context, span)
+    } else {
+        Location::unknown(context)
+    }
+}
+
+pub fn node_location<'c>(node: &AstNode, context: &'c Context, d: &Diagnostics) -> Location<'c> {
+    let span = d.lookup(node.span_id);
+    diagnostics_location(d, context, &span)
+    //d.location(context, &span)
 }

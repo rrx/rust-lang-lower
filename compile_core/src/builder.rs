@@ -1,16 +1,18 @@
 use crate::ast::*;
 use crate::intern::StringPool;
-use crate::Diagnostics;
+//use crate::Diagnostics;
 use crate::{
     //ir::{IRArg, IRBlock, IRKind, IRNode, IRTypeSelect},
+    AstNode,
     AstType,
+    Diagnostics,
     Span,
     SpanId,
     //CodeLocation,
     //NodeIndex, PlaceId,
     StringKey,
 };
-use melior::{ir::Location, Context};
+//use melior::{ir::Location, Context};
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
 pub enum BlockId {
@@ -95,13 +97,13 @@ impl LabelBuilder {
 }
 
 pub struct NodeBuilder {
-    span: Option<Span>,
+    pub span: Option<Span>,
     filename: String,
     current_node_id: u32,
     current_def_id: u32,
     static_count: usize,
     loop_count: usize,
-    pub extra_unknown: SimpleExtra,
+    //pub extra_unknown: SimpleExtra,
     pub span_id: SpanId,
     pub labels: LabelBuilder,
     //_e: std::marker::PhantomData<E>,
@@ -120,7 +122,7 @@ impl NodeBuilder {
             loop_count: 0,
             labels: LabelBuilder::new(),
             span_id: span_unknown.span_id.clone(),
-            extra_unknown: SimpleExtra::span(span_unknown),
+            //extra_unknown: SimpleExtra::span(span_unknown),
             //_e: std::marker::PhantomData::default(),
         }
     }
@@ -219,14 +221,6 @@ impl NodeBuilder {
         self.span.as_ref().map(|s| s.file_id).unwrap_or(0)
     }
 
-    pub fn get_location<'c>(&self, context: &'c Context, d: &Diagnostics) -> Location<'c> {
-        if let Some(span) = self.span.as_ref() {
-            d.location(context, span)
-        } else {
-            Location::unknown(context)
-        }
-    }
-
     /*
     pub fn extra(&self) -> E {
         if let Some(span) = self.span.as_ref() {
@@ -242,9 +236,9 @@ impl NodeBuilder {
         AstNode {
             node,
             span_id, //: E::get_span(&extra).span_id,
-            //extra: self.extra_unknown.clone(),
-            //node_id: NodeID(None),
-            //_e: std::marker::PhantomData::default(),
+                     //extra: self.extra_unknown.clone(),
+                     //node_id: NodeID(None),
+                     //_e: std::marker::PhantomData::default(),
         }
     }
 
@@ -470,12 +464,7 @@ impl NodeBuilder {
         self.node(Ast::Assign(AssignTarget::Alloca(name), rhs.into()))
     }
 
-    pub fn cond(
-        &self,
-        condition: AstNode,
-        then: AstNode,
-        else_block: Option<AstNode>,
-    ) -> AstNode {
+    pub fn cond(&self, condition: AstNode, then: AstNode, else_block: Option<AstNode>) -> AstNode {
         self.node(Ast::Conditional(
             condition.into(),
             then.into(),
@@ -749,6 +738,7 @@ impl<'c, E: Extra> Definition<E> {
 }
 */
 
+/*
 #[cfg(test)]
 mod tests {
     //use super::*;
@@ -756,4 +746,169 @@ mod tests {
 
     #[test]
     fn test_builder() {}
+}
+*/
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::*;
+
+    pub fn gen_block<'c>(b: &mut NodeBuilder) -> AstNode {
+        // global variable x = 10
+        //seq.push(b.global("z", b.integer(10)));
+        let y = b.s("y").into();
+        let yy = b.s("yy").into();
+        let asdf = b.s("asdf");
+        let asdf2 = b.s("asdf2").into();
+        let entry = b.s("entry").into();
+        let main = b.main(b.seq(vec![
+            // entry
+            b.label(entry),
+            b.assign(yy, b.integer(1)),
+            b.alloca(y, b.integer(999)),
+            b.goto(asdf.into()),
+            // asdf
+            b.label(asdf),
+            b.assign(yy, b.integer(2)),
+            b.goto(asdf2),
+            // asdf2
+            b.label(asdf2),
+            b.assign(yy, b.integer(3)),
+            b.ret(Some(b.integer(0))),
+        ]));
+        b.seq(vec![b.import_prelude(), main])
+    }
+
+    pub fn gen_while<'c>(b: &mut NodeBuilder) -> AstNode {
+        let mut seq = vec![b.import_prelude()];
+
+        // global variable x = 10
+        let x = b.s("x").into();
+        let x2 = b.s("x2").into();
+        let z = b.s("z").into();
+        let y = b.s("y").into();
+        let z_static = b.s("z_static");
+
+        seq.push(b.global(z, b.integer(10)));
+        seq.push(b.main(b.seq(vec![
+            // define local var
+            // allocate mutable var
+            b.assign(x, b.integer(123)),
+            b.alloca(x2, b.integer(10)),
+            b.while_loop(
+                //b.ne(b.deref_offset(b.ident(x2.into()), 0), b.integer(0)),
+                b.ne(b.ident(x2.into()), b.integer(0)),
+                b.seq(vec![
+                    // static variable with local scope
+                    b.global(z_static, b.integer(10)),
+                    //b.mutate(b.ident(z_static.into()), b.integer(10)),
+                    b.assign(z_static, b.integer(10)),
+                    // mutate global variable
+                    b.assign(
+                        z,
+                        //b.subtract(b.deref_offset(b.ident(z.into()), 0), b.integer(1)),
+                        b.subtract(b.ident(z.into()), b.integer(1)),
+                    ),
+                    // mutate scoped variable
+                    b.assign(
+                        //b.ident(x2.into()),
+                        x2,
+                        //b.subtract(b.deref_offset(b.ident(x2.into()), 0), b.integer(1)),
+                        b.subtract(b.ident(x2.into()), b.integer(1)),
+                    ),
+                    b.assign(
+                        //b.ident(z_static.into()),
+                        z_static,
+                        //b.subtract(b.deref_offset(b.ident(z_static.into()), 0), b.integer(1)),
+                        b.subtract(b.ident(z_static.into()), b.integer(1)),
+                    ),
+                    // assign local
+                    b.assign(
+                        y,
+                        b.subtract(
+                            b.ident(x.into()),
+                            //b.deref_offset(b.ident(z_static.into()), 0),
+                            b.ident(z_static.into()),
+                        ),
+                    ),
+                ]),
+            ),
+            b.ret(Some(b.ident(z.into()))),
+        ])));
+
+        b.seq(seq)
+    }
+
+    pub fn gen_function_call<'c>(b: &mut NodeBuilder) -> AstNode {
+        let x = b.s("x").into();
+        let x1 = b.s("x1").into();
+        let z = b.s("z").into();
+        let y = b.s("y").into();
+        let arg0 = b.s("arg0").into();
+
+        let mut seq = vec![b.import_prelude()];
+        seq.push(b.global(z, b.integer(10)));
+
+        seq.push(b.func(
+            x1,
+            &[(arg0, AstType::Int)],
+            AstType::Int,
+            b.seq(vec![
+                // using an alloca
+                b.alloca(y, b.ident(arg0.into())),
+                b.cond(
+                    //b.ne(b.deref_offset(b.ident(y.into()), 0), b.integer(0)),
+                    b.ne(b.ident(y.into()), b.integer(0)),
+                    b.seq(vec![
+                        b.assign(
+                            y,
+                            //b.ident(y.into()),
+                            //b.subtract(b.deref_offset(b.ident(y.into()), 0), b.integer(1)),
+                            b.subtract(b.ident(y.into()), b.integer(1)),
+                        ),
+                        b.assign(
+                            y,
+                            //b.ident(y.into()),
+                            b.apply(
+                                x1.into(),
+                                //vec![b.deref_offset(b.ident(y.into()), 0).into()],
+                                vec![b.ident(y.into()).into()],
+                                AstType::Int,
+                            ),
+                        ),
+                    ]),
+                    None,
+                ),
+                // using args
+                b.cond(
+                    b.ne(b.ident(arg0.into()), b.integer(0)),
+                    b.seq(vec![b.assign(
+                        y,
+                        //b.ident(y.into()),
+                        b.apply(
+                            x1.into(),
+                            vec![b.subtract(b.ident(arg0.into()), b.integer(1).into()).into()],
+                            AstType::Int,
+                        ),
+                    )]),
+                    None,
+                ),
+                //b.ret(Some(b.deref_offset(b.ident(y.into()), 0))),
+                b.ret(Some(b.ident(y.into()))),
+            ]),
+        ));
+
+        seq.push(b.main(b.seq(vec![
+            b.assign(
+                x,
+                b.apply(x1.into(), vec![b.integer(10).into()], AstType::Int),
+            ),
+            b.assign(
+                x,
+                b.apply(x1.into(), vec![b.integer(0).into()], AstType::Int),
+            ),
+            b.ret(Some(b.ident(x.into()))),
+        ])));
+        b.seq(seq)
+    }
 }

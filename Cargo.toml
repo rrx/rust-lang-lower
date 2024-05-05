@@ -5,5 +5,5 @@ members = [
   "parse",
   "flat",
   "dump",
-  "core"
+  "compile_core"
 ]

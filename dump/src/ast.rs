@@ -1,6 +1,13 @@
-use lower::{Argument, AssignTarget, Ast, AstNode, Diagnostics, 
+use compile_core::{
+    Argument,
+    AssignTarget,
+    Ast,
+    AstNode,
+    Diagnostics,
     //Extra,
-    NodeBuilder, SpanId};
+    NodeBuilder,
+    SpanId,
+};
 
 pub fn dump(node: &AstNode, b: &NodeBuilder) {
     let mut out = vec![];
@@ -14,11 +21,7 @@ pub fn print_with_indent(s: &str, depth: usize) {
     println!("{:width$}{}", "", s, width = depth * 2);
 }
 
-pub fn dump_html(
-    node: &AstNode,
-    b: &NodeBuilder,
-    d: &Diagnostics,
-) -> String {
+pub fn dump_html(node: &AstNode, b: &NodeBuilder, d: &Diagnostics) -> String {
     let mut out = vec![];
     dump_strings(node, b, &mut out, 0);
     let mut s = String::new();

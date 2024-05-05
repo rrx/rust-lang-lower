@@ -3,11 +3,32 @@ use anyhow::Result;
 use indexmap::IndexMap;
 use std::collections::HashMap;
 
-use lower::{
-    ast::AssignTarget, ast::Builtin, Argument, Ast, AstNode, AstType, BinaryOperation, Definition,
-    Diagnostic, Diagnostics, Extra, Label, LinkOptions, Literal, NodeBuilder, ParameterNode,
-    ParseError, Span, SpanId, StringKey, StringLabel, UnaryOperation, VarDefinitionSpace,
+use compile_core::{
+    Argument,
+    AssignTarget,
+    Ast,
+    AstNode,
+    AstType,
+    BinaryOperation,
+    Builtin,
+    Definition,
+    Diagnostic,
+    Diagnostics,
+    //Extra,
+    Label,
+    Literal,
+    NodeBuilder,
+    ParameterNode,
+    ParseError,
+    Span,
+    SpanId,
+    StringKey,
+    StringLabel,
+    UnaryOperation,
+    VarDefinitionSpace,
 };
+
+use lower::LinkOptions;
 
 use crate::{BlockId, CodeOffset, Environment, ScopeId, ScopeType, TemplateId, ValueId};
 
@@ -96,11 +117,7 @@ pub enum NextSeqState {
 }
 
 impl NextSeqState {
-    pub fn get(
-        _env: &Environment,
-        node: &AstNode,
-        next_node: Option<&AstNode>,
-    ) -> (bool, Self) {
+    pub fn get(_env: &Environment, node: &AstNode, next_node: Option<&AstNode>) -> (bool, Self) {
         let is_term = match node.node {
             Ast::Branch(_, _, _) => true,
             Ast::Conditional(_, _, _) => true,

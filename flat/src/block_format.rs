@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use lower::{
+use compile_core::{
     //Extra,
     Literal,
     NodeBuilder,

@@ -1,5 +1,5 @@
-use crate::ast::BinaryOperation;
-use crate::{Ast, AstNode, AstType, Diagnostics, Extra, Literal, ParseError, Span};
+use compile_core::BinaryOperation;
+use compile_core::{Ast, AstNode, AstType, Diagnostics, Literal, ParseError, Span};
 
 use anyhow::Error;
 use anyhow::Result;
@@ -134,7 +134,7 @@ pub fn build_reserved<'c>(
     }
 }
 
-pub fn emit_static<'c, E: Extra>(
+pub fn emit_static<'c>(
     context: &'c Context,
     global_name: String,
     expr: AstNode,

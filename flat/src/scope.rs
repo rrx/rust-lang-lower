@@ -2,9 +2,13 @@ use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
 
 use crate::{BlockId, CodeOffset, ValueId};
-use lower::{AstType, 
+use compile_core::{
+    AstType,
     //Extra,
-    StringKey, StringLabel, VarDefinitionSpace};
+    StringKey,
+    StringLabel,
+    VarDefinitionSpace,
+};
 
 #[derive(Debug, Clone)]
 pub struct Data {

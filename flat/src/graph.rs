@@ -4,7 +4,7 @@ use petgraph::visit::Bfs;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 
-use lower::{Extra, NodeBuilder};
+use compile_core::NodeBuilder;
 
 use crate::{Blockify, CodeOffset, Successor, ValueId};
 
@@ -122,12 +122,7 @@ impl Blockify {
         self.get_graph(entry_id, Some(Successor::BlockScope), b)
     }
 
-    pub fn get_graph(
-        &self,
-        entry_id: ValueId,
-        scope: Option<Successor>,
-        b: &NodeBuilder,
-    ) -> CFG {
+    pub fn get_graph(&self, entry_id: ValueId, scope: Option<Successor>, b: &NodeBuilder) -> CFG {
         let mut cfg = CFG::new();
 
         let mut stack = VecDeque::new();

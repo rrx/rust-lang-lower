@@ -404,6 +404,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "compile_core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "codespan-reporting",
+ "ena",
+ "indexmap",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
 name = "comrak"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -437,10 +449,6 @@ checksum = "ec182b0ca2f35d8fc196cf3404988fd8b8c739a4d270ff118a398feb0cbec1ca"
 dependencies = [
  "unicode-segmentation",
 ]
-
-[[package]]
-name = "core"
-version = "0.1.0"
 
 [[package]]
 name = "crc32fast"
@@ -706,6 +714,7 @@ dependencies = [
 name = "dump"
 version = "0.1.0"
 dependencies = [
+ "compile_core",
  "flat",
  "lower",
  "petgraph",
@@ -803,6 +812,7 @@ name = "flat"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "compile_core",
  "indexmap",
  "lower",
  "minijinja",
@@ -1123,6 +1133,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "codespan-reporting",
+ "compile_core",
  "criterion",
  "ena",
  "env_logger",
@@ -1376,6 +1387,7 @@ dependencies = [
  "anyhow",
  "argh",
  "codespan-reporting",
+ "compile_core",
  "criterion",
  "dump",
  "env_logger",

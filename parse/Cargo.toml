@@ -9,6 +9,7 @@ edition = "2021"
 lower = { path = "../lower" }
 flat = { path = "../flat" }
 dump = { path = "../dump" }
+compile_core = { path = "../compile_core" }
 starlark_syntax = { git = "https://github.com/facebookexperimental/starlark-rust.git", branch = "main" }
 log = "*"
 simple_logger = "^4.3.0"

@@ -1,12 +1,12 @@
-use flat::block_format::LCodeIterator;
-use serde::Serialize;
-use flat::{
-    Blockify,
-    CodeOffset,
-    LCode,
-    ValueId,
+use compile_core::{
+    AstType,
+    //Extra,
+    Literal,
+    NodeBuilder,
 };
-use lower::{AstType, Extra, Literal, NodeBuilder};
+use flat::block_format::LCodeIterator;
+use flat::{Blockify, CodeOffset, LCode, ValueId};
+use serde::Serialize;
 use tabled::{
     settings::{object::Rows, Border, Style},
     Table, Tabled,
