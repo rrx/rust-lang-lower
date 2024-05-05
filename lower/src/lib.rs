@@ -53,7 +53,7 @@ pub use link::LinkOptions;
 //};
 
 // re-export codespan
-pub use codespan_reporting::diagnostic::{Diagnostic, Label};
+//pub use codespan_reporting::diagnostic::{Diagnostic, Label};
 
 // re-export melior structs
 pub use melior;

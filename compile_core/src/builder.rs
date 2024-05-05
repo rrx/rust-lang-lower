@@ -1,18 +1,6 @@
 use crate::ast::*;
 use crate::intern::StringPool;
-//use crate::Diagnostics;
-use crate::{
-    //ir::{IRArg, IRBlock, IRKind, IRNode, IRTypeSelect},
-    AstNode,
-    AstType,
-    Diagnostics,
-    Span,
-    SpanId,
-    //CodeLocation,
-    //NodeIndex, PlaceId,
-    StringKey,
-};
-//use melior::{ir::Location, Context};
+use crate::{AstNode, AstType, Diagnostics, Span, SpanId, StringKey};
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
 pub enum BlockId {
@@ -41,16 +29,6 @@ impl BlockId {
         }
     }
 }
-
-/*
-#[derive(Debug, Clone, Copy)]
-pub struct NodeID(Option<u32>);
-impl NodeID {
-    pub fn is_valid(&self) -> bool {
-        self.0.is_some()
-    }
-}
-*/
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone, Copy)]
 pub enum StringLabel {
@@ -103,10 +81,8 @@ pub struct NodeBuilder {
     current_def_id: u32,
     static_count: usize,
     loop_count: usize,
-    //pub extra_unknown: SimpleExtra,
     pub span_id: SpanId,
     pub labels: LabelBuilder,
-    //_e: std::marker::PhantomData<E>,
 }
 
 impl NodeBuilder {
@@ -122,8 +98,6 @@ impl NodeBuilder {
             loop_count: 0,
             labels: LabelBuilder::new(),
             span_id: span_unknown.span_id.clone(),
-            //extra_unknown: SimpleExtra::span(span_unknown),
-            //_e: std::marker::PhantomData::default(),
         }
     }
 
@@ -221,38 +195,13 @@ impl NodeBuilder {
         self.span.as_ref().map(|s| s.file_id).unwrap_or(0)
     }
 
-    /*
-    pub fn extra(&self) -> E {
-        if let Some(span) = self.span.as_ref() {
-            E::span(span.clone())
-            //E::new(0, CodeLocation::default(), CodeLocation::default())
-        } else {
-            E::new(0, CodeLocation::default(), CodeLocation::default())
-        }
-    }
-    */
-
     pub fn build(&self, node: Ast, span_id: SpanId) -> AstNode {
-        AstNode {
-            node,
-            span_id, //: E::get_span(&extra).span_id,
-                     //extra: self.extra_unknown.clone(),
-                     //node_id: NodeID(None),
-                     //_e: std::marker::PhantomData::default(),
-        }
+        AstNode { node, span_id }
     }
 
     pub fn node(&self, ast: Ast) -> AstNode {
-        self.build(ast, self.span_id.clone()) //self.extra_unknown.clone())
+        self.build(ast, self.span_id.clone())
     }
-
-    /*
-    pub fn extra_unknown(&self) -> E {
-        let begin = CodeLocation { pos: 0 };
-        let end = CodeLocation { pos: 0 };
-        E::new(self.current_file_id(), begin, end)
-    }
-    */
 
     pub fn error(&self, span_id: SpanId) -> AstNode {
         self.build(Ast::Error, span_id)
@@ -264,7 +213,6 @@ impl NodeBuilder {
         params: &[(StringKey, AstType)],
         return_type: AstType,
         body: Option<AstNode>,
-        //lambda: bool,
     ) -> AstNode {
         let params = params
             .into_iter()
@@ -273,16 +221,13 @@ impl NodeBuilder {
                 ty: ty.clone(),
                 node: Parameter::Normal,
                 span_id: self.span_id.clone(),
-                //extra: self.extra_unknown.clone(),
             })
             .collect();
 
         self.global(
             name,
             self.node(Ast::Definition(Definition {
-                //name,
                 params,
-                //lambda,
                 return_type: return_type.into(),
                 body: body.map(|b| b.into()),
             })),
@@ -300,20 +245,8 @@ impl NodeBuilder {
         let print_index = self.s("print_index".into());
         let print_float = self.s("print_float".into());
         vec![
-            self.definition(
-                print_index,
-                &[(a, AstType::Int)],
-                AstType::Unit,
-                None,
-                //false,
-            ),
-            self.definition(
-                print_float,
-                &[(a, AstType::Float)],
-                AstType::Unit,
-                None,
-                //false,
-            ),
+            self.definition(print_index, &[(a, AstType::Int)], AstType::Unit, None),
+            self.definition(print_float, &[(a, AstType::Float)], AstType::Unit, None),
         ]
     }
 
@@ -374,27 +307,12 @@ impl NodeBuilder {
     }
 
     pub fn ident(&self, name: StringKey) -> AstNode {
-        self.build(Ast::Identifier(name), self.span_id.clone()) //self.extra_unknown.clone())
+        self.build(Ast::Identifier(name), self.span_id.clone())
     }
-
-    //pub fn deref_offset(&self, value: AstNode<E>, offset: usize) -> AstNode<E> {
-    //self.node(Ast::Deref(value.into(), DerefTarget::Offset(offset)))
-    //}
 
     pub fn global(&self, name: StringKey, value: AstNode) -> AstNode {
-        //let extra = value.extra.clone();
         self.build(Ast::Global(name, value.into()), self.span_id.clone()) //extra)
     }
-
-    /*
-    pub fn test(&self, condition: AstNode, body: AstNode) -> AstNode {
-        //let extra = body.extra.clone();
-        self.build(
-            Ast::Test(condition.into(), body.into()),
-            self.span_id.clone(),
-        ) //extra)
-    }
-    */
 
     pub fn while_loop(&self, condition: AstNode, body: AstNode) -> AstNode {
         self.node(Ast::While(condition.into(), body.into()))
@@ -415,14 +333,11 @@ impl NodeBuilder {
         return_type: AstType,
         body: AstNode,
     ) -> AstNode {
-        self.definition(name, params, return_type, Some(body)) //, false)
+        self.definition(name, params, return_type, Some(body))
     }
 
     pub fn ret(&self, node: Option<AstNode>) -> AstNode {
-        self.build(
-            Ast::Return(node.map(|n| n.into())),
-            self.span_id.clone(), //self.extra_unknown.clone(),
-        )
+        self.build(Ast::Return(node.map(|n| n.into())), self.span_id.clone())
     }
 
     pub fn arg(&self, node: AstNode) -> Argument {
@@ -431,30 +346,17 @@ impl NodeBuilder {
 
     pub fn apply(&self, name: StringKey, args: Vec<Argument>, ty: AstType) -> AstNode {
         let ident = self.ident(name);
-        self.build(
-            Ast::Call(ident.into(), args, ty),
-            //self.extra_unknown.clone(),
-            self.span_id.clone(),
-        )
+        self.build(Ast::Call(ident.into(), args, ty), self.span_id.clone())
     }
 
     pub fn call(&self, f: AstNode, args: Vec<Argument>, ty: AstType) -> AstNode {
-        //let extra = f.extra.clone();
-        self.build(Ast::Call(f.into(), args, ty), self.span_id.clone()) //extra)
+        self.build(Ast::Call(f.into(), args, ty), self.span_id.clone())
     }
 
     pub fn main(&mut self, body: AstNode) -> AstNode {
         let key = self.s("main".into());
         self.func(key, &[], AstType::Int, body)
     }
-
-    /*
-    pub fn mutate(&self, lhs: AstNode<E>, rhs: AstNode<E>) -> AstNode<E> {
-        //let extra = lhs.extra.clone();
-        let span_id = lhs.span_id;
-        self.build(Ast::Mutate(lhs.into(), rhs.into()), span_id)
-    }
-    */
 
     pub fn assign(&self, name: StringKey, rhs: AstNode) -> AstNode {
         self.node(Ast::Assign(AssignTarget::Identifier(name), rhs.into()))
@@ -473,15 +375,15 @@ impl NodeBuilder {
     }
 
     pub fn label(&self, name: StringKey) -> AstNode {
-        self.build(Ast::BlockStart(name, vec![]), self.span_id.clone()) //self.extra_unknown.clone())
+        self.build(Ast::BlockStart(name, vec![]), self.span_id.clone())
     }
 
     pub fn block_start(&self, name: StringKey, params: Vec<ParameterNode>) -> AstNode {
-        self.build(Ast::BlockStart(name, params), self.span_id.clone()) //self.extra_unknown.clone())
+        self.build(Ast::BlockStart(name, params), self.span_id.clone())
     }
 
     pub fn goto(&self, name: StringKey) -> AstNode {
-        self.build(Ast::Goto(name), self.span_id.clone()) //self.extra_unknown.clone())
+        self.build(Ast::Goto(name), self.span_id.clone())
     }
 
     pub fn param(&self, name: StringKey, ty: AstType) -> ParameterNode {
@@ -489,7 +391,6 @@ impl NodeBuilder {
             name,
             ty: ty.clone(),
             node: Parameter::Normal,
-            //extra: self.extra_unknown.clone(),
             span_id: self.span_id.clone(),
         }
     }
@@ -498,256 +399,7 @@ impl NodeBuilder {
         let span_id = body.span_id;
         self.build(Ast::Module(name, body.into()), span_id)
     }
-
-    /*
-    pub fn block(
-        &self,
-        name: StringKey,
-        params: &[(StringKey, AstType)],
-        body: AstNode,
-    ) -> AstNode {
-        //let extra = body.extra.clone();
-        let params = params
-            .iter()
-            .map(|(name, ty)| ParameterNode {
-                name: *name,
-                ty: ty.clone(),
-                node: Parameter::Normal,
-                //extra: self.extra_unknown.clone(),
-                span_id: self.span_id.clone(),
-            })
-            .collect();
-        let nb = AstNodeBlock {
-            name: name.into(),
-            params,
-            children: vec![body],
-        };
-        self.build(Ast::Block(nb), self.span_id.clone()) //extra)
-    }
-    */
-
-    /*
-    pub fn ir_module(&self, label: BlockId, index: NodeIndex, seq: Vec<IRNode>) -> IRNode {
-        IRNode::new(
-            IRKind::Module(IRBlock::new(index, label, vec![], seq)),
-            self.span.clone().unwrap(),
-        )
-    }
-
-    pub fn ir_noop(&self) -> IRNode {
-        IRNode::new(IRKind::Noop, self.span.clone().unwrap())
-    }
-
-    pub fn ir_seq(&self, seq: Vec<IRNode>) -> IRNode {
-        IRNode::new(IRKind::Seq(seq), self.span.clone().unwrap())
-    }
-
-    pub fn ir_ret(&self, seq: Vec<IRNode>) -> IRNode {
-        IRNode::new(IRKind::Ret(seq), self.span.clone().unwrap())
-    }
-
-    pub fn ir_block(
-        &self,
-        label: BlockId,
-        block_index: NodeIndex,
-        args: Vec<IRArg>,
-        seq: Vec<IRNode>,
-    ) -> IRNode {
-        IRNode::new(
-            IRKind::Block(IRBlock::new(block_index, label, args, seq)),
-            self.span.clone().unwrap(),
-        )
-    }
-
-    pub fn ir_label(&self, label: BlockId, block_index: NodeIndex, args: Vec<IRArg>) -> IRNode {
-        IRNode::new(
-            IRKind::Label(label, block_index, args),
-            self.span.clone().unwrap(),
-        )
-    }
-
-    pub fn ir_jump(&self, label: BlockId, args: Vec<IRNode>) -> IRNode {
-        IRNode::new(IRKind::Jump(label, args), self.span.clone().unwrap())
-    }
-
-    pub fn ir_get(&self, place_id: PlaceId, select: IRTypeSelect) -> IRNode {
-        IRNode::new(IRKind::Get(place_id, select), self.span.clone().unwrap())
-    }
-
-    pub fn ir_set(&self, place_id: PlaceId, expr: IRNode, select: IRTypeSelect) -> IRNode {
-        IRNode::new(
-            IRKind::Set(place_id, expr.into(), select),
-            self.span.clone().unwrap(),
-        )
-    }
-
-    pub fn ir_decl(&self, place_id: PlaceId) -> IRNode {
-        IRNode::new(IRKind::Decl(place_id), self.span.clone().unwrap())
-    }
-
-    pub fn ir_call(&self, key: StringLabel, args: Vec<IRNode>) -> IRNode {
-        IRNode::new(IRKind::Call(key, args), self.span.clone().unwrap())
-    }
-
-    pub fn ir_float(&self, f: f64) -> IRNode {
-        IRNode::new(
-            IRKind::Literal(Literal::Float(f)),
-            self.span.clone().unwrap(),
-        )
-    }
-
-    pub fn ir_integer(&self, f: i64) -> IRNode {
-        IRNode::new(IRKind::Literal(Literal::Int(f)), self.span.clone().unwrap())
-    }
-
-    pub fn ir_index(&self, f: usize) -> IRNode {
-        IRNode::new(
-            IRKind::Literal(Literal::Index(f)),
-            self.span.clone().unwrap(),
-        )
-    }
-
-    pub fn ir_bool(&self, f: bool) -> IRNode {
-        IRNode::new(
-            IRKind::Literal(Literal::Bool(f)),
-            self.span.clone().unwrap(),
-        )
-    }
-
-    pub fn ir_string(&self, f: String) -> IRNode {
-        IRNode::new(
-            IRKind::Literal(Literal::String(f)),
-            self.span.clone().unwrap(),
-        )
-    }
-
-    pub fn ir_op1(&self, op: UnaryOperation, v: IRNode) -> IRNode {
-        IRNode::new(IRKind::Op1(op, v.into()), self.span.clone().unwrap())
-    }
-
-    pub fn ir_op2(&self, op: BinaryOperation, a: IRNode, b: IRNode) -> IRNode {
-        IRNode::new(
-            IRKind::Op2(op, a.into(), b.into()),
-            self.span.clone().unwrap(),
-        )
-    }
-
-    pub fn ir_ternary(&self, condition: IRNode, a: IRNode, b: IRNode) -> IRNode {
-        IRNode::new(
-            IRKind::Ternary(condition.into(), a.into(), b.into()),
-            self.span.clone().unwrap(),
-        )
-    }
-
-    pub fn ir_branch(&self, condition: IRNode, then_br: BlockId, else_br: BlockId) -> IRNode {
-        IRNode::new(
-            IRKind::Branch(condition.into(), then_br, else_br),
-            self.span.clone().unwrap(),
-        )
-    }
-
-    pub fn ir_cond(
-        &self,
-        condition: IRNode,
-        then_expr: IRNode,
-        maybe_else_expr: Option<IRNode>,
-    ) -> IRNode {
-        IRNode::new(
-            IRKind::Cond(
-                condition.into(),
-                then_expr.into(),
-                maybe_else_expr.map(|e| e.into()),
-            ),
-            self.span.clone().unwrap(),
-        )
-    }
-    */
 }
-
-/*
-impl<'c, E: Extra> Definition<E> {
-    pub fn normalize2(mut self, b: &mut NodeBuilder<E>) -> Self {
-        // ensure that the function body is a sequence of named blocks
-        if let Some(body) = self.body {
-            let extra = body.extra.clone();
-            // sort body
-            let mut s = crate::sort::AstBlockSorter::new();
-
-            // push label that matches the function signature
-            s.stack.push(b.label(self.name.into(), self.params.clone()));
-            s.sort_children(*body, &self.params, b);
-
-            let mut blocks = vec![];
-
-            // initial nodes form the entry block
-            if s.stack.len() > 0 {
-                // ensure a well formed block
-                // must start with a label and end with a terminator
-                // statements in between should be neither
-                for (i, v) in s.stack.iter().enumerate() {
-                    if i == 0 {
-                        // first
-                        assert!(v.node.is_label());
-                    } else if i + 1 == s.stack.len() {
-                        //last
-                        assert!(v.node.terminator().is_some());
-                    } else {
-                        assert!(v.node.terminator().is_none());
-                        assert_eq!(false, v.node.is_label());
-                    }
-                }
-
-                //let children = s.stack.into_iter().skip(1).collect::<Vec<_>>().drain(..).collect();
-                let children = s.stack;
-                //let seq = b.seq(s.stack).set_extra(extra.clone());
-
-                // TODO: check that function args match the first block args
-                let params = self
-                    .params
-                    .iter()
-                    .map(|p| {
-                        //if let Parameter::Normal = p.node {
-                        ParameterNode {
-                            name: p.name.clone(),
-                            ty: p.ty.clone(),
-                            node: Parameter::Normal,
-                            extra: p.extra.clone(),
-                        }
-                        //} else {
-                        //unreachable!()
-                        //}
-                    })
-                    .collect::<Vec<_>>();
-                let nb = AstNodeBlock {
-                    name: self.name.into(), //StringLabel::Intern(self.name), //b.strings.intern("entry".to_string()),
-                    params,
-                    children,
-                };
-                let node = b.build(Ast::Block(nb), extra.clone());
-                blocks.push(node.into());
-            }
-
-            blocks.extend(s.blocks.into_iter().map(|b| b.into()));
-
-            let mut body = b.seq(blocks.into_iter().collect()).set_extra(extra.clone());
-            body.analyze(b);
-            self.body = Some(body.into());
-        }
-        self
-    }
-}
-*/
-
-/*
-#[cfg(test)]
-mod tests {
-    //use super::*;
-    use test_log::test;
-
-    #[test]
-    fn test_builder() {}
-}
-*/
 
 #[cfg(test)]
 pub(crate) mod tests {

@@ -1,4 +1,3 @@
-use codespan_reporting::diagnostic::{Diagnostic, Label};
 use compile_core::Ast;
 use compile_core::Diagnostics;
 use compile_core::{
@@ -8,6 +7,7 @@ use compile_core::{
     SpanId,
     StringKey,
 };
+use compile_core::{Diagnostic, Label};
 use melior::{ir::Location, Context};
 use std::fmt::Debug;
 

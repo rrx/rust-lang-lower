@@ -9,16 +9,10 @@ edition = "2021"
 #melior = { version = "*", features = ['ods-dialects'] }
 melior = { path = "../../melior/melior", features = ['ods-dialects'] }
 compile_core = { path = "../compile_core" }
-im = "15.1.0"
 log = "0.4"
-miette = "5.10.0"
-codespan-reporting = "*"
 anyhow = "*"
 thiserror = "*"
 petgraph = "0.6.4"
-ena = "*"
-indexmap = "2.1.0"
-serde = "1.0"
 
 [dev-dependencies]
 criterion = "0.3"

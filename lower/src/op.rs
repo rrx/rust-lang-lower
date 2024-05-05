@@ -3,7 +3,7 @@ use compile_core::{Ast, AstNode, AstType, Diagnostics, Literal, ParseError, Span
 
 use anyhow::Error;
 use anyhow::Result;
-use codespan_reporting::diagnostic::Diagnostic;
+use compile_core::Diagnostic;
 use melior::ir::Location;
 use melior::{
     dialect::{
