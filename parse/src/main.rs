@@ -1,25 +1,12 @@
+use argh::FromArgs;
+use simple_logger::{set_up_color_terminal, SimpleLogger};
 use std::error::Error;
 use std::fs::File;
 use std::io::Write;
-//use std::path::Path;
-
-use argh::FromArgs;
-//use melior::ir;
-use simple_logger::{set_up_color_terminal, SimpleLogger};
 
 use lower::default_context;
 
-use compile_core::{
-    //CFGGraph,
-    Diagnostics,
-    //CFG,
-    //LinkOptions,
-    //Extra,
-    //IREnvironment, IRGraph,
-    NodeBuilder,
-    //SimpleExtra,
-};
-//use parse::starlark::Parser;
+use compile_core::{Diagnostics, NodeBuilder};
 use parse::starlark::StarlarkParser;
 
 #[derive(FromArgs, Debug)]
