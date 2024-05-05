@@ -3,7 +3,6 @@ use std::io::prelude::Write;
 use std::path::Path;
 
 use anyhow::Result;
-use codespan_reporting::diagnostic::{Diagnostic, Label};
 
 use starlark_syntax::codemap;
 use starlark_syntax::codemap::CodeMap;
@@ -11,23 +10,11 @@ use starlark_syntax::lexer;
 use starlark_syntax::syntax;
 use starlark_syntax::syntax::module::AstModuleFields;
 
-use compile_core::ast;
 use compile_core::{
-    Argument,
-    AssignTarget,
-    AstType,
-    BinOpNode,
-    CodeLocation,
-    Diagnostics,
-    //Extra,
-    //Module,
-    NodeBuilder,
-    //Span,
-    SpanId,
-    StringKey,
-    TypeUnify,
+    ast, Argument, AssignTarget, Ast, AstNode, AstType, BinOpNode, CodeLocation, Diagnostic,
+    Diagnostics, Label, NodeBuilder, SpanId, StringKey, TypeUnify,
 };
-use compile_core::{Ast, AstNode};
+
 use flat::Blockify;
 
 use lower::LinkOptions;
@@ -158,19 +145,6 @@ impl<'a> Environment<'a> {
         }
     }
 
-    /*
-    pub fn extra<E: Extra>(&self, span: codemap::Span, d: &mut Diagnostics) -> E {
-        let begin = CodeLocation {
-            pos: span.begin().get(),
-        };
-        let end = CodeLocation {
-            pos: span.end().get(),
-        };
-        let span = d.get_span(self.file_id, begin.clone(), end.clone());
-        E::span(span)
-    }
-    */
-
     pub fn span_id(&self, span: codemap::Span, d: &mut Diagnostics) -> SpanId {
         let begin = CodeLocation {
             pos: span.begin().get(),
@@ -180,7 +154,6 @@ impl<'a> Environment<'a> {
         };
         let span = d.get_span(self.file_id, begin.clone(), end.clone());
         span.span_id
-        //E::span(span)
     }
 
     pub fn push_loop(&mut self, name: StringKey) {
@@ -312,14 +285,12 @@ fn from_assign_target<P: syntax::ast::AstPayload>(
 
 pub struct Parser {
     u: TypeUnify,
-    //_e: std::marker::PhantomData<E>,
 }
 
 impl Parser {
     pub fn new() -> Self {
         Self {
             u: TypeUnify::new(),
-            //_e: std::marker::PhantomData::default(),
         }
     }
 
@@ -442,17 +413,13 @@ impl Parser {
                     .into();
 
                 let def_ast = Ast::Definition(ast::Definition {
-                    //name,
                     body: Some(b.seq(body).into()),
                     return_type,
                     params,
-                    //lambda: is_lambda,
                 });
 
                 env.define(name);
                 Ok(b.global(name, b.build(def_ast, span_id)))
-
-                //Ok(b.build(def_ast, span_id))
             }
 
             StmtP::If(expr, truestmt) => {
@@ -788,7 +755,6 @@ struct StatementReader<P: syntax::ast::AstPayload> {
     names: Vec<StringKey>,
     loops: Vec<Vec<AstNode>>,
     seq: Vec<AstNode>,
-    //_e: std::marker::PhantomData<E>,
     _p: std::marker::PhantomData<P>,
 }
 
@@ -798,7 +764,6 @@ impl<P: syntax::ast::AstPayload> StatementReader<P> {
             names: vec![],
             loops: vec![],
             seq: vec![],
-            //_e: std::marker::PhantomData::default(),
             _p: std::marker::PhantomData::default(),
         }
     }
@@ -846,7 +811,6 @@ impl<P: syntax::ast::AstPayload> StatementReader<P> {
         for stmt in stmts {
             if parse.is_extra(&stmt) {
                 let extra = parse.read_extra(stmt, env, d, b)?;
-                //println!("extra: {:?}", extra);
                 match extra {
                     ExtraAst::LoopStart(maybe_key) => {
                         let key = if let Some(key) = maybe_key {
@@ -865,7 +829,7 @@ impl<P: syntax::ast::AstPayload> StatementReader<P> {
                     ExtraAst::BlockEnd => {
                         let ast = reader.end_loop(b);
                         reader.push_ast(ast);
-                    } //_ => unimplemented!()
+                    }
                 }
             } else {
                 reader.push_stmt(stmt, parse, env, d, b)?;
@@ -877,14 +841,12 @@ impl<P: syntax::ast::AstPayload> StatementReader<P> {
 
 #[derive(Default)]
 pub struct StarlarkParser {
-    //_e: std::marker::PhantomData<E>,
     link: LinkOptions,
 }
 
 impl StarlarkParser {
     pub fn new() -> Self {
         Self {
-            //_e: std::marker::PhantomData::default(),
             link: LinkOptions::new(),
         }
     }
@@ -904,31 +866,16 @@ impl StarlarkParser {
         let mut parser = Parser::new();
         let module_key = b.s("module");
         let ast: AstNode = parser.parse(Path::new(filename), None, module_key, file_id, d, b)?;
-        //.normalize(d, b);
         dump::ast::dump(&ast, b);
-
-        let ast_html = dump::ast::dump_html(&ast, b, d);
 
         let mut blockify = Blockify::new();
         let r = blockify.build_module(ast, b, d);
         dump::env::blockify_dump(&blockify, b);
         dump::code::save_graph(&blockify, "out.dot", b);
 
-        let rows = dump::code::get_code_rows(&blockify, b);
         let j = dump::code::get_json(&blockify, b);
         let mut file = std::fs::File::create("blocks.json").unwrap();
         file.write_all(j.as_bytes()).unwrap();
-
-        {
-            // write html for debugging
-            let mut env = minijinja::Environment::new();
-            env.add_template("template", include_str!("template.html"))
-                .unwrap();
-            let tmpl = env.get_template("template").unwrap();
-            let html = tmpl.render(minijinja::context!(code=> ast_html, header => dump::code::CodeRow::header(), rows => rows)).unwrap();
-            let mut file = std::fs::File::create("blocks.html").unwrap();
-            file.write_all(html.as_bytes()).unwrap();
-        }
 
         let module_block_id = r?;
         let mut lower = flat::Lower::new(context, module_block_id);
@@ -979,9 +926,8 @@ impl StarlarkParser {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::StarlarkParser;
-    //use lower::ast::SimpleExtra;
     use lower::Location;
-    //use test_log::test;
+    use test_log::test;
 
     fn run_test_ir(filename: &str, expected: i32) {
         let mut p: StarlarkParser = StarlarkParser::new();

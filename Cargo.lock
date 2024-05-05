@@ -1334,7 +1334,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "argh",
- "codespan-reporting",
  "compile_core",
  "criterion",
  "dump",
@@ -1342,7 +1341,6 @@ dependencies = [
  "flat",
  "log",
  "lower",
- "minijinja",
  "simple_logger",
  "starlark_syntax",
  "test-log",
