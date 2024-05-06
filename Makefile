@@ -1,8 +1,6 @@
 default: run
 
 run:
-	clang-17 -c tests/prelude.c -o target/debug/prelude.o
-	clang-17 -shared tests/prelude.c -o target/debug/prelude.so
 	RUST_BACKTRACE=1 cargo run --bin parse -- -l -v -x \
 		       -o target/debug/out.mlir \
 		       tests/test_global.star
@@ -24,13 +22,15 @@ run:
 		#out.ll
 	./target/debug/out ; echo $$?
 
-test:
+test: examples
 	cargo test -- --nocapture
 fmt:
 	cargo fmt
 
 .PHONY: examples
 examples:
+	clang-17 -c tests/prelude.c -o target/debug/prelude.o
+	clang-17 -shared tests/prelude.c -o target/debug/prelude.so
 	clang-17 -c examples/test.c -o target/debug/test.o
 	clang-17 -S -emit-llvm examples/test.c -o target/debug/test.ll
 	cat target/debug/test.ll

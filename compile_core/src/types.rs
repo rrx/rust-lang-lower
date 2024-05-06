@@ -315,9 +315,9 @@ impl TypeUnify {
         }
     }
 
-    pub fn resolve(&mut self, a: AstType) -> Option<AstType> {
+    pub fn resolve(&mut self, a: &AstType) -> Option<AstType> {
         match a {
-            AstType::Ptr(v) => self.resolve(*v).map(|x| AstType::Ptr(x.into())),
+            AstType::Ptr(v) => self.resolve(v).map(|x| AstType::Ptr(x.into())),
             AstType::Tuple(vs) => {
                 let size = vs.len();
                 let vs2 = vs
@@ -331,7 +331,7 @@ impl TypeUnify {
                 }
             }
             AstType::Func(args, ret) => {
-                if let Some(ret) = self.resolve(*ret) {
+                if let Some(ret) = self.resolve(ret) {
                     let size = args.len();
                     let args2 = args
                         .into_iter()
@@ -347,15 +347,15 @@ impl TypeUnify {
                 }
             }
             AstType::Variable(offset) => {
-                let k = self.variables[offset as usize];
+                let k = self.variables[*offset as usize];
                 let v = self.ut.probe_value(k);
                 if let AstType::Variable(_) = v {
                     None
                 } else {
-                    self.resolve(v)
+                    self.resolve(&v)
                 }
             }
-            _ => Some(a),
+            _ => Some(a.clone()),
         }
     }
 }
@@ -367,22 +367,23 @@ mod tests {
     #[test]
     fn test_stuff1() {
         let mut u = TypeUnify::new();
+
+        // just unify
         let ut0 = u.fresh_unknown();
         let ut1 = u.fresh_unknown();
         let ut2 = AstType::Int;
         u.unify(&ut0, &ut1).unwrap();
         u.unify(&ut1, &ut2).unwrap();
-        assert_eq!(AstType::Int, u.resolve(ut0).unwrap());
-        assert_eq!(AstType::Int, u.resolve(ut1).unwrap());
+        assert_eq!(AstType::Int, u.resolve(&ut0).unwrap());
+        assert_eq!(AstType::Int, u.resolve(&ut1).unwrap());
 
+        // unify float
         let ut3 = u.fresh_unknown();
         let ut4 = AstType::Float;
         u.unify(&ut3, &ut4).unwrap();
+        assert_eq!(AstType::Float, u.resolve(&ut3).unwrap());
 
-        let ut5 = u.fresh_unknown();
-        let ut6 = u.fresh_unknown();
-        u.unify(&ut5, &ut6).unwrap();
-
+        // Test tuple unify
         let ut7 = u.fresh_unknown();
         let ut8 = u.fresh_unknown();
         let ut9 = u.fresh_unknown();
@@ -393,30 +394,38 @@ mod tests {
         let ut13 = u.fresh_unknown();
         u.unify(&ut11, &ut12).unwrap();
         u.unify(&ut12, &ut13).unwrap();
-        println!("ut9 {:?}", u.resolve(ut9));
-        println!("ut10 {:?}", u.resolve(ut10));
-        println!("ut11 {:?}", u.resolve(ut11));
-        println!("ut12 {:?}", u.resolve(ut12));
-        println!("ut13 {:?}", u.resolve(ut13));
+        println!("ut9 {:?}", u.resolve(&ut9));
+        assert_eq!(AstType::Int, u.resolve(&ut9).unwrap());
+        println!("ut10 {:?}", u.resolve(&ut10));
+        println!("ut11 {:?}", u.resolve(&ut11));
+        println!("ut12 {:?}", u.resolve(&ut12));
+        println!("ut13 {:?}", u.resolve(&ut13));
+        assert_eq!(AstType::Int, u.resolve(&ut10).unwrap());
+        assert_eq!(u.resolve(&ut11).unwrap(), u.resolve(&ut12).unwrap());
+        assert_eq!(u.resolve(&ut11).unwrap(), u.resolve(&ut13).unwrap());
 
+        // test ptr unify
         let ut14 = u.fresh_unknown();
         let p0 = AstType::Ptr(ut14.clone().into());
         let p1 = AstType::Ptr(AstType::Int.into());
         u.unify(&p0, &p1).unwrap();
-        println!("{:?}", u.resolve(ut14));
+        println!("{:?}", u.resolve(&ut14));
+        assert_eq!(AstType::Int, u.resolve(&ut14).unwrap());
 
+        // resolve function parameter
         let ut15 = u.fresh_unknown();
         let f0 = AstType::Func(vec![AstType::Int], AstType::Int.into());
         let f1 = AstType::Func(vec![AstType::Float], AstType::Float.into());
         let f2 = AstType::Func(vec![ut15.clone()], AstType::Int.into());
-
         let ut16 = u.fresh_unknown();
-        let f3 = AstType::Func(vec![ut16.clone()], ut16.clone().into());
+        let ut17 = u.fresh_unknown();
+        let f3 = AstType::Func(vec![ut16.clone()], ut17.clone().into());
         assert!(u.unify(&f0, &f2).is_ok());
         assert!(u.unify(&f1, &f2).is_err());
         assert!(u.unify(&f2, &f3).is_ok());
-        assert_eq!(u.resolve(ut15), Some(AstType::Int));
-        assert_eq!(u.resolve(ut16), Some(AstType::Int));
+        assert_eq!(u.resolve(&ut15), Some(AstType::Int));
+        assert_eq!(u.resolve(&ut16), Some(AstType::Int));
+        assert_eq!(u.resolve(&ut17), Some(AstType::Int));
     }
 
     #[test]

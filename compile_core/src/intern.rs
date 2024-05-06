@@ -1,4 +1,3 @@
-//use crate::StringLabel;
 use serde::Serialize;
 use std::fmt::Debug;
 use std::hash::Hash;
