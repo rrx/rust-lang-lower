@@ -893,44 +893,6 @@ impl StarlarkParser {
         Ok(())
     }
 
-    /*
-    pub fn parse_module<'c>(
-        &mut self,
-        filename: &str,
-        context: &'c lower::Context,
-        module: &mut Module<'c>,
-        b: &mut NodeBuilder,
-        d: &mut Diagnostics,
-        _verbose: bool,
-    ) -> Result<()> {
-        log::debug!("parsing: {}", filename);
-        let file_id = d.add_source(filename.to_string(), std::fs::read_to_string(filename)?);
-
-        let mut parser = Parser::new();
-        let module_key = b.s("module");
-        let ast: AstNode = parser.parse(Path::new(filename), None, module_key, file_id, d, b)?;
-        dump::ast::dump(&ast, b);
-
-        let mut blockify = Blockify::new();
-        let r = blockify.build_module(ast, b, d);
-        dump::env::blockify_dump(&blockify, b);
-        dump::code::save_graph(&blockify, "out.dot", b);
-
-        let j = dump::code::get_json(&blockify, b);
-        let mut file = std::fs::File::create("blocks.json").unwrap();
-        file.write_all(j.as_bytes()).unwrap();
-
-        let module_block_id = r?;
-        let mut lower = flat::Lower::new(context, module_block_id);
-        let mut blocks = flat::LowerBlocks::new();
-        blockify.lower_module(&mut lower, &mut blocks, module, b, d)?;
-        for lib in blockify.shared_libraries() {
-            self.link.add_library(&lib);
-        }
-        Ok(())
-    }
-    */
-
     pub fn exec_main<'c>(
         &self,
         context: &lower::Context,

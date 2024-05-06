@@ -97,7 +97,6 @@ pub struct NodeBuilder {
     current_def_id: u32,
     static_count: usize,
     loop_count: usize,
-    //pub span_id: SpanId,
     pub labels: LabelBuilder,
     pub types: TypeBuilder,
     pub builtins: BuiltinBuilder,
@@ -106,7 +105,6 @@ pub struct NodeBuilder {
 impl NodeBuilder {
     pub fn new() -> Self {
         let filename = "";
-        //let span_unknown = d.get_span_unknown();
         let mut s = Self {
             span: None,
             filename: filename.to_string(),
@@ -117,7 +115,6 @@ impl NodeBuilder {
             labels: LabelBuilder::new(),
             types: TypeBuilder::new(),
             builtins: BuiltinBuilder::new(),
-            //span_id: span_unknown.span_id.clone(),
         };
         s.init();
         s
@@ -224,27 +221,9 @@ impl NodeBuilder {
         s
     }
 
-    /*
-    pub fn enter(&mut self, file_id: usize, filename: &str) {
-        let begin = CodeLocation { pos: 0 };
-        let end = CodeLocation { pos: 0 };
-        let span = Span {
-            file_id,
-            begin,
-            end,
-        };
-        self.span = Some(span);
-        self.filename = filename.to_string();
-    }
-    */
-
     pub fn with_loc(&mut self, span: Span) {
         self.span = Some(span);
     }
-
-    //pub fn current_file_id(&self) -> usize {
-    //self.span.as_ref().map(|s| s.file_id).unwrap_or(0)
-    //}
 
     pub fn build(&self, node: Ast, span_id: SpanId) -> AstNode {
         AstNode { node, span_id }
@@ -255,7 +234,6 @@ impl NodeBuilder {
             node: ast,
             span_id: SpanId::unknown(),
         }
-        //self.build(ast, self.span_id.clone())
     }
 
     pub fn error(&self, span_id: SpanId) -> AstNode {
@@ -297,8 +275,6 @@ impl NodeBuilder {
         let s = self.string("prelude");
         let arg = self.arg(s);
         let id = self.builtins.get_id(crate::Builtin::Import);
-
-        //compile_core::Builtin::new("import".to_string(), ty);
         self.node(Ast::Builtin(id, vec![arg]))
     }
 
@@ -514,41 +490,18 @@ pub(crate) mod tests {
             b.assign(x, b.integer(123)),
             b.alloca(x2, b.integer(10)),
             b.while_loop(
-                //b.ne(b.deref_offset(b.ident(x2.into()), 0), b.integer(0)),
                 b.ne(b.ident(x2.into()), b.integer(0)),
                 b.seq(vec![
                     // static variable with local scope
                     b.global(z_static, b.integer(10)),
-                    //b.mutate(b.ident(z_static.into()), b.integer(10)),
                     b.assign(z_static, b.integer(10)),
                     // mutate global variable
-                    b.assign(
-                        z,
-                        //b.subtract(b.deref_offset(b.ident(z.into()), 0), b.integer(1)),
-                        b.subtract(b.ident(z.into()), b.integer(1)),
-                    ),
+                    b.assign(z, b.subtract(b.ident(z.into()), b.integer(1))),
                     // mutate scoped variable
-                    b.assign(
-                        //b.ident(x2.into()),
-                        x2,
-                        //b.subtract(b.deref_offset(b.ident(x2.into()), 0), b.integer(1)),
-                        b.subtract(b.ident(x2.into()), b.integer(1)),
-                    ),
-                    b.assign(
-                        //b.ident(z_static.into()),
-                        z_static,
-                        //b.subtract(b.deref_offset(b.ident(z_static.into()), 0), b.integer(1)),
-                        b.subtract(b.ident(z_static.into()), b.integer(1)),
-                    ),
+                    b.assign(x2, b.subtract(b.ident(x2.into()), b.integer(1))),
+                    b.assign(z_static, b.subtract(b.ident(z_static.into()), b.integer(1))),
                     // assign local
-                    b.assign(
-                        y,
-                        b.subtract(
-                            b.ident(x.into()),
-                            //b.deref_offset(b.ident(z_static.into()), 0),
-                            b.ident(z_static.into()),
-                        ),
-                    ),
+                    b.assign(y, b.subtract(b.ident(x.into()), b.ident(z_static.into()))),
                 ]),
             ),
             b.ret(Some(b.ident(z.into()))),
@@ -576,25 +529,10 @@ pub(crate) mod tests {
                 // using an alloca
                 b.alloca(y, b.ident(arg0.into())),
                 b.cond(
-                    //b.ne(b.deref_offset(b.ident(y.into()), 0), b.integer(0)),
                     b.ne(b.ident(y.into()), b.integer(0)),
                     b.seq(vec![
-                        b.assign(
-                            y,
-                            //b.ident(y.into()),
-                            //b.subtract(b.deref_offset(b.ident(y.into()), 0), b.integer(1)),
-                            b.subtract(b.ident(y.into()), b.integer(1)),
-                        ),
-                        b.assign(
-                            y,
-                            //b.ident(y.into()),
-                            b.apply(
-                                x1.into(),
-                                //vec![b.deref_offset(b.ident(y.into()), 0).into()],
-                                vec![b.ident(y.into()).into()],
-                                t_int,
-                            ),
-                        ),
+                        b.assign(y, b.subtract(b.ident(y.into()), b.integer(1))),
+                        b.assign(y, b.apply(x1.into(), vec![b.ident(y.into()).into()], t_int)),
                     ]),
                     None,
                 ),
@@ -603,7 +541,6 @@ pub(crate) mod tests {
                     b.ne(b.ident(arg0.into()), b.integer(0)),
                     b.seq(vec![b.assign(
                         y,
-                        //b.ident(y.into()),
                         b.apply(
                             x1.into(),
                             vec![b.subtract(b.ident(arg0.into()), b.integer(1).into()).into()],
@@ -612,7 +549,6 @@ pub(crate) mod tests {
                     )]),
                     None,
                 ),
-                //b.ret(Some(b.deref_offset(b.ident(y.into()), 0))),
                 b.ret(Some(b.ident(y.into()))),
             ]),
         ));
