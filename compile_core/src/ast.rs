@@ -1,4 +1,4 @@
-use crate::{AstNode, AstType, SpanId, StringKey, TypeId};
+use crate::{AstNode, AstType, BuiltinId, SpanId, StringKey, TypeId};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum DefinitionId {
@@ -142,39 +142,6 @@ pub enum DerefTarget {
 }
 
 #[derive(Debug, Clone)]
-pub enum Builtin {
-    Assert,
-    Print,
-    Import,
-}
-
-impl Builtin {
-    pub fn from_name(name: &str) -> Option<Builtin> {
-        if name == "check" {
-            Some(Builtin::Assert)
-        } else if name == "print" {
-            Some(Builtin::Print)
-        } else if name == "use" {
-            Some(Builtin::Import)
-        } else {
-            None
-        }
-    }
-
-    pub fn arity(&self) -> usize {
-        match self {
-            Self::Assert => 1,
-            Self::Print => 1,
-            Self::Import => 1,
-        }
-    }
-
-    pub fn get_return_type(&self) -> AstType {
-        AstType::Unit
-    }
-}
-
-#[derive(Debug, Clone)]
 pub enum AssignTarget {
     Identifier(StringKey),
     Alloca(StringKey),
@@ -197,7 +164,7 @@ pub enum Ast {
     Ternary(Box<AstNode>, Box<AstNode>, Box<AstNode>),
     Return(Option<Box<AstNode>>),
     While(Box<AstNode>, Box<AstNode>),
-    Builtin(Builtin, Vec<Argument>),
+    Builtin(BuiltinId, Vec<Argument>),
     Module(StringKey, Box<AstNode>),
     Loop(StringKey, Box<AstNode>),
     Break(Option<StringKey>, Vec<AstNode>),

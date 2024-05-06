@@ -4,7 +4,7 @@ use indexmap::IndexMap;
 use std::collections::HashMap;
 
 use compile_core::{
-    Argument, AssignTarget, Ast, AstNode, AstType, BinaryOperation, Builtin, Definition,
+    Argument, AssignTarget, Ast, AstNode, AstType, BinaryOperation, BuiltinId, Definition,
     Diagnostic, Diagnostics, Label, Literal, ParameterNode, ParseError, Span, SpanId, StringKey,
     UnaryOperation, VarDefinitionSpace,
 };
@@ -12,8 +12,8 @@ use compile_core::{
 use lower::LinkOptions;
 
 use crate::{
-    BlockId, CodeOffset, Environment, NodeBuilder, ScopeId, ScopeType, StringLabel, TemplateId,
-    ValueId,
+    BlockId, Builtin, CodeOffset, Environment, NodeBuilder, ScopeId, ScopeType, StringLabel,
+    TemplateId, ValueId,
 };
 
 #[derive(Debug)]
@@ -60,7 +60,7 @@ pub enum LCode {
     Jump(CodeOffset, u8),
     Branch(ValueId, ValueId, ValueId),
     Ternary(ValueId, ValueId, ValueId), // condition, then_entry, else_entry
-    Builtin(Builtin, u8, u8),
+    Builtin(BuiltinId, u8, u8),
     Call(ValueId, u8, u8),
 }
 
@@ -1217,53 +1217,56 @@ impl Blockify {
                 Ok(AddResult::new(Some(v), false, v_block))
             }
 
-            Ast::Builtin(bi, mut args) => match bi {
-                Builtin::Import => {
-                    let arg = args.pop().unwrap();
-                    if let Some(s) = arg.try_string() {
-                        self.link.add_library(&s);
-                    } else {
-                        let span = d.lookup(node.span_id);
-                        d.push_diagnostic(error("Expected string", span));
+            Ast::Builtin(id, mut args) => {
+                let bi = b.builtins.get_enum(id);
+                match bi {
+                    Builtin::Import => {
+                        let arg = args.pop().unwrap();
+                        if let Some(s) = arg.try_string() {
+                            self.link.add_library(&s);
+                        } else {
+                            let span = d.lookup(node.span_id);
+                            d.push_diagnostic(error("Expected string", span));
+                        }
+                        Ok(AddResult::new(None, false, entry_id))
                     }
-                    Ok(AddResult::new(None, false, entry_id))
-                }
-                _ => {
-                    let _ty = bi.get_return_type();
-                    let args_size = args.len();
-                    assert_eq!(args_size, bi.arity());
-                    let mut values = vec![];
-                    for a in args.into_iter() {
-                        let Argument::Positional(expr) = a;
-                        let r = self.add(entry_id, None, *expr, b, d)?;
-                        let v = r.value_id.unwrap();
-                        let ty = self.get_type(v);
-                        values.push((v, ty));
-                    }
+                    _ => {
+                        let _ty = bi.get_return_type();
+                        let args_size = args.len();
+                        assert_eq!(args_size, bi.arity());
+                        let mut values = vec![];
+                        for a in args.into_iter() {
+                            let Argument::Positional(expr) = a;
+                            let r = self.add(entry_id, None, *expr, b, d)?;
+                            let v = r.value_id.unwrap();
+                            let ty = self.get_type(v);
+                            values.push((v, ty));
+                        }
 
-                    for (v, ty) in values {
-                        self.push_code(
-                            LCode::Value(v),
+                        for (v, ty) in values {
+                            self.push_code(
+                                LCode::Value(v),
+                                node.span_id,
+                                scope_id,
+                                entry_id,
+                                ty,
+                                VarDefinitionSpace::Reg,
+                            );
+                        }
+
+                        let ty = bi.get_return_type();
+                        let value_id = self.push_code(
+                            LCode::Builtin(id, args_size as u8, 0),
                             node.span_id,
                             scope_id,
                             entry_id,
                             ty,
                             VarDefinitionSpace::Reg,
                         );
+                        Ok(AddResult::new(Some(value_id), false, entry_id))
                     }
-
-                    let ty = bi.get_return_type();
-                    let value_id = self.push_code(
-                        LCode::Builtin(bi, args_size as u8, 0),
-                        node.span_id,
-                        scope_id,
-                        entry_id,
-                        ty,
-                        VarDefinitionSpace::Reg,
-                    );
-                    Ok(AddResult::new(Some(value_id), false, entry_id))
                 }
-            },
+            }
 
             Ast::Literal(lit) => {
                 // literal is expression, non-terminal

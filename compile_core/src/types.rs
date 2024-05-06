@@ -4,7 +4,7 @@ use ena::unify::*;
 use serde::Serialize;
 use thiserror::Error;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub struct TypeId(u32);
 
 impl InternValue for AstType {}
@@ -40,6 +40,7 @@ pub enum AstType {
     Unit,
     Never,
     Type,
+    Sum(Vec<AstType>),
     Ptr(Box<AstType>),
     Tuple(Vec<AstType>),
     NamedTuple(Vec<(StringKey, AstType)>),

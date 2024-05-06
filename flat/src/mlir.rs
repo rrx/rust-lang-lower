@@ -1,4 +1,4 @@
-use crate::{Blockify, CodeOffset, LCode, NodeBuilder, StringLabel, ValueId};
+use crate::{Blockify, Builtin, CodeOffset, LCode, NodeBuilder, StringLabel, ValueId};
 use anyhow::Result;
 use indexmap::IndexMap;
 use lower::melior::ir::Location;
@@ -32,7 +32,7 @@ use std::collections::VecDeque;
 
 use lower::op;
 
-use compile_core::{AstType, Builtin, Diagnostics, Span, UnaryOperation, VarDefinitionSpace};
+use compile_core::{AstType, Diagnostics, Span, UnaryOperation, VarDefinitionSpace};
 
 use std::collections::HashMap;
 
@@ -801,9 +801,11 @@ impl Blockify {
             LCode::Value(_) => (),
             LCode::Noop => (),
 
-            LCode::Builtin(bi, num_args, _num_kwargs) => {
+            LCode::Builtin(id, num_args, _num_kwargs) => {
+                let bi = b.builtins.get_enum(*id);
                 let arity = bi.arity();
                 assert_eq!(arity, *num_args as usize);
+
                 match bi {
                     Builtin::Import => {
                         unreachable!()

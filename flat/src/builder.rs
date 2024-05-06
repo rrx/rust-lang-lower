@@ -4,6 +4,8 @@ use compile_core::{
     Parameter, ParameterNode, Span, SpanId, StringKey, StringPool, TypeId, TypePool,
 };
 
+use crate::BuiltinBuilder;
+
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
 pub enum BlockId {
     Name(StringKey),
@@ -98,13 +100,14 @@ pub struct NodeBuilder {
     pub span_id: SpanId,
     pub labels: LabelBuilder,
     pub types: TypeBuilder,
+    pub builtins: BuiltinBuilder,
 }
 
 impl NodeBuilder {
     pub fn new(d: &mut Diagnostics) -> Self {
         let filename = "";
         let span_unknown = d.get_span_unknown();
-        Self {
+        let mut s = Self {
             span: None,
             filename: filename.to_string(),
             current_node_id: 0,
@@ -113,8 +116,31 @@ impl NodeBuilder {
             loop_count: 0,
             labels: LabelBuilder::new(),
             types: TypeBuilder::new(),
+            builtins: BuiltinBuilder::new(),
             span_id: span_unknown.span_id.clone(),
-        }
+        };
+        s.init();
+        s
+    }
+
+    pub fn init(&mut self) {
+        let ty = AstType::Func(vec![AstType::Bool], AstType::Unit.into());
+        let ty = self.t(&ty);
+        let b = compile_core::Builtin::new("check".into(), ty);
+        self.builtins.insert(b);
+
+        let ty = AstType::Func(vec![AstType::String], AstType::Unit.into());
+        let ty = self.t(&ty);
+        let b = compile_core::Builtin::new("use".into(), ty);
+        self.builtins.insert(b);
+
+        let ty = AstType::Func(
+            vec![AstType::Sum(vec![AstType::Int, AstType::Float])],
+            AstType::Unit.into(),
+        );
+        let ty = self.t(&ty);
+        let b = compile_core::Builtin::new("print".into(), ty);
+        self.builtins.insert(b);
     }
 
     pub fn r(&self, key: StringKey) -> &str {
@@ -161,9 +187,12 @@ impl NodeBuilder {
         args: Vec<Argument>,
         span_id: SpanId,
     ) -> Option<AstNode> {
-        if let Some(b) = Builtin::from_name(name) {
+        if let Some(b) = crate::builtin_from_name(name) {
             assert_eq!(b.arity(), args.len());
-            Some(self.build(Ast::Builtin(b, args), span_id))
+            let id = self.builtins.get_id(b);
+            //let b = compile_core::Builtin::new(name.to_string(), ty);
+            //let id = self.builtins.pool.intern(b);
+            Some(self.build(Ast::Builtin(id, args), span_id))
         } else if let Some(ast) = ast_from_name(name, args, self) {
             Some(self.build(ast, span_id))
         } else {
@@ -265,7 +294,10 @@ impl NodeBuilder {
     pub fn import_prelude(&self) -> AstNode {
         let s = self.string("prelude");
         let arg = self.arg(s);
-        self.node(Ast::Builtin(Builtin::Import, vec![arg]))
+        let id = self.builtins.get_id(crate::Builtin::Import);
+
+        //compile_core::Builtin::new("import".to_string(), ty);
+        self.node(Ast::Builtin(id, vec![arg]))
     }
 
     pub fn prelude(&mut self) -> Vec<AstNode> {
