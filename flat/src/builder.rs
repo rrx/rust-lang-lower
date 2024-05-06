@@ -104,7 +104,7 @@ pub struct NodeBuilder {
 }
 
 impl NodeBuilder {
-    pub fn new(_d: &mut Diagnostics) -> Self {
+    pub fn new() -> Self {
         let filename = "";
         //let span_unknown = d.get_span_unknown();
         let mut s = Self {

@@ -928,7 +928,7 @@ pub(crate) mod tests {
     fn run_test_ir(filename: &str, expected: i32) {
         let mut p: StarlarkParser = StarlarkParser::new();
         let mut d = compile_core::Diagnostics::new();
-        let mut b = flat::NodeBuilder::new(&mut d);
+        let mut b = flat::NodeBuilder::new();
         let context = lower::default_context();
         let mut module = lower::Module::new(Location::unknown(&context));
         let r = p.parse_module(filename, &context, &mut module, &mut b, &mut d, true);

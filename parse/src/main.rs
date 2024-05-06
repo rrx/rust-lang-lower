@@ -56,7 +56,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut module = lower::Module::new(location);
     let mut p: StarlarkParser = StarlarkParser::new();
     let mut d = Diagnostics::new();
-    let mut b: NodeBuilder = NodeBuilder::new(&mut d);
+    let mut b: NodeBuilder = NodeBuilder::new();
 
     for filename in config.inputs {
         p.parse_module(
