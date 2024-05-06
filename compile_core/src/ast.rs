@@ -1,4 +1,4 @@
-use crate::{AstNode, AstType, NodeBuilder, SpanId, StringKey, TypeId};
+use crate::{AstNode, AstType, SpanId, StringKey, TypeId};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum DefinitionId {
@@ -247,59 +247,6 @@ impl Ast {
             //Self::Conditional(_, _, _) => true,
             Self::While(_, _) => true,
             _ => false,
-        }
-    }
-
-    pub fn from_name(name: &str, mut args: Vec<Argument>, b: &mut NodeBuilder) -> Option<Self> {
-        if name == "goto" {
-            let rest = args
-                .split_off(1)
-                .into_iter()
-                .map(|a| {
-                    let Argument::Positional(expr) = a;
-                    *expr
-                })
-                .collect::<Vec<_>>();
-            assert_eq!(rest.len(), 0);
-            let s = args.pop().unwrap().try_string().unwrap();
-            let key = b.s(&s);
-            Some(Self::Goto(key.into()))
-        } else if name == "static" {
-            println!("args: {:?}", args);
-            let Argument::Positional(value) = args.pop().unwrap();
-            let Argument::Positional(name_node) = args.pop().unwrap();
-            let name = b.s(&name_node.try_string().unwrap());
-            Some(Self::global(name, *value))
-        } else if name == "label" {
-            let rest = args.split_off(1);
-            let s = args.pop().unwrap().try_string().unwrap();
-            let key = b.s(&s);
-
-            let mut params = vec![];
-            for arg in rest {
-                let Argument::Positional(node) = arg;
-                let name = node.try_string().unwrap();
-                let key = b.s(&name);
-                let ty = b.t(&AstType::Unit);
-                params.push(ParameterNode {
-                    name: key,
-                    ty,
-                    node: Parameter::Normal,
-                    span_id: b.span_id.clone(),
-                });
-            }
-            Some(Self::BlockStart(key.into(), vec![]))
-        } else if name == "ternary" {
-            let Argument::Positional(else_expr) = args.pop().unwrap();
-            let Argument::Positional(then_expr) = args.pop().unwrap();
-            let Argument::Positional(condition) = args.pop().unwrap();
-            Some(Self::Ternary(
-                condition.into(),
-                then_expr.into(),
-                else_expr.into(),
-            ))
-        } else {
-            None
         }
     }
 }
