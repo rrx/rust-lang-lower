@@ -249,11 +249,12 @@ impl NodeBuilder {
             })
             .collect();
 
+        let return_type = self.t(&return_type);
         self.global(
             name,
             self.node(Ast::Definition(Definition {
                 params,
-                return_type: return_type.into(),
+                return_type,
                 body: body.map(|b| b.into()),
             })),
         )

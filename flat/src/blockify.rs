@@ -668,7 +668,8 @@ impl Blockify {
         // return block is the next block
 
         // handle body
-        let return_type = *def.return_type;
+        //let return_type = *def.return_type;
+        let return_type = b.rt(def.return_type).clone();
         let return_type_args = match &return_type {
             AstType::Unit => vec![],
             _ => vec![return_type.clone()],
@@ -721,7 +722,8 @@ impl Blockify {
             })
             .collect();
         //let spans = def.params.iter().map(|p| p.span_id).collect::<Vec<_>>();
-        let ty = AstType::Func(params, def.return_type.clone());
+        let return_type = b.rt(def.return_type).clone();
+        let ty = AstType::Func(params, return_type.clone().into());
 
         if let Some(body) = def.body {
             let body_scope_id = self.env.new_scope(ScopeType::Function);
@@ -739,7 +741,7 @@ impl Blockify {
 
             // return block
             let name = b.s("ret");
-            let return_type = *def.return_type;
+            //let return_type = *def.return_type;
             let args = match &return_type {
                 AstType::Unit => vec![],
                 _ => vec![return_type.clone()],

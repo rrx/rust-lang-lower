@@ -406,15 +406,16 @@ impl Parser {
                 body.extend(self.from_stmt(*def.body, env, b, d)?.to_vec());
 
                 env.exit_func();
+                //let t_unit = b.t(&AstType::Unit);
                 let return_type = def
                     .return_type
                     .map(|ty| from_type(&ty).unwrap_or(AstType::Unit))
-                    .unwrap_or(AstType::Unit)
-                    .into();
+                    .unwrap_or(AstType::Unit);
+                //.into();
 
                 let def_ast = Ast::Definition(ast::Definition {
                     body: Some(b.seq(body).into()),
-                    return_type,
+                    return_type: b.t(&return_type),
                     params,
                 });
 

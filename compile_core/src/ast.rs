@@ -131,7 +131,7 @@ pub struct ParameterNode {
 #[derive(Debug, Clone)]
 pub struct Definition {
     pub params: Vec<ParameterNode>,
-    pub return_type: Box<AstType>,
+    pub return_type: TypeId,
     pub body: Option<Box<AstNode>>,
 }
 
