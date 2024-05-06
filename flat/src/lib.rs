@@ -1,10 +1,12 @@
 pub mod block_format;
 pub mod blockify;
+pub mod builder;
 pub mod graph;
 pub mod mlir;
 pub mod scope;
 
 pub use blockify::{Blockify, LCode};
+pub use builder::*;
 pub use mlir::{Lower, LowerBlocks};
 pub use scope::{Environment, ScopeId, ScopeLayer, ScopeType, Successor, TemplateId};
 

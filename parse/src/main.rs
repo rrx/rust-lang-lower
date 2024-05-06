@@ -6,7 +6,8 @@ use std::io::Write;
 
 use lower::default_context;
 
-use compile_core::{Diagnostics, NodeBuilder};
+use compile_core::Diagnostics;
+use flat::NodeBuilder;
 use parse::starlark::StarlarkParser;
 
 #[derive(FromArgs, Debug)]

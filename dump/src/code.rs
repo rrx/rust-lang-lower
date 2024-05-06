@@ -2,10 +2,9 @@ use compile_core::{
     AstType,
     //Extra,
     Literal,
-    NodeBuilder,
 };
 use flat::block_format::LCodeIterator;
-use flat::{Blockify, CodeOffset, LCode, ValueId};
+use flat::{Blockify, CodeOffset, LCode, NodeBuilder, ValueId};
 use serde::Serialize;
 use tabled::{
     settings::{object::Rows, Border, Style},

@@ -5,13 +5,16 @@ use std::collections::HashMap;
 
 use compile_core::{
     Argument, AssignTarget, Ast, AstNode, AstType, BinaryOperation, Builtin, Definition,
-    Diagnostic, Diagnostics, Label, Literal, NodeBuilder, ParameterNode, ParseError, Span, SpanId,
-    StringKey, StringLabel, UnaryOperation, VarDefinitionSpace,
+    Diagnostic, Diagnostics, Label, Literal, ParameterNode, ParseError, Span, SpanId, StringKey,
+    UnaryOperation, VarDefinitionSpace,
 };
 
 use lower::LinkOptions;
 
-use crate::{BlockId, CodeOffset, Environment, ScopeId, ScopeType, TemplateId, ValueId};
+use crate::{
+    BlockId, CodeOffset, Environment, NodeBuilder, ScopeId, ScopeType, StringLabel, TemplateId,
+    ValueId,
+};
 
 #[derive(Debug)]
 pub struct AstBlock {

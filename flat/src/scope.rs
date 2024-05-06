@@ -1,8 +1,8 @@
 use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
 
-use crate::{BlockId, CodeOffset, ValueId};
-use compile_core::{AstType, StringKey, StringLabel, VarDefinitionSpace};
+use crate::{BlockId, CodeOffset, StringLabel, ValueId};
+use compile_core::{AstType, StringKey, VarDefinitionSpace};
 
 #[derive(Debug, Clone)]
 pub struct Data {

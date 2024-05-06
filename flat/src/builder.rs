@@ -1,6 +1,8 @@
-use crate::ast::*;
-use crate::intern::StringPool;
-use crate::{AstNode, AstType, Diagnostics, Span, SpanId, StringKey, TypeId, TypePool};
+use compile_core::ast::*;
+use compile_core::{
+    Argument, Ast, AstNode, AstType, Builtin, Definition, DefinitionId, Diagnostics, Literal,
+    Parameter, ParameterNode, Span, SpanId, StringKey, StringPool, TypeId, TypePool,
+};
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
 pub enum BlockId {

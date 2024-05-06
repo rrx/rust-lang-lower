@@ -1,4 +1,4 @@
-use crate::{Blockify, CodeOffset, LCode, ValueId};
+use crate::{Blockify, CodeOffset, LCode, NodeBuilder, StringLabel, ValueId};
 use anyhow::Result;
 use indexmap::IndexMap;
 use lower::melior::ir::Location;
@@ -32,10 +32,7 @@ use std::collections::VecDeque;
 
 use lower::op;
 
-use compile_core::{
-    AstType, Builtin, Diagnostics, NodeBuilder, Span, StringLabel, UnaryOperation,
-    VarDefinitionSpace,
-};
+use compile_core::{AstType, Builtin, Diagnostics, Span, UnaryOperation, VarDefinitionSpace};
 
 use std::collections::HashMap;
 

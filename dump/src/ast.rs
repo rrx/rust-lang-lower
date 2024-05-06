@@ -1,13 +1,6 @@
-use compile_core::{
-    Argument,
-    AssignTarget,
-    Ast,
-    AstNode,
-    Diagnostics,
-    //Extra,
-    NodeBuilder,
-    SpanId,
-};
+use compile_core::{Argument, AssignTarget, Ast, AstNode, Diagnostics, SpanId};
+
+use flat::NodeBuilder;
 
 pub fn dump(node: &AstNode, b: &NodeBuilder) {
     let mut out = vec![];

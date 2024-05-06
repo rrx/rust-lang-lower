@@ -1,5 +1,4 @@
 pub mod ast;
-mod builder;
 mod builtin;
 mod diagnostics;
 mod intern;
@@ -8,7 +7,6 @@ mod span;
 mod types;
 
 pub use ast::*;
-pub use builder::*;
 pub use builtin::*;
 pub use diagnostics::*;
 pub use intern::*;

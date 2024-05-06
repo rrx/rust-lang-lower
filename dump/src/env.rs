@@ -1,5 +1,4 @@
-use compile_core::NodeBuilder;
-use flat::{Blockify, Environment};
+use flat::{Blockify, Environment, NodeBuilder};
 
 use tabled::{
     settings::Style,

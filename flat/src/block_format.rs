@@ -1,12 +1,8 @@
 use std::collections::VecDeque;
 
-use compile_core::{
-    //Extra,
-    Literal,
-    NodeBuilder,
-};
+use compile_core::Literal;
 
-use crate::{Blockify, LCode, ValueId};
+use crate::{Blockify, LCode, NodeBuilder, ValueId};
 
 impl Blockify {
     pub fn code_to_string(&self, v: ValueId, b: &NodeBuilder) -> String {

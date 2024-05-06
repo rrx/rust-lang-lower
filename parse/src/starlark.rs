@@ -12,10 +12,10 @@ use starlark_syntax::syntax::module::AstModuleFields;
 
 use compile_core::{
     ast, Argument, AssignTarget, Ast, AstNode, AstType, BinOpNode, CodeLocation, Diagnostic,
-    Diagnostics, Label, NodeBuilder, SpanId, StringKey, TypeUnify,
+    Diagnostics, Label, SpanId, StringKey, TypeUnify,
 };
 
-use flat::Blockify;
+use flat::{Blockify, NodeBuilder};
 
 use lower::LinkOptions;
 use lower::Module;
@@ -930,7 +930,7 @@ pub(crate) mod tests {
     fn run_test_ir(filename: &str, expected: i32) {
         let mut p: StarlarkParser = StarlarkParser::new();
         let mut d = compile_core::Diagnostics::new();
-        let mut b = compile_core::NodeBuilder::new(&mut d);
+        let mut b = flat::NodeBuilder::new(&mut d);
         let context = lower::default_context();
         let mut module = lower::Module::new(Location::unknown(&context));
         let r = p.parse_module(filename, &context, &mut module, &mut b, &mut d, true);

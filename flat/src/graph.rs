@@ -4,7 +4,7 @@ use petgraph::visit::Bfs;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 
-use compile_core::NodeBuilder;
+use crate::NodeBuilder;
 
 use crate::{Blockify, CodeOffset, Successor, ValueId};
 
