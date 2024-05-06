@@ -1,7 +1,7 @@
 use compile_core::ast::*;
 use compile_core::{
-    Argument, Ast, AstNode, AstType, Builtin, Definition, DefinitionId, Diagnostics, Literal,
-    Parameter, ParameterNode, Span, SpanId, StringKey, StringPool, TypeId, TypePool,
+    Argument, Ast, AstNode, AstType, Definition, DefinitionId, Diagnostics, Literal, Parameter,
+    ParameterNode, Span, SpanId, StringKey, StringPool, TypeId, TypePool,
 };
 
 use crate::BuiltinBuilder;
@@ -97,16 +97,16 @@ pub struct NodeBuilder {
     current_def_id: u32,
     static_count: usize,
     loop_count: usize,
-    pub span_id: SpanId,
+    //pub span_id: SpanId,
     pub labels: LabelBuilder,
     pub types: TypeBuilder,
     pub builtins: BuiltinBuilder,
 }
 
 impl NodeBuilder {
-    pub fn new(d: &mut Diagnostics) -> Self {
+    pub fn new(_d: &mut Diagnostics) -> Self {
         let filename = "";
-        let span_unknown = d.get_span_unknown();
+        //let span_unknown = d.get_span_unknown();
         let mut s = Self {
             span: None,
             filename: filename.to_string(),
@@ -117,13 +117,13 @@ impl NodeBuilder {
             labels: LabelBuilder::new(),
             types: TypeBuilder::new(),
             builtins: BuiltinBuilder::new(),
-            span_id: span_unknown.span_id.clone(),
+            //span_id: span_unknown.span_id.clone(),
         };
         s.init();
         s
     }
 
-    pub fn init(&mut self) {
+    fn init(&mut self) {
         let ty = AstType::Func(vec![AstType::Bool], AstType::Unit.into());
         let ty = self.t(&ty);
         let b = compile_core::Builtin::new("check".into(), ty);
@@ -190,8 +190,6 @@ impl NodeBuilder {
         if let Some(b) = crate::builtin_from_name(name) {
             assert_eq!(b.arity(), args.len());
             let id = self.builtins.get_id(b);
-            //let b = compile_core::Builtin::new(name.to_string(), ty);
-            //let id = self.builtins.pool.intern(b);
             Some(self.build(Ast::Builtin(id, args), span_id))
         } else if let Some(ast) = ast_from_name(name, args, self) {
             Some(self.build(ast, span_id))
@@ -244,16 +242,20 @@ impl NodeBuilder {
         self.span = Some(span);
     }
 
-    pub fn current_file_id(&self) -> usize {
-        self.span.as_ref().map(|s| s.file_id).unwrap_or(0)
-    }
+    //pub fn current_file_id(&self) -> usize {
+    //self.span.as_ref().map(|s| s.file_id).unwrap_or(0)
+    //}
 
     pub fn build(&self, node: Ast, span_id: SpanId) -> AstNode {
         AstNode { node, span_id }
     }
 
     pub fn node(&self, ast: Ast) -> AstNode {
-        self.build(ast, self.span_id.clone())
+        AstNode {
+            node: ast,
+            span_id: SpanId::unknown(),
+        }
+        //self.build(ast, self.span_id.clone())
     }
 
     pub fn error(&self, span_id: SpanId) -> AstNode {
@@ -275,7 +277,7 @@ impl NodeBuilder {
                     name: *name,
                     ty,
                     node: Parameter::Normal,
-                    span_id: self.span_id.clone(),
+                    span_id: SpanId::unknown(),
                 }
             })
             .collect();
@@ -327,7 +329,7 @@ impl NodeBuilder {
     }
 
     pub fn binop(&self, op: BinaryOperation, a: AstNode, b: AstNode) -> AstNode {
-        let op_node = BinOpNode::new(op, self.span_id.clone());
+        let op_node = BinOpNode::new(op, SpanId::unknown());
         let ast = Ast::BinaryOp(op_node, a.into(), b.into());
         self.node(ast)
     }
@@ -367,11 +369,11 @@ impl NodeBuilder {
     }
 
     pub fn ident(&self, name: StringKey) -> AstNode {
-        self.build(Ast::Identifier(name), self.span_id.clone())
+        self.node(Ast::Identifier(name))
     }
 
     pub fn global(&self, name: StringKey, value: AstNode) -> AstNode {
-        self.build(Ast::Global(name, value.into()), self.span_id.clone()) //extra)
+        self.node(Ast::Global(name, value.into()))
     }
 
     pub fn while_loop(&self, condition: AstNode, body: AstNode) -> AstNode {
@@ -397,7 +399,7 @@ impl NodeBuilder {
     }
 
     pub fn ret(&self, node: Option<AstNode>) -> AstNode {
-        self.build(Ast::Return(node.map(|n| n.into())), self.span_id.clone())
+        self.node(Ast::Return(node.map(|n| n.into())))
     }
 
     pub fn arg(&self, node: AstNode) -> Argument {
@@ -406,11 +408,11 @@ impl NodeBuilder {
 
     pub fn apply(&self, name: StringKey, args: Vec<Argument>, ty: TypeId) -> AstNode {
         let ident = self.ident(name);
-        self.build(Ast::Call(ident.into(), args, ty), self.span_id.clone())
+        self.node(Ast::Call(ident.into(), args, ty))
     }
 
     pub fn call(&self, f: AstNode, args: Vec<Argument>, ty: TypeId) -> AstNode {
-        self.build(Ast::Call(f.into(), args, ty), self.span_id.clone())
+        self.node(Ast::Call(f.into(), args, ty))
     }
 
     pub fn main(&mut self, body: AstNode) -> AstNode {
@@ -435,15 +437,15 @@ impl NodeBuilder {
     }
 
     pub fn label(&self, name: StringKey) -> AstNode {
-        self.build(Ast::BlockStart(name, vec![]), self.span_id.clone())
+        self.node(Ast::BlockStart(name, vec![]))
     }
 
     pub fn block_start(&self, name: StringKey, params: Vec<ParameterNode>) -> AstNode {
-        self.build(Ast::BlockStart(name, params), self.span_id.clone())
+        self.node(Ast::BlockStart(name, params))
     }
 
     pub fn goto(&self, name: StringKey) -> AstNode {
-        self.build(Ast::Goto(name), self.span_id.clone())
+        self.node(Ast::Goto(name))
     }
 
     pub fn param(&mut self, name: StringKey, ty: AstType) -> ParameterNode {
@@ -452,13 +454,16 @@ impl NodeBuilder {
             name,
             ty: ty.clone(),
             node: Parameter::Normal,
-            span_id: self.span_id.clone(),
+            span_id: SpanId::unknown(),
         }
     }
 
     pub fn module(&self, name: StringKey, body: AstNode) -> AstNode {
         let span_id = body.span_id;
-        self.build(Ast::Module(name, body.into()), span_id)
+        AstNode {
+            node: Ast::Module(name, body.into()),
+            span_id,
+        }
     }
 }
 
@@ -656,7 +661,7 @@ pub fn ast_from_name(name: &str, mut args: Vec<Argument>, b: &mut NodeBuilder) -
                 name: key,
                 ty,
                 node: Parameter::Normal,
-                span_id: b.span_id.clone(),
+                span_id: SpanId::unknown(),
             });
         }
         Some(Ast::BlockStart(key.into(), vec![]))

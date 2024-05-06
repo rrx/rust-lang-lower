@@ -8,6 +8,10 @@ impl SpanId {
         Self(v)
     }
 
+    pub fn unknown() -> Self {
+        Self(0)
+    }
+
     pub fn index(&self) -> usize {
         self.0 as usize
     }
@@ -18,22 +22,32 @@ pub struct CodeLocation {
     pub pos: u32,
 }
 
-#[derive(Debug, Clone)]
-pub struct Span {
-    pub span_id: SpanId,
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct SpanInner {
+    //pub span_id: SpanId,
     pub file_id: usize,
     pub begin: CodeLocation,
     pub end: CodeLocation,
 }
 
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub enum Span {
+    //pub span_id: SpanId,
+    Unknown,
+    Loc(SpanInner),
+}
+
 impl Span {
-    pub fn new(span_id: SpanId, file_id: usize, begin: CodeLocation, end: CodeLocation) -> Self {
-        Self {
-            span_id,
+    pub fn new(file_id: usize, begin: CodeLocation, end: CodeLocation) -> Self {
+        Self::Loc(SpanInner {
+            //span_id,
             file_id,
             begin,
             end,
-        }
+        })
+    }
+    pub fn unknown() -> Self {
+        Self::Unknown
     }
     pub fn to_string(&self) -> String {
         format!("{:?}", self)

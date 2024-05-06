@@ -278,8 +278,8 @@ pub fn build_binop<'c>(
                 d.push_diagnostic(
                     Diagnostic::error()
                         .with_labels(vec![
-                            d.primary(&format!("Type {:?}", a.r#type()), a_span),
-                            d.secondary(&format!("Type: {:?}", b.r#type()), b_span),
+                            d.primary(&format!("Type {:?}", a.r#type()), &a_span.clone()),
+                            d.secondary(&format!("Type: {:?}", b.r#type()), &b_span.clone()),
                         ])
                         .with_message("Type Mispatch"),
                 );

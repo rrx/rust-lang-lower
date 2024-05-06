@@ -1,4 +1,4 @@
-use compile_core::{Argument, AssignTarget, Ast, AstNode, Diagnostics, SpanId};
+use compile_core::{Argument, AssignTarget, Ast, AstNode, Diagnostics, Span, SpanId};
 
 use flat::NodeBuilder;
 
@@ -21,16 +21,29 @@ pub fn dump_html(node: &AstNode, b: &NodeBuilder, d: &Diagnostics) -> String {
     s.push_str("<pre>\n");
     for (depth, content, span_id) in out {
         let span = d.lookup(span_id);
-        s.push_str(&format!(
-            "{:width$}<span span_id=\"{}\" class=\"s{}\" begin=\"{}\" end=\"{}\">{}</span>\n",
-            "",
-            span_id.index(),
-            span_id.index(),
-            span.begin.pos,
-            span.end.pos,
-            content,
-            width = depth * 2
-        ));
+        if let Span::Loc(span) = span {
+            s.push_str(&format!(
+                "{:width$}<span span_id=\"{}\" class=\"s{}\" begin=\"{}\" end=\"{}\">{}</span>\n",
+                "",
+                span_id.index(),
+                span_id.index(),
+                span.begin.pos,
+                span.end.pos,
+                content,
+                width = depth * 2
+            ));
+        } else {
+            s.push_str(&format!(
+                "{:width$}<span span_id=\"{}\" class=\"s{}\" begin=\"{}\" end=\"{}\">{}</span>\n",
+                "",
+                span_id.index(),
+                span_id.index(),
+                0,
+                0,
+                content,
+                width = depth * 2
+            ));
+        }
     }
     s.push_str("</pre>\n");
     s

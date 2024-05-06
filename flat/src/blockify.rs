@@ -84,8 +84,12 @@ impl LCode {
 }
 
 pub fn error(msg: &str, span: Span) -> Diagnostic<usize> {
-    let r = span.begin.pos as usize..span.end.pos as usize;
-    let labels = vec![Label::primary(span.file_id, r).with_message(msg)];
+    let mut labels = vec![];
+    if let Span::Loc(span) = span {
+        let r = span.begin.pos as usize..span.end.pos as usize;
+        labels = vec![Label::primary(span.file_id, r).with_message(msg)];
+    }
+
     let error = Diagnostic::error()
         .with_labels(labels)
         .with_message("error");

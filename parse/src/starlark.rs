@@ -129,8 +129,7 @@ pub fn get_span_id(file_id: usize, span: codemap::Span, d: &mut Diagnostics) -> 
     let end = CodeLocation {
         pos: span.end().get(),
     };
-    let span = d.get_span(file_id, begin.clone(), end.clone());
-    span.span_id
+    d.get_span(file_id, begin.clone(), end.clone())
 }
 
 impl<'a> Environment<'a> {
@@ -152,8 +151,7 @@ impl<'a> Environment<'a> {
         let end = CodeLocation {
             pos: span.end().get(),
         };
-        let span = d.get_span(self.file_id, begin.clone(), end.clone());
-        span.span_id
+        d.get_span(self.file_id, begin.clone(), end.clone())
     }
 
     pub fn push_loop(&mut self, name: StringKey) {
