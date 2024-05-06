@@ -15,7 +15,7 @@ use compile_core::{
     Diagnostics, Label, SpanId, StringKey, TypeUnify,
 };
 
-use flat::{Blockify, NodeBuilder};
+use flat::{Blockify, NodeBuilder, ValueId};
 
 use lower::LinkOptions;
 use lower::Module;
@@ -847,6 +847,53 @@ impl StarlarkParser {
         }
     }
 
+    pub fn parse(
+        &mut self,
+        filename: &str,
+        b: &mut NodeBuilder,
+        d: &mut Diagnostics,
+        _verbose: bool,
+    ) -> Result<(Blockify, ValueId)> {
+        log::debug!("parsing: {}", filename);
+        let file_id = d.add_source(filename.to_string(), std::fs::read_to_string(filename)?);
+
+        let mut parser = Parser::new();
+        let module_key = b.s("module");
+        let ast: AstNode = parser.parse(Path::new(filename), None, module_key, file_id, d, b)?;
+        dump::ast::dump(&ast, b);
+
+        let mut blockify = Blockify::new();
+        let r = blockify.build_module(ast, b, d);
+        dump::env::blockify_dump(&blockify, b);
+        dump::code::save_graph(&blockify, "out.dot", b);
+
+        let j = dump::code::get_json(&blockify, b);
+        let mut file = std::fs::File::create("blocks.json").unwrap();
+        file.write_all(j.as_bytes()).unwrap();
+
+        let module_block_id = r?;
+        Ok((blockify, module_block_id))
+    }
+
+    pub fn lower<'c>(
+        &mut self,
+        blockify: Blockify,
+        module_block_id: ValueId,
+        context: &'c lower::Context,
+        module: &mut Module<'c>,
+        b: &mut NodeBuilder,
+        d: &mut Diagnostics,
+    ) -> Result<()> {
+        let mut lower = flat::Lower::new(context, module_block_id);
+        let mut blocks = flat::LowerBlocks::new();
+        blockify.lower_module(&mut lower, &mut blocks, module, b, d)?;
+        for lib in blockify.shared_libraries() {
+            self.link.add_library(&lib);
+        }
+        Ok(())
+    }
+
+    /*
     pub fn parse_module<'c>(
         &mut self,
         filename: &str,
@@ -882,6 +929,7 @@ impl StarlarkParser {
         }
         Ok(())
     }
+    */
 
     pub fn exec_main<'c>(
         &self,
@@ -931,7 +979,18 @@ pub(crate) mod tests {
         let mut b = flat::NodeBuilder::new();
         let context = lower::default_context();
         let mut module = lower::Module::new(Location::unknown(&context));
-        let r = p.parse_module(filename, &context, &mut module, &mut b, &mut d, true);
+        let result = p.parse(filename, &mut b, &mut d, true);
+        d.dump();
+        let (blockify, module_block_id) = result.unwrap();
+
+        let r = p.lower(
+            blockify,
+            module_block_id,
+            &context,
+            &mut module,
+            &mut b,
+            &mut d,
+        );
         d.dump();
         r.unwrap();
         let verify = module.as_operation().verify();

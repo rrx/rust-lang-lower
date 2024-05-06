@@ -59,14 +59,20 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut b: NodeBuilder = NodeBuilder::new();
 
     for filename in config.inputs {
-        p.parse_module(
-            &filename,
+        let result = p.parse(&filename, &mut b, &mut d, true);
+        d.dump();
+        let (blockify, module_block_id) = result.unwrap();
+
+        let r = p.lower(
+            blockify,
+            module_block_id,
             &context,
             &mut module,
             &mut b,
             &mut d,
-            config.verbose,
-        )?;
+        );
+        d.dump();
+        r?;
     }
 
     if config.verbose {

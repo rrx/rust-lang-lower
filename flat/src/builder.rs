@@ -1,7 +1,7 @@
 use compile_core::ast::*;
 use compile_core::{
-    Argument, Ast, AstNode, AstType, Definition, DefinitionId, Diagnostics, Literal, Parameter,
-    ParameterNode, Span, SpanId, StringKey, StringPool, TypeId, TypePool,
+    Argument, Ast, AstNode, AstType, Definition, DefinitionId, Literal, Parameter, ParameterNode,
+    Span, SpanId, StringKey, StringPool, TypeId, TypePool,
 };
 
 use crate::BuiltinBuilder;
