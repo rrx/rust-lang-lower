@@ -1,4 +1,4 @@
-use crate::{AstNode, AstType, NodeBuilder, SpanId, StringKey};
+use crate::{AstNode, AstType, NodeBuilder, SpanId, StringKey, TypeId};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum DefinitionId {
@@ -31,9 +31,9 @@ impl VarDefinitionSpace {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone)]
 pub struct VarDefinition {
-    ty: AstType,
+    ty: TypeId,
     space: VarDefinitionSpace,
 }
 
@@ -44,7 +44,7 @@ pub enum Literal {
     Float(f64),
     String(String),
     Bool(bool),
-    Type(AstType),
+    Type(TypeId),
 }
 
 impl From<Literal> for AstType {
@@ -123,7 +123,7 @@ pub enum Parameter {
 #[derive(Debug, Clone)]
 pub struct ParameterNode {
     pub name: StringKey,
-    pub ty: AstType,
+    pub ty: TypeId,
     pub node: Parameter,
     pub span_id: SpanId,
 }
@@ -279,9 +279,10 @@ impl Ast {
                 let Argument::Positional(node) = arg;
                 let name = node.try_string().unwrap();
                 let key = b.s(&name);
+                let ty = b.t(&AstType::Unit);
                 params.push(ParameterNode {
                     name: key,
-                    ty: AstType::Unit,
+                    ty,
                     node: Parameter::Normal,
                     span_id: b.span_id.clone(),
                 });

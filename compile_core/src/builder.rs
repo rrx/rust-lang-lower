@@ -1,6 +1,6 @@
 use crate::ast::*;
 use crate::intern::StringPool;
-use crate::{AstNode, AstType, Diagnostics, Span, SpanId, StringKey};
+use crate::{AstNode, AstType, Diagnostics, Span, SpanId, StringKey, TypeId, TypePool};
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
 pub enum BlockId {
@@ -74,6 +74,18 @@ impl LabelBuilder {
     }
 }
 
+pub struct TypeBuilder {
+    pool: TypePool,
+}
+
+impl TypeBuilder {
+    pub fn new() -> Self {
+        Self {
+            pool: TypePool::new(),
+        }
+    }
+}
+
 pub struct NodeBuilder {
     pub span: Option<Span>,
     filename: String,
@@ -83,6 +95,7 @@ pub struct NodeBuilder {
     loop_count: usize,
     pub span_id: SpanId,
     pub labels: LabelBuilder,
+    pub types: TypeBuilder,
 }
 
 impl NodeBuilder {
@@ -97,6 +110,7 @@ impl NodeBuilder {
             static_count: 0,
             loop_count: 0,
             labels: LabelBuilder::new(),
+            types: TypeBuilder::new(),
             span_id: span_unknown.span_id.clone(),
         }
     }
@@ -107,6 +121,14 @@ impl NodeBuilder {
 
     pub fn s(&mut self, s: &str) -> StringKey {
         self.labels.strings.intern(s.into())
+    }
+
+    pub fn t(&mut self, t: &AstType) -> TypeId {
+        self.types.pool.intern(t.clone())
+    }
+
+    pub fn rt(&mut self, id: TypeId) -> &AstType {
+        self.types.pool.resolve(&id)
     }
 
     pub fn resolve_block_label(&self, k: BlockId) -> String {
@@ -208,7 +230,7 @@ impl NodeBuilder {
     }
 
     pub fn definition(
-        &self,
+        &mut self,
         name: StringKey,
         params: &[(StringKey, AstType)],
         return_type: AstType,
@@ -216,11 +238,14 @@ impl NodeBuilder {
     ) -> AstNode {
         let params = params
             .into_iter()
-            .map(|(name, ty)| ParameterNode {
-                name: *name,
-                ty: ty.clone(),
-                node: Parameter::Normal,
-                span_id: self.span_id.clone(),
+            .map(|(name, ty)| {
+                let ty = self.t(ty);
+                ParameterNode {
+                    name: *name,
+                    ty,
+                    node: Parameter::Normal,
+                    span_id: self.span_id.clone(),
+                }
             })
             .collect();
 
@@ -327,7 +352,7 @@ impl NodeBuilder {
     }
 
     pub fn func(
-        &self,
+        &mut self,
         name: StringKey,
         params: &[(StringKey, AstType)],
         return_type: AstType,
@@ -386,7 +411,8 @@ impl NodeBuilder {
         self.build(Ast::Goto(name), self.span_id.clone())
     }
 
-    pub fn param(&self, name: StringKey, ty: AstType) -> ParameterNode {
+    pub fn param(&mut self, name: StringKey, ty: AstType) -> ParameterNode {
+        let ty = self.t(&ty);
         ParameterNode {
             name,
             ty: ty.clone(),

@@ -1,8 +1,24 @@
-use crate::StringKey;
+use crate::{InternKey, InternPool, InternValue, StringKey};
 use anyhow::Result;
 use ena::unify::*;
 use serde::Serialize;
 use thiserror::Error;
+
+#[derive(Debug, Clone, Copy)]
+pub struct TypeId(u32);
+
+impl InternValue for AstType {}
+
+impl InternKey for TypeId {
+    fn index(&self) -> usize {
+        self.0 as usize
+    }
+    fn new(index: usize) -> Self {
+        Self(index as u32)
+    }
+}
+
+pub type TypePool = InternPool<TypeId, AstType>;
 
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub struct IntKey(u32);
@@ -98,27 +114,6 @@ impl AstType {
         }
     }
 }
-
-/*
-#[derive(Default)]
-pub struct TypeBuilder {
-    types: HashMap<SymIndex, (AstType, VarDefinitionSpace)>,
-}
-
-impl TypeBuilder {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn lookup_type(&self, index: SymIndex) -> Option<(AstType, VarDefinitionSpace)> {
-        self.types.get(&index).cloned()
-    }
-
-    pub fn set_type(&mut self, index: SymIndex, ty: AstType, mem: VarDefinitionSpace) {
-        self.types.insert(index, (ty, mem));
-    }
-}
-*/
 
 impl UnifyKey for IntKey {
     type Value = AstType;
@@ -217,27 +212,6 @@ impl UnifyValue for AstType {
 }
 
 pub type TypeUnifyTable = UnificationTable<InPlace<IntKey>>;
-
-/*
-impl AstType {
-    pub fn probe(self, ut: &TypeUnifyTable) -> Self {
-        match self {
-            Self::Ptr(v) => Self::Ptr(v.probe(ut).into()),
-            Self::Tuple(vs) => {
-                let vs = vs.into_iter().map(|v| v.probe(ut).into()).collect();
-                Self::Tuple(vs)
-            }
-            Self::Func(args, ret) => {
-                let ret = ret.probe(ut);
-                let args = args.into_iter().map(|v| v.probe(ut).into()).collect();
-                Self::Func(args, ret.into())
-            }
-            //Self::Variable(_) => self
-            _ => self
-        }
-    }
-}
-*/
 
 pub struct TypeUnify {
     ut: TypeUnifyTable,
@@ -426,97 +400,5 @@ mod tests {
         assert_eq!(u.resolve(&ut15), Some(AstType::Int));
         assert_eq!(u.resolve(&ut16), Some(AstType::Int));
         assert_eq!(u.resolve(&ut17), Some(AstType::Int));
-    }
-
-    #[test]
-    fn test_stuff2() {
-        let mut ut = TypeUnifyTable::new();
-        //let start = ut.snapshot();
-        let k1 = ut.new_key(AstType::unknown(1));
-        let k2 = ut.new_key(AstType::unknown(0));
-        ut.unify_var_var(k1, k2).unwrap();
-        let k3 = ut.new_key(AstType::Int);
-        ut.unify_var_var(k2, k3).unwrap();
-
-        let k4 = ut.new_key(AstType::Float);
-        let ut2 = ut.new_key(AstType::unknown(2));
-        ut.unify_var_var(k4, ut2).unwrap();
-
-        let x3 = ut.new_key(AstType::unknown(3));
-        let x4 = ut.new_key(AstType::unknown(4));
-        ut.unify_var_var(x3, x4).unwrap();
-
-        let ut7 = AstType::unknown(7);
-        let ut8 = AstType::unknown(8);
-        let k7 = ut.new_key(ut7.clone());
-        let k8 = ut.new_key(ut8.clone());
-        ut.unify_var_value(k8, AstType::Float).unwrap();
-        let kt0 = ut.new_key(AstType::Tuple(vec![AstType::unknown(5), AstType::Int, ut7]));
-        let kt1 = ut.new_key(AstType::Tuple(vec![
-            AstType::Float,
-            AstType::unknown(6),
-            ut8,
-        ]));
-        ut.unify_var_var(kt0, kt1).unwrap();
-        ut.unify_var_var(k7, k8).unwrap();
-
-        let ut9 = AstType::unknown(9);
-        let ut10 = AstType::unknown(10);
-        let k9 = ut.new_key(ut9.clone());
-        let k10 = ut.new_key(ut10.clone());
-        let p0 = ut.new_key(AstType::Ptr(ut9.clone().into()));
-        let p1 = ut.new_key(AstType::Ptr(ut10.into()));
-        ut.unify_var_var(p0, p1).unwrap();
-        let p2 = ut.new_key(AstType::Ptr(AstType::Float.into()));
-        ut.unify_var_var(p1, p2).unwrap();
-        let p3 = ut.new_key(AstType::Ptr(ut9.clone().into()));
-        ut.unify_var_var(p2, p3).unwrap();
-
-        let f0 = ut.new_key(AstType::Func(vec![AstType::Int], AstType::Int.into()));
-        let f1 = ut.new_key(AstType::Func(vec![AstType::Float], AstType::Float.into()));
-        let ut11 = AstType::Func(vec![AstType::unknown(11)], AstType::Int.into());
-        let f2 = ut.new_key(ut11);
-        assert!(ut.unify_var_var(f0, f2).is_ok());
-        assert!(ut.unify_var_var(f1, f2).is_err());
-        //ut.vars_since_snapshot(&start)
-        //assert!(ut.unify_var_var(k2, k1).is_ok());
-        //assert!(ut.unify_var_var(k2, k3).is_ok());
-        //assert!(ut.unify_var_var(k4, k5).is_ok());
-        //assert!(ut.unify_var_var(k6, k7).is_ok());
-        //assert!(ut.unify_var_var(k8, k9).is_ok());
-        //assert_eq!(ut.probe_value(k8), AstType::Tuple(vec![AstType::Float, AstType::Int, AstType::Int]));
-
-        //assert!(ut.unify_var_var(k3, k4).is_ok());
-        //assert!(ut.unify_var_value(k1, OrderedRank(3)).is_ok());
-        //ut.union(k1, k2);
-        //println!("{:?}", ut.vars_since_snapshot(&start));
-        //for k in ut.vars_since_snapshot(&start)) {
-        //println!("{} => {:?}", k, ut.probe_value(k));
-        //}
-
-        println!("{:?}", ut.probe_value(k1));
-        println!("{:?}", ut.probe_value(x3));
-        println!("{:?}", ut.probe_value(x4));
-        println!("{:?}", ut.probe_value(kt0));
-        println!("{:?}", ut.probe_value(kt1));
-        println!("k7 {:?}", ut.probe_value(k7));
-        println!("k8 {:?}", ut.probe_value(k8));
-        println!("p0 {:?}", ut.probe_value(p0));
-        println!("p1 {:?}", ut.probe_value(p1));
-        println!("p2 {:?}", ut.probe_value(p2));
-        println!("p3 {:?}", ut.probe_value(p3));
-        println!("k9 {:?}", ut.probe_value(k9));
-        println!("k10 {:?}", ut.probe_value(k10));
-        println!("kt0 {:?}", ut.probe_value(kt0));
-        println!("kt1 {:?}", ut.probe_value(kt1));
-        println!("f2 {:?}", ut.probe_value(f2));
-
-        assert_eq!(ut.probe_value(p0), AstType::Ptr(AstType::Float.into()));
-        //assert_eq!(ut.probe_value(p0).is_unknown(), false);
-        //assert_eq!(ut.probe_value(p1).is_unknown(), false);
-        assert!(ut.probe_value(k1).try_unknown().is_none());
-        assert!(ut.probe_value(ut2).try_unknown().is_none());
-        //assert!(ut.probe_value(x3).try_unknown().is_none());
-        //assert!(ut.probe_value(x4).try_unknown().is_none());
     }
 }

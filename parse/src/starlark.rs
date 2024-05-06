@@ -341,7 +341,7 @@ impl Parser {
                 };
                 ast::ParameterNode {
                     name: b.s(&ident.node.ident),
-                    ty: ty.unwrap(),
+                    ty: b.t(&ty.unwrap()),
                     node: ast::Parameter::Normal,
                     span_id,
                 }
