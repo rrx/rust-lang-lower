@@ -184,7 +184,8 @@ pub enum AssignTarget {
 pub enum Ast {
     BinaryOp(BinOpNode, Box<AstNode>, Box<AstNode>),
     UnaryOp(UnaryOperation, Box<AstNode>),
-    Call(Box<AstNode>, Vec<Argument>, AstType),
+    // func, args, return type
+    Call(Box<AstNode>, Vec<Argument>, TypeId),
     Identifier(StringKey),
     Literal(Literal),
     Sequence(Vec<AstNode>),

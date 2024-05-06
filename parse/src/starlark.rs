@@ -633,6 +633,7 @@ impl Parser {
                 for arg in expr_args {
                     args.push(self.from_argument(arg, env, d, b)?.into());
                 }
+                let t_int = b.t(&AstType::Int);
 
                 match expr.node {
                     ExprP::Identifier(ident) => {
@@ -640,10 +641,8 @@ impl Parser {
                         if let Some(_data) = env.resolve(name) {
                             let ident_span_id = env.span_id(ident.span, d);
                             let ident = b.build(Ast::Identifier(name), ident_span_id);
-                            let ast = b.build(
-                                Ast::Call(ident.into(), args, AstType::Int),
-                                span_id.clone(),
-                            );
+                            let ast =
+                                b.build(Ast::Call(ident.into(), args, t_int), span_id.clone());
                             Ok(ast)
                         } else {
                             d.push_diagnostic(env.error(ident.span, "Not found"));
@@ -657,10 +656,8 @@ impl Parser {
                             if let Some(_data) = env.resolve(key) {
                                 let ident_span_id = env.span_id(ident.span, d);
                                 let ident = b.build(Ast::Identifier(key), ident_span_id);
-                                let ast = b.build(
-                                    Ast::Call(ident.into(), args, AstType::Int),
-                                    span_id.clone(),
-                                );
+                                let ast =
+                                    b.build(Ast::Call(ident.into(), args, t_int), span_id.clone());
                                 Ok(ast)
                             } else if &ident.node.ident == "q" {
                                 // builtin namespace

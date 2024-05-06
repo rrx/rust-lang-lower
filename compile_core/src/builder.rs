@@ -370,12 +370,12 @@ impl NodeBuilder {
         node.into()
     }
 
-    pub fn apply(&self, name: StringKey, args: Vec<Argument>, ty: AstType) -> AstNode {
+    pub fn apply(&self, name: StringKey, args: Vec<Argument>, ty: TypeId) -> AstNode {
         let ident = self.ident(name);
         self.build(Ast::Call(ident.into(), args, ty), self.span_id.clone())
     }
 
-    pub fn call(&self, f: AstNode, args: Vec<Argument>, ty: AstType) -> AstNode {
+    pub fn call(&self, f: AstNode, args: Vec<Argument>, ty: TypeId) -> AstNode {
         self.build(Ast::Call(f.into(), args, ty), self.span_id.clone())
     }
 
@@ -524,6 +524,7 @@ pub(crate) mod tests {
         let z = b.s("z").into();
         let y = b.s("y").into();
         let arg0 = b.s("arg0").into();
+        let t_int = b.t(&AstType::Int);
 
         let mut seq = vec![b.import_prelude()];
         seq.push(b.global(z, b.integer(10)));
@@ -552,7 +553,7 @@ pub(crate) mod tests {
                                 x1.into(),
                                 //vec![b.deref_offset(b.ident(y.into()), 0).into()],
                                 vec![b.ident(y.into()).into()],
-                                AstType::Int,
+                                t_int,
                             ),
                         ),
                     ]),
@@ -567,7 +568,7 @@ pub(crate) mod tests {
                         b.apply(
                             x1.into(),
                             vec![b.subtract(b.ident(arg0.into()), b.integer(1).into()).into()],
-                            AstType::Int,
+                            t_int,
                         ),
                     )]),
                     None,
@@ -578,14 +579,8 @@ pub(crate) mod tests {
         ));
 
         seq.push(b.main(b.seq(vec![
-            b.assign(
-                x,
-                b.apply(x1.into(), vec![b.integer(10).into()], AstType::Int),
-            ),
-            b.assign(
-                x,
-                b.apply(x1.into(), vec![b.integer(0).into()], AstType::Int),
-            ),
+            b.assign(x, b.apply(x1.into(), vec![b.integer(10).into()], t_int)),
+            b.assign(x, b.apply(x1.into(), vec![b.integer(0).into()], t_int)),
             b.ret(Some(b.ident(x.into()))),
         ])));
         b.seq(seq)
