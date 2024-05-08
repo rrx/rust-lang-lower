@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
   "lower",
+  "lower_mlir",
   "parse",
   "flat",
   "dump",

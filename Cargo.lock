@@ -1128,6 +1128,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "lower_mlir"
+version = "0.1.0"
+dependencies = [
+ "compile_core",
+ "flat",
+ "melior",
+]
+
+[[package]]
 name = "lsp-types"
 version = "0.94.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
