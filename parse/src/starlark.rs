@@ -234,8 +234,6 @@ fn from_literal(
         //_ => env.unimplemented(span),
         _ => unimplemented!("{:?}", item),
     };
-    //let extra = env.extra(span, d);
-    //get_span_id(
 
     let span_id = env.span_id(span, b);
     b.build(Ast::Literal(lit), span_id)
@@ -297,10 +295,8 @@ impl Parser {
         content: Option<&str>,
         module_key: StringKey,
         file_id: usize,
-        //d: &mut Diagnostics,
         b: &mut NodeBuilder,
     ) -> Result<compile_core::AstNode> {
-        //b.enter(file_id, path.to_str().unwrap());
         let dialect = syntax::Dialect::Extended;
         let m = match content {
             Some(content) => {
@@ -854,7 +850,6 @@ impl StarlarkParser {
         _verbose: bool,
     ) -> Result<(Blockify, ValueId)> {
         log::debug!("parsing: {}", filename);
-        //let file_id = d.add_source(filename.to_string(), std::fs::read_to_string(filename)?);
         let file_id = b
             .spans
             .add_source(filename.to_string(), std::fs::read_to_string(filename)?);
