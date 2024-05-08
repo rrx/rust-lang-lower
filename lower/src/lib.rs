@@ -1,7 +1,7 @@
 pub mod ast;
 pub mod compile;
 pub mod link;
-pub mod op;
+//pub mod op;
 
 pub use compile::{default_context, default_pass_manager};
 pub use link::LinkOptions;

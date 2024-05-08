@@ -1,4 +1,4 @@
-use compile_core::{Argument, AssignTarget, Ast, AstNode, Diagnostics, Span, SpanId};
+use compile_core::{Argument, AssignTarget, Ast, AstNode, Span, SpanId};
 
 use flat::NodeBuilder;
 
@@ -14,13 +14,13 @@ pub fn print_with_indent(s: &str, depth: usize) {
     println!("{:width$}{}", "", s, width = depth * 2);
 }
 
-pub fn dump_html(node: &AstNode, b: &NodeBuilder, d: &Diagnostics) -> String {
+pub fn dump_html(node: &AstNode, b: &NodeBuilder) -> String {
     let mut out = vec![];
     dump_strings(node, b, &mut out, 0);
     let mut s = String::new();
     s.push_str("<pre>\n");
     for (depth, content, span_id) in out {
-        let span = d.lookup(span_id);
+        let span = b.spans.lookup(span_id);
         if let Span::Loc(span) = span {
             s.push_str(&format!(
                 "{:width$}<span span_id=\"{}\" class=\"s{}\" begin=\"{}\" end=\"{}\">{}</span>\n",

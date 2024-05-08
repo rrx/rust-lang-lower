@@ -4,6 +4,7 @@ pub mod builder;
 pub mod builtin;
 pub mod graph;
 pub mod mlir;
+pub mod op;
 pub mod scope;
 
 pub use blockify::{Blockify, LCode};

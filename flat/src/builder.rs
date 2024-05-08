@@ -1,7 +1,7 @@
 use compile_core::ast::*;
 use compile_core::{
     Argument, Ast, AstNode, AstType, Definition, DefinitionId, Literal, Parameter, ParameterNode,
-    Span, SpanId, StringKey, StringPool, TypeId, TypePool,
+    SpanBuilder, SpanId, StringKey, StringPool, TypeId, TypePool,
 };
 
 use crate::BuiltinBuilder;
@@ -91,7 +91,6 @@ impl TypeBuilder {
 }
 
 pub struct NodeBuilder {
-    pub span: Option<Span>,
     filename: String,
     current_node_id: u32,
     current_def_id: u32,
@@ -100,13 +99,13 @@ pub struct NodeBuilder {
     pub labels: LabelBuilder,
     pub types: TypeBuilder,
     pub builtins: BuiltinBuilder,
+    pub spans: SpanBuilder,
 }
 
 impl NodeBuilder {
     pub fn new() -> Self {
         let filename = "";
         let mut s = Self {
-            span: None,
             filename: filename.to_string(),
             current_node_id: 0,
             current_def_id: 0,
@@ -115,6 +114,7 @@ impl NodeBuilder {
             labels: LabelBuilder::new(),
             types: TypeBuilder::new(),
             builtins: BuiltinBuilder::new(),
+            spans: SpanBuilder::new(),
         };
         s.init();
         s
@@ -219,10 +219,6 @@ impl NodeBuilder {
         let s = format!("__static_x{}", self.static_count);
         self.static_count += 1;
         s
-    }
-
-    pub fn with_loc(&mut self, span: Span) {
-        self.span = Some(span);
     }
 
     pub fn build(&self, node: Ast, span_id: SpanId) -> AstNode {

@@ -6,7 +6,6 @@ use std::io::Write;
 
 use lower::default_context;
 
-use compile_core::Diagnostics;
 use flat::NodeBuilder;
 use parse::starlark::StarlarkParser;
 
@@ -55,23 +54,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     let location = lower::Location::unknown(&context);
     let mut module = lower::Module::new(location);
     let mut p: StarlarkParser = StarlarkParser::new();
-    let mut d = Diagnostics::new();
     let mut b: NodeBuilder = NodeBuilder::new();
 
     for filename in config.inputs {
-        let result = p.parse(&filename, &mut b, &mut d, true);
-        d.dump();
+        let result = p.parse(&filename, &mut b, true);
+        b.spans.diagnostics_dump();
         let (blockify, module_block_id) = result.unwrap();
 
-        let r = p.lower(
-            blockify,
-            module_block_id,
-            &context,
-            &mut module,
-            &mut b,
-            &mut d,
-        );
-        d.dump();
+        let r = p.lower(blockify, module_block_id, &context, &mut module, &mut b);
+        b.spans.diagnostics_dump();
         r?;
     }
 

@@ -813,6 +813,7 @@ dependencies = [
  "compile_core",
  "indexmap",
  "lower",
+ "melior",
  "minijinja",
  "petgraph",
  "serde",

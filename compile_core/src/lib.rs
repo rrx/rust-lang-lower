@@ -1,6 +1,6 @@
 pub mod ast;
 mod builtin;
-mod diagnostics;
+mod errors;
 mod intern;
 mod node;
 mod span;
@@ -8,7 +8,7 @@ mod types;
 
 pub use ast::*;
 pub use builtin::*;
-pub use diagnostics::*;
+pub use errors::*;
 pub use intern::*;
 pub use node::*;
 pub use span::*;

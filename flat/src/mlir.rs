@@ -30,9 +30,9 @@ use lower::melior::{
 };
 use std::collections::VecDeque;
 
-use lower::op;
+use crate::op;
 
-use compile_core::{AstType, Diagnostics, Span, UnaryOperation, VarDefinitionSpace};
+use compile_core::{AstType, Span, UnaryOperation, VarDefinitionSpace};
 
 use std::collections::HashMap;
 
@@ -251,11 +251,11 @@ impl Blockify {
         &self,
         value_id: ValueId,
         context: &'c Context,
-        d: &Diagnostics,
+        b: &NodeBuilder,
     ) -> Location<'c> {
         let span_id = self.get_span_id(value_id);
-        let span = d.lookup(span_id);
-        let location = diagnostics_location(d, context, &span);
+        let span = b.spans.lookup(span_id);
+        let location = diagnostics_location(b, context, &span);
         location
     }
 
@@ -265,12 +265,12 @@ impl Blockify {
         v: ValueId,
         num_args: usize,
         num_kwargs: usize,
-        d: &Diagnostics,
+        b: &NodeBuilder,
     ) -> Vec<(Type<'c>, Location<'c>)> {
         let mut current = v;
         let mut out = vec![];
         for _ in 0..num_args {
-            let location = self.get_location(current, context, d);
+            let location = self.get_location(current, context, b);
 
             let next = self.get_next(current).unwrap();
             let ty = op::from_type(context, &self.get_type(next));
@@ -278,7 +278,7 @@ impl Blockify {
             out.push((ty, location));
         }
         for _ in 0..num_kwargs {
-            let location = self.get_location(current, context, d);
+            let location = self.get_location(current, context, b);
             let next = self.get_next(current).unwrap();
             let ty = op::from_type(context, &self.get_type(next));
             current = next;
@@ -304,7 +304,7 @@ impl Blockify {
         lower: &mut Lower<'c>,
         blocks: &mut LowerBlocks<'c>,
         entry_id: ValueId,
-        d: &Diagnostics,
+        b: &NodeBuilder,
     ) {
         let code = self.get_code(entry_id);
         if let LCode::Label(num_args, num_kwargs) = code {
@@ -313,7 +313,7 @@ impl Blockify {
                 entry_id,
                 *num_args as usize,
                 *num_kwargs as usize,
-                d,
+                b,
             );
             let block = Block::new(&args);
             let c = OpCollection::new(entry_id, block);
@@ -330,7 +330,7 @@ impl Blockify {
         v: ValueId,
         target_value_id: ValueId,
         num_args: u8,
-        d: &mut Diagnostics,
+        b: &NodeBuilder,
     ) -> Result<()> {
         let block_id = self.get_entry_id(v);
         let values = self.get_previous_values(v, num_args as usize);
@@ -344,7 +344,7 @@ impl Blockify {
         let arg_count = c.block.as_ref().unwrap().argument_count();
         assert_eq!(arg_count, num_args as usize);
 
-        let location = self.get_location(v, lower.context, d);
+        let location = self.get_location(v, lower.context, b);
         let op = cf::br(&c.block.as_ref().unwrap(), &rs, location);
         let c = blocks.blocks.get_mut(&block_id).unwrap();
 
@@ -359,11 +359,10 @@ impl Blockify {
         blocks: &mut LowerBlocks<'c>,
         v: ValueId,
         stack: &mut Vec<ValueId>,
-        b: &NodeBuilder,
-        d: &mut Diagnostics,
+        b: &mut NodeBuilder,
     ) -> Result<()> {
         let code = self.get_code(v);
-        let location = self.get_location(v, lower.context, d);
+        let location = self.get_location(v, lower.context, b);
 
         match code {
             LCode::Label(_num_args, _num_kwargs) => {
@@ -380,7 +379,7 @@ impl Blockify {
 
             LCode::Jump(target, num_args) => match target {
                 CodeOffset::Value(target_value_id) => {
-                    self.lower_jump(lower, blocks, v, *target_value_id, *num_args, d)?;
+                    self.lower_jump(lower, blocks, v, *target_value_id, *num_args, b)?;
                 }
                 CodeOffset::Block(target_block_id) => {
                     let target_entry_id = self
@@ -388,7 +387,7 @@ impl Blockify {
                         .get_block_by_block_id(*target_block_id)
                         .entry_id
                         .unwrap();
-                    self.lower_jump(lower, blocks, v, target_entry_id, *num_args, d)?;
+                    self.lower_jump(lower, blocks, v, target_entry_id, *num_args, b)?;
                 }
             },
 
@@ -486,13 +485,13 @@ impl Blockify {
                     // create blocks
                     for block_id in block_ids.iter() {
                         let entry_id = self.env.resolve_code_offset(*block_id);
-                        self.create_block(lower, blocks, entry_id, d);
+                        self.create_block(lower, blocks, entry_id, b);
                     }
 
                     // lower
                     for block_id in block_ids.iter() {
                         let entry_id = self.env.resolve_code_offset(*block_id);
-                        self.lower_block(entry_id, lower, blocks, stack, b, d)?;
+                        self.lower_block(entry_id, lower, blocks, stack, b)?;
                     }
 
                     // append blocks to region
@@ -676,8 +675,8 @@ impl Blockify {
                 let block_id = self.get_entry_id(v);
                 let x_span_id = self.get_span_id(*x);
                 let y_span_id = self.get_span_id(*y);
-                let x_span = d.lookup(x_span_id);
-                let y_span = d.lookup(y_span_id);
+                let x_span = b.spans.lookup(x_span_id);
+                let y_span = b.spans.lookup(y_span_id);
                 let x_index = self.resolve_value(lower, *x).unwrap();
                 let r_x = blocks.value0(x_index);
                 let y_index = self.resolve_value(lower, *y).unwrap();
@@ -690,7 +689,7 @@ impl Blockify {
                     r_y,
                     &y_span,
                     location,
-                    d,
+                    b,
                 )?;
                 let c = blocks.blocks.get_mut(&block_id).unwrap();
                 let index = c.push(op);
@@ -735,11 +734,11 @@ impl Blockify {
 
                 for block_id in then_block_ids.iter() {
                     let entry_id = self.env.resolve_code_offset(*block_id);
-                    self.create_block(lower, blocks, entry_id, d);
+                    self.create_block(lower, blocks, entry_id, b);
                 }
                 for block_id in then_block_ids.iter() {
                     let entry_id = self.env.resolve_code_offset(*block_id);
-                    self.lower_block(entry_id, lower, blocks, stack, b, d)?;
+                    self.lower_block(entry_id, lower, blocks, stack, b)?;
                 }
 
                 let c = blocks.blocks.get_mut(&then_block_id).unwrap();
@@ -757,11 +756,11 @@ impl Blockify {
 
                 for block_id in else_block_ids.iter() {
                     let entry_id = self.env.resolve_code_offset(*block_id);
-                    self.create_block(lower, blocks, entry_id, d);
+                    self.create_block(lower, blocks, entry_id, b);
                 }
                 for block_id in else_block_ids.iter() {
                     let entry_id = self.env.resolve_code_offset(*block_id);
-                    self.lower_block(entry_id, lower, blocks, stack, b, d)?;
+                    self.lower_block(entry_id, lower, blocks, stack, b)?;
                 }
 
                 let c = blocks.blocks.get_mut(&else_block_id).unwrap();
@@ -868,13 +867,12 @@ impl Blockify {
         lower: &mut Lower<'c>,
         blocks: &mut LowerBlocks<'c>,
         stack: &mut Vec<ValueId>,
-        b: &NodeBuilder,
-        d: &mut Diagnostics,
+        b: &mut NodeBuilder,
     ) -> Result<()> {
         let mut current = block_id;
         stack.push(block_id);
         loop {
-            self.lower_code(lower, blocks, current, stack, b, d)?;
+            self.lower_code(lower, blocks, current, stack, b)?;
             if let Some(next) = self.get_next(current) {
                 current = next;
             } else {
@@ -892,8 +890,7 @@ impl Blockify {
         lower: &mut Lower<'c>,
         blocks: &mut LowerBlocks<'c>,
         stack: &mut Vec<ValueId>,
-        b: &NodeBuilder,
-        d: &mut Diagnostics,
+        b: &mut NodeBuilder,
     ) -> Result<()> {
         // reorder things, so we lower declarations last
         let mut current = module_block_id;
@@ -915,7 +912,7 @@ impl Blockify {
         }
 
         for current in values {
-            self.lower_code(lower, blocks, current, stack, b, d)?;
+            self.lower_code(lower, blocks, current, stack, b)?;
         }
 
         blocks.blocks.get_mut(&module_block_id).unwrap().complete = true;
@@ -928,13 +925,12 @@ impl Blockify {
         lower: &mut Lower<'c>,
         blocks: &mut LowerBlocks<'c>,
         module: &mut lower::Module,
-        b: &NodeBuilder,
-        d: &mut Diagnostics,
+        b: &mut NodeBuilder,
     ) -> Result<()> {
         let module_block_id = lower.module_block_id;
         let mut stack = vec![];
-        self.create_block(lower, blocks, module_block_id, d);
-        self.lower_static_block(module_block_id, lower, blocks, &mut stack, b, d)?;
+        self.create_block(lower, blocks, module_block_id, b);
+        self.lower_static_block(module_block_id, lower, blocks, &mut stack, b)?;
         let block = blocks.blocks.get_mut(&module_block_id).unwrap();
         for op in block.take_ops() {
             module.body().append_operation(op);
@@ -991,12 +987,12 @@ pub fn build_declare_function<'c>(
 }
 
 pub fn diagnostics_location<'c>(
-    d: &Diagnostics,
+    b: &NodeBuilder,
     context: &'c Context,
     span: &Span,
 ) -> ir::Location<'c> {
-    if let Ok(name) = d.get_filename(span) {
-        let loc = d.get_location(span).unwrap();
+    if let Ok(name) = b.spans.get_filename(span) {
+        let loc = b.spans.get_location(span).unwrap();
         ir::Location::new(context, &name, loc.line_number, loc.column_number)
     } else {
         ir::Location::unknown(context)
