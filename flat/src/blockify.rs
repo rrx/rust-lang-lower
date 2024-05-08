@@ -36,6 +36,47 @@ impl BlockLayer {
     }
 }
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub enum SymIndex {
+    Op(ValueId, usize),
+    Arg(ValueId, usize),
+    Def(ValueId, usize),
+}
+
+impl SymIndex {
+    pub fn block(&self) -> ValueId {
+        match self {
+            SymIndex::Op(block_index, _)
+            | SymIndex::Arg(block_index, _)
+            | SymIndex::Def(block_index, _) => *block_index,
+        }
+    }
+
+    pub fn offset(&self) -> usize {
+        match self {
+            SymIndex::Op(_, offset) | SymIndex::Arg(_, offset) | SymIndex::Def(_, offset) => {
+                *offset
+            }
+        }
+    }
+
+    pub fn is_op(&self) -> bool {
+        if let SymIndex::Op(_, _) = self {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn is_arg(&self) -> bool {
+        if let SymIndex::Arg(_, _) = self {
+            true
+        } else {
+            false
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct LoopLayer {
     next: ValueId,
@@ -256,6 +297,30 @@ impl Blockify {
             Some(prev)
         } else {
             None
+        }
+    }
+
+    pub fn get_previous_values(&self, v: ValueId, num: usize) -> Vec<ValueId> {
+        let mut values = vec![];
+        for i in 0..num {
+            let v = ValueId((v.0 as usize - num + i) as u32);
+            let code = self.get_code(v);
+            if let LCode::Value(value_id) = code {
+                values.push(*value_id);
+            }
+        }
+        values
+    }
+
+    pub fn resolve_declaration<'c>(&self, value_id: ValueId) -> Option<ValueId> {
+        let mut current = value_id;
+        loop {
+            let code = self.get_code(current);
+            if let LCode::Value(next_value_id) = code {
+                current = *next_value_id;
+            } else {
+                return Some(current);
+            }
         }
     }
 

@@ -10,3 +10,8 @@ melior = { path = "../../melior/melior", features = ['ods-dialects'] }
 compile_core = { path = "../compile_core" }
 flat = { path = "../flat" }
 
+anyhow = "*"
+thiserror = "*"
+tabled = "0.15.0"
+indexmap = "2.1.0"
+

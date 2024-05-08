@@ -1131,9 +1131,13 @@ dependencies = [
 name = "lower_mlir"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "compile_core",
  "flat",
+ "indexmap",
  "melior",
+ "tabled",
+ "thiserror",
 ]
 
 [[package]]
@@ -1358,6 +1362,7 @@ dependencies = [
  "flat",
  "log",
  "lower",
+ "lower_mlir",
  "simple_logger",
  "starlark_syntax",
  "test-log",

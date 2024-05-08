@@ -10,6 +10,7 @@ lower = { path = "../lower" }
 flat = { path = "../flat" }
 dump = { path = "../dump" }
 compile_core = { path = "../compile_core" }
+lower_mlir = { path = "../lower_mlir" }
 
 starlark_syntax = { git = "https://github.com/facebookexperimental/starlark-rust.git", branch = "main" }
 log = "*"
