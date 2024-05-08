@@ -114,6 +114,7 @@ impl Diagnostics {
         self.diagnostics.push(d);
     }
 
+    /*
     pub fn enter(&mut self, span: Span) {
         self.stack.push(span);
     }
@@ -121,6 +122,7 @@ impl Diagnostics {
     pub fn exit(&mut self) {
         self.stack.pop();
     }
+    */
 
     pub fn emit_string(&self, d: Diagnostic<usize>) -> String {
         let config = codespan_reporting::term::Config::default();

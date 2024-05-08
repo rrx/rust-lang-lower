@@ -65,6 +65,53 @@ impl InternKey for SpanId {
 
 pub type SpanPool = InternPool<SpanId, Span>;
 
+pub struct SpanBuilder {
+    pool: SpanPool,
+}
+
+impl SpanBuilder {
+    pub fn new() -> Self {
+        Self {
+            pool: SpanPool::new(),
+        }
+    }
+
+    /*
+    pub fn get_filename(&self, span: &Span) -> Result<String, codespan_reporting::files::Error> {
+        if let Span::Loc(span) = span {
+            self.files.name(span.file_id)
+        } else {
+            Ok("unknown".into())
+        }
+    }
+
+
+    pub fn get_location(
+        &self,
+        span: &Span,
+    ) -> Result<codespan_reporting::files::Location, codespan_reporting::files::Error> {
+        if let Span::Loc(span) = span {
+            self.files.location(span.file_id, span.begin.pos as usize)
+        } else {
+            self.files.location(0, 0)
+        }
+    }
+
+    */
+    pub fn get_span_unknown(&mut self) -> SpanId {
+        self.get_span(0, CodeLocation::default(), CodeLocation::default())
+    }
+
+    pub fn lookup(&self, span_id: SpanId) -> Span {
+        self.pool.resolve(&span_id).clone()
+    }
+
+    pub fn get_span(&mut self, file_id: usize, begin: CodeLocation, end: CodeLocation) -> SpanId {
+        let v = Span::new(file_id, begin, end);
+        self.pool.intern(v)
+    }
+}
+
 pub type Spanned<T> = (T, SpanId);
 
 #[derive(Debug)]
