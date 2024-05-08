@@ -1,3 +1,4 @@
+use crate::{InternKey, InternPool, InternValue};
 use std::error;
 use std::fmt;
 
@@ -24,7 +25,6 @@ pub struct CodeLocation {
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct SpanInner {
-    //pub span_id: SpanId,
     pub file_id: usize,
     pub begin: CodeLocation,
     pub end: CodeLocation,
@@ -32,7 +32,6 @@ pub struct SpanInner {
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Span {
-    //pub span_id: SpanId,
     Unknown,
     Loc(SpanInner),
 }
@@ -40,7 +39,6 @@ pub enum Span {
 impl Span {
     pub fn new(file_id: usize, begin: CodeLocation, end: CodeLocation) -> Self {
         Self::Loc(SpanInner {
-            //span_id,
             file_id,
             begin,
             end,
@@ -53,6 +51,19 @@ impl Span {
         format!("{:?}", self)
     }
 }
+
+impl InternValue for Span {}
+
+impl InternKey for SpanId {
+    fn index(&self) -> usize {
+        self.0 as usize
+    }
+    fn new(index: usize) -> Self {
+        Self(index as u32)
+    }
+}
+
+pub type SpanPool = InternPool<SpanId, Span>;
 
 pub type Spanned<T> = (T, SpanId);
 

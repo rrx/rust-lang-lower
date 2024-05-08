@@ -4,10 +4,9 @@ use codespan_reporting::files::SimpleFiles;
 use codespan_reporting::term;
 use codespan_reporting::term::termcolor::{BufferWriter, ColorChoice, StandardStream};
 
-use indexmap::IndexSet;
 use thiserror::Error;
 
-use crate::{CodeLocation, Span, SpanId};
+use crate::{CodeLocation, Span, SpanId, SpanPool};
 
 pub type FileDB = SimpleFiles<String, String>;
 
@@ -22,7 +21,7 @@ pub struct Diagnostics {
     diagnostics: Vec<Diagnostic<usize>>,
     stack: Vec<Span>,
     pub has_errors: bool,
-    spans: IndexSet<Span>,
+    spans: SpanPool,
 }
 
 impl Diagnostics {
@@ -32,7 +31,7 @@ impl Diagnostics {
             diagnostics: vec![],
             stack: vec![],
             has_errors: false,
-            spans: IndexSet::new(),
+            spans: SpanPool::new(),
         };
         s.init()
     }
@@ -67,20 +66,12 @@ impl Diagnostics {
     }
 
     pub fn lookup(&self, span_id: SpanId) -> Span {
-        //if let Some(span_id) = span_id {
-        self.spans.get_index(span_id.index()).unwrap().clone()
-        //Some(Span::new(*file_id, *begin, *end))
-        //} else {
-        //Span::Unknown
-        //}
+        self.spans.resolve(&span_id).clone()
     }
 
     pub fn get_span(&mut self, file_id: usize, begin: CodeLocation, end: CodeLocation) -> SpanId {
         let v = Span::new(file_id, begin, end);
-        let (index, _) = self.spans.insert_full(v);
-        let span_id = SpanId::new(index as u32);
-        span_id
-        //Span::new(file_id, begin, end)
+        self.spans.intern(v)
     }
 
     pub fn add_source(&mut self, filename: String, content: String) -> usize {
