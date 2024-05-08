@@ -5,11 +5,9 @@ use std::collections::HashMap;
 
 use compile_core::{
     Argument, AssignTarget, Ast, AstNode, AstType, BinaryOperation, BuiltinId, Definition,
-    Diagnostic, Label, Literal, ParameterNode, ParseError, Span, SpanId, StringKey, UnaryOperation,
-    VarDefinitionSpace,
+    Diagnostic, Label, LinkOptions, Literal, ParameterNode, ParseError, Span, SpanId, StringKey,
+    UnaryOperation, VarDefinitionSpace,
 };
-
-use lower::LinkOptions;
 
 use crate::{
     BlockId, Builtin, CodeOffset, Environment, NodeBuilder, ScopeId, ScopeType, StringLabel,

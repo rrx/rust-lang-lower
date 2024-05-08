@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-lower = { path = "../lower" }
+#lower = { path = "../lower" }
 flat = { path = "../flat" }
 compile_core = { path = "../compile_core" }
 tabled = "0.15.0"

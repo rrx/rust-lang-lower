@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
-  "lower",
+  #"lower",
   "lower_mlir",
   "parse",
   "flat",

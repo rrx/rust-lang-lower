@@ -51,8 +51,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     log::debug!("config: {:?}", config);
     let context = default_context();
 
-    let location = lower::Location::unknown(&context);
-    let mut module = lower::Module::new(location);
+    let location = lower_mlir::Location::unknown(&context);
+    let mut module = lower_mlir::Module::new(location);
     let mut p: StarlarkParser = StarlarkParser::new();
     let mut b: NodeBuilder = NodeBuilder::new();
 

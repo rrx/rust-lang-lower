@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 melior = { path = "../../melior/melior", features = ['ods-dialects'] }
-lower = { path = "../lower" }
+#lower = { path = "../lower" }
 compile_core = { path = "../compile_core" }
 anyhow = "*"
 thiserror = "*"

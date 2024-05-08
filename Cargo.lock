@@ -714,7 +714,6 @@ version = "0.1.0"
 dependencies = [
  "compile_core",
  "flat",
- "lower",
  "petgraph",
  "serde",
  "serde_json",
@@ -812,7 +811,6 @@ dependencies = [
  "anyhow",
  "compile_core",
  "indexmap",
- "lower",
  "melior",
  "minijinja",
  "petgraph",
@@ -1113,21 +1111,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "lower"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "compile_core",
- "criterion",
- "env_logger",
- "log",
- "melior",
- "petgraph",
- "test-log",
- "thiserror",
-]
-
-[[package]]
 name = "lower_mlir"
 version = "0.1.0"
 dependencies = [
@@ -1362,7 +1345,6 @@ dependencies = [
  "env_logger",
  "flat",
  "log",
- "lower",
  "lower_mlir",
  "simple_logger",
  "starlark_syntax",

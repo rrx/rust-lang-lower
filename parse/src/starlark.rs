@@ -12,13 +12,12 @@ use starlark_syntax::syntax::module::AstModuleFields;
 
 use compile_core::{
     ast, Argument, AssignTarget, Ast, AstNode, AstType, BinOpNode, CodeLocation, Diagnostic, Label,
-    SpanId, StringKey, TypeUnify,
+    LinkOptions, SpanId, StringKey, TypeUnify,
 };
 
 use flat::{Blockify, NodeBuilder, ValueId};
 
-use lower::LinkOptions;
-use lower::Module;
+use lower_mlir::Module;
 
 #[derive(Debug, Clone)]
 pub enum ExtraAst {
@@ -882,7 +881,7 @@ impl StarlarkParser {
         &mut self,
         blockify: Blockify,
         module_block_id: ValueId,
-        context: &'c lower::Context,
+        context: &'c lower_mlir::Context,
         module: &mut Module<'c>,
         b: &mut NodeBuilder,
     ) -> Result<()> {
@@ -897,7 +896,7 @@ impl StarlarkParser {
 
     pub fn exec_main<'c>(
         &self,
-        context: &lower::Context,
+        context: &lower_mlir::Context,
         module: &mut Module,
         libpath: &str,
         verbose: bool,
@@ -908,7 +907,7 @@ impl StarlarkParser {
                 "lowered {}",
                 module
                     .as_operation()
-                    .to_string_with_flags(lower::OperationPrintingFlags::new())
+                    .to_string_with_flags(lower_mlir::OperationPrintingFlags::new())
                     .unwrap()
             );
         }
@@ -922,7 +921,7 @@ impl StarlarkParser {
                 "after pass {}",
                 module
                     .as_operation()
-                    .to_string_with_flags(lower::OperationPrintingFlags::new())
+                    .to_string_with_flags(lower_mlir::OperationPrintingFlags::new())
                     .unwrap()
             );
         }
@@ -934,14 +933,14 @@ impl StarlarkParser {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::StarlarkParser;
-    use lower::Location;
+    use lower_mlir::Location;
     use test_log::test;
 
     fn run_test_ir(filename: &str, expected: i32) {
         let mut p: StarlarkParser = StarlarkParser::new();
         let mut b = flat::NodeBuilder::new();
         let context = lower_mlir::default_context();
-        let mut module = lower::Module::new(Location::unknown(&context));
+        let mut module = lower_mlir::Module::new(Location::unknown(&context));
         let result = p.parse(filename, &mut b, true);
         b.spans.diagnostics_dump();
         let (blockify, module_block_id) = result.unwrap();
