@@ -1135,6 +1135,7 @@ dependencies = [
  "compile_core",
  "flat",
  "indexmap",
+ "log",
  "melior",
  "tabled",
  "thiserror",

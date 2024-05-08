@@ -4,7 +4,7 @@ use std::error::Error;
 use std::fs::File;
 use std::io::Write;
 
-use lower::default_context;
+use lower_mlir::default_context;
 
 use flat::NodeBuilder;
 use parse::starlark::StarlarkParser;

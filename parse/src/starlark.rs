@@ -913,7 +913,7 @@ impl StarlarkParser {
             );
         }
 
-        let pass_manager = lower::default_pass_manager(context);
+        let pass_manager = lower_mlir::default_pass_manager(context);
         pass_manager.run(module).unwrap();
         assert!(module.as_operation().verify());
 
@@ -927,7 +927,7 @@ impl StarlarkParser {
             );
         }
 
-        lower::compile::exec_main(&self.link.shared_libraries(), module, libpath)
+        lower_mlir::compile::exec_main(&self.link.shared_libraries(), module, libpath)
     }
 }
 
@@ -940,7 +940,7 @@ pub(crate) mod tests {
     fn run_test_ir(filename: &str, expected: i32) {
         let mut p: StarlarkParser = StarlarkParser::new();
         let mut b = flat::NodeBuilder::new();
-        let context = lower::default_context();
+        let context = lower_mlir::default_context();
         let mut module = lower::Module::new(Location::unknown(&context));
         let result = p.parse(filename, &mut b, true);
         b.spans.diagnostics_dump();
