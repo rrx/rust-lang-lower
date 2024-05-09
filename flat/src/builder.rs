@@ -180,10 +180,6 @@ impl NodeBuilder {
         s
     }
 
-    pub fn error(&self, span_id: SpanId) -> AstNode {
-        Ast::Error.node(span_id)
-    }
-
     pub fn definition(
         &mut self,
         name: StringKey,
@@ -237,9 +233,11 @@ impl NodeBuilder {
         Ast::Literal(Literal::String(s.to_string())).into()
     }
 
+    /*
     pub fn integer(&self, x: i64) -> AstNode {
         Ast::Literal(Literal::Int(x)).into()
     }
+    */
 
     pub fn index(&self, x: i64) -> AstNode {
         Ast::Literal(Literal::Index(x as usize)).into()
@@ -398,17 +396,17 @@ pub(crate) mod tests {
         let main = b.main(b.seq(vec![
             // entry
             b.label(entry),
-            b.assign(yy, b.integer(1)),
-            b.alloca(y, b.integer(999)),
+            b.assign(yy, 1.into()),
+            b.alloca(y, 999.into()),
             b.goto(asdf.into()),
             // asdf
             b.label(asdf),
-            b.assign(yy, b.integer(2)),
+            b.assign(yy, 2.into()),
             b.goto(asdf2),
             // asdf2
             b.label(asdf2),
-            b.assign(yy, b.integer(3)),
-            b.ret(Some(b.integer(0))),
+            b.assign(yy, 3.into()),
+            b.ret(Some(0.into())),
         ]));
         b.seq(vec![b.import_prelude(), main])
     }
@@ -423,23 +421,23 @@ pub(crate) mod tests {
         let y = b.s("y").into();
         let z_static = b.s("z_static");
 
-        seq.push(b.global(z, b.integer(10)));
+        seq.push(b.global(z, 10.into()));
         seq.push(b.main(b.seq(vec![
             // define local var
             // allocate mutable var
-            b.assign(x, b.integer(123)),
-            b.alloca(x2, b.integer(10)),
+            b.assign(x, 123.into()),
+            b.alloca(x2, 10.into()),
             b.while_loop(
-                b.ne(b.ident(x2.into()), b.integer(0)),
+                b.ne(b.ident(x2.into()), 0.into()),
                 b.seq(vec![
                     // static variable with local scope
-                    b.global(z_static, b.integer(10)),
-                    b.assign(z_static, b.integer(10)),
+                    b.global(z_static, 10.into()),
+                    b.assign(z_static, 10.into()),
                     // mutate global variable
-                    b.assign(z, b.subtract(b.ident(z.into()), b.integer(1))),
+                    b.assign(z, b.subtract(b.ident(z.into()), 1.into())),
                     // mutate scoped variable
-                    b.assign(x2, b.subtract(b.ident(x2.into()), b.integer(1))),
-                    b.assign(z_static, b.subtract(b.ident(z_static.into()), b.integer(1))),
+                    b.assign(x2, b.subtract(b.ident(x2.into()), 1.into())),
+                    b.assign(z_static, b.subtract(b.ident(z_static.into()), 1.into())),
                     // assign local
                     b.assign(y, b.subtract(b.ident(x.into()), b.ident(z_static.into()))),
                 ]),
@@ -459,7 +457,7 @@ pub(crate) mod tests {
         let t_int = b.t(&AstType::Int);
 
         let mut seq = vec![b.import_prelude()];
-        seq.push(b.global(z, b.integer(10)));
+        seq.push(b.global(z, 10.into()));
 
         seq.push(b.func(
             x1,
@@ -469,21 +467,21 @@ pub(crate) mod tests {
                 // using an alloca
                 b.alloca(y, b.ident(arg0.into())),
                 b.cond(
-                    b.ne(b.ident(y.into()), b.integer(0)),
+                    b.ne(b.ident(y.into()), 0.into()),
                     b.seq(vec![
-                        b.assign(y, b.subtract(b.ident(y.into()), b.integer(1))),
+                        b.assign(y, b.subtract(b.ident(y.into()), 1.into())),
                         b.assign(y, b.apply(x1.into(), vec![b.ident(y.into()).into()], t_int)),
                     ]),
                     None,
                 ),
                 // using args
                 b.cond(
-                    b.ne(b.ident(arg0.into()), b.integer(0)),
+                    b.ne(b.ident(arg0.into()), 0.into()),
                     b.seq(vec![b.assign(
                         y,
                         b.apply(
                             x1.into(),
-                            vec![b.subtract(b.ident(arg0.into()), b.integer(1).into()).into()],
+                            vec![b.subtract(b.ident(arg0.into()), 1.into()).into()],
                             t_int,
                         ),
                     )]),
@@ -494,8 +492,8 @@ pub(crate) mod tests {
         ));
 
         seq.push(b.main(b.seq(vec![
-            b.assign(x, b.apply(x1.into(), vec![b.integer(10).into()], t_int)),
-            b.assign(x, b.apply(x1.into(), vec![b.integer(0).into()], t_int)),
+            b.assign(x, b.apply(x1.into(), vec![AstNode::from(10).into()], t_int)),
+            b.assign(x, b.apply(x1.into(), vec![AstNode::from(0).into()], t_int)),
             b.ret(Some(b.ident(x.into()))),
         ])));
         b.seq(seq)

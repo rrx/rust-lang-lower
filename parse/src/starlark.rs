@@ -577,7 +577,7 @@ impl Parser {
                             b.spans
                                 .push_diagnostic(env.error(name.span, "Builtin not found"));
                             let span_id = env.span_id(item.span, b);
-                            Ok(b.error(span_id))
+                            Ok(Ast::Error.node(span_id))
                         }
                     } else {
                         b.spans.push_diagnostic(env.error(
@@ -585,7 +585,7 @@ impl Parser {
                             &format!("Variable not in scope: {}", ident.node.ident),
                         ));
                         let span_id = env.span_id(item.span, b);
-                        Ok(b.error(span_id))
+                        Ok(Ast::Error.node(span_id))
                     }
                 } else {
                     unimplemented!("{:?}", (expr, name))
@@ -631,7 +631,7 @@ impl Parser {
                         } else {
                             b.spans.push_diagnostic(env.error(ident.span, "Not found"));
                             let span_id = env.span_id(item.span, b);
-                            Ok(b.error(span_id))
+                            Ok(Ast::Error.node(span_id))
                         }
                     }
 
@@ -672,7 +672,7 @@ impl Parser {
                                     b.spans
                                         .push_diagnostic(env.error(name.span, "Builtin not found"));
                                     let span_id = env.span_id(item.span, b);
-                                    Ok(b.error(span_id))
+                                    Ok(Ast::Error.node(span_id))
                                 }
                             } else {
                                 b.spans.push_diagnostic(env.error(
@@ -680,7 +680,7 @@ impl Parser {
                                     &format!("Variable not in scope: {}", ident.node.ident),
                                 ));
                                 let span_id = env.span_id(item.span, b);
-                                Ok(b.error(span_id))
+                                Ok(Ast::Error.node(span_id))
                             }
                         } else {
                             unimplemented!("{:?}", (expr, name))
@@ -705,7 +705,7 @@ impl Parser {
                         ident.span,
                         &format!("Variable not in scope: {}", ident.node.ident),
                     ));
-                    Ok(b.error(span_id))
+                    Ok(Ast::Error.node(span_id))
                 }
             }
 

@@ -155,3 +155,9 @@ impl From<Ast> for AstNode {
         }
     }
 }
+
+impl From<i64> for AstNode {
+    fn from(i: i64) -> Self {
+        Ast::Literal(Literal::Int(i)).into()
+    }
+}
