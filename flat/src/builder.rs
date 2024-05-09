@@ -125,15 +125,6 @@ impl NodeBuilder {
         self.builtins.insert(b);
     }
 
-    /*
-    pub fn resolve_label(&self, k: StringLabel) -> String {
-        match k {
-            StringLabel::Intern(key) => self.labels.pool.resolve(&key).clone(),
-            StringLabel::Variable(offset) => format!("v{}", offset),
-        }
-    }
-    */
-
     pub fn build_literal_from_identifier(&self, name: &str) -> Option<AstNode> {
         match name {
             "True" => Some(true.into()),
