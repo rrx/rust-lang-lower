@@ -180,6 +180,13 @@ impl Ast {
         Ast::Global(name, Box::new(node))
     }
 
+    pub fn node(self, span_id: SpanId) -> AstNode {
+        AstNode {
+            node: self,
+            span_id,
+        }
+    }
+
     pub fn assign(target: AssignTarget, node: AstNode) -> Self {
         Ast::Assign(target, Box::new(node))
     }

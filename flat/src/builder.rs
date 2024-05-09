@@ -146,9 +146,9 @@ impl NodeBuilder {
         if let Some(b) = crate::builtin_from_name(name) {
             assert_eq!(b.arity(), args.len());
             let id = self.builtins.get_id(b);
-            Some(self.build(Ast::Builtin(id, args), span_id))
+            Some(Ast::Builtin(id, args).node(span_id))
         } else if let Some(ast) = ast_from_name(name, args, self) {
-            Some(self.build(ast, span_id))
+            Some(ast.node(span_id))
         } else {
             None
         }
@@ -180,21 +180,8 @@ impl NodeBuilder {
         s
     }
 
-    pub fn build(&self, node: Ast, span_id: SpanId) -> AstNode {
-        AstNode { node, span_id }
-    }
-
-    /*
-    pub fn node(&self, ast: Ast) -> AstNode {
-        AstNode {
-            node: ast,
-            span_id: SpanId::unknown(),
-        }
-    }
-    */
-
     pub fn error(&self, span_id: SpanId) -> AstNode {
-        self.build(Ast::Error, span_id)
+        Ast::Error.node(span_id)
     }
 
     pub fn definition(

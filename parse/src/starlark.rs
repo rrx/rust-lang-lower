@@ -236,7 +236,7 @@ fn from_literal(
     };
 
     let span_id = env.span_id(span, b);
-    b.build(Ast::Literal(lit), span_id)
+    Ast::Literal(lit).node(span_id)
 }
 
 fn from_binop(item: syntax::ast::BinOp) -> ast::BinaryOperation {
@@ -310,7 +310,7 @@ impl Parser {
         let ast: compile_core::AstNode = self.from_stmt(stmt, &mut env, b)?;
         let span_id = ast.span_id.clone();
         seq.push(ast);
-        Ok(b.build(Ast::Module(module_key, b.seq(seq).into()), span_id))
+        Ok(Ast::Module(module_key, b.seq(seq).into()).node(span_id))
     }
 
     fn from_parameter<'a, P: syntax::ast::AstPayload>(
@@ -408,17 +408,14 @@ impl Parser {
                 });
 
                 env.define(name);
-                Ok(b.global(name, b.build(def_ast, span_id)))
+                Ok(b.global(name, def_ast.node(span_id)))
             }
 
             StmtP::If(expr, truestmt) => {
                 let condition = self.from_expr(expr, env, b)?;
                 let truestmt = self.from_stmt(*truestmt, env, b)?;
                 let span_id = env.span_id(item.span, b);
-                Ok(b.build(
-                    Ast::Conditional(condition.into(), truestmt.into(), None),
-                    span_id,
-                ))
+                Ok(Ast::Conditional(condition.into(), truestmt.into(), None).node(span_id))
             }
 
             StmtP::IfElse(expr, options) => {
@@ -426,16 +423,16 @@ impl Parser {
                 let truestmt = self.from_stmt(options.0, env, b)?;
                 let elsestmt = self.from_stmt(options.1, env, b)?;
                 let span_id = env.span_id(item.span, b);
-                Ok(b.build(
-                    Ast::Conditional(condition.into(), truestmt.into(), Some(elsestmt.into())),
-                    span_id,
-                ))
+                Ok(
+                    Ast::Conditional(condition.into(), truestmt.into(), Some(elsestmt.into()))
+                        .node(span_id),
+                )
             }
 
             StmtP::Return(maybe_expr) => Ok(match maybe_expr {
                 Some(expr) => {
                     let node = self.from_expr(expr, env, b)?;
-                    b.build(Ast::Return(Some(node.into())), span_id)
+                    Ast::Return(Some(node.into())).node(span_id)
                 }
                 None => b.ret(None),
             }),
@@ -454,21 +451,17 @@ impl Parser {
 
                         // lookup
                         if let Some(_data) = env.resolve(name) {
-                            Ok(b.build(
-                                Ast::Assign(AssignTarget::Identifier(name), rhs.into()),
-                                span_id,
-                            ))
+                            Ok(Ast::Assign(AssignTarget::Identifier(name), rhs.into())
+                                .node(span_id))
                         } else {
                             // name does not exist in scope
                             // Either create a global or do local, depending on context
                             env.define(name);
                             if env.is_in_func() {
-                                Ok(b.build(
-                                    Ast::Assign(AssignTarget::Identifier(name), rhs.into()),
-                                    span_id,
-                                ))
+                                Ok(Ast::Assign(AssignTarget::Identifier(name), rhs.into())
+                                    .node(span_id))
                             } else {
-                                Ok(b.build(Ast::Global(name, rhs.into()), span_id))
+                                Ok(Ast::Global(name, rhs.into()).node(span_id))
                             }
                         }
                     }
@@ -605,7 +598,7 @@ impl Parser {
 
                 let op_node = BinOpNode::new(from_binop(op), node_a.span_id.clone());
                 let ast = Ast::BinaryOp(op_node, node_a.into(), node_b.into());
-                Ok(b.build(ast, span_id))
+                Ok(ast.node(span_id))
             }
 
             ExprP::If(args) => {
@@ -614,10 +607,10 @@ impl Parser {
                 let then_expr = self.from_expr(then_expr, env, b)?;
                 let else_expr = self.from_expr(else_expr, env, b)?;
                 let span_id = env.span_id(item.span, b);
-                Ok(b.build(
-                    Ast::Ternary(condition.into(), then_expr.into(), else_expr.into()),
-                    span_id,
-                ))
+                Ok(
+                    Ast::Ternary(condition.into(), then_expr.into(), else_expr.into())
+                        .node(span_id),
+                )
             }
 
             ExprP::Call(expr, expr_args) => {
@@ -632,9 +625,8 @@ impl Parser {
                         let name = b.s(&ident.node.ident);
                         if let Some(_data) = env.resolve(name) {
                             let ident_span_id = env.span_id(ident.span, b);
-                            let ident = b.build(Ast::Identifier(name), ident_span_id);
-                            let ast =
-                                b.build(Ast::Call(ident.into(), args, t_int), span_id.clone());
+                            let ident = Ast::Identifier(name).node(ident_span_id);
+                            let ast = Ast::Call(ident.into(), args, t_int).node(span_id.clone());
                             Ok(ast)
                         } else {
                             b.spans.push_diagnostic(env.error(ident.span, "Not found"));
@@ -648,9 +640,9 @@ impl Parser {
                             let key = b.s(&ident.node.ident);
                             if let Some(_data) = env.resolve(key) {
                                 let ident_span_id = env.span_id(ident.span, b);
-                                let ident = b.build(Ast::Identifier(key), ident_span_id);
+                                let ident = Ast::Identifier(key).node(ident_span_id);
                                 let ast =
-                                    b.build(Ast::Call(ident.into(), args, t_int), span_id.clone());
+                                    Ast::Call(ident.into(), args, t_int).node(span_id.clone());
                                 Ok(ast)
                             } else if &ident.node.ident == "q" {
                                 // builtin namespace
@@ -706,7 +698,7 @@ impl Parser {
                 let name = b.s(&ident.node.ident);
                 let span_id = env.span_id(item.span, b);
                 if let Some(_data) = env.resolve(name) {
-                    let ast = b.build(Ast::Identifier(name), span_id);
+                    let ast = Ast::Identifier(name).node(span_id);
                     Ok(ast)
                 } else {
                     b.spans.push_diagnostic(env.error(
@@ -724,7 +716,7 @@ impl Parser {
                     ast::UnaryOperation::Minus,
                     self.from_expr(*expr, env, b)?.into(),
                 );
-                Ok(b.build(ast, span_id))
+                Ok(ast.node(span_id))
             }
 
             _ => unimplemented!("{:?}", item.node),
