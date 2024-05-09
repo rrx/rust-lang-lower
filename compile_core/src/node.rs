@@ -161,3 +161,15 @@ impl From<i64> for AstNode {
         Ast::Literal(Literal::Int(i)).into()
     }
 }
+
+impl From<&str> for AstNode {
+    fn from(s: &str) -> Self {
+        Ast::Literal(Literal::String(s.to_string())).into()
+    }
+}
+
+impl From<bool> for AstNode {
+    fn from(b: bool) -> Self {
+        Ast::Literal(Literal::Bool(b)).into()
+    }
+}

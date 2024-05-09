@@ -131,8 +131,8 @@ impl NodeBuilder {
 
     pub fn build_literal_from_identifier(&self, name: &str) -> Option<AstNode> {
         match name {
-            "True" => Some(self.bool(true)),
-            "False" => Some(self.bool(false)),
+            "True" => Some(true.into()),
+            "False" => Some(false.into()),
             _ => None,
         }
     }
@@ -213,8 +213,7 @@ impl NodeBuilder {
     }
 
     pub fn import_prelude(&self) -> AstNode {
-        let s = self.string("prelude");
-        let arg = self.arg(s);
+        let arg = self.arg("prelude".into());
         let id = self.builtins.get_id(crate::Builtin::Import);
         Ast::Builtin(id, vec![arg]).into()
     }
@@ -229,50 +228,36 @@ impl NodeBuilder {
         ]
     }
 
-    pub fn string(&self, s: &str) -> AstNode {
-        Ast::Literal(Literal::String(s.to_string())).into()
-    }
-
-    /*
-    pub fn integer(&self, x: i64) -> AstNode {
-        Ast::Literal(Literal::Int(x)).into()
-    }
-    */
-
-    pub fn index(&self, x: i64) -> AstNode {
+    pub fn index(x: i64) -> AstNode {
         Ast::Literal(Literal::Index(x as usize)).into()
     }
 
-    pub fn bool(&self, x: bool) -> AstNode {
-        Ast::Literal(Literal::Bool(x)).into()
-    }
-
-    pub fn binop(&self, op: BinaryOperation, a: AstNode, b: AstNode) -> AstNode {
+    pub fn binop(op: BinaryOperation, a: AstNode, b: AstNode) -> AstNode {
         let op_node = BinOpNode::new(op, SpanId::unknown());
         Ast::BinaryOp(op_node, a.into(), b.into()).into()
     }
 
-    pub fn subtract(&self, a: AstNode, b: AstNode) -> AstNode {
-        self.binop(BinaryOperation::Subtract, a, b)
+    pub fn subtract(a: AstNode, b: AstNode) -> AstNode {
+        Self::binop(BinaryOperation::Subtract, a, b)
     }
 
-    pub fn add(&self, a: AstNode, b: AstNode) -> AstNode {
-        self.binop(BinaryOperation::Add, a, b)
+    pub fn add(a: AstNode, b: AstNode) -> AstNode {
+        Self::binop(BinaryOperation::Add, a, b)
     }
 
-    pub fn multiply(&self, a: AstNode, b: AstNode) -> AstNode {
-        self.binop(BinaryOperation::Multiply, a, b)
+    pub fn multiply(a: AstNode, b: AstNode) -> AstNode {
+        Self::binop(BinaryOperation::Multiply, a, b)
     }
 
-    pub fn ne(&self, a: AstNode, b: AstNode) -> AstNode {
-        self.binop(BinaryOperation::NE, a, b)
+    pub fn ne(a: AstNode, b: AstNode) -> AstNode {
+        Self::binop(BinaryOperation::NE, a, b)
     }
 
-    pub fn eq(&self, a: AstNode, b: AstNode) -> AstNode {
-        self.binop(BinaryOperation::EQ, a, b)
+    pub fn eq(a: AstNode, b: AstNode) -> AstNode {
+        Self::binop(BinaryOperation::EQ, a, b)
     }
 
-    pub fn seq(&self, nodes: Vec<AstNode>) -> AstNode {
+    pub fn seq(nodes: Vec<AstNode>) -> AstNode {
         // flatten nodes
         let nodes = nodes
             .into_iter()
@@ -383,6 +368,7 @@ impl NodeBuilder {
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use super::NodeBuilder as NB;
     use super::*;
 
     pub fn gen_block<'c>(b: &mut NodeBuilder) -> AstNode {
@@ -393,7 +379,7 @@ pub(crate) mod tests {
         let asdf = b.s("asdf");
         let asdf2 = b.s("asdf2").into();
         let entry = b.s("entry").into();
-        let main = b.main(b.seq(vec![
+        let main = b.main(NB::seq(vec![
             // entry
             b.label(entry),
             b.assign(yy, 1.into()),
@@ -408,7 +394,7 @@ pub(crate) mod tests {
             b.assign(yy, 3.into()),
             b.ret(Some(0.into())),
         ]));
-        b.seq(vec![b.import_prelude(), main])
+        NB::seq(vec![b.import_prelude(), main])
     }
 
     pub fn gen_while<'c>(b: &mut NodeBuilder) -> AstNode {
@@ -422,30 +408,30 @@ pub(crate) mod tests {
         let z_static = b.s("z_static");
 
         seq.push(b.global(z, 10.into()));
-        seq.push(b.main(b.seq(vec![
+        seq.push(b.main(NB::seq(vec![
             // define local var
             // allocate mutable var
             b.assign(x, 123.into()),
             b.alloca(x2, 10.into()),
             b.while_loop(
-                b.ne(b.ident(x2.into()), 0.into()),
-                b.seq(vec![
+                NB::ne(b.ident(x2.into()), 0.into()),
+                NB::seq(vec![
                     // static variable with local scope
                     b.global(z_static, 10.into()),
                     b.assign(z_static, 10.into()),
                     // mutate global variable
-                    b.assign(z, b.subtract(b.ident(z.into()), 1.into())),
+                    b.assign(z, NB::subtract(b.ident(z.into()), 1.into())),
                     // mutate scoped variable
-                    b.assign(x2, b.subtract(b.ident(x2.into()), 1.into())),
-                    b.assign(z_static, b.subtract(b.ident(z_static.into()), 1.into())),
+                    b.assign(x2, NB::subtract(b.ident(x2.into()), 1.into())),
+                    b.assign(z_static, NB::subtract(b.ident(z_static.into()), 1.into())),
                     // assign local
-                    b.assign(y, b.subtract(b.ident(x.into()), b.ident(z_static.into()))),
+                    b.assign(y, NB::subtract(b.ident(x.into()), b.ident(z_static.into()))),
                 ]),
             ),
             b.ret(Some(b.ident(z.into()))),
         ])));
 
-        b.seq(seq)
+        NB::seq(seq)
     }
 
     pub fn gen_function_call<'c>(b: &mut NodeBuilder) -> AstNode {
@@ -463,25 +449,25 @@ pub(crate) mod tests {
             x1,
             &[(arg0, AstType::Int)],
             AstType::Int,
-            b.seq(vec![
+            NB::seq(vec![
                 // using an alloca
                 b.alloca(y, b.ident(arg0.into())),
                 b.cond(
-                    b.ne(b.ident(y.into()), 0.into()),
-                    b.seq(vec![
-                        b.assign(y, b.subtract(b.ident(y.into()), 1.into())),
+                    NB::ne(b.ident(y.into()), 0.into()),
+                    NB::seq(vec![
+                        b.assign(y, NB::subtract(b.ident(y.into()), 1.into())),
                         b.assign(y, b.apply(x1.into(), vec![b.ident(y.into()).into()], t_int)),
                     ]),
                     None,
                 ),
                 // using args
                 b.cond(
-                    b.ne(b.ident(arg0.into()), 0.into()),
-                    b.seq(vec![b.assign(
+                    NB::ne(b.ident(arg0.into()), 0.into()),
+                    NB::seq(vec![b.assign(
                         y,
                         b.apply(
                             x1.into(),
-                            vec![b.subtract(b.ident(arg0.into()), 1.into()).into()],
+                            vec![NB::subtract(b.ident(arg0.into()), 1.into()).into()],
                             t_int,
                         ),
                     )]),
@@ -491,12 +477,12 @@ pub(crate) mod tests {
             ]),
         ));
 
-        seq.push(b.main(b.seq(vec![
+        seq.push(b.main(NB::seq(vec![
             b.assign(x, b.apply(x1.into(), vec![AstNode::from(10).into()], t_int)),
             b.assign(x, b.apply(x1.into(), vec![AstNode::from(0).into()], t_int)),
             b.ret(Some(b.ident(x.into()))),
         ])));
-        b.seq(seq)
+        NB::seq(seq)
     }
 }
 

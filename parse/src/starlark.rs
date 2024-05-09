@@ -15,7 +15,7 @@ use compile_core::{
     LinkOptions, SpanId, StringKey, TypeUnify,
 };
 
-use flat::{Blockify, NodeBuilder, ValueId};
+use flat::{Blockify, NodeBuilder, NodeBuilder as NB, ValueId};
 
 use lower_mlir::Module;
 
@@ -310,7 +310,7 @@ impl Parser {
         let ast: compile_core::AstNode = self.from_stmt(stmt, &mut env, b)?;
         let span_id = ast.span_id.clone();
         seq.push(ast);
-        Ok(Ast::Module(module_key, b.seq(seq).into()).node(span_id))
+        Ok(Ast::Module(module_key, NB::seq(seq).into()).node(span_id))
     }
 
     fn from_parameter<'a, P: syntax::ast::AstPayload>(
@@ -402,7 +402,7 @@ impl Parser {
                     .unwrap_or(AstType::Unit);
 
                 let def_ast = Ast::Definition(ast::Definition {
-                    body: Some(b.seq(body).into()),
+                    body: Some(NB::seq(body).into()),
                     return_type: b.t(&return_type),
                     params,
                 });
@@ -759,10 +759,10 @@ impl<P: syntax::ast::AstPayload> StatementReader<P> {
         self.loops.push(vec![]);
     }
 
-    fn end_loop(&mut self, b: &mut NodeBuilder) -> AstNode {
+    fn end_loop(&mut self) -> AstNode {
         let seq = self.loops.pop().unwrap();
         let key = self.names.pop().unwrap();
-        Ast::Loop(key, b.seq(seq).into()).into()
+        Ast::Loop(key, NB::seq(seq).into()).into()
     }
 
     fn push_ast(&mut self, ast: AstNode) {
@@ -811,7 +811,7 @@ impl<P: syntax::ast::AstPayload> StatementReader<P> {
                         reader.push_ast(b.loop_continue(maybe_key));
                     }
                     ExtraAst::BlockEnd => {
-                        let ast = reader.end_loop(b);
+                        let ast = reader.end_loop();
                         reader.push_ast(ast);
                     }
                 }
@@ -819,7 +819,7 @@ impl<P: syntax::ast::AstPayload> StatementReader<P> {
                 reader.push_stmt(stmt, parse, env, b)?;
             }
         }
-        Ok(b.seq(reader.seq.drain(..).collect()))
+        Ok(NB::seq(reader.seq.drain(..).collect()))
     }
 }
 
