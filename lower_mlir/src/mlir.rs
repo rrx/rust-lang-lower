@@ -345,7 +345,7 @@ impl<'c> Lower<'c> {
 
                     let mut op = memref::global(
                         self.context,
-                        &b.resolve_label(name),
+                        &b.labels.r(name),
                         Some("private"),
                         MemRefType::new(ty, &[], None, Some(memspace)),
                         // initial value is not set
@@ -459,7 +459,7 @@ impl<'c> Lower<'c> {
 
                 // function to call
                 let key = blockify.get_name(*v_f).unwrap();
-                let name = b.resolve_label(key);
+                let name = b.labels.r(key);
                 let ty = blockify.get_type(*v_f);
                 let f = FlatSymbolRefAttribute::new(self.context, &name);
 
@@ -514,7 +514,7 @@ impl<'c> Lower<'c> {
 
                     let lower_ty = op::from_type(self.context, &lhs_ty);
                     let memref_ty = MemRefType::new(lower_ty, &[], None, None);
-                    let static_name = b.resolve_label(name);
+                    let static_name = b.labels.r(name);
                     // TODO: FIXME
                     //let static_name = b
                     //.strings
@@ -554,7 +554,7 @@ impl<'c> Lower<'c> {
                     let memref_ty = MemRefType::new(lower_ty, &[], None, None);
                     // TODO: FIXME
                     let decl_name = blockify.get_name(v_decl).unwrap();
-                    let static_name = b.resolve_label(decl_name);
+                    let static_name = b.labels.r(decl_name);
                     let op = memref::get_global(self.context, &static_name, memref_ty, location);
                     let c = blocks.blocks.get_mut(&block_id).unwrap();
                     let addr_index = c.push(op);
@@ -906,7 +906,7 @@ pub fn build_declare_function<'c>(
         };
 
         let func_type = FunctionType::new(context, &type_list, &ret_type);
-        let func_name_attr = StringAttribute::new(context, &b.resolve_label(key));
+        let func_name_attr = StringAttribute::new(context, &b.labels.r(key));
         let func_ty_attr = TypeAttribute::new(func_type.into());
 
         let op = func::func(

@@ -18,10 +18,10 @@ pub fn dump(env: &Environment, b: &NodeBuilder) {
     for (index, layer) in env.scopes.iter().enumerate() {
         println!("scope({},{:?})", index, layer.scope_type);
         for (key, data) in layer.names.iter() {
-            println!("  name  {} = {:?}", b.labels.r(*key), data);
+            println!("  name  {} = {:?}", b.labels.r((*key).into()), data);
         }
         for (key, data) in layer.labels.iter() {
-            println!("  label {} = {:?}", b.resolve_label(*key), data);
+            println!("  label {} = {:?}", b.labels.r(*key), data);
         }
         for next_id in layer.next_block.iter() {
             println!("  next  {:?}", next_id);
@@ -30,7 +30,7 @@ pub fn dump(env: &Environment, b: &NodeBuilder) {
             println!("  block {:?}", block_id);
         }
         for (name, def) in layer.lambdas.iter() {
-            println!("  def {:?}", (b.resolve_label(*name), def));
+            println!("  def {:?}", (b.labels.r(*name), def));
         }
     }
 }

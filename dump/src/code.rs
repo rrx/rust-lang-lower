@@ -67,12 +67,12 @@ pub fn code_to_string(v: ValueId, blockify: &Blockify, b: &NodeBuilder) -> Strin
     let code = blockify.get_code(v);
     match code {
         LCode::Declare => {
-            let code_str = b.resolve_label(blockify.get_name(v).unwrap());
+            let code_str = b.labels.r(blockify.get_name(v).unwrap());
             format!("declare {}: {:?}", code_str, blockify.get_type(v))
         }
 
         LCode::DeclareFunction(maybe_entry) => {
-            let code_str = b.resolve_label(blockify.get_name(v).unwrap());
+            let code_str = b.labels.r(blockify.get_name(v).unwrap());
             if let Some(entry_id) = maybe_entry {
                 format!("declare_function({},{})", code_str, entry_id.index())
             } else {
@@ -82,14 +82,14 @@ pub fn code_to_string(v: ValueId, blockify: &Blockify, b: &NodeBuilder) -> Strin
 
         LCode::Label(args, kwargs) => {
             if let Some(key) = blockify.get_name(v) {
-                format!("label({}, {}, {})", b.resolve_label(key), args, kwargs,)
+                format!("label({}, {}, {})", b.labels.r(key), args, kwargs,)
             } else {
                 format!("label(-, {}, {})", args, kwargs,)
             }
         }
 
         LCode::Goto(block_id) => {
-            format!("goto({})", b.labels.r(*block_id))
+            format!("goto({})", b.labels.r((*block_id).into()))
         }
 
         LCode::Jump(value_id, args) => {
@@ -133,7 +133,7 @@ fn get_code_row(v: ValueId, blockify: &Blockify, b: &NodeBuilder) -> CodeRow {
         mem: format!("{:?}", mem),
         name: blockify
             .get_name(v)
-            .map(|key| b.resolve_label(key))
+            .map(|key| b.labels.r(key))
             .unwrap_or("".to_string())
             .to_string(),
         span_id: blockify.get_span_id(v).index(),

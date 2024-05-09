@@ -57,7 +57,7 @@ pub fn dump_strings(
 ) {
     match &node.node {
         Ast::Module(name, body) => {
-            let s = format!("module({})", b.labels.r(*name));
+            let s = format!("module({})", b.labels.r((*name).into()));
             out.push((depth, s, node.span_id));
             depth += 1;
             dump_strings(body, b, out, depth);
@@ -92,16 +92,16 @@ pub fn dump_strings(
         }
 
         Ast::BlockStart(name, params) => {
-            let s = format!("block_start: {}", b.labels.r(*name),);
+            let s = format!("block_start: {}", b.labels.r((*name).into()),);
             out.push((depth, s, node.span_id));
             for e in params {
-                let s = format!("arg: {}, {:?}", b.resolve_label(e.name.into()), e.ty,);
+                let s = format!("arg: {}, {:?}", b.labels.r(e.name.into()), e.ty,);
                 out.push((depth, s, node.span_id));
             }
         }
 
         Ast::Goto(key) => {
-            let s = format!("goto: {}", b.labels.r(*key),);
+            let s = format!("goto: {}", b.labels.r(key.into()),);
             out.push((depth, s, node.span_id));
         }
 
@@ -112,7 +112,7 @@ pub fn dump_strings(
             depth += 1;
 
             for a in &def.params {
-                let s = format!("arg: {}: {:?}", b.resolve_label(a.name.into()), a.ty,);
+                let s = format!("arg: {}: {:?}", b.labels.r(a.name.into()), a.ty,);
                 out.push((depth, s, node.span_id));
             }
             if let Some(ref body) = def.body {
@@ -121,7 +121,7 @@ pub fn dump_strings(
         }
 
         Ast::Global(key, value) => {
-            let s = format!("global: {}", b.labels.r(*key));
+            let s = format!("global: {}", b.labels.r(key.into()));
             out.push((depth, s, node.span_id));
             dump_strings(value, b, out, depth + 1);
         }
@@ -132,11 +132,11 @@ pub fn dump_strings(
             depth += 1;
             match target {
                 AssignTarget::Identifier(key) => {
-                    let s = format!("target identifier: {}", b.resolve_label(key.into()),);
+                    let s = format!("target identifier: {}", b.labels.r(key.into()),);
                     out.push((depth, s, node.span_id));
                 }
                 AssignTarget::Alloca(key) => {
-                    let s = format!("target alloca: {}", b.resolve_label(key.into()),);
+                    let s = format!("target alloca: {}", b.labels.r(key.into()),);
                     out.push((depth, s, node.span_id));
                 }
             }
@@ -157,7 +157,7 @@ pub fn dump_strings(
         }
 
         Ast::Identifier(key) => {
-            let s = format!("ident: {}", b.resolve_label(key.into()),);
+            let s = format!("ident: {}", b.labels.r(key.into()),);
             out.push((depth, s, node.span_id));
         }
 
@@ -192,8 +192,8 @@ pub fn dump_strings(
         Ast::Branch(c, then_key, else_key) => {
             let s = format!(
                 "branch: {}, {}",
-                b.labels.r(*then_key),
-                b.labels.r(*else_key),
+                b.labels.r(then_key.into()),
+                b.labels.r(else_key.into()),
             );
             out.push((depth, s, node.span_id));
             dump_strings(c, b, out, depth + 1);
@@ -212,7 +212,7 @@ pub fn dump_strings(
         }
 
         Ast::Loop(key, body) => {
-            let s = format!("loop({})", b.labels.r(*key));
+            let s = format!("loop({})", b.labels.r(key.into()));
             out.push((depth, s, node.span_id));
             dump_strings(body, b, out, depth + 1);
         }
@@ -220,7 +220,10 @@ pub fn dump_strings(
         Ast::Break(maybe_key, args) => {
             let s = format!(
                 "break({})",
-                maybe_key.map(|key| b.labels.r(key)).or(Some("")).unwrap()
+                maybe_key
+                    .map(|key| b.labels.r(key.into()))
+                    .or(Some("".into()))
+                    .unwrap()
             );
             out.push((depth, s, node.span_id));
             for expr in args {
@@ -231,7 +234,10 @@ pub fn dump_strings(
         Ast::Continue(maybe_key, args) => {
             let s = format!(
                 "continue({})",
-                maybe_key.map(|key| b.labels.r(key)).or(Some("")).unwrap()
+                maybe_key
+                    .map(|key| b.labels.r(key.into()))
+                    .or(Some("".into()))
+                    .unwrap()
             );
             out.push((depth, s, node.span_id));
             for expr in args {

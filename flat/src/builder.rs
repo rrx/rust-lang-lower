@@ -43,8 +43,11 @@ impl LabelBuilder {
         StringLabel::Variable(offset)
     }
 
-    pub fn r(&self, key: StringKey) -> &str {
-        self.pool.resolve(&key)
+    pub fn r(&self, k: StringLabel) -> String {
+        match k {
+            StringLabel::Intern(key) => self.pool.resolve(&key).clone(),
+            StringLabel::Variable(offset) => format!("v{}", offset),
+        }
     }
 
     pub fn s(&mut self, s: &str) -> StringKey {
@@ -65,6 +68,10 @@ impl TypeBuilder {
 
     pub fn s(&mut self, t: &AstType) -> TypeId {
         self.pool.intern(t.clone())
+    }
+
+    pub fn r(&mut self, id: TypeId) -> &AstType {
+        self.pool.resolve(&id)
     }
 }
 
@@ -119,25 +126,13 @@ impl NodeBuilder {
     }
 
     /*
-    pub fn s(&mut self, s: &str) -> StringKey {
-        self.labels.pool.intern(s.into())
-    }
-
-    pub fn t(&mut self, t: &AstType) -> TypeId {
-        self.types.pool.intern(t.clone())
-    }
-    */
-
-    pub fn rt(&mut self, id: TypeId) -> &AstType {
-        self.types.pool.resolve(&id)
-    }
-
     pub fn resolve_label(&self, k: StringLabel) -> String {
         match k {
             StringLabel::Intern(key) => self.labels.pool.resolve(&key).clone(),
             StringLabel::Variable(offset) => format!("v{}", offset),
         }
     }
+    */
 
     pub fn build_literal_from_identifier(&self, name: &str) -> Option<AstNode> {
         match name {

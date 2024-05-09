@@ -469,7 +469,7 @@ impl Blockify {
         let block = self.env.get_block_mut(v_block);
         block.last_value = Some(v_block);
         for (i, p) in kwargs.iter().enumerate() {
-            let ty = b.rt(p.ty);
+            let ty = b.types.r(p.ty);
             let v = self.push_code(
                 LCode::Arg(i as u8),
                 span_id,
@@ -487,7 +487,7 @@ impl Blockify {
 
     pub fn resolve_block_label(&self, k: ValueId, b: &NodeBuilder) -> String {
         if let Some(key) = self.names.get(&k) {
-            b.resolve_label(*key).to_string()
+            b.labels.r(*key).to_string()
         } else {
             format!("b{}", k.0)
         }
@@ -730,7 +730,7 @@ impl Blockify {
 
         // handle body
         //let return_type = *def.return_type;
-        let return_type = b.rt(def.return_type).clone();
+        let return_type = b.types.r(def.return_type).clone();
         let return_type_args = match &return_type {
             AstType::Unit => vec![],
             _ => vec![return_type.clone()],
@@ -770,19 +770,19 @@ impl Blockify {
         span_id: SpanId,
         b: &mut NodeBuilder,
     ) -> Result<AddResult> {
-        println!("add_function: {}", b.labels.r(function_name));
+        println!("add_function: {}", b.labels.r(function_name.into()));
         let scope_id = self.env.current_scope().unwrap();
 
         let params = def
             .params
             .iter()
             .map(|p| {
-                let ty = b.rt(p.ty);
+                let ty = b.types.r(p.ty);
                 ty.clone()
             })
             .collect();
         //let spans = def.params.iter().map(|p| p.span_id).collect::<Vec<_>>();
-        let return_type = b.rt(def.return_type).clone();
+        let return_type = b.types.r(def.return_type).clone();
         let ty = AstType::Func(params, return_type.clone().into());
 
         if let Some(body) = def.body {
@@ -1082,7 +1082,7 @@ impl Blockify {
             );
             Ok(AddResult::new(Some(v), false, entry_id))
         } else {
-            let name = b.resolve_label(self.get_name(v_func).unwrap());
+            let name = b.labels.r(self.get_name(v_func).unwrap());
             return Self::error(
                 &format!("Type not function: {}, {:?}", name, ty),
                 span_id,
@@ -1139,7 +1139,7 @@ impl Blockify {
                 // call is an expression, it's non-terminal
                 // lambdas should also be non-terminal
                 Ast::Identifier(ident) => {
-                    let name = b.resolve_label(ident.into());
+                    let name = b.labels.r(ident.into());
                     if let Some(data) = self.env.resolve(*ident) {
                         return self.add_function_call(
                             scope_id,
@@ -1459,7 +1459,7 @@ impl Blockify {
                 } else {
                     let span = b.spans.lookup(node.span_id);
                     b.spans.push_diagnostic(error(
-                        &format!("Block name not found: {}", b.labels.r(label)),
+                        &format!("Block name not found: {}", b.labels.r(label.into())),
                         span,
                     ));
                     Err(Error::new(ParseError::Invalid))
@@ -1491,10 +1491,10 @@ impl Blockify {
                     let scope = self.env.get_scope(scope_id);
 
                     let global_name = if let ScopeType::Static = scope.scope_type {
-                        b.labels.r(name).to_string()
+                        b.labels.r(name.into()).to_string()
                     } else {
                         let unique_name = b.unique_static_name();
-                        let base = b.labels.r(name);
+                        let base = b.labels.r(name.into());
                         format!("{}{}", base, unique_name).clone()
                     };
 

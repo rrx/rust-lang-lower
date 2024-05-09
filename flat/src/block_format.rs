@@ -9,12 +9,12 @@ impl Blockify {
         let code = self.get_code(v);
         match code {
             LCode::Declare => {
-                let code_str = b.resolve_label(self.get_name(v).unwrap());
+                let code_str = b.labels.r(self.get_name(v).unwrap());
                 format!("declare {}: {:?}", code_str, self.get_type(v))
             }
 
             LCode::DeclareFunction(maybe_entry) => {
-                let code_str = b.resolve_label(self.get_name(v).unwrap());
+                let code_str = b.labels.r(self.get_name(v).unwrap());
                 if let Some(entry_id) = maybe_entry {
                     format!("declare_function({},{})", code_str, entry_id.0)
                 } else {
@@ -24,14 +24,14 @@ impl Blockify {
 
             LCode::Label(args, kwargs) => {
                 if let Some(key) = self.get_name(v) {
-                    format!("label({}, {}, {})", b.resolve_label(key), args, kwargs,)
+                    format!("label({}, {}, {})", b.labels.r(key), args, kwargs,)
                 } else {
                     format!("label(-, {}, {})", args, kwargs,)
                 }
             }
 
             LCode::Goto(block_id) => {
-                format!("goto({})", b.labels.r(*block_id))
+                format!("goto({})", b.labels.r((*block_id).into()))
             }
 
             LCode::Jump(value_id, args) => {
