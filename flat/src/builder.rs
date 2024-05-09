@@ -42,6 +42,14 @@ impl LabelBuilder {
         self.unique_count += 1;
         StringLabel::Variable(offset)
     }
+
+    pub fn r(&self, key: StringKey) -> &str {
+        self.pool.resolve(&key)
+    }
+
+    pub fn s(&mut self, s: &str) -> StringKey {
+        self.pool.intern(s.into())
+    }
 }
 
 pub struct TypeBuilder {
@@ -106,13 +114,11 @@ impl NodeBuilder {
         self.builtins.insert(b);
     }
 
-    pub fn r(&self, key: StringKey) -> &str {
-        self.labels.pool.resolve(&key)
-    }
-
+    /*
     pub fn s(&mut self, s: &str) -> StringKey {
         self.labels.pool.intern(s.into())
     }
+    */
 
     pub fn t(&mut self, t: &AstType) -> TypeId {
         self.types.pool.intern(t.clone())
@@ -158,7 +164,7 @@ impl NodeBuilder {
         let unique = self.loop_count;
         self.loop_count += 1;
         let s = format!("_loop{}", unique);
-        let key = self.s(&s);
+        let key = self.labels.s(&s);
         key
     }
 
@@ -201,7 +207,7 @@ impl NodeBuilder {
             .collect();
 
         let return_type = self.t(&return_type);
-        self.global(
+        Self::global(
             name,
             Ast::Definition(Definition {
                 params,
@@ -213,15 +219,14 @@ impl NodeBuilder {
     }
 
     pub fn import_prelude(&self) -> AstNode {
-        let arg = self.arg("prelude".into());
         let id = self.builtins.get_id(crate::Builtin::Import);
-        Ast::Builtin(id, vec![arg]).into()
+        Ast::Builtin(id, vec![Argument::Positional(Box::new("prelude".into()))]).into()
     }
 
     pub fn prelude(&mut self) -> Vec<AstNode> {
-        let a = self.s("a".into());
-        let print_index = self.s("print_index".into());
-        let print_float = self.s("print_float".into());
+        let a = self.labels.s("a".into());
+        let print_index = self.labels.s("print_index".into());
+        let print_float = self.labels.s("print_float".into());
         vec![
             self.definition(print_index, &[(a, AstType::Int)], AstType::Unit, None),
             self.definition(print_float, &[(a, AstType::Float)], AstType::Unit, None),
@@ -267,27 +272,23 @@ impl NodeBuilder {
         Ast::Sequence(nodes).into()
     }
 
-    pub fn v(&self, name: StringKey) -> AstNode {
-        self.ident(name)
-    }
-
-    pub fn ident(&self, name: StringKey) -> AstNode {
+    pub fn ident(name: StringKey) -> AstNode {
         Ast::Identifier(name).into()
     }
 
-    pub fn global(&self, name: StringKey, value: AstNode) -> AstNode {
+    pub fn global(name: StringKey, value: AstNode) -> AstNode {
         Ast::Global(name, value.into()).into()
     }
 
-    pub fn while_loop(&self, condition: AstNode, body: AstNode) -> AstNode {
+    pub fn while_loop(condition: AstNode, body: AstNode) -> AstNode {
         Ast::While(condition.into(), body.into()).into()
     }
 
-    pub fn loop_break(&self, key: Option<StringKey>) -> AstNode {
+    pub fn loop_break(key: Option<StringKey>) -> AstNode {
         Ast::Break(key, vec![]).into()
     }
 
-    pub fn loop_continue(&self, key: Option<StringKey>) -> AstNode {
+    pub fn loop_continue(key: Option<StringKey>) -> AstNode {
         Ast::Continue(key, vec![]).into()
     }
 
@@ -301,49 +302,45 @@ impl NodeBuilder {
         self.definition(name, params, return_type, Some(body))
     }
 
-    pub fn ret(&self, node: Option<AstNode>) -> AstNode {
+    pub fn ret(node: Option<AstNode>) -> AstNode {
         Ast::Return(node.map(|n| n.into())).into()
     }
 
-    pub fn arg(&self, node: AstNode) -> Argument {
-        node.into()
-    }
-
-    pub fn apply(&self, name: StringKey, args: Vec<Argument>, ty: TypeId) -> AstNode {
-        let ident = self.ident(name);
+    pub fn apply(name: StringKey, args: Vec<Argument>, ty: TypeId) -> AstNode {
+        let ident = Self::ident(name);
         Ast::Call(ident.into(), args, ty).into()
     }
 
-    pub fn call(&self, f: AstNode, args: Vec<Argument>, ty: TypeId) -> AstNode {
+    pub fn call(f: AstNode, args: Vec<Argument>, ty: TypeId) -> AstNode {
         Ast::Call(f.into(), args, ty).into()
     }
 
     pub fn main(&mut self, body: AstNode) -> AstNode {
-        let key = self.s("main".into());
+        let key = self.labels.s("main".into());
         self.func(key, &[], AstType::Int, body)
     }
 
-    pub fn assign(&self, name: StringKey, rhs: AstNode) -> AstNode {
+    pub fn assign(name: StringKey, rhs: AstNode) -> AstNode {
         Ast::Assign(AssignTarget::Identifier(name), rhs.into()).into()
     }
 
-    pub fn alloca(&self, name: StringKey, rhs: AstNode) -> AstNode {
+    pub fn alloca(name: StringKey, rhs: AstNode) -> AstNode {
         Ast::Assign(AssignTarget::Alloca(name), rhs.into()).into()
     }
 
-    pub fn cond(&self, condition: AstNode, then: AstNode, else_block: Option<AstNode>) -> AstNode {
+    pub fn cond(condition: AstNode, then: AstNode, else_block: Option<AstNode>) -> AstNode {
         Ast::Conditional(condition.into(), then.into(), else_block.map(|x| x.into())).into()
     }
 
-    pub fn label(&self, name: StringKey) -> AstNode {
+    pub fn label(name: StringKey) -> AstNode {
         Ast::BlockStart(name, vec![]).into()
     }
 
-    pub fn block_start(&self, name: StringKey, params: Vec<ParameterNode>) -> AstNode {
+    pub fn block_start(name: StringKey, params: Vec<ParameterNode>) -> AstNode {
         Ast::BlockStart(name, params).into()
     }
 
-    pub fn goto(&self, name: StringKey) -> AstNode {
+    pub fn goto(name: StringKey) -> AstNode {
         Ast::Goto(name).into()
     }
 
@@ -357,7 +354,7 @@ impl NodeBuilder {
         }
     }
 
-    pub fn module(&self, name: StringKey, body: AstNode) -> AstNode {
+    pub fn module(name: StringKey, body: AstNode) -> AstNode {
         let span_id = body.span_id;
         AstNode {
             node: Ast::Module(name, body.into()),
@@ -374,25 +371,25 @@ pub(crate) mod tests {
     pub fn gen_block<'c>(b: &mut NodeBuilder) -> AstNode {
         // global variable x = 10
         //seq.push(b.global("z", b.integer(10)));
-        let y = b.s("y").into();
-        let yy = b.s("yy").into();
-        let asdf = b.s("asdf");
-        let asdf2 = b.s("asdf2").into();
-        let entry = b.s("entry").into();
+        let y = b.labels.s("y").into();
+        let yy = b.labels.s("yy").into();
+        let asdf = b.labels.s("asdf");
+        let asdf2 = b.labels.s("asdf2").into();
+        let entry = b.labels.s("entry").into();
         let main = b.main(NB::seq(vec![
             // entry
-            b.label(entry),
-            b.assign(yy, 1.into()),
-            b.alloca(y, 999.into()),
-            b.goto(asdf.into()),
+            NB::label(entry),
+            NB::assign(yy, 1.into()),
+            NB::alloca(y, 999.into()),
+            NB::goto(asdf.into()),
             // asdf
-            b.label(asdf),
-            b.assign(yy, 2.into()),
-            b.goto(asdf2),
+            NB::label(asdf),
+            NB::assign(yy, 2.into()),
+            NB::goto(asdf2),
             // asdf2
-            b.label(asdf2),
-            b.assign(yy, 3.into()),
-            b.ret(Some(0.into())),
+            NB::label(asdf2),
+            NB::assign(yy, 3.into()),
+            NB::ret(Some(0.into())),
         ]));
         NB::seq(vec![b.import_prelude(), main])
     }
@@ -401,49 +398,52 @@ pub(crate) mod tests {
         let mut seq = vec![b.import_prelude()];
 
         // global variable x = 10
-        let x = b.s("x").into();
-        let x2 = b.s("x2").into();
-        let z = b.s("z").into();
-        let y = b.s("y").into();
-        let z_static = b.s("z_static");
+        let x = b.labels.s("x").into();
+        let x2 = b.labels.s("x2").into();
+        let z = b.labels.s("z").into();
+        let y = b.labels.s("y").into();
+        let z_static = b.labels.s("z_static");
 
-        seq.push(b.global(z, 10.into()));
+        seq.push(NB::global(z, 10.into()));
         seq.push(b.main(NB::seq(vec![
             // define local var
             // allocate mutable var
-            b.assign(x, 123.into()),
-            b.alloca(x2, 10.into()),
-            b.while_loop(
-                NB::ne(b.ident(x2.into()), 0.into()),
+            NB::assign(x, 123.into()),
+            NB::alloca(x2, 10.into()),
+            NB::while_loop(
+                NB::ne(NB::ident(x2.into()), 0.into()),
                 NB::seq(vec![
                     // static variable with local scope
-                    b.global(z_static, 10.into()),
-                    b.assign(z_static, 10.into()),
+                    NB::global(z_static, 10.into()),
+                    NB::assign(z_static, 10.into()),
                     // mutate global variable
-                    b.assign(z, NB::subtract(b.ident(z.into()), 1.into())),
+                    NB::assign(z, NB::subtract(NB::ident(z.into()), 1.into())),
                     // mutate scoped variable
-                    b.assign(x2, NB::subtract(b.ident(x2.into()), 1.into())),
-                    b.assign(z_static, NB::subtract(b.ident(z_static.into()), 1.into())),
+                    NB::assign(x2, NB::subtract(NB::ident(x2.into()), 1.into())),
+                    NB::assign(z_static, NB::subtract(NB::ident(z_static.into()), 1.into())),
                     // assign local
-                    b.assign(y, NB::subtract(b.ident(x.into()), b.ident(z_static.into()))),
+                    NB::assign(
+                        y,
+                        NB::subtract(NB::ident(x.into()), NB::ident(z_static.into())),
+                    ),
                 ]),
             ),
-            b.ret(Some(b.ident(z.into()))),
+            NB::ret(Some(NB::ident(z.into()))),
         ])));
 
         NB::seq(seq)
     }
 
     pub fn gen_function_call<'c>(b: &mut NodeBuilder) -> AstNode {
-        let x = b.s("x").into();
-        let x1 = b.s("x1").into();
-        let z = b.s("z").into();
-        let y = b.s("y").into();
-        let arg0 = b.s("arg0").into();
+        let x = b.labels.s("x").into();
+        let x1 = b.labels.s("x1").into();
+        let z = b.labels.s("z").into();
+        let y = b.labels.s("y").into();
+        let arg0 = b.labels.s("arg0").into();
         let t_int = b.t(&AstType::Int);
 
         let mut seq = vec![b.import_prelude()];
-        seq.push(b.global(z, 10.into()));
+        seq.push(NB::global(z, 10.into()));
 
         seq.push(b.func(
             x1,
@@ -451,36 +451,45 @@ pub(crate) mod tests {
             AstType::Int,
             NB::seq(vec![
                 // using an alloca
-                b.alloca(y, b.ident(arg0.into())),
-                b.cond(
-                    NB::ne(b.ident(y.into()), 0.into()),
+                NB::alloca(y, NB::ident(arg0.into())),
+                NB::cond(
+                    NB::ne(NB::ident(y.into()), 0.into()),
                     NB::seq(vec![
-                        b.assign(y, NB::subtract(b.ident(y.into()), 1.into())),
-                        b.assign(y, b.apply(x1.into(), vec![b.ident(y.into()).into()], t_int)),
+                        NB::assign(y, NB::subtract(NB::ident(y.into()), 1.into())),
+                        NB::assign(
+                            y,
+                            NB::apply(x1.into(), vec![NB::ident(y.into()).into()], t_int),
+                        ),
                     ]),
                     None,
                 ),
                 // using args
-                b.cond(
-                    NB::ne(b.ident(arg0.into()), 0.into()),
-                    NB::seq(vec![b.assign(
+                NB::cond(
+                    NB::ne(NB::ident(arg0.into()), 0.into()),
+                    NB::seq(vec![NB::assign(
                         y,
-                        b.apply(
+                        NB::apply(
                             x1.into(),
-                            vec![NB::subtract(b.ident(arg0.into()), 1.into()).into()],
+                            vec![NB::subtract(NB::ident(arg0.into()), 1.into()).into()],
                             t_int,
                         ),
                     )]),
                     None,
                 ),
-                b.ret(Some(b.ident(y.into()))),
+                NB::ret(Some(NB::ident(y.into()))),
             ]),
         ));
 
         seq.push(b.main(NB::seq(vec![
-            b.assign(x, b.apply(x1.into(), vec![AstNode::from(10).into()], t_int)),
-            b.assign(x, b.apply(x1.into(), vec![AstNode::from(0).into()], t_int)),
-            b.ret(Some(b.ident(x.into()))),
+            NB::assign(
+                x,
+                NB::apply(x1.into(), vec![AstNode::from(10).into()], t_int),
+            ),
+            NB::assign(
+                x,
+                NB::apply(x1.into(), vec![AstNode::from(0).into()], t_int),
+            ),
+            NB::ret(Some(NB::ident(x.into()))),
         ])));
         NB::seq(seq)
     }
@@ -498,24 +507,24 @@ pub fn ast_from_name(name: &str, mut args: Vec<Argument>, b: &mut NodeBuilder) -
             .collect::<Vec<_>>();
         assert_eq!(rest.len(), 0);
         let s = args.pop().unwrap().try_string().unwrap();
-        let key = b.s(&s);
+        let key = b.labels.s(&s);
         Some(Ast::Goto(key.into()))
     } else if name == "static" {
         println!("args: {:?}", args);
         let Argument::Positional(value) = args.pop().unwrap();
         let Argument::Positional(name_node) = args.pop().unwrap();
-        let name = b.s(&name_node.try_string().unwrap());
+        let name = b.labels.s(&name_node.try_string().unwrap());
         Some(Ast::global(name, *value))
     } else if name == "label" {
         let rest = args.split_off(1);
         let s = args.pop().unwrap().try_string().unwrap();
-        let key = b.s(&s);
+        let key = b.labels.s(&s);
 
         let mut params = vec![];
         for arg in rest {
             let Argument::Positional(node) = arg;
             let name = node.try_string().unwrap();
-            let key = b.s(&name);
+            let key = b.labels.s(&name);
             let ty = b.t(&AstType::Unit);
             params.push(ParameterNode {
                 name: key,

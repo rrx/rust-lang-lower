@@ -18,7 +18,7 @@ pub fn dump(env: &Environment, b: &NodeBuilder) {
     for (index, layer) in env.scopes.iter().enumerate() {
         println!("scope({},{:?})", index, layer.scope_type);
         for (key, data) in layer.names.iter() {
-            println!("  name  {} = {:?}", b.r(*key), data);
+            println!("  name  {} = {:?}", b.labels.r(*key), data);
         }
         for (key, data) in layer.labels.iter() {
             println!("  label {} = {:?}", b.resolve_label(*key), data);

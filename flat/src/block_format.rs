@@ -31,7 +31,7 @@ impl Blockify {
             }
 
             LCode::Goto(block_id) => {
-                format!("goto({})", b.r(*block_id))
+                format!("goto({})", b.labels.r(*block_id))
             }
 
             LCode::Jump(value_id, args) => {

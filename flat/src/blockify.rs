@@ -656,7 +656,7 @@ impl Blockify {
                     (true, NextSeqState::Other) => {
                         // a terminal, followed by other statements
                         // we create a next block for the statements to follow
-                        let name = b.s("next");
+                        let name = b.labels.s("next");
                         let v_next =
                             self.push_label(name.into(), expr_span_id, scope_id, &[], &[], b);
                         let r = self.add_with_next(current_entry_id.unwrap(), expr, v_next, b)?;
@@ -736,7 +736,7 @@ impl Blockify {
             _ => vec![return_type.clone()],
         };
 
-        let name = b.s("lambda_result");
+        let name = b.labels.s("lambda_result");
         let v_next = self.push_label(name.into(), span_id, scope_id, &return_type_args, &[], b);
 
         // push Arg to next block
@@ -770,7 +770,7 @@ impl Blockify {
         span_id: SpanId,
         b: &mut NodeBuilder,
     ) -> Result<AddResult> {
-        println!("add_function: {}", b.r(function_name));
+        println!("add_function: {}", b.labels.r(function_name));
         let scope_id = self.env.current_scope().unwrap();
 
         let params = def
@@ -800,7 +800,7 @@ impl Blockify {
             );
 
             // return block
-            let name = b.s("ret");
+            let name = b.labels.s("ret");
             //let return_type = *def.return_type;
             let args = match &return_type {
                 AstType::Unit => vec![],
@@ -1352,7 +1352,7 @@ impl Blockify {
                 let v_next = maybe_next.unwrap();
                 assert_eq!(v_next, maybe_next.unwrap());
 
-                let name = b.s("then");
+                let name = b.labels.s("then");
                 let then_scope_id = self.env.new_scope(ScopeType::Block);
                 let v_then =
                     self.push_label(name.into(), then_expr.span_id, then_scope_id, &[], &[], b);
@@ -1362,7 +1362,7 @@ impl Blockify {
                 self.env.exit_scope();
 
                 let v_else = if let Some(else_expr) = maybe_else_expr {
-                    let name = b.s("else");
+                    let name = b.labels.s("else");
                     let else_scope_id = self.env.new_scope(ScopeType::Block);
                     let v_else =
                         self.push_label(name.into(), else_expr.span_id, else_scope_id, &[], &[], b);
@@ -1398,7 +1398,7 @@ impl Blockify {
                 let v_c = r.value_id.unwrap();
 
                 let then_scope_id = self.env.new_scope(ScopeType::Block);
-                let name = b.s("then");
+                let name = b.labels.s("then");
                 self.env.enter_scope(then_scope_id);
                 let v_then = self.push_label(name.into(), x.span_id, then_scope_id, &[], &[], b);
                 let r = self.add(v_then, None, *x, b)?;
@@ -1407,7 +1407,7 @@ impl Blockify {
                 let then_ty = self.get_type(v_then_result);
 
                 let else_scope_id = self.env.new_scope(ScopeType::Block);
-                let name = b.s("else");
+                let name = b.labels.s("else");
                 self.env.enter_scope(else_scope_id);
                 let v_else = self.push_label(name.into(), y.span_id, else_scope_id, &[], &[], b);
                 let r = self.add(v_else, None, *y, b)?;
@@ -1459,7 +1459,7 @@ impl Blockify {
                 } else {
                     let span = b.spans.lookup(node.span_id);
                     b.spans.push_diagnostic(error(
-                        &format!("Block name not found: {}", b.r(label)),
+                        &format!("Block name not found: {}", b.labels.r(label)),
                         span,
                     ));
                     Err(Error::new(ParseError::Invalid))
@@ -1491,10 +1491,10 @@ impl Blockify {
                     let scope = self.env.get_scope(scope_id);
 
                     let global_name = if let ScopeType::Static = scope.scope_type {
-                        b.r(name).to_string()
+                        b.labels.r(name).to_string()
                     } else {
                         let unique_name = b.unique_static_name();
-                        let base = b.r(name);
+                        let base = b.labels.r(name);
                         format!("{}{}", base, unique_name).clone()
                     };
 
@@ -1508,7 +1508,7 @@ impl Blockify {
                         static_entry_id,
                         ast_ty.clone(),
                         VarDefinitionSpace::Static,
-                        b.s(&global_name),
+                        b.labels.s(&global_name),
                     );
 
                     let v = self.push_code_with_name(

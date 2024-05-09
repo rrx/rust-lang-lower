@@ -39,7 +39,7 @@ impl ExtraAst {
             } else if args.len() == 1 {
                 let Argument::Positional(arg) = args.pop().unwrap();
                 let s = arg.try_string().unwrap();
-                let key = b.s(&s);
+                let key = b.labels.s(&s);
                 Some(Self::LoopStart(Some(key)))
             } else {
                 unreachable!()
@@ -50,7 +50,7 @@ impl ExtraAst {
             } else if args.len() == 1 {
                 let Argument::Positional(arg) = args.pop().unwrap();
                 let s = arg.try_string().unwrap();
-                let key = b.s(&s);
+                let key = b.labels.s(&s);
                 Some(Self::LoopBreak(Some(key)))
             } else {
                 unreachable!()
@@ -61,7 +61,7 @@ impl ExtraAst {
             } else if args.len() == 1 {
                 let Argument::Positional(arg) = args.pop().unwrap();
                 let s = arg.try_string().unwrap();
-                let key = b.s(&s);
+                let key = b.labels.s(&s);
                 Some(Self::LoopContinue(Some(key)))
             } else {
                 unreachable!()
@@ -272,7 +272,7 @@ fn from_assign_target<P: syntax::ast::AstPayload>(
     use syntax::ast::AssignTargetP;
     match item {
         AssignTargetP::Identifier(ident) => {
-            ast::AssignTarget::Identifier(b.s(&ident.node.ident).into())
+            ast::AssignTarget::Identifier(b.labels.s(&ident.node.ident).into())
         }
         _ => unimplemented!(),
     }
@@ -332,7 +332,7 @@ impl Parser {
                     //Some(AstType::Unit)
                 };
                 ast::ParameterNode {
-                    name: b.s(&ident.node.ident),
+                    name: b.labels.s(&ident.node.ident),
                     ty: b.t(&ty.unwrap()),
                     node: ast::Parameter::Normal,
                     span_id,
@@ -374,7 +374,7 @@ impl Parser {
             StmtP::Statements(stmts) => StatementReader::build(self, stmts, env, b),
 
             StmtP::Def(def) => {
-                let name = b.s(&def.name.ident);
+                let name = b.labels.s(&def.name.ident);
 
                 env.enter_func();
 
@@ -408,7 +408,7 @@ impl Parser {
                 });
 
                 env.define(name);
-                Ok(b.global(name, def_ast.node(span_id)))
+                Ok(NB::global(name, def_ast.node(span_id)))
             }
 
             StmtP::If(expr, truestmt) => {
@@ -434,7 +434,7 @@ impl Parser {
                     let node = self.from_expr(expr, env, b)?;
                     Ast::Return(Some(node.into())).node(span_id)
                 }
-                None => b.ret(None),
+                None => NB::ret(None),
             }),
 
             StmtP::Assign(assign) => {
@@ -447,7 +447,7 @@ impl Parser {
                             return Ok(node);
                         }
 
-                        let name = b.s(&ident.node.ident);
+                        let name = b.labels.s(&ident.node.ident);
 
                         // lookup
                         if let Some(_data) = env.resolve(name) {
@@ -568,8 +568,10 @@ impl Parser {
                             Ok(ast)
                         } else if let Some(extra) = ExtraAst::from_name(&name, vec![], b) {
                             match extra {
-                                ExtraAst::LoopBreak(maybe_key) => Ok(b.loop_break(maybe_key)),
-                                ExtraAst::LoopContinue(maybe_key) => Ok(b.loop_continue(maybe_key)),
+                                ExtraAst::LoopBreak(maybe_key) => Ok(NB::loop_break(maybe_key)),
+                                ExtraAst::LoopContinue(maybe_key) => {
+                                    Ok(NB::loop_continue(maybe_key))
+                                }
                                 _ => unimplemented!(),
                             }
                         } else {
@@ -622,7 +624,7 @@ impl Parser {
 
                 match expr.node {
                     ExprP::Identifier(ident) => {
-                        let name = b.s(&ident.node.ident);
+                        let name = b.labels.s(&ident.node.ident);
                         if let Some(_data) = env.resolve(name) {
                             let ident_span_id = env.span_id(ident.span, b);
                             let ident = Ast::Identifier(name).node(ident_span_id);
@@ -637,7 +639,7 @@ impl Parser {
 
                     ExprP::Dot(expr, name) => {
                         if let ExprP::Identifier(ident) = &expr.node {
-                            let key = b.s(&ident.node.ident);
+                            let key = b.labels.s(&ident.node.ident);
                             if let Some(_data) = env.resolve(key) {
                                 let ident_span_id = env.span_id(ident.span, b);
                                 let ident = Ast::Identifier(key).node(ident_span_id);
@@ -650,10 +652,10 @@ impl Parser {
                                     let extra = ExtraAst::from_name(&name, args, b).unwrap();
                                     return match extra {
                                         ExtraAst::LoopBreak(maybe_key) => {
-                                            Ok(b.loop_break(maybe_key))
+                                            Ok(NB::loop_break(maybe_key))
                                         }
                                         ExtraAst::LoopContinue(maybe_key) => {
-                                            Ok(b.loop_continue(maybe_key))
+                                            Ok(NB::loop_continue(maybe_key))
                                         }
                                         _ => unimplemented!(),
                                     };
@@ -695,7 +697,7 @@ impl Parser {
                     return Ok(node);
                 }
 
-                let name = b.s(&ident.node.ident);
+                let name = b.labels.s(&ident.node.ident);
                 let span_id = env.span_id(item.span, b);
                 if let Some(_data) = env.resolve(name) {
                     let ast = Ast::Identifier(name).node(span_id);
@@ -805,10 +807,10 @@ impl<P: syntax::ast::AstPayload> StatementReader<P> {
                         reader.start_loop(key);
                     }
                     ExtraAst::LoopBreak(maybe_key) => {
-                        reader.push_ast(b.loop_break(maybe_key));
+                        reader.push_ast(NB::loop_break(maybe_key));
                     }
                     ExtraAst::LoopContinue(maybe_key) => {
-                        reader.push_ast(b.loop_continue(maybe_key));
+                        reader.push_ast(NB::loop_continue(maybe_key));
                     }
                     ExtraAst::BlockEnd => {
                         let ast = reader.end_loop();
@@ -847,7 +849,7 @@ impl StarlarkParser {
             .add_source(filename.to_string(), std::fs::read_to_string(filename)?);
 
         let mut parser = Parser::new();
-        let module_key = b.s("module");
+        let module_key = b.labels.s("module");
         let ast: AstNode = parser.parse(Path::new(filename), None, module_key, file_id, b)?;
         dump::ast::dump(&ast, b);
 

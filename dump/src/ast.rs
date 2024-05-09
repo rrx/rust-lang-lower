@@ -57,7 +57,7 @@ pub fn dump_strings(
 ) {
     match &node.node {
         Ast::Module(name, body) => {
-            let s = format!("module({})", b.r(*name));
+            let s = format!("module({})", b.labels.r(*name));
             out.push((depth, s, node.span_id));
             depth += 1;
             dump_strings(body, b, out, depth);
@@ -92,7 +92,7 @@ pub fn dump_strings(
         }
 
         Ast::BlockStart(name, params) => {
-            let s = format!("block_start: {}", b.r(*name),);
+            let s = format!("block_start: {}", b.labels.r(*name),);
             out.push((depth, s, node.span_id));
             for e in params {
                 let s = format!("arg: {}, {:?}", b.resolve_label(e.name.into()), e.ty,);
@@ -100,12 +100,8 @@ pub fn dump_strings(
             }
         }
 
-        //Ast::Label(name) => {
-        //let s = format!("label: {}", b.r(*name));
-        //out.push((depth, s, self.span_id));
-        //}
         Ast::Goto(key) => {
-            let s = format!("goto: {}", b.r(*key),);
+            let s = format!("goto: {}", b.labels.r(*key),);
             out.push((depth, s, node.span_id));
         }
 
@@ -124,22 +120,8 @@ pub fn dump_strings(
             }
         }
 
-        /*
-        Ast::Block(block) => {
-            let s = format!("block({})", b.resolve_block_label(block.name),);
-            out.push((depth, s, self.span_id));
-            depth += 1;
-            for a in &block.params {
-                let s = format!("arg: {}: {:?}", b.resolve_label(a.name.into()), a.ty,);
-                out.push((depth, s, self.span_id));
-            }
-            for a in &block.children {
-                a.dump_strings(b, out, depth);
-            }
-        }
-        */
         Ast::Global(key, value) => {
-            let s = format!("global: {}", b.r(*key));
+            let s = format!("global: {}", b.labels.r(*key));
             out.push((depth, s, node.span_id));
             dump_strings(value, b, out, depth + 1);
         }
@@ -208,7 +190,11 @@ pub fn dump_strings(
         }
 
         Ast::Branch(c, then_key, else_key) => {
-            let s = format!("branch: {}, {}", b.r(*then_key), b.r(*else_key),);
+            let s = format!(
+                "branch: {}, {}",
+                b.labels.r(*then_key),
+                b.labels.r(*else_key),
+            );
             out.push((depth, s, node.span_id));
             dump_strings(c, b, out, depth + 1);
         }
@@ -225,17 +211,8 @@ pub fn dump_strings(
             }
         }
 
-        //Ast::Deref(a, _) => a.dump_strings(b, out, depth),
-        /*
-        Ast::Mutate(lhs, rhs) => {
-            let s = format!("mutate");
-            out.push((depth, s, self.span_id));
-            lhs.dump_strings(b, out, depth + 1);
-            rhs.dump_strings(b, out, depth + 1);
-        }
-        */
         Ast::Loop(key, body) => {
-            let s = format!("loop({})", b.r(*key));
+            let s = format!("loop({})", b.labels.r(*key));
             out.push((depth, s, node.span_id));
             dump_strings(body, b, out, depth + 1);
         }
@@ -243,7 +220,7 @@ pub fn dump_strings(
         Ast::Break(maybe_key, args) => {
             let s = format!(
                 "break({})",
-                maybe_key.map(|key| b.r(key)).or(Some("")).unwrap()
+                maybe_key.map(|key| b.labels.r(key)).or(Some("")).unwrap()
             );
             out.push((depth, s, node.span_id));
             for expr in args {
@@ -254,7 +231,7 @@ pub fn dump_strings(
         Ast::Continue(maybe_key, args) => {
             let s = format!(
                 "continue({})",
-                maybe_key.map(|key| b.r(key)).or(Some("")).unwrap()
+                maybe_key.map(|key| b.labels.r(key)).or(Some("")).unwrap()
             );
             out.push((depth, s, node.span_id));
             for expr in args {
@@ -265,15 +242,3 @@ pub fn dump_strings(
         _ => unimplemented!("{:?}", node),
     }
 }
-
-/*
-pub fn print_html(s: &str, depth: usize, span: &Span) {
-    println!(
-        "{:width$}<span class=\"span{}\">{}</span>",
-        "",
-        span.span_id.index(),
-        s,
-        width = depth * 2
-    );
-}
-*/
