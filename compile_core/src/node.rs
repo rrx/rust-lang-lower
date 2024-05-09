@@ -146,3 +146,12 @@ impl From<Argument> for AstNode {
         }
     }
 }
+
+impl From<Ast> for AstNode {
+    fn from(ast: Ast) -> Self {
+        Self {
+            node: ast,
+            span_id: SpanId::unknown(),
+        }
+    }
+}

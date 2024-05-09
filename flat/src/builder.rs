@@ -6,34 +6,6 @@ use compile_core::{
 
 use crate::BuiltinBuilder;
 
-#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
-pub enum BlockId {
-    Name(StringKey),
-    // unique
-    U(usize),
-}
-
-impl From<StringKey> for BlockId {
-    fn from(item: StringKey) -> BlockId {
-        BlockId::Name(item)
-    }
-}
-
-impl From<&StringKey> for BlockId {
-    fn from(item: &StringKey) -> BlockId {
-        BlockId::Name(*item)
-    }
-}
-
-impl BlockId {
-    pub fn to_string(self, b: &NodeBuilder) -> String {
-        match self {
-            Self::Name(key) => b.r(key).to_string(),
-            Self::U(i) => format!("b{}", i),
-        }
-    }
-}
-
 #[derive(Debug, Eq, PartialEq, Hash, Clone, Copy)]
 pub enum StringLabel {
     Intern(StringKey),
@@ -54,21 +26,15 @@ impl From<&StringKey> for StringLabel {
 
 pub struct LabelBuilder {
     unique_count: usize,
-    strings: StringPool,
+    pool: StringPool,
 }
 
 impl LabelBuilder {
     pub fn new() -> Self {
         Self {
             unique_count: 0,
-            strings: StringPool::new(),
+            pool: StringPool::new(),
         }
-    }
-
-    pub fn fresh_block_id(&mut self) -> BlockId {
-        let offset = self.unique_count;
-        self.unique_count += 1;
-        BlockId::U(offset)
     }
 
     pub fn fresh_var_id(&mut self) -> StringLabel {
@@ -141,11 +107,11 @@ impl NodeBuilder {
     }
 
     pub fn r(&self, key: StringKey) -> &str {
-        self.labels.strings.resolve(&key)
+        self.labels.pool.resolve(&key)
     }
 
     pub fn s(&mut self, s: &str) -> StringKey {
-        self.labels.strings.intern(s.into())
+        self.labels.pool.intern(s.into())
     }
 
     pub fn t(&mut self, t: &AstType) -> TypeId {
@@ -156,16 +122,9 @@ impl NodeBuilder {
         self.types.pool.resolve(&id)
     }
 
-    pub fn resolve_block_label(&self, k: BlockId) -> String {
-        match k {
-            BlockId::Name(key) => self.labels.strings.resolve(&key).clone(),
-            BlockId::U(offset) => format!("b{}", offset),
-        }
-    }
-
     pub fn resolve_label(&self, k: StringLabel) -> String {
         match k {
-            StringLabel::Intern(key) => self.labels.strings.resolve(&key).clone(),
+            StringLabel::Intern(key) => self.labels.pool.resolve(&key).clone(),
             StringLabel::Variable(offset) => format!("v{}", offset),
         }
     }
@@ -225,12 +184,14 @@ impl NodeBuilder {
         AstNode { node, span_id }
     }
 
+    /*
     pub fn node(&self, ast: Ast) -> AstNode {
         AstNode {
             node: ast,
             span_id: SpanId::unknown(),
         }
     }
+    */
 
     pub fn error(&self, span_id: SpanId) -> AstNode {
         self.build(Ast::Error, span_id)
@@ -259,11 +220,12 @@ impl NodeBuilder {
         let return_type = self.t(&return_type);
         self.global(
             name,
-            self.node(Ast::Definition(Definition {
+            Ast::Definition(Definition {
                 params,
                 return_type,
                 body: body.map(|b| b.into()),
-            })),
+            })
+            .into(),
         )
     }
 
@@ -271,7 +233,7 @@ impl NodeBuilder {
         let s = self.string("prelude");
         let arg = self.arg(s);
         let id = self.builtins.get_id(crate::Builtin::Import);
-        self.node(Ast::Builtin(id, vec![arg]))
+        Ast::Builtin(id, vec![arg]).into()
     }
 
     pub fn prelude(&mut self) -> Vec<AstNode> {
@@ -285,25 +247,24 @@ impl NodeBuilder {
     }
 
     pub fn string(&self, s: &str) -> AstNode {
-        self.node(Ast::Literal(Literal::String(s.to_string())))
+        Ast::Literal(Literal::String(s.to_string())).into()
     }
 
     pub fn integer(&self, x: i64) -> AstNode {
-        self.node(Ast::Literal(Literal::Int(x)))
+        Ast::Literal(Literal::Int(x)).into()
     }
 
     pub fn index(&self, x: i64) -> AstNode {
-        self.node(Ast::Literal(Literal::Index(x as usize)))
+        Ast::Literal(Literal::Index(x as usize)).into()
     }
 
     pub fn bool(&self, x: bool) -> AstNode {
-        self.node(Ast::Literal(Literal::Bool(x)))
+        Ast::Literal(Literal::Bool(x)).into()
     }
 
     pub fn binop(&self, op: BinaryOperation, a: AstNode, b: AstNode) -> AstNode {
         let op_node = BinOpNode::new(op, SpanId::unknown());
-        let ast = Ast::BinaryOp(op_node, a.into(), b.into());
-        self.node(ast)
+        Ast::BinaryOp(op_node, a.into(), b.into()).into()
     }
 
     pub fn subtract(&self, a: AstNode, b: AstNode) -> AstNode {
@@ -333,7 +294,7 @@ impl NodeBuilder {
             .map(|expr| expr.to_vec())
             .flatten()
             .collect();
-        self.node(Ast::Sequence(nodes))
+        Ast::Sequence(nodes).into()
     }
 
     pub fn v(&self, name: StringKey) -> AstNode {
@@ -341,23 +302,23 @@ impl NodeBuilder {
     }
 
     pub fn ident(&self, name: StringKey) -> AstNode {
-        self.node(Ast::Identifier(name))
+        Ast::Identifier(name).into()
     }
 
     pub fn global(&self, name: StringKey, value: AstNode) -> AstNode {
-        self.node(Ast::Global(name, value.into()))
+        Ast::Global(name, value.into()).into()
     }
 
     pub fn while_loop(&self, condition: AstNode, body: AstNode) -> AstNode {
-        self.node(Ast::While(condition.into(), body.into()))
+        Ast::While(condition.into(), body.into()).into()
     }
 
     pub fn loop_break(&self, key: Option<StringKey>) -> AstNode {
-        self.node(Ast::Break(key, vec![]))
+        Ast::Break(key, vec![]).into()
     }
 
     pub fn loop_continue(&self, key: Option<StringKey>) -> AstNode {
-        self.node(Ast::Continue(key, vec![]))
+        Ast::Continue(key, vec![]).into()
     }
 
     pub fn func(
@@ -371,7 +332,7 @@ impl NodeBuilder {
     }
 
     pub fn ret(&self, node: Option<AstNode>) -> AstNode {
-        self.node(Ast::Return(node.map(|n| n.into())))
+        Ast::Return(node.map(|n| n.into())).into()
     }
 
     pub fn arg(&self, node: AstNode) -> Argument {
@@ -380,11 +341,11 @@ impl NodeBuilder {
 
     pub fn apply(&self, name: StringKey, args: Vec<Argument>, ty: TypeId) -> AstNode {
         let ident = self.ident(name);
-        self.node(Ast::Call(ident.into(), args, ty))
+        Ast::Call(ident.into(), args, ty).into()
     }
 
     pub fn call(&self, f: AstNode, args: Vec<Argument>, ty: TypeId) -> AstNode {
-        self.node(Ast::Call(f.into(), args, ty))
+        Ast::Call(f.into(), args, ty).into()
     }
 
     pub fn main(&mut self, body: AstNode) -> AstNode {
@@ -393,31 +354,27 @@ impl NodeBuilder {
     }
 
     pub fn assign(&self, name: StringKey, rhs: AstNode) -> AstNode {
-        self.node(Ast::Assign(AssignTarget::Identifier(name), rhs.into()))
+        Ast::Assign(AssignTarget::Identifier(name), rhs.into()).into()
     }
 
     pub fn alloca(&self, name: StringKey, rhs: AstNode) -> AstNode {
-        self.node(Ast::Assign(AssignTarget::Alloca(name), rhs.into()))
+        Ast::Assign(AssignTarget::Alloca(name), rhs.into()).into()
     }
 
     pub fn cond(&self, condition: AstNode, then: AstNode, else_block: Option<AstNode>) -> AstNode {
-        self.node(Ast::Conditional(
-            condition.into(),
-            then.into(),
-            else_block.map(|x| x.into()),
-        ))
+        Ast::Conditional(condition.into(), then.into(), else_block.map(|x| x.into())).into()
     }
 
     pub fn label(&self, name: StringKey) -> AstNode {
-        self.node(Ast::BlockStart(name, vec![]))
+        Ast::BlockStart(name, vec![]).into()
     }
 
     pub fn block_start(&self, name: StringKey, params: Vec<ParameterNode>) -> AstNode {
-        self.node(Ast::BlockStart(name, params))
+        Ast::BlockStart(name, params).into()
     }
 
     pub fn goto(&self, name: StringKey) -> AstNode {
-        self.node(Ast::Goto(name))
+        Ast::Goto(name).into()
     }
 
     pub fn param(&mut self, name: StringKey, ty: AstType) -> ParameterNode {

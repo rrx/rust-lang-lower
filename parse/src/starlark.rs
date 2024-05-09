@@ -770,7 +770,7 @@ impl<P: syntax::ast::AstPayload> StatementReader<P> {
     fn end_loop(&mut self, b: &mut NodeBuilder) -> AstNode {
         let seq = self.loops.pop().unwrap();
         let key = self.names.pop().unwrap();
-        b.node(Ast::Loop(key, b.seq(seq).into()))
+        Ast::Loop(key, b.seq(seq).into()).into()
     }
 
     fn push_ast(&mut self, ast: AstNode) {
