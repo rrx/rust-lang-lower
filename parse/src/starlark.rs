@@ -333,7 +333,7 @@ impl Parser {
                 };
                 ast::ParameterNode {
                     name: b.labels.s(&ident.node.ident),
-                    ty: b.t(&ty.unwrap()),
+                    ty: b.types.s(&ty.unwrap()),
                     node: ast::Parameter::Normal,
                     span_id,
                 }
@@ -403,7 +403,7 @@ impl Parser {
 
                 let def_ast = Ast::Definition(ast::Definition {
                     body: Some(NB::seq(body).into()),
-                    return_type: b.t(&return_type),
+                    return_type: b.types.s(&return_type),
                     params,
                 });
 
@@ -620,7 +620,7 @@ impl Parser {
                 for arg in expr_args {
                     args.push(self.from_argument(arg, env, b)?.into());
                 }
-                let t_int = b.t(&AstType::Int);
+                let t_int = b.types.s(&AstType::Int);
 
                 match expr.node {
                     ExprP::Identifier(ident) => {

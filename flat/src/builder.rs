@@ -62,6 +62,10 @@ impl TypeBuilder {
             pool: TypePool::new(),
         }
     }
+
+    pub fn s(&mut self, t: &AstType) -> TypeId {
+        self.pool.intern(t.clone())
+    }
 }
 
 pub struct NodeBuilder {
@@ -96,12 +100,12 @@ impl NodeBuilder {
 
     fn init(&mut self) {
         let ty = AstType::Func(vec![AstType::Bool], AstType::Unit.into());
-        let ty = self.t(&ty);
+        let ty = self.types.s(&ty);
         let b = compile_core::Builtin::new("check".into(), ty);
         self.builtins.insert(b);
 
         let ty = AstType::Func(vec![AstType::String], AstType::Unit.into());
-        let ty = self.t(&ty);
+        let ty = self.types.s(&ty);
         let b = compile_core::Builtin::new("use".into(), ty);
         self.builtins.insert(b);
 
@@ -109,7 +113,7 @@ impl NodeBuilder {
             vec![AstType::Sum(vec![AstType::Int, AstType::Float])],
             AstType::Unit.into(),
         );
-        let ty = self.t(&ty);
+        let ty = self.types.s(&ty);
         let b = compile_core::Builtin::new("print".into(), ty);
         self.builtins.insert(b);
     }
@@ -118,11 +122,11 @@ impl NodeBuilder {
     pub fn s(&mut self, s: &str) -> StringKey {
         self.labels.pool.intern(s.into())
     }
-    */
 
     pub fn t(&mut self, t: &AstType) -> TypeId {
         self.types.pool.intern(t.clone())
     }
+    */
 
     pub fn rt(&mut self, id: TypeId) -> &AstType {
         self.types.pool.resolve(&id)
@@ -196,7 +200,7 @@ impl NodeBuilder {
         let params = params
             .into_iter()
             .map(|(name, ty)| {
-                let ty = self.t(ty);
+                let ty = self.types.s(ty);
                 ParameterNode {
                     name: *name,
                     ty,
@@ -206,7 +210,7 @@ impl NodeBuilder {
             })
             .collect();
 
-        let return_type = self.t(&return_type);
+        let return_type = self.types.s(&return_type);
         Self::global(
             name,
             Ast::Definition(Definition {
@@ -345,7 +349,7 @@ impl NodeBuilder {
     }
 
     pub fn param(&mut self, name: StringKey, ty: AstType) -> ParameterNode {
-        let ty = self.t(&ty);
+        let ty = self.types.s(&ty);
         ParameterNode {
             name,
             ty: ty.clone(),
@@ -440,7 +444,7 @@ pub(crate) mod tests {
         let z = b.labels.s("z").into();
         let y = b.labels.s("y").into();
         let arg0 = b.labels.s("arg0").into();
-        let t_int = b.t(&AstType::Int);
+        let t_int = b.types.s(&AstType::Int);
 
         let mut seq = vec![b.import_prelude()];
         seq.push(NB::global(z, 10.into()));
@@ -525,7 +529,7 @@ pub fn ast_from_name(name: &str, mut args: Vec<Argument>, b: &mut NodeBuilder) -
             let Argument::Positional(node) = arg;
             let name = node.try_string().unwrap();
             let key = b.labels.s(&name);
-            let ty = b.t(&AstType::Unit);
+            let ty = b.types.s(&AstType::Unit);
             params.push(ParameterNode {
                 name: key,
                 ty,
