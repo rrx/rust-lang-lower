@@ -782,8 +782,33 @@ impl<P: syntax::ast::AstPayload> StatementReader<P> {
         env: &mut Environment,
         b: &mut NodeBuilder,
     ) -> Result<()> {
-        let ast = parse.from_stmt(stmt, env, b)?;
-        self.push_ast(ast);
+        if parse.is_extra(&stmt) {
+            let extra = parse.read_extra(stmt, env, b)?;
+            match extra {
+                ExtraAst::LoopStart(maybe_key) => {
+                    let key = if let Some(key) = maybe_key {
+                        key
+                    } else {
+                        b.fresh_loop_name()
+                    };
+                    self.start_loop(key);
+                }
+                ExtraAst::LoopBreak(maybe_key) => {
+                    self.push_ast(NB::loop_break(maybe_key));
+                }
+                ExtraAst::LoopContinue(maybe_key) => {
+                    self.push_ast(NB::loop_continue(maybe_key));
+                }
+                ExtraAst::BlockEnd => {
+                    let ast = self.end_loop();
+                    self.push_ast(ast);
+                }
+            }
+        } else {
+            let ast = parse.from_stmt(stmt, env, b)?;
+            self.push_ast(ast);
+        }
+
         Ok(())
     }
 
@@ -795,31 +820,7 @@ impl<P: syntax::ast::AstPayload> StatementReader<P> {
     ) -> Result<AstNode> {
         let mut reader = Self::new();
         for stmt in stmts {
-            if parse.is_extra(&stmt) {
-                let extra = parse.read_extra(stmt, env, b)?;
-                match extra {
-                    ExtraAst::LoopStart(maybe_key) => {
-                        let key = if let Some(key) = maybe_key {
-                            key
-                        } else {
-                            b.fresh_loop_name()
-                        };
-                        reader.start_loop(key);
-                    }
-                    ExtraAst::LoopBreak(maybe_key) => {
-                        reader.push_ast(NB::loop_break(maybe_key));
-                    }
-                    ExtraAst::LoopContinue(maybe_key) => {
-                        reader.push_ast(NB::loop_continue(maybe_key));
-                    }
-                    ExtraAst::BlockEnd => {
-                        let ast = reader.end_loop();
-                        reader.push_ast(ast);
-                    }
-                }
-            } else {
-                reader.push_stmt(stmt, parse, env, b)?;
-            }
+            reader.push_stmt(stmt, parse, env, b)?;
         }
         Ok(NB::seq(reader.seq.drain(..).collect()))
     }
