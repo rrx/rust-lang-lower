@@ -238,14 +238,14 @@ impl NodeBuilder {
         Self::binop(BinaryOperation::EQ, a, b)
     }
 
-    pub fn seq(nodes: Vec<AstNode>) -> AstNode {
+    pub fn seq(nodes: Vec<AstNode>, span_id: SpanId) -> AstNode {
         // flatten nodes
         let nodes = nodes
             .into_iter()
             .map(|expr| expr.to_vec())
             .flatten()
             .collect();
-        Ast::Sequence(nodes).into()
+        Ast::Sequence(nodes).node(span_id)
     }
 
     pub fn ident(name: StringKey) -> AstNode {
@@ -352,22 +352,26 @@ pub(crate) mod tests {
         let asdf = b.labels.s("asdf");
         let asdf2 = b.labels.s("asdf2").into();
         let entry = b.labels.s("entry").into();
-        let main = b.main(NB::seq(vec![
-            // entry
-            NB::label(entry),
-            NB::assign(yy, 1.into()),
-            NB::alloca(y, 999.into()),
-            NB::goto(asdf.into()),
-            // asdf
-            NB::label(asdf),
-            NB::assign(yy, 2.into()),
-            NB::goto(asdf2),
-            // asdf2
-            NB::label(asdf2),
-            NB::assign(yy, 3.into()),
-            NB::ret(Some(0.into())),
-        ]));
-        NB::seq(vec![b.import_prelude(), main])
+        let span_id = b.spans.get_span_unknown();
+        let main = b.main(NB::seq(
+            vec![
+                // entry
+                NB::label(entry),
+                NB::assign(yy, 1.into()),
+                NB::alloca(y, 999.into()),
+                NB::goto(asdf.into()),
+                // asdf
+                NB::label(asdf),
+                NB::assign(yy, 2.into()),
+                NB::goto(asdf2),
+                // asdf2
+                NB::label(asdf2),
+                NB::assign(yy, 3.into()),
+                NB::ret(Some(0.into())),
+            ],
+            span_id,
+        ));
+        NB::seq(vec![b.import_prelude(), main], span_id)
     }
 
     pub fn gen_while<'c>(b: &mut NodeBuilder) -> AstNode {
@@ -379,35 +383,45 @@ pub(crate) mod tests {
         let z = b.labels.s("z").into();
         let y = b.labels.s("y").into();
         let z_static = b.labels.s("z_static");
+        let span_id = b.spans.get_span_unknown();
 
         seq.push(NB::global(z, 10.into()));
-        seq.push(b.main(NB::seq(vec![
-            // define local var
-            // allocate mutable var
-            NB::assign(x, 123.into()),
-            NB::alloca(x2, 10.into()),
-            NB::while_loop(
-                NB::ne(NB::ident(x2.into()), 0.into()),
-                NB::seq(vec![
-                    // static variable with local scope
-                    NB::global(z_static, 10.into()),
-                    NB::assign(z_static, 10.into()),
-                    // mutate global variable
-                    NB::assign(z, NB::subtract(NB::ident(z.into()), 1.into())),
-                    // mutate scoped variable
-                    NB::assign(x2, NB::subtract(NB::ident(x2.into()), 1.into())),
-                    NB::assign(z_static, NB::subtract(NB::ident(z_static.into()), 1.into())),
-                    // assign local
-                    NB::assign(
-                        y,
-                        NB::subtract(NB::ident(x.into()), NB::ident(z_static.into())),
+        seq.push(b.main(NB::seq(
+            vec![
+                // define local var
+                // allocate mutable var
+                NB::assign(x, 123.into()),
+                NB::alloca(x2, 10.into()),
+                NB::while_loop(
+                    NB::ne(NB::ident(x2.into()), 0.into()),
+                    NB::seq(
+                        vec![
+                            // static variable with local scope
+                            NB::global(z_static, 10.into()),
+                            NB::assign(z_static, 10.into()),
+                            // mutate global variable
+                            NB::assign(z, NB::subtract(NB::ident(z.into()), 1.into())),
+                            // mutate scoped variable
+                            NB::assign(x2, NB::subtract(NB::ident(x2.into()), 1.into())),
+                            NB::assign(
+                                z_static,
+                                NB::subtract(NB::ident(z_static.into()), 1.into()),
+                            ),
+                            // assign local
+                            NB::assign(
+                                y,
+                                NB::subtract(NB::ident(x.into()), NB::ident(z_static.into())),
+                            ),
+                        ],
+                        span_id,
                     ),
-                ]),
-            ),
-            NB::ret(Some(NB::ident(z.into()))),
-        ])));
+                ),
+                NB::ret(Some(NB::ident(z.into()))),
+            ],
+            span_id,
+        )));
 
-        NB::seq(seq)
+        NB::seq(seq, span_id)
     }
 
     pub fn gen_function_call<'c>(b: &mut NodeBuilder) -> AstNode {
@@ -417,6 +431,7 @@ pub(crate) mod tests {
         let y = b.labels.s("y").into();
         let arg0 = b.labels.s("arg0").into();
         let t_int = b.types.s(&AstType::Int);
+        let span_id = b.spans.get_span_unknown();
 
         let mut seq = vec![b.import_prelude()];
         seq.push(NB::global(z, 10.into()));
@@ -425,49 +440,61 @@ pub(crate) mod tests {
             x1,
             &[(arg0, AstType::Int)],
             AstType::Int,
-            NB::seq(vec![
-                // using an alloca
-                NB::alloca(y, NB::ident(arg0.into())),
-                NB::cond(
-                    NB::ne(NB::ident(y.into()), 0.into()),
-                    NB::seq(vec![
-                        NB::assign(y, NB::subtract(NB::ident(y.into()), 1.into())),
-                        NB::assign(
-                            y,
-                            NB::apply(x1.into(), vec![NB::ident(y.into()).into()], t_int),
+            NB::seq(
+                vec![
+                    // using an alloca
+                    NB::alloca(y, NB::ident(arg0.into())),
+                    NB::cond(
+                        NB::ne(NB::ident(y.into()), 0.into()),
+                        NB::seq(
+                            vec![
+                                NB::assign(y, NB::subtract(NB::ident(y.into()), 1.into())),
+                                NB::assign(
+                                    y,
+                                    NB::apply(x1.into(), vec![NB::ident(y.into()).into()], t_int),
+                                ),
+                            ],
+                            span_id,
                         ),
-                    ]),
-                    None,
-                ),
-                // using args
-                NB::cond(
-                    NB::ne(NB::ident(arg0.into()), 0.into()),
-                    NB::seq(vec![NB::assign(
-                        y,
-                        NB::apply(
-                            x1.into(),
-                            vec![NB::subtract(NB::ident(arg0.into()), 1.into()).into()],
-                            t_int,
+                        None,
+                    ),
+                    // using args
+                    NB::cond(
+                        NB::ne(NB::ident(arg0.into()), 0.into()),
+                        NB::seq(
+                            vec![NB::assign(
+                                y,
+                                NB::apply(
+                                    x1.into(),
+                                    vec![NB::subtract(NB::ident(arg0.into()), 1.into()).into()],
+                                    t_int,
+                                ),
+                            )],
+                            span_id,
                         ),
-                    )]),
-                    None,
-                ),
-                NB::ret(Some(NB::ident(y.into()))),
-            ]),
+                        None,
+                    ),
+                    NB::ret(Some(NB::ident(y.into()))),
+                ],
+                span_id,
+            ),
         ));
 
-        seq.push(b.main(NB::seq(vec![
-            NB::assign(
-                x,
-                NB::apply(x1.into(), vec![AstNode::from(10).into()], t_int),
-            ),
-            NB::assign(
-                x,
-                NB::apply(x1.into(), vec![AstNode::from(0).into()], t_int),
-            ),
-            NB::ret(Some(NB::ident(x.into()))),
-        ])));
-        NB::seq(seq)
+        seq.push(b.main(NB::seq(
+            vec![
+                NB::assign(
+                    x,
+                    NB::apply(x1.into(), vec![AstNode::from(10).into()], t_int),
+                ),
+                NB::assign(
+                    x,
+                    NB::apply(x1.into(), vec![AstNode::from(0).into()], t_int),
+                ),
+                NB::ret(Some(NB::ident(x.into()))),
+            ],
+            span_id,
+        )));
+        NB::seq(seq, span_id)
     }
 }
 

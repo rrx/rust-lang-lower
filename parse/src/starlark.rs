@@ -310,7 +310,7 @@ impl Parser {
         let ast: compile_core::AstNode = self.from_stmt(stmt, &mut env, b)?;
         let span_id = ast.span_id.clone();
         seq.push(ast);
-        Ok(Ast::Module(module_key, NB::seq(seq).into()).node(span_id))
+        Ok(Ast::Module(module_key, NB::seq(seq, span_id).into()).node(span_id))
     }
 
     fn from_parameter<'a, P: syntax::ast::AstPayload>(
@@ -371,10 +371,14 @@ impl Parser {
         let span_id = env.span_id(item.span, b);
 
         match item.node {
-            StmtP::Statements(stmts) => StatementReader::build(self, stmts, env, b),
+            StmtP::Statements(stmts) => {
+                let span_id = env.span_id(item.span, b);
+                StatementReader::build(self, stmts, span_id, env, b)
+            }
 
             StmtP::Def(def) => {
                 let name = b.labels.s(&def.name.ident);
+                let span_id = env.span_id(item.span, b);
 
                 env.enter_func();
 
@@ -402,7 +406,7 @@ impl Parser {
                     .unwrap_or(AstType::Unit);
 
                 let def_ast = Ast::Definition(ast::Definition {
-                    body: Some(NB::seq(body).into()),
+                    body: Some(NB::seq(body, span_id).into()),
                     return_type: b.types.s(&return_type),
                     params,
                 });
@@ -766,9 +770,9 @@ impl<P: syntax::ast::AstPayload> StatementReader<P> {
 
     fn end_loop(&mut self) -> AstNode {
         let seq = self.loops.pop().unwrap();
-        self.loop_spans.pop().unwrap();
+        let span_id = self.loop_spans.pop().unwrap();
         let key = self.names.pop().unwrap();
-        Ast::Loop(key, NB::seq(seq).into()).into()
+        Ast::Loop(key, NB::seq(seq, span_id).into()).into()
     }
 
     fn push_ast(&mut self, ast: AstNode) {
@@ -821,6 +825,7 @@ impl<P: syntax::ast::AstPayload> StatementReader<P> {
     fn build(
         parse: &mut Parser,
         stmts: Vec<syntax::ast::AstStmtP<P>>,
+        span_id: SpanId,
         env: &mut Environment,
         b: &mut NodeBuilder,
     ) -> Result<AstNode> {
@@ -830,10 +835,12 @@ impl<P: syntax::ast::AstPayload> StatementReader<P> {
         }
 
         if reader.loops.len() > 0 {
-            //b.spans.push_diagnostic(b.spans.error("Mismatched end loop", reader.loops.get(0).unwrap().
+            let span = b.spans.lookup(span_id);
+            b.spans
+                .push_diagnostic(b.spans.error("Mismatched end loop", &span));
         }
 
-        Ok(NB::seq(reader.seq.drain(..).collect()))
+        Ok(NB::seq(reader.seq.drain(..).collect(), span_id))
     }
 }
 
