@@ -1,12 +1,6 @@
 use crate::{AstNode, AstType, BuiltinId, SpanId, StringKey, TypeId};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
-pub enum DefinitionId {
-    Var(u32),
-    Arg(u32),
-}
-
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum VarDefinitionSpace {
     Arg,
     Reg,

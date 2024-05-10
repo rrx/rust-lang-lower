@@ -1,7 +1,7 @@
 use compile_core::ast::*;
 use compile_core::{
-    Argument, Ast, AstNode, AstType, Definition, DefinitionId, Literal, Parameter, ParameterNode,
-    SpanBuilder, SpanId, StringKey, StringPool, TypeId, TypePool,
+    Argument, Ast, AstNode, AstType, Definition, Literal, Parameter, ParameterNode, SpanBuilder,
+    SpanId, StringKey, StringPool, TypeId, TypePool,
 };
 
 use crate::BuiltinBuilder;
@@ -78,7 +78,6 @@ impl TypeBuilder {
 pub struct NodeBuilder {
     filename: String,
     current_node_id: u32,
-    current_def_id: u32,
     static_count: usize,
     loop_count: usize,
     pub labels: LabelBuilder,
@@ -93,7 +92,6 @@ impl NodeBuilder {
         let mut s = Self {
             filename: filename.to_string(),
             current_node_id: 0,
-            current_def_id: 0,
             static_count: 0,
             loop_count: 0,
             labels: LabelBuilder::new(),
@@ -156,18 +154,6 @@ impl NodeBuilder {
         let s = format!("_loop{}", unique);
         let key = self.labels.s(&s);
         key
-    }
-
-    fn fresh_def_arg(&mut self) -> DefinitionId {
-        let def_id = DefinitionId::Arg(self.current_def_id);
-        self.current_def_id += 1;
-        def_id
-    }
-
-    fn fresh_def_var(&mut self) -> DefinitionId {
-        let def_id = DefinitionId::Var(self.current_def_id);
-        self.current_def_id += 1;
-        def_id
     }
 
     pub fn unique_static_name(&mut self) -> String {
