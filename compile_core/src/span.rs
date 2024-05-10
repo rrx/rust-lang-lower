@@ -179,6 +179,10 @@ impl SpanBuilder {
         self.pool.intern(v)
     }
 
+    pub fn s(&mut self, span: Span) -> SpanId {
+        self.pool.intern(span)
+    }
+
     pub fn error(&self, msg: &str, span: &Span) -> Diagnostic<usize> {
         let mut labels = vec![];
         if let Span::Loc(span) = span {

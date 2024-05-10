@@ -742,6 +742,7 @@ impl Parser {
 struct StatementReader<P: syntax::ast::AstPayload> {
     names: Vec<StringKey>,
     loops: Vec<Vec<AstNode>>,
+    loop_spans: Vec<SpanId>,
     seq: Vec<AstNode>,
     _p: std::marker::PhantomData<P>,
 }
@@ -751,18 +752,21 @@ impl<P: syntax::ast::AstPayload> StatementReader<P> {
         Self {
             names: vec![],
             loops: vec![],
+            loop_spans: vec![],
             seq: vec![],
             _p: std::marker::PhantomData::default(),
         }
     }
 
-    fn start_loop(&mut self, key: StringKey) {
+    fn start_loop(&mut self, key: StringKey, span_id: SpanId) {
         self.names.push(key);
         self.loops.push(vec![]);
+        self.loop_spans.push(span_id)
     }
 
     fn end_loop(&mut self) -> AstNode {
         let seq = self.loops.pop().unwrap();
+        self.loop_spans.pop().unwrap();
         let key = self.names.pop().unwrap();
         Ast::Loop(key, NB::seq(seq).into()).into()
     }
@@ -783,6 +787,8 @@ impl<P: syntax::ast::AstPayload> StatementReader<P> {
         b: &mut NodeBuilder,
     ) -> Result<()> {
         if parse.is_extra(&stmt) {
+            let span_id = env.span_id(stmt.span.clone(), b);
+
             let extra = parse.read_extra(stmt, env, b)?;
             match extra {
                 ExtraAst::LoopStart(maybe_key) => {
@@ -791,7 +797,7 @@ impl<P: syntax::ast::AstPayload> StatementReader<P> {
                     } else {
                         b.fresh_loop_name()
                     };
-                    self.start_loop(key);
+                    self.start_loop(key, span_id);
                 }
                 ExtraAst::LoopBreak(maybe_key) => {
                     self.push_ast(NB::loop_break(maybe_key));
@@ -822,6 +828,11 @@ impl<P: syntax::ast::AstPayload> StatementReader<P> {
         for stmt in stmts {
             reader.push_stmt(stmt, parse, env, b)?;
         }
+
+        if reader.loops.len() > 0 {
+            //b.spans.push_diagnostic(b.spans.error("Mismatched end loop", reader.loops.get(0).unwrap().
+        }
+
         Ok(NB::seq(reader.seq.drain(..).collect()))
     }
 }
