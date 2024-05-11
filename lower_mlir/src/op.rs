@@ -1,10 +1,7 @@
-use compile_core::BinaryOperation;
-use compile_core::{primary_label, secondary_label, Ast, AstNode, AstType, Literal, Span};
-use thiserror::Error;
-
 use anyhow::Error;
 use anyhow::Result;
 use compile_core::Diagnostic;
+use compile_core::{Ast, AstNode, AstType, BinaryOperation, Literal, SpanId};
 use melior::ir::Location;
 use melior::{
     dialect::{
@@ -43,11 +40,44 @@ use melior::{
     },
     Context,
 };
+use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum LowerError {
     #[error("LowerError")]
     Invalid,
+    #[error("op")]
+    Op(String, SpanId),
+    #[error("diagnostic")]
+    Diagnostic(Diagnostic<usize>),
+}
+
+pub fn from_type<'c>(context: &'c Context, ty: &AstType) -> Type<'c> {
+    match ty {
+        AstType::Ptr(_) => Type::index(context),
+        AstType::Tuple(args) => {
+            let types = args
+                .iter()
+                .map(|a| from_type(context, a))
+                .collect::<Vec<_>>();
+            melior::ir::r#type::TupleType::new(context, &types).into()
+        }
+        AstType::Func(args, ret) => {
+            let inputs = args
+                .iter()
+                .map(|a| from_type(context, a))
+                .collect::<Vec<_>>();
+            let results = vec![from_type(context, ret)];
+            melior::ir::r#type::FunctionType::new(context, &inputs, &results).into()
+        }
+        AstType::Int => IntegerType::new(context, 64).into(),
+        AstType::Index => Type::index(context),
+        AstType::Float => Type::float64(context),
+        AstType::Bool => IntegerType::new(context, 1).into(),
+        AstType::Unit => Type::none(context),
+        //AstType::String => Type::none(self.context),
+        _ => unimplemented!("{:?}", ty),
+    }
 }
 
 pub fn build_float_op<'c>(
@@ -130,4 +160,241 @@ pub fn build_reserved<'c>(
         }
         _ => None,
     }
+}
+
+pub fn build_static<'c>(
+    context: &'c Context,
+    name: &str,
+    ty: Type<'c>,
+    value: Attribute<'c>,
+    constant: bool,
+    location: Location<'c>,
+) -> Operation<'c> {
+    let integer_type = IntegerType::new(context, 64).into();
+    let attribute =
+        DenseElementsAttribute::new(RankedTensorType::new(&[], ty, None).into(), &[value]).unwrap();
+    let alignment = IntegerAttribute::new(8, integer_type);
+    let memspace = IntegerAttribute::new(0, integer_type).into();
+
+    memref::global(
+        context,
+        name,
+        Some("private"),
+        MemRefType::new(ty, &[], None, Some(memspace)),
+        Some(attribute.into()),
+        constant,
+        Some(alignment),
+        location,
+    )
+}
+
+pub fn emit_static<'c>(
+    context: &'c Context,
+    global_name: String,
+    expr: AstNode,
+    location: Location<'c>,
+) -> (Operation<'c>, AstType) {
+    // evaluate expr at compile time
+    let (ast_ty, op) = match expr.node {
+        Ast::Literal(Literal::Bool(x)) => {
+            let ast_ty = AstType::Bool;
+            let ty = from_type(context, &ast_ty);
+            let v = if x { 1 } else { 0 };
+            let value = IntegerAttribute::new(v, ty).into();
+            let op = build_static(context, &global_name, ty, value, false, location);
+            (ast_ty, op)
+        }
+
+        Ast::Literal(Literal::Int(x)) => {
+            let ast_ty = AstType::Int;
+            let ty = from_type(context, &ast_ty);
+            let value = IntegerAttribute::new(x, ty).into();
+            let op = build_static(context, &global_name, ty, value, false, location);
+            (ast_ty, op)
+        }
+
+        Ast::Literal(Literal::Index(x)) => {
+            let ast_ty = AstType::Int;
+            let ty = from_type(context, &ast_ty);
+            let value = IntegerAttribute::new(x as i64, ty).into();
+            let op = build_static(context, &global_name, ty, value, false, location);
+            (ast_ty, op)
+        }
+
+        Ast::Literal(Literal::Float(x)) => {
+            let ast_ty = AstType::Float;
+            let ty = from_type(context, &ast_ty);
+            let value = FloatAttribute::new(context, x, ty).into();
+            let op = build_static(context, &global_name, ty, value, false, location);
+            (ast_ty, op)
+        }
+
+        _ => unreachable!("{:?}", expr.node),
+    };
+    (op, ast_ty)
+}
+
+pub fn build_static_attribute<'c>(context: &'c Context, lit: &Literal) -> (Attribute<'c>, AstType) {
+    // evaluate expr at compile time
+    match lit {
+        Literal::Bool(x) => {
+            let ast_ty = AstType::Bool;
+            let ty = from_type(context, &ast_ty);
+            let v = if *x { 1 } else { 0 };
+            let value = IntegerAttribute::new(v, ty).into();
+            (value, ast_ty)
+        }
+
+        Literal::Int(x) => {
+            let ast_ty = AstType::Int;
+            let ty = from_type(context, &ast_ty);
+            let value = IntegerAttribute::new(*x, ty).into();
+            (value, ast_ty)
+        }
+
+        Literal::Index(x) => {
+            let ast_ty = AstType::Int;
+            let ty = from_type(context, &ast_ty);
+            let value = IntegerAttribute::new(*x as i64, ty).into();
+            (value, ast_ty)
+        }
+
+        Literal::Float(x) => {
+            let ast_ty = AstType::Float;
+            let ty = from_type(context, &ast_ty);
+            let value = FloatAttribute::new(context, *x, ty).into();
+            (value, ast_ty)
+        }
+        _ => unreachable!("{:?}", lit),
+    }
+}
+
+pub fn build_binop<'c>(
+    context: &'c Context,
+    op: BinaryOperation,
+    a: Value<'c, '_>,
+    a_span: &SpanId,
+    b: Value<'c, '_>,
+    _b_span: &SpanId,
+    location: Location<'c>,
+) -> Result<(Operation<'c>, AstType)> {
+    let ty = a.r#type();
+    assert_eq!(ty, b.r#type());
+
+    let (op, ast_ty) = match op {
+        BinaryOperation::Divide => {
+            if ty.is_index() {
+                // index type is unsigned
+                (arith::divui(a, b, location), AstType::Index)
+            } else if ty.is_integer() {
+                // we assume all integers are signed for now
+                (arith::divsi(a, b, location), AstType::Int)
+            } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
+                (arith::divf(a, b, location), AstType::Float)
+            } else {
+                return Err(Error::new(LowerError::Op(format!("Invalid Type"), *a_span)));
+            }
+        }
+        BinaryOperation::Multiply => {
+            if ty.is_index() {
+                (arith::muli(a, b, location), AstType::Index)
+            } else if ty.is_integer() {
+                (arith::muli(a, b, location), AstType::Int)
+            } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
+                (arith::mulf(a, b, location), AstType::Float)
+            } else {
+                return Err(Error::new(LowerError::Op(format!("Invalid Type"), *a_span)));
+            }
+        }
+        BinaryOperation::Add => {
+            if ty.is_index() {
+                (arith::addi(a, b, location), AstType::Index)
+            } else if ty.is_integer() {
+                (arith::addi(a, b, location), AstType::Int)
+            } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
+                (arith::addf(a, b, location), AstType::Float)
+            } else {
+                return Err(Error::new(LowerError::Op(format!("Invalid Type"), *a_span)));
+            }
+        }
+        BinaryOperation::Subtract => {
+            if ty.is_index() {
+                (arith::subi(a, b, location), AstType::Index)
+            } else if ty.is_integer() {
+                (arith::subi(a, b, location), AstType::Int)
+            } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
+                (arith::subf(a, b, location), AstType::Float)
+            } else {
+                return Err(Error::new(LowerError::Op(format!("Invalid Type"), *a_span)));
+            }
+        }
+        BinaryOperation::GTE => {
+            if ty.is_index() {
+                // unsigned
+                (
+                    arith::cmpi(context, arith::CmpiPredicate::Uge, a, b, location),
+                    AstType::Bool,
+                )
+            } else if ty.is_integer() {
+                // signed
+                (
+                    arith::cmpi(context, arith::CmpiPredicate::Sge, a, b, location),
+                    AstType::Bool,
+                )
+            } else {
+                return Err(Error::new(LowerError::Op(format!("Invalid Type"), *a_span)));
+            }
+        }
+        BinaryOperation::GT => {
+            if ty.is_index() {
+                // unsigned
+                (
+                    arith::cmpi(context, arith::CmpiPredicate::Ugt, a, b, location),
+                    AstType::Bool,
+                )
+            } else if ty.is_integer() {
+                // signed
+                (
+                    arith::cmpi(context, arith::CmpiPredicate::Sgt, a, b, location),
+                    AstType::Bool,
+                )
+            } else {
+                return Err(Error::new(LowerError::Op(format!("Invalid Type"), *a_span)));
+            }
+        }
+        BinaryOperation::NE => {
+            if ty.is_index() || ty.is_integer() {
+                (
+                    arith::cmpi(context, arith::CmpiPredicate::Ne, a, b, location),
+                    AstType::Bool,
+                )
+            } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
+                // ordered comparison
+                (
+                    arith::cmpf(context, arith::CmpfPredicate::One, a, b, location),
+                    AstType::Bool,
+                )
+            } else {
+                return Err(Error::new(LowerError::Op(format!("Invalid Type"), *a_span)));
+            }
+        }
+        BinaryOperation::EQ => {
+            if ty.is_index() || ty.is_integer() {
+                (
+                    arith::cmpi(context, arith::CmpiPredicate::Eq, a, b, location),
+                    AstType::Bool,
+                )
+            } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
+                // ordered comparison
+                (
+                    arith::cmpf(context, arith::CmpfPredicate::Oeq, a, b, location),
+                    AstType::Bool,
+                )
+            } else {
+                return Err(Error::new(LowerError::Op(format!("Invalid Type"), *a_span)));
+            }
+        } //_ => unimplemented!("{:?}", op)
+    };
+
+    Ok((op, ast_ty))
 }

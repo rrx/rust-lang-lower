@@ -3,14 +3,11 @@ pub mod blockify;
 pub mod builder;
 pub mod builtin;
 pub mod graph;
-//pub mod mlir;
-pub mod op;
 pub mod scope;
 
 pub use blockify::{Blockify, LCode, SymIndex};
 pub use builder::*;
 pub use builtin::*;
-//pub use mlir::{Lower, LowerBlocks};
 pub use scope::{Environment, ScopeId, ScopeLayer, ScopeType, Successor, TemplateId};
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]

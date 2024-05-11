@@ -30,8 +30,6 @@ use melior::{
 };
 use std::collections::VecDeque;
 
-use flat::op;
-
 use compile_core::{AstType, Span, UnaryOperation, VarDefinitionSpace};
 
 use std::collections::HashMap;
@@ -221,14 +219,14 @@ impl<'c> Lower<'c> {
             let location = Lower::get_location(blockify, current, context, b);
 
             let next = blockify.get_next(current).unwrap();
-            let ty = op::from_type(context, &blockify.get_type(next));
+            let ty = crate::op::from_type(context, &blockify.get_type(next));
             current = next;
             out.push((ty, location));
         }
         for _ in 0..num_kwargs {
             let location = Lower::get_location(blockify, current, context, b);
             let next = blockify.get_next(current).unwrap();
-            let ty = op::from_type(context, &blockify.get_type(next));
+            let ty = crate::op::from_type(context, &blockify.get_type(next));
             current = next;
             out.push((ty, location));
         }
@@ -332,13 +330,13 @@ impl<'c> Lower<'c> {
                 let block_id = blockify.get_entry_id(v);
 
                 if blockify.is_in_static_scope(v) {
-                    let (value, ast_ty) = op::build_static_attribute(self.context, lit);
+                    let (value, ast_ty) = crate::op::build_static_attribute(self.context, lit);
 
                     let name = blockify.get_name(v).unwrap();
 
                     // declare
                     let integer_type = IntegerType::new(self.context, 64).into();
-                    let ty = op::from_type(self.context, &ast_ty);
+                    let ty = crate::op::from_type(self.context, &ast_ty);
                     let alignment = IntegerAttribute::new(8, integer_type);
                     let memspace = IntegerAttribute::new(0, integer_type).into();
                     let constant = false;
@@ -355,7 +353,7 @@ impl<'c> Lower<'c> {
                         location,
                     );
 
-                    let ty = op::from_type(self.context, &ast_ty);
+                    let ty = crate::op::from_type(self.context, &ast_ty);
                     let attribute = DenseElementsAttribute::new(
                         RankedTensorType::new(&[], ty, None).into(),
                         &[value],
@@ -464,7 +462,7 @@ impl<'c> Lower<'c> {
                 let f = FlatSymbolRefAttribute::new(self.context, &name);
 
                 if let AstType::Func(_func_arg_types, ret) = &ty {
-                    let ret_type = op::from_type(self.context, &ret);
+                    let ret_type = crate::op::from_type(self.context, &ret);
                     // handle call arguments
 
                     let values = blockify.get_previous_values(v, *args as usize);
@@ -494,7 +492,7 @@ impl<'c> Lower<'c> {
             LCode::Declare => {
                 let block_id = blockify.get_entry_id(v);
                 let ast_ty = blockify.get_type(v);
-                let ty = op::from_type(self.context, &ast_ty);
+                let ty = crate::op::from_type(self.context, &ast_ty);
                 let memref_ty = MemRefType::new(ty.into(), &[], None, None);
                 let op = memref::alloca(self.context, memref_ty, &[], &[], None, location);
                 let c = blocks.blocks.get_mut(&block_id).unwrap();
@@ -512,7 +510,7 @@ impl<'c> Lower<'c> {
                     let rhs_ty = blockify.get_type(*v_value);
                     assert_eq!(lhs_ty, rhs_ty);
 
-                    let lower_ty = op::from_type(self.context, &lhs_ty);
+                    let lower_ty = crate::op::from_type(self.context, &lhs_ty);
                     let memref_ty = MemRefType::new(lower_ty, &[], None, None);
                     let static_name = b.labels.r(name);
                     // TODO: FIXME
@@ -550,7 +548,7 @@ impl<'c> Lower<'c> {
                 let v_decl = blockify.resolve_declaration(*v_decl).unwrap();
                 if blockify.is_in_static_scope(v_decl) {
                     let ast_ty = blockify.get_type(v);
-                    let lower_ty = op::from_type(self.context, &ast_ty);
+                    let lower_ty = crate::op::from_type(self.context, &ast_ty);
                     let memref_ty = MemRefType::new(lower_ty, &[], None, None);
                     // TODO: FIXME
                     let decl_name = blockify.get_name(v_decl).unwrap();
@@ -577,7 +575,7 @@ impl<'c> Lower<'c> {
                 let block_id = blockify.get_entry_id(v);
                 let x_index = self.resolve_value(blockify, *x).unwrap();
                 let ast_ty = blockify.get_type(*x);
-                let ty = op::from_type(self.context, &ast_ty);
+                let ty = crate::op::from_type(self.context, &ast_ty);
 
                 match op {
                     UnaryOperation::Minus => {
@@ -612,21 +610,20 @@ impl<'c> Lower<'c> {
                 let block_id = blockify.get_entry_id(v);
                 let x_span_id = blockify.get_span_id(*x);
                 let y_span_id = blockify.get_span_id(*y);
-                let x_span = b.spans.lookup(x_span_id);
-                let y_span = b.spans.lookup(y_span_id);
+                //let x_span = b.spans.lookup(x_span_id);
+                //let y_span = b.spans.lookup(y_span_id);
                 let x_index = self.resolve_value(blockify, *x).unwrap();
                 let r_x = blocks.value0(x_index);
                 let y_index = self.resolve_value(blockify, *y).unwrap();
                 let r_y = blocks.value0(y_index);
-                let (op, _ast_ty) = op::build_binop(
+                let (op, _ast_ty) = crate::op::build_binop(
                     self.context,
                     op.clone(),
                     r_x,
-                    &x_span,
+                    &x_span_id,
                     r_y,
-                    &y_span,
+                    &y_span_id,
                     location,
-                    b,
                 )?;
                 let c = blocks.blocks.get_mut(&block_id).unwrap();
                 let index = c.push(op);
@@ -893,7 +890,7 @@ pub fn build_declare_function<'c>(
         )];
 
         for ty in params {
-            type_list.push(op::from_type(context, &ty));
+            type_list.push(crate::op::from_type(context, &ty));
             ast_types.push(ty.clone());
         }
 
@@ -902,7 +899,7 @@ pub fn build_declare_function<'c>(
         let ret_type = if let AstType::Unit = *ast_ret_type {
             vec![]
         } else {
-            vec![op::from_type(context, &ast_ret_type)]
+            vec![crate::op::from_type(context, &ast_ret_type)]
         };
 
         let func_type = FunctionType::new(context, &type_list, &ret_type);
