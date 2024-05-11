@@ -2,10 +2,11 @@ use anyhow::Error;
 use anyhow::Result;
 use indexmap::IndexMap;
 use std::collections::HashMap;
+use thiserror::Error;
 
 use compile_core::{
     Argument, AssignTarget, Ast, AstNode, AstType, BinaryOperation, BuiltinId, Definition,
-    Diagnostic, Label, LinkOptions, Literal, ParameterNode, ParseError, Span, SpanId, StringKey,
+    Diagnostic, Label, LinkOptions, Literal, ParameterNode, Span, SpanId, StringKey,
     UnaryOperation, VarDefinitionSpace,
 };
 
@@ -13,6 +14,12 @@ use crate::{
     BlockId, Builtin, CodeOffset, Environment, NodeBuilder, ScopeId, ScopeType, StringLabel,
     TemplateId, ValueId,
 };
+
+#[derive(Error, Debug)]
+pub enum BlockifyError {
+    #[error("BlockifyError")]
+    Invalid,
+}
 
 #[derive(Debug)]
 pub struct AstBlock {
@@ -888,7 +895,7 @@ impl Blockify {
     pub fn error(msg: &str, span_id: SpanId, b: &mut NodeBuilder) -> Result<AddResult> {
         let span = b.spans.lookup(span_id);
         b.spans.push_diagnostic(error(msg, span));
-        return Err(Error::new(ParseError::Invalid));
+        return Err(Error::new(BlockifyError::Invalid));
     }
 
     pub fn add_loop(
@@ -1212,7 +1219,7 @@ impl Blockify {
                 } else {
                     let span = b.spans.lookup(node.span_id);
                     b.spans.push_diagnostic(error("Name not found", span));
-                    Err(Error::new(ParseError::Invalid))
+                    Err(Error::new(BlockifyError::Invalid))
                 }
             }
 
@@ -1462,7 +1469,7 @@ impl Blockify {
                         &format!("Block name not found: {}", b.labels.r(label.into())),
                         span,
                     ));
-                    Err(Error::new(ParseError::Invalid))
+                    Err(Error::new(BlockifyError::Invalid))
                 }
             }
 
@@ -1479,7 +1486,7 @@ impl Blockify {
                     let span = b.spans.lookup(node.span_id);
                     b.spans
                         .push_diagnostic(error(&format!("Return without function context"), span));
-                    Err(Error::new(ParseError::Invalid))
+                    Err(Error::new(BlockifyError::Invalid))
                 }
             }
 
@@ -1541,7 +1548,7 @@ impl Blockify {
                     let span = b.spans.lookup(node.span_id);
                     b.spans
                         .push_diagnostic(error(&format!("Break without loop"), span));
-                    Err(Error::new(ParseError::Invalid))
+                    Err(Error::new(BlockifyError::Invalid))
                 }
             }
 
@@ -1556,14 +1563,14 @@ impl Blockify {
                     let span = b.spans.lookup(node.span_id);
                     b.spans
                         .push_diagnostic(error(&format!("Continue without loop"), span));
-                    Err(Error::new(ParseError::Invalid))
+                    Err(Error::new(BlockifyError::Invalid))
                 }
             }
 
             Ast::Error => {
                 let span = b.spans.lookup(node.span_id);
                 b.spans.push_diagnostic(error(&format!("AST Error"), span));
-                Err(Error::new(ParseError::Invalid))
+                Err(Error::new(BlockifyError::Invalid))
             }
 
             _ => unimplemented!("{:?}", node.node),

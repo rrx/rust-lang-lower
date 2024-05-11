@@ -1,8 +1,7 @@
 use crate::NodeBuilder;
 use compile_core::BinaryOperation;
-use compile_core::{
-    primary_label, secondary_label, Ast, AstNode, AstType, Literal, ParseError, Span,
-};
+use compile_core::{primary_label, secondary_label, Ast, AstNode, AstType, Literal, Span};
+use thiserror::Error;
 
 use anyhow::Error;
 use anyhow::Result;
@@ -45,6 +44,12 @@ use melior::{
     },
     Context,
 };
+
+#[derive(Error, Debug)]
+pub enum LowerError {
+    #[error("LowerError")]
+    Invalid,
+}
 
 pub fn build_float_op<'c>(
     context: &'c Context,
@@ -243,7 +248,7 @@ pub fn build_binop<'c>(
                 (arith::divf(a, b, location), AstType::Float)
             } else {
                 builder.spans.error(&format!("Invalid Type"), a_span);
-                return Err(Error::new(ParseError::Invalid));
+                return Err(Error::new(LowerError::Invalid));
             }
         }
         BinaryOperation::Multiply => {
@@ -255,7 +260,7 @@ pub fn build_binop<'c>(
                 (arith::mulf(a, b, location), AstType::Float)
             } else {
                 builder.spans.error(&format!("Invalid Type"), a_span);
-                return Err(Error::new(ParseError::Invalid));
+                return Err(Error::new(LowerError::Invalid));
             }
         }
         BinaryOperation::Add => {
@@ -267,7 +272,7 @@ pub fn build_binop<'c>(
                 (arith::addf(a, b, location), AstType::Float)
             } else {
                 builder.spans.error(&format!("Invalid Type"), a_span);
-                return Err(Error::new(ParseError::Invalid));
+                return Err(Error::new(LowerError::Invalid));
             }
         }
         BinaryOperation::Subtract => {
@@ -287,7 +292,7 @@ pub fn build_binop<'c>(
                         .with_message("Type Mispatch"),
                 );
 
-                return Err(Error::new(ParseError::Invalid));
+                return Err(Error::new(LowerError::Invalid));
             }
         }
         BinaryOperation::GTE => {
@@ -305,7 +310,7 @@ pub fn build_binop<'c>(
                 )
             } else {
                 builder.spans.error(&format!("Invalid Type"), a_span);
-                return Err(Error::new(ParseError::Invalid));
+                return Err(Error::new(LowerError::Invalid));
             }
         }
         BinaryOperation::GT => {
@@ -323,7 +328,7 @@ pub fn build_binop<'c>(
                 )
             } else {
                 builder.spans.error(&format!("Invalid Type"), a_span);
-                return Err(Error::new(ParseError::Invalid));
+                return Err(Error::new(LowerError::Invalid));
             }
         }
         BinaryOperation::NE => {
@@ -340,7 +345,7 @@ pub fn build_binop<'c>(
                 )
             } else {
                 builder.spans.error(&format!("Invalid Type"), a_span);
-                return Err(Error::new(ParseError::Invalid));
+                return Err(Error::new(LowerError::Invalid));
             }
         }
         BinaryOperation::EQ => {
@@ -357,7 +362,7 @@ pub fn build_binop<'c>(
                 )
             } else {
                 builder.spans.error(&format!("Invalid Type"), a_span);
-                return Err(Error::new(ParseError::Invalid));
+                return Err(Error::new(LowerError::Invalid));
             }
         } //_ => unimplemented!("{:?}", op)
     };

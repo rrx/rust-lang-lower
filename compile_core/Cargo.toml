@@ -8,7 +8,6 @@ edition = "2021"
 [dependencies]
 anyhow = "*"
 thiserror = "*"
-ena = "*"
 serde = "1.0"
 indexmap = "2.1.0"
 codespan-reporting = "*"

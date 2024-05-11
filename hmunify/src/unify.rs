@@ -1,6 +1,5 @@
 use anyhow::Result;
 use ena::unify::*;
-//use serde::Serialize;
 use std::convert::Into;
 use thiserror::Error;
 

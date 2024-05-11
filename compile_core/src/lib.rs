@@ -1,6 +1,5 @@
 pub mod ast;
 mod builtin;
-mod errors;
 mod intern;
 mod link;
 mod node;
@@ -9,7 +8,6 @@ mod types;
 
 pub use ast::*;
 pub use builtin::*;
-pub use errors::*;
 pub use intern::*;
 pub use link::*;
 pub use node::*;
