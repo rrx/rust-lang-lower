@@ -483,6 +483,13 @@ impl Blockify {
         }
     }
 
+    pub fn resolve_block_id(&self, offset: CodeOffset) -> BlockId {
+        match offset {
+            CodeOffset::Value(value_id) => self.env.block_map.get(&value_id).unwrap().clone(),
+            CodeOffset::Block(block_id) => block_id,
+        }
+    }
+
     pub fn get_type(&self, v: ValueId) -> AstType {
         self.types.get(v.0 as usize).unwrap().clone()
     }
@@ -1336,14 +1343,13 @@ impl Blockify {
                 self.env.exit_scope();
                 */
 
-                /*
-                let v_else = if let Some(else_expr) = maybe_else_expr {
-                    self.env.new_block()
+                let else_block_id = if let Some(_) = maybe_else_expr {
+                    self.env.new_block().into()
                 } else {
                     v_next
                 };
-                */
 
+                /*
                 let v_else = if let Some(else_expr) = maybe_else_expr {
                     let name = b.labels.s("else");
                     let else_scope_id = self.env.new_scope(ScopeType::Block);
@@ -1357,6 +1363,7 @@ impl Blockify {
                 } else {
                     v_next
                 };
+                */
 
                 // condition
                 let span_id = condition.span_id;
@@ -1364,7 +1371,7 @@ impl Blockify {
                 let v = r.value_id.unwrap();
 
                 // branch
-                let code = LCode::Branch(v, then_block_id.into(), v_else.into());
+                let code = LCode::Branch(v, then_block_id.into(), else_block_id.into());
                 let v = self.push_code(
                     code,
                     span_id,
@@ -1386,29 +1393,30 @@ impl Blockify {
                     &[],
                     b,
                 );
-                //let v_then =
-                //self.push_label(name.into(), then_expr.span_id, then_scope_id, &[], &[], b);
                 self.env.enter_scope(then_scope_id);
                 let r = self.add_with_next(v_then.into(), *then_expr, v_next, b)?;
                 let _ = r.value_id.unwrap();
                 self.env.exit_scope();
 
                 // ELSE
-                /*
-                let v_else = if let Some(else_expr) = maybe_else_expr {
+                if let Some(else_expr) = maybe_else_expr {
                     let name = b.labels.s("else");
                     let else_scope_id = self.env.new_scope(ScopeType::Block);
-                    let v_else =
-                        self.push_label(name.into(), else_expr.span_id, else_scope_id, &[], &[], b);
+                    let v_else = self.push_block_label(
+                        name.into(),
+                        else_expr.span_id,
+                        else_scope_id,
+                        self.resolve_block_id(else_block_id),
+                        //else_block_id,
+                        &[],
+                        &[],
+                        b,
+                    );
                     self.env.enter_scope(else_scope_id);
-                    let r = self.add_with_next(v_else, *else_expr, v_next, b)?;
+                    let r = self.add_with_next(v_else.into(), *else_expr, v_next, b)?;
                     let _ = r.value_id.unwrap();
                     self.env.exit_scope();
-                    v_else
-                } else {
-                    v_next
-                };
-                */
+                }
 
                 Ok(AddResult::new(Some(v), true, v_next))
             }
