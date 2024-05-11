@@ -702,13 +702,14 @@ impl<'c> Lower<'c> {
                 self.index.insert(v, index);
             }
 
-            LCode::Ternary(condition, v_then, v_else) => {
+            LCode::Ternary(condition, then_block_id, else_block_id) => {
                 // THEN
                 //let then_block_id = blockify.get_entry_id(*v_then);
-                let then_block_id = blockify.env.resolve_code_offset(*v_then);
-
+                //let then_block_id = blockify.env.resolve_code_offset(v_then);
+                let then_block_id = *then_block_id;
+                let v_then = blockify.env.resolve_code_offset(then_block_id.into());
                 let cfg = blockify.get_cfg(then_block_id.into(), b);
-                let then_block_ids = cfg.blocks(then_block_id);
+                let then_block_ids = cfg.blocks(v_then);
 
                 for block_id in then_block_ids.iter() {
                     let entry_id = blockify.env.resolve_code_offset(*block_id);
@@ -719,19 +720,21 @@ impl<'c> Lower<'c> {
                     self.lower_block(blockify, entry_id, blocks, stack, b)?;
                 }
 
-                let c = blocks.blocks.get_mut(&then_block_id).unwrap();
+                // yield the last value
+                let c = blocks.blocks.get_mut(&v_then).unwrap();
                 let r: Value<'c, '_> = c.ops.last().unwrap().result(0).unwrap().into();
                 let then_ty = r.r#type();
                 let op = scf::r#yield(&[r], location);
-                let c = blocks.blocks.get_mut(&then_block_id).unwrap();
+                let c = blocks.blocks.get_mut(&v_then).unwrap();
                 c.push(op);
 
                 // ELSE
                 //let else_block_id = blockify.get_entry_id(*v_else);
-                let else_block_id = blockify.env.resolve_code_offset(*v_else);
-
+                //let else_block_id = blockify.env.resolve_code_offset(*v_else);
+                let else_block_id = *else_block_id;
+                let v_else = blockify.env.resolve_code_offset(else_block_id.into());
                 let cfg = blockify.get_cfg(else_block_id.into(), b);
-                let else_block_ids = cfg.blocks(else_block_id);
+                let else_block_ids = cfg.blocks(v_else);
 
                 for block_id in else_block_ids.iter() {
                     let entry_id = blockify.env.resolve_code_offset(*block_id);
@@ -742,11 +745,12 @@ impl<'c> Lower<'c> {
                     self.lower_block(blockify, entry_id, blocks, stack, b)?;
                 }
 
-                let c = blocks.blocks.get_mut(&else_block_id).unwrap();
+                // yield the last value
+                let c = blocks.blocks.get_mut(&v_else).unwrap();
                 let r: Value<'c, '_> = c.ops.last().unwrap().result(0).unwrap().into();
                 let else_ty = r.r#type();
                 let op = scf::r#yield(&[r], location);
-                let c = blocks.blocks.get_mut(&else_block_id).unwrap();
+                let c = blocks.blocks.get_mut(&v_else).unwrap();
                 c.push(op);
 
                 let then_region = Region::new();

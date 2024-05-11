@@ -47,7 +47,7 @@ pub enum LCode {
     Jump(CodeOffset, u8),
 
     Branch(ValueId, CodeOffset, CodeOffset),
-    Ternary(ValueId, CodeOffset, CodeOffset), // condition, then_entry, else_entry
+    Ternary(ValueId, BlockId, BlockId), // condition, then_entry, else_entry
     Builtin(BuiltinId, u8, u8),
     Call(ValueId, u8, u8),
 }
@@ -383,8 +383,8 @@ impl Blockify {
             }
 
             LCode::Ternary(_, v_then, v_else) => {
-                self.env.add_succ_op(entry_id, *v_then);
-                self.env.add_succ_op(entry_id, *v_else);
+                self.env.add_succ_op(entry_id, v_then.clone().into());
+                self.env.add_succ_op(entry_id, v_else.clone().into());
             }
             _ => (),
         }
@@ -1425,6 +1425,7 @@ impl Blockify {
                 let name = b.labels.s("then");
                 self.env.enter_scope(then_scope_id);
                 let v_then = self.push_label(name.into(), x.span_id, then_scope_id, &[], &[], b);
+                let then_block_id = self.resolve_block_id(v_then.into());
                 let r = self.add(v_then.into(), None, *x, b)?;
                 let v_then_result = r.value_id.unwrap();
                 self.env.exit_scope();
@@ -1434,6 +1435,7 @@ impl Blockify {
                 let name = b.labels.s("else");
                 self.env.enter_scope(else_scope_id);
                 let v_else = self.push_label(name.into(), y.span_id, else_scope_id, &[], &[], b);
+                let else_block_id = self.resolve_block_id(v_else.into());
                 let r = self.add(v_else.into(), None, *y, b)?;
                 let v_else_result = r.value_id.unwrap();
                 self.env.exit_scope();
@@ -1442,7 +1444,7 @@ impl Blockify {
 
                 // TODO: we need to ensure that the cfg terminates with a yield
 
-                let code = LCode::Ternary(v_c, v_then.into(), v_else.into());
+                let code = LCode::Ternary(v_c, then_block_id.into(), else_block_id.into());
                 let v = self.push_code(
                     code,
                     condition_span_id,
