@@ -898,8 +898,7 @@ impl Blockify {
     }
 
     pub fn error(msg: &str, span_id: SpanId, b: &mut NodeBuilder) -> Result<AddResult> {
-        let span = b.spans.lookup(span_id);
-        b.spans.push_diagnostic(error(msg, span));
+        b.push_error(msg, span_id);
         return Err(Error::new(BlockifyError::Invalid));
     }
 
@@ -1008,11 +1007,11 @@ impl Blockify {
             );
             Ok(AddResult::new(Some(v), true, entry_id))
         } else {
-            Self::error(
+            b.push_error(
                 &format!("End of block expects {} values", num_args),
                 span_id,
-                b,
-            )
+            );
+            return Err(Error::new(BlockifyError::Invalid));
         }
     }
 
@@ -1052,15 +1051,15 @@ impl Blockify {
 
         if let AstType::Func(func_arg_types, ret) = &ty {
             if func_arg_types.len() != args.len() {
-                return Self::error(
+                b.push_error(
                     &format!(
                         "Call arity mismatch: {}<=>{}",
                         func_arg_types.len(),
                         args.len()
                     ),
                     span_id,
-                    b,
                 );
+                return Err(Error::new(BlockifyError::Invalid));
             }
 
             let args_size = args.len() as u8;
@@ -1095,11 +1094,8 @@ impl Blockify {
             Ok(AddResult::new(Some(v), false, entry_id))
         } else {
             let name = b.labels.r(self.get_name(v_func).unwrap());
-            return Self::error(
-                &format!("Type not function: {}, {:?}", name, ty),
-                span_id,
-                b,
-            );
+            b.push_error(&format!("Type not function: {}, {:?}", name, ty), span_id);
+            return Err(Error::new(BlockifyError::Invalid));
         }
     }
 
@@ -1175,8 +1171,8 @@ impl Blockify {
                             b,
                         );
                     }
-
-                    return Self::error(&format!("Call name not found: {}", name), node.span_id, b);
+                    b.push_error(&format!("Call name not found: {}", name), node.span_id);
+                    return Err(Error::new(BlockifyError::Invalid));
                 }
                 _ => {
                     unimplemented!("{:?}", expr.node);

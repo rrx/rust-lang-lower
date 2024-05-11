@@ -1,7 +1,7 @@
 use compile_core::ast::*;
 use compile_core::{
-    Argument, Ast, AstNode, AstType, Definition, Literal, Parameter, ParameterNode, SpanBuilder,
-    SpanId, StringKey, StringPool, TypeId, TypePool,
+    Argument, Ast, AstNode, AstType, Definition, Literal, Parameter, ParameterNode, Span,
+    SpanBuilder, SpanId, StringKey, StringPool, TypeId, TypePool,
 };
 
 use crate::BuiltinBuilder;
@@ -345,6 +345,17 @@ impl NodeBuilder {
             node: Ast::Module(name, body.into()),
             span_id,
         }
+    }
+
+    pub fn push_error_span(&mut self, msg: &str, span: Span) {
+        self.spans
+            .push_diagnostic(compile_core::diagnostic_error(msg, span));
+    }
+
+    pub fn push_error(&mut self, msg: &str, span_id: SpanId) {
+        let span = self.spans.lookup(span_id);
+        self.spans
+            .push_diagnostic(compile_core::diagnostic_error(msg, span));
     }
 }
 

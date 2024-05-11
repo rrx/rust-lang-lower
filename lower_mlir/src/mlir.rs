@@ -792,9 +792,7 @@ impl<'c> Lower<'c> {
                         self.index.insert(v, index);
                     } //_ => unreachable!("{:?}", bi),
                 }
-            }
-
-            _ => unimplemented!("{:?}", (v, code)),
+            } //_ => unimplemented!("{:?}", (v, code)),
         }
         Ok(())
     }
