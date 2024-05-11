@@ -42,8 +42,8 @@ impl ScopeId {
 #[derive(Debug, Clone, Copy)]
 pub struct LoopScope {
     pub(crate) name: Option<StringKey>,
-    pub(crate) next_block: ValueId,
-    pub(crate) start_block: ValueId,
+    pub(crate) next_block: CodeOffset,
+    pub(crate) start_block: CodeOffset,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
@@ -203,10 +203,10 @@ impl Environment {
         self.stack.get(0).unwrap().clone()
     }
 
-    pub fn static_entry_id(&self) -> ValueId {
+    pub fn static_entry_id(&self) -> CodeOffset {
         let scope_id = self.stack.get(0).unwrap().clone();
         let scope = self.get_scope(scope_id);
-        scope.blocks.get(0).unwrap().clone()
+        scope.blocks.get(0).unwrap().clone().into()
     }
 
     pub fn get_scope(&self, scope_id: ScopeId) -> &ScopeLayer {
@@ -304,8 +304,8 @@ impl Environment {
     pub fn push_loop_blocks(
         &mut self,
         maybe_name: Option<StringKey>,
-        next_block: ValueId,
-        start_block: ValueId,
+        next_block: CodeOffset,
+        start_block: CodeOffset,
     ) {
         let scope_id = self.current_scope().unwrap();
         let scope = self.get_scope_mut(scope_id);
