@@ -1096,6 +1096,28 @@ impl Blockify {
         )))
     }
 
+    pub fn add_block_with_expr(
+        &mut self,
+        name: StringLabel,
+        block_id: BlockId,
+        v_next: Option<CodeOffset>,
+        expr: AstNode,
+        b: &mut NodeBuilder,
+    ) -> Result<AddResult> {
+        let scope_id = self.env.new_scope(ScopeType::Block);
+        let v_then =
+            self.push_block_label(name.into(), expr.span_id, scope_id, block_id, &[], &[], b);
+        self.env.enter_scope(scope_id);
+        let r = if let Some(v_next) = v_next {
+            self.add_with_next(v_then.into(), expr, v_next, b)?
+        } else {
+            self.add(v_then.into(), None, expr, b)?
+        };
+        let _ = r.value_id.unwrap();
+        self.env.exit_scope();
+        Ok(r)
+    }
+
     pub fn add(
         &mut self,
         entry_id: CodeOffset,
@@ -1421,16 +1443,40 @@ impl Blockify {
                 // TODO: we need to ensure that the cfg terminates with a yield
 
                 let code = LCode::Ternary(v_c, v_then.into(), v_else.into());
+                let v = self.push_code(
+                    code,
+                    condition_span_id,
+                    scope_id,
+                    entry_id,
+                    then_ty, // the branches should match
+                    VarDefinitionSpace::Reg,
+                );
+
+                Ok(AddResult::new(Some(v), false, entry_id))
+
+                /*
+                let then_block_id = self.env.new_block();
+                let code = LCode::Ternary(v_c, then_block_id.into(), v_else.into());
 
                 let v = self.push_code(
                     code,
                     condition_span_id,
                     scope_id,
                     entry_id,
-                    then_ty,
+                    // fill in later
+                    AstType::Unit,
                     VarDefinitionSpace::Reg,
                 );
-                Ok(AddResult::new(Some(v), false, entry_id))
+
+                let r = self.add_block_with_expr(
+                    b.labels.s("then").into(), then_block_id, None, *x, b)?;
+
+                let v_then_result = r.value_id.unwrap();
+                let then_ty = self.get_type(v_then_result);
+                assert_eq!(then_ty, else_ty);
+
+                Ok(r)
+                */
             }
 
             Ast::BinaryOp(op, x, y) => {
