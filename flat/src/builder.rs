@@ -57,13 +57,22 @@ impl LabelBuilder {
 
 pub struct TypeBuilder {
     pool: TypePool,
+    unknown_count: u32,
 }
 
 impl TypeBuilder {
     pub fn new() -> Self {
         Self {
+            unknown_count: 0,
             pool: TypePool::new(),
         }
+    }
+
+    pub fn fresh_unknown(&mut self) -> AstType {
+        let offset = self.unknown_count;
+        let r = AstType::Variable(offset as u32);
+        self.unknown_count += 1;
+        r
     }
 
     pub fn s(&mut self, t: &AstType) -> TypeId {

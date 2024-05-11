@@ -12,7 +12,7 @@ use starlark_syntax::syntax::module::AstModuleFields;
 
 use compile_core::{
     ast, Argument, AssignTarget, Ast, AstNode, AstType, BinOpNode, CodeLocation, Diagnostic, Label,
-    LinkOptions, SpanId, StringKey, TypeUnify,
+    LinkOptions, SpanId, StringKey,
 };
 
 use flat::{Blockify, NodeBuilder, NodeBuilder as NB, ValueId};
@@ -121,16 +121,6 @@ pub struct Environment<'a> {
     unique: usize,
 }
 
-pub fn get_span_id(file_id: usize, span: codemap::Span, b: &mut NodeBuilder) -> SpanId {
-    let begin = CodeLocation {
-        pos: span.begin().get(),
-    };
-    let end = CodeLocation {
-        pos: span.end().get(),
-    };
-    b.spans.get_span(file_id, begin.clone(), end.clone())
-}
-
 impl<'a> Environment<'a> {
     pub fn new(codemap: &'a CodeMap, file_id: usize) -> Self {
         let start = Layer::default();
@@ -225,13 +215,11 @@ fn from_literal(
             use lexer::TokenInt;
             match x.node {
                 TokenInt::I32(y) => ast::Literal::Int(y as i64),
-                //_ => env.unimplemented(span),
                 _ => unimplemented!("{:?}", item),
             }
         }
         AstLiteral::Float(x) => ast::Literal::Float(x.node),
         AstLiteral::String(x) => ast::Literal::String(x.node.clone()),
-        //_ => env.unimplemented(span),
         _ => unimplemented!("{:?}", item),
     };
 
@@ -279,13 +267,13 @@ fn from_assign_target<P: syntax::ast::AstPayload>(
 }
 
 pub struct Parser {
-    u: TypeUnify,
+    //u: TypeUnify,
 }
 
 impl Parser {
     pub fn new() -> Self {
         Self {
-            u: TypeUnify::new(),
+            //u: TypeUnify::new(),
         }
     }
 
@@ -320,14 +308,15 @@ impl Parser {
         b: &mut NodeBuilder,
     ) -> ast::ParameterNode {
         use syntax::ast::ParameterP;
-        let span_id = get_span_id(env.file_id, item.span, b);
+        let span_id = env.span_id(item.span, b);
 
         match item.node {
             ParameterP::Normal(ident, maybe_type) => {
                 let ty = if let Some(ty) = maybe_type.map(|ty| from_type(&ty)) {
                     ty
                 } else {
-                    Some(self.u.fresh_unknown())
+                    Some(b.types.fresh_unknown())
+                    //Some(self.u.fresh_unknown())
                     //d.push_diagnostic(env.error(item.span, "Missing Type"));
                     //Some(AstType::Unit)
                 };
