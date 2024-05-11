@@ -105,7 +105,7 @@ pub fn dump_strings(
             out.push((depth, s, node.span_id));
         }
 
-        Ast::Definition(def) => {
+        Ast::Lambda(def) => {
             //let s = format!("func({}):", b.r(def.name));
             let s = "func:";
             out.push((depth, s.into(), node.span_id));

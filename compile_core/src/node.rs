@@ -79,7 +79,7 @@ impl AstNode {
                     values.push(e);
                 }
             }
-            Ast::Definition(def) => {
+            Ast::Lambda(def) => {
                 if let Some(ref mut body) = def.body {
                     values.push(body);
                 }

@@ -123,7 +123,7 @@ pub struct ParameterNode {
 }
 
 #[derive(Debug, Clone)]
-pub struct Definition {
+pub struct Lambda {
     pub params: Vec<ParameterNode>,
     pub return_type: TypeId,
     pub body: Option<Box<AstNode>>,
@@ -150,7 +150,7 @@ pub enum Ast {
     Identifier(StringKey),
     Literal(Literal),
     Sequence(Vec<AstNode>),
-    Definition(Definition),
+    Lambda(Lambda),
     Global(StringKey, Box<AstNode>),
     Assign(AssignTarget, Box<AstNode>),
     Branch(Box<AstNode>, StringKey, StringKey),

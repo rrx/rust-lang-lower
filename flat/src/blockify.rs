@@ -5,8 +5,8 @@ use std::collections::HashMap;
 use thiserror::Error;
 
 use compile_core::{
-    Argument, AssignTarget, Ast, AstNode, AstType, BinaryOperation, BuiltinId, Definition,
-    LinkOptions, Literal, ParameterNode, SpanId, StringKey, UnaryOperation, VarDefinitionSpace,
+    Argument, AssignTarget, Ast, AstNode, AstType, BinaryOperation, BuiltinId, Lambda, LinkOptions,
+    Literal, ParameterNode, SpanId, StringKey, UnaryOperation, VarDefinitionSpace,
 };
 
 use crate::{
@@ -212,7 +212,7 @@ pub struct Blockify {
     entries: Vec<ValueId>,
     span: Vec<SpanId>,
     loop_stack: Vec<LoopLayer>,
-    templates: Vec<Definition>,
+    templates: Vec<Lambda>,
 
     // other
     pub env: Environment,
@@ -249,13 +249,13 @@ impl Blockify {
         self.link.shared_libraries()
     }
 
-    pub fn push_template(&mut self, def: Definition) -> TemplateId {
+    pub fn push_template(&mut self, def: Lambda) -> TemplateId {
         let offset = self.templates.len();
         self.templates.push(def);
         TemplateId(offset as u32)
     }
 
-    pub fn get_template(&mut self, template_id: TemplateId) -> &Definition {
+    pub fn get_template(&mut self, template_id: TemplateId) -> &Lambda {
         self.templates.get(template_id.index()).unwrap()
     }
 
@@ -779,7 +779,7 @@ impl Blockify {
         &mut self,
         current_entry_id: ValueId,
         function_name: StringKey,
-        def: Definition,
+        def: Lambda,
         span_id: SpanId,
         b: &mut NodeBuilder,
     ) -> Result<AddResult> {
@@ -1128,20 +1128,8 @@ impl Blockify {
 
             Ast::Sequence(ref _exprs) => self.add_sequence(entry_id, maybe_next, node, b),
 
-            Ast::Definition(_def) => {
+            Ast::Lambda(_def) => {
                 unreachable!();
-                // definition is non-terminal
-                //if block_id == self.env.static_block_id() {
-                //static function
-                //self.add_function(block_id, def, node.span_id, b)
-                //} else {
-                // lambda block in current scope, called by name
-                //let name = def.name.into();
-                //let template_id = self.push_template(def);
-                //let scope = self.env.get_scope_mut(scope_id);
-                //scope.lambdas.insert(name, template_id);
-                //Ok(AddResult::new(None, false, block_id))
-                //}
             }
 
             Ast::Call(expr, args, _ret_ty) => match &expr.node {
@@ -1231,7 +1219,7 @@ impl Blockify {
                 };
 
                 // push the definition into the lambda list
-                if let Ast::Definition(def) = expr.node {
+                if let Ast::Lambda(def) = expr.node {
                     let template_id = self.push_template(def);
                     let scope = self.env.get_scope_mut(scope_id);
                     scope.lambdas.insert(name.into(), template_id);
@@ -1491,7 +1479,7 @@ impl Blockify {
             }
 
             Ast::Global(name, expr) => match expr.node {
-                Ast::Definition(def) => self.add_function(entry_id, name, def, node.span_id, b),
+                Ast::Lambda(def) => self.add_function(entry_id, name, def, node.span_id, b),
                 Ast::Literal(lit) => {
                     let static_scope_id = self.env.static_scope_id();
                     let static_entry_id = self.env.static_entry_id();

@@ -1,7 +1,7 @@
 use compile_core::ast::*;
 use compile_core::{
-    Argument, Ast, AstNode, AstType, Definition, Literal, Parameter, ParameterNode, Span,
-    SpanBuilder, SpanId, StringKey, StringPool, TypeId, TypePool,
+    Argument, Ast, AstNode, AstType, Lambda, Literal, Parameter, ParameterNode, Span, SpanBuilder,
+    SpanId, StringKey, StringPool, TypeId, TypePool,
 };
 
 use crate::BuiltinBuilder;
@@ -194,7 +194,7 @@ impl NodeBuilder {
         let return_type = self.types.s(&return_type);
         Self::global(
             name,
-            Ast::Definition(Definition {
+            Ast::Lambda(Lambda {
                 params,
                 return_type,
                 body: body.map(|b| b.into()),

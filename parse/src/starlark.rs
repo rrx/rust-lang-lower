@@ -394,7 +394,7 @@ impl Parser {
                     .map(|ty| from_type(&ty).unwrap_or(AstType::Unit))
                     .unwrap_or(AstType::Unit);
 
-                let def_ast = Ast::Definition(ast::Definition {
+                let def_ast = Ast::Lambda(ast::Lambda {
                     body: Some(NB::seq(body, span_id).into()),
                     return_type: b.types.s(&return_type),
                     params,
