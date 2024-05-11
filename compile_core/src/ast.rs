@@ -157,6 +157,7 @@ pub enum Ast {
     Conditional(Box<AstNode>, Box<AstNode>, Option<Box<AstNode>>),
     Ternary(Box<AstNode>, Box<AstNode>, Box<AstNode>),
     Return(Option<Box<AstNode>>),
+    Yield(Option<Box<AstNode>>),
     While(Box<AstNode>, Box<AstNode>),
     Builtin(BuiltinId, Vec<Argument>),
     Module(StringKey, Box<AstNode>),

@@ -39,6 +39,7 @@ pub enum LCode {
     Load(ValueId),
     Store(ValueId, ValueId), // memref, value to store
     Return(u8),              // return values
+    Yield(u8),               // yield values
 
     //jump to named block, with 0 args
     //Goto(StringKey),
@@ -66,6 +67,7 @@ impl LCode {
             //Self::Goto(_) => true,
             Self::Branch(_, _, _) => true,
             Self::Return(_) => true,
+            Self::Yield(_) => true,
             _ => false,
         }
     }
@@ -1426,7 +1428,7 @@ impl Blockify {
                 self.env.enter_scope(then_scope_id);
                 let v_then = self.push_label(name.into(), x.span_id, then_scope_id, &[], &[], b);
                 let then_block_id = self.resolve_block_id(v_then.into());
-                let r = self.add(v_then.into(), None, *x, b)?;
+                let r = self.add(v_then.into(), None, AstNode::make_yield(*x), b)?;
                 let v_then_result = r.value_id.unwrap();
                 self.env.exit_scope();
                 let then_ty = self.get_type(v_then_result);
@@ -1436,7 +1438,7 @@ impl Blockify {
                 self.env.enter_scope(else_scope_id);
                 let v_else = self.push_label(name.into(), y.span_id, else_scope_id, &[], &[], b);
                 let else_block_id = self.resolve_block_id(v_else.into());
-                let r = self.add(v_else.into(), None, *y, b)?;
+                let r = self.add(v_else.into(), None, AstNode::make_yield(*y), b)?;
                 let v_else_result = r.value_id.unwrap();
                 self.env.exit_scope();
                 let else_ty = self.get_type(v_else_result);
@@ -1528,6 +1530,43 @@ impl Blockify {
                     b.push_error(&format!("Return without function context"), node.span_id);
                     Err(Error::new(BlockifyError::Invalid))
                 }
+            }
+
+            Ast::Yield(maybe_expr) => {
+                // yield is terminal
+                let mut n_args = 0;
+                let mut v_block = entry_id;
+                let mut ty = AstType::Unit;
+                if let Some(expr) = maybe_expr {
+                    let r = self.add(entry_id, None, *expr, b)?;
+                    if let Some(v) = r.value_id {
+                        ty = self.get_type(v);
+                        n_args = 1;
+                        v_block = r.entry_id;
+
+                        // push single arg
+                        let code = LCode::Value(v);
+                        self.push_code(
+                            code,
+                            node.span_id,
+                            scope_id,
+                            v_block,
+                            ty.clone(),
+                            VarDefinitionSpace::Reg,
+                        );
+                    }
+                }
+
+                let v = self.push_code(
+                    LCode::Yield(n_args),
+                    node.span_id,
+                    scope_id,
+                    v_block,
+                    ty,
+                    VarDefinitionSpace::Reg,
+                );
+
+                Ok(AddResult::new(Some(v), true, v_block))
             }
 
             Ast::Global(name, expr) => match expr.node {

@@ -71,6 +71,34 @@ impl AstNode {
         }
     }
 
+    pub fn make_yield(node: Self) -> Self {
+        // the last element should be yielded
+        if let Ast::Yield(_) = &node.node {
+            return node;
+        }
+
+        let span_id = node.span_id;
+        Ast::Yield(Some(node.into())).node(span_id)
+    }
+
+    pub fn append(self, node: Self) -> Self {
+        // we should merge spans here to be correct
+        let span_id = self.span_id;
+        if let Ast::Sequence(mut seq) = self.node {
+            seq.push(node);
+            Self {
+                node: Ast::Sequence(seq),
+                span_id,
+            }
+        } else {
+            let seq = vec![self, node];
+            Self {
+                node: Ast::Sequence(seq),
+                span_id,
+            }
+        }
+    }
+
     pub fn children_mut<'a>(&'a mut self) -> AstNodeIterator<'a> {
         let mut values = vec![];
         match &mut self.node {
