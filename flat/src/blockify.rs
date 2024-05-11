@@ -1326,44 +1326,16 @@ impl Blockify {
             Ast::Conditional(condition, then_expr, maybe_else_expr) => {
                 // conditional is terminal
 
-                //let v_next = self.env.get_next_block().unwrap();
                 let v_next = maybe_next.unwrap();
                 assert_eq!(v_next, maybe_next.unwrap());
 
                 let then_block_id = self.env.new_block();
-
-                /*
-                let name = b.labels.s("then");
-                let then_scope_id = self.env.new_scope(ScopeType::Block);
-                let v_then =
-                    self.push_label(name.into(), then_expr.span_id, then_scope_id, &[], &[], b);
-                self.env.enter_scope(then_scope_id);
-                let r = self.add_with_next(v_then, *then_expr, v_next, b)?;
-                let _ = r.value_id.unwrap();
-                self.env.exit_scope();
-                */
 
                 let else_block_id = if let Some(_) = maybe_else_expr {
                     self.env.new_block().into()
                 } else {
                     v_next
                 };
-
-                /*
-                let v_else = if let Some(else_expr) = maybe_else_expr {
-                    let name = b.labels.s("else");
-                    let else_scope_id = self.env.new_scope(ScopeType::Block);
-                    let v_else =
-                        self.push_label(name.into(), else_expr.span_id, else_scope_id, &[], &[], b);
-                    self.env.enter_scope(else_scope_id);
-                    let r = self.add_with_next(v_else.into(), *else_expr, v_next, b)?;
-                    let _ = r.value_id.unwrap();
-                    self.env.exit_scope();
-                    v_else.into()
-                } else {
-                    v_next
-                };
-                */
 
                 // condition
                 let span_id = condition.span_id;
@@ -1381,6 +1353,7 @@ impl Blockify {
                     VarDefinitionSpace::Reg,
                 );
 
+                // THEN
                 // push block then_block_id, with expr then_expr
                 let name = b.labels.s("then");
                 let then_scope_id = self.env.new_scope(ScopeType::Block);
@@ -1407,7 +1380,6 @@ impl Blockify {
                         else_expr.span_id,
                         else_scope_id,
                         self.resolve_block_id(else_block_id),
-                        //else_block_id,
                         &[],
                         &[],
                         b,
