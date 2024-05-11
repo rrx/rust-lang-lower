@@ -30,10 +30,9 @@ impl Blockify {
                 }
             }
 
-            LCode::Goto(block_id) => {
-                format!("goto({})", b.labels.r((*block_id).into()))
-            }
-
+            //LCode::Goto(block_id) => {
+            //format!("goto({})", b.labels.r((*block_id).into()))
+            //}
             LCode::Jump(value_id, args) => {
                 format!("jump({:?}, {})", value_id, args,)
             }

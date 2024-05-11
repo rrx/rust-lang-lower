@@ -102,8 +102,13 @@ pub enum LCode {
     Load(ValueId),
     Store(ValueId, ValueId), // memref, value to store
     Return(u8),              // return values
-    Goto(StringKey),
+
+    //jump to named block, with 0 args
+    //Goto(StringKey),
+
+    // jump to block, with num args
     Jump(CodeOffset, u8),
+
     Branch(ValueId, CodeOffset, CodeOffset),
     Ternary(ValueId, CodeOffset, CodeOffset), // condition, then_entry, else_entry
     Builtin(BuiltinId, u8, u8),
@@ -121,7 +126,7 @@ impl LCode {
     pub fn is_term(&self) -> bool {
         match self {
             Self::Jump(_, _) => true,
-            Self::Goto(_) => true,
+            //Self::Goto(_) => true,
             Self::Branch(_, _, _) => true,
             Self::Return(_) => true,
             _ => false,
