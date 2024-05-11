@@ -41,9 +41,9 @@ impl ScopeId {
 
 #[derive(Debug, Clone, Copy)]
 pub struct LoopScope {
-    name: Option<StringKey>,
-    next_block: ValueId,
-    start_block: ValueId,
+    pub(crate) name: Option<StringKey>,
+    pub(crate) next_block: ValueId,
+    pub(crate) start_block: ValueId,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
@@ -301,53 +301,24 @@ impl Environment {
             .insert((successor_type, succ));
     }
 
-    /*
-        pub fn push_next_block(&mut self, next_id: ValueId) {
-            let scope_id = self.current_scope().unwrap();
-            let scope = self.get_scope_mut(scope_id);
-            scope.next_block.push(next_id);
-        }
-
-        pub fn pop_next_block(&mut self) -> Option<ValueId> {
-            let scope_id = self.current_scope().unwrap();
-            let scope = self.get_scope_mut(scope_id);
-            scope.next_block.pop()
-        }
-
-
-        pub fn get_next_block(&self) -> Option<ValueId> {
-            let scope_id = self.current_scope().unwrap();
-            let scope = self.get_scope(scope_id);
-            scope.next_block.last().cloned()
-            /*
-            for scope_id in self.stack.iter().rev() {
-                let scope = self.get_scope(*scope_id);
-                if let Some(value_id) = scope.next_block.last().cloned() {
-                    return Some(value_id);
-                }
-            }
-            */
-            //None
-        }
-    */
-
     pub fn push_loop_blocks(
         &mut self,
         maybe_name: Option<StringKey>,
-        next_id: ValueId,
-        restart_id: ValueId,
+        next_block: ValueId,
+        start_block: ValueId,
     ) {
         let scope_id = self.current_scope().unwrap();
         let scope = self.get_scope_mut(scope_id);
         let loop_scope = LoopScope {
             name: maybe_name,
-            next_block: next_id,
-            start_block: restart_id,
+            next_block,
+            start_block,
         };
         scope.loop_block = Some(loop_scope);
     }
 
     pub fn get_loop_scope(&self, maybe_name: Option<StringKey>) -> Option<LoopScope> {
+        // move up the stack until we find a matching loop
         for scope_id in self.stack.iter().rev() {
             let scope = self.get_scope(*scope_id);
             if let Some(loop_scope) = scope.loop_block {
@@ -355,20 +326,6 @@ impl Environment {
                     return Some(loop_scope);
                 }
             }
-        }
-        None
-    }
-
-    pub fn get_loop_next_block(&self, maybe_name: Option<StringKey>) -> Option<ValueId> {
-        if let Some(loop_scope) = self.get_loop_scope(maybe_name) {
-            return Some(loop_scope.next_block);
-        }
-        None
-    }
-
-    pub fn get_loop_start_block(&self, maybe_name: Option<StringKey>) -> Option<ValueId> {
-        if let Some(loop_scope) = self.get_loop_scope(maybe_name) {
-            return Some(loop_scope.start_block);
         }
         None
     }
@@ -384,6 +341,7 @@ impl Environment {
     }
 
     pub fn resolve_return_block(&self) -> Option<ValueId> {
+        // walk up the stack until we find the containing block, which has the return block
         for scope_id in self.stack.iter().rev() {
             let scope = self.get_scope(*scope_id);
             if let Some(value_id) = scope.return_block {
@@ -413,7 +371,7 @@ impl Environment {
         None
     }
 
-    pub fn resolve(&self, name: StringKey) -> Option<&Data> {
+    pub fn resolve_name(&self, name: StringKey) -> Option<&Data> {
         // resolve scope through the tree, starting at the current scope
         for scope_id in self.stack.iter().rev() {
             let scope = self.get_scope(*scope_id);

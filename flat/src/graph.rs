@@ -80,7 +80,8 @@ impl CFG {
 }
 
 impl Blockify {
-    pub fn get_cfg(&self, entry_id: ValueId, b: &NodeBuilder) -> CFG {
+    pub fn get_cfg(&self, offset: CodeOffset, b: &NodeBuilder) -> CFG {
+        let entry_id = self.env.resolve_code_offset(offset);
         self.get_graph(entry_id, Some(Successor::BlockScope), b)
     }
 

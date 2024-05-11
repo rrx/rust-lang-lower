@@ -16,7 +16,7 @@ impl Blockify {
             LCode::DeclareFunction(maybe_entry) => {
                 let code_str = b.labels.r(self.get_name(v).unwrap());
                 if let Some(entry_id) = maybe_entry {
-                    format!("declare_function({},{})", code_str, entry_id.0)
+                    format!("declare_function({},{:?})", code_str, entry_id)
                 } else {
                     format!("declare_function({})", code_str)
                 }

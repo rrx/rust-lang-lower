@@ -74,7 +74,7 @@ pub fn code_to_string(v: ValueId, blockify: &Blockify, b: &NodeBuilder) -> Strin
         LCode::DeclareFunction(maybe_entry) => {
             let code_str = b.labels.r(blockify.get_name(v).unwrap());
             if let Some(entry_id) = maybe_entry {
-                format!("declare_function({},{})", code_str, entry_id.index())
+                format!("declare_function({},{:?})", code_str, entry_id)
             } else {
                 format!("declare_function({})", code_str)
             }

@@ -415,7 +415,9 @@ impl<'c> Lower<'c> {
                     op.set_attribute("llvm.emit_c_interface", &Attribute::unit(self.context));
 
                     let cfg = blockify.get_cfg(*entry_id, b);
-                    let block_ids = cfg.blocks(*entry_id);
+                    let offset = entry_id.clone().into();
+                    let entry_id = blockify.env.resolve_code_offset(offset);
+                    let block_ids = cfg.blocks(entry_id);
 
                     // create blocks
                     for block_id in block_ids.iter() {
@@ -663,7 +665,7 @@ impl<'c> Lower<'c> {
                 // THEN
                 let then_block_id = blockify.get_entry_id(*v_then);
 
-                let cfg = blockify.get_cfg(then_block_id, b);
+                let cfg = blockify.get_cfg(then_block_id.into(), b);
                 let then_block_ids = cfg.blocks(then_block_id);
 
                 for block_id in then_block_ids.iter() {
@@ -685,7 +687,7 @@ impl<'c> Lower<'c> {
                 // ELSE
                 let else_block_id = blockify.get_entry_id(*v_else);
 
-                let cfg = blockify.get_cfg(else_block_id, b);
+                let cfg = blockify.get_cfg(else_block_id.into(), b);
                 let else_block_ids = cfg.blocks(else_block_id);
 
                 for block_id in else_block_ids.iter() {

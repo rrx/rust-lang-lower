@@ -93,7 +93,7 @@ pub enum LCode {
     Label(u8, u8), // number of positional arguments, number of named arguments
     Noop,
     Declare,
-    DeclareFunction(Option<ValueId>), // optional entry block
+    DeclareFunction(Option<CodeOffset>), // optional entry block
     Value(ValueId),
     Arg(u8), // get the value of a positional arg
     Const(Literal),
@@ -860,7 +860,7 @@ impl Blockify {
 
             // declare function before adding the body, for recursion
             let v_decl = self.push_code_with_name(
-                LCode::DeclareFunction(Some(new_entry_id)),
+                LCode::DeclareFunction(Some(new_entry_id.into())),
                 span_id,
                 scope_id,
                 current_entry_id,
@@ -1147,7 +1147,7 @@ impl Blockify {
                 // lambdas should also be non-terminal
                 Ast::Identifier(ident) => {
                     let name = b.labels.r(ident.into());
-                    if let Some(data) = self.env.resolve(*ident) {
+                    if let Some(data) = self.env.resolve_name(*ident) {
                         return self.add_function_call(
                             scope_id,
                             entry_id,
@@ -1200,7 +1200,7 @@ impl Blockify {
 
             Ast::Identifier(key) => {
                 // identifier is expression, non-terminal
-                if let Some(data) = self.env.resolve(key) {
+                if let Some(data) = self.env.resolve_name(key) {
                     let ty = data.ty.clone();
                     let code = if let VarDefinitionSpace::Arg = data.mem {
                         LCode::Value(data.value_id)
@@ -1244,7 +1244,7 @@ impl Blockify {
 
                 let expr_ty = self.get_type(v_expr);
 
-                let v_decl = if let Some(data) = self.env.resolve(name) {
+                let v_decl = if let Some(data) = self.env.resolve_name(name) {
                     assert_eq!(data.ty, expr_ty);
                     data.value_id
                 } else {
@@ -1542,7 +1542,8 @@ impl Blockify {
                 // args not implemented yet
                 assert_eq!(args.len(), 0);
                 // loop up loop blocks by name
-                if let Some(v_next) = self.env.get_loop_next_block(maybe_name) {
+                if let Some(loop_scope) = self.env.get_loop_scope(maybe_name) {
+                    let v_next = loop_scope.next_block;
                     self.add_jump(entry_id, v_next, vec![], node.span_id, b)
                 } else {
                     let span = b.spans.lookup(node.span_id);
@@ -1556,7 +1557,8 @@ impl Blockify {
                 // args not implemented yet
                 assert_eq!(args.len(), 0);
                 // loop up loop blocks by name
-                if let Some(v_start) = self.env.get_loop_start_block(maybe_name) {
+                if let Some(loop_scope) = self.env.get_loop_scope(maybe_name) {
+                    let v_start = loop_scope.start_block;
                     self.add_jump(entry_id, v_start, vec![], node.span_id, b)
                 } else {
                     // mismatch name
