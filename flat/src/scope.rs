@@ -277,10 +277,10 @@ impl Environment {
         self.get_block_mut(block_id).pred.insert(pred);
     }
 
-    pub fn add_succ_op(&mut self, block_id: ValueId, succ: ValueId) {
+    pub fn add_succ_op(&mut self, block_id: ValueId, succ: CodeOffset) {
         self.get_block_mut(block_id)
             .succ
-            .insert((Successor::Operation, succ.into()));
+            .insert((Successor::Operation, succ));
     }
 
     pub fn add_succ_block(&mut self, block_id: ValueId, succ: CodeOffset) {

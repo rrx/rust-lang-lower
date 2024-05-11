@@ -22,6 +22,12 @@ impl ValueId {
     }
 }
 
+impl std::fmt::Display for ValueId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "v{}", self.index())
+    }
+}
+
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 pub struct BlockId(pub(crate) u32);
 
@@ -31,10 +37,25 @@ impl BlockId {
     }
 }
 
+impl std::fmt::Display for BlockId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "b{}", self.index())
+    }
+}
+
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 pub enum CodeOffset {
     Value(ValueId),
     Block(BlockId),
+}
+
+impl std::fmt::Display for CodeOffset {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Value(x) => write!(f, "{}", x),
+            Self::Block(x) => write!(f, "{}", x),
+        }
+    }
 }
 
 impl From<ValueId> for CodeOffset {

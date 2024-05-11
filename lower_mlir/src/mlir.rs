@@ -633,8 +633,8 @@ impl<'c> Lower<'c> {
             }
 
             LCode::Branch(condition, v_then, v_else) => {
-                let then_block_id = blockify.get_entry_id(*v_then);
-                let else_block_id = blockify.get_entry_id(*v_else);
+                let then_block_id = blockify.env.resolve_code_offset(*v_then);
+                let else_block_id = blockify.env.resolve_code_offset(*v_else);
 
                 let c_index = self.resolve_value(blockify, *condition).unwrap();
                 let r_c = blocks.value0(c_index);
@@ -663,7 +663,8 @@ impl<'c> Lower<'c> {
 
             LCode::Ternary(condition, v_then, v_else) => {
                 // THEN
-                let then_block_id = blockify.get_entry_id(*v_then);
+                //let then_block_id = blockify.get_entry_id(*v_then);
+                let then_block_id = blockify.env.resolve_code_offset(*v_then);
 
                 let cfg = blockify.get_cfg(then_block_id.into(), b);
                 let then_block_ids = cfg.blocks(then_block_id);
@@ -685,7 +686,8 @@ impl<'c> Lower<'c> {
                 c.push(op);
 
                 // ELSE
-                let else_block_id = blockify.get_entry_id(*v_else);
+                //let else_block_id = blockify.get_entry_id(*v_else);
+                let else_block_id = blockify.env.resolve_code_offset(*v_else);
 
                 let cfg = blockify.get_cfg(else_block_id.into(), b);
                 let else_block_ids = cfg.blocks(else_block_id);

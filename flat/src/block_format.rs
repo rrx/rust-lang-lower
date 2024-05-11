@@ -43,11 +43,11 @@ impl Blockify {
             }
 
             LCode::Ternary(c, x, y) => {
-                format!("Ternary({},{},{})", c.0, x.0, y.0)
+                format!("Ternary({},{},{})", c.0, x, y)
             }
 
             LCode::Branch(c, x, y) => {
-                format!("Branch({},{},{})", c.0, x.0, y.0)
+                format!("Branch({},{},{})", c.0, x, y)
             }
 
             _ => {

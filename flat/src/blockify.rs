@@ -104,8 +104,8 @@ pub enum LCode {
     Return(u8),              // return values
     Goto(StringKey),
     Jump(CodeOffset, u8),
-    Branch(ValueId, ValueId, ValueId),
-    Ternary(ValueId, ValueId, ValueId), // condition, then_entry, else_entry
+    Branch(ValueId, CodeOffset, CodeOffset),
+    Ternary(ValueId, CodeOffset, CodeOffset), // condition, then_entry, else_entry
     Builtin(BuiltinId, u8, u8),
     Call(ValueId, u8, u8),
 }
@@ -395,8 +395,8 @@ impl Blockify {
             }
 
             LCode::Branch(_, v_then, v_else) => {
-                self.env.add_succ_block(entry_id, (*v_then).into());
-                self.env.add_succ_block(entry_id, (*v_else).into());
+                self.env.add_succ_block(entry_id, *v_then);
+                self.env.add_succ_block(entry_id, *v_else);
             }
 
             LCode::Ternary(_, v_then, v_else) => {
@@ -1382,10 +1382,13 @@ impl Blockify {
                     v_next
                 };
 
+                // condition
                 let span_id = condition.span_id;
                 let r = self.add(entry_id, None, *condition, b)?;
                 let v = r.value_id.unwrap();
-                let code = LCode::Branch(v, v_then, v_else);
+
+                // branch
+                let code = LCode::Branch(v, v_then.into(), v_else.into());
                 let v = self.push_code(
                     code,
                     span_id,
@@ -1425,7 +1428,7 @@ impl Blockify {
 
                 // TODO: we need to ensure that the cfg terminates with a yield
 
-                let code = LCode::Ternary(v_c, v_then, v_else);
+                let code = LCode::Ternary(v_c, v_then.into(), v_else.into());
 
                 let v = self.push_code(
                     code,

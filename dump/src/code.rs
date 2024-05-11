@@ -101,11 +101,11 @@ pub fn code_to_string(v: ValueId, blockify: &Blockify, b: &NodeBuilder) -> Strin
         }
 
         LCode::Ternary(c, x, y) => {
-            format!("Ternary({},{},{})", c.index(), x.index(), y.index())
+            format!("Ternary({},{},{})", c.index(), x, y)
         }
 
         LCode::Branch(c, x, y) => {
-            format!("Branch({},{},{})", c.index(), x.index(), y.index())
+            format!("Branch({},{},{})", c.index(), x, y)
         }
 
         _ => {
