@@ -1,5 +1,6 @@
 pub mod compile;
 mod mlir;
+pub mod op;
 
 pub use compile::*;
 pub use mlir::*;

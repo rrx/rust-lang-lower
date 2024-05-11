@@ -378,7 +378,7 @@ impl<'c> Lower<'c> {
                     //Ok(index)
                     self.index.insert(v, index);
                 } else {
-                    let (op, _ast_ty) = op::emit_literal_const(self.context, lit, location);
+                    let (op, _ast_ty) = crate::op::emit_literal_const(self.context, lit, location);
                     let c = blocks.blocks.get_mut(&block_id).unwrap();
                     let index = c.push(op);
                     self.index.insert(v, index);
@@ -585,7 +585,7 @@ impl<'c> Lower<'c> {
                             unreachable!("Unable to negate index type");
                         } else if ty.is_integer() {
                             // Multiply by -1
-                            let int_op = op::build_int_op(self.context, -1, location);
+                            let int_op = crate::op::build_int_op(self.context, -1, location);
                             let c = blocks.blocks.get_mut(&block_id).unwrap();
                             let index = c.push(int_op);
                             let r = blocks.value0(index);
