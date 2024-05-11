@@ -71,21 +71,6 @@ impl LCode {
     }
 }
 
-/*
-pub fn error(msg: &str, span: Span) -> Diagnostic<usize> {
-    let mut labels = vec![];
-    if let Span::Loc(span) = span {
-        let r = span.begin.pos as usize..span.end.pos as usize;
-        labels = vec![Label::primary(span.file_id, r).with_message(msg)];
-    }
-
-    let error = Diagnostic::error()
-        .with_labels(labels)
-        .with_message("error");
-    error
-}
-*/
-
 #[derive(Debug)]
 pub enum NextSeqState {
     Empty,                // no nodes follow
@@ -289,6 +274,59 @@ impl Blockify {
         value_id
     }
 
+    pub fn push_block_label(
+        &mut self,
+        name: StringLabel,
+        span_id: SpanId,
+        scope_id: ScopeId,
+        block_id: BlockId,
+        args: &[AstType],
+        kwargs: &[ParameterNode],
+        b: &mut NodeBuilder,
+    ) -> ValueId {
+        let code = LCode::Label(args.len() as u8, kwargs.len() as u8);
+
+        let v_block = self._push_code(
+            code,
+            span_id,
+            scope_id,
+            // update later in function
+            ValueId(0), // entry_id
+            AstType::Unit,
+            VarDefinitionSpace::Reg,
+        );
+
+        // update
+        self.names.insert(v_block, name);
+        self.env.block_name(scope_id, name, v_block, block_id);
+
+        for (i, p) in kwargs.iter().enumerate() {
+            let ty = b.types.r(p.ty);
+            let v = self.push_code(
+                LCode::Arg(i as u8),
+                span_id,
+                scope_id,
+                v_block,
+                ty.clone(),
+                VarDefinitionSpace::Arg,
+            );
+            self.names.insert(v, p.name.into());
+            self.env
+                .define(p.name, v, ty.clone(), VarDefinitionSpace::Arg);
+        }
+
+        self.env.block_entry(block_id, v_block);
+        let scope = self.env.get_scope_mut(scope_id);
+        scope.blocks.push(v_block);
+        self.entries[v_block.index()] = v_block;
+
+        // update these last
+        let block = self.env.get_block_mut(v_block);
+        block.last_value = Some(v_block);
+        self._update_code(v_block, v_block);
+        v_block
+    }
+
     pub fn push_code_new_block(
         &mut self,
         code: LCode,
@@ -399,6 +437,31 @@ impl Blockify {
         self.span.push(span_id);
         v
     }
+
+    /*
+    pub fn push_block(
+        &mut self,
+        name: StringLabel,
+        span_id: SpanId,
+        scope_id: ScopeId,
+        block_id: BlockId,
+        args: &[AstType],
+        kwargs: &[ParameterNode],
+        b: &mut NodeBuilder,
+    ) -> ValueId {
+        let v_block = self.push_block_label(
+            name,
+            span_id,
+            scope_id,
+            block_id,
+            args,
+            kwargs,
+            AstType::Unit,
+            b,
+        );
+        v_block
+    }
+    */
 
     pub fn push_label(
         &mut self,
@@ -836,11 +899,6 @@ impl Blockify {
         }
     }
 
-    pub fn error(msg: &str, span_id: SpanId, b: &mut NodeBuilder) -> Result<AddResult> {
-        b.push_error(msg, span_id);
-        return Err(Error::new(BlockifyError::Invalid));
-    }
-
     pub fn add_loop(
         &mut self,
         entry_id: ValueId,
@@ -1107,7 +1165,6 @@ impl Blockify {
             },
 
             Ast::BlockStart(name, args) => {
-                //Ast::Label(name) => {
                 // all blocks should have been forward declared in the sequence
                 let value_id = self.env.resolve_block(name.into()).unwrap();
                 assert_eq!(0, args.len());
@@ -1285,6 +1342,9 @@ impl Blockify {
                 let v_next = maybe_next.unwrap();
                 assert_eq!(v_next, maybe_next.unwrap());
 
+                let then_block_id = self.env.new_block();
+
+                /*
                 let name = b.labels.s("then");
                 let then_scope_id = self.env.new_scope(ScopeType::Block);
                 let v_then =
@@ -1293,6 +1353,7 @@ impl Blockify {
                 let r = self.add_with_next(v_then, *then_expr, v_next, b)?;
                 let _ = r.value_id.unwrap();
                 self.env.exit_scope();
+                */
 
                 let v_else = if let Some(else_expr) = maybe_else_expr {
                     let name = b.labels.s("else");
@@ -1314,7 +1375,7 @@ impl Blockify {
                 let v = r.value_id.unwrap();
 
                 // branch
-                let code = LCode::Branch(v, v_then.into(), v_else.into());
+                let code = LCode::Branch(v, then_block_id.into(), v_else.into());
                 let v = self.push_code(
                     code,
                     span_id,
@@ -1323,6 +1384,25 @@ impl Blockify {
                     AstType::Unit,
                     VarDefinitionSpace::Reg,
                 );
+
+                // push block then_block_id, with expr then_expr
+                let name = b.labels.s("then");
+                let then_scope_id = self.env.new_scope(ScopeType::Block);
+                let v_then = self.push_block_label(
+                    name.into(),
+                    then_expr.span_id,
+                    then_scope_id,
+                    then_block_id,
+                    &[],
+                    &[],
+                    b,
+                );
+                //let v_then =
+                //self.push_label(name.into(), then_expr.span_id, then_scope_id, &[], &[], b);
+                self.env.enter_scope(then_scope_id);
+                let r = self.add_with_next(v_then, *then_expr, v_next, b)?;
+                let _ = r.value_id.unwrap();
+                self.env.exit_scope();
 
                 Ok(AddResult::new(Some(v), true, v_next))
             }
