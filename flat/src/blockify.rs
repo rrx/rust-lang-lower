@@ -6,8 +6,7 @@ use thiserror::Error;
 
 use compile_core::{
     Argument, AssignTarget, Ast, AstNode, AstType, BinaryOperation, BuiltinId, Definition,
-    Diagnostic, Label, LinkOptions, Literal, ParameterNode, Span, SpanId, StringKey,
-    UnaryOperation, VarDefinitionSpace,
+    LinkOptions, Literal, ParameterNode, SpanId, StringKey, UnaryOperation, VarDefinitionSpace,
 };
 
 use crate::{
@@ -134,6 +133,7 @@ impl LCode {
     }
 }
 
+/*
 pub fn error(msg: &str, span: Span) -> Diagnostic<usize> {
     let mut labels = vec![];
     if let Span::Loc(span) = span {
@@ -146,6 +146,7 @@ pub fn error(msg: &str, span: Span) -> Diagnostic<usize> {
         .with_message("error");
     error
 }
+*/
 
 #[derive(Debug)]
 pub enum NextSeqState {
@@ -1218,8 +1219,7 @@ impl Blockify {
                     );
                     Ok(AddResult::new(Some(v), false, entry_id))
                 } else {
-                    let span = b.spans.lookup(node.span_id);
-                    b.spans.push_diagnostic(error("Name not found", span));
+                    b.push_error("Name not found", node.span_id);
                     Err(Error::new(BlockifyError::Invalid))
                 }
             }
@@ -1279,8 +1279,7 @@ impl Blockify {
                         if let Some(s) = arg.try_string() {
                             self.link.add_library(&s);
                         } else {
-                            let span = b.spans.lookup(node.span_id);
-                            b.spans.push_diagnostic(error("Expected string", span));
+                            b.push_error("Expected string", node.span_id);
                         }
                         Ok(AddResult::new(None, false, entry_id))
                     }
@@ -1468,11 +1467,10 @@ impl Blockify {
                 if let Some(target_block_id) = self.env.resolve_block_id(label.into()) {
                     self.add_jump_by_block(entry_id, target_block_id, vec![], node.span_id, b)
                 } else {
-                    let span = b.spans.lookup(node.span_id);
-                    b.spans.push_diagnostic(error(
+                    b.push_error(
                         &format!("Block name not found: {}", b.labels.r(label.into())),
-                        span,
-                    ));
+                        node.span_id,
+                    );
                     Err(Error::new(BlockifyError::Invalid))
                 }
             }
@@ -1487,9 +1485,7 @@ impl Blockify {
                     };
                     self.add_jump(entry_id, v_return, args, node.span_id, b)
                 } else {
-                    let span = b.spans.lookup(node.span_id);
-                    b.spans
-                        .push_diagnostic(error(&format!("Return without function context"), span));
+                    b.push_error(&format!("Return without function context"), node.span_id);
                     Err(Error::new(BlockifyError::Invalid))
                 }
             }
@@ -1550,9 +1546,7 @@ impl Blockify {
                     let v_next = loop_scope.next_block;
                     self.add_jump(entry_id, v_next, vec![], node.span_id, b)
                 } else {
-                    let span = b.spans.lookup(node.span_id);
-                    b.spans
-                        .push_diagnostic(error(&format!("Break without loop"), span));
+                    b.push_error(&format!("Break without loop"), node.span_id);
                     Err(Error::new(BlockifyError::Invalid))
                 }
             }
@@ -1566,16 +1560,13 @@ impl Blockify {
                     self.add_jump(entry_id, v_start, vec![], node.span_id, b)
                 } else {
                     // mismatch name
-                    let span = b.spans.lookup(node.span_id);
-                    b.spans
-                        .push_diagnostic(error(&format!("Continue without loop"), span));
+                    b.push_error(&format!("Continue without loop"), node.span_id);
                     Err(Error::new(BlockifyError::Invalid))
                 }
             }
 
             Ast::Error => {
-                let span = b.spans.lookup(node.span_id);
-                b.spans.push_diagnostic(error(&format!("AST Error"), span));
+                b.push_error(&format!("AST Error"), node.span_id);
                 Err(Error::new(BlockifyError::Invalid))
             }
 
