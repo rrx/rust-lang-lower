@@ -5,7 +5,7 @@ pub mod builtin;
 pub mod graph;
 pub mod scope;
 
-pub use blockify::{Blockify, LCode, SymIndex};
+pub use blockify::{Blockify, LCode};
 pub use builder::*;
 pub use builtin::*;
 pub use scope::{Environment, ScopeId, ScopeLayer, ScopeType, Successor, TemplateId};

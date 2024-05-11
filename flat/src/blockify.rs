@@ -1,7 +1,6 @@
 use anyhow::Error;
 use anyhow::Result;
 use indexmap::IndexMap;
-use std::collections::HashMap;
 use thiserror::Error;
 
 use compile_core::{
@@ -18,67 +17,6 @@ use crate::{
 pub enum BlockifyError {
     #[error("BlockifyError")]
     Invalid,
-}
-
-#[derive(Debug)]
-pub struct AstBlock {
-    name: ValueId,
-}
-
-#[derive(Debug, Copy, Clone)]
-pub struct BlockLayerId(u32);
-
-#[derive(Debug)]
-pub struct BlockLayer {
-    labels: HashMap<StringKey, ValueId>,
-}
-impl BlockLayer {
-    pub fn new() -> Self {
-        Self {
-            labels: HashMap::new(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
-pub enum SymIndex {
-    Op(ValueId, usize),
-    Arg(ValueId, usize),
-    Def(ValueId, usize),
-}
-
-impl SymIndex {
-    pub fn block(&self) -> ValueId {
-        match self {
-            SymIndex::Op(block_index, _)
-            | SymIndex::Arg(block_index, _)
-            | SymIndex::Def(block_index, _) => *block_index,
-        }
-    }
-
-    pub fn offset(&self) -> usize {
-        match self {
-            SymIndex::Op(_, offset) | SymIndex::Arg(_, offset) | SymIndex::Def(_, offset) => {
-                *offset
-            }
-        }
-    }
-
-    pub fn is_op(&self) -> bool {
-        if let SymIndex::Op(_, _) = self {
-            true
-        } else {
-            false
-        }
-    }
-
-    pub fn is_arg(&self) -> bool {
-        if let SymIndex::Arg(_, _) = self {
-            true
-        } else {
-            false
-        }
-    }
 }
 
 #[derive(Debug)]

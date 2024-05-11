@@ -1,5 +1,5 @@
 use anyhow::Result;
-use flat::{Blockify, Builtin, CodeOffset, LCode, NodeBuilder, StringLabel, SymIndex, ValueId};
+use flat::{Blockify, Builtin, CodeOffset, LCode, NodeBuilder, StringLabel, ValueId};
 use indexmap::IndexMap;
 use melior::ir::Location;
 use melior::{
@@ -33,6 +33,47 @@ use std::collections::VecDeque;
 use compile_core::{AstType, Span, UnaryOperation, VarDefinitionSpace};
 
 use std::collections::HashMap;
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub enum SymIndex {
+    Op(ValueId, usize),
+    Arg(ValueId, usize),
+    Def(ValueId, usize),
+}
+
+impl SymIndex {
+    pub fn block(&self) -> ValueId {
+        match self {
+            SymIndex::Op(block_index, _)
+            | SymIndex::Arg(block_index, _)
+            | SymIndex::Def(block_index, _) => *block_index,
+        }
+    }
+
+    pub fn offset(&self) -> usize {
+        match self {
+            SymIndex::Op(_, offset) | SymIndex::Arg(_, offset) | SymIndex::Def(_, offset) => {
+                *offset
+            }
+        }
+    }
+
+    pub fn is_op(&self) -> bool {
+        if let SymIndex::Op(_, _) = self {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn is_arg(&self) -> bool {
+        if let SymIndex::Arg(_, _) = self {
+            true
+        } else {
+            false
+        }
+    }
+}
 
 pub struct LowerBlocks<'c> {
     blocks: HashMap<ValueId, OpCollection<'c>>,
