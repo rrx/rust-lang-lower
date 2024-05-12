@@ -1,5 +1,5 @@
 use anyhow::Result;
-use flat::{Blockify, Builtin, CodeOffset, LCode, NodeBuilder, StringLabel, ValueId};
+use flat::{Blockify, Builtin, LCode, NodeBuilder, StringLabel, ValueId};
 use indexmap::IndexMap;
 use melior::ir::Location;
 use melior::{
