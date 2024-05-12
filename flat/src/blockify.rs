@@ -410,60 +410,6 @@ impl Blockify {
         v
     }
 
-    pub fn push_block_label(
-        &mut self,
-        name: StringLabel,
-        span_id: SpanId,
-        scope_id: ScopeId,
-        block_id: BlockId,
-        args: &[AstType],
-        kwargs: &[ParameterNode],
-        b: &mut NodeBuilder,
-    ) -> ValueId {
-        let code = LCode::Label(args.len() as u8, kwargs.len() as u8);
-
-        let v_block = self._push_code(
-            code,
-            span_id,
-            scope_id,
-            // update later in function
-            ValueId(0), // entry_id
-            AstType::Unit,
-            VarDefinitionSpace::Reg,
-        );
-
-        // update
-        self.names.insert(v_block, name);
-        self.env.block_name(scope_id, name, v_block, block_id);
-
-        for (i, p) in kwargs.iter().enumerate() {
-            let ty = b.types.r(p.ty);
-            let v = self.push_code_with_name(
-                LCode::Arg(i as u8),
-                span_id,
-                scope_id,
-                block_id,
-                ty.clone(),
-                VarDefinitionSpace::Arg,
-                p.name.into(),
-            );
-            self.names.insert(v, p.name.into());
-            self.env
-                .define(p.name, v, ty.clone(), VarDefinitionSpace::Arg);
-        }
-
-        self.env.block_entry(block_id, v_block);
-        let scope = self.env.get_scope_mut(scope_id);
-        scope.blocks.push(v_block);
-        self.entries[v_block.index()] = v_block;
-
-        // update these last
-        let block = self.env.get_block_mut(v_block);
-        block.last_value = Some(v_block);
-        self._update_code(v_block, v_block);
-        v_block
-    }
-
     pub fn push_label(
         &mut self,
         name: StringLabel,
@@ -549,8 +495,16 @@ impl Blockify {
         match node.node {
             Ast::Module(name, body) => {
                 let static_scope = self.env.new_scope(ScopeType::Static);
-                let entry_id =
-                    self.push_label(name.into(), node.span_id, static_scope, &[], &[], b);
+                let block_id = self.env.new_block();
+                let entry_id = self.push_label_with_block(
+                    name.into(),
+                    node.span_id,
+                    static_scope,
+                    block_id,
+                    &[],
+                    &[],
+                    b,
+                );
                 self.env.enter_scope(static_scope);
                 self.add(entry_id.into(), None, *body, b)?;
                 self.env.exit_scope();
@@ -577,7 +531,16 @@ impl Blockify {
         for expr in exprs.iter() {
             if let Ast::BlockStart(name, args) = &expr.node {
                 assert_eq!(0, args.len());
-                let _ = self.push_label(name.into(), expr.span_id, scope_id, &[], &[], b);
+                let block_id = self.env.new_block();
+                let _ = self.push_label_with_block(
+                    name.into(),
+                    expr.span_id,
+                    scope_id,
+                    block_id,
+                    &[],
+                    &[],
+                    b,
+                );
             }
         }
 
@@ -706,8 +669,16 @@ impl Blockify {
                         // a terminal, followed by other statements
                         // we create a next block for the statements to follow
                         let name = b.labels.s("next");
-                        let v_next =
-                            self.push_label(name.into(), expr_span_id, scope_id, &[], &[], b);
+                        let b_next = self.env.new_block();
+                        let v_next = self.push_label_with_block(
+                            name.into(),
+                            expr_span_id,
+                            scope_id,
+                            b_next,
+                            &[],
+                            &[],
+                            b,
+                        );
                         let v_next = self.resolve_block_id(v_next.into());
                         let r = self.add_with_next(current_entry_id.unwrap(), expr, v_next, b)?;
                         let v = r.value_id.unwrap();
@@ -1139,7 +1110,7 @@ impl Blockify {
         b: &mut NodeBuilder,
     ) -> Result<AddResult> {
         let scope_id = self.env.new_scope(ScopeType::Block);
-        let v_then = self.push_block_label(
+        let v_then = self.push_label_with_block(
             name.into(),
             expr.span_id,
             scope_id,
