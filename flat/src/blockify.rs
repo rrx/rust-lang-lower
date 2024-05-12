@@ -142,6 +142,8 @@ pub struct Pending {
     block_id: BlockId,
     next_block_id: Option<BlockId>,
     ty: AstType,
+    args: Vec<AstType>,
+    kwargs: Vec<ParameterNode>,
 }
 
 #[derive(Debug)]
@@ -906,7 +908,6 @@ impl Blockify {
             // return block
             //
             let ret_block_id = self.env.new_block();
-            let _ = self.add_return_block(body_scope_id, ret_block_id, span_id, return_type, b)?;
 
             //self.new_pending(name, b.ret()
 
@@ -933,6 +934,7 @@ impl Blockify {
             self.env.exit_scope();
             self.env.add_succ_static(current_block_id, new_entry_id);
 
+            let _ = self.add_return_block(body_scope_id, ret_block_id, span_id, return_type, b)?;
             Ok(AddResult::new(Some(v_decl), false, current_entry_id))
         } else {
             Ok(AddResult::new(
@@ -1158,8 +1160,7 @@ impl Blockify {
         kwargs: &[ParameterNode],
         b: &mut NodeBuilder,
     ) -> Pending {
-        let entry_id = self.push_label(name, expr.span_id, scope_id, args, kwargs, b);
-        let block_id = self.resolve_block_id(entry_id.into());
+        let block_id = self.env.new_block();
         let ty = b.types.fresh_unknown();
         Pending {
             name,
@@ -1167,12 +1168,23 @@ impl Blockify {
             scope_id,
             block_id,
             next_block_id,
+            args: args.iter().cloned().collect(),
+            kwargs: kwargs.iter().cloned().collect(),
             ty,
         }
     }
 
     pub fn add_pending(&mut self, pending: Pending, b: &mut NodeBuilder) -> Result<PendingResult> {
         self.env.enter_scope(pending.scope_id);
+        let r = self.push_label_with_block(
+            pending.name,
+            pending.expr.span_id,
+            pending.scope_id,
+            pending.block_id,
+            &pending.args,
+            &pending.kwargs,
+            b,
+        );
         let r = self.add(
             pending.block_id.into(),
             pending.next_block_id,
