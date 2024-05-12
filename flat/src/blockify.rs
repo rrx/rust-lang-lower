@@ -735,7 +735,15 @@ impl Blockify {
         // entry first
         let label_name = b.labels.fresh_var_id();
         let new_block_id = self.env.new_block();
-        let new_entry_id = self.push_label_with_block(label_name, span_id, body_scope_id, new_block_id, &[], &def.params, b);
+        let new_entry_id = self.push_label_with_block(
+            label_name,
+            span_id,
+            body_scope_id,
+            new_block_id,
+            &[],
+            &def.params,
+            b,
+        );
 
         let mut jump_args = vec![];
         for a in args.into_iter() {
@@ -764,7 +772,15 @@ impl Blockify {
 
         let name = b.labels.s("lambda_result");
         let b_next = self.env.new_block();
-        let v_next = self.push_label_with_block(name.into(), span_id, scope_id, b_next, &return_type_args, &[], b);
+        let v_next = self.push_label_with_block(
+            name.into(),
+            span_id,
+            scope_id,
+            b_next,
+            &return_type_args,
+            &[],
+            b,
+        );
         let v_next = self.resolve_block_id(v_next.into());
 
         // push Arg to next block
@@ -780,7 +796,7 @@ impl Blockify {
         let ret_block_id = self.resolve_block_id(v_next.into());
         let scope = self.env.get_scope_mut(body_scope_id);
         scope.return_block = Some(ret_block_id);
-        scope.entry_block = Some(new_entry_id.into());
+        scope.entry_block = Some(new_block_id); //new_entry_id.into());
         self.env.enter_scope(body_scope_id);
         let _r1 = self.add_with_next(current_entry_id.into(), *body, v_next, b)?;
         self.env.exit_scope();
@@ -887,7 +903,6 @@ impl Blockify {
                 function_name,
             );
 
-
             // return block
             //
             let ret_block_id = self.env.new_block();
@@ -896,7 +911,7 @@ impl Blockify {
             //self.new_pending(name, b.ret()
 
             // handle body
-            
+
             // entry first
             let new_entry_id = self.push_label_with_block(
                 function_name.into(),
@@ -910,8 +925,7 @@ impl Blockify {
 
             let scope = self.env.get_scope_mut(body_scope_id);
             scope.return_block = Some(ret_block_id);
-            scope.entry_block = Some(new_entry_id);
-
+            scope.entry_block = Some(new_block_id);
 
             self.env.enter_scope(body_scope_id);
             // next block in body scope
