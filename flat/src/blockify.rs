@@ -1090,13 +1090,14 @@ impl Blockify {
         }
     }
 
-    pub fn add_noop(&mut self, entry_id: CodeOffset, span_id: SpanId) -> Result<Option<ValueId>> {
+    pub fn add_noop(&mut self, entry_id: BlockId, span_id: SpanId) -> Result<Option<ValueId>> {
         let scope_id = self.env.current_scope().unwrap();
+        let entry_id = self.resolve_block_id(entry_id.into());
         Ok(Some(self.push_code(
             LCode::Noop,
             span_id,
             scope_id,
-            entry_id,
+            entry_id.into(),
             AstType::Unit,
             VarDefinitionSpace::Reg,
         )))
