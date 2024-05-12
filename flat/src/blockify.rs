@@ -484,15 +484,17 @@ impl Blockify {
         block.last_value = Some(v_block);
         for (i, p) in kwargs.iter().enumerate() {
             let ty = b.types.r(p.ty);
-            let v = self.push_code(
+            let v = self.push_code_with_name(
                 LCode::Arg(i as u8),
                 span_id,
                 scope_id,
-                v_block.into(),
+                block_id,
+                //v_block.into(),
                 ty.clone(),
                 VarDefinitionSpace::Arg,
+                p.name.into(),
             );
-            self.names.insert(v, p.name.into());
+            //self.names.insert(v, p.name.into());
             self.env
                 .define(p.name, v, ty.clone(), VarDefinitionSpace::Arg);
         }
@@ -809,13 +811,15 @@ impl Blockify {
             .iter()
             .enumerate()
             .map(|(i, _arg)| {
-                let v_arg = self.push_code(
+                let v_arg = self.push_code_with_name(
                     LCode::Arg(i as u8),
                     span_id,
                     scope_id,
-                    entry_id.into(),
+                    block_id,
+                    //entry_id.into(),
                     return_type.clone(),
                     VarDefinitionSpace::Arg,
+                    b.labels.s(&format!("arg{}", i)).into(),
                 );
                 v_arg
             })
