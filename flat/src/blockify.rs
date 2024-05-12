@@ -130,7 +130,7 @@ pub struct Pending {
     name: StringLabel,
     scope_id: ScopeId,
     expr: AstNode,
-    block_id: CodeOffset,
+    block_id: BlockId,
     next_block_id: Option<CodeOffset>,
 }
 
@@ -1147,21 +1147,27 @@ impl Blockify {
         kwargs: &[ParameterNode],
         b: &mut NodeBuilder,
     ) -> Pending {
-        let block_id = self.push_label(name, expr.span_id, scope_id, args, kwargs, b);
+        let entry_id = self.push_label(name, expr.span_id, scope_id, args, kwargs, b);
+        let block_id = self.resolve_block_id(entry_id.into());
         Pending {
             name,
             expr,
             scope_id,
-            block_id: block_id.into(),
+            block_id,
             next_block_id,
         }
     }
 
     pub fn add_pending(&mut self, pending: Pending, b: &mut NodeBuilder) -> Result<PendingResult> {
         self.env.enter_scope(pending.scope_id);
-        let r = self.add(pending.block_id, pending.next_block_id, pending.expr, b)?;
+        let r = self.add(
+            pending.block_id.into(),
+            pending.next_block_id,
+            pending.expr,
+            b,
+        )?;
         self.env.exit_scope();
-        let block_id = self.resolve_block_id(pending.block_id);
+        let block_id = self.resolve_block_id(pending.block_id.into());
         let v_result = r.value_id.unwrap();
         let ty = self.get_type(v_result);
         Ok(PendingResult { block_id, ty })
@@ -1490,10 +1496,7 @@ impl Blockify {
                     &[],
                     b,
                 );
-
-                let result = self.add_pending(p_then, b)?;
-                let then_ty = result.ty;
-                let then_block_id = result.block_id;
+                let then_block_id = p_then.block_id;
 
                 let scope_id = self.env.new_scope(ScopeType::Block);
                 let p_else = self.new_pending(
@@ -1505,14 +1508,16 @@ impl Blockify {
                     &[],
                     b,
                 );
+                let else_block_id = p_else.block_id;
 
+                let result = self.add_pending(p_then, b)?;
+                let then_ty = result.ty;
                 let result = self.add_pending(p_else, b)?;
                 let else_ty = result.ty;
-                let else_block_id = result.block_id;
 
                 assert_eq!(then_ty, else_ty);
 
-                let code = LCode::Ternary(v_c, then_block_id.into(), else_block_id.into());
+                let code = LCode::Ternary(v_c, then_block_id, else_block_id);
                 let v = self.push_code(
                     code,
                     condition_span_id,
