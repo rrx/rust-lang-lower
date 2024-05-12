@@ -77,7 +77,7 @@ pub fn from_type<'c>(context: &'c Context, ty: &AstType, b: &NodeBuilder) -> Typ
         AstType::Float => Type::float64(context),
         AstType::Bool => IntegerType::new(context, 1).into(),
         AstType::Unit => Type::none(context),
-        AstType::Variable(offset) => {
+        AstType::Variable(_) => {
             let ty = b.types.resolve_type(ty).unwrap();
             from_type(context, &ty, b)
         }

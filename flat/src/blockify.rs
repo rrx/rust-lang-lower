@@ -1527,8 +1527,14 @@ impl Blockify {
                     b,
                 );
                 let else_block_id = p_else.block_id;
+
+                // two unknowns needs to be unified
+                /*
                 let else_ty = p_else.ty.clone();
-                //b.types.unify(
+                let then_type_id = b.types.s(&then_ty);
+                let else_type_id = b.types.s(&else_ty);
+                b.types.unify(then_type_id, else_type_id);
+                */
 
                 /*
                 let result = self.add_pending(p_then, b)?;
