@@ -474,6 +474,19 @@ impl Blockify {
         b: &mut NodeBuilder,
     ) -> ValueId {
         let block_id = self.env.new_block();
+        self.push_label_with_block(name, span_id, scope_id, block_id, args, kwargs, b)
+    }
+
+    pub fn push_label_with_block(
+        &mut self,
+        name: StringLabel,
+        span_id: SpanId,
+        scope_id: ScopeId,
+        block_id: BlockId,
+        args: &[AstType],
+        kwargs: &[ParameterNode],
+        b: &mut NodeBuilder,
+    ) -> ValueId {
         let code = LCode::Label(args.len() as u8, kwargs.len() as u8);
         let v_block = self._push_code(
             code,
@@ -489,16 +502,6 @@ impl Blockify {
 
         self.entries[v_block.index()] = v_block;
         self._update_code(v_block, v_block);
-        /*
-        (block_id, v_block)
-
-        let (block_id, v_block) = self.push_code_new_block(
-            LCode::Label(args.len() as u8, kwargs.len() as u8),
-            span_id,
-            scope_id,
-            AstType::Unit,
-        );
-        */
 
         self.names.insert(v_block, name);
         self.env.block_name(scope_id, name, v_block, block_id);
@@ -829,7 +832,7 @@ impl Blockify {
             _ => vec![return_type.clone()],
         };
         let entry_id =
-            self.push_block_label(name.into(), span_id, scope_id, block_id, &args, &[], b);
+            self.push_label_with_block(name.into(), span_id, scope_id, block_id, &args, &[], b);
 
         let v_args = args
             .iter()
