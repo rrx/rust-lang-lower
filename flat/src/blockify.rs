@@ -560,7 +560,7 @@ impl Blockify {
                             current_entry_id = Some(r.entry_id.into());
                             //assert_eq!(current_block_id.unwrap(), r.block_id);
                             value_id = Some(v);
-                            println!("r6: {:?}", r);
+                            //println!("r6: {:?}", r);
                             //
                         } else {
                             unreachable!()
@@ -612,7 +612,7 @@ impl Blockify {
                             //assert_eq!(current_block_id.unwrap(), r.block_id);
                             value_id = Some(v);
                         }
-                        println!("r3: {:?}", r);
+                        //println!("r3: {:?}", r);
                     }
 
                     (true, NextSeqState::Empty) => {
@@ -626,7 +626,7 @@ impl Blockify {
                         assert_eq!(current_is_term, is_term);
                         current_entry_id = Some(r.entry_id.into());
                         value_id = Some(v);
-                        println!("r4: {:?}", r);
+                        //println!("r4: {:?}", r);
                     }
 
                     (false, NextSeqState::Empty) => {
@@ -645,7 +645,7 @@ impl Blockify {
                         current_is_term = r.is_term;
                         current_entry_id = Some(r.entry_id.into());
                         value_id = Some(v);
-                        println!("r2: {:?}", r);
+                        //println!("r2: {:?}", r);
 
                         // check that this terminates correctly
                         // exception for module level
@@ -662,7 +662,7 @@ impl Blockify {
                             self.add_with_next(current_entry_id.unwrap(), expr, v_next.into(), b)?;
                         let v = r.value_id.unwrap();
                         current_is_term = r.is_term;
-                        println!("r1: {:?}", r);
+                        //println!("r1: {:?}", r);
                         assert!(r.is_term);
                         assert_eq!(current_is_term, is_term);
                         // next block is the next block
@@ -755,12 +755,12 @@ impl Blockify {
         scope.return_block = Some(v_next);
         scope.entry_block = Some(new_entry_id);
         self.env.enter_scope(body_scope_id);
-        let r1 = self.add_with_next(current_entry_id.into(), *body, v_next.into(), b)?;
+        let _r1 = self.add_with_next(current_entry_id.into(), *body, v_next.into(), b)?;
         self.env.exit_scope();
 
         // we return the value of the arg in the next block
         let r2 = AddResult::new(Some(v_expr), false, v_next.into());
-        println!("lambda: {:?}", (&r1, &r2));
+        //println!("lambda: {:?}", (&r1, &r2));
         Ok(r2)
     }
 
@@ -772,7 +772,7 @@ impl Blockify {
         span_id: SpanId,
         b: &mut NodeBuilder,
     ) -> Result<AddResult> {
-        println!("add_function: {}", b.labels.r(function_name.into()));
+        //println!("add_function: {}", b.labels.r(function_name.into()));
         let scope_id = self.env.current_scope().unwrap();
 
         let params = def

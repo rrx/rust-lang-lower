@@ -226,19 +226,16 @@ impl<'c> Lower<'c> {
 
     pub fn resolve_value(&self, blockify: &Blockify, value_id: ValueId) -> Option<SymIndex> {
         if let Some(v_decl) = blockify.resolve_declaration(value_id) {
-            //println!("resolve: {:?}", value_id);
             let mut current = v_decl;
             loop {
                 let code = blockify.get_code(current);
                 if let LCode::Value(next_value_id) = code {
-                    //println!("resolve: {:?}", next_value_id);
                     current = *next_value_id;
                     continue;
                 } else {
                     break;
                 }
             }
-            //println!(":{:?}", lower.index);
             self.index.get(&current).cloned()
         } else {
             None
@@ -697,7 +694,6 @@ impl<'c> Lower<'c> {
                     &[], //else_args,
                     location,
                 );
-                //println!("op: {:?}", (op));
                 let block_id = blockify.get_entry_id(v);
                 let c = blocks.blocks.get_mut(&block_id).unwrap();
                 let index = c.push(op);
@@ -724,15 +720,8 @@ impl<'c> Lower<'c> {
 
                 // yield the last value
                 let c = blocks.blocks.get_mut(&v_then).unwrap();
-                //let r: Value<'c, '_> = c.ops.last().unwrap().result(0).unwrap().into();
                 let r2: Value<'c, '_> = c.ops.last().unwrap().operand(0).unwrap().into();
-                println!("r: {:?}", (r2));
                 let then_ty = r2.r#type();
-                /*
-                let op = scf::r#yield(&[r], location);
-                let c = blocks.blocks.get_mut(&v_then).unwrap();
-                c.push(op);
-                */
 
                 // ELSE
                 //let else_block_id = blockify.get_entry_id(*v_else);
@@ -754,13 +743,7 @@ impl<'c> Lower<'c> {
                 // yield the last value
                 let c = blocks.blocks.get_mut(&v_else).unwrap();
                 let r: Value<'c, '_> = c.ops.last().unwrap().operand(0).unwrap().into();
-                //let r: Value<'c, '_> = c.ops.last().unwrap().result(0).unwrap().into();
                 let else_ty = r.r#type();
-                /*
-                let op = scf::r#yield(&[r], location);
-                let c = blocks.blocks.get_mut(&v_else).unwrap();
-                c.push(op);
-                */
 
                 let then_region = Region::new();
                 for block_id in then_block_ids.iter() {
@@ -780,7 +763,6 @@ impl<'c> Lower<'c> {
                 let r_c = blocks.value0(c_index);
 
                 assert_eq!(then_ty, else_ty);
-                println!("x: {:?}", (then_ty, else_ty));
                 let r_types = &[then_ty];
 
                 let op = scf::r#if(r_c, r_types, then_region, else_region, location);
