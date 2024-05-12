@@ -1176,7 +1176,7 @@ impl Blockify {
 
     pub fn add_pending(&mut self, pending: Pending, b: &mut NodeBuilder) -> Result<PendingResult> {
         self.env.enter_scope(pending.scope_id);
-        let r = self.push_label_with_block(
+        let _ = self.push_label_with_block(
             pending.name,
             pending.expr.span_id,
             pending.scope_id,
