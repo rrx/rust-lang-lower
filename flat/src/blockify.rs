@@ -526,6 +526,7 @@ impl Blockify {
                 let static_scope = self.env.new_scope(ScopeType::Static);
                 let entry_id =
                     self.push_label(name.into(), node.span_id, static_scope, &[], &[], b);
+                let block_id = self.resolve_block_id(entry_id.into());
                 self.env.enter_scope(static_scope);
                 self.add(entry_id.into(), None, *body, b)?;
                 self.env.exit_scope();
@@ -537,12 +538,13 @@ impl Blockify {
 
     pub fn add_sequence(
         &mut self,
-        entry_id: CodeOffset,
+        entry_id: BlockId,
         maybe_next: Option<BlockId>,
         node: AstNode,
         b: &mut NodeBuilder,
     ) -> Result<AddResult> {
         let scope_id = self.env.current_scope().unwrap();
+        let entry_id = self.env.resolve_code_offset(entry_id.into());
         // flatten
         let exprs = node.to_vec();
 
@@ -556,7 +558,7 @@ impl Blockify {
         }
 
         let mut value_id = None;
-        let mut current_entry_id = Some(entry_id);
+        let mut current_entry_id = Some(entry_id.into());
         let mut iter = exprs.into_iter().peekable();
         let mut current_is_term = false;
         loop {
@@ -1208,7 +1210,9 @@ impl Blockify {
                 unimplemented!()
             }
 
-            Ast::Sequence(ref _exprs) => self.add_sequence(entry_id, maybe_next, node, b),
+            Ast::Sequence(ref _exprs) => {
+                self.add_sequence(self.resolve_block_id(entry_id), maybe_next, node, b)
+            }
 
             Ast::Lambda(_def) => {
                 unreachable!();
