@@ -1424,9 +1424,9 @@ impl Blockify {
                 let then_block_id = self.env.new_block();
 
                 let else_block_id = if let Some(_) = maybe_else_expr {
-                    self.env.new_block().into()
+                    self.env.new_block()
                 } else {
-                    v_next
+                    self.resolve_block_id(v_next)
                 };
 
                 // condition
@@ -1448,38 +1448,28 @@ impl Blockify {
                 // THEN
                 // push block then_block_id, with expr then_expr
                 let name = b.labels.s("then");
-                let then_scope_id = self.env.new_scope(ScopeType::Block);
-                let v_then = self.push_block_label(
+                let _ = self.add_block_with_expr(
                     name.into(),
-                    then_expr.span_id,
-                    then_scope_id,
                     then_block_id,
+                    Some(v_next),
+                    *then_expr,
                     &[],
                     &[],
                     b,
-                );
-                self.env.enter_scope(then_scope_id);
-                let r = self.add_with_next(v_then.into(), *then_expr, v_next, b)?;
-                let _ = r.value_id.unwrap();
-                self.env.exit_scope();
+                )?;
 
                 // ELSE
                 if let Some(else_expr) = maybe_else_expr {
                     let name = b.labels.s("else");
-                    let else_scope_id = self.env.new_scope(ScopeType::Block);
-                    let v_else = self.push_block_label(
+                    let _ = self.add_block_with_expr(
                         name.into(),
-                        else_expr.span_id,
-                        else_scope_id,
-                        self.resolve_block_id(else_block_id),
+                        else_block_id,
+                        Some(v_next),
+                        *else_expr,
                         &[],
                         &[],
                         b,
-                    );
-                    self.env.enter_scope(else_scope_id);
-                    let r = self.add_with_next(v_else.into(), *else_expr, v_next, b)?;
-                    let _ = r.value_id.unwrap();
-                    self.env.exit_scope();
+                    )?;
                 }
 
                 Ok(AddResult::new(Some(v), true, v_next))
