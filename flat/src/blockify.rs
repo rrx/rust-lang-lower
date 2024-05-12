@@ -130,25 +130,8 @@ pub struct Pending {
     name: StringLabel,
     scope_id: ScopeId,
     expr: AstNode,
-    //block_id: CodeOffset,
+    block_id: CodeOffset,
     next_block_id: Option<CodeOffset>,
-}
-
-impl Pending {
-    pub fn new(
-        name: StringLabel,
-        expr: AstNode,
-        scope_id: ScopeId,
-        next_block_id: Option<CodeOffset>,
-    ) -> Self {
-        Self {
-            name,
-            expr,
-            scope_id,
-            //block_id,
-            next_block_id,
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -1154,19 +1137,31 @@ impl Blockify {
         Ok(r)
     }
 
+    pub fn new_pending(
+        &mut self,
+        name: StringLabel,
+        expr: AstNode,
+        scope_id: ScopeId,
+        next_block_id: Option<CodeOffset>,
+        args: &[AstType],
+        kwargs: &[ParameterNode],
+        b: &mut NodeBuilder,
+    ) -> Pending {
+        let block_id = self.push_label(name, expr.span_id, scope_id, args, kwargs, b);
+        Pending {
+            name,
+            expr,
+            scope_id,
+            block_id: block_id.into(),
+            next_block_id,
+        }
+    }
+
     pub fn add_pending(&mut self, pending: Pending, b: &mut NodeBuilder) -> Result<PendingResult> {
         self.env.enter_scope(pending.scope_id);
-        let entry_id = self.push_label(
-            pending.name,
-            pending.expr.span_id,
-            pending.scope_id,
-            &[],
-            &[],
-            b,
-        );
-        let r = self.add(entry_id.into(), pending.next_block_id, pending.expr, b)?;
+        let r = self.add(pending.block_id, pending.next_block_id, pending.expr, b)?;
         self.env.exit_scope();
-        let block_id = self.resolve_block_id(entry_id.into());
+        let block_id = self.resolve_block_id(pending.block_id);
         let v_result = r.value_id.unwrap();
         let ty = self.get_type(v_result);
         Ok(PendingResult { block_id, ty })
@@ -1485,51 +1480,36 @@ impl Blockify {
                 let r = self.add(entry_id, None, *c, b)?;
                 let v_c = r.value_id.unwrap();
 
-                let p_then = Pending::new(
+                let scope_id = self.env.new_scope(ScopeType::Block);
+                let p_then = self.new_pending(
                     b.labels.s("then").into(),
                     AstNode::make_yield(*x),
-                    self.env.new_scope(ScopeType::Block),
+                    scope_id,
                     None,
+                    &[],
+                    &[],
+                    b,
                 );
 
                 let result = self.add_pending(p_then, b)?;
                 let then_ty = result.ty;
                 let then_block_id = result.block_id;
 
-                let p_else = Pending::new(
+                let scope_id = self.env.new_scope(ScopeType::Block);
+                let p_else = self.new_pending(
                     b.labels.s("else").into(),
                     AstNode::make_yield(*y),
-                    self.env.new_scope(ScopeType::Block),
+                    scope_id,
                     None,
+                    &[],
+                    &[],
+                    b,
                 );
 
                 let result = self.add_pending(p_else, b)?;
                 let else_ty = result.ty;
                 let else_block_id = result.block_id;
 
-                /*
-                let then_scope_id = self.env.new_scope(ScopeType::Block);
-                let name = b.labels.s("then");
-                self.env.enter_scope(then_scope_id);
-                let v_then = self.push_label(name.into(), x.span_id, then_scope_id, &[], &[], b);
-                let then_block_id = self.resolve_block_id(v_then.into());
-                let r = self.add(v_then.into(), None, AstNode::make_yield(*x), b)?;
-                let v_then_result = r.value_id.unwrap();
-                self.env.exit_scope();
-                let then_ty = self.get_type(v_then_result);
-                */
-
-                /*
-                let else_scope_id = self.env.new_scope(ScopeType::Block);
-                let name = b.labels.s("else");
-                self.env.enter_scope(else_scope_id);
-                let v_else = self.push_label(name.into(), y.span_id, else_scope_id, &[], &[], b);
-                let else_block_id = self.resolve_block_id(v_else.into());
-                let r = self.add(v_else.into(), None, AstNode::make_yield(*y), b)?;
-                let v_else_result = r.value_id.unwrap();
-                self.env.exit_scope();
-                let else_ty = self.get_type(v_else_result);
-                */
                 assert_eq!(then_ty, else_ty);
 
                 let code = LCode::Ternary(v_c, then_block_id.into(), else_block_id.into());
@@ -1543,30 +1523,6 @@ impl Blockify {
                 );
 
                 Ok(AddResult::new(Some(v), false, entry_id))
-
-                /*
-                let then_block_id = self.env.new_block();
-                let code = LCode::Ternary(v_c, then_block_id.into(), v_else.into());
-
-                let v = self.push_code(
-                    code,
-                    condition_span_id,
-                    scope_id,
-                    entry_id,
-                    // fill in later
-                    AstType::Unit,
-                    VarDefinitionSpace::Reg,
-                );
-
-                let r = self.add_block_with_expr(
-                    b.labels.s("then").into(), then_block_id, None, *x, b)?;
-
-                let v_then_result = r.value_id.unwrap();
-                let then_ty = self.get_type(v_then_result);
-                assert_eq!(then_ty, else_ty);
-
-                Ok(r)
-                */
             }
 
             Ast::BinaryOp(op, x, y) => {
