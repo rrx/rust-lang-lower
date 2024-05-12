@@ -126,6 +126,38 @@ impl AddResult {
 }
 
 #[derive(Debug)]
+pub struct Pending {
+    name: StringLabel,
+    scope_id: ScopeId,
+    expr: AstNode,
+    //block_id: CodeOffset,
+    next_block_id: Option<CodeOffset>,
+}
+
+impl Pending {
+    pub fn new(
+        name: StringLabel,
+        expr: AstNode,
+        scope_id: ScopeId,
+        next_block_id: Option<CodeOffset>,
+    ) -> Self {
+        Self {
+            name,
+            expr,
+            scope_id,
+            //block_id,
+            next_block_id,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct PendingResult {
+    block_id: BlockId,
+    ty: AstType,
+}
+
+#[derive(Debug)]
 pub struct Blockify {
     // table entries
     code: Vec<LCode>,
@@ -138,6 +170,7 @@ pub struct Blockify {
     span: Vec<SpanId>,
     loop_stack: Vec<LoopLayer>,
     templates: Vec<Lambda>,
+    pending: Vec<Pending>,
 
     // other
     pub env: Environment,
@@ -159,6 +192,7 @@ impl Blockify {
             entries: vec![],
             templates: vec![],
             span: vec![],
+            pending: vec![],
 
             names: IndexMap::new(),
             env: Environment::new(),
@@ -1120,7 +1154,35 @@ impl Blockify {
         Ok(r)
     }
 
+    pub fn add_pending(&mut self, pending: Pending, b: &mut NodeBuilder) -> Result<PendingResult> {
+        self.env.enter_scope(pending.scope_id);
+        let entry_id = self.push_label(
+            pending.name,
+            pending.expr.span_id,
+            pending.scope_id,
+            &[],
+            &[],
+            b,
+        );
+        let r = self.add(entry_id.into(), pending.next_block_id, pending.expr, b)?;
+        self.env.exit_scope();
+        let block_id = self.resolve_block_id(entry_id.into());
+        let v_result = r.value_id.unwrap();
+        let ty = self.get_type(v_result);
+        Ok(PendingResult { block_id, ty })
+    }
+
     pub fn add(
+        &mut self,
+        entry_id: CodeOffset,
+        maybe_next: Option<CodeOffset>,
+        node: AstNode,
+        b: &mut NodeBuilder,
+    ) -> Result<AddResult> {
+        self._add(entry_id, maybe_next, node, b)
+    }
+
+    pub fn _add(
         &mut self,
         entry_id: CodeOffset,
         maybe_next: Option<CodeOffset>,
@@ -1423,6 +1485,29 @@ impl Blockify {
                 let r = self.add(entry_id, None, *c, b)?;
                 let v_c = r.value_id.unwrap();
 
+                let p_then = Pending::new(
+                    b.labels.s("then").into(),
+                    AstNode::make_yield(*x),
+                    self.env.new_scope(ScopeType::Block),
+                    None,
+                );
+
+                let result = self.add_pending(p_then, b)?;
+                let then_ty = result.ty;
+                let then_block_id = result.block_id;
+
+                let p_else = Pending::new(
+                    b.labels.s("else").into(),
+                    AstNode::make_yield(*y),
+                    self.env.new_scope(ScopeType::Block),
+                    None,
+                );
+
+                let result = self.add_pending(p_else, b)?;
+                let else_ty = result.ty;
+                let else_block_id = result.block_id;
+
+                /*
                 let then_scope_id = self.env.new_scope(ScopeType::Block);
                 let name = b.labels.s("then");
                 self.env.enter_scope(then_scope_id);
@@ -1432,7 +1517,9 @@ impl Blockify {
                 let v_then_result = r.value_id.unwrap();
                 self.env.exit_scope();
                 let then_ty = self.get_type(v_then_result);
+                */
 
+                /*
                 let else_scope_id = self.env.new_scope(ScopeType::Block);
                 let name = b.labels.s("else");
                 self.env.enter_scope(else_scope_id);
@@ -1442,9 +1529,8 @@ impl Blockify {
                 let v_else_result = r.value_id.unwrap();
                 self.env.exit_scope();
                 let else_ty = self.get_type(v_else_result);
+                */
                 assert_eq!(then_ty, else_ty);
-
-                // TODO: we need to ensure that the cfg terminates with a yield
 
                 let code = LCode::Ternary(v_c, then_block_id.into(), else_block_id.into());
                 let v = self.push_code(
