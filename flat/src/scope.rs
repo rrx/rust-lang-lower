@@ -60,7 +60,7 @@ pub struct ScopeLayer {
     pub labels: HashMap<StringLabel, ValueId>,
     pub(crate) block_labels: HashMap<StringLabel, BlockId>,
     pub blocks: Vec<ValueId>,
-    pub return_block: Option<ValueId>,
+    pub return_block: Option<BlockId>,
     pub next_block: Vec<ValueId>,
     pub(crate) entry_block: Option<ValueId>,
     pub(crate) loop_block: Option<LoopScope>,
@@ -340,7 +340,7 @@ impl Environment {
         None
     }
 
-    pub fn resolve_return_block(&self) -> Option<ValueId> {
+    pub fn resolve_return_block(&self) -> Option<BlockId> {
         // walk up the stack until we find the containing block, which has the return block
         for scope_id in self.stack.iter().rev() {
             let scope = self.get_scope(*scope_id);

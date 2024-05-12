@@ -9,8 +9,8 @@ use compile_core::{
 };
 
 use crate::{
-    BlockId, Builtin, CodeOffset, Environment, NodeBuilder, ScopeId, ScopeType, StringLabel,
-    TemplateId, ValueId,
+    BlockId, Builtin, CodeOffset, Environment, NodeBuilder, NodeBuilder as NB, ScopeId, ScopeType,
+    StringLabel, TemplateId, ValueId,
 };
 
 #[derive(Error, Debug)]
@@ -769,8 +769,9 @@ impl Blockify {
             VarDefinitionSpace::Reg,
         );
 
+        let ret_block_id = self.resolve_block_id(v_next.into());
         let scope = self.env.get_scope_mut(body_scope_id);
-        scope.return_block = Some(v_next);
+        scope.return_block = Some(ret_block_id);
         scope.entry_block = Some(new_entry_id);
         self.env.enter_scope(body_scope_id);
         let _r1 = self.add_with_next(current_entry_id.into(), *body, v_next.into(), b)?;
@@ -820,15 +821,22 @@ impl Blockify {
             );
 
             // return block
+            //
             let name = b.labels.s("ret");
-            //let return_type = *def.return_type;
             let args = match &return_type {
                 AstType::Unit => vec![],
                 _ => vec![return_type.clone()],
             };
+            //let ret_block_id = self.env.new_block();
+
+            //let block_start = NB::block_start(name, def.params);
+            //self.new_pending(name, b.ret()
+
+            //let return_type = *def.return_type;
 
             // return block follows entry
             let return_block = self.push_label(name.into(), span_id, body_scope_id, &args, &[], b);
+            let ret_block_id = self.resolve_block_id(return_block.into());
             let v_args = args
                 .iter()
                 .enumerate()
@@ -868,7 +876,7 @@ impl Blockify {
             // handle body
 
             let scope = self.env.get_scope_mut(body_scope_id);
-            scope.return_block = Some(return_block);
+            scope.return_block = Some(ret_block_id);
             scope.entry_block = Some(new_entry_id);
 
             // declare function before adding the body, for recursion
@@ -884,7 +892,7 @@ impl Blockify {
 
             self.env.enter_scope(body_scope_id);
             // next block in body scope
-            self.add_with_next(new_entry_id.into(), *body, return_block.into(), b)?;
+            self.add_with_next(new_entry_id.into(), *body, ret_block_id.into(), b)?;
             self.env.exit_scope();
             self.env
                 .add_succ_static(self.env.resolve_code_offset(current_entry_id), new_entry_id);
@@ -1122,11 +1130,20 @@ impl Blockify {
         block_id: BlockId,
         v_next: Option<CodeOffset>,
         expr: AstNode,
+        args: &[AstType],
+        kwargs: &[ParameterNode],
         b: &mut NodeBuilder,
     ) -> Result<AddResult> {
         let scope_id = self.env.new_scope(ScopeType::Block);
-        let v_then =
-            self.push_block_label(name.into(), expr.span_id, scope_id, block_id, &[], &[], b);
+        let v_then = self.push_block_label(
+            name.into(),
+            expr.span_id,
+            scope_id,
+            block_id,
+            args,
+            kwargs,
+            b,
+        );
         self.env.enter_scope(scope_id);
         let r = if let Some(v_next) = v_next {
             self.add_with_next(v_then.into(), expr, v_next, b)?
@@ -1554,9 +1571,7 @@ impl Blockify {
                     condition_span_id,
                     scope_id,
                     entry_id,
-                    //then_ty, // the branches should match
-                    then_ty,
-                    //AstType::Int,
+                    then_ty, // the branches should match
                     VarDefinitionSpace::Reg,
                 );
 
