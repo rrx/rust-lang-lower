@@ -875,7 +875,18 @@ impl Blockify {
             let body_scope_id = self.env.new_scope(ScopeType::Function);
 
             let new_block_id = self.env.new_block();
-            //
+
+            // declare function before adding the body, for recursion
+            let v_decl = self.push_code_with_name(
+                LCode::DeclareFunction(Some(new_block_id)),
+                span_id,
+                scope_id,
+                current_block_id,
+                ty.clone(),
+                VarDefinitionSpace::Static,
+                function_name,
+            );
+
             // entry first
             let new_entry_id = self.push_label_with_block(
                 function_name.into(),
@@ -900,16 +911,6 @@ impl Blockify {
             scope.return_block = Some(ret_block_id);
             scope.entry_block = Some(new_entry_id);
 
-            // declare function before adding the body, for recursion
-            let v_decl = self.push_code_with_name(
-                LCode::DeclareFunction(Some(self.resolve_block_id(new_entry_id.into()))),
-                span_id,
-                scope_id,
-                current_block_id,
-                ty.clone(),
-                VarDefinitionSpace::Static,
-                function_name,
-            );
 
             self.env.enter_scope(body_scope_id);
             // next block in body scope
