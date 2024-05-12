@@ -526,7 +526,6 @@ impl Blockify {
                 let static_scope = self.env.new_scope(ScopeType::Static);
                 let entry_id =
                     self.push_label(name.into(), node.span_id, static_scope, &[], &[], b);
-                let block_id = self.resolve_block_id(entry_id.into());
                 self.env.enter_scope(static_scope);
                 self.add(entry_id.into(), None, *body, b)?;
                 self.env.exit_scope();
@@ -717,7 +716,7 @@ impl Blockify {
 
     pub fn add_lambda_and_call(
         &mut self,
-        current_entry_id: CodeOffset,
+        current_entry_id: BlockId,
         template_id: TemplateId,
         args: Vec<Argument>,
         span_id: SpanId,
@@ -750,9 +749,9 @@ impl Blockify {
         assert_eq!(args_size as usize, jump_args.len());
         // jump to entry
         let new_block_id = self.resolve_block_id(new_entry_id.into());
-        let _r = self.add_jump(current_entry_id, new_block_id, jump_args, span_id, b)?;
+        let _r = self.add_jump(current_entry_id.into(), new_block_id, jump_args, span_id, b)?;
         self.env.add_succ_block(
-            self.env.resolve_code_offset(current_entry_id),
+            self.env.resolve_code_offset(current_entry_id.into()),
             new_entry_id.into(),
         );
         // return block is the next block
@@ -1238,8 +1237,9 @@ impl Blockify {
                         let scope = self.env.get_scope(scope_id);
                         let label: StringLabel = (*ident).into();
                         let template_id = scope.lambdas.get(&label).unwrap();
+                        let block_id = self.resolve_block_id(entry_id);
                         return self.add_lambda_and_call(
-                            entry_id,
+                            block_id,
                             *template_id,
                             args,
                             node.span_id,
