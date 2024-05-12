@@ -140,7 +140,7 @@ pub struct Pending {
     scope_id: ScopeId,
     expr: AstNode,
     block_id: BlockId,
-    next_block_id: Option<CodeOffset>,
+    next_block_id: Option<BlockId>,
     ty: AstType,
 }
 
@@ -541,7 +541,7 @@ impl Blockify {
     pub fn add_sequence(
         &mut self,
         entry_id: CodeOffset,
-        maybe_next: Option<CodeOffset>,
+        maybe_next: Option<BlockId>,
         node: AstNode,
         b: &mut NodeBuilder,
     ) -> Result<AddResult> {
@@ -569,14 +569,14 @@ impl Blockify {
                 match (is_term, next_state) {
                     (_, NextSeqState::NextLabel(key)) => {
                         // next label handles implicit jumps
-                        if let Some(target_value_id) = self.env.resolve_block(key.into()) {
+                        if let Some(target_block_id) = self.env.resolve_block_id(key.into()) {
                             // ensure target block exists
                             //let scope = self.env.get_scope_mut(scope_id);
                             //scope.next_block = Some(target_value_id);
                             //current_entry_id = Some(target_value_id);
                             let r = self.add(
                                 current_entry_id.unwrap(),
-                                Some(target_value_id.into()),
+                                Some(target_block_id),
                                 expr,
                                 b,
                             )?;
@@ -685,8 +685,8 @@ impl Blockify {
                         let name = b.labels.s("next");
                         let v_next =
                             self.push_label(name.into(), expr_span_id, scope_id, &[], &[], b);
-                        let r =
-                            self.add_with_next(current_entry_id.unwrap(), expr, v_next.into(), b)?;
+                        let v_next = self.resolve_block_id(v_next.into());
+                        let r = self.add_with_next(current_entry_id.unwrap(), expr, v_next, b)?;
                         let v = r.value_id.unwrap();
                         current_is_term = r.is_term;
                         //println!("r1: {:?}", r);
@@ -768,6 +768,7 @@ impl Blockify {
 
         let name = b.labels.s("lambda_result");
         let v_next = self.push_label(name.into(), span_id, scope_id, &return_type_args, &[], b);
+        let v_next = self.resolve_block_id(v_next.into());
 
         // push Arg to next block
         let v_expr = self.push_code(
@@ -784,7 +785,7 @@ impl Blockify {
         scope.return_block = Some(ret_block_id);
         scope.entry_block = Some(new_entry_id.into());
         self.env.enter_scope(body_scope_id);
-        let _r1 = self.add_with_next(current_entry_id.into(), *body, v_next.into(), b)?;
+        let _r1 = self.add_with_next(current_entry_id.into(), *body, v_next, b)?;
         self.env.exit_scope();
 
         // we return the value of the arg in the next block
@@ -938,7 +939,7 @@ impl Blockify {
     pub fn add_loop(
         &mut self,
         entry_id: CodeOffset,
-        v_next: CodeOffset,
+        v_next: BlockId,
         name: StringKey,
         body: AstNode,
         b: &mut NodeBuilder,
@@ -947,7 +948,8 @@ impl Blockify {
         let loop_scope_id = self.env.new_scope(ScopeType::Loop);
         let v_loop = self.push_label(name.into(), span_id, loop_scope_id, &[], &[], b);
         let b_loop = self.resolve_block_id(v_loop.into());
-        self.env.push_loop_blocks(Some(name), v_next, v_loop.into());
+        self.env
+            .push_loop_blocks(Some(name), v_next.into(), v_loop.into());
 
         self.env.enter_scope(loop_scope_id);
         let _ = self.add_with_next(v_loop.into(), body, v_next.into(), b)?;
@@ -955,7 +957,11 @@ impl Blockify {
 
         // enter loop
         let r = self.add_jump(entry_id, b_loop, vec![], span_id, b)?;
-        Ok(AddResult::new(Some(r.value_id.unwrap()), true, v_next))
+        Ok(AddResult::new(
+            Some(r.value_id.unwrap()),
+            true,
+            v_next.into(),
+        ))
     }
 
     pub fn add_jump(
@@ -1002,7 +1008,7 @@ impl Blockify {
         &mut self,
         entry_id: CodeOffset,
         node: AstNode,
-        v_next: CodeOffset,
+        v_next: BlockId,
         b: &mut NodeBuilder,
     ) -> Result<AddResult> {
         let span_id = node.span_id;
@@ -1013,7 +1019,7 @@ impl Blockify {
         //assert_eq!(last_entry_id, r.entry_id);
         let block = self.env.get_block(last_entry_id);
 
-        let v_next = self.resolve_block_id(v_next);
+        //let v_next = self.resolve_block_id(v_next);
         if !block.has_term() {
             // if the block doesn't explicitely terminate, then we jump to the next block
             self.add_jump(v_block, v_next, vec![], span_id, b)
@@ -1099,7 +1105,7 @@ impl Blockify {
         &mut self,
         name: StringLabel,
         block_id: BlockId,
-        v_next: Option<CodeOffset>,
+        v_next: Option<BlockId>,
         expr: AstNode,
         args: &[AstType],
         kwargs: &[ParameterNode],
@@ -1131,7 +1137,7 @@ impl Blockify {
         name: StringLabel,
         expr: AstNode,
         scope_id: ScopeId,
-        next_block_id: Option<CodeOffset>,
+        next_block_id: Option<BlockId>,
         args: &[AstType],
         kwargs: &[ParameterNode],
         b: &mut NodeBuilder,
@@ -1174,7 +1180,7 @@ impl Blockify {
     pub fn add(
         &mut self,
         entry_id: CodeOffset,
-        maybe_next: Option<CodeOffset>,
+        maybe_next: Option<BlockId>,
         node: AstNode,
         b: &mut NodeBuilder,
     ) -> Result<AddResult> {
@@ -1191,7 +1197,7 @@ impl Blockify {
     pub fn _add(
         &mut self,
         entry_id: CodeOffset,
-        maybe_next: Option<CodeOffset>,
+        maybe_next: Option<BlockId>,
         node: AstNode,
         b: &mut NodeBuilder,
     ) -> Result<AddResult> {
@@ -1426,7 +1432,8 @@ impl Blockify {
                 let else_block_id = if let Some(_) = maybe_else_expr {
                     self.env.new_block()
                 } else {
-                    self.resolve_block_id(v_next)
+                    v_next
+                    //self.resolve_block_id(v_next)
                 };
 
                 // condition
@@ -1472,7 +1479,7 @@ impl Blockify {
                     )?;
                 }
 
-                Ok(AddResult::new(Some(v), true, v_next))
+                Ok(AddResult::new(Some(v), true, v_next.into()))
             }
 
             Ast::Ternary(c, x, y) => {
