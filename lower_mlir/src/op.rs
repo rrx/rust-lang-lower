@@ -4,6 +4,7 @@ use compile_core::Diagnostic;
 use compile_core::{Ast, AstNode, AstType, BinaryOperation, Literal, SpanId};
 use flat::NodeBuilder;
 
+use crate::Lower;
 use melior::ir::Location;
 use melior::{
     dialect::{
@@ -54,35 +55,125 @@ pub enum LowerError {
     Diagnostic(Diagnostic<usize>),
 }
 
-pub fn from_type<'c>(context: &'c Context, ty: &AstType, b: &NodeBuilder) -> Type<'c> {
-    match ty {
-        AstType::Ptr(_) => Type::index(context),
-        AstType::Tuple(args) => {
-            let types = args
-                .iter()
-                .map(|a| from_type(context, a, b))
-                .collect::<Vec<_>>();
-            melior::ir::r#type::TupleType::new(context, &types).into()
+impl<'c> Lower<'c> {
+    pub fn from_type(&self, ty: &AstType, b: &NodeBuilder) -> Type<'c> {
+        match ty {
+            AstType::Ptr(_) => Type::index(self.context),
+            AstType::Tuple(args) => {
+                let types = args
+                    .iter()
+                    .map(|a| self.from_type(a, b))
+                    .collect::<Vec<_>>();
+                melior::ir::r#type::TupleType::new(self.context, &types).into()
+            }
+            AstType::Func(args, ret) => {
+                let inputs = args
+                    .iter()
+                    .map(|a| self.from_type(a, b))
+                    .collect::<Vec<_>>();
+                let results = vec![self.from_type(ret, b)];
+                melior::ir::r#type::FunctionType::new(self.context, &inputs, &results).into()
+            }
+            AstType::Int => IntegerType::new(self.context, 64).into(),
+            AstType::Index => Type::index(self.context),
+            AstType::Float => Type::float64(self.context),
+            AstType::Bool => IntegerType::new(self.context, 1).into(),
+            AstType::Unit => Type::none(self.context),
+
+            // Resolve Variable
+            AstType::Variable(_) => {
+                let ty = b.types.resolve_type(ty).unwrap();
+                self.from_type(&ty, b)
+            }
+            //AstType::String => Type::none(self.context),
+            _ => unimplemented!("{:?}", ty),
         }
-        AstType::Func(args, ret) => {
-            let inputs = args
-                .iter()
-                .map(|a| from_type(context, a, b))
-                .collect::<Vec<_>>();
-            let results = vec![from_type(context, ret, b)];
-            melior::ir::r#type::FunctionType::new(context, &inputs, &results).into()
+    }
+
+    pub fn emit_static(
+        &self,
+        global_name: String,
+        expr: AstNode,
+        location: Location<'c>,
+        b: &NodeBuilder,
+    ) -> (Operation<'c>, AstType) {
+        // evaluate expr at compile time
+        let (ast_ty, op) = match expr.node {
+            Ast::Literal(Literal::Bool(x)) => {
+                let ast_ty = AstType::Bool;
+                let ty = self.from_type(&ast_ty, b);
+                let v = if x { 1 } else { 0 };
+                let value = IntegerAttribute::new(v, ty).into();
+                let op = build_static(self.context, &global_name, ty, value, false, location);
+                (ast_ty, op)
+            }
+
+            Ast::Literal(Literal::Int(x)) => {
+                let ast_ty = AstType::Int;
+                let ty = self.from_type(&ast_ty, b);
+                let value = IntegerAttribute::new(x, ty).into();
+                let op = build_static(self.context, &global_name, ty, value, false, location);
+                (ast_ty, op)
+            }
+
+            Ast::Literal(Literal::Index(x)) => {
+                let ast_ty = AstType::Int;
+                let ty = self.from_type(&ast_ty, b);
+                let value = IntegerAttribute::new(x as i64, ty).into();
+                let op = build_static(self.context, &global_name, ty, value, false, location);
+                (ast_ty, op)
+            }
+
+            Ast::Literal(Literal::Float(x)) => {
+                let ast_ty = AstType::Float;
+                let ty = self.from_type(&ast_ty, b);
+                let value = FloatAttribute::new(self.context, x, ty).into();
+                let op = build_static(self.context, &global_name, ty, value, false, location);
+                (ast_ty, op)
+            }
+
+            _ => unreachable!("{:?}", expr.node),
+        };
+        (op, ast_ty)
+    }
+
+    pub fn build_static_attribute(
+        &self,
+        lit: &Literal,
+        b: &NodeBuilder,
+    ) -> (Attribute<'c>, AstType) {
+        // evaluate expr at compile time
+        match lit {
+            Literal::Bool(x) => {
+                let ast_ty = AstType::Bool;
+                let ty = self.from_type(&ast_ty, b);
+                let v = if *x { 1 } else { 0 };
+                let value = IntegerAttribute::new(v, ty).into();
+                (value, ast_ty)
+            }
+
+            Literal::Int(x) => {
+                let ast_ty = AstType::Int;
+                let ty = self.from_type(&ast_ty, b);
+                let value = IntegerAttribute::new(*x, ty).into();
+                (value, ast_ty)
+            }
+
+            Literal::Index(x) => {
+                let ast_ty = AstType::Int;
+                let ty = self.from_type(&ast_ty, b);
+                let value = IntegerAttribute::new(*x as i64, ty).into();
+                (value, ast_ty)
+            }
+
+            Literal::Float(x) => {
+                let ast_ty = AstType::Float;
+                let ty = self.from_type(&ast_ty, b);
+                let value = FloatAttribute::new(self.context, *x, ty).into();
+                (value, ast_ty)
+            }
+            _ => unreachable!("{:?}", lit),
         }
-        AstType::Int => IntegerType::new(context, 64).into(),
-        AstType::Index => Type::index(context),
-        AstType::Float => Type::float64(context),
-        AstType::Bool => IntegerType::new(context, 1).into(),
-        AstType::Unit => Type::none(context),
-        AstType::Variable(_) => {
-            let ty = b.types.resolve_type(ty).unwrap();
-            from_type(context, &ty, b)
-        }
-        //AstType::String => Type::none(self.context),
-        _ => unimplemented!("{:?}", ty),
     }
 }
 
@@ -192,92 +283,6 @@ pub fn build_static<'c>(
         Some(alignment),
         location,
     )
-}
-
-pub fn emit_static<'c>(
-    context: &'c Context,
-    global_name: String,
-    expr: AstNode,
-    location: Location<'c>,
-    b: &NodeBuilder,
-) -> (Operation<'c>, AstType) {
-    // evaluate expr at compile time
-    let (ast_ty, op) = match expr.node {
-        Ast::Literal(Literal::Bool(x)) => {
-            let ast_ty = AstType::Bool;
-            let ty = from_type(context, &ast_ty, b);
-            let v = if x { 1 } else { 0 };
-            let value = IntegerAttribute::new(v, ty).into();
-            let op = build_static(context, &global_name, ty, value, false, location);
-            (ast_ty, op)
-        }
-
-        Ast::Literal(Literal::Int(x)) => {
-            let ast_ty = AstType::Int;
-            let ty = from_type(context, &ast_ty, b);
-            let value = IntegerAttribute::new(x, ty).into();
-            let op = build_static(context, &global_name, ty, value, false, location);
-            (ast_ty, op)
-        }
-
-        Ast::Literal(Literal::Index(x)) => {
-            let ast_ty = AstType::Int;
-            let ty = from_type(context, &ast_ty, b);
-            let value = IntegerAttribute::new(x as i64, ty).into();
-            let op = build_static(context, &global_name, ty, value, false, location);
-            (ast_ty, op)
-        }
-
-        Ast::Literal(Literal::Float(x)) => {
-            let ast_ty = AstType::Float;
-            let ty = from_type(context, &ast_ty, b);
-            let value = FloatAttribute::new(context, x, ty).into();
-            let op = build_static(context, &global_name, ty, value, false, location);
-            (ast_ty, op)
-        }
-
-        _ => unreachable!("{:?}", expr.node),
-    };
-    (op, ast_ty)
-}
-
-pub fn build_static_attribute<'c>(
-    context: &'c Context,
-    lit: &Literal,
-    b: &NodeBuilder,
-) -> (Attribute<'c>, AstType) {
-    // evaluate expr at compile time
-    match lit {
-        Literal::Bool(x) => {
-            let ast_ty = AstType::Bool;
-            let ty = from_type(context, &ast_ty, b);
-            let v = if *x { 1 } else { 0 };
-            let value = IntegerAttribute::new(v, ty).into();
-            (value, ast_ty)
-        }
-
-        Literal::Int(x) => {
-            let ast_ty = AstType::Int;
-            let ty = from_type(context, &ast_ty, b);
-            let value = IntegerAttribute::new(*x, ty).into();
-            (value, ast_ty)
-        }
-
-        Literal::Index(x) => {
-            let ast_ty = AstType::Int;
-            let ty = from_type(context, &ast_ty, b);
-            let value = IntegerAttribute::new(*x as i64, ty).into();
-            (value, ast_ty)
-        }
-
-        Literal::Float(x) => {
-            let ast_ty = AstType::Float;
-            let ty = from_type(context, &ast_ty, b);
-            let value = FloatAttribute::new(context, *x, ty).into();
-            (value, ast_ty)
-        }
-        _ => unreachable!("{:?}", lit),
-    }
 }
 
 pub fn build_binop<'c>(

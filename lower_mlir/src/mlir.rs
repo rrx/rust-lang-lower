@@ -123,22 +123,6 @@ impl<'c> LowerBlocks<'c> {
     }
 }
 
-pub struct Lower<'c> {
-    context: &'c Context,
-    index: IndexMap<ValueId, SymIndex>,
-    module_block_id: ValueId,
-}
-
-impl<'c> Lower<'c> {
-    pub fn new(context: &'c Context, module_block_id: ValueId) -> Self {
-        Self {
-            context,
-            index: IndexMap::new(),
-            module_block_id,
-        }
-    }
-}
-
 #[derive(Debug)]
 pub struct OpCollection<'c> {
     block_id: ValueId,
@@ -211,6 +195,22 @@ impl<'c> OpCollection<'c> {
     }
 }
 
+pub struct Lower<'c> {
+    pub(crate) context: &'c Context,
+    index: IndexMap<ValueId, SymIndex>,
+    module_block_id: ValueId,
+}
+
+impl<'c> Lower<'c> {
+    pub fn new(context: &'c Context, module_block_id: ValueId) -> Self {
+        Self {
+            context,
+            index: IndexMap::new(),
+            module_block_id,
+        }
+    }
+}
+
 impl<'c> Lower<'c> {
     pub fn get_location(
         blockify: &Blockify,
@@ -257,14 +257,14 @@ impl<'c> Lower<'c> {
             let location = Lower::get_location(blockify, current, context, b);
 
             let next = blockify.get_next(current).unwrap();
-            let ty = crate::op::from_type(context, &blockify.get_type(next), b);
+            let ty = self.from_type(&blockify.get_type(next), b);
             current = next;
             out.push((ty, location));
         }
         for _ in 0..num_kwargs {
             let location = Lower::get_location(blockify, current, context, b);
             let next = blockify.get_next(current).unwrap();
-            let ty = crate::op::from_type(context, &blockify.get_type(next), b);
+            let ty = self.from_type(&blockify.get_type(next), b);
             current = next;
             out.push((ty, location));
         }
@@ -370,13 +370,13 @@ impl<'c> Lower<'c> {
                 let block_id = blockify.get_entry_id(v);
 
                 if blockify.is_in_static_scope(v) {
-                    let (value, ast_ty) = crate::op::build_static_attribute(self.context, lit, b);
+                    let (value, ast_ty) = self.build_static_attribute(lit, b);
 
                     let name = blockify.get_name(v).unwrap();
 
                     // declare
                     let integer_type = IntegerType::new(self.context, 64).into();
-                    let ty = crate::op::from_type(self.context, &ast_ty, b);
+                    let ty = self.from_type(&ast_ty, b);
                     let alignment = IntegerAttribute::new(8, integer_type);
                     let memspace = IntegerAttribute::new(0, integer_type).into();
                     let constant = false;
@@ -393,7 +393,7 @@ impl<'c> Lower<'c> {
                         location,
                     );
 
-                    let ty = crate::op::from_type(self.context, &ast_ty, b);
+                    let ty = self.from_type(&ast_ty, b);
                     let attribute = DenseElementsAttribute::new(
                         RankedTensorType::new(&[], ty, None).into(),
                         &[value],
@@ -446,7 +446,7 @@ impl<'c> Lower<'c> {
 
                 //if static_block_id == block_id {
                 // global context
-                let op = build_declare_function(self.context, key, ty, location, b)?;
+                let op = self.build_declare_function(key, ty, location, b)?;
                 let c = blocks.blocks.get_mut(&static_block_id).unwrap();
                 let index = c.push(op);
                 self.index.insert(v, index);
@@ -504,7 +504,7 @@ impl<'c> Lower<'c> {
                 let f = FlatSymbolRefAttribute::new(self.context, &name);
 
                 if let AstType::Func(_func_arg_types, ret) = &ty {
-                    let ret_type = crate::op::from_type(self.context, &ret, b);
+                    let ret_type = self.from_type(&ret, b);
                     // handle call arguments
 
                     let values = blockify.get_previous_values(v, *args as usize);
@@ -534,7 +534,7 @@ impl<'c> Lower<'c> {
             LCode::Declare => {
                 let block_id = blockify.get_entry_id(v);
                 let ast_ty = blockify.get_type(v);
-                let ty = crate::op::from_type(self.context, &ast_ty, b);
+                let ty = self.from_type(&ast_ty, b);
                 let memref_ty = MemRefType::new(ty.into(), &[], None, None);
                 let op = memref::alloca(self.context, memref_ty, &[], &[], None, location);
                 let c = blocks.blocks.get_mut(&block_id).unwrap();
@@ -552,7 +552,7 @@ impl<'c> Lower<'c> {
                     let rhs_ty = blockify.get_type(*v_value);
                     assert_eq!(lhs_ty, rhs_ty);
 
-                    let lower_ty = crate::op::from_type(self.context, &lhs_ty, b);
+                    let lower_ty = self.from_type(&lhs_ty, b);
                     let memref_ty = MemRefType::new(lower_ty, &[], None, None);
                     let static_name = b.labels.r(name);
                     // TODO: FIXME
@@ -590,7 +590,7 @@ impl<'c> Lower<'c> {
                 let v_decl = blockify.resolve_declaration(*v_decl).unwrap();
                 if blockify.is_in_static_scope(v_decl) {
                     let ast_ty = blockify.get_type(v);
-                    let lower_ty = crate::op::from_type(self.context, &ast_ty, b);
+                    let lower_ty = self.from_type(&ast_ty, b);
                     let memref_ty = MemRefType::new(lower_ty, &[], None, None);
                     // TODO: FIXME
                     let decl_name = blockify.get_name(v_decl).unwrap();
@@ -617,7 +617,7 @@ impl<'c> Lower<'c> {
                 let block_id = blockify.get_entry_id(v);
                 let x_index = self.resolve_value(blockify, *x).unwrap();
                 let ast_ty = blockify.get_type(*x);
-                let ty = crate::op::from_type(self.context, &ast_ty, b);
+                let ty = self.from_type(&ast_ty, b);
 
                 match op {
                     UnaryOperation::Minus => {
@@ -926,50 +926,52 @@ impl<'c> Lower<'c> {
     }
 }
 
-pub fn build_declare_function<'c>(
-    context: &'c Context,
-    key: StringLabel,
-    ast_ty: AstType,
-    location: Location<'c>,
-    b: &NodeBuilder,
-) -> Result<Operation<'c>> {
-    if let AstType::Func(params, ast_ret_type) = ast_ty.clone() {
-        let mut type_list = vec![];
-        let mut ast_types = vec![];
+impl<'c> Lower<'c> {
+    pub fn build_declare_function(
+        &self,
+        key: StringLabel,
+        ast_ty: AstType,
+        location: Location<'c>,
+        b: &NodeBuilder,
+    ) -> Result<Operation<'c>> {
+        if let AstType::Func(params, ast_ret_type) = ast_ty.clone() {
+            let mut type_list = vec![];
+            let mut ast_types = vec![];
 
-        let attributes = vec![(
-            Identifier::new(context, "sym_visibility"),
-            StringAttribute::new(context, "private").into(),
-        )];
+            let attributes = vec![(
+                Identifier::new(self.context, "sym_visibility"),
+                StringAttribute::new(self.context, "private").into(),
+            )];
 
-        for ty in params {
-            type_list.push(crate::op::from_type(context, &ty, b));
-            ast_types.push(ty.clone());
-        }
+            for ty in params {
+                type_list.push(self.from_type(&ty, b));
+                ast_types.push(ty.clone());
+            }
 
-        let region = Region::new();
+            let region = Region::new();
 
-        let ret_type = if let AstType::Unit = *ast_ret_type {
-            vec![]
+            let ret_type = if let AstType::Unit = *ast_ret_type {
+                vec![]
+            } else {
+                vec![self.from_type(&ast_ret_type, b)]
+            };
+
+            let func_type = FunctionType::new(self.context, &type_list, &ret_type);
+            let func_name_attr = StringAttribute::new(self.context, &b.labels.r(key));
+            let func_ty_attr = TypeAttribute::new(func_type.into());
+
+            let op = func::func(
+                self.context,
+                func_name_attr,
+                func_ty_attr,
+                region,
+                &attributes,
+                location,
+            );
+            Ok(op)
         } else {
-            vec![crate::op::from_type(context, &ast_ret_type, b)]
-        };
-
-        let func_type = FunctionType::new(context, &type_list, &ret_type);
-        let func_name_attr = StringAttribute::new(context, &b.labels.r(key));
-        let func_ty_attr = TypeAttribute::new(func_type.into());
-
-        let op = func::func(
-            context,
-            func_name_attr,
-            func_ty_attr,
-            region,
-            &attributes,
-            location,
-        );
-        Ok(op)
-    } else {
-        unreachable!()
+            unreachable!()
+        }
     }
 }
 
