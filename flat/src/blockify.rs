@@ -292,12 +292,13 @@ impl Blockify {
         code: LCode,
         span_id: SpanId,
         scope_id: ScopeId,
-        entry_id: CodeOffset,
+        entry_id: BlockId,
         ty: AstType,
         mem: VarDefinitionSpace,
         name: StringKey,
     ) -> ValueId {
-        let value_id = self.push_code(code, span_id, scope_id, entry_id, ty.clone(), mem);
+        let entry_id = self.env.resolve_code_offset(entry_id.into());
+        let value_id = self.push_code(code, span_id, scope_id, entry_id.into(), ty.clone(), mem);
         self.env.scope_define(scope_id, name, value_id, ty, mem);
         self.names.insert(value_id, name.into());
         value_id
@@ -898,7 +899,7 @@ impl Blockify {
                 LCode::DeclareFunction(Some(self.resolve_block_id(new_entry_id.into()))),
                 span_id,
                 scope_id,
-                current_entry_id,
+                self.resolve_block_id(current_entry_id),
                 ty.clone(),
                 VarDefinitionSpace::Static,
                 function_name,
@@ -918,7 +919,8 @@ impl Blockify {
                     LCode::DeclareFunction(None),
                     span_id,
                     scope_id,
-                    current_entry_id,
+                    self.resolve_block_id(current_entry_id),
+                    //current_entry_id,
                     ty.clone(),
                     VarDefinitionSpace::Static,
                     function_name,
@@ -1315,7 +1317,7 @@ impl Blockify {
                         LCode::Declare,
                         node.span_id,
                         scope_id,
-                        v_block,
+                        self.resolve_block_id(v_block),
                         expr_ty.clone(),
                         VarDefinitionSpace::Stack,
                         name,
@@ -1647,7 +1649,7 @@ impl Blockify {
                         code,
                         node.span_id,
                         static_scope_id,
-                        static_entry_id,
+                        self.resolve_block_id(static_entry_id),
                         ast_ty.clone(),
                         VarDefinitionSpace::Static,
                         b.labels.s(&global_name),
@@ -1657,7 +1659,8 @@ impl Blockify {
                         LCode::Value(v),
                         expr.span_id,
                         scope_id,
-                        entry_id,
+                        self.resolve_block_id(entry_id),
+                        //entry_id,
                         ast_ty,
                         VarDefinitionSpace::Static,
                         name,
