@@ -667,17 +667,17 @@ impl<'c> Lower<'c> {
                 self.index.insert(v, index);
             }
 
-            LCode::Branch(condition, v_then, v_else) => {
-                let then_block_id = blockify.env.resolve_code_offset(*v_then);
-                let else_block_id = blockify.env.resolve_code_offset(*v_else);
+            LCode::Branch(condition, then_block_id, else_block_id) => {
+                let v_then = blockify.env.resolve_code_offset((*then_block_id).into());
+                let v_else = blockify.env.resolve_code_offset((*else_block_id).into());
 
                 let c_index = self.resolve_value(blockify, *condition).unwrap();
                 let r_c = blocks.value0(c_index);
 
-                let c = blocks.blocks.get(&then_block_id).unwrap();
+                let c = blocks.blocks.get(&v_then).unwrap();
                 let then_block = c.block.as_ref().unwrap();
 
-                let c = blocks.blocks.get(&else_block_id).unwrap();
+                let c = blocks.blocks.get(&v_else).unwrap();
                 let else_block = c.block.as_ref().unwrap();
 
                 let op = cf::cond_br(

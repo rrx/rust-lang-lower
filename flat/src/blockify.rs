@@ -56,7 +56,7 @@ pub enum LCode {
     // jump to block, with num args
     Jump(BlockId, u8),
 
-    Branch(ValueId, CodeOffset, CodeOffset),
+    Branch(ValueId, BlockId, BlockId),
     Ternary(ValueId, BlockId, BlockId), // condition, then_entry, else_entry
     Builtin(BuiltinId, u8, u8),
     Call(ValueId, u8, u8),
@@ -400,8 +400,8 @@ impl Blockify {
             }
 
             LCode::Branch(_, v_then, v_else) => {
-                self.env.add_succ_block(entry_id, *v_then);
-                self.env.add_succ_block(entry_id, *v_else);
+                self.env.add_succ_block(entry_id, v_then.clone().into());
+                self.env.add_succ_block(entry_id, v_else.clone().into());
             }
 
             LCode::Ternary(_, v_then, v_else) => {
