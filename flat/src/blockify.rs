@@ -908,7 +908,7 @@ impl Blockify {
                 LCode::DeclareFunction(Some(self.resolve_block_id(new_entry_id.into()))),
                 span_id,
                 scope_id,
-                self.resolve_block_id(current_entry_id),
+                current_block_id,
                 ty.clone(),
                 VarDefinitionSpace::Static,
                 function_name,
@@ -918,11 +918,7 @@ impl Blockify {
             // next block in body scope
             self.add_with_next(new_entry_id.into(), *body, ret_block_id.into(), b)?;
             self.env.exit_scope();
-            self.env.add_succ_static(
-                current_block_id,
-                //self.env.resolve_code_offset(current_entry_id),
-                new_entry_id,
-            );
+            self.env.add_succ_static(current_block_id, new_entry_id);
 
             Ok(AddResult::new(Some(v_decl), false, current_entry_id))
         } else {
@@ -932,7 +928,6 @@ impl Blockify {
                     span_id,
                     scope_id,
                     current_block_id,
-                    //current_entry_id,
                     ty.clone(),
                     VarDefinitionSpace::Static,
                     function_name,
@@ -1644,7 +1639,10 @@ impl Blockify {
             }
 
             Ast::Global(name, expr) => match expr.node {
-                Ast::Lambda(def) => self.add_function(entry_id, name, def, node.span_id, b),
+                Ast::Lambda(def) => {
+                    let block_id = self.resolve_block_id(entry_id);
+                    self.add_function(entry_id, name, def, node.span_id, b)
+                }
                 Ast::Literal(lit) => {
                     let static_scope_id = self.env.static_scope_id();
                     let static_entry_id = self.env.static_entry_id();
