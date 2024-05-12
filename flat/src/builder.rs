@@ -58,6 +58,7 @@ impl LabelBuilder {
 pub struct TypeBuilder {
     pool: TypePool,
     unknown_count: u32,
+    vars: Vec<Option<TypeId>>,
 }
 
 impl TypeBuilder {
@@ -65,14 +66,70 @@ impl TypeBuilder {
         Self {
             unknown_count: 0,
             pool: TypePool::new(),
+            vars: vec![],
         }
     }
 
     pub fn fresh_unknown(&mut self) -> AstType {
-        let offset = self.unknown_count;
+        let offset = self.vars.len();
+        self.vars.push(None);
         let r = AstType::Variable(offset as u32);
-        self.unknown_count += 1;
         r
+    }
+
+    pub fn unify(&mut self, a: TypeId, b: TypeId) {
+        let ty1 = self.pool.resolve(&a);
+        let ty2 = self.pool.resolve(&b);
+        let offset1 = ty1.try_unknown();
+        let offset2 = ty2.try_unknown();
+
+        if offset1.is_none() && offset2.is_none() {
+            unimplemented!();
+        }
+
+        if offset1.is_some() && offset2.is_some() {
+            let type_id1 = self.vars.get(offset1.unwrap() as usize).unwrap().clone();
+            let type_id2 = self.vars.get(offset2.unwrap() as usize).unwrap().clone();
+            if let Some(type_id) = type_id1 {
+                if type_id2.is_none() {
+                    self.vars[offset2.unwrap() as usize] = Some(type_id);
+                    return;
+                }
+            }
+            if let Some(type_id) = type_id2 {
+                if type_id1.is_none() {
+                    self.vars[offset1.unwrap() as usize] = Some(type_id);
+                    return;
+                }
+            }
+
+            println!("match: {:?}", (ty1, ty2));
+            println!("match: {:?}", (type_id1, type_id2));
+            println!("x: {:?}", self.pool);
+            println!("x: {:?}", self.vars);
+            unimplemented!();
+        }
+
+        if let Some(offset) = offset1 {
+            self.vars[offset as usize] = Some(b);
+        }
+
+        if let Some(offset) = offset2 {
+            self.vars[offset as usize] = Some(a);
+        }
+    }
+
+    pub fn resolve_type<'a>(&self, ty: &'a AstType) -> Option<AstType> {
+        if let AstType::Variable(offset) = ty {
+            if let Some(type_id) = self.vars.get(*offset as usize).unwrap() {
+                let ty = self.pool.resolve(type_id).clone();
+                Some(ty)
+            } else {
+                None
+            }
+        } else {
+            Some(ty.clone())
+        }
     }
 
     pub fn s(&mut self, t: &AstType) -> TypeId {

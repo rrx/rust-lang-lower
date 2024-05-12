@@ -132,6 +132,7 @@ pub struct Pending {
     expr: AstNode,
     block_id: BlockId,
     next_block_id: Option<CodeOffset>,
+    ty: AstType,
 }
 
 #[derive(Debug)]
@@ -1149,12 +1150,14 @@ impl Blockify {
     ) -> Pending {
         let entry_id = self.push_label(name, expr.span_id, scope_id, args, kwargs, b);
         let block_id = self.resolve_block_id(entry_id.into());
+        let ty = b.types.fresh_unknown();
         Pending {
             name,
             expr,
             scope_id,
             block_id,
             next_block_id,
+            ty,
         }
     }
 
@@ -1170,7 +1173,14 @@ impl Blockify {
         let block_id = self.resolve_block_id(pending.block_id.into());
         let v_result = r.value_id.unwrap();
         let ty = self.get_type(v_result);
+        let type_id1 = b.types.s(&pending.ty);
+        let type_id2 = b.types.s(&ty);
+        b.types.unify(type_id1, type_id2);
         Ok(PendingResult { block_id, ty })
+    }
+
+    pub fn push_pending(&mut self, pending: Pending) {
+        self.pending.push(pending);
     }
 
     pub fn add(
@@ -1180,7 +1190,14 @@ impl Blockify {
         node: AstNode,
         b: &mut NodeBuilder,
     ) -> Result<AddResult> {
-        self._add(entry_id, maybe_next, node, b)
+        let r = self._add(entry_id, maybe_next, node, b)?;
+        if r.is_term {
+            let pendings = self.pending.drain(..).collect::<Vec<_>>();
+            for pending in pendings {
+                self.add_pending(pending, b)?;
+            }
+        }
+        Ok(r)
     }
 
     pub fn _add(
@@ -1497,6 +1514,7 @@ impl Blockify {
                     b,
                 );
                 let then_block_id = p_then.block_id;
+                let then_ty = p_then.ty.clone();
 
                 let scope_id = self.env.new_scope(ScopeType::Block);
                 let p_else = self.new_pending(
@@ -1509,13 +1527,20 @@ impl Blockify {
                     b,
                 );
                 let else_block_id = p_else.block_id;
+                let else_ty = p_else.ty.clone();
+                //b.types.unify(
 
+                /*
                 let result = self.add_pending(p_then, b)?;
                 let then_ty = result.ty;
                 let result = self.add_pending(p_else, b)?;
                 let else_ty = result.ty;
+                */
 
-                assert_eq!(then_ty, else_ty);
+                self.push_pending(p_then);
+                self.push_pending(p_else);
+
+                //assert_eq!(then_ty, else_ty);
 
                 let code = LCode::Ternary(v_c, then_block_id, else_block_id);
                 let v = self.push_code(
@@ -1523,7 +1548,9 @@ impl Blockify {
                     condition_span_id,
                     scope_id,
                     entry_id,
-                    then_ty, // the branches should match
+                    //then_ty, // the branches should match
+                    then_ty,
+                    //AstType::Int,
                     VarDefinitionSpace::Reg,
                 );
 
