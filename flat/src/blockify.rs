@@ -473,12 +473,33 @@ impl Blockify {
         kwargs: &[ParameterNode],
         b: &mut NodeBuilder,
     ) -> ValueId {
+        let block_id = self.env.new_block();
+        let code = LCode::Label(args.len() as u8, kwargs.len() as u8);
+        let v_block = self._push_code(
+            code,
+            span_id,
+            scope_id,
+            ValueId(0),
+            AstType::Unit,
+            VarDefinitionSpace::Reg,
+        );
+        self.env.block_entry(block_id, v_block);
+        let scope = self.env.get_scope_mut(scope_id);
+        scope.blocks.push(v_block);
+
+        self.entries[v_block.index()] = v_block;
+        self._update_code(v_block, v_block);
+        /*
+        (block_id, v_block)
+
         let (block_id, v_block) = self.push_code_new_block(
             LCode::Label(args.len() as u8, kwargs.len() as u8),
             span_id,
             scope_id,
             AstType::Unit,
         );
+        */
+
         self.names.insert(v_block, name);
         self.env.block_name(scope_id, name, v_block, block_id);
         let block = self.env.get_block_mut(v_block);
