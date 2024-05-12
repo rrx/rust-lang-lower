@@ -734,7 +734,8 @@ impl Blockify {
 
         // entry first
         let label_name = b.labels.fresh_var_id();
-        let new_entry_id = self.push_label(label_name, span_id, body_scope_id, &[], &def.params, b);
+        let new_block_id = self.env.new_block();
+        let new_entry_id = self.push_label_with_block(label_name, span_id, body_scope_id, new_block_id, &[], &def.params, b);
 
         let mut jump_args = vec![];
         for a in args.into_iter() {
@@ -762,7 +763,8 @@ impl Blockify {
         };
 
         let name = b.labels.s("lambda_result");
-        let v_next = self.push_label(name.into(), span_id, scope_id, &return_type_args, &[], b);
+        let b_next = self.env.new_block();
+        let v_next = self.push_label_with_block(name.into(), span_id, scope_id, b_next, &return_type_args, &[], b);
         let v_next = self.resolve_block_id(v_next.into());
 
         // push Arg to next block
@@ -1635,7 +1637,7 @@ impl Blockify {
 
             Ast::Global(name, expr) => match expr.node {
                 Ast::Lambda(def) => {
-                    let block_id = self.resolve_block_id(entry_id);
+                    let _block_id = self.resolve_block_id(entry_id);
                     self.add_function(entry_id, name, def, node.span_id, b)
                 }
                 Ast::Literal(lit) => {
