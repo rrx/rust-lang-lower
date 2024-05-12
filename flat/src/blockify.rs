@@ -9,8 +9,17 @@ use compile_core::{
 };
 
 use crate::{
-    BlockId, Builtin, CodeOffset, Environment, NodeBuilder, NodeBuilder as NB, ScopeId, ScopeType,
-    StringLabel, TemplateId, ValueId,
+    BlockId,
+    Builtin,
+    CodeOffset,
+    Environment,
+    NodeBuilder,
+    //NodeBuilder as NB,
+    ScopeId,
+    ScopeType,
+    StringLabel,
+    TemplateId,
+    ValueId,
 };
 
 #[derive(Error, Debug)]
@@ -783,6 +792,60 @@ impl Blockify {
         Ok(r2)
     }
 
+    pub fn add_return_block(
+        &mut self,
+        scope_id: ScopeId,
+        block_id: BlockId,
+        span_id: SpanId,
+        return_type: AstType,
+        b: &mut NodeBuilder,
+    ) -> Result<()> {
+        let name = b.labels.s("ret");
+        let args = match &return_type {
+            AstType::Unit => vec![],
+            _ => vec![return_type.clone()],
+        };
+        let entry_id =
+            self.push_block_label(name.into(), span_id, scope_id, block_id, &args, &[], b);
+
+        let v_args = args
+            .iter()
+            .enumerate()
+            .map(|(i, _arg)| {
+                let v_arg = self.push_code(
+                    LCode::Arg(i as u8),
+                    span_id,
+                    scope_id,
+                    entry_id.into(),
+                    return_type.clone(),
+                    VarDefinitionSpace::Arg,
+                );
+                v_arg
+            })
+            .collect::<Vec<_>>();
+
+        for v_arg in v_args.iter() {
+            self.push_code(
+                LCode::Value(*v_arg),
+                span_id,
+                scope_id,
+                entry_id.into(),
+                return_type.clone(),
+                VarDefinitionSpace::Arg,
+            );
+        }
+
+        self.push_code(
+            LCode::Return(v_args.len() as u8),
+            span_id,
+            scope_id,
+            entry_id.into(),
+            AstType::Unit,
+            VarDefinitionSpace::Reg,
+        );
+        Ok(())
+    }
+
     pub fn add_function(
         &mut self,
         current_entry_id: CodeOffset,
@@ -822,56 +885,11 @@ impl Blockify {
 
             // return block
             //
-            let name = b.labels.s("ret");
-            let args = match &return_type {
-                AstType::Unit => vec![],
-                _ => vec![return_type.clone()],
-            };
-            //let ret_block_id = self.env.new_block();
+            let ret_block_id = self.env.new_block();
+            let _ = self.add_return_block(body_scope_id, ret_block_id, span_id, return_type, b)?;
 
             //let block_start = NB::block_start(name, def.params);
             //self.new_pending(name, b.ret()
-
-            //let return_type = *def.return_type;
-
-            // return block follows entry
-            let return_block = self.push_label(name.into(), span_id, body_scope_id, &args, &[], b);
-            let ret_block_id = self.resolve_block_id(return_block.into());
-            let v_args = args
-                .iter()
-                .enumerate()
-                .map(|(i, _arg)| {
-                    let v_arg = self.push_code(
-                        LCode::Arg(i as u8),
-                        span_id,
-                        body_scope_id,
-                        return_block.into(),
-                        return_type.clone(),
-                        VarDefinitionSpace::Arg,
-                    );
-                    v_arg
-                })
-                .collect::<Vec<_>>();
-
-            for v_arg in v_args.iter() {
-                self.push_code(
-                    LCode::Value(*v_arg),
-                    span_id,
-                    body_scope_id,
-                    return_block.into(),
-                    return_type.clone(),
-                    VarDefinitionSpace::Arg,
-                );
-            }
-
-            self.push_code(
-                LCode::Return(v_args.len() as u8),
-                span_id,
-                body_scope_id,
-                return_block.into(),
-                AstType::Unit,
-                VarDefinitionSpace::Reg,
-            );
 
             // handle body
 
