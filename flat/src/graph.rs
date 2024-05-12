@@ -6,7 +6,7 @@ use std::collections::VecDeque;
 
 use crate::NodeBuilder;
 
-use crate::{Blockify, CodeOffset, Successor, ValueId};
+use crate::{BlockId, Blockify, CodeOffset, Successor, ValueId};
 
 #[derive(Debug)]
 pub enum Shape {
@@ -80,8 +80,8 @@ impl CFG {
 }
 
 impl Blockify {
-    pub fn get_cfg(&self, offset: CodeOffset, b: &NodeBuilder) -> CFG {
-        let entry_id = self.env.resolve_code_offset(offset);
+    pub fn get_cfg(&self, block_id: BlockId, b: &NodeBuilder) -> CFG {
+        let entry_id = self.env.resolve_code_offset(block_id.into());
         self.get_graph(entry_id, Some(Successor::BlockScope), b)
     }
 
