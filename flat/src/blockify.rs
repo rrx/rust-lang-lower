@@ -332,13 +332,14 @@ impl Blockify {
 
         for (i, p) in kwargs.iter().enumerate() {
             let ty = b.types.r(p.ty);
-            let v = self.push_code(
+            let v = self.push_code_with_name(
                 LCode::Arg(i as u8),
                 span_id,
                 scope_id,
-                v_block.into(),
+                block_id,
                 ty.clone(),
                 VarDefinitionSpace::Arg,
+                p.name.into(),
             );
             self.names.insert(v, p.name.into());
             self.env
