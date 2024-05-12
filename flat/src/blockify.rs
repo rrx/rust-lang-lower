@@ -887,6 +887,16 @@ impl Blockify {
                 function_name,
             );
 
+
+            // return block
+            //
+            let ret_block_id = self.env.new_block();
+            let _ = self.add_return_block(body_scope_id, ret_block_id, span_id, return_type, b)?;
+
+            //self.new_pending(name, b.ret()
+
+            // handle body
+            
             // entry first
             let new_entry_id = self.push_label_with_block(
                 function_name.into(),
@@ -897,15 +907,6 @@ impl Blockify {
                 &def.params,
                 b,
             );
-
-            // return block
-            //
-            let ret_block_id = self.env.new_block();
-            let _ = self.add_return_block(body_scope_id, ret_block_id, span_id, return_type, b)?;
-
-            //self.new_pending(name, b.ret()
-
-            // handle body
 
             let scope = self.env.get_scope_mut(body_scope_id);
             scope.return_block = Some(ret_block_id);
