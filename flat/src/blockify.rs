@@ -874,14 +874,14 @@ impl Blockify {
         if let Some(body) = def.body {
             let body_scope_id = self.env.new_scope(ScopeType::Function);
 
-            //let new_block_id = self.env.new_block();
+            let new_block_id = self.env.new_block();
             //
             // entry first
-            let new_entry_id = self.push_label(
+            let new_entry_id = self.push_label_with_block(
                 function_name.into(),
                 span_id,
                 body_scope_id,
-                //new_block_id,
+                new_block_id,
                 &[],
                 &def.params,
                 b,
