@@ -352,19 +352,14 @@ impl<'c> Lower<'c> {
                 self.index.insert(v, index);
             }
 
-            LCode::Jump(target, num_args) => match target {
-                CodeOffset::Value(target_value_id) => {
-                    self.lower_jump(blockify, blocks, v, *target_value_id, *num_args, b)?;
-                }
-                CodeOffset::Block(target_block_id) => {
-                    let target_entry_id = blockify
-                        .env
-                        .get_block_by_block_id(*target_block_id)
-                        .entry_id
-                        .unwrap();
-                    self.lower_jump(blockify, blocks, v, target_entry_id, *num_args, b)?;
-                }
-            },
+            LCode::Jump(target, num_args) => {
+                let target_entry_id = blockify
+                    .env
+                    .get_block_by_block_id(*target)
+                    .entry_id
+                    .unwrap();
+                self.lower_jump(blockify, blocks, v, target_entry_id, *num_args, b)?;
+            }
 
             LCode::Const(lit) => {
                 let block_id = blockify.get_entry_id(v);

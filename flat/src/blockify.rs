@@ -54,7 +54,7 @@ pub enum LCode {
     //Goto(StringKey),
 
     // jump to block, with num args
-    Jump(CodeOffset, u8),
+    Jump(BlockId, u8),
 
     Branch(ValueId, CodeOffset, CodeOffset),
     Ternary(ValueId, BlockId, BlockId), // condition, then_entry, else_entry
@@ -396,14 +396,7 @@ impl Blockify {
             LCode::Jump(target, _) => {
                 // XXX: This is causing us to terminate the loop we are currently generating
                 // If it knows about the loop, then it tries to terminate it
-                match target {
-                    CodeOffset::Value(value_id) => {
-                        self.env.add_succ_block(entry_id, (*value_id).into());
-                    }
-                    CodeOffset::Block(block_id) => {
-                        self.env.add_succ_block(entry_id, (*block_id).into());
-                    }
-                }
+                self.env.add_succ_block(entry_id, (*target).into());
             }
 
             LCode::Branch(_, v_then, v_else) => {
