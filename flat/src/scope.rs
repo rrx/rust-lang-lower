@@ -277,26 +277,30 @@ impl Environment {
         self.get_block_mut(block_id).pred.insert(pred);
     }
 
-    pub fn add_succ_op(&mut self, block_id: ValueId, succ: CodeOffset) {
-        self.get_block_mut(block_id)
+    pub fn add_succ_op(&mut self, block_id: BlockId, succ: CodeOffset) {
+        self.get_block_mut_by_block_id(block_id)
+            //self.get_block_mut(block_id)
             .succ
             .insert((Successor::Operation, succ));
     }
 
-    pub fn add_succ_block(&mut self, block_id: ValueId, succ: CodeOffset) {
-        self.get_block_mut(block_id)
+    pub fn add_succ_block(&mut self, block_id: BlockId, succ: CodeOffset) {
+        self.get_block_mut_by_block_id(block_id)
+            //self.get_block_mut(block_id)
             .succ
             .insert((Successor::BlockScope, succ));
     }
 
-    pub fn add_succ_static(&mut self, block_id: ValueId, succ: ValueId) {
-        self.get_block_mut(block_id)
+    pub fn add_succ_static(&mut self, block_id: BlockId, succ: ValueId) {
+        self.get_block_mut_by_block_id(block_id)
+            //self.get_block_mut(block_id)
             .succ
             .insert((Successor::FunctionDeclaration, succ.into()));
     }
 
-    pub fn add_succ(&mut self, block_id: ValueId, succ: CodeOffset, successor_type: Successor) {
-        self.get_block_mut(block_id)
+    pub fn add_succ(&mut self, block_id: BlockId, succ: CodeOffset, successor_type: Successor) {
+        self.get_block_mut_by_block_id(block_id)
+            //self.get_block_mut(block_id)
             .succ
             .insert((successor_type, succ));
     }

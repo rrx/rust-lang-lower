@@ -394,21 +394,22 @@ impl Blockify {
     ) -> ValueId {
         // update successor blocks
         let entry_id = self.env.resolve_code_offset(entry_id);
+        let block_id = self.resolve_block_id(entry_id.into());
         match &code {
             LCode::Jump(target, _) => {
                 // XXX: This is causing us to terminate the loop we are currently generating
                 // If it knows about the loop, then it tries to terminate it
-                self.env.add_succ_block(entry_id, (*target).into());
+                self.env.add_succ_block(block_id, (*target).into());
             }
 
             LCode::Branch(_, v_then, v_else) => {
-                self.env.add_succ_block(entry_id, v_then.clone().into());
-                self.env.add_succ_block(entry_id, v_else.clone().into());
+                self.env.add_succ_block(block_id, v_then.clone().into());
+                self.env.add_succ_block(block_id, v_else.clone().into());
             }
 
             LCode::Ternary(_, v_then, v_else) => {
-                self.env.add_succ_op(entry_id, v_then.clone().into());
-                self.env.add_succ_op(entry_id, v_else.clone().into());
+                self.env.add_succ_op(block_id, v_then.clone().into());
+                self.env.add_succ_op(block_id, v_else.clone().into());
             }
             _ => (),
         }
@@ -751,7 +752,8 @@ impl Blockify {
         let new_block_id = self.resolve_block_id(new_entry_id.into());
         let _r = self.add_jump(current_entry_id.into(), new_block_id, jump_args, span_id, b)?;
         self.env.add_succ_block(
-            self.env.resolve_code_offset(current_entry_id.into()),
+            current_entry_id,
+            //self.env.resolve_code_offset(current_entry_id.into()),
             new_entry_id.into(),
         );
         // return block is the next block
@@ -858,6 +860,7 @@ impl Blockify {
     ) -> Result<AddResult> {
         //println!("add_function: {}", b.labels.r(function_name.into()));
         let scope_id = self.env.current_scope().unwrap();
+        let current_block_id = self.resolve_block_id(current_entry_id);
 
         let params = def
             .params
@@ -915,8 +918,11 @@ impl Blockify {
             // next block in body scope
             self.add_with_next(new_entry_id.into(), *body, ret_block_id.into(), b)?;
             self.env.exit_scope();
-            self.env
-                .add_succ_static(self.env.resolve_code_offset(current_entry_id), new_entry_id);
+            self.env.add_succ_static(
+                current_block_id,
+                //self.env.resolve_code_offset(current_entry_id),
+                new_entry_id,
+            );
 
             Ok(AddResult::new(Some(v_decl), false, current_entry_id))
         } else {
@@ -925,7 +931,7 @@ impl Blockify {
                     LCode::DeclareFunction(None),
                     span_id,
                     scope_id,
-                    self.resolve_block_id(current_entry_id),
+                    current_block_id,
                     //current_entry_id,
                     ty.clone(),
                     VarDefinitionSpace::Static,
