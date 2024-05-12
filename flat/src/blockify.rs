@@ -967,7 +967,6 @@ impl Blockify {
         b: &mut NodeBuilder,
     ) -> Result<AddResult> {
         let scope_id = self.env.current_scope().unwrap();
-        let count = jump_args.len();
         let num_args = jump_args.len();
 
         let mut values = vec![];
@@ -988,23 +987,15 @@ impl Blockify {
             );
         }
 
-        if num_args == count {
-            let v = self.push_code(
-                LCode::Jump(target_id.into(), num_args as u8),
-                span_id,
-                scope_id,
-                entry_id,
-                AstType::Unit,
-                VarDefinitionSpace::Reg,
-            );
-            Ok(AddResult::new(Some(v), true, entry_id))
-        } else {
-            b.push_error(
-                &format!("End of block expects {} values", num_args),
-                span_id,
-            );
-            return Err(Error::new(BlockifyError::Invalid));
-        }
+        let v = self.push_code(
+            LCode::Jump(target_id.into(), num_args as u8),
+            span_id,
+            scope_id,
+            entry_id,
+            AstType::Unit,
+            VarDefinitionSpace::Reg,
+        );
+        Ok(AddResult::new(Some(v), true, entry_id))
     }
 
     pub fn add_with_next(
