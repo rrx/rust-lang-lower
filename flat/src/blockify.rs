@@ -966,55 +966,9 @@ impl Blockify {
         span_id: SpanId,
         b: &mut NodeBuilder,
     ) -> Result<AddResult> {
-        self._add_jump(
-            entry_id,
-            target_id.into(),
-            jump_args.len(),
-            jump_args,
-            span_id,
-            b,
-        )
-    }
-
-    pub fn add_jum2p(
-        &mut self,
-        entry_id: CodeOffset,
-        target_id: BlockId,
-        jump_args: Vec<AstNode>,
-        span_id: SpanId,
-        b: &mut NodeBuilder,
-    ) -> Result<AddResult> {
-        let v = self.env.resolve_code_offset(target_id.into());
-        let target = self.get_code(v);
-        // make sure we match the arity of the next block
-        let args = if let LCode::Label(args, _) = target {
-            args
-        } else {
-            unreachable!();
-        };
-
-        self._add_jump(
-            entry_id,
-            target_id.into(),
-            *args as usize,
-            //jump_args.len(),
-            jump_args,
-            span_id,
-            b,
-        )
-    }
-
-    pub fn _add_jump(
-        &mut self,
-        entry_id: CodeOffset,
-        target: CodeOffset,
-        num_args: usize,
-        jump_args: Vec<AstNode>,
-        span_id: SpanId,
-        b: &mut NodeBuilder,
-    ) -> Result<AddResult> {
         let scope_id = self.env.current_scope().unwrap();
         let count = jump_args.len();
+        let num_args = jump_args.len();
 
         let mut values = vec![];
         for arg in jump_args.into_iter() {
@@ -1034,9 +988,9 @@ impl Blockify {
             );
         }
 
-        if num_args as usize == count {
+        if num_args == count {
             let v = self.push_code(
-                LCode::Jump(target, num_args as u8),
+                LCode::Jump(target_id.into(), num_args as u8),
                 span_id,
                 scope_id,
                 entry_id,
