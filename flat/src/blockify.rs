@@ -751,7 +751,7 @@ impl Blockify {
         assert_eq!(args_size as usize, jump_args.len());
         // jump to entry
         let new_block_id = self.resolve_block_id(new_entry_id.into());
-        let _r = self.add_jump_by_block(current_entry_id, new_block_id, jump_args, span_id, b)?;
+        let _r = self.add_jump(current_entry_id, new_block_id, jump_args, span_id, b)?;
         self.env.add_succ_block(
             self.env.resolve_code_offset(current_entry_id),
             new_entry_id.into(),
@@ -954,11 +954,11 @@ impl Blockify {
         self.env.exit_scope();
 
         // enter loop
-        let r = self.add_jump_by_block(entry_id, b_loop, vec![], span_id, b)?;
+        let r = self.add_jump(entry_id, b_loop, vec![], span_id, b)?;
         Ok(AddResult::new(Some(r.value_id.unwrap()), true, v_next))
     }
 
-    pub fn add_jump_by_block(
+    pub fn add_jump(
         &mut self,
         entry_id: CodeOffset,
         target_id: BlockId,
@@ -1016,7 +1016,7 @@ impl Blockify {
         let v_next = self.resolve_block_id(v_next);
         if !block.has_term() {
             // if the block doesn't explicitely terminate, then we jump to the next block
-            self.add_jump_by_block(v_block, v_next, vec![], span_id, b)
+            self.add_jump(v_block, v_next, vec![], span_id, b)
         } else {
             Ok(r)
         }
@@ -1573,7 +1573,7 @@ impl Blockify {
             Ast::Goto(label) => {
                 // Goto is terminal
                 if let Some(target_block_id) = self.env.resolve_block_id(label.into()) {
-                    self.add_jump_by_block(entry_id, target_block_id, vec![], node.span_id, b)
+                    self.add_jump(entry_id, target_block_id, vec![], node.span_id, b)
                 } else {
                     b.push_error(
                         &format!("Block name not found: {}", b.labels.r(label.into())),
@@ -1591,7 +1591,7 @@ impl Blockify {
                     } else {
                         vec![]
                     };
-                    self.add_jump_by_block(entry_id, v_return.into(), args, node.span_id, b)
+                    self.add_jump(entry_id, v_return.into(), args, node.span_id, b)
                 } else {
                     b.push_error(&format!("Return without function context"), node.span_id);
                     Err(Error::new(BlockifyError::Invalid))
@@ -1690,7 +1690,7 @@ impl Blockify {
                 if let Some(loop_scope) = self.env.get_loop_scope(maybe_name) {
                     let v_next = loop_scope.next_block;
                     let v_next = self.resolve_block_id(v_next);
-                    self.add_jump_by_block(entry_id, v_next, vec![], node.span_id, b)
+                    self.add_jump(entry_id, v_next, vec![], node.span_id, b)
                 } else {
                     b.push_error(&format!("Break without loop"), node.span_id);
                     Err(Error::new(BlockifyError::Invalid))
@@ -1704,7 +1704,7 @@ impl Blockify {
                 if let Some(loop_scope) = self.env.get_loop_scope(maybe_name) {
                     let v_start = loop_scope.start_block;
                     let v_start = self.resolve_block_id(v_start);
-                    self.add_jump_by_block(entry_id, v_start, vec![], node.span_id, b)
+                    self.add_jump(entry_id, v_start, vec![], node.span_id, b)
                 } else {
                     // mismatch name
                     b.push_error(&format!("Continue without loop"), node.span_id);
