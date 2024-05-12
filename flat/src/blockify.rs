@@ -39,7 +39,7 @@ pub enum LCode {
     Label(u8, u8), // number of positional arguments, number of named arguments
     Noop,
     Declare,
-    DeclareFunction(Option<CodeOffset>), // optional entry block
+    DeclareFunction(Option<BlockId>), // optional entry block
     Value(ValueId),
     Arg(u8), // get the value of a positional arg
     Const(Literal),
@@ -895,7 +895,7 @@ impl Blockify {
 
             // declare function before adding the body, for recursion
             let v_decl = self.push_code_with_name(
-                LCode::DeclareFunction(Some(new_entry_id.into())),
+                LCode::DeclareFunction(Some(self.resolve_block_id(new_entry_id.into()))),
                 span_id,
                 scope_id,
                 current_entry_id,

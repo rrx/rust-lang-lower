@@ -449,7 +449,7 @@ impl<'c> Lower<'c> {
                     let op = blocks.op_ref(index);
                     op.set_attribute("llvm.emit_c_interface", &Attribute::unit(self.context));
 
-                    let cfg = blockify.get_cfg(*entry_id, b);
+                    let cfg = blockify.get_cfg((*entry_id).into(), b);
                     let offset = entry_id.clone().into();
                     let entry_id = blockify.env.resolve_code_offset(offset);
                     let block_ids = cfg.blocks(entry_id);
