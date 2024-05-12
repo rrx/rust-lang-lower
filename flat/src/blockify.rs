@@ -304,60 +304,6 @@ impl Blockify {
         value_id
     }
 
-    pub fn push_block_label(
-        &mut self,
-        name: StringLabel,
-        span_id: SpanId,
-        scope_id: ScopeId,
-        block_id: BlockId,
-        args: &[AstType],
-        kwargs: &[ParameterNode],
-        b: &mut NodeBuilder,
-    ) -> ValueId {
-        let code = LCode::Label(args.len() as u8, kwargs.len() as u8);
-
-        let v_block = self._push_code(
-            code,
-            span_id,
-            scope_id,
-            // update later in function
-            ValueId(0), // entry_id
-            AstType::Unit,
-            VarDefinitionSpace::Reg,
-        );
-
-        // update
-        self.names.insert(v_block, name);
-        self.env.block_name(scope_id, name, v_block, block_id);
-
-        for (i, p) in kwargs.iter().enumerate() {
-            let ty = b.types.r(p.ty);
-            let v = self.push_code_with_name(
-                LCode::Arg(i as u8),
-                span_id,
-                scope_id,
-                block_id,
-                ty.clone(),
-                VarDefinitionSpace::Arg,
-                p.name.into(),
-            );
-            self.names.insert(v, p.name.into());
-            self.env
-                .define(p.name, v, ty.clone(), VarDefinitionSpace::Arg);
-        }
-
-        self.env.block_entry(block_id, v_block);
-        let scope = self.env.get_scope_mut(scope_id);
-        scope.blocks.push(v_block);
-        self.entries[v_block.index()] = v_block;
-
-        // update these last
-        let block = self.env.get_block_mut(v_block);
-        block.last_value = Some(v_block);
-        self._update_code(v_block, v_block);
-        v_block
-    }
-
     pub fn push_code_new_block(
         &mut self,
         code: LCode,
@@ -462,6 +408,60 @@ impl Blockify {
         self.mem.push(mem);
         self.span.push(span_id);
         v
+    }
+
+    pub fn push_block_label(
+        &mut self,
+        name: StringLabel,
+        span_id: SpanId,
+        scope_id: ScopeId,
+        block_id: BlockId,
+        args: &[AstType],
+        kwargs: &[ParameterNode],
+        b: &mut NodeBuilder,
+    ) -> ValueId {
+        let code = LCode::Label(args.len() as u8, kwargs.len() as u8);
+
+        let v_block = self._push_code(
+            code,
+            span_id,
+            scope_id,
+            // update later in function
+            ValueId(0), // entry_id
+            AstType::Unit,
+            VarDefinitionSpace::Reg,
+        );
+
+        // update
+        self.names.insert(v_block, name);
+        self.env.block_name(scope_id, name, v_block, block_id);
+
+        for (i, p) in kwargs.iter().enumerate() {
+            let ty = b.types.r(p.ty);
+            let v = self.push_code_with_name(
+                LCode::Arg(i as u8),
+                span_id,
+                scope_id,
+                block_id,
+                ty.clone(),
+                VarDefinitionSpace::Arg,
+                p.name.into(),
+            );
+            self.names.insert(v, p.name.into());
+            self.env
+                .define(p.name, v, ty.clone(), VarDefinitionSpace::Arg);
+        }
+
+        self.env.block_entry(block_id, v_block);
+        let scope = self.env.get_scope_mut(scope_id);
+        scope.blocks.push(v_block);
+        self.entries[v_block.index()] = v_block;
+
+        // update these last
+        let block = self.env.get_block_mut(v_block);
+        block.last_value = Some(v_block);
+        self._update_code(v_block, v_block);
+        v_block
     }
 
     pub fn push_label(
