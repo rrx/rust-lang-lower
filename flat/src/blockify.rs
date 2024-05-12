@@ -750,7 +750,8 @@ impl Blockify {
 
         assert_eq!(args_size as usize, jump_args.len());
         // jump to entry
-        let _r = self.add_jump(current_entry_id, new_entry_id.into(), jump_args, span_id, b)?;
+        let new_block_id = self.resolve_block_id(new_entry_id.into());
+        let _r = self.add_jump(current_entry_id, new_block_id, jump_args, span_id, b)?;
         self.env.add_succ_block(
             self.env.resolve_code_offset(current_entry_id),
             new_entry_id.into(),
@@ -781,7 +782,7 @@ impl Blockify {
         let ret_block_id = self.resolve_block_id(v_next.into());
         let scope = self.env.get_scope_mut(body_scope_id);
         scope.return_block = Some(ret_block_id);
-        scope.entry_block = Some(new_entry_id);
+        scope.entry_block = Some(new_entry_id.into());
         self.env.enter_scope(body_scope_id);
         let _r1 = self.add_with_next(current_entry_id.into(), *body, v_next.into(), b)?;
         self.env.exit_scope();
@@ -871,7 +872,6 @@ impl Blockify {
 
         if let Some(body) = def.body {
             let body_scope_id = self.env.new_scope(ScopeType::Function);
-            //let body_span_id = body.span_id;
 
             // entry first
             let new_entry_id = self.push_label(
@@ -888,7 +888,6 @@ impl Blockify {
             let ret_block_id = self.env.new_block();
             let _ = self.add_return_block(body_scope_id, ret_block_id, span_id, return_type, b)?;
 
-            //let block_start = NB::block_start(name, def.params);
             //self.new_pending(name, b.ret()
 
             // handle body
@@ -914,6 +913,7 @@ impl Blockify {
             self.env.exit_scope();
             self.env
                 .add_succ_static(self.env.resolve_code_offset(current_entry_id), new_entry_id);
+
             Ok(AddResult::new(Some(v_decl), false, current_entry_id))
         } else {
             Ok(AddResult::new(
@@ -943,13 +943,15 @@ impl Blockify {
         let span_id = body.span_id;
         let loop_scope_id = self.env.new_scope(ScopeType::Loop);
         let v_loop = self.push_label(name.into(), span_id, loop_scope_id, &[], &[], b);
+        let b_loop = self.resolve_block_id(v_loop.into());
         self.env.push_loop_blocks(Some(name), v_next, v_loop.into());
+
         self.env.enter_scope(loop_scope_id);
         let _ = self.add_with_next(v_loop.into(), body, v_next.into(), b)?;
         self.env.exit_scope();
 
         // enter loop
-        let r = self.add_jump(entry_id, v_loop.into(), vec![], span_id, b)?;
+        let r = self.add_jump(entry_id, b_loop, vec![], span_id, b)?;
         Ok(AddResult::new(Some(r.value_id.unwrap()), true, v_next))
     }
 
@@ -974,12 +976,12 @@ impl Blockify {
     pub fn add_jump(
         &mut self,
         entry_id: CodeOffset,
-        target_id: CodeOffset,
+        target_id: BlockId,
         jump_args: Vec<AstNode>,
         span_id: SpanId,
         b: &mut NodeBuilder,
     ) -> Result<AddResult> {
-        let v = self.env.resolve_code_offset(target_id);
+        let v = self.env.resolve_code_offset(target_id.into());
         let target = self.get_code(v);
         // make sure we match the arity of the next block
         let args = if let LCode::Label(args, _) = target {
@@ -1061,6 +1063,7 @@ impl Blockify {
         //assert_eq!(last_entry_id, r.entry_id);
         let block = self.env.get_block(last_entry_id);
 
+        let v_next = self.resolve_block_id(v_next);
         if !block.has_term() {
             // if the block doesn't explicitely terminate, then we jump to the next block
             self.add_jump(v_block, v_next, vec![], span_id, b)
@@ -1736,6 +1739,7 @@ impl Blockify {
                 // loop up loop blocks by name
                 if let Some(loop_scope) = self.env.get_loop_scope(maybe_name) {
                     let v_next = loop_scope.next_block;
+                    let v_next = self.resolve_block_id(v_next);
                     self.add_jump(entry_id, v_next, vec![], node.span_id, b)
                 } else {
                     b.push_error(&format!("Break without loop"), node.span_id);
@@ -1749,6 +1753,7 @@ impl Blockify {
                 // loop up loop blocks by name
                 if let Some(loop_scope) = self.env.get_loop_scope(maybe_name) {
                     let v_start = loop_scope.start_block;
+                    let v_start = self.resolve_block_id(v_start);
                     self.add_jump(entry_id, v_start, vec![], node.span_id, b)
                 } else {
                     // mismatch name
