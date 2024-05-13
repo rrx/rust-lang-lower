@@ -166,6 +166,7 @@ pub enum Ast {
     Continue(Option<StringKey>, Vec<AstNode>),
     Goto(StringKey),
     BlockStart(StringKey, Vec<ParameterNode>),
+    Block(StringKey, Vec<ParameterNode>, Box<AstNode>),
     Noop,
     Error,
 }

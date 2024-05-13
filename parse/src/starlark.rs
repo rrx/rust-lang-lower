@@ -24,53 +24,42 @@ pub enum ExtraAst {
     LoopStart(Option<StringKey>),
     LoopBreak(Option<StringKey>),
     LoopContinue(Option<StringKey>),
+    Label(StringKey),
+    Goto(StringKey),
     BlockEnd,
+}
+
+fn get_string_arg(args: &[Argument], b: &mut NodeBuilder) -> Option<StringKey> {
+    if args.len() == 0 {
+        None
+    } else if args.len() == 1 {
+        let Argument::Positional(arg) = args.get(0).unwrap();
+        let s = arg.try_string().unwrap();
+        let key = b.labels.s(&s);
+        Some(key)
+    } else {
+        unreachable!()
+    }
 }
 
 impl ExtraAst {
     pub fn is_extra(name: &str) -> bool {
         name == "loop" || name == "loop_break" || name == "loop_continue" || name == "end"
+        //|| name == "goto" || name == "label"
     }
 
-    pub fn from_name(name: &str, mut args: Vec<Argument>, b: &mut NodeBuilder) -> Option<ExtraAst> {
-        if name == "loop" {
-            if args.len() == 0 {
-                Some(Self::LoopStart(None))
-            } else if args.len() == 1 {
-                let Argument::Positional(arg) = args.pop().unwrap();
-                let s = arg.try_string().unwrap();
-                let key = b.labels.s(&s);
-                Some(Self::LoopStart(Some(key)))
-            } else {
-                unreachable!()
+    pub fn from_name(name: &str, args: &[Argument], b: &mut NodeBuilder) -> Option<ExtraAst> {
+        match name {
+            "loop" => Some(Self::LoopStart(get_string_arg(args, b))),
+            "loop_break" => Some(Self::LoopBreak(get_string_arg(args, b))),
+            "loop_continue" => Some(Self::LoopContinue(get_string_arg(args, b))),
+            "end" => {
+                assert_eq!(args.len(), 0);
+                Some(ExtraAst::BlockEnd)
             }
-        } else if name == "loop_break" {
-            if args.len() == 0 {
-                Some(Self::LoopBreak(None))
-            } else if args.len() == 1 {
-                let Argument::Positional(arg) = args.pop().unwrap();
-                let s = arg.try_string().unwrap();
-                let key = b.labels.s(&s);
-                Some(Self::LoopBreak(Some(key)))
-            } else {
-                unreachable!()
-            }
-        } else if name == "loop_continue" {
-            if args.len() == 0 {
-                Some(Self::LoopContinue(None))
-            } else if args.len() == 1 {
-                let Argument::Positional(arg) = args.pop().unwrap();
-                let s = arg.try_string().unwrap();
-                let key = b.labels.s(&s);
-                Some(Self::LoopContinue(Some(key)))
-            } else {
-                unreachable!()
-            }
-        } else if name == "end" {
-            assert_eq!(args.len(), 0);
-            Some(ExtraAst::BlockEnd)
-        } else {
-            None
+            "goto" => Some(Self::Goto(get_string_arg(args, b).unwrap())),
+            "label" => Some(Self::Label(get_string_arg(args, b).unwrap())),
+            _ => None,
         }
     }
 }
@@ -513,7 +502,7 @@ impl Parser {
                 ExprP::Dot(expr, name) => {
                     if let ExprP::Identifier(ident) = &expr.node {
                         if &ident.node.ident == "q" && ExtraAst::is_extra(&name) {
-                            if let Some(extra) = ExtraAst::from_name(&name, vec![], b) {
+                            if let Some(extra) = ExtraAst::from_name(&name, &[], b) {
                                 return Ok(extra);
                             }
                         }
@@ -529,7 +518,7 @@ impl Parser {
                                 for arg in expr_args {
                                     args.push(self.from_argument(arg, env, b)?.into());
                                 }
-                                if let Some(extra) = ExtraAst::from_name(&name, args, b) {
+                                if let Some(extra) = ExtraAst::from_name(&name, &args, b) {
                                     return Ok(extra);
                                 }
                             }
@@ -559,7 +548,7 @@ impl Parser {
                         // builtin namespace
                         if let Some(ast) = b.build_builtin_from_name(&name, vec![], span_id) {
                             Ok(ast)
-                        } else if let Some(extra) = ExtraAst::from_name(&name, vec![], b) {
+                        } else if let Some(extra) = ExtraAst::from_name(&name, &[], b) {
                             match extra {
                                 ExtraAst::LoopBreak(maybe_key) => Ok(NB::loop_break(maybe_key)),
                                 ExtraAst::LoopContinue(maybe_key) => {
@@ -642,7 +631,7 @@ impl Parser {
                             } else if &ident.node.ident == "q" {
                                 // builtin namespace
                                 if ExtraAst::is_extra(&name) {
-                                    let extra = ExtraAst::from_name(&name, args, b).unwrap();
+                                    let extra = ExtraAst::from_name(&name, &args, b).unwrap();
                                     return match extra {
                                         ExtraAst::LoopBreak(maybe_key) => {
                                             Ok(NB::loop_break(maybe_key))
@@ -733,42 +722,81 @@ impl Parser {
 }
 
 struct StatementReader<P: syntax::ast::AstPayload> {
-    names: Vec<StringKey>,
-    loops: Vec<Vec<AstNode>>,
-    loop_spans: Vec<SpanId>,
+    loop_names: Vec<StringKey>,
+    block_names: Vec<StringKey>,
+    stack: Vec<(StackType, Vec<AstNode>)>,
+    spans: Vec<SpanId>,
     seq: Vec<AstNode>,
     _p: std::marker::PhantomData<P>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum StackType {
+    Loop,
+    Block,
 }
 
 impl<P: syntax::ast::AstPayload> StatementReader<P> {
     fn new() -> Self {
         Self {
-            names: vec![],
-            loops: vec![],
-            loop_spans: vec![],
+            loop_names: vec![],
+            block_names: vec![],
+            stack: vec![],
+            spans: vec![],
             seq: vec![],
             _p: std::marker::PhantomData::default(),
         }
     }
 
     fn start_loop(&mut self, key: StringKey, span_id: SpanId) {
-        self.names.push(key);
-        self.loops.push(vec![]);
-        self.loop_spans.push(span_id)
+        self.loop_names.push(key);
+        self.stack.push((StackType::Loop, vec![]));
+        self.spans.push(span_id)
     }
 
     fn end_loop(&mut self) -> AstNode {
-        let seq = self.loops.pop().unwrap();
-        let span_id = self.loop_spans.pop().unwrap();
-        let key = self.names.pop().unwrap();
+        let (stack_type, seq) = self.stack.pop().unwrap();
+        assert_eq!(stack_type, StackType::Loop);
+        let span_id = self.spans.pop().unwrap();
+        let key = self.loop_names.pop().unwrap();
         Ast::Loop(key, NB::seq(seq, span_id).into()).into()
     }
 
+    fn start_block(&mut self, key: StringKey, span_id: SpanId) {
+        self.block_names.push(key);
+        self.stack.push((StackType::Block, vec![]));
+        self.spans.push(span_id)
+    }
+
+    fn end_block(&mut self) -> AstNode {
+        let (stack_type, seq) = self.stack.pop().unwrap();
+        assert_eq!(stack_type, StackType::Block);
+        let span_id = self.spans.pop().unwrap();
+        let key = self.block_names.pop().unwrap();
+        Ast::Block(key, vec![], NB::seq(seq, span_id).into()).into()
+    }
+
+    fn is_type(&self, t: StackType) -> bool {
+        self.stack
+            .last()
+            .as_ref()
+            .map(|v| v.0 == t)
+            .unwrap_or(false)
+    }
+
+    fn is_block(&self) -> bool {
+        self.is_type(StackType::Block)
+    }
+
+    fn is_loop(&self) -> bool {
+        self.is_type(StackType::Loop)
+    }
+
     fn push_ast(&mut self, ast: AstNode) {
-        if self.loops.len() == 0 {
+        if self.stack.len() == 0 {
             self.seq.push(ast);
         } else {
-            self.loops.last_mut().unwrap().push(ast);
+            self.stack.last_mut().unwrap().1.push(ast);
         }
     }
 
@@ -802,6 +830,18 @@ impl<P: syntax::ast::AstPayload> StatementReader<P> {
                     let ast = self.end_loop();
                     self.push_ast(ast);
                 }
+                ExtraAst::Label(key) => {
+                    self.start_block(key, span_id);
+                    //self.push_ast(NB::block_start(key, vec![]))
+                }
+                ExtraAst::Goto(key) => {
+                    if self.is_block() {
+                        let ast = self.end_block();
+                        self.push_ast(ast);
+                    } else {
+                        self.push_ast(NB::goto(key));
+                    }
+                } //_ => unimplemented!()
             }
         } else {
             let ast = parse.from_stmt(stmt, env, b)?;
@@ -823,7 +863,7 @@ impl<P: syntax::ast::AstPayload> StatementReader<P> {
             reader.push_stmt(stmt, parse, env, b)?;
         }
 
-        if reader.loops.len() > 0 {
+        if reader.stack.len() > 0 {
             let span = b.spans.lookup(span_id);
             b.spans
                 .push_diagnostic(b.spans.error("Mismatched end loop", &span));
@@ -850,7 +890,7 @@ impl StarlarkParser {
         filename: &str,
         b: &mut NodeBuilder,
         _verbose: bool,
-    ) -> Result<(Blockify, ValueId)> {
+    ) -> Result<AstNode> {
         log::debug!("parsing: {}", filename);
         let file_id = b
             .spans
@@ -860,7 +900,15 @@ impl StarlarkParser {
         let module_key = b.labels.s("module");
         let ast: AstNode = parser.parse(Path::new(filename), None, module_key, file_id, b)?;
         dump::ast::dump(&ast, b);
+        Ok(ast)
+    }
 
+    pub fn blockify(
+        &mut self,
+        ast: AstNode,
+        b: &mut NodeBuilder,
+        _verbose: bool,
+    ) -> Result<(Blockify, ValueId)> {
         let mut blockify = Blockify::new();
         let r = blockify.build_module(ast, b);
         dump::env::blockify_dump(&blockify, b);
@@ -936,12 +984,16 @@ pub(crate) mod tests {
     fn run_test_ir(filename: &str, expected: i32) {
         let mut p: StarlarkParser = StarlarkParser::new();
         let mut b = flat::NodeBuilder::new();
-        let context = lower_mlir::default_context();
-        let mut module = lower_mlir::Module::new(Location::unknown(&context));
         let result = p.parse(filename, &mut b, true);
         b.spans.diagnostics_dump();
+        let ast = result.unwrap();
+        //return;
+
+        let result = p.blockify(ast, &mut b, true);
         let (blockify, module_block_id) = result.unwrap();
 
+        let context = lower_mlir::default_context();
+        let mut module = lower_mlir::Module::new(Location::unknown(&context));
         let r = p.lower(blockify, module_block_id, &context, &mut module, &mut b);
         b.spans.diagnostics_dump();
         r.unwrap();

@@ -59,6 +59,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     for filename in config.inputs {
         let result = p.parse(&filename, &mut b, true);
         b.spans.diagnostics_dump();
+        let ast = result.unwrap();
+        let result = p.blockify(ast, &mut b, true);
         let (blockify, module_block_id) = result.unwrap();
 
         let r = p.lower(blockify, module_block_id, &context, &mut module, &mut b);

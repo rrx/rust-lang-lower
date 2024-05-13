@@ -63,6 +63,13 @@ pub fn dump_strings(
             dump_strings(body, b, out, depth);
         }
 
+        Ast::Block(name, _args, body) => {
+            let s = format!("block({})", b.labels.r((*name).into()));
+            out.push((depth, s, node.span_id));
+            depth += 1;
+            dump_strings(body, b, out, depth);
+        }
+
         Ast::Sequence(exprs) => {
             for expr in exprs {
                 dump_strings(expr, b, out, depth);
