@@ -142,6 +142,21 @@ pub enum AssignTarget {
 }
 
 #[derive(Debug, Clone)]
+pub enum ControlFlowMarker {
+    Start(Option<StringKey>),
+    Break(Option<StringKey>),
+    Continue(Option<StringKey>),
+    BlockStart(StringKey, Vec<ParameterNode>),
+    Goto(StringKey),
+}
+
+impl From<ControlFlowMarker> for AstNode {
+    fn from(c: ControlFlowMarker) -> Self {
+        Ast::ControlFlowMarker(c).into()
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum Ast {
     BinaryOp(BinOpNode, Box<AstNode>, Box<AstNode>),
     UnaryOp(UnaryOperation, Box<AstNode>),
@@ -161,11 +176,12 @@ pub enum Ast {
     While(Box<AstNode>, Box<AstNode>),
     Builtin(BuiltinId, Vec<Argument>),
     Module(StringKey, Box<AstNode>),
+    ControlFlowMarker(ControlFlowMarker),
     Loop(StringKey, Box<AstNode>),
     Break(Option<StringKey>, Vec<AstNode>),
     Continue(Option<StringKey>, Vec<AstNode>),
     Goto(StringKey),
-    BlockStart(StringKey, Vec<ParameterNode>),
+    //BlockStart(StringKey, Vec<ParameterNode>),
     Block(StringKey, Vec<ParameterNode>, Box<AstNode>),
     Noop,
     Error,
@@ -192,7 +208,7 @@ impl Ast {
     }
 
     pub fn is_label(&self) -> bool {
-        if let Ast::BlockStart(_, _) = self {
+        if let Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(_, _)) = self {
             true
         } else {
             false
@@ -200,7 +216,7 @@ impl Ast {
     }
 
     pub fn get_label(&self) -> Option<StringKey> {
-        if let Ast::BlockStart(key, _) = self {
+        if let Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(key, _)) = self {
             Some(*key)
         } else {
             None

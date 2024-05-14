@@ -4,8 +4,9 @@ use indexmap::IndexMap;
 use thiserror::Error;
 
 use compile_core::{
-    Argument, AssignTarget, Ast, AstNode, AstType, BinaryOperation, BuiltinId, Lambda, LinkOptions,
-    Literal, ParameterNode, SpanId, StringKey, UnaryOperation, VarDefinitionSpace,
+    Argument, AssignTarget, Ast, AstNode, AstType, BinaryOperation, BuiltinId, ControlFlowMarker,
+    Lambda, LinkOptions, Literal, ParameterNode, SpanId, StringKey, UnaryOperation,
+    VarDefinitionSpace,
 };
 
 use crate::{
@@ -109,7 +110,9 @@ impl NextSeqState {
         if let Some(next_node) = next_node {
             match next_node.node {
                 //Ast::Return(_) => Self::NextReturn,
-                Ast::BlockStart(key, _) => (is_term, Self::NextLabel(key)),
+                Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(key, _)) => {
+                    (is_term, Self::NextLabel(key))
+                }
                 _ => (is_term, Self::Other),
             }
         } else {
@@ -531,7 +534,7 @@ impl Blockify {
         // generate blocks for all predefined labels
         // this needs to be done first as a forward declaration
         for expr in exprs.iter() {
-            if let Ast::BlockStart(name, args) = &expr.node {
+            if let Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(name, args)) = &expr.node {
                 assert_eq!(0, args.len());
                 let block_id = self.env.new_block();
                 let _ = self.push_label_with_block(
@@ -1281,7 +1284,7 @@ impl Blockify {
                 }
             },
 
-            Ast::BlockStart(name, args) => {
+            Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(name, args)) => {
                 // all blocks should have been forward declared in the sequence
                 let value_id = self.env.resolve_block(name.into()).unwrap();
                 assert_eq!(0, args.len());

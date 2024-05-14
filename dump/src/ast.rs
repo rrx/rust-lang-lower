@@ -1,4 +1,4 @@
-use compile_core::{Argument, AssignTarget, Ast, AstNode, Span, SpanId};
+use compile_core::{Argument, AssignTarget, Ast, AstNode, ControlFlowMarker, Span, SpanId};
 
 use flat::NodeBuilder;
 
@@ -98,7 +98,7 @@ pub fn dump_strings(
             out.push((depth, s, node.span_id));
         }
 
-        Ast::BlockStart(name, params) => {
+        Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(name, params)) => {
             let s = format!("block_start: {}", b.labels.r((*name).into()),);
             out.push((depth, s, node.span_id));
             for e in params {

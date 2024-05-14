@@ -375,11 +375,11 @@ impl NodeBuilder {
     }
 
     pub fn label(name: StringKey) -> AstNode {
-        Ast::BlockStart(name, vec![]).into()
+        ControlFlowMarker::BlockStart(name, vec![]).into()
     }
 
     pub fn block_start(name: StringKey, params: Vec<ParameterNode>) -> AstNode {
-        Ast::BlockStart(name, params).into()
+        ControlFlowMarker::BlockStart(name, params).into()
     }
 
     pub fn goto(name: StringKey) -> AstNode {
@@ -613,7 +613,10 @@ pub fn ast_from_name(name: &str, mut args: Vec<Argument>, b: &mut NodeBuilder) -
                 span_id: SpanId::unknown(),
             });
         }
-        Some(Ast::BlockStart(key.into(), vec![]))
+        Some(Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(
+            key.into(),
+            vec![],
+        )))
     } else if name == "ternary" {
         let Argument::Positional(else_expr) = args.pop().unwrap();
         let Argument::Positional(then_expr) = args.pop().unwrap();
