@@ -107,7 +107,7 @@ pub fn dump_strings(
             }
         }
 
-        Ast::Goto(key) => {
+        Ast::ControlFlowMarker(ControlFlowMarker::Goto(key)) => {
             let s = format!("goto: {}", b.labels.r(key.into()),);
             out.push((depth, s, node.span_id));
         }

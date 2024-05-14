@@ -103,7 +103,7 @@ impl NextSeqState {
             Ast::Module(_, _) => true,
             Ast::Break(_, _) => true,
             Ast::Continue(_, _) => true,
-            Ast::Goto(_) => true,
+            Ast::ControlFlowMarker(ControlFlowMarker::Goto(_)) => true,
             _ => false,
         };
 
@@ -1303,6 +1303,19 @@ impl Blockify {
                 Ok(AddResult::new(Some(value_id), false, value_id.into()))
             }
 
+            Ast::ControlFlowMarker(ControlFlowMarker::Goto(label)) => {
+                // Goto is terminal
+                if let Some(target_block_id) = self.env.resolve_block_id(label.into()) {
+                    self.add_jump(entry_id, target_block_id, vec![], node.span_id, b)
+                } else {
+                    b.push_error(
+                        &format!("Block name not found: {}", b.labels.r(label.into())),
+                        node.span_id,
+                    );
+                    Err(Error::new(BlockifyError::Invalid))
+                }
+            }
+
             Ast::Identifier(key) => {
                 // identifier is expression, non-terminal
                 if let Some(data) = self.env.resolve_name(key) {
@@ -1599,19 +1612,6 @@ impl Blockify {
                     VarDefinitionSpace::Reg,
                 );
                 Ok(AddResult::new(Some(v), false, v_block))
-            }
-
-            Ast::Goto(label) => {
-                // Goto is terminal
-                if let Some(target_block_id) = self.env.resolve_block_id(label.into()) {
-                    self.add_jump(entry_id, target_block_id, vec![], node.span_id, b)
-                } else {
-                    b.push_error(
-                        &format!("Block name not found: {}", b.labels.r(label.into())),
-                        node.span_id,
-                    );
-                    Err(Error::new(BlockifyError::Invalid))
-                }
             }
 
             Ast::Return(maybe_expr) => {

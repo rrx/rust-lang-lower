@@ -383,7 +383,7 @@ impl NodeBuilder {
     }
 
     pub fn goto(name: StringKey) -> AstNode {
-        Ast::Goto(name).into()
+        ControlFlowMarker::Goto(name).into()
     }
 
     pub fn param(&mut self, name: StringKey, ty: AstType) -> ParameterNode {
@@ -588,7 +588,7 @@ pub fn ast_from_name(name: &str, mut args: Vec<Argument>, b: &mut NodeBuilder) -
         assert_eq!(rest.len(), 0);
         let s = args.pop().unwrap().try_string().unwrap();
         let key = b.labels.s(&s);
-        Some(Ast::Goto(key.into()))
+        Some(Ast::ControlFlowMarker(ControlFlowMarker::Goto(key.into())))
     } else if name == "static" {
         println!("args: {:?}", args);
         let Argument::Positional(value) = args.pop().unwrap();
