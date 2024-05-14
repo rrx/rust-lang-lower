@@ -4,6 +4,7 @@ pub mod builder;
 pub mod builtin;
 pub mod graph;
 pub mod scope;
+pub mod seq;
 
 pub use blockify::{Blockify, LCode};
 pub use builder::*;

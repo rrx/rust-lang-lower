@@ -93,20 +93,7 @@ pub enum NextSeqState {
 
 impl NextSeqState {
     pub fn get(_env: &Environment, node: &AstNode, next_node: Option<&AstNode>) -> (bool, Self) {
-        let is_term = match node.node {
-            Ast::Branch(_, _, _) => true,
-            Ast::Conditional(_, _, _) => true,
-            //Ast::Test(_, _) => true,
-            Ast::While(_, _) => true,
-            Ast::Return(_) => true,
-            Ast::Loop(_, _) => true,
-            Ast::Module(_, _) => true,
-            Ast::Break(_, _) => true,
-            Ast::Continue(_, _) => true,
-            Ast::ControlFlowMarker(ControlFlowMarker::Goto(_)) => true,
-            _ => false,
-        };
-
+        let is_term = node.node.is_term();
         if let Some(next_node) = next_node {
             match next_node.node {
                 //Ast::Return(_) => Self::NextReturn,
@@ -519,7 +506,83 @@ impl Blockify {
         }
     }
 
+    pub fn add_sequence_inner(
+        &mut self,
+        entry_id: BlockId,
+        maybe_next: Option<BlockId>,
+        node: AstNode,
+        b: &mut NodeBuilder,
+    ) -> Result<AddResult> {
+        // iterate through and merge things together so we have a sequence of terminals
+
+        //let scope_id = self.env.current_scope().unwrap();
+        let entry_id = self.env.resolve_code_offset(entry_id.into());
+        //let mut current_entry_id = Some(entry_id.into());
+        // flatten
+        let exprs = node.to_vec();
+
+        let mut value_id = None;
+        let mut current_entry_id = Some(entry_id.into());
+        let mut current_is_term = false;
+        let mut iter = exprs.into_iter().peekable();
+        loop {
+            if let Some(expr) = iter.next() {
+                let this_is_term = expr.node.is_term();
+                let this_label = expr.node.get_label();
+
+                if let Some(next) = iter.peek() {
+                    let next_is_term = next.node.is_term();
+                    let next_label = expr.node.get_label();
+                    if next_is_term {
+                        // just add with next
+                    } else {
+                    }
+                } else {
+                    // end of the line
+                }
+                println!("a: {:?}", (&expr.node, maybe_next, entry_id));
+
+                if let Ast::ControlFlowMarker(_) = expr.node {
+                    unreachable!()
+                }
+                let r = self.add(
+                    current_entry_id.unwrap(),
+                    None,
+                    //Some(target_block_id),
+                    expr,
+                    b,
+                )?;
+                if let Some(v) = r.value_id {
+                    //let v = r.value_id.unwrap();
+                    current_is_term = r.is_term;
+                    //assert_eq!(current_is_term, is_term);
+                    //current_entry_id = Some(*self.entries.get(v.0 as usize).unwrap());
+                    current_entry_id = Some(r.entry_id.into());
+                    //assert_eq!(current_block_id.unwrap(), r.block_id);
+                    value_id = Some(v);
+                }
+            } else {
+                break;
+            }
+        }
+        Ok(AddResult::new(
+            value_id,
+            current_is_term,
+            current_entry_id.unwrap(),
+        ))
+    }
+
     pub fn add_sequence(
+        &mut self,
+        entry_id: BlockId,
+        maybe_next: Option<BlockId>,
+        node: AstNode,
+        b: &mut NodeBuilder,
+    ) -> Result<AddResult> {
+        self.add_sequence_complicated(entry_id, maybe_next, node, b)
+    }
+
+    pub fn add_sequence_complicated(
         &mut self,
         entry_id: BlockId,
         maybe_next: Option<BlockId>,
@@ -1239,12 +1302,12 @@ impl Blockify {
                 unimplemented!()
             }
 
-            Ast::Sequence(ref _exprs) => {
-                self.add_sequence(self.resolve_block_id(entry_id), maybe_next, node, b)
-            }
-
             Ast::Lambda(_def) => {
                 unreachable!();
+            }
+
+            Ast::Sequence(ref _exprs) => {
+                self.add_sequence(self.resolve_block_id(entry_id), maybe_next, node, b)
             }
 
             Ast::Call(expr, args, _ret_ty) => match &expr.node {
@@ -1470,6 +1533,17 @@ impl Blockify {
 
             Ast::Conditional(condition, then_expr, maybe_else_expr) => {
                 // conditional is terminal
+                // next could be nothing
+                // the expressions could terminate or fall through
+                // if they fall through they need to know where to go next
+                // the fall through is what comes next
+                // if it's the end of the sequence, then we have an implicit yield or return
+                // next is sort of like cps
+                // next is a block that has been setup already
+                // if this is terminal and next expr is not terminal, then we need to make it a
+                // block
+                // We can do this in an intial pass, making sure we have things in the proper
+                // configuration, a sequence of all terminals
 
                 let v_next = maybe_next.unwrap();
                 assert_eq!(v_next, maybe_next.unwrap());
@@ -1668,7 +1742,7 @@ impl Blockify {
 
             Ast::Global(name, expr) => match expr.node {
                 Ast::Lambda(def) => {
-                    let _block_id = self.resolve_block_id(entry_id);
+                    //let _block_id = self.resolve_block_id(entry_id);
                     self.add_function(entry_id, name, def, node.span_id, b)
                 }
                 Ast::Literal(lit) => {

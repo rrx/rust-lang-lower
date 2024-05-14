@@ -172,6 +172,7 @@ pub enum Ast {
     Conditional(Box<AstNode>, Box<AstNode>, Option<Box<AstNode>>),
     Ternary(Box<AstNode>, Box<AstNode>, Box<AstNode>),
     Return(Option<Box<AstNode>>),
+    CloseBlock, // implicit close has different meaning depending on the context
     Yield(Option<Box<AstNode>>),
     While(Box<AstNode>, Box<AstNode>),
     Builtin(BuiltinId, Vec<Argument>),
@@ -180,7 +181,6 @@ pub enum Ast {
     Loop(StringKey, Box<AstNode>),
     Break(Option<StringKey>, Vec<AstNode>),
     Continue(Option<StringKey>, Vec<AstNode>),
-    //Goto(StringKey),
     Block(StringKey, Vec<ParameterNode>, Box<AstNode>),
     Noop,
     Error,
@@ -207,30 +207,33 @@ impl Ast {
     }
 
     pub fn is_label(&self) -> bool {
-        if let Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(_, _)) = self {
-            true
-        } else {
-            false
+        match self {
+            Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(_, _)) => true,
+            Ast::Block(_, _, _) => true,
+            _ => false,
         }
     }
 
     pub fn get_label(&self) -> Option<StringKey> {
-        if let Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(key, _)) = self {
-            Some(*key)
-        } else {
-            None
+        match self {
+            Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(key, _)) => Some(*key),
+            Ast::Block(key, _, _) => Some(*key),
+            _ => None,
         }
     }
 
-    pub fn is_expr(&self) -> bool {
+    pub fn is_term(&self) -> bool {
         match self {
-            Self::BinaryOp(_, _, _) => true,
-            Self::UnaryOp(_, _) => true,
-            Self::Call(_, _, _) => true,
-            Self::Identifier(_) => true,
-            Self::Literal(_) => true,
-            //Self::Conditional(_, _, _) => true,
-            Self::While(_, _) => true,
+            Ast::Branch(_, _, _) => true,
+            Ast::Conditional(_, _, _) => true,
+            Ast::While(_, _) => true,
+            Ast::Return(_) => true,
+            Ast::Loop(_, _) => true,
+            Ast::Module(_, _) => true,
+            Ast::Break(_, _) => true,
+            Ast::Continue(_, _) => true,
+            Ast::CloseBlock => true,
+            Ast::ControlFlowMarker(ControlFlowMarker::Goto(_)) => true,
             _ => false,
         }
     }

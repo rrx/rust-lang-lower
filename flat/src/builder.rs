@@ -139,6 +139,21 @@ impl TypeBuilder {
     pub fn r(&mut self, id: TypeId) -> &AstType {
         self.pool.resolve(&id)
     }
+
+    pub fn get_type(&mut self, lambda: &Lambda) -> AstType {
+        let params = lambda
+            .params
+            .iter()
+            .map(|p| {
+                let ty = self.r(p.ty);
+                ty.clone()
+            })
+            .collect();
+        //let spans = def.params.iter().map(|p| p.span_id).collect::<Vec<_>>();
+        let return_type = self.r(lambda.return_type).clone();
+        let ty = AstType::Func(params, return_type.clone().into());
+        ty
+    }
 }
 
 pub struct NodeBuilder {
@@ -218,6 +233,14 @@ impl NodeBuilder {
         let unique = self.loop_count;
         self.loop_count += 1;
         let s = format!("_loop{}", unique);
+        let key = self.labels.s(&s);
+        key
+    }
+
+    pub fn fresh_block_name(&mut self) -> StringKey {
+        let unique = self.loop_count;
+        self.loop_count += 1;
+        let s = format!("_block{}", unique);
         let key = self.labels.s(&s);
         key
     }
