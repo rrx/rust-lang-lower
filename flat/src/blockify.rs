@@ -110,9 +110,9 @@ impl NextSeqState {
 
 #[derive(Debug, Clone)]
 pub struct AddResult {
-    value_id: Option<ValueId>,
-    is_term: bool,
-    entry_id: CodeOffset,
+    pub(crate) value_id: Option<ValueId>,
+    pub(crate) is_term: bool,
+    pub(crate) entry_id: CodeOffset,
 }
 impl AddResult {
     pub fn new(value_id: Option<ValueId>, is_term: bool, entry_id: CodeOffset) -> Self {
@@ -506,72 +506,6 @@ impl Blockify {
         }
     }
 
-    pub fn add_sequence_inner(
-        &mut self,
-        entry_id: BlockId,
-        maybe_next: Option<BlockId>,
-        node: AstNode,
-        b: &mut NodeBuilder,
-    ) -> Result<AddResult> {
-        // iterate through and merge things together so we have a sequence of terminals
-
-        //let scope_id = self.env.current_scope().unwrap();
-        let entry_id = self.env.resolve_code_offset(entry_id.into());
-        //let mut current_entry_id = Some(entry_id.into());
-        // flatten
-        let exprs = node.to_vec();
-
-        let mut value_id = None;
-        let mut current_entry_id = Some(entry_id.into());
-        let mut current_is_term = false;
-        let mut iter = exprs.into_iter().peekable();
-        loop {
-            if let Some(expr) = iter.next() {
-                let this_is_term = expr.node.is_term();
-                let this_label = expr.node.get_label();
-
-                if let Some(next) = iter.peek() {
-                    let next_is_term = next.node.is_term();
-                    let next_label = expr.node.get_label();
-                    if next_is_term {
-                        // just add with next
-                    } else {
-                    }
-                } else {
-                    // end of the line
-                }
-                println!("a: {:?}", (&expr.node, maybe_next, entry_id));
-
-                if let Ast::ControlFlowMarker(_) = expr.node {
-                    unreachable!()
-                }
-                let r = self.add(
-                    current_entry_id.unwrap(),
-                    None,
-                    //Some(target_block_id),
-                    expr,
-                    b,
-                )?;
-                if let Some(v) = r.value_id {
-                    //let v = r.value_id.unwrap();
-                    current_is_term = r.is_term;
-                    //assert_eq!(current_is_term, is_term);
-                    //current_entry_id = Some(*self.entries.get(v.0 as usize).unwrap());
-                    current_entry_id = Some(r.entry_id.into());
-                    //assert_eq!(current_block_id.unwrap(), r.block_id);
-                    value_id = Some(v);
-                }
-            } else {
-                break;
-            }
-        }
-        Ok(AddResult::new(
-            value_id,
-            current_is_term,
-            current_entry_id.unwrap(),
-        ))
-    }
-
     pub fn add_sequence(
         &mut self,
         entry_id: BlockId,
@@ -882,7 +816,7 @@ impl Blockify {
         span_id: SpanId,
         return_type: AstType,
         b: &mut NodeBuilder,
-    ) -> Result<()> {
+    ) {
         let name = b.labels.s("ret");
         let args = match &return_type {
             AstType::Unit => vec![],
@@ -928,7 +862,6 @@ impl Blockify {
             AstType::Unit,
             VarDefinitionSpace::Reg,
         );
-        Ok(())
     }
 
     pub fn add_function(
@@ -1000,7 +933,7 @@ impl Blockify {
             self.env.exit_scope();
             self.env.add_succ_static(current_block_id, new_entry_id);
 
-            let _ = self.add_return_block(body_scope_id, ret_block_id, span_id, return_type, b)?;
+            self.add_return_block(body_scope_id, ret_block_id, span_id, return_type, b);
             Ok(AddResult::new(Some(v_decl), false, current_entry_id))
         } else {
             Ok(AddResult::new(

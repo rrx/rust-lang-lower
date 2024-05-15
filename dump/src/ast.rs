@@ -1,7 +1,8 @@
-use compile_core::{Argument, AssignTarget, Ast, AstNode, ControlFlowMarker, Span, SpanId};
+use compile_core::{AstNode, Span};
 
 use flat::NodeBuilder;
 
+/*
 pub fn dump(node: &AstNode, b: &NodeBuilder) {
     let mut out = vec![];
     dump_strings(node, b, &mut out, 0);
@@ -13,10 +14,11 @@ pub fn dump(node: &AstNode, b: &NodeBuilder) {
 pub fn print_with_indent(s: &str, depth: usize) {
     println!("{:width$}{}", "", s, width = depth * 2);
 }
+*/
 
 pub fn dump_html(node: &AstNode, b: &NodeBuilder) -> String {
     let mut out = vec![];
-    dump_strings(node, b, &mut out, 0);
+    b.dump_strings(node, &mut out, 0);
     let mut s = String::new();
     s.push_str("<pre>\n");
     for (depth, content, span_id) in out {
@@ -49,6 +51,7 @@ pub fn dump_html(node: &AstNode, b: &NodeBuilder) -> String {
     s
 }
 
+/*
 pub fn dump_strings(
     node: &AstNode,
     b: &NodeBuilder,
@@ -255,3 +258,4 @@ pub fn dump_strings(
         _ => unimplemented!("{:?}", node),
     }
 }
+*/

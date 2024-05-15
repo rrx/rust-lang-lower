@@ -899,7 +899,7 @@ impl StarlarkParser {
         let mut parser = Parser::new();
         let module_key = b.labels.s("module");
         let ast: AstNode = parser.parse(Path::new(filename), None, module_key, file_id, b)?;
-        dump::ast::dump(&ast, b);
+        b.dump_ast(&ast);
         Ok(ast)
     }
 

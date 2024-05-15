@@ -2,6 +2,7 @@ pub mod block_format;
 pub mod blockify;
 pub mod builder;
 pub mod builtin;
+mod dump;
 pub mod graph;
 pub mod scope;
 pub mod seq;
