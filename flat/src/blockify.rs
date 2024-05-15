@@ -980,6 +980,37 @@ impl Blockify {
         ))
     }
 
+    pub fn add_block_with_expr(
+        &mut self,
+        name: StringLabel,
+        block_id: BlockId,
+        v_next: Option<BlockId>,
+        expr: AstNode,
+        args: &[AstType],
+        kwargs: &[ParameterNode],
+        b: &mut NodeBuilder,
+    ) -> Result<AddResult> {
+        let scope_id = self.env.new_scope(ScopeType::Block);
+        let v_then = self.push_label_with_block(
+            name.into(),
+            expr.span_id,
+            scope_id,
+            block_id,
+            args,
+            kwargs,
+            b,
+        );
+        self.env.enter_scope(scope_id);
+        let r = if let Some(v_next) = v_next {
+            self.add_with_next(v_then.into(), expr, v_next, b)?
+        } else {
+            self.add(v_then.into(), None, expr, b)?
+        };
+        let _ = r.value_id.unwrap();
+        self.env.exit_scope();
+        Ok(r)
+    }
+
     pub fn add_jump(
         &mut self,
         entry_id: CodeOffset,
@@ -1116,37 +1147,6 @@ impl Blockify {
             AstType::Unit,
             VarDefinitionSpace::Reg,
         )))
-    }
-
-    pub fn add_block_with_expr(
-        &mut self,
-        name: StringLabel,
-        block_id: BlockId,
-        v_next: Option<BlockId>,
-        expr: AstNode,
-        args: &[AstType],
-        kwargs: &[ParameterNode],
-        b: &mut NodeBuilder,
-    ) -> Result<AddResult> {
-        let scope_id = self.env.new_scope(ScopeType::Block);
-        let v_then = self.push_label_with_block(
-            name.into(),
-            expr.span_id,
-            scope_id,
-            block_id,
-            args,
-            kwargs,
-            b,
-        );
-        self.env.enter_scope(scope_id);
-        let r = if let Some(v_next) = v_next {
-            self.add_with_next(v_then.into(), expr, v_next, b)?
-        } else {
-            self.add(v_then.into(), None, expr, b)?
-        };
-        let _ = r.value_id.unwrap();
-        self.env.exit_scope();
-        Ok(r)
     }
 
     pub fn new_pending(
@@ -1723,6 +1723,19 @@ impl Blockify {
             Ast::Loop(name, body) => {
                 // loop is a terminal, so we are expecting a next block
                 self.add_loop(entry_id, maybe_next.unwrap(), name, *body, b)
+            }
+
+            Ast::Block(name, args, body) => {
+                let block_id = self.env.new_block();
+                self.add_block_with_expr(name.into(), block_id, maybe_next, *body, &[], &[], b)
+            }
+
+            Ast::CloseBlock => {
+                if let Some(next) = maybe_next {
+                    self.add_jump(entry_id, next, vec![], node.span_id, b)
+                } else {
+                    unreachable!()
+                }
             }
 
             Ast::Break(maybe_name, args) => {

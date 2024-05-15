@@ -11,3 +11,8 @@ anyhow = "*"
 thiserror = "*"
 indexmap = "2.1.0"
 petgraph = "0.6.4"
+tabled = "0.15.0"
+serde = "1.0"
+serde_json = "*"
+
+

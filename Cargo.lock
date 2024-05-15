@@ -811,6 +811,9 @@ dependencies = [
  "compile_core",
  "indexmap",
  "petgraph",
+ "serde",
+ "serde_json",
+ "tabled",
  "thiserror",
 ]
 

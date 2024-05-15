@@ -1,10 +1,95 @@
 use std::collections::VecDeque;
 
-use compile_core::Literal;
+use compile_core::{AstType, Literal};
 
 use crate::{Blockify, LCode, NodeBuilder, ValueId};
+use serde::Serialize;
+use tabled::{
+    settings::{object::Rows, Border, Style},
+    Table, Tabled,
+};
+
+#[derive(Tabled, Serialize)]
+pub struct CodeRow {
+    pub pos: usize,
+    pub next: usize,
+    pub prev: usize,
+    pub value: String,
+    pub ty: AstType,
+    pub mem: String,
+    pub name: String,
+    pub span_id: usize,
+    pub scope_id: usize,
+    pub block_id: usize,
+    pub entry_id: usize,
+    pub term: bool,
+}
+
+impl CodeRow {
+    pub fn header() -> Vec<&'static str> {
+        vec![
+            "pos", "next", "prev", "value", "ty", "mem", "name", "span_id", "scope_id", "block_id",
+            "term",
+        ]
+    }
+}
 
 impl Blockify {
+    pub fn dump_codes_filter(&self, b: &NodeBuilder, filter_entry_id: ValueId) -> Vec<CodeRow> {
+        let mut pos = 0;
+        let mut out = vec![];
+        loop {
+            let v = ValueId::new(pos as u32);
+            let row = self.get_code_row(v, b);
+            let entry_id = self.get_entry_id(v);
+
+            let mut display = true;
+            if filter_entry_id != entry_id {
+                display = false;
+            }
+
+            if display {
+                out.push(row);
+            }
+
+            pos += 1;
+            if pos == self.code_count() {
+                break;
+            }
+        }
+        out
+    }
+
+    pub fn get_code_row(&self, v: ValueId, b: &NodeBuilder) -> CodeRow {
+        let code = self.get_code(v);
+        let ty = self.get_type(v);
+        let mem = self.get_mem(v);
+        let next = self.get_next(v).unwrap_or(v).index();
+        let prev = self.get_prev(v).unwrap_or(v).index();
+        let scope_id = self.get_scope_id(v);
+        let entry_id = self.get_entry_id(v);
+        let block_id = self.env.block_map.get(&entry_id).unwrap();
+
+        CodeRow {
+            pos: v.index(),
+            next,
+            prev,
+            value: self.code_to_string(v, b),
+            ty,
+            mem: format!("{:?}", mem),
+            name: self
+                .get_name(v)
+                .map(|key| b.labels.r(key))
+                .unwrap_or("".to_string())
+                .to_string(),
+            span_id: self.get_span_id(v).index(),
+            scope_id: scope_id.index(),
+            entry_id: entry_id.index(),
+            block_id: block_id.index(),
+            term: code.is_term(),
+        }
+    }
+
     pub fn code_to_string(&self, v: ValueId, b: &NodeBuilder) -> String {
         let code = self.get_code(v);
         match code {

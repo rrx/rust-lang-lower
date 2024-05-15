@@ -1,5 +1,10 @@
-use crate::NodeBuilder;
+use crate::{block_format::LCodeIterator, Blockify, Environment, NodeBuilder};
 use compile_core::{Argument, AssignTarget, Ast, AstNode, ControlFlowMarker, SpanId};
+
+use tabled::{
+    settings::{object::Rows, Border, Style},
+    Table, Tabled,
+};
 
 pub fn print_with_indent(s: &str, depth: usize) {
     println!("{:width$}{}", "", s, width = depth * 2);
@@ -14,7 +19,7 @@ impl NodeBuilder {
         }
     }
 
-    pub fn dump_strings(
+    fn dump_strings(
         &self,
         node: &AstNode,
         out: &mut Vec<(usize, String, SpanId)>,
@@ -217,7 +222,103 @@ impl NodeBuilder {
                 }
             }
 
+            Ast::CloseBlock => {
+                let s = "close_block";
+                out.push((depth, s.into(), node.span_id));
+            }
+
             _ => unimplemented!("{:?}", node),
         }
+    }
+
+    pub fn dump_env(&self, env: &Environment) {
+        println!("current scope: {:?}", env.current_scope());
+        //println!("static block: {:?}", self.static_block_id());
+        //println!("static scope: {:?}", self.static_scope_id());
+        for block in env.blocks.iter() {
+            //let block_id = BlockId(offset as u32);
+            println!("block({:?}, {:?})", block.entry_id, block);
+        }
+
+        for (index, layer) in env.scopes.iter().enumerate() {
+            println!("scope({},{:?})", index, layer.scope_type);
+            for (key, data) in layer.names.iter() {
+                println!("  name  {} = {:?}", self.labels.r((*key).into()), data);
+            }
+            for (key, data) in layer.labels.iter() {
+                println!("  label {} = {:?}", self.labels.r(*key), data);
+            }
+            for next_id in layer.next_block.iter() {
+                println!("  next  {:?}", next_id);
+            }
+            for block_id in layer.blocks.iter() {
+                println!("  block {:?}", block_id);
+            }
+            for (name, def) in layer.lambdas.iter() {
+                println!("  def {:?}", (self.labels.r(*name), def));
+            }
+        }
+    }
+
+    pub fn dump_blockify(&self, blockify: &Blockify) {
+        //self.dump_codes(b, None);
+        self.dump_env(&blockify.env);
+
+        for block in blockify.env.blocks.iter() {
+            println!("block({:?}, {:?})", block.entry_id, block);
+            let rows = blockify.dump_codes_filter(self, block.entry_id.unwrap());
+            let s = Table::new(rows).with(Style::sharp()).to_string();
+            println!("{}", s);
+        }
+        /*
+        let rows = self.get_code_rows(b);
+
+        if false {
+        use minijinja::{context, Environment};
+        use std::io::prelude::*;
+        let mut env = Environment::new();
+        env.add_template("template", include_str!("template.html"))
+        .unwrap();
+        let tmpl = env.get_template("template").unwrap();
+        let html = tmpl
+        .render(context!(header => CodeRow::header(), rows => rows))
+        .unwrap();
+        let mut file = std::fs::File::create("blocks.html").unwrap();
+        file.write_all(html.as_bytes()).unwrap();
+        println!(
+        "{}",
+        tmpl.render(context!(header => CodeRow::header(), rows => rows))
+        .unwrap()
+        );
+        }
+        */
+    }
+
+    pub fn dump_codes(&self, blockify: &Blockify) -> String {
+        let mut out = vec![];
+        let mut labels = vec![];
+        let iter = LCodeIterator::new(blockify);
+        for (i, v) in iter.enumerate() {
+            let row = blockify.get_code_row(v, self);
+            let code = blockify.get_code(v);
+
+            if code.is_start() {
+                labels.push(i + 1);
+            }
+
+            out.push(row);
+        }
+
+        let mut t = Table::new(out);
+
+        t.with(Style::sharp());
+
+        for i in labels {
+            let rows = Rows::single(i);
+            t.modify(rows, Border::new().set_top('-'));
+        }
+        let s = t.to_string();
+        println!("{}", s);
+        s
     }
 }

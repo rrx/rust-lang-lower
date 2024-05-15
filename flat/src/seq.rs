@@ -206,11 +206,16 @@ impl Blockify {
 
     fn open_module(&mut self, name: StringKey, b: &mut NodeBuilder) -> (BlockId, ScopeId) {
         let static_scope = self.env.new_scope(ScopeType::Static);
+        self.env.enter_scope(static_scope);
         let block_id = self.env.new_block();
         let span_id = b.spans.get_span_unknown();
         let entry_id =
             self.push_label_with_block(name.into(), span_id, static_scope, block_id, &[], &[], b);
         (block_id, static_scope)
+    }
+
+    fn close_module(&mut self) {
+        self.env.exit_scope();
     }
 
     fn open_function(
@@ -287,10 +292,18 @@ pub(crate) mod tests {
 
         let block = blockify.open_function(b.labels.s("main"), block_id, scope_id, &lambda, &mut b);
         let r = R::build(vec![Ast::bool(true).into()], &mut blockify, &mut b);
-        for expr in r {
-            println!("{:?}", expr);
-        }
+        let seq = Ast::Sequence(r).into();
+        b.dump_ast(&seq);
+
+        blockify.env.enter_scope(block.scope_id);
+        let r = blockify
+            .add(block.start.into(), Some(block.next), seq, &mut b)
+            .unwrap();
+        println!("{:?}", r);
+        blockify.env.exit_scope();
+
         blockify.close_function(&block, lambda, span_id, &mut b);
+        blockify.close_module();
     }
 }
 /*

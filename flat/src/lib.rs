@@ -7,6 +7,7 @@ pub mod graph;
 pub mod scope;
 pub mod seq;
 
+pub use block_format::*;
 pub use blockify::{Blockify, LCode};
 pub use builder::*;
 pub use builtin::*;

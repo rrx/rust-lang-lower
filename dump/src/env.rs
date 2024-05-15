@@ -41,7 +41,7 @@ pub fn blockify_dump(blockify: &Blockify, b: &NodeBuilder) {
 
     for block in blockify.env.blocks.iter() {
         println!("block({:?}, {:?})", block.entry_id, block);
-        let rows = crate::code::dump_codes_filter(blockify, b, block.entry_id.unwrap());
+        let rows = blockify.dump_codes_filter(b, block.entry_id.unwrap());
         let s = Table::new(rows).with(Style::sharp()).to_string();
         println!("{}", s);
     }
