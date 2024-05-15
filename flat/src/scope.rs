@@ -64,6 +64,7 @@ pub struct ScopeLayer {
     pub next_block: Vec<ValueId>,
     pub(crate) entry_block: Option<BlockId>,
     pub(crate) loop_block: Option<LoopScope>,
+    pub(crate) current_block: Option<BlockId>,
     pub scope_type: ScopeType,
     pub lambdas: HashMap<StringLabel, TemplateId>,
 }
@@ -81,6 +82,7 @@ impl ScopeLayer {
             loop_block: None,
             scope_type,
             lambdas: HashMap::new(),
+            current_block: None,
         }
     }
 
@@ -145,6 +147,7 @@ pub struct Environment {
     pub scopes: Vec<ScopeLayer>,
     pub blocks: Vec<Block>,
     pub block_map: IndexMap<ValueId, BlockId>,
+    pub current_block: Option<BlockId>,
 }
 
 impl Environment {
@@ -154,6 +157,7 @@ impl Environment {
             scopes: vec![],
             blocks: vec![],
             block_map: IndexMap::new(),
+            current_block: None,
         }
     }
 
@@ -164,12 +168,30 @@ impl Environment {
         ScopeId(offset as u32)
     }
 
-    pub fn enter_scope(&mut self, scope_id: ScopeId) {
+    pub fn current_scope(&self) -> Option<ScopeId> {
+        self.stack.last().cloned()
+    }
+
+    pub fn enter_scope(&mut self, scope_id: ScopeId, block_id: BlockId) {
         self.stack.push(scope_id);
+        self.current_block = Some(block_id);
     }
 
     pub fn exit_scope(&mut self) {
         self.stack.pop().unwrap();
+    }
+
+    pub fn enter_block(&mut self, block_id: BlockId) {
+        //assert!(self.current_block.is_none());
+        self.current_block = Some(block_id);
+    }
+    pub fn exit_block(&mut self) {
+        //assert!(self.current_block.is_some());
+        self.current_block = None;
+    }
+
+    pub fn current_block(&self) -> Option<BlockId> {
+        self.current_block
     }
 
     pub fn scope_define(
@@ -391,9 +413,5 @@ impl Environment {
             }
         }
         None
-    }
-
-    pub fn current_scope(&self) -> Option<ScopeId> {
-        self.stack.last().cloned()
     }
 }

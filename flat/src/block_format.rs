@@ -35,6 +35,18 @@ impl CodeRow {
 }
 
 impl Blockify {
+    pub fn dump(&self, b: &NodeBuilder) {
+        //self.dump_codes(b, None);
+        b.dump_env(&self.env);
+
+        for block in self.env.blocks.iter() {
+            println!("block({:?}, {:?})", block.entry_id, block);
+            let rows = self.dump_codes_filter(b, block.entry_id.unwrap());
+            let s = Table::new(rows).with(Style::sharp()).to_string();
+            println!("{}", s);
+        }
+    }
+
     pub fn dump_codes_filter(&self, b: &NodeBuilder, filter_entry_id: ValueId) -> Vec<CodeRow> {
         let mut pos = 0;
         let mut out = vec![];

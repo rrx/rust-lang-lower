@@ -155,7 +155,7 @@ pub struct Blockify {
     span: Vec<SpanId>,
     loop_stack: Vec<LoopLayer>,
     templates: Vec<Lambda>,
-    pending: Vec<Pending>,
+    pub(crate) pending: Vec<Pending>,
 
     // other
     pub env: Environment,
@@ -425,6 +425,7 @@ impl Blockify {
         kwargs: &[ParameterNode],
         b: &mut NodeBuilder,
     ) -> ValueId {
+        self.env.enter_block(block_id);
         let code = LCode::Label(args.len() as u8, kwargs.len() as u8);
         let v_block = self._push_code(
             code,
@@ -497,7 +498,7 @@ impl Blockify {
                     &[],
                     b,
                 );
-                self.env.enter_scope(static_scope);
+                self.env.enter_scope(static_scope, block_id);
                 self.add(entry_id.into(), None, *body, b)?;
                 self.env.exit_scope();
                 Ok(entry_id)
@@ -799,7 +800,7 @@ impl Blockify {
         let scope = self.env.get_scope_mut(body_scope_id);
         scope.return_block = Some(ret_block_id);
         scope.entry_block = Some(new_block_id); //new_entry_id.into());
-        self.env.enter_scope(body_scope_id);
+        self.env.enter_scope(body_scope_id, new_block_id);
         let _r1 = self.add_with_next(current_entry_id.into(), *body, v_next, b)?;
         self.env.exit_scope();
 
@@ -927,7 +928,7 @@ impl Blockify {
             scope.return_block = Some(ret_block_id);
             scope.entry_block = Some(new_block_id);
 
-            self.env.enter_scope(body_scope_id);
+            self.env.enter_scope(body_scope_id, new_block_id);
             // next block in body scope
             self.add_with_next(new_entry_id.into(), *body, ret_block_id.into(), b)?;
             self.env.exit_scope();
@@ -967,7 +968,7 @@ impl Blockify {
         self.env
             .push_loop_blocks(Some(name), v_next.into(), v_loop.into());
 
-        self.env.enter_scope(loop_scope_id);
+        self.env.enter_scope(loop_scope_id, b_loop);
         let _ = self.add_with_next(v_loop.into(), body, v_next.into(), b)?;
         self.env.exit_scope();
 
@@ -1000,7 +1001,7 @@ impl Blockify {
             kwargs,
             b,
         );
-        self.env.enter_scope(scope_id);
+        self.env.enter_scope(scope_id, block_id);
         let r = if let Some(v_next) = v_next {
             self.add_with_next(v_then.into(), expr, v_next, b)?
         } else {
@@ -1149,6 +1150,26 @@ impl Blockify {
         )))
     }
 
+    pub fn add_literal_expr(
+        &mut self,
+        entry_id: CodeOffset,
+        lit: Literal,
+        span_id: SpanId,
+    ) -> Result<AddResult> {
+        let scope_id = self.env.current_scope().unwrap();
+        // literal is expression, non-terminal
+        let ty: AstType = lit.clone().into();
+        let v = self.push_code(
+            LCode::Const(lit),
+            span_id,
+            scope_id,
+            entry_id,
+            ty,
+            VarDefinitionSpace::Reg,
+        );
+        Ok(AddResult::new(Some(v), false, entry_id))
+    }
+
     pub fn new_pending(
         &mut self,
         name: StringLabel,
@@ -1174,7 +1195,7 @@ impl Blockify {
     }
 
     pub fn add_pending(&mut self, pending: Pending, b: &mut NodeBuilder) -> Result<PendingResult> {
-        self.env.enter_scope(pending.scope_id);
+        self.env.enter_scope(pending.scope_id, pending.block_id);
         let _ = self.push_label_with_block(
             pending.name,
             pending.expr.span_id,

@@ -5,16 +5,17 @@ use compile_core::{
 };
 
 use crate::{
-    blockify::AddResult, BlockId, Blockify, Environment, LCode, NodeBuilder, NodeBuilder as NB,
-    ScopeId, ScopeType,
+    blockify::AddResult, BlockId, Blockify, CodeOffset, Environment, LCode, NodeBuilder,
+    NodeBuilder as NB, ScopeId, ScopeType,
 };
 
 enum BlockType {
     Normal,
+    Module,
     Loop,
 }
 
-struct SequenceBlock {
+pub struct SequenceBlock {
     block_type: BlockType,
     start: BlockId,
     next: BlockId,
@@ -39,31 +40,49 @@ impl SequenceBlock {
             scope_id,
         }
     }
+
+    fn module(start: BlockId, scope_id: ScopeId) -> Self {
+        Self {
+            block_type: BlockType::Module,
+            start: start,
+            next: start,
+            scope_id,
+        }
+    }
 }
 
 struct SequenceReader {
-    result: Vec<AstNode>,
+    //result: Vec<AstNode>,
     current: Vec<AstNode>,
     current_label: Option<StringKey>,
+    current_block: Option<BlockId>,
 }
 
 impl SequenceReader {
     fn new() -> Self {
         Self {
-            result: vec![],
+            //result: vec![],
             current: vec![],
             current_label: None,
+            current_block: None,
         }
     }
 
-    fn close_block(&mut self) {
+    fn add(&mut self, blockify: &mut Blockify, ast: AstNode, b: &mut NodeBuilder) {
+        blockify.test_add(self.current_block.unwrap(), ast, b);
+        //blockify.add_block_with_expr(
+        //blockify.test_add(entry_id,
+        //self.result.push(block.into());
+    }
+
+    fn close_block(&mut self, blockify: &mut Blockify, b: &mut NodeBuilder) {
         let block = Ast::Block(
             self.current_label.unwrap(),
             vec![],
             Box::new(Ast::Sequence(self.current.drain(..).collect()).into()),
         );
         self.current_label = None;
-        self.result.push(block.into());
+        self.add(blockify, block.into(), b);
     }
 
     fn push(&mut self, ast: AstNode, blockify: &mut Blockify, b: &mut NodeBuilder) {
@@ -76,11 +95,12 @@ impl SequenceReader {
                 // a block is open
                 // close it by jumping to this
                 self.current.push(NB::goto(this_label));
-                self.close_block();
-                self.result.push(ast);
+                self.close_block(blockify, b);
+                self.add(blockify, ast, b);
             } else {
                 // block is not open, just push this block
-                self.result.push(ast);
+                //self.result.push(ast);
+                self.add(blockify, ast, b);
             }
         } else if this_is_term {
             // this is not a block, but it is a terminal
@@ -88,13 +108,13 @@ impl SequenceReader {
                 // block is open
                 // close it with the terminal
                 self.current.push(ast);
-                self.close_block();
+                self.close_block(blockify, b);
             } else {
                 // current is not yet open, this is not a block, but it's a terminal
                 // open a new block, and push the terminal, then close the block
                 self.current_label = Some(b.fresh_block_name());
                 self.current.push(ast);
-                self.close_block();
+                self.close_block(blockify, b);
             }
         } else {
             // not a block and not a terminal
@@ -117,7 +137,7 @@ impl SequenceReader {
         //next_block: Option<BlockId>,
         blockify: &mut Blockify,
         b: &mut NodeBuilder,
-    ) -> Vec<AstNode> {
+    ) {
         let mut reader = Self::new();
         for expr in exprs {
             reader.push(expr, blockify, b);
@@ -132,7 +152,7 @@ impl SequenceReader {
             // it needs to be a yield or a return
             reader.push(Ast::CloseBlock.into(), blockify, b);
         }
-        reader.result
+        //reader.result
         //Ok(NB::seq(reader.result.drain(..).collect(), span_id))
     }
 }
@@ -206,8 +226,8 @@ impl Blockify {
 
     fn open_module(&mut self, name: StringKey, b: &mut NodeBuilder) -> (BlockId, ScopeId) {
         let static_scope = self.env.new_scope(ScopeType::Static);
-        self.env.enter_scope(static_scope);
         let block_id = self.env.new_block();
+        self.env.enter_scope(static_scope, block_id);
         let span_id = b.spans.get_span_unknown();
         let entry_id =
             self.push_label_with_block(name.into(), span_id, static_scope, block_id, &[], &[], b);
@@ -220,9 +240,9 @@ impl Blockify {
 
     fn open_function(
         &mut self,
-        name: StringKey,
-        block_id: BlockId,
         scope_id: ScopeId,
+        block_id: BlockId,
+        name: StringKey,
         lambda: &Lambda,
         b: &mut NodeBuilder,
     ) -> SequenceBlock {
@@ -262,85 +282,207 @@ impl Blockify {
     fn close_function(
         &mut self,
         block: &SequenceBlock,
-        lambda: Lambda,
+        lambda: &Lambda,
         span_id: SpanId,
         b: &mut NodeBuilder,
     ) {
         let return_type = b.types.r(lambda.return_type).clone();
         self.add_return_block(block.scope_id, block.next, span_id, return_type, b);
     }
+
+    pub fn test_add_module(
+        &mut self,
+        block_id: BlockId,
+        name: StringKey,
+        body: AstNode,
+        b: &mut NodeBuilder,
+    ) -> Result<SequenceBlock> {
+        assert_eq!(self.env.stack.len(), 0);
+        let static_scope = self.env.new_scope(ScopeType::Static);
+        let entry_id = self.push_label_with_block(
+            name.into(),
+            body.span_id,
+            static_scope,
+            block_id,
+            &[],
+            &[],
+            b,
+        );
+        self.env.enter_scope(static_scope, block_id);
+        for expr in body.to_vec() {
+            self.test_add(block_id, expr, b)?;
+        }
+        self.env.exit_scope();
+        let block = SequenceBlock::module(block_id, static_scope);
+        Ok(block)
+    }
+
+    pub fn test_add_function(
+        &mut self,
+        scope_id: ScopeId,
+        block_id: BlockId,
+        name: StringKey,
+        lambda: Lambda,
+        span_id: SpanId,
+        b: &mut NodeBuilder,
+    ) -> Result<SequenceBlock> {
+        let block = self.open_function(scope_id, block_id, name, &lambda, b);
+        self.test_add(block.start, *lambda.body.unwrap(), b)?;
+        let return_type = b.types.r(lambda.return_type).clone();
+        self.add_return_block(block.scope_id, block.next, span_id, return_type, b);
+        let block = SequenceBlock::normal(block_id, block_id, scope_id);
+        Ok(block)
+    }
+
+    pub fn test_add_return(
+        &mut self,
+        scope_id: ScopeId,
+        block_id: BlockId,
+        span_id: SpanId,
+        arg: Option<AstNode>,
+        //return_type: AstType,
+        b: &mut NodeBuilder,
+    ) -> Result<AddResult> {
+        let mut block_id = block_id.into();
+        let v_args = if let Some(arg) = arg {
+            let r = self.add(block_id, None, arg, b)?;
+            let ty = self.get_type(r.value_id.unwrap());
+
+            block_id = r.entry_id;
+            self.push_code(
+                LCode::Value(r.value_id.unwrap()),
+                span_id,
+                scope_id,
+                block_id,
+                ty,
+                VarDefinitionSpace::Arg,
+            );
+            1
+        } else {
+            0
+        };
+        let v = self.push_code(
+            LCode::Return(v_args),
+            span_id,
+            scope_id,
+            block_id.into(),
+            AstType::Unit,
+            VarDefinitionSpace::Reg,
+        );
+        Ok(AddResult::new(Some(v), false, block_id))
+    }
+
+    pub fn test_add(
+        &mut self,
+        entry_id: BlockId,
+        //maybe_next: Option<BlockId>,
+        node: AstNode,
+        b: &mut NodeBuilder,
+    ) -> Result<SequenceBlock> {
+        println!("ADD");
+        b.dump_ast(&node);
+        match node.node {
+            Ast::Module(name, body) => self.test_add_module(entry_id, name, *body, b),
+
+            Ast::Lambda(_def) => {
+                unimplemented!();
+            }
+
+            Ast::Global(name, expr) => match expr.node {
+                Ast::Lambda(lambda) => {
+                    let scope_id = self.env.current_scope().unwrap();
+                    let block_id = self.resolve_block_id(self.env.static_entry_id());
+                    self.test_add_function(scope_id, block_id, name, lambda, node.span_id, b)
+                }
+                _ => unimplemented!(),
+            },
+
+            Ast::Sequence(exprs) => {
+                let mut block = None;
+                for expr in exprs {
+                    block = Some(self.test_add(entry_id, expr, b)?);
+                }
+
+                Ok(block.unwrap())
+                /*
+                let mut reader = SequenceReader::new();
+                for expr in exprs {
+                    reader.push(expr, self, b);
+                }
+
+                // end of the sequence
+                if let Some(_) = reader.current_label {
+                    // we have an open current
+                    // close it with next
+                    //env
+                    //reader.current.push(NB::goto(next_block.unwrap()));
+                    // it needs to be a yield or a return
+                    reader.push(Ast::CloseBlock.into(), self, b);
+                }
+
+                //SequenceReader::build(exprs, self, b);
+                Ok(())
+                */
+            }
+
+            Ast::Return(maybe_body) => {
+                let scope_id = self.env.current_scope().unwrap();
+                let r = self.test_add_return(
+                    scope_id,
+                    entry_id,
+                    node.span_id,
+                    maybe_body.map(|body| *body),
+                    b,
+                )?;
+                let block = SequenceBlock::normal(entry_id, entry_id, scope_id);
+                Ok(block)
+            }
+
+            Ast::Literal(lit) => {
+                let scope_id = self.env.current_scope().unwrap();
+                let r = self.add_literal_expr(entry_id.into(), lit, node.span_id)?;
+                let block = SequenceBlock::normal(entry_id, entry_id, scope_id);
+                Ok(block)
+            }
+
+            Ast::Block(name, args, body) => {
+                let scope_id = self.env.new_scope(ScopeType::Block);
+                let block_id = self.env.new_block();
+                self.env.enter_scope(scope_id, block_id);
+                self.test_add(entry_id, *body, b)?;
+                self.env.exit_scope();
+                let block = SequenceBlock::normal(entry_id, entry_id, scope_id);
+                Ok(block)
+            }
+
+            Ast::Builtin(_, _) => {
+                let scope_id = self.env.new_scope(ScopeType::Block);
+                let block = SequenceBlock::normal(entry_id, entry_id, scope_id);
+                Ok(block)
+            }
+            _ => {
+                unreachable!();
+                //let r = self._add(entry_id, maybe_next, node, b)?;
+                //let block = SequenceBlock::normal(entry_id, entry_id, scope_id);
+                //Ok(block)
+            }
+        }
+    }
 }
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use super::{SequenceReader as R, *};
+    use super::*;
     //use test_log::test;
 
     #[test]
     fn test_seq() {
         let mut b = NodeBuilder::new();
         let ast = crate::builder::tests::gen_block(&mut b);
-        let span_id = ast.span_id;
-
+        let module: AstNode = Ast::Module(b.labels.s("module"), ast.into()).into();
         let mut blockify = Blockify::new();
-        let (block_id, scope_id) = blockify.open_module(b.labels.s("module"), &mut b);
-        let lambda = Lambda {
-            params: vec![],
-            return_type: b.types.s(&AstType::Unit),
-            body: None,
-        };
-
-        let block = blockify.open_function(b.labels.s("main"), block_id, scope_id, &lambda, &mut b);
-        let r = R::build(vec![Ast::bool(true).into()], &mut blockify, &mut b);
-        let seq = Ast::Sequence(r).into();
-        b.dump_ast(&seq);
-
-        blockify.env.enter_scope(block.scope_id);
-        let r = blockify
-            .add(block.start.into(), Some(block.next), seq, &mut b)
-            .unwrap();
-        println!("{:?}", r);
-        blockify.env.exit_scope();
-
-        blockify.close_function(&block, lambda, span_id, &mut b);
-        blockify.close_module();
+        let block_id = blockify.env.new_block();
+        blockify.test_add(block_id, module, &mut b).unwrap();
+        blockify.dump(&b);
     }
 }
-/*
- *
-    let scope = self.env.get_scope_mut(body_scope_id);
-    scope.return_block = Some(ret_block_id);
-    scope.entry_block = Some(new_block_id);
-
-    self.env.enter_scope(body_scope_id);
-    // next block in body scope
-    self.add_with_next(new_entry_id.into(), *body, ret_block_id.into(), b)?;
-    self.env.exit_scope();
-    self.env.add_succ_static(current_block_id, new_entry_id);
-
-    Ok(AddResult::new(Some(v_decl), false, current_entry_id))
-
-    body_scope_id
-}
-*/
-/*
-        let ret_block_id = self.env.new_block();
-        let scope = self.env.get_scope_mut(body_scope_id);
-        scope.return_block = Some(ret_block_id);
-        scope.entry_block = Some(new_block_id);
-
-        self.env.enter_scope(body_scope_id);
-        // next block in body scope
-        self.add_with_next(new_entry_id.into(), *body, ret_block_id.into(), b)?;
-        self.env.exit_scope();
-        self.env.add_succ_static(current_block_id, new_entry_id);
-
-        let _ = self.add_return_block(body_scope_id, ret_block_id, span_id, return_type, b)?;
-        Ok(AddResult::new(Some(v_decl), false, current_entry_id))
-    }
-}
-        self.env.enter_scope(static_scope);
-        self.add(entry_id.into(), None, *body, b)?;
-        self.env.exit_scope();
-        Ok(entry_id)
-        */

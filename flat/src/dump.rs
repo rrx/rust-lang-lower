@@ -3,7 +3,7 @@ use compile_core::{Argument, AssignTarget, Ast, AstNode, ControlFlowMarker, Span
 
 use tabled::{
     settings::{object::Rows, Border, Style},
-    Table, Tabled,
+    Table,
 };
 
 pub fn print_with_indent(s: &str, depth: usize) {
@@ -41,6 +41,8 @@ impl NodeBuilder {
             }
 
             Ast::Sequence(exprs) => {
+                let s = format!("sequence:");
+                depth += 1;
                 for expr in exprs {
                     self.dump_strings(expr, out, depth);
                 }
