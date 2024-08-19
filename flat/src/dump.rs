@@ -41,7 +41,7 @@ impl NodeBuilder {
             }
 
             Ast::Sequence(exprs) => {
-                let s = format!("sequence:");
+                let _s = format!("sequence:");
                 depth += 1;
                 for expr in exprs {
                     self.dump_strings(expr, out, depth);
@@ -268,7 +268,7 @@ impl NodeBuilder {
 
         for block in blockify.env.blocks.iter() {
             println!("block({:?}, {:?})", block.entry_id, block);
-            let rows = blockify.dump_codes_filter(self, block.entry_id.unwrap());
+            let rows = blockify.dump_codes_filter(self, block.entry_id.unwrap().into());
             let s = Table::new(rows).with(Style::sharp()).to_string();
             println!("{}", s);
         }
