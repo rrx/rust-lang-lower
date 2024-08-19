@@ -15,7 +15,7 @@ use compile_core::{
     LinkOptions, SpanId, StringKey,
 };
 
-use flat::{Blockify, NodeBuilder, NodeBuilder as NB, ValueId};
+use flat::{Blockify, NodeBuilder, NodeBuilder as NB, ValueId, Flatten, FlattenEnvironment};
 
 use lower_mlir::Module;
 
@@ -900,6 +900,12 @@ impl StarlarkParser {
         let module_key = b.labels.s("module");
         let ast: AstNode = parser.parse(Path::new(filename), None, module_key, file_id, b)?;
         b.dump_ast(&ast);
+
+        let mut fenv = FlattenEnvironment::new();
+        let mut flatten = Flatten::new();
+        flatten.flatten(ast, &mut fenv, b).unwrap();
+
+        let ast: AstNode = parser.parse(Path::new(filename), None, module_key, file_id, b)?;
         Ok(ast)
     }
 

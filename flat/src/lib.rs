@@ -6,12 +6,14 @@ mod dump;
 pub mod graph;
 pub mod scope;
 pub mod seq;
+pub mod flatten;
 
 pub use block_format::*;
-pub use blockify::{Blockify, LCode};
+pub use blockify::{Blockify, LCode, BlockifyError};
 pub use builder::*;
 pub use builtin::*;
 pub use scope::{Environment, ScopeId, ScopeLayer, ScopeType, Successor, TemplateId};
+pub use flatten::*;
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 pub struct ValueId(pub(crate) u32);
