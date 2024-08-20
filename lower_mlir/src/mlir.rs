@@ -782,6 +782,7 @@ impl<'c> Lower<'c> {
             }
 
             LCode::Value(_) => (),
+            LCode::Link(_) => (),
             LCode::Noop => (),
 
             LCode::Builtin(id, num_args, _num_kwargs) => {

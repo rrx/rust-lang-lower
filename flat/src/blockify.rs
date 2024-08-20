@@ -14,6 +14,7 @@ use crate::{
     Builtin,
     CodeOffset,
     Environment,
+    LinkId,
     NodeBuilder,
     //NodeBuilder as NB,
     ScopeId,
@@ -42,6 +43,7 @@ pub enum LCode {
     Declare,
     DeclareFunction(Option<BlockId>), // optional entry block
     Value(ValueId),
+    Link(LinkId),
     Arg(u8), // get the value of a positional arg
     Const(Literal),
     Op1(UnaryOperation, ValueId),

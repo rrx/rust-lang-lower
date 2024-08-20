@@ -3,17 +3,17 @@ pub mod blockify;
 pub mod builder;
 pub mod builtin;
 mod dump;
+pub mod flatten;
 pub mod graph;
 pub mod scope;
 pub mod seq;
-pub mod flatten;
 
 pub use block_format::*;
-pub use blockify::{Blockify, LCode, BlockifyError};
+pub use blockify::{Blockify, BlockifyError, LCode};
 pub use builder::*;
 pub use builtin::*;
-pub use scope::{Environment, ScopeId, ScopeLayer, ScopeType, Successor, TemplateId};
 pub use flatten::*;
+pub use scope::{Environment, ScopeId, ScopeLayer, ScopeType, Successor, TemplateId};
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 pub struct ValueId(pub(crate) u32);
@@ -29,7 +29,7 @@ impl ValueId {
 
 impl std::fmt::Display for ValueId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "v{}", self.index())
+        write!(f, "V{}", self.index())
     }
 }
 
@@ -44,7 +44,22 @@ impl BlockId {
 
 impl std::fmt::Display for BlockId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "b{}", self.index())
+        write!(f, "B{}", self.index())
+    }
+}
+
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
+pub struct LinkId(pub(crate) u32);
+
+impl LinkId {
+    pub fn index(&self) -> usize {
+        self.0 as usize
+    }
+}
+
+impl std::fmt::Display for LinkId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "L{}", self.index())
     }
 }
 
