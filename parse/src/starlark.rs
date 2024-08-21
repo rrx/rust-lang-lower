@@ -885,6 +885,30 @@ impl StarlarkParser {
         }
     }
 
+    pub fn flatten(
+        &mut self,
+        filename: &str,
+        b: &mut NodeBuilder,
+        _verbose: bool,
+    ) -> Result<AstNode> {
+        log::debug!("flatten: {}", filename);
+        let file_id = b
+            .spans
+            .add_source(filename.to_string(), std::fs::read_to_string(filename)?);
+        let mut parser = Parser::new();
+        let module_key = b.labels.s("module");
+        let ast: AstNode = parser.parse(Path::new(filename), None, module_key, file_id, b)?;
+        b.dump_ast(&ast);
+
+        let mut fenv = FlattenEnvironment::new();
+        let mut f = Flatten::flatten_module(ast, &mut fenv)?;
+        f.run_loop(&mut fenv, b)?;
+        f.dump(b);
+
+        let ast: AstNode = parser.parse(Path::new(filename), None, module_key, file_id, b)?;
+        Ok(ast)
+    }
+
     pub fn parse(
         &mut self,
         filename: &str,
@@ -900,11 +924,6 @@ impl StarlarkParser {
         let module_key = b.labels.s("module");
         let ast: AstNode = parser.parse(Path::new(filename), None, module_key, file_id, b)?;
         b.dump_ast(&ast);
-
-        let mut fenv = FlattenEnvironment::new();
-        let mut f = Flatten::flatten_module(ast, &mut fenv)?;
-        f.run_loop(&mut fenv, b)?;
-
         let ast: AstNode = parser.parse(Path::new(filename), None, module_key, file_id, b)?;
         Ok(ast)
     }

@@ -1,6 +1,9 @@
 default: run
 
 run:
+	RUST_BACKTRACE=1 cargo run --example flatten tests/bare.star
+
+run_test:
 	RUST_BACKTRACE=1 cargo run --bin parse -- -l -v -x \
 		       -o target/debug/out.mlir \
 		       tests/test_global.star
