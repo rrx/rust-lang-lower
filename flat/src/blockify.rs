@@ -1,6 +1,7 @@
 use anyhow::Error;
 use anyhow::Result;
 use indexmap::IndexMap;
+use std::collections::VecDeque;
 use thiserror::Error;
 
 use compile_core::{
@@ -15,13 +16,16 @@ use crate::{
     CodeOffset,
     Environment,
     LinkId,
+    Node,
     NodeBuilder,
     //NodeBuilder as NB,
     ScopeId,
     ScopeType,
     StringLabel,
+    Successor,
     TemplateId,
     ValueId,
+    CFG,
 };
 
 use tabled::{
@@ -156,14 +160,88 @@ pub trait ICodeModule {
     fn get_code(&self, value_id: ValueId) -> &LCode;
     fn get_next(&self, value_id: ValueId) -> Option<ValueId>;
     fn get_prev(&self, value_id: ValueId) -> Option<ValueId>;
-    fn resolve_declaration<'c>(&self, value_id: ValueId) -> Option<ValueId>;
-    fn get_previous_values(&self, v: ValueId, num: usize) -> Vec<ValueId>;
+
+    fn get_cfg(&self, block_id: BlockId, b: &NodeBuilder) -> CFG {
+        let entry_id = self.resolve_code_offset(block_id.into());
+        self.get_graph(entry_id, Some(Successor::BlockScope), b)
+    }
+
+    fn get_block_successors(&self, entry_id: ValueId) -> Vec<(Successor, CodeOffset)>;
+
+    fn get_graph(&self, entry_id: ValueId, scope: Option<Successor>, b: &NodeBuilder) -> CFG {
+        let mut cfg = CFG::new();
+
+        let mut stack = VecDeque::new();
+        stack.push_back(entry_id);
+
+        loop {
+            if let Some(entry_id) = stack.pop_front() {
+                if cfg.ids.contains_key(&entry_id) {
+                    continue;
+                }
+                let name = self.code_to_string(entry_id, b);
+                let c = cfg.g.add_node(Node::new_block(name, entry_id.into()));
+                cfg.ids.insert(entry_id, c);
+                for (succ_type, next_code_offset) in self.get_block_successors(entry_id) {
+                    let v = self.resolve_code_offset(next_code_offset);
+                    if scope.is_none() || scope == Some(succ_type) {
+                        stack.push_back(v);
+                    }
+                }
+            } else {
+                break;
+            }
+        }
+
+        for entry_id in cfg.ids.keys() {
+            //let block = self.env.get_block(*entry_id);
+            let id = cfg.ids.get(entry_id).unwrap();
+            for (succ_type, next_code_offset) in self.get_block_successors(*entry_id) {
+                if let Successor::BlockScope = succ_type {
+                    let v = self.resolve_code_offset(next_code_offset);
+                    let child_id = cfg.ids.get(&v).unwrap();
+                    cfg.g.add_edge(*id, *child_id, ());
+                }
+            }
+        }
+        cfg
+    }
+
+    fn resolve_declaration<'c>(&self, value_id: ValueId) -> Option<ValueId> {
+        let mut current = value_id;
+        loop {
+            let code = self.get_code(current);
+            if let LCode::Value(next_value_id) = code {
+                current = *next_value_id;
+            } else {
+                return Some(current);
+            }
+        }
+    }
+
+    fn get_previous_values(&self, v: ValueId, num: usize) -> Vec<ValueId> {
+        let mut values = vec![];
+        for i in 0..num {
+            let v = ValueId((v.0 as usize - num + i) as u32);
+            let code = self.get_code(v);
+            if let LCode::Value(value_id) = code {
+                values.push(*value_id);
+            }
+        }
+        values
+    }
+
     fn get_type(&self, v: ValueId) -> AstType;
     fn get_entry_id(&self, value_id: ValueId) -> ValueId;
     fn is_in_static_scope(&self, v: ValueId) -> bool;
     fn get_mem(&self, value_id: ValueId) -> &VarDefinitionSpace;
     fn resolve_code_offset(&self, code_offset: CodeOffset) -> ValueId;
-    fn blocks(&self, b1: BlockId, v2: ValueId, b: &NodeBuilder) -> Vec<CodeOffset>;
+
+    fn blocks(&self, block_id: BlockId, v: ValueId, b: &NodeBuilder) -> Vec<CodeOffset> {
+        let cfg = self.get_cfg(block_id, b);
+        cfg.blocks(v)
+    }
+
     fn get_entry_id_from_block_id(&self, block_id: BlockId) -> ValueId;
     fn dump(&self, b: &NodeBuilder);
 
@@ -249,11 +327,6 @@ impl ICodeModule for Blockify {
         self.names.get(&v).cloned()
     }
 
-    fn blocks(&self, block_id: BlockId, v: ValueId, b: &NodeBuilder) -> Vec<CodeOffset> {
-        let cfg = self.get_cfg(block_id, b);
-        cfg.blocks(v)
-    }
-
     fn get_code(&self, value_id: ValueId) -> &LCode {
         self.code.get(value_id.index()).unwrap()
     }
@@ -276,36 +349,17 @@ impl ICodeModule for Blockify {
         }
     }
 
+    fn get_block_successors(&self, entry_id: ValueId) -> Vec<(Successor, CodeOffset)> {
+        let block = self.env.get_block(entry_id);
+        block.succ.iter().cloned().collect::<Vec<_>>()
+    }
+
     fn get_entry_id(&self, value_id: ValueId) -> ValueId {
         *self.entries.get(value_id.index()).unwrap()
     }
 
     fn get_entry_id_from_block_id(&self, block_id: BlockId) -> ValueId {
         self.env.get_block_by_block_id(block_id).entry_id.unwrap()
-    }
-
-    fn resolve_declaration<'c>(&self, value_id: ValueId) -> Option<ValueId> {
-        let mut current = value_id;
-        loop {
-            let code = self.get_code(current);
-            if let LCode::Value(next_value_id) = code {
-                current = *next_value_id;
-            } else {
-                return Some(current);
-            }
-        }
-    }
-
-    fn get_previous_values(&self, v: ValueId, num: usize) -> Vec<ValueId> {
-        let mut values = vec![];
-        for i in 0..num {
-            let v = ValueId((v.0 as usize - num + i) as u32);
-            let code = self.get_code(v);
-            if let LCode::Value(value_id) = code {
-                values.push(*value_id);
-            }
-        }
-        values
     }
 
     fn get_type(&self, v: ValueId) -> AstType {
@@ -325,6 +379,7 @@ impl ICodeModule for Blockify {
     fn get_mem(&self, value_id: ValueId) -> &VarDefinitionSpace {
         self.mem.get(value_id.index()).unwrap()
     }
+
     fn resolve_code_offset(&self, code_offset: CodeOffset) -> ValueId {
         self.env.resolve_code_offset(code_offset)
     }

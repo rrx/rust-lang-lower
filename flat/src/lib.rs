@@ -13,6 +13,7 @@ pub use blockify::{Blockify, BlockifyError, ICodeModule, LCode};
 pub use builder::*;
 pub use builtin::*;
 pub use flatten::*;
+pub use graph::{Node, CFG};
 pub use scope::{Environment, ScopeId, ScopeLayer, ScopeType, Successor, TemplateId};
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]

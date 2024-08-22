@@ -11,6 +11,8 @@ use crate::{
     BlockId,
     BlockifyError,
     Builtin,
+    CodeOffset,
+    ICodeModule,
     LCode,
     LinkId,
     NodeBuilder,
@@ -18,6 +20,8 @@ use crate::{
     ScopeLayer,
     //NodeBuilder as NB,
     ScopeType,
+    StringLabel,
+    Successor,
     TemplateId,
     ValueId,
 };
@@ -100,6 +104,8 @@ pub struct ModuleEntry {
     block_id: BlockId,
     ty: Option<AstType>,
     span_id: SpanId,
+    mem: VarDefinitionSpace,
+    scope_type: ScopeType,
 }
 
 impl ModuleEntry {
@@ -107,18 +113,21 @@ impl ModuleEntry {
         value_id: ValueId,
         next: ValueId,
         prev: ValueId,
+        scope_type: ScopeType,
         entry: CodeEntry,
     ) -> ModuleEntry {
         Self {
             value_id,
             next,
             prev,
+            scope_type,
             code: entry.code,
             name: entry.name,
             link: entry.link,
             block_id: entry.block_id,
             ty: entry.ty,
             span_id: entry.span_id,
+            mem: entry.mem,
         }
     }
 }
@@ -131,6 +140,7 @@ pub struct CodeEntry {
     block_id: BlockId,
     ty: Option<AstType>,
     span_id: SpanId,
+    mem: VarDefinitionSpace,
 }
 
 impl CodeEntry {
@@ -142,11 +152,17 @@ impl CodeEntry {
             link: None,
             ty: None,
             span_id,
+            mem: VarDefinitionSpace::Default,
         }
     }
 
     pub fn add_type(mut self, ty: AstType) -> Self {
         self.ty = Some(ty);
+        self
+    }
+
+    pub fn add_mem(mut self, mem: VarDefinitionSpace) -> Self {
+        self.mem = mem;
         self
     }
 }
@@ -158,6 +174,7 @@ pub struct IRBlock {
     next: Option<BlockId>,
     ret: Option<BlockId>,
     links: Vec<LinkId>,
+    succ: Vec<(Successor, BlockId)>,
 }
 
 impl IRBlock {
@@ -169,6 +186,7 @@ impl IRBlock {
             links: vec![],
             ret: None,
             next: None,
+            succ: vec![],
         }
     }
 
@@ -182,6 +200,10 @@ impl IRBlock {
 
     pub fn add_ret(&mut self, block_id: BlockId) {
         self.ret = Some(block_id);
+    }
+
+    pub fn add_succ(&mut self, block_id: BlockId, succ_type: Successor) {
+        self.succ.push((succ_type, block_id));
     }
 }
 
@@ -200,29 +222,24 @@ impl FlattenResult {
 pub struct FlattenModule {
     entries: Vec<ModuleEntry>,
     link_map: HashMap<LinkId, ValueId>,
+    block_map: HashMap<BlockId, ValueId>,
+    succ: HashMap<BlockId, Vec<(Successor, CodeOffset)>>,
 }
-impl FlattenModule {
-    pub fn new() -> Self {
-        Self {
-            entries: vec![],
-            link_map: HashMap::new(),
-        }
+
+impl ICodeModule for FlattenModule {
+    fn get_span_id(&self, value_id: ValueId) -> SpanId {
+        let entry = self.get_entry(value_id);
+        entry.span_id
     }
 
-    pub fn add(&mut self, mentry: ModuleEntry) {
-        self.link_map.insert(mentry.link.unwrap(), mentry.value_id);
-        self.entries.push(mentry);
+    fn get_name(&self, v: ValueId) -> Option<StringLabel> {
+        self.get_entry(v).name.map(|n| n.into())
     }
 
-    pub fn get_code(&self, value_id: ValueId) -> &LCode {
+    fn get_code(&self, value_id: ValueId) -> &LCode {
         &self.get_entry(value_id).code
     }
-
-    pub fn get_entry(&self, value_id: ValueId) -> &ModuleEntry {
-        self.entries.get(value_id.index()).unwrap()
-    }
-
-    pub fn get_next(&self, value_id: ValueId) -> Option<ValueId> {
+    fn get_next(&self, value_id: ValueId) -> Option<ValueId> {
         let entry = self.get_entry(value_id);
         if entry.next != value_id {
             Some(entry.next)
@@ -231,7 +248,7 @@ impl FlattenModule {
         }
     }
 
-    pub fn get_prev(&self, value_id: ValueId) -> Option<ValueId> {
+    fn get_prev(&self, value_id: ValueId) -> Option<ValueId> {
         let entry = self.get_entry(value_id);
         if entry.prev != value_id {
             Some(entry.prev)
@@ -240,22 +257,41 @@ impl FlattenModule {
         }
     }
 
-    pub fn get_span_id(&self, value_id: ValueId) -> SpanId {
-        let entry = self.get_entry(value_id);
-        entry.span_id
+    fn get_block_successors(&self, entry_id: ValueId) -> Vec<(Successor, CodeOffset)> {
+        let entry = self.get_entry(entry_id);
+        let block_id = entry.block_id;
+        self.succ.get(&block_id).unwrap().clone()
     }
 
-    pub fn get_span(&self, value_id: ValueId, b: &NodeBuilder) -> Span {
-        let span_id = self.get_span_id(value_id);
-        b.spans.lookup(span_id)
+    fn get_type(&self, v: ValueId) -> AstType {
+        let entry = self.get_entry(v);
+        entry.clone().ty.unwrap()
     }
 
-    pub fn get_code_by_link(&self, link_id: LinkId) -> &LCode {
-        let value_id = self.link_map.get(&link_id).unwrap();
-        self.get_code(*value_id)
+    fn get_entry_id(&self, value_id: ValueId) -> ValueId {
+        let block_id = self.get_entry(value_id).block_id;
+        *self.block_map.get(&block_id).unwrap()
     }
 
-    pub fn dump(&self, b: &NodeBuilder) {
+    fn is_in_static_scope(&self, v: ValueId) -> bool {
+        self.get_entry(v).scope_type == ScopeType::Static
+    }
+
+    fn get_mem(&self, value_id: ValueId) -> &VarDefinitionSpace {
+        &self.get_entry(value_id).mem
+    }
+
+    fn resolve_code_offset(&self, code_offset: CodeOffset) -> ValueId {
+        match code_offset {
+            CodeOffset::Value(v) => v,
+            CodeOffset::Block(block_id) => *self.block_map.get(&block_id).unwrap(),
+        }
+    }
+
+    fn get_entry_id_from_block_id(&self, block_id: BlockId) -> ValueId {
+        self.resolve_code_offset(block_id.into())
+    }
+    fn dump(&self, b: &NodeBuilder) {
         for entry in self.entries.iter() {
             let name = entry.name.map(|n| b.labels.r(n.into()));
             println!(
@@ -270,6 +306,37 @@ impl FlattenModule {
                 entry.ty
             );
         }
+    }
+}
+
+impl FlattenModule {
+    pub fn new() -> Self {
+        Self {
+            entries: vec![],
+            link_map: HashMap::new(),
+            block_map: HashMap::new(),
+            succ: HashMap::new(),
+        }
+    }
+
+    pub fn add(&mut self, mentry: ModuleEntry) {
+        self.link_map.insert(mentry.link.unwrap(), mentry.value_id);
+        self.block_map.insert(mentry.block_id, mentry.value_id);
+        self.entries.push(mentry);
+    }
+
+    pub fn get_entry(&self, value_id: ValueId) -> &ModuleEntry {
+        self.entries.get(value_id.index()).unwrap()
+    }
+
+    pub fn get_span(&self, value_id: ValueId, b: &NodeBuilder) -> Span {
+        let span_id = self.get_span_id(value_id);
+        b.spans.lookup(span_id)
+    }
+
+    pub fn get_code_by_link(&self, link_id: LinkId) -> &LCode {
+        let value_id = self.link_map.get(&link_id).unwrap();
+        self.get_code(*value_id)
     }
 }
 
@@ -294,13 +361,23 @@ impl Flatten {
         }
     }
 
-    pub fn module(self, b: &NodeBuilder) -> FlattenModule {
+    pub fn module(self, fenv: &FlattenEnvironment, _b: &NodeBuilder) -> FlattenModule {
         assert!(self.ast_blocks.is_empty());
         let mut m = FlattenModule::new();
 
         let mut value_count = 0;
         for block_id in self.ir_blocks.iter() {
             let block = self.get_block(*block_id);
+
+            m.succ.insert(
+                *block_id,
+                block
+                    .succ
+                    .iter()
+                    .map(|(a, b)| (*a, (*b).into()))
+                    .collect::<Vec<_>>(),
+            );
+
             for (index, link_id) in block.links.iter().enumerate() {
                 let entry = self.get_entry(*link_id).clone();
                 let v = ValueId(value_count);
@@ -312,7 +389,9 @@ impl Flatten {
                 if index < block.links.len() - 1 {
                     next = ValueId(value_count + 1);
                 }
-                let mentry = ModuleEntry::from_code_entry(v, next, prev, entry);
+                let scope_id = block.stack.last().unwrap();
+                let scope = fenv.get_scope(*scope_id);
+                let mentry = ModuleEntry::from_code_entry(v, next, prev, scope.scope_type, entry);
                 m.add(mentry);
                 value_count += 1;
             }
@@ -402,9 +481,17 @@ impl Flatten {
         block_id
     }
 
-    pub fn successor(&mut self, block_id: BlockId, ast: Option<AstNode>) -> BlockId {
+    pub fn successor(
+        &mut self,
+        block_id: BlockId,
+        ast: Option<AstNode>,
+        succ_type: Successor,
+    ) -> BlockId {
         let block = self.get_block(block_id);
-        self._successor(block_id, ast, None, block.ret, block.next)
+        let succ_block_id = self._successor(block_id, ast, None, block.ret, block.next);
+        let block = self.get_block_mut(block_id);
+        block.add_succ(succ_block_id, succ_type);
+        succ_block_id
     }
 
     pub fn function_successor(
@@ -498,7 +585,8 @@ impl Flatten {
             AstType::Unit => vec![],
             _ => vec![return_type.clone()],
         };
-        let ret_block_id = self.successor(fun_block_id, None);
+        let ret_block_id = self.successor(fun_block_id, None, Successor::BlockScope);
+
         let code = LCode::Label(args.len() as u8, 0);
         let entry =
             CodeEntry::new(ret_block_id, code, Some(name), span_id).add_type(return_type.clone());
@@ -584,7 +672,11 @@ impl Flatten {
                         let fun_ty = AstType::Func(params, return_type.into());
 
                         let r = if let Some(body) = def.body {
-                            let fun_block_id = self.successor(block_id, Some(*body));
+                            let fun_block_id = self.successor(
+                                block_id,
+                                Some(*body),
+                                Successor::FunctionDeclaration,
+                            );
                             let code = LCode::Label(0, 0);
                             let entry = CodeEntry::new(fun_block_id, code, Some(name), span_id);
                             self.push_entry_with_link(fun_block_id, entry);
