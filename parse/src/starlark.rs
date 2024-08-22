@@ -938,7 +938,7 @@ impl StarlarkParser {
     ) -> Result<(Blockify, ValueId)> {
         let mut blockify = Blockify::new();
         let r = blockify.build_module(ast, b);
-        dump::env::blockify_dump(&blockify, b);
+        blockify.dump(b);
         dump::code::save_graph(&blockify, "out.dot", b);
 
         let j = dump::code::get_json(&blockify, b);
