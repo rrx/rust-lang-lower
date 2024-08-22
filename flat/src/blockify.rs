@@ -36,7 +36,7 @@ pub struct LoopLayer {
     restart: ValueId,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum LCode {
     Label(u8, u8), // number of positional arguments, number of named arguments
     Noop,
@@ -144,6 +144,73 @@ pub struct PendingResult {
     ty: AstType,
 }
 
+pub trait ICodeModule {
+    fn get_span_id(&self, value_id: ValueId) -> SpanId;
+    fn get_name(&self, v: ValueId) -> Option<StringLabel>;
+    fn get_code(&self, value_id: ValueId) -> &LCode;
+    fn get_next(&self, value_id: ValueId) -> Option<ValueId>;
+    fn get_prev(&self, value_id: ValueId) -> Option<ValueId>;
+    fn resolve_declaration<'c>(&self, value_id: ValueId) -> Option<ValueId>;
+    fn get_previous_values(&self, v: ValueId, num: usize) -> Vec<ValueId>;
+    fn get_type(&self, v: ValueId) -> AstType;
+    fn get_entry_id(&self, value_id: ValueId) -> ValueId;
+    fn is_in_static_scope(&self, v: ValueId) -> bool;
+    fn get_mem(&self, value_id: ValueId) -> &VarDefinitionSpace;
+    fn resolve_code_offset(&self, code_offset: CodeOffset) -> ValueId;
+    fn blocks(&self, b1: BlockId, v2: ValueId, b: &NodeBuilder) -> Vec<CodeOffset>;
+    fn get_entry_id_from_block_id(&self, block_id: BlockId) -> ValueId;
+
+    fn code_to_string(&self, v: ValueId, b: &NodeBuilder) -> String {
+        let code = self.get_code(v);
+        match code {
+            LCode::Declare => {
+                let code_str = b.labels.r(self.get_name(v).unwrap());
+                format!("declare {}: {:?}", code_str, self.get_type(v))
+            }
+
+            LCode::DeclareFunction(maybe_entry) => {
+                let code_str = b.labels.r(self.get_name(v).unwrap());
+                if let Some(entry_id) = maybe_entry {
+                    format!("declare_function({},{:?})", code_str, entry_id)
+                } else {
+                    format!("declare_function({})", code_str)
+                }
+            }
+
+            LCode::Label(args, kwargs) => {
+                if let Some(key) = self.get_name(v) {
+                    format!("label({}, {}, {})", b.labels.r(key), args, kwargs,)
+                } else {
+                    format!("label(-, {}, {})", args, kwargs,)
+                }
+            }
+
+            //LCode::Goto(block_id) => {
+            //format!("goto({})", b.labels.r((*block_id).into()))
+            //}
+            LCode::Jump(value_id, args) => {
+                format!("jump({:?}, {})", value_id, args,)
+            }
+
+            LCode::Const(Literal::String(s)) => {
+                format!("String({})", s)
+            }
+
+            LCode::Ternary(c, x, y) => {
+                format!("Ternary({},{},{})", c.0, x, y)
+            }
+
+            LCode::Branch(c, x, y) => {
+                format!("Branch({},{},{})", c.0, x, y)
+            }
+
+            _ => {
+                format!("{:?}", code)
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Blockify {
     // table entries
@@ -164,6 +231,96 @@ pub struct Blockify {
     // sparse names
     names: IndexMap<ValueId, StringLabel>,
     link: LinkOptions,
+}
+
+impl ICodeModule for Blockify {
+    fn get_span_id(&self, value_id: ValueId) -> SpanId {
+        self.span.get(value_id.index()).unwrap().clone()
+    }
+
+    fn get_name(&self, v: ValueId) -> Option<StringLabel> {
+        self.names.get(&v).cloned()
+    }
+
+    fn blocks(&self, block_id: BlockId, v: ValueId, b: &NodeBuilder) -> Vec<CodeOffset> {
+        let cfg = self.get_cfg(block_id, b);
+        cfg.blocks(v)
+    }
+
+    fn get_code(&self, value_id: ValueId) -> &LCode {
+        self.code.get(value_id.index()).unwrap()
+    }
+
+    fn get_next(&self, value_id: ValueId) -> Option<ValueId> {
+        let next = self.next_pos[value_id.index()];
+        if next != value_id {
+            Some(next)
+        } else {
+            None
+        }
+    }
+
+    fn get_prev(&self, value_id: ValueId) -> Option<ValueId> {
+        let prev = self.prev_pos[value_id.index()];
+        if prev != value_id {
+            Some(prev)
+        } else {
+            None
+        }
+    }
+
+    fn get_entry_id(&self, value_id: ValueId) -> ValueId {
+        *self.entries.get(value_id.index()).unwrap()
+    }
+
+    fn get_entry_id_from_block_id(&self, block_id: BlockId) -> ValueId {
+        self.env.get_block_by_block_id(block_id).entry_id.unwrap()
+    }
+
+    fn resolve_declaration<'c>(&self, value_id: ValueId) -> Option<ValueId> {
+        let mut current = value_id;
+        loop {
+            let code = self.get_code(current);
+            if let LCode::Value(next_value_id) = code {
+                current = *next_value_id;
+            } else {
+                return Some(current);
+            }
+        }
+    }
+
+    fn get_previous_values(&self, v: ValueId, num: usize) -> Vec<ValueId> {
+        let mut values = vec![];
+        for i in 0..num {
+            let v = ValueId((v.0 as usize - num + i) as u32);
+            let code = self.get_code(v);
+            if let LCode::Value(value_id) = code {
+                values.push(*value_id);
+            }
+        }
+        values
+    }
+
+    fn get_type(&self, v: ValueId) -> AstType {
+        self.types.get(v.0 as usize).unwrap().clone()
+    }
+
+    fn is_in_static_scope(&self, v: ValueId) -> bool {
+        let scope_id = self.get_scope_id(v);
+        let scope = self.env.get_scope(scope_id);
+        if let ScopeType::Static = scope.scope_type {
+            true
+        } else {
+            false
+        }
+    }
+
+    fn get_mem(&self, value_id: ValueId) -> &VarDefinitionSpace {
+        self.mem.get(value_id.index()).unwrap()
+    }
+    fn resolve_code_offset(&self, code_offset: CodeOffset) -> ValueId {
+        self.env.resolve_code_offset(code_offset)
+    }
 }
 
 impl Blockify {
@@ -205,80 +362,8 @@ impl Blockify {
         self.templates.get(template_id.index()).unwrap()
     }
 
-    pub fn get_code(&self, value_id: ValueId) -> &LCode {
-        self.code.get(value_id.index()).unwrap()
-    }
-
-    pub fn get_span_id(&self, value_id: ValueId) -> SpanId {
-        self.span.get(value_id.index()).unwrap().clone()
-    }
-
-    pub fn get_mem(&self, value_id: ValueId) -> &VarDefinitionSpace {
-        self.mem.get(value_id.index()).unwrap()
-    }
-
-    pub fn get_entry_id(&self, value_id: ValueId) -> ValueId {
-        *self.entries.get(value_id.index()).unwrap()
-    }
-
     pub fn get_scope_id(&self, value_id: ValueId) -> ScopeId {
         *self.scopes.get(value_id.index()).unwrap()
-    }
-
-    pub fn get_name(&self, v: ValueId) -> Option<StringLabel> {
-        self.names.get(&v).cloned()
-    }
-
-    pub fn is_in_static_scope(&self, v: ValueId) -> bool {
-        let scope_id = self.get_scope_id(v);
-        let scope = self.env.get_scope(scope_id);
-        if let ScopeType::Static = scope.scope_type {
-            true
-        } else {
-            false
-        }
-    }
-
-    pub fn get_next(&self, value_id: ValueId) -> Option<ValueId> {
-        let next = self.next_pos[value_id.index()];
-        if next != value_id {
-            Some(next)
-        } else {
-            None
-        }
-    }
-
-    pub fn get_prev(&self, value_id: ValueId) -> Option<ValueId> {
-        let prev = self.prev_pos[value_id.index()];
-        if prev != value_id {
-            Some(prev)
-        } else {
-            None
-        }
-    }
-
-    pub fn get_previous_values(&self, v: ValueId, num: usize) -> Vec<ValueId> {
-        let mut values = vec![];
-        for i in 0..num {
-            let v = ValueId((v.0 as usize - num + i) as u32);
-            let code = self.get_code(v);
-            if let LCode::Value(value_id) = code {
-                values.push(*value_id);
-            }
-        }
-        values
-    }
-
-    pub fn resolve_declaration<'c>(&self, value_id: ValueId) -> Option<ValueId> {
-        let mut current = value_id;
-        loop {
-            let code = self.get_code(current);
-            if let LCode::Value(next_value_id) = code {
-                current = *next_value_id;
-            } else {
-                return Some(current);
-            }
-        }
     }
 
     pub fn push_code_with_name(
@@ -480,10 +565,6 @@ impl Blockify {
             CodeOffset::Value(value_id) => self.env.block_map.get(&value_id).unwrap().clone(),
             CodeOffset::Block(block_id) => block_id,
         }
-    }
-
-    pub fn get_type(&self, v: ValueId) -> AstType {
-        self.types.get(v.0 as usize).unwrap().clone()
     }
 
     pub fn build_module(&mut self, node: AstNode, b: &mut NodeBuilder) -> Result<ValueId> {
@@ -1748,7 +1829,7 @@ impl Blockify {
                 self.add_loop(entry_id, maybe_next.unwrap(), name, *body, b)
             }
 
-            Ast::Block(name, args, body) => {
+            Ast::Block(name, _args, body) => {
                 let block_id = self.env.new_block();
                 self.add_block_with_expr(name.into(), block_id, maybe_next, *body, &[], &[], b)
             }

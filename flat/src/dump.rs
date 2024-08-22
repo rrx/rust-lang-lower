@@ -1,4 +1,4 @@
-use crate::{block_format::LCodeIterator, Blockify, Environment, NodeBuilder};
+use crate::{block_format::LCodeIterator, Blockify, Environment, ICodeModule, NodeBuilder};
 use compile_core::{Argument, AssignTarget, Ast, AstNode, ControlFlowMarker, SpanId};
 
 use tabled::{

@@ -903,7 +903,9 @@ impl StarlarkParser {
         let mut fenv = FlattenEnvironment::new();
         let mut f = Flatten::flatten_module(ast, &mut fenv)?;
         f.run_loop(&mut fenv, b)?;
-        f.dump(b);
+        f.dump_ast(b);
+        let m = f.module(b);
+        m.dump(b);
 
         let ast: AstNode = parser.parse(Path::new(filename), None, module_key, file_id, b)?;
         Ok(ast)

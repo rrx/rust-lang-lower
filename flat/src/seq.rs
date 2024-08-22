@@ -5,8 +5,17 @@ use compile_core::{
 };
 
 use crate::{
-    blockify::AddResult, BlockId, Blockify, CodeOffset, Environment, LCode, NodeBuilder,
-    NodeBuilder as NB, ScopeId, ScopeType,
+    blockify::AddResult,
+    BlockId,
+    Blockify,
+    ICodeModule,
+    //CodeOffset,
+    //Environment,
+    LCode,
+    NodeBuilder,
+    NodeBuilder as NB,
+    ScopeId,
+    ScopeType,
 };
 
 enum BlockType {

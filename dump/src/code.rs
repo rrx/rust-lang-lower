@@ -1,6 +1,6 @@
 use compile_core::Literal;
 use flat::block_format::LCodeIterator;
-use flat::{Blockify, CodeOffset, CodeRow, LCode, NodeBuilder, ValueId};
+use flat::{Blockify, CodeOffset, CodeRow, ICodeModule, LCode, NodeBuilder, ValueId};
 
 fn format_html_header() -> String {
     let mut s = String::new();

@@ -2,10 +2,14 @@ use std::collections::VecDeque;
 
 use compile_core::{AstType, Literal};
 
-use crate::{Blockify, LCode, NodeBuilder, ValueId};
+use crate::{Blockify, ICodeModule, LCode, NodeBuilder, ValueId};
 use serde::Serialize;
 use tabled::{
-    settings::{object::Rows, Border, Style},
+    settings::{
+        //object::Rows,
+        //Border,
+        Style,
+    },
     Table, Tabled,
 };
 
@@ -99,56 +103,6 @@ impl Blockify {
             entry_id: entry_id.index(),
             block_id: block_id.index(),
             term: code.is_term(),
-        }
-    }
-
-    pub fn code_to_string(&self, v: ValueId, b: &NodeBuilder) -> String {
-        let code = self.get_code(v);
-        match code {
-            LCode::Declare => {
-                let code_str = b.labels.r(self.get_name(v).unwrap());
-                format!("declare {}: {:?}", code_str, self.get_type(v))
-            }
-
-            LCode::DeclareFunction(maybe_entry) => {
-                let code_str = b.labels.r(self.get_name(v).unwrap());
-                if let Some(entry_id) = maybe_entry {
-                    format!("declare_function({},{:?})", code_str, entry_id)
-                } else {
-                    format!("declare_function({})", code_str)
-                }
-            }
-
-            LCode::Label(args, kwargs) => {
-                if let Some(key) = self.get_name(v) {
-                    format!("label({}, {}, {})", b.labels.r(key), args, kwargs,)
-                } else {
-                    format!("label(-, {}, {})", args, kwargs,)
-                }
-            }
-
-            //LCode::Goto(block_id) => {
-            //format!("goto({})", b.labels.r((*block_id).into()))
-            //}
-            LCode::Jump(value_id, args) => {
-                format!("jump({:?}, {})", value_id, args,)
-            }
-
-            LCode::Const(Literal::String(s)) => {
-                format!("String({})", s)
-            }
-
-            LCode::Ternary(c, x, y) => {
-                format!("Ternary({},{},{})", c.0, x, y)
-            }
-
-            LCode::Branch(c, x, y) => {
-                format!("Branch({},{},{})", c.0, x, y)
-            }
-
-            _ => {
-                format!("{:?}", code)
-            }
         }
     }
 }

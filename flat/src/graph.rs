@@ -6,7 +6,7 @@ use std::collections::VecDeque;
 
 use crate::NodeBuilder;
 
-use crate::{BlockId, Blockify, CodeOffset, Successor, ValueId};
+use crate::{BlockId, Blockify, CodeOffset, ICodeModule, Successor, ValueId};
 
 #[derive(Debug)]
 pub enum Shape {

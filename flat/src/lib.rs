@@ -9,7 +9,7 @@ pub mod scope;
 pub mod seq;
 
 pub use block_format::*;
-pub use blockify::{Blockify, BlockifyError, LCode};
+pub use blockify::{Blockify, BlockifyError, ICodeModule, LCode};
 pub use builder::*;
 pub use builtin::*;
 pub use flatten::*;

@@ -1,5 +1,5 @@
 use anyhow::Result;
-use flat::{Blockify, Builtin, LCode, NodeBuilder, StringLabel, ValueId};
+use flat::{Builtin, ICodeModule, LCode, NodeBuilder, StringLabel, ValueId};
 use indexmap::IndexMap;
 use melior::ir::Location;
 use melior::{
@@ -213,7 +213,7 @@ impl<'c> Lower<'c> {
 
 impl<'c> Lower<'c> {
     pub fn get_location(
-        blockify: &Blockify,
+        blockify: &dyn ICodeModule,
         value_id: ValueId,
         context: &'c Context,
         b: &NodeBuilder,
@@ -224,7 +224,7 @@ impl<'c> Lower<'c> {
         location
     }
 
-    pub fn resolve_value(&self, blockify: &Blockify, value_id: ValueId) -> Option<SymIndex> {
+    pub fn resolve_value(&self, blockify: &dyn ICodeModule, value_id: ValueId) -> Option<SymIndex> {
         if let Some(v_decl) = blockify.resolve_declaration(value_id) {
             let mut current = v_decl;
             loop {
@@ -244,7 +244,7 @@ impl<'c> Lower<'c> {
 
     pub fn get_label_args(
         &self,
-        blockify: &Blockify,
+        blockify: &dyn ICodeModule,
         context: &'c Context,
         v: ValueId,
         num_args: usize,
@@ -273,7 +273,7 @@ impl<'c> Lower<'c> {
 
     pub fn create_block(
         &self,
-        blockify: &Blockify,
+        blockify: &dyn ICodeModule,
         blocks: &mut LowerBlocks<'c>,
         entry_id: ValueId,
         b: &NodeBuilder,
@@ -298,7 +298,7 @@ impl<'c> Lower<'c> {
 
     pub fn lower_jump(
         &mut self,
-        blockify: &Blockify,
+        blockify: &dyn ICodeModule,
         blocks: &mut LowerBlocks<'c>,
         v: ValueId,
         target_value_id: ValueId,
@@ -328,7 +328,7 @@ impl<'c> Lower<'c> {
 
     pub fn lower_code(
         &mut self,
-        blockify: &Blockify,
+        blockify: &dyn ICodeModule,
         blocks: &mut LowerBlocks<'c>,
         v: ValueId,
         stack: &mut Vec<ValueId>,
@@ -353,11 +353,12 @@ impl<'c> Lower<'c> {
             }
 
             LCode::Jump(target, num_args) => {
-                let target_entry_id = blockify
-                    .env
-                    .get_block_by_block_id(*target)
-                    .entry_id
-                    .unwrap();
+                let target_entry_id = blockify.get_entry_id_from_block_id(*target);
+                //let target_entry_id = blockify
+                //.env
+                //.get_block_by_block_id(*target)
+                //.entry_id
+                //.unwrap();
                 self.lower_jump(blockify, blocks, v, target_entry_id, *num_args, b)?;
             }
 
@@ -433,7 +434,7 @@ impl<'c> Lower<'c> {
                 self.index.insert(v, index);
             }
 
-            LCode::DeclareFunction(maybe_entry_id) => {
+            LCode::DeclareFunction(maybe_block_id) => {
                 let static_block_id = self.module_block_id;
                 let _block_id = blockify.get_entry_id(v);
                 let key = blockify.get_name(v).unwrap();
@@ -445,30 +446,30 @@ impl<'c> Lower<'c> {
                 let c = blocks.blocks.get_mut(&static_block_id).unwrap();
                 let index = c.push(op);
                 self.index.insert(v, index);
-                if let Some(entry_id) = maybe_entry_id {
+                if let Some(block_id) = maybe_block_id {
                     let op = blocks.op_ref(index);
                     op.set_attribute("llvm.emit_c_interface", &Attribute::unit(self.context));
-
-                    let cfg = blockify.get_cfg((*entry_id).into(), b);
-                    let offset = entry_id.clone().into();
-                    let entry_id = blockify.env.resolve_code_offset(offset);
-                    let block_ids = cfg.blocks(entry_id);
+                    let offset = block_id.clone().into();
+                    let entry_id = blockify.resolve_code_offset(offset);
+                    let block_ids = blockify.blocks(*block_id, entry_id, b);
+                    //let cfg = blockify.get_cfg((*entry_id).into(), b);
+                    //let block_ids = cfg.blocks(entry_id);
 
                     // create blocks
                     for block_id in block_ids.iter() {
-                        let entry_id = blockify.env.resolve_code_offset(*block_id);
+                        let entry_id = blockify.resolve_code_offset(*block_id);
                         self.create_block(blockify, blocks, entry_id, b);
                     }
 
                     // lower
                     for block_id in block_ids.iter() {
-                        let entry_id = blockify.env.resolve_code_offset(*block_id);
+                        let entry_id = blockify.resolve_code_offset(*block_id);
                         self.lower_block(blockify, entry_id, blocks, stack, b)?;
                     }
 
                     // append blocks to region
                     for block_id in block_ids.iter() {
-                        let entry_id = blockify.env.resolve_code_offset(*block_id);
+                        let entry_id = blockify.resolve_code_offset(*block_id);
                         blocks.append_op(index, entry_id, 0);
                     }
                 }
@@ -668,8 +669,8 @@ impl<'c> Lower<'c> {
             }
 
             LCode::Branch(condition, then_block_id, else_block_id) => {
-                let v_then = blockify.env.resolve_code_offset((*then_block_id).into());
-                let v_else = blockify.env.resolve_code_offset((*else_block_id).into());
+                let v_then = blockify.resolve_code_offset((*then_block_id).into());
+                let v_else = blockify.resolve_code_offset((*else_block_id).into());
 
                 let c_index = self.resolve_value(blockify, *condition).unwrap();
                 let r_c = blocks.value0(c_index);
@@ -698,18 +699,17 @@ impl<'c> Lower<'c> {
             LCode::Ternary(condition, then_block_id, else_block_id) => {
                 // THEN
                 //let then_block_id = blockify.get_entry_id(*v_then);
-                //let then_block_id = blockify.env.resolve_code_offset(v_then);
+                //let then_block_id = blockify.resolve_code_offset(v_then);
                 let then_block_id = *then_block_id;
-                let v_then = blockify.env.resolve_code_offset(then_block_id.into());
-                let cfg = blockify.get_cfg(then_block_id.into(), b);
-                let then_block_ids = cfg.blocks(v_then);
+                let v_then = blockify.resolve_code_offset(then_block_id.into());
+                let then_block_ids = blockify.blocks(then_block_id, v_then, b);
 
                 for block_id in then_block_ids.iter() {
-                    let entry_id = blockify.env.resolve_code_offset(*block_id);
+                    let entry_id = blockify.resolve_code_offset(*block_id);
                     self.create_block(blockify, blocks, entry_id, b);
                 }
                 for block_id in then_block_ids.iter() {
-                    let entry_id = blockify.env.resolve_code_offset(*block_id);
+                    let entry_id = blockify.resolve_code_offset(*block_id);
                     self.lower_block(blockify, entry_id, blocks, stack, b)?;
                 }
 
@@ -720,18 +720,17 @@ impl<'c> Lower<'c> {
 
                 // ELSE
                 //let else_block_id = blockify.get_entry_id(*v_else);
-                //let else_block_id = blockify.env.resolve_code_offset(*v_else);
+                //let else_block_id = blockify.resolve_code_offset(*v_else);
                 let else_block_id = *else_block_id;
-                let v_else = blockify.env.resolve_code_offset(else_block_id.into());
-                let cfg = blockify.get_cfg(else_block_id.into(), b);
-                let else_block_ids = cfg.blocks(v_else);
+                let v_else = blockify.resolve_code_offset(else_block_id.into());
+                let else_block_ids = blockify.blocks(else_block_id, v_else, b);
 
                 for block_id in else_block_ids.iter() {
-                    let entry_id = blockify.env.resolve_code_offset(*block_id);
+                    let entry_id = blockify.resolve_code_offset(*block_id);
                     self.create_block(blockify, blocks, entry_id, b);
                 }
                 for block_id in else_block_ids.iter() {
-                    let entry_id = blockify.env.resolve_code_offset(*block_id);
+                    let entry_id = blockify.resolve_code_offset(*block_id);
                     self.lower_block(blockify, entry_id, blocks, stack, b)?;
                 }
 
@@ -742,14 +741,14 @@ impl<'c> Lower<'c> {
 
                 let then_region = Region::new();
                 for block_id in then_block_ids.iter() {
-                    let entry_id = blockify.env.resolve_code_offset(*block_id);
+                    let entry_id = blockify.resolve_code_offset(*block_id);
                     let block = blocks.take_block(entry_id);
                     then_region.append_block(block);
                 }
 
                 let else_region = Region::new();
                 for block_id in else_block_ids.iter() {
-                    let entry_id = blockify.env.resolve_code_offset(*block_id);
+                    let entry_id = blockify.resolve_code_offset(*block_id);
                     let block = blocks.take_block(entry_id);
                     else_region.append_block(block);
                 }
@@ -846,7 +845,7 @@ impl<'c> Lower<'c> {
 
     pub fn lower_block(
         &mut self,
-        blockify: &Blockify,
+        blockify: &dyn ICodeModule,
         block_id: ValueId,
         blocks: &mut LowerBlocks<'c>,
         stack: &mut Vec<ValueId>,
@@ -869,7 +868,7 @@ impl<'c> Lower<'c> {
 
     pub fn lower_static_block(
         &mut self,
-        blockify: &Blockify,
+        blockify: &dyn ICodeModule,
         module_block_id: ValueId,
         blocks: &mut LowerBlocks<'c>,
         stack: &mut Vec<ValueId>,
@@ -905,7 +904,7 @@ impl<'c> Lower<'c> {
 
     pub fn lower_module(
         &mut self,
-        blockify: &Blockify,
+        blockify: &dyn ICodeModule,
         blocks: &mut LowerBlocks<'c>,
         module: &mut melior::ir::Module,
         b: &mut NodeBuilder,
