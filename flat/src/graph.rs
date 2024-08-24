@@ -1,12 +1,8 @@
+use crate::{CodeOffset, ValueId};
 use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::Bfs;
 use std::collections::HashMap;
-use std::collections::VecDeque;
-
-use crate::NodeBuilder;
-
-use crate::{BlockId, Blockify, CodeOffset, ICodeModule, Successor, ValueId};
 
 #[derive(Debug)]
 pub enum Shape {

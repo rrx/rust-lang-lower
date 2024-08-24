@@ -1,8 +1,20 @@
 use anyhow::Error;
 use anyhow::Result;
 use compile_core::{
-    Argument, AssignTarget, Ast, AstNode, AstType, BinaryOperation, BuiltinId, ControlFlowMarker,
-    Lambda, LinkOptions, Literal, ParameterNode, Span, SpanId, StringKey, UnaryOperation,
+    Argument,
+    //AssignTarget,
+    Ast,
+    AstNode,
+    AstType,
+    //BinaryOperation, BuiltinId, ControlFlowMarker,
+    //Lambda,
+    LinkOptions,
+    //Literal,
+    //ParameterNode,
+    Span,
+    SpanId,
+    StringKey,
+    //UnaryOperation,
     VarDefinitionSpace,
 };
 use std::collections::HashMap;
@@ -22,7 +34,7 @@ use crate::{
     ScopeType,
     StringLabel,
     Successor,
-    TemplateId,
+    //TemplateId,
     ValueId,
 };
 

@@ -1,8 +1,8 @@
 use std::collections::VecDeque;
 
-use compile_core::{AstType, Literal};
+use compile_core::AstType;
 
-use crate::{Blockify, ICodeModule, LCode, NodeBuilder, ValueId};
+use crate::{Blockify, ICodeModule, NodeBuilder, ValueId};
 use serde::Serialize;
 use tabled::{
     settings::{

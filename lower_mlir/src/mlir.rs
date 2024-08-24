@@ -292,7 +292,7 @@ impl<'c> Lower<'c> {
             let c = OpCollection::new(entry_id, block);
             blocks.blocks.insert(entry_id, c);
         } else {
-            unreachable!()
+            unreachable!("{:?}", code)
         }
     }
 

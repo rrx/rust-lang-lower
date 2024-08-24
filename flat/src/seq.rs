@@ -1,7 +1,14 @@
 use anyhow::Result;
 
 use compile_core::{
-    Ast, AstNode, AstType, Lambda, ParameterNode, SpanId, StringKey, VarDefinitionSpace,
+    Ast,
+    AstNode,
+    AstType,
+    Lambda,
+    //ParameterNode,
+    SpanId,
+    StringKey,
+    VarDefinitionSpace,
 };
 
 use crate::{
@@ -53,7 +60,7 @@ impl SequenceBlock {
     fn module(start: BlockId, scope_id: ScopeId) -> Self {
         Self {
             block_type: BlockType::Module,
-            start: start,
+            start,
             next: start,
             scope_id,
         }
@@ -78,7 +85,9 @@ impl SequenceReader {
     }
 
     fn add(&mut self, blockify: &mut Blockify, ast: AstNode, b: &mut NodeBuilder) {
-        blockify.test_add(self.current_block.unwrap(), ast, b);
+        blockify
+            .test_add(self.current_block.unwrap(), ast, b)
+            .unwrap();
         //blockify.add_block_with_expr(
         //blockify.test_add(entry_id,
         //self.result.push(block.into());
@@ -188,12 +197,12 @@ impl Blockify {
         let mut iter = exprs.into_iter().peekable();
         loop {
             if let Some(expr) = iter.next() {
-                let this_is_term = expr.node.is_term();
-                let this_label = expr.node.get_label();
+                let _this_is_term = expr.node.is_term();
+                let _this_label = expr.node.get_label();
 
                 if let Some(next) = iter.peek() {
                     let next_is_term = next.node.is_term();
-                    let next_label = expr.node.get_label();
+                    let _next_label = expr.node.get_label();
                     if next_is_term {
                         // just add with next
                     } else {
@@ -238,7 +247,7 @@ impl Blockify {
         let block_id = self.env.new_block();
         self.env.enter_scope(static_scope, block_id);
         let span_id = b.spans.get_span_unknown();
-        let entry_id =
+        let _entry_id =
             self.push_label_with_block(name.into(), span_id, static_scope, block_id, &[], &[], b);
         (block_id, static_scope)
     }
@@ -261,7 +270,7 @@ impl Blockify {
         let span_id = b.spans.get_span_unknown();
         let ty = b.types.get_type(&lambda);
         // declare function before adding the body, for recursion
-        let v_decl = self.push_code_with_name(
+        let _v_decl = self.push_code_with_name(
             LCode::DeclareFunction(Some(new_block_id)),
             span_id,
             scope_id,
@@ -272,7 +281,7 @@ impl Blockify {
         );
 
         // entry
-        let new_entry_id = self.push_label_with_block(
+        let _new_entry_id = self.push_label_with_block(
             name.into(),
             span_id,
             body_scope_id,
@@ -308,7 +317,7 @@ impl Blockify {
     ) -> Result<SequenceBlock> {
         assert_eq!(self.env.stack.len(), 0);
         let static_scope = self.env.new_scope(ScopeType::Static);
-        let entry_id = self.push_label_with_block(
+        let _entry_id = self.push_label_with_block(
             name.into(),
             body.span_id,
             static_scope,
@@ -436,7 +445,7 @@ impl Blockify {
 
             Ast::Return(maybe_body) => {
                 let scope_id = self.env.current_scope().unwrap();
-                let r = self.test_add_return(
+                let _r = self.test_add_return(
                     scope_id,
                     entry_id,
                     node.span_id,
@@ -449,12 +458,12 @@ impl Blockify {
 
             Ast::Literal(lit) => {
                 let scope_id = self.env.current_scope().unwrap();
-                let r = self.add_literal_expr(entry_id.into(), lit, node.span_id)?;
+                let _r = self.add_literal_expr(entry_id.into(), lit, node.span_id)?;
                 let block = SequenceBlock::normal(entry_id, entry_id, scope_id);
                 Ok(block)
             }
 
-            Ast::Block(name, args, body) => {
+            Ast::Block(_name, _args, body) => {
                 let scope_id = self.env.new_scope(ScopeType::Block);
                 let block_id = self.env.new_block();
                 self.env.enter_scope(scope_id, block_id);
