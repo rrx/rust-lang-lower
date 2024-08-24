@@ -19,8 +19,9 @@ use compile_core::{
 };
 use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
-use petgraph::visit::Bfs;
 use std::collections::HashMap;
+use std::convert::From;
+use std::convert::Into;
 
 use crate::{
     BlockId,
@@ -52,6 +53,19 @@ use tabled::{
 };
 
 pub type BlockGraph = DiGraph<IRBlock, Successor>;
+
+impl Into<NodeIndex> for BlockId {
+    fn into(self) -> NodeIndex {
+        NodeIndex::new(self.index())
+        //BlockId(self.index() as u32)
+    }
+}
+
+impl From<NodeIndex> for BlockId {
+    fn from(item: NodeIndex) -> Self {
+        Self(item.index() as u32)
+    }
+}
 
 pub struct FlattenEnvironment {
     current_block: Option<BlockId>,
@@ -201,7 +215,6 @@ pub struct IRBlock {
     next: Option<BlockId>,
     ret: Option<BlockId>,
     links: Vec<LinkId>,
-    succ: Vec<(Successor, BlockId)>,
 }
 
 impl IRBlock {
@@ -212,7 +225,6 @@ impl IRBlock {
             links: vec![],
             ret: None,
             next: None,
-            succ: vec![],
         }
     }
 
@@ -226,10 +238,6 @@ impl IRBlock {
 
     pub fn add_ret(&mut self, block_id: BlockId) {
         self.ret = Some(block_id);
-    }
-
-    pub fn add_succ(&mut self, block_id: BlockId, succ_type: Successor) {
-        self.succ.push((succ_type, block_id));
     }
 }
 
@@ -251,6 +259,7 @@ pub struct FlattenModule {
     block_map: HashMap<BlockId, ValueId>,
     succ: HashMap<BlockId, Vec<(Successor, CodeOffset)>>,
     link: LinkOptions,
+    gblocks: BlockGraph,
 }
 
 impl ICodeModule for FlattenModule {
@@ -291,7 +300,11 @@ impl ICodeModule for FlattenModule {
     fn get_block_successors(&self, entry_id: ValueId) -> Vec<(Successor, CodeOffset)> {
         let entry = self.get_entry(entry_id);
         let block_id = entry.block_id;
-        self.succ.get(&block_id).unwrap().clone()
+        let index = NodeIndex::new(block_id.index());
+        self.gblocks
+            .neighbors_directed(index, petgraph::Direction::Outgoing)
+            .map(|i| (Successor::BlockScope, BlockId(i.index() as u32).into()))
+            .collect::<Vec<_>>()
     }
 
     fn get_type(&self, v: ValueId) -> AstType {
@@ -349,6 +362,7 @@ impl ICodeModule for FlattenModule {
         }
         let s = Table::new(rows).with(Style::sharp()).to_string();
         println!("{}", s);
+        save_graph(self, "out.dot", b);
     }
 }
 
@@ -360,10 +374,12 @@ impl FlattenModule {
             link_map: HashMap::new(),
             block_map: HashMap::new(),
             succ: HashMap::new(),
+            gblocks: BlockGraph::new(),
         }
     }
 
     pub fn add(&mut self, mentry: ModuleEntry) {
+        //println!("add: {:?}", mentry);
         self.link_map.insert(mentry.link.unwrap(), mentry.value_id);
         if let LCode::Label(_, _) = mentry.code {
             self.block_map.insert(mentry.block_id, mentry.value_id);
@@ -420,10 +436,9 @@ impl FlattenModule {
 pub struct Flatten {
     module_key: Option<StringKey>,
     ast_blocks: Vec<BlockId>,
-    ir_blocks: Vec<BlockId>,
     link: LinkOptions,
     entries: Vec<CodeEntry>,
-    blocks: BlockGraph,
+    gblocks: BlockGraph,
 }
 
 impl Flatten {
@@ -431,9 +446,8 @@ impl Flatten {
         Self {
             module_key: None,
             ast_blocks: vec![],
-            ir_blocks: vec![],
             entries: vec![],
-            blocks: BlockGraph::new(),
+            gblocks: BlockGraph::new(),
             link: LinkOptions::new(),
         }
     }
@@ -443,17 +457,11 @@ impl Flatten {
         let mut m = FlattenModule::new();
 
         let mut value_count = 0;
-        for block_id in self.ir_blocks.iter() {
-            let block = self.get_block(*block_id);
-
-            m.succ.insert(
-                *block_id,
-                block
-                    .succ
-                    .iter()
-                    .map(|(a, b)| (*a, (*b).into()))
-                    .collect::<Vec<_>>(),
-            );
+        let mut dfs = petgraph::visit::Dfs::new(&self.gblocks, NodeIndex::new(0));
+        while let Some(index) = dfs.next(&self.gblocks) {
+            let block_id = BlockId(index.index() as u32);
+            println!("o: {:?}", index);
+            let block = self.get_block(block_id);
 
             for (index, link_id) in block.links.iter().enumerate() {
                 let entry = self.get_entry(*link_id).clone();
@@ -473,6 +481,8 @@ impl Flatten {
                 value_count += 1;
             }
         }
+        m.gblocks = self.gblocks;
+
         m
     }
 
@@ -507,7 +517,6 @@ impl Flatten {
             fenv.static_block = Some(block_id);
             fenv.static_scope = Some(static_scope);
             f.ast_blocks.push(block_id);
-            f.ir_blocks.push(block_id);
             Ok(f)
         } else {
             unreachable!()
@@ -552,7 +561,7 @@ impl Flatten {
 
     pub fn new_ast_block(&mut self, ast: Option<AstNode>, stack: Vec<ScopeId>) -> BlockId {
         let ir_block = IRBlock::new(stack, ast);
-        let index = self.blocks.add_node(ir_block);
+        let index = self.gblocks.add_node(ir_block);
         BlockId(index.index() as u32)
     }
 
@@ -565,8 +574,8 @@ impl Flatten {
     ) -> BlockId {
         let block = self.get_block(block_id);
         let succ_block_id = self._successor(block_id, ast, scope_id, block.ret, block.next);
-        let block = self.get_block_mut(block_id);
-        block.add_succ(succ_block_id, succ_type);
+        self.gblocks
+            .add_edge(block_id.into(), succ_block_id.into(), succ_type);
         succ_block_id
     }
 
@@ -603,12 +612,12 @@ impl Flatten {
 
     pub fn get_block(&self, block_id: BlockId) -> &IRBlock {
         let index = NodeIndex::new(block_id.index());
-        self.blocks.node_weight(index).unwrap()
+        self.gblocks.node_weight(index).unwrap()
     }
 
     pub fn get_block_mut(&mut self, block_id: BlockId) -> &mut IRBlock {
         let index = NodeIndex::new(block_id.index());
-        self.blocks.node_weight_mut(index).unwrap()
+        self.gblocks.node_weight_mut(index).unwrap()
     }
 
     pub fn get_entry(&self, link_id: LinkId) -> &CodeEntry {
@@ -632,7 +641,7 @@ impl Flatten {
             if is_static {
                 // don't do anything, static block is already present
             } else {
-                self.ir_blocks.push(block_id);
+                //self.ir_blocks.push(block_id);
             }
             FlattenResult::new(block_id, None)
         } else {
@@ -640,7 +649,7 @@ impl Flatten {
             let node = seq.pop().unwrap();
             let r = self.flatten(block_id, node, fenv, b)?;
             if r.block_id != block_id {
-                self.ir_blocks.push(block_id);
+                //self.ir_blocks.push(block_id);
             }
 
             let block = self.get_block_mut(r.block_id);
@@ -765,7 +774,7 @@ impl Flatten {
                             );
                             self.push_entry_with_link(fun_block_id, entry);
 
-                            self.ir_blocks.push(fun_block_id);
+                            //self.ir_blocks.push(fun_block_id);
                             let ret_ty = b.types.r(def.return_type).clone();
                             let ret_block_id =
                                 self.add_return_block(fun_block_id, fun_scope_id, ret_ty, b);
@@ -775,7 +784,7 @@ impl Flatten {
                             fun_block.next = Some(ret_block_id);
 
                             self.ast_blocks.push(fun_block_id);
-                            self.ir_blocks.push(ret_block_id);
+                            //self.ir_blocks.push(ret_block_id);
 
                             // push declaration into static block
                             let code = LCode::DeclareFunction(Some(fun_block_id));
@@ -949,4 +958,40 @@ impl Flatten {
             _ => unimplemented!("{:?}", ast),
         }
     }
+}
+
+pub fn save_graph(blockify: &dyn ICodeModule, filename: &str, b: &NodeBuilder) {
+    use petgraph::dot::{Config, Dot};
+    let cfg = blockify.get_graph(ValueId::new(0), None, b);
+    let s = format!(
+        "{:?}",
+        Dot::with_attr_getters(
+            &cfg.g,
+            &[Config::EdgeNoLabel, Config::NodeNoLabel],
+            &|_, _er| String::new(),
+            &|_, (_index, data)| {
+                match data.code_offset {
+                    CodeOffset::Value(value_id) => {
+                        format!(
+                            "label = \"V{}:{}\" shape={:?}",
+                            value_id.index(),
+                            &data.name,
+                            &data.ty.to_string()
+                        )
+                    }
+                    CodeOffset::Block(block_id) => {
+                        format!(
+                            "label = \"B{}:{}\" shape={:?}",
+                            block_id.index(),
+                            &data.name,
+                            &data.ty.to_string()
+                        )
+                    }
+                }
+            }
+        )
+    );
+    println!("saved graph {:?}", filename);
+    println!("{}", s);
+    std::fs::write(filename, s).unwrap();
 }
