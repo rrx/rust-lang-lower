@@ -343,10 +343,10 @@ impl ICodeModule for FlattenModule {
     fn dump(&self, b: &NodeBuilder) {
         let mut rows = vec![];
         for entry in self.entries.iter() {
-            let name = entry.name.map(|n| b.labels.r(n.into()));
             let row = self.get_code_row(entry.value_id, b);
             rows.push(row);
-
+            /*
+            let name = entry.name.map(|n| b.labels.r(n.into()));
             println!(
                 "IR: V: {}, Nx: {}, Pr: {}, B: {}, L:{}, N: {:?}, C: {:?}, T: {:?}, S: {:?}",
                 entry.value_id,
@@ -359,6 +359,7 @@ impl ICodeModule for FlattenModule {
                 entry.ty,
                 entry.scope_type,
             );
+            */
         }
         let s = Table::new(rows).with(Style::sharp()).to_string();
         println!("{}", s);
