@@ -286,17 +286,13 @@ impl Environment {
     }
 
     pub fn get_block_by_offset(&self, code_offset: CodeOffset) -> &Block {
-        match code_offset {
-            CodeOffset::Value(v) => self.get_block(v),
-            CodeOffset::Block(block_id) => self.get_block_by_block_id(block_id),
-        }
+        let v = self.resolve_code_offset(code_offset);
+        self.get_block(v)
     }
 
     pub fn get_block_mut_by_offset(&mut self, code_offset: CodeOffset) -> &mut Block {
-        match code_offset {
-            CodeOffset::Value(v) => self.get_block_mut(v),
-            CodeOffset::Block(block_id) => self.get_block_mut_by_block_id(block_id),
-        }
+        let v = self.resolve_code_offset(code_offset);
+        self.get_block_mut(v)
     }
 
     pub fn resolve_code_offset(&self, code_offset: CodeOffset) -> ValueId {
@@ -306,6 +302,7 @@ impl Environment {
                 let block = self.get_block_by_block_id(block_id);
                 block.entry_id.unwrap()
             }
+            _ => unimplemented!(),
         }
     }
 

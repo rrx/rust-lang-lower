@@ -328,6 +328,7 @@ impl ICodeModule for FlattenModule {
     fn resolve_code_offset(&self, code_offset: CodeOffset) -> ValueId {
         match code_offset {
             CodeOffset::Value(v) => v,
+            CodeOffset::Link(v) => *self.link_map.get(&v).unwrap(),
             CodeOffset::Block(block_id) => *self.block_map.get(&block_id).unwrap(),
         }
     }
@@ -407,16 +408,17 @@ impl FlattenModule {
         let code = self.get_code(v);
         let ty = self.get_type(v);
         let mem = self.get_mem(v);
-        let next = self.get_next(v).unwrap_or(v).index();
-        let prev = self.get_prev(v).unwrap_or(v).index();
+        //let next = self.get_next(v).unwrap_or(v).index();
+        //let prev = self.get_prev(v).unwrap_or(v).index();
         let scope_id = ScopeId(0); //self.get_scope_id(v);
         let entry_id = self.get_entry_id(v);
         let block_id = entry.block_id;
 
         CodeRow {
             pos: v.index(),
-            next,
-            prev,
+            link: entry.link.unwrap().index(),
+            //next: 0,
+            //prev: 0,
             value: self.code_to_string(v, b),
             ty,
             mem: format!("{:?}", mem),
@@ -972,6 +974,14 @@ pub fn save_graph(blockify: &dyn ICodeModule, filename: &str, b: &NodeBuilder) {
             &|_, _er| String::new(),
             &|_, (_index, data)| {
                 match data.code_offset {
+                    CodeOffset::Link(link_id) => {
+                        format!(
+                            "label = \"L{}:{}\" shape={:?}",
+                            link_id.index(),
+                            &data.name,
+                            &data.ty.to_string()
+                        )
+                    }
                     CodeOffset::Value(value_id) => {
                         format!(
                             "label = \"V{}:{}\" shape={:?}",

@@ -16,8 +16,9 @@ use tabled::{
 #[derive(Tabled, Serialize)]
 pub struct CodeRow {
     pub pos: usize,
-    pub next: usize,
-    pub prev: usize,
+    pub link: usize,
+    //pub next: usize,
+    //pub prev: usize,
     pub value: String,
     pub ty: AstType,
     pub mem: String,
@@ -32,8 +33,8 @@ pub struct CodeRow {
 impl CodeRow {
     pub fn header() -> Vec<&'static str> {
         vec![
-            "pos", "next", "prev", "value", "ty", "mem", "name", "span_id", "scope_id", "block_id",
-            "term",
+            "pos", "link", "next", "prev", "value", "ty", "mem", "name", "span_id", "scope_id",
+            "block_id", "term",
         ]
     }
 }
@@ -88,8 +89,9 @@ impl Blockify {
 
         CodeRow {
             pos: v.index(),
-            next,
-            prev,
+            link: 0,
+            //next,
+            //prev,
             value: self.code_to_string(v, b),
             ty,
             mem: format!("{:?}", mem),

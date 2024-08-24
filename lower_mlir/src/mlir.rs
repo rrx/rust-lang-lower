@@ -232,6 +232,10 @@ impl<'c> Lower<'c> {
                 if let LCode::Value(next_value_id) = code {
                     current = *next_value_id;
                     continue;
+                }
+                if let LCode::Link(next_link_id) = code {
+                    let v = (*next_link_id).into();
+                    current = blockify.resolve_code_offset(v);
                 } else {
                     break;
                 }
@@ -307,10 +311,12 @@ impl<'c> Lower<'c> {
     ) -> Result<()> {
         let block_id = blockify.get_entry_id(v);
         let values = blockify.get_previous_values(v, num_args as usize);
+        println!("v: {:?}", values);
         let indicies = values
             .iter()
             .map(|value_id| self.resolve_value(blockify, *value_id).unwrap())
             .collect();
+        println!("ind: {:?}", indicies);
         let rs = blocks.values(indicies);
 
         let c = blocks.blocks.get(&target_value_id).unwrap();
@@ -452,12 +458,12 @@ impl<'c> Lower<'c> {
                     let offset = block_id.clone().into();
                     let entry_id = blockify.resolve_code_offset(offset);
                     let block_ids = blockify.blocks(*block_id, entry_id, b);
-                    //let cfg = blockify.get_cfg((*entry_id).into(), b);
-                    //let block_ids = cfg.blocks(entry_id);
+                    println!("{}, {}, blocks: {:?}", block_id, v, block_ids);
 
                     // create blocks
                     for block_id in block_ids.iter() {
                         let entry_id = blockify.resolve_code_offset(*block_id);
+                        println!("E: {}, B: {}", entry_id, *block_id);
                         self.create_block(blockify, blocks, entry_id, b);
                     }
 

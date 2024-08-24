@@ -15,8 +15,8 @@ fn format_html_row(row: &CodeRow) -> String {
     let mut s = String::new();
     s.push_str(&format!("<tr class=\"s{}\">", row.span_id));
     s.push_str(&format!("<td>{}</td>", row.pos));
-    s.push_str(&format!("<td>{}</td>", row.next));
-    s.push_str(&format!("<td>{}</td>", row.prev));
+    //s.push_str(&format!("<td>{}</td>", row.next));
+    //s.push_str(&format!("<td>{}</td>", row.prev));
     s.push_str(&format!("<td>{}</td>", row.value));
     s.push_str(&format!("<td>{}</td>", row.ty));
     s.push_str(&format!("<td>{}</td>", row.mem));
@@ -122,6 +122,7 @@ pub fn save_graph(blockify: &dyn ICodeModule, filename: &str, b: &NodeBuilder) {
                             &data.ty.to_string()
                         )
                     }
+                    _ => unimplemented!(),
                 }
             }
         )

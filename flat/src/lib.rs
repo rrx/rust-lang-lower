@@ -67,6 +67,7 @@ impl std::fmt::Display for LinkId {
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 pub enum CodeOffset {
     Value(ValueId),
+    Link(LinkId),
     Block(BlockId),
 }
 
@@ -74,8 +75,15 @@ impl std::fmt::Display for CodeOffset {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Value(x) => write!(f, "{}", x),
+            Self::Link(x) => write!(f, "{}", x),
             Self::Block(x) => write!(f, "{}", x),
         }
+    }
+}
+
+impl From<LinkId> for CodeOffset {
+    fn from(item: LinkId) -> Self {
+        Self::Link(item)
     }
 }
 

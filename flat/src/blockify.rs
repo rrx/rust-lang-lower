@@ -227,6 +227,12 @@ pub trait ICodeModule {
             let code = self.get_code(v);
             if let LCode::Value(value_id) = code {
                 values.push(*value_id);
+                continue;
+            }
+            if let LCode::Link(link_id) = code {
+                let v = (*link_id).into();
+                values.push(self.resolve_code_offset(v));
+                continue;
             }
         }
         values
@@ -668,6 +674,7 @@ impl Blockify {
         match offset {
             CodeOffset::Value(value_id) => self.env.block_map.get(&value_id).unwrap().clone(),
             CodeOffset::Block(block_id) => block_id,
+            _ => unreachable!(),
         }
     }
 
