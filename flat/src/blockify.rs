@@ -155,6 +155,7 @@ pub struct PendingResult {
 }
 
 pub trait ICodeModule {
+    fn shared_libraries(&self) -> Vec<String>;
     fn get_span_id(&self, value_id: ValueId) -> SpanId;
     fn get_name(&self, v: ValueId) -> Option<StringLabel>;
     fn get_code(&self, value_id: ValueId) -> &LCode;
@@ -319,6 +320,10 @@ pub struct Blockify {
 }
 
 impl ICodeModule for Blockify {
+    fn shared_libraries(&self) -> Vec<String> {
+        self.link.shared_libraries()
+    }
+
     fn get_span_id(&self, value_id: ValueId) -> SpanId {
         self.span.get(value_id.index()).unwrap().clone()
     }
@@ -448,10 +453,6 @@ impl Blockify {
 
     pub fn code_count(&self) -> usize {
         self.code.len()
-    }
-
-    pub fn shared_libraries(&self) -> Vec<String> {
-        self.link.shared_libraries()
     }
 
     pub fn push_template(&mut self, def: Lambda) -> TemplateId {

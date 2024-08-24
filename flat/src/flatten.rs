@@ -224,9 +224,14 @@ pub struct FlattenModule {
     link_map: HashMap<LinkId, ValueId>,
     block_map: HashMap<BlockId, ValueId>,
     succ: HashMap<BlockId, Vec<(Successor, CodeOffset)>>,
+    link: LinkOptions,
 }
 
 impl ICodeModule for FlattenModule {
+    fn shared_libraries(&self) -> Vec<String> {
+        self.link.shared_libraries()
+    }
+
     fn get_span_id(&self, value_id: ValueId) -> SpanId {
         let entry = self.get_entry(value_id);
         entry.span_id
@@ -313,6 +318,7 @@ impl FlattenModule {
     pub fn new() -> Self {
         Self {
             entries: vec![],
+            link: LinkOptions::new(),
             link_map: HashMap::new(),
             block_map: HashMap::new(),
             succ: HashMap::new(),

@@ -16,7 +16,12 @@ use compile_core::{
 };
 
 use flat::{
-    Blockify, Flatten, FlattenEnvironment, ICodeModule, NodeBuilder, NodeBuilder as NB, ValueId,
+    Blockify,
+    //Flatten, FlattenEnvironment,
+    ICodeModule,
+    NodeBuilder,
+    NodeBuilder as NB,
+    ValueId,
 };
 
 use lower_mlir::Module;
@@ -887,32 +892,6 @@ impl StarlarkParser {
         }
     }
 
-    pub fn flatten(
-        &mut self,
-        filename: &str,
-        b: &mut NodeBuilder,
-        _verbose: bool,
-    ) -> Result<AstNode> {
-        log::debug!("flatten: {}", filename);
-        let file_id = b
-            .spans
-            .add_source(filename.to_string(), std::fs::read_to_string(filename)?);
-        let mut parser = Parser::new();
-        let module_key = b.labels.s("module");
-        let ast: AstNode = parser.parse(Path::new(filename), None, module_key, file_id, b)?;
-        b.dump_ast(&ast);
-
-        let mut fenv = FlattenEnvironment::new();
-        let mut f = Flatten::flatten_module(ast, &mut fenv)?;
-        f.run_loop(&mut fenv, b)?;
-        f.dump_ast(b);
-        let m = f.module(&mut fenv, b);
-        m.dump(b);
-
-        let ast: AstNode = parser.parse(Path::new(filename), None, module_key, file_id, b)?;
-        Ok(ast)
-    }
-
     pub fn parse(
         &mut self,
         filename: &str,
@@ -953,7 +932,7 @@ impl StarlarkParser {
 
     pub fn lower<'c>(
         &mut self,
-        blockify: Blockify,
+        blockify: &dyn ICodeModule,
         module_block_id: ValueId,
         context: &'c lower_mlir::Context,
         module: &mut Module<'c>,
@@ -961,7 +940,7 @@ impl StarlarkParser {
     ) -> Result<()> {
         let mut lower = lower_mlir::Lower::new(context, module_block_id);
         let mut blocks = lower_mlir::LowerBlocks::new();
-        lower.lower_module(&blockify, &mut blocks, module, b)?;
+        lower.lower_module(blockify, &mut blocks, module, b)?;
         for lib in blockify.shared_libraries() {
             self.link.add_library(&lib);
         }
@@ -1023,7 +1002,7 @@ pub(crate) mod tests {
 
         let context = lower_mlir::default_context();
         let mut module = lower_mlir::Module::new(Location::unknown(&context));
-        let r = p.lower(blockify, module_block_id, &context, &mut module, &mut b);
+        let r = p.lower(&blockify, module_block_id, &context, &mut module, &mut b);
         b.spans.diagnostics_dump();
         r.unwrap();
         let verify = module.as_operation().verify();

@@ -63,7 +63,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let result = p.blockify(ast, &mut b, true);
         let (blockify, module_block_id) = result.unwrap();
 
-        let r = p.lower(blockify, module_block_id, &context, &mut module, &mut b);
+        let r = p.lower(&blockify, module_block_id, &context, &mut module, &mut b);
         b.spans.diagnostics_dump();
         r?;
     }
