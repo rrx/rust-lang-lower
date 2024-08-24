@@ -295,6 +295,7 @@ pub trait ICodeModule {
             }
         }
     }
+    fn code_count(&self) -> usize;
 }
 
 #[derive(Debug)]
@@ -399,6 +400,11 @@ impl ICodeModule for Blockify {
             println!("{}", s);
         }
     }
+
+    fn code_count(&self) -> usize {
+        self.code.len()
+    }
+
 }
 
 pub fn dump_env(env: &Environment, b: &NodeBuilder) {
@@ -449,10 +455,6 @@ impl Blockify {
             env: Environment::new(),
             link: LinkOptions::new(),
         }
-    }
-
-    pub fn code_count(&self) -> usize {
-        self.code.len()
     }
 
     pub fn push_template(&mut self, def: Lambda) -> TemplateId {

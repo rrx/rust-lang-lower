@@ -95,7 +95,7 @@ pub fn get_json(blockify: &Blockify, b: &NodeBuilder) -> String {
     serde_json::to_string(&out).unwrap()
 }
 
-pub fn save_graph(blockify: &Blockify, filename: &str, b: &NodeBuilder) {
+pub fn save_graph(blockify: &dyn ICodeModule, filename: &str, b: &NodeBuilder) {
     use petgraph::dot::{Config, Dot};
     let cfg = blockify.get_graph(ValueId::new(0), None, b);
     let s = format!(

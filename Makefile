@@ -1,7 +1,10 @@
 default: run
 
 run:
-	RUST_BACKTRACE=1 cargo run --example flatten tests/bare.star
+	RUST_BACKTRACE=1 cargo run --example flatten -- -v tests/bare.star
+
+run0:
+	RUST_BACKTRACE=1 cargo run --bin parse -- -v tests/bare.star
 
 run_test:
 	RUST_BACKTRACE=1 cargo run --bin parse -- -l -v -x \

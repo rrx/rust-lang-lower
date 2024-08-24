@@ -34,6 +34,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     SimpleLogger::new().init().unwrap();
     let config: Config = argh::from_env();
 
+    println!("Config: {:?}", config);
     if config.verbose {
         log::set_max_level(log::LevelFilter::Trace);
     } else {
