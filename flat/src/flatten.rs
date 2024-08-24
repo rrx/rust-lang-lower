@@ -17,14 +17,17 @@ use compile_core::{
     //UnaryOperation,
     VarDefinitionSpace,
 };
+use petgraph::graph::DiGraph;
+use petgraph::graph::NodeIndex;
+use petgraph::visit::Bfs;
 use std::collections::HashMap;
 
 use crate::{
     BlockId,
     BlockifyError,
-    CodeRow,
     Builtin,
     CodeOffset,
+    CodeRow,
     ICodeModule,
     LCode,
     LinkId,
@@ -45,8 +48,10 @@ use tabled::{
         //Border,
         Style,
     },
-    Table
+    Table,
 };
+
+pub type BlockGraph = DiGraph<IRBlock, Successor>;
 
 pub struct FlattenEnvironment {
     current_block: Option<BlockId>,
@@ -166,7 +171,13 @@ pub struct CodeEntry {
 }
 
 impl CodeEntry {
-    pub fn new(block_id: BlockId, code: LCode, ty: AstType, name: Option<StringKey>, span_id: SpanId) -> Self {
+    pub fn new(
+        block_id: BlockId,
+        code: LCode,
+        ty: AstType,
+        name: Option<StringKey>,
+        span_id: SpanId,
+    ) -> Self {
         Self {
             block_id,
             code,
@@ -185,7 +196,6 @@ impl CodeEntry {
 }
 
 pub struct IRBlock {
-    block_id: BlockId,
     stack: Vec<ScopeId>,
     ast: Option<AstNode>,
     next: Option<BlockId>,
@@ -195,9 +205,8 @@ pub struct IRBlock {
 }
 
 impl IRBlock {
-    pub fn new(block_id: BlockId, stack: Vec<ScopeId>, ast: Option<AstNode>) -> Self {
+    pub fn new(stack: Vec<ScopeId>, ast: Option<AstNode>) -> Self {
         Self {
-            block_id,
             stack,
             ast,
             links: vec![],
@@ -383,7 +392,7 @@ impl FlattenModule {
         let mem = self.get_mem(v);
         let next = self.get_next(v).unwrap_or(v).index();
         let prev = self.get_prev(v).unwrap_or(v).index();
-        let scope_id = ScopeId(0);//self.get_scope_id(v);
+        let scope_id = ScopeId(0); //self.get_scope_id(v);
         let entry_id = self.get_entry_id(v);
         let block_id = entry.block_id;
 
@@ -406,7 +415,6 @@ impl FlattenModule {
             term: code.is_term(),
         }
     }
-
 }
 
 pub struct Flatten {
@@ -415,7 +423,7 @@ pub struct Flatten {
     ir_blocks: Vec<BlockId>,
     link: LinkOptions,
     entries: Vec<CodeEntry>,
-    blocks: Vec<IRBlock>,
+    blocks: BlockGraph,
 }
 
 impl Flatten {
@@ -425,7 +433,7 @@ impl Flatten {
             ast_blocks: vec![],
             ir_blocks: vec![],
             entries: vec![],
-            blocks: vec![],
+            blocks: BlockGraph::new(),
             link: LinkOptions::new(),
         }
     }
@@ -476,7 +484,7 @@ impl Flatten {
                 let name = entry.name.map(|n| b.labels.r(n.into()));
                 println!(
                     "AST: B: {}, N: {:?}, C: {:?}, T: {:?}, A: {:?}",
-                    block.block_id,
+                    block_id,
                     name,
                     entry.code,
                     entry.ty,
@@ -543,11 +551,9 @@ impl Flatten {
     }
 
     pub fn new_ast_block(&mut self, ast: Option<AstNode>, stack: Vec<ScopeId>) -> BlockId {
-        let index = self.blocks.len();
-        let block_id = BlockId(index as u32);
-        let ir_block = IRBlock::new(block_id, stack, ast);
-        self.blocks.push(ir_block);
-        block_id
+        let ir_block = IRBlock::new(stack, ast);
+        let index = self.blocks.add_node(ir_block);
+        BlockId(index.index() as u32)
     }
 
     pub fn successor(
@@ -596,11 +602,13 @@ impl Flatten {
     }
 
     pub fn get_block(&self, block_id: BlockId) -> &IRBlock {
-        self.blocks.get(block_id.index()).unwrap()
+        let index = NodeIndex::new(block_id.index());
+        self.blocks.node_weight(index).unwrap()
     }
 
     pub fn get_block_mut(&mut self, block_id: BlockId) -> &mut IRBlock {
-        self.blocks.get_mut(block_id.index()).unwrap()
+        let index = NodeIndex::new(block_id.index());
+        self.blocks.node_weight_mut(index).unwrap()
     }
 
     pub fn get_entry(&self, link_id: LinkId) -> &CodeEntry {
@@ -656,11 +664,11 @@ impl Flatten {
             AstType::Unit => vec![],
             _ => vec![return_type.clone()],
         };
-        let ret_block_id = self.successor(fun_block_id, None, Some(scope_id), Successor::BlockScope);
+        let ret_block_id =
+            self.successor(fun_block_id, None, Some(scope_id), Successor::BlockScope);
 
         let code = LCode::Label(args.len() as u8, 0);
-        let entry =
-            CodeEntry::new(ret_block_id, code, return_type.clone(), Some(name), span_id);
+        let entry = CodeEntry::new(ret_block_id, code, return_type.clone(), Some(name), span_id);
         self.push_entry_with_link(ret_block_id, entry);
 
         let v_args = args
@@ -669,15 +677,15 @@ impl Flatten {
             .map(|(i, _arg)| {
                 let code = LCode::Arg(i as u8);
                 let name = b.labels.s(&format!("arg{}", i));
-                let entry = CodeEntry::new(ret_block_id, code, return_type.clone(), Some(name), span_id);
+                let entry =
+                    CodeEntry::new(ret_block_id, code, return_type.clone(), Some(name), span_id);
                 self.push_entry_with_link(ret_block_id, entry)
             })
             .collect::<Vec<_>>();
 
         for link_id in v_args.iter() {
             let code = LCode::Link(*link_id);
-            let entry =
-                CodeEntry::new(ret_block_id, code, return_type.clone(), None, span_id);
+            let entry = CodeEntry::new(ret_block_id, code, return_type.clone(), None, span_id);
             self.push_entry_with_link(ret_block_id, entry);
         }
 
@@ -748,12 +756,19 @@ impl Flatten {
                             );
                             let code = LCode::Label(0, 0);
 
-                            let entry = CodeEntry::new(fun_block_id, code, fun_ty.clone(), Some(name), span_id);
+                            let entry = CodeEntry::new(
+                                fun_block_id,
+                                code,
+                                fun_ty.clone(),
+                                Some(name),
+                                span_id,
+                            );
                             self.push_entry_with_link(fun_block_id, entry);
 
                             self.ir_blocks.push(fun_block_id);
                             let ret_ty = b.types.r(def.return_type).clone();
-                            let ret_block_id = self.add_return_block(fun_block_id, fun_scope_id, ret_ty, b);
+                            let ret_block_id =
+                                self.add_return_block(fun_block_id, fun_scope_id, ret_ty, b);
 
                             let fun_block = self.get_block_mut(fun_block_id);
                             fun_block.ret = Some(ret_block_id);
@@ -764,7 +779,8 @@ impl Flatten {
 
                             // push declaration into static block
                             let code = LCode::DeclareFunction(Some(fun_block_id));
-                            let entry = CodeEntry::new(block_id, code, fun_ty.clone(), Some(name), span_id);
+                            let entry =
+                                CodeEntry::new(block_id, code, fun_ty.clone(), Some(name), span_id);
                             let link_id = self.push_entry_with_link(block_id, entry);
                             FlattenResult::new(block_id, Some(link_id))
                         } else {
@@ -791,12 +807,18 @@ impl Flatten {
                         let ast_ty: AstType = lit.clone().into();
                         let code = LCode::Const(lit);
                         let global_name_key = b.labels.s(&global_name);
-                        let entry =
-                            CodeEntry::new(block_id, code, ast_ty.clone(), Some(global_name_key), node.span_id);
+                        let entry = CodeEntry::new(
+                            block_id,
+                            code,
+                            ast_ty.clone(),
+                            Some(global_name_key),
+                            node.span_id,
+                        );
                         let link_id = self.push_entry_with_link(block_id, entry);
 
                         let code = LCode::Link(link_id);
-                        let entry = CodeEntry::new(block_id, code, ast_ty, Some(name), node.span_id);
+                        let entry =
+                            CodeEntry::new(block_id, code, ast_ty, Some(name), node.span_id);
                         let link_id = self.push_entry_with_link(block_id, entry);
                         Ok(FlattenResult::new(block_id, Some(link_id)))
                     }

@@ -404,7 +404,6 @@ impl ICodeModule for Blockify {
     fn code_count(&self) -> usize {
         self.code.len()
     }
-
 }
 
 pub fn dump_env(env: &Environment, b: &NodeBuilder) {
