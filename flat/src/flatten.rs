@@ -1322,12 +1322,15 @@ impl Flatten {
                             let ret_ty_id = def.return_type.clone();
                             let ret_ty = b.types.r(ret_ty_id);
 
-                            let body = *def.body.unwrap();
-                            let span_id = body.span_id;
-                            let block = self.get_block(block_id);
-                            let fun_scope_id = fenv.new_scope(ScopeType::Block);
-                            fenv.scope_succ(block.scope_id, fun_scope_id);
+                            //let span_id = body.span_id;
 
+                            // create a new block for the lambda
+                            // we call the lambda by jumping to it
+                            // the new block points to a next block
+                            // which we create here, and we return next block to the sequence
+
+                            // NEXT BLOCK(ret_ty)
+                            let block = self.get_block(block_id);
                             let next_block_id = self.successor(
                                 block_id,
                                 None,
@@ -1335,6 +1338,7 @@ impl Flatten {
                                 Successor::BlockScope,
                                 block.next,
                             );
+                            self.ast_blocks.push(next_block_id);
 
                             let args = match &ret_ty {
                                 AstType::Unit => vec![],
@@ -1354,9 +1358,36 @@ impl Flatten {
                                 b,
                             );
 
-                            let fun_block_id = self.add_block(
-                                fun_scope_id,
+                            // LAMBDA BLOCK
+                            let fun_scope_id = fenv.new_scope(ScopeType::Block);
+                            fenv.scope_succ(scope_id, fun_scope_id);
+
+                            let body = def.body.unwrap();
+                            let fun_block_id = self.successor(
                                 block_id,
+                                Some(*body),
+                                Some(fun_scope_id),
+                                Successor::BlockScope,
+                                Some(next_block_id),
+                            );
+
+                            self.start_block(
+                                fun_block_id,
+                                fun_scope_id,
+                                &[],
+                                &def.params,
+                                AstType::Unit,
+                                Some(b.fresh_block_name()),
+                                span_id,
+                                VarDefinitionSpace::Reg,
+                                fenv,
+                                b,
+                            );
+
+                            /*
+                            let fun_block_id = self.start_block(
+                                block_id,
+                                fun_scope_id,
                                 &[],
                                 &def.params,
                                 Some(body),
@@ -1369,6 +1400,7 @@ impl Flatten {
                                 fenv,
                                 b,
                             )?;
+                            */
 
                             //let r = self.flatten(fun_block_id, *body, fenv, b)?;
                             self.ast_blocks.push(fun_block_id);
