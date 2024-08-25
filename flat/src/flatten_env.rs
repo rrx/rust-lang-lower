@@ -78,6 +78,16 @@ impl FlattenEnvironment {
         scope.names.insert(name, data);
     }
 
+    pub fn find_nearest_scope(&self, scope_id: ScopeId, scope_type: ScopeType) -> Option<ScopeId> {
+        for scope_id in self.walk_scopes(scope_id) {
+            let scope = self.get_scope(scope_id);
+            if scope.scope_type == scope_type {
+                return Some(scope_id);
+            }
+        }
+        None
+    }
+
     pub fn walk_scopes(&self, scope_id: ScopeId) -> Vec<ScopeId> {
         let mut out = vec![];
         let mut current = scope_id;

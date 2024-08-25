@@ -880,6 +880,7 @@ impl Flatten {
         let entry = CodeEntry::new(block_id, code, ty, name, span_id, mem);
         self.push_entry_with_link(entry);
 
+        // positional, unnamed, returned as links
         let v_args = args
             .iter()
             .enumerate()
@@ -898,6 +899,7 @@ impl Flatten {
             })
             .collect::<Vec<_>>();
 
+        // defined in the scope
         for (i, p) in kwargs.iter().enumerate() {
             let ty = b.types.r(p.ty);
             let code = LCode::Arg(i as u8);
@@ -1054,6 +1056,9 @@ impl Flatten {
                                 b,
                             );
 
+                            let fun_scope = fenv.get_scope_mut(fun_scope_id);
+                            fun_scope.return_block = Some(ret_block_id);
+
                             let fun_block = self.get_block_mut(fun_block_id);
                             fun_block.ret = Some(ret_block_id);
                             fun_block.next = Some(ret_block_id);
@@ -1201,7 +1206,10 @@ impl Flatten {
             }
 
             Ast::Return(maybe_expr) => {
-                let ret_block_id = block.ret.as_ref().unwrap().clone();
+                let fun_scope_id = fenv
+                    .find_nearest_scope(block.scope_id, ScopeType::Function)
+                    .unwrap();
+                //let ret_block_id = block.ret.as_ref().unwrap().clone();
 
                 let mut jump_args = vec![];
                 let mut block_id = block_id;
@@ -1213,7 +1221,13 @@ impl Flatten {
                     jump_args.push((link_id, entry.ty.clone()));
                 }
 
-                self.add_jump(block_id, ret_block_id, jump_args, node.span_id);
+                let scope = fenv.get_scope(fun_scope_id);
+                self.add_jump(
+                    block_id,
+                    scope.return_block.unwrap(),
+                    jump_args,
+                    node.span_id,
+                );
                 Ok(FlattenResult::new(block_id, None, AstType::Unit, true)) //Some(link_id)))
             }
 
