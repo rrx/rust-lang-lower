@@ -645,13 +645,23 @@ impl Flatten {
         let mut current_block_id = block_id;
         let mut ty = AstType::Unit;
         let mut link_id = None;
+        let mut is_term = false;
+        let mut span_id = b.spans.get_span_unknown();
         for ast in seq {
+            span_id = ast.span_id;
             let r = self.flatten(current_block_id, ast, fenv, b)?;
             current_block_id = r.block_id;
             ty = r.ty;
             link_id = r.link_id;
+            is_term = r.is_term;
         }
-        Ok(FlattenResult::new(current_block_id, link_id, ty, true))
+
+        if !is_term {
+            let block = self.get_block(current_block_id);
+            println!("missing term: {:?}", block.next);
+            self.add_jump(current_block_id, block.next.unwrap(), vec![], span_id);
+        }
+        Ok(FlattenResult::new(current_block_id, link_id, ty, is_term))
     }
 
     pub fn add_return_block(
