@@ -217,9 +217,15 @@ pub trait ICodeModule {
             let code = self.get_code(value_id);
             if let LCode::Value(next_value_id) = code {
                 current = *next_value_id;
-            } else {
-                return Some(current);
+                continue;
             }
+
+            if let LCode::Link(next_link_id) = code {
+                current = (*next_link_id).into();
+                continue;
+            }
+
+            return Some(current);
         }
     }
 

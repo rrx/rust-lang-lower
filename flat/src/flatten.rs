@@ -260,7 +260,9 @@ impl ICodeModule for FlattenModule {
 
     fn is_in_static_scope(&self, offset: CodeOffset) -> bool {
         let value_id = self.resolve_code_offset(offset);
-        self.get_entry(value_id).scope_type == ScopeType::Static
+        let entry = self.get_entry(value_id);
+        println!("E: {:?}", entry);
+        entry.scope_type == ScopeType::Static
     }
 
     fn get_mem(&self, offset: CodeOffset) -> &VarDefinitionSpace {
@@ -495,7 +497,7 @@ impl Flatten {
                 node.span_id,
                 VarDefinitionSpace::Static,
             );
-            f.push_entry_with_link(block_id, entry);
+            f.push_entry_with_link(entry);
             fenv.static_block = Some(block_id);
             fenv.static_scope = Some(static_scope);
             f.ast_blocks.push(block_id);
@@ -535,7 +537,8 @@ impl Flatten {
         self.get_block_mut(block_id).push(link_id);
     }
 
-    pub fn push_entry_with_link(&mut self, block_id: BlockId, entry: CodeEntry) -> LinkId {
+    pub fn push_entry_with_link(&mut self, entry: CodeEntry) -> LinkId {
+        let block_id = entry.block_id;
         let link_id = self.push(entry);
         self.get_block_mut(block_id).push(link_id);
         link_id
@@ -664,9 +667,9 @@ impl Flatten {
             return_type.clone(),
             Some(name),
             span_id,
-            VarDefinitionSpace::Default,
+            VarDefinitionSpace::Reg,
         );
-        self.push_entry_with_link(ret_block_id, entry);
+        self.push_entry_with_link(entry);
 
         let v_args = args
             .iter()
@@ -680,9 +683,9 @@ impl Flatten {
                     return_type.clone(),
                     Some(name),
                     span_id,
-                    VarDefinitionSpace::Default,
+                    VarDefinitionSpace::Arg,
                 );
-                self.push_entry_with_link(ret_block_id, entry)
+                self.push_entry_with_link(entry)
             })
             .collect::<Vec<_>>();
 
@@ -694,9 +697,9 @@ impl Flatten {
                 return_type.clone(),
                 None,
                 span_id,
-                VarDefinitionSpace::Default,
+                VarDefinitionSpace::Reg,
             );
-            self.push_entry_with_link(ret_block_id, entry);
+            self.push_entry_with_link(entry);
         }
 
         let code = LCode::Return(v_args.len() as u8);
@@ -706,9 +709,9 @@ impl Flatten {
             AstType::Unit,
             None,
             span_id,
-            VarDefinitionSpace::Default,
+            VarDefinitionSpace::Reg,
         );
-        self.push_entry_with_link(ret_block_id, entry);
+        self.push_entry_with_link(entry);
         ret_block_id
     }
 
@@ -722,15 +725,8 @@ impl Flatten {
         let num_args = jump_args.len();
         for (link_id, ty) in jump_args.into_iter() {
             let code = LCode::Link(link_id);
-            let entry = CodeEntry::new(
-                block_id,
-                code,
-                ty,
-                None,
-                span_id,
-                VarDefinitionSpace::Default,
-            );
-            self.push_entry_with_link(block_id, entry);
+            let entry = CodeEntry::new(block_id, code, ty, None, span_id, VarDefinitionSpace::Reg);
+            self.push_entry_with_link(entry);
         }
 
         let code = LCode::Jump(target_id.into(), num_args as u8);
@@ -740,10 +736,10 @@ impl Flatten {
             AstType::Unit,
             None,
             span_id,
-            VarDefinitionSpace::Default,
+            VarDefinitionSpace::Reg,
         );
 
-        self.push_entry_with_link(block_id, entry);
+        self.push_entry_with_link(entry);
     }
 
     pub fn add_function_call(
@@ -790,9 +786,9 @@ impl Flatten {
                     ty,
                     None,
                     span_id,
-                    VarDefinitionSpace::Default,
+                    VarDefinitionSpace::Reg,
                 );
-                self.push_entry_with_link(current_block_id, entry);
+                self.push_entry_with_link(entry);
             }
 
             let code = LCode::Call(fun_offset, args_size, 0);
@@ -804,7 +800,7 @@ impl Flatten {
                 span_id,
                 VarDefinitionSpace::Default,
             );
-            let link_id = self.push_entry_with_link(current_block_id, entry);
+            let link_id = self.push_entry_with_link(entry);
             Ok(FlattenResult::new(current_block_id, Some(link_id)))
         } else {
             b.push_error(&format!("Type not function: {:?}", fun_ty), span_id);
@@ -842,7 +838,7 @@ impl Flatten {
                 span_id,
                 VarDefinitionSpace::Static,
             );
-            self.push_entry_with_link(fun_block_id, entry);
+            self.push_entry_with_link(entry);
 
             for (i, p) in def.params.iter().enumerate() {
                 let ty = b.types.r(p.ty);
@@ -855,7 +851,7 @@ impl Flatten {
                     p.span_id,
                     VarDefinitionSpace::Arg,
                 );
-                let link_id = self.push_entry_with_link(fun_block_id, entry);
+                let link_id = self.push_entry_with_link(entry);
                 fenv.scope_define(
                     fun_scope_id,
                     p.name,
@@ -920,7 +916,7 @@ impl Flatten {
                                 span_id,
                                 VarDefinitionSpace::Static,
                             );
-                            let link_id = self.push_entry_with_link(block_id, entry);
+                            let link_id = self.push_entry_with_link(entry);
 
                             let scope_id = fenv.static_scope_id();
                             fenv.scope_define(
@@ -943,14 +939,16 @@ impl Flatten {
                                 span_id,
                                 VarDefinitionSpace::Static,
                             );
-                            let link_id = self.push_entry_with_link(block_id, entry);
+                            let link_id = self.push_entry_with_link(entry);
                             Ok(FlattenResult::new(block_id, Some(link_id)))
                         }
                     }
 
                     Ast::Literal(lit) => {
-                        let scope_id = block.stack.last().unwrap();
-                        let scope = fenv.get_scope(*scope_id);
+                        let scope_id = block.stack.last().unwrap().clone();
+                        let scope = fenv.get_scope(scope_id);
+
+                        let static_block_id = fenv.static_block_id();
                         let global_name = if let ScopeType::Static = scope.scope_type {
                             b.labels.r(name.into()).to_string()
                         } else {
@@ -964,25 +962,34 @@ impl Flatten {
                         let code = LCode::Const(lit);
                         let global_name_key = b.labels.s(&global_name);
                         let entry = CodeEntry::new(
-                            block_id,
+                            static_block_id,
                             code,
                             ast_ty.clone(),
                             Some(global_name_key),
                             node.span_id,
-                            VarDefinitionSpace::Default,
+                            VarDefinitionSpace::Static,
                         );
-                        let link_id = self.push_entry_with_link(block_id, entry);
+                        let link_id = self.push_entry_with_link(entry);
 
                         let code = LCode::Link(link_id);
                         let entry = CodeEntry::new(
                             block_id,
                             code,
-                            ast_ty,
+                            ast_ty.clone(),
                             Some(name),
                             node.span_id,
-                            VarDefinitionSpace::Default,
+                            VarDefinitionSpace::Static,
                         );
-                        let link_id = self.push_entry_with_link(block_id, entry);
+                        let link_id = self.push_entry_with_link(entry);
+
+                        fenv.scope_define(
+                            scope_id,
+                            name,
+                            link_id.into(),
+                            ast_ty,
+                            VarDefinitionSpace::Static,
+                        );
+
                         Ok(FlattenResult::new(block_id, Some(link_id)))
                     }
                     _ => unreachable!(),
@@ -1022,9 +1029,9 @@ impl Flatten {
                                 ty,
                                 None,
                                 node.span_id,
-                                VarDefinitionSpace::Default,
+                                VarDefinitionSpace::Reg,
                             );
-                            self.push_entry_with_link(block_id, entry);
+                            self.push_entry_with_link(entry);
                         }
 
                         let code = LCode::Builtin(id, args_size as u8, 0);
@@ -1036,7 +1043,7 @@ impl Flatten {
                             node.span_id,
                             VarDefinitionSpace::Default,
                         );
-                        let link_id = self.push_entry_with_link(block_id, entry);
+                        let link_id = self.push_entry_with_link(entry);
                         Ok(FlattenResult::new(block_id, Some(link_id)))
                     }
                 }
@@ -1071,7 +1078,7 @@ impl Flatten {
                     node.span_id,
                     VarDefinitionSpace::Default,
                 );
-                let link_id = self.push_entry_with_link(block_id, entry);
+                let link_id = self.push_entry_with_link(entry);
                 Ok(FlattenResult::new(block_id, Some(link_id)))
             }
 
@@ -1092,7 +1099,7 @@ impl Flatten {
                     node.span_id,
                     VarDefinitionSpace::Default,
                 );
-                let link_id = self.push_entry_with_link(ry.block_id, entry);
+                let link_id = self.push_entry_with_link(entry);
                 Ok(FlattenResult::new(ry.block_id, Some(link_id)))
             }
 
@@ -1106,15 +1113,8 @@ impl Flatten {
                     } else {
                         LCode::Load(data.offset)
                     };
-                    let entry = CodeEntry::new(
-                        block_id,
-                        code,
-                        ty,
-                        None,
-                        node.span_id,
-                        VarDefinitionSpace::Default,
-                    );
-                    let link_id = self.push_entry_with_link(block_id, entry);
+                    let entry = CodeEntry::new(block_id, code, ty, None, node.span_id, data.mem);
+                    let link_id = self.push_entry_with_link(entry);
                     Ok(FlattenResult::new(block_id, Some(link_id)))
                 } else {
                     b.push_error("Name not found", node.span_id);
@@ -1162,7 +1162,7 @@ impl Flatten {
                         node.span_id,
                         VarDefinitionSpace::Default,
                     );
-                    let link_id = self.push_entry_with_link(block_id, entry);
+                    let link_id = self.push_entry_with_link(entry);
                     fenv.scope_define(
                         scope_id,
                         name,
@@ -1182,7 +1182,7 @@ impl Flatten {
                     node.span_id,
                     VarDefinitionSpace::Default,
                 );
-                let link_id = self.push_entry_with_link(block_id, entry);
+                let link_id = self.push_entry_with_link(entry);
                 Ok(FlattenResult::new(block_id, Some(link_id)))
             }
 
