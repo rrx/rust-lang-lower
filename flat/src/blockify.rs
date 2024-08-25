@@ -58,7 +58,7 @@ pub enum LCode {
     Link(LinkId),
     Arg(u8), // get the value of a positional arg
     Const(Literal),
-    Op1(UnaryOperation, ValueId),
+    Op1(UnaryOperation, CodeOffset),
     Op2(BinaryOperation, CodeOffset, CodeOffset),
     Load(CodeOffset),
     Store(CodeOffset, CodeOffset), // memref, value to store
@@ -1682,7 +1682,7 @@ impl Blockify {
                 let r = self.add(entry_id, None, *x, b)?;
                 let v_block = r.entry_id;
                 let vx = r.value_id.unwrap();
-                let code = LCode::Op1(op, vx);
+                let code = LCode::Op1(op, vx.into());
                 let v = self.push_code(
                     code,
                     node.span_id,
