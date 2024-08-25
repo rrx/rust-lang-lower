@@ -1,8 +1,9 @@
 use crate::{
     scope::Data,
-    //NodeBuilder,
     BlockId,
-    LinkId,
+    //NodeBuilder,
+    CodeOffset,
+    //LinkId,
     ScopeId,
     ScopeLayer,
     ScopeType,
@@ -81,11 +82,11 @@ impl FlattenEnvironment {
         &mut self,
         scope_id: ScopeId,
         name: StringKey,
-        link_id: LinkId,
+        offset: CodeOffset,
         ty: AstType,
         mem: VarDefinitionSpace,
     ) {
-        let data = Data::new(link_id.into(), ty, mem);
+        let data = Data::new(offset, ty, mem);
         self.scopes
             .get_mut(scope_id.0 as usize)
             .unwrap()

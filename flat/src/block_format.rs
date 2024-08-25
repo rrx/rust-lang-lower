@@ -80,7 +80,7 @@ impl Blockify {
     pub fn get_code_row(&self, v: ValueId, b: &NodeBuilder) -> CodeRow {
         let code = self.get_code(v);
         let ty = self.get_type(v.into());
-        let mem = self.get_mem(v);
+        let mem = self.get_mem(v.into());
         //let next = self.get_next(v).unwrap_or(v).index();
         //let prev = self.get_prev(v).unwrap_or(v).index();
         let scope_id = self.get_scope_id(v);

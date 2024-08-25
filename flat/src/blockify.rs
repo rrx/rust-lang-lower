@@ -74,7 +74,7 @@ pub enum LCode {
     Branch(ValueId, BlockId, BlockId),
     Ternary(ValueId, BlockId, BlockId), // condition, then_entry, else_entry
     Builtin(BuiltinId, u8, u8),
-    Call(ValueId, u8, u8),
+    Call(CodeOffset, u8, u8),
 }
 
 impl LCode {
@@ -245,7 +245,7 @@ pub trait ICodeModule {
     fn get_type(&self, v: CodeOffset) -> AstType;
     fn get_entry_id(&self, value_id: ValueId) -> ValueId;
     fn is_in_static_scope(&self, v: CodeOffset) -> bool;
-    fn get_mem(&self, value_id: ValueId) -> &VarDefinitionSpace;
+    fn get_mem(&self, offset: CodeOffset) -> &VarDefinitionSpace;
     fn resolve_code_offset(&self, code_offset: CodeOffset) -> ValueId;
 
     fn blocks(&self, block_id: BlockId, v: ValueId, b: &NodeBuilder) -> Vec<CodeOffset> {
@@ -395,7 +395,8 @@ impl ICodeModule for Blockify {
         }
     }
 
-    fn get_mem(&self, value_id: ValueId) -> &VarDefinitionSpace {
+    fn get_mem(&self, offset: CodeOffset) -> &VarDefinitionSpace {
+        let value_id = self.resolve_code_offset(offset);
         self.mem.get(value_id.index()).unwrap()
     }
 
@@ -1323,7 +1324,7 @@ impl Blockify {
                 );
             }
             let v = self.push_code(
-                LCode::Call(v_func, args_size, 0),
+                LCode::Call(v_func.into(), args_size, 0),
                 span_id,
                 scope_id,
                 entry_id,
