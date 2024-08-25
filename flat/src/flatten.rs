@@ -184,14 +184,16 @@ pub struct FlattenResult {
     link_id: Option<LinkId>,
     block_id: BlockId,
     ty: AstType,
+    is_term: bool,
 }
 
 impl FlattenResult {
-    pub fn new(block_id: BlockId, link_id: Option<LinkId>, ty: AstType) -> Self {
+    pub fn new(block_id: BlockId, link_id: Option<LinkId>, ty: AstType, is_term: bool) -> Self {
         Self {
             block_id,
             link_id,
             ty,
+            is_term,
         }
     }
 }
@@ -266,7 +268,6 @@ impl ICodeModule for FlattenModule {
     fn is_in_static_scope(&self, offset: CodeOffset) -> bool {
         let value_id = self.resolve_code_offset(offset);
         let entry = self.get_entry(value_id);
-        println!("E: {:?}", entry);
         entry.scope_type == ScopeType::Static
     }
 
@@ -486,13 +487,17 @@ impl Flatten {
         }
     }
 
-    pub fn flatten_module(node: AstNode, fenv: &mut FlattenEnvironment) -> Result<Self> {
+    pub fn flatten_module(
+        node: AstNode,
+        fenv: &mut FlattenEnvironment,
+        b: &mut NodeBuilder,
+    ) -> Result<Self> {
         let mut f = Self::new();
         if let Ast::Module(key, body) = node.node {
             f.module_key = Some(key);
             let static_scope = fenv.new_scope(ScopeType::Static);
             let stack = vec![static_scope];
-            let block_id = f.new_ast_block(Some(*body), stack);
+            let block_id = f.new_ast_block(None, stack);
             let code = LCode::Label(0, 0);
             let entry = CodeEntry::new(
                 block_id,
@@ -505,7 +510,9 @@ impl Flatten {
             f.push_entry_with_link(entry);
             fenv.static_block = Some(block_id);
             fenv.static_scope = Some(static_scope);
-            f.ast_blocks.push(block_id);
+            for ast in body.to_vec() {
+                let _ = f.flatten(block_id, ast, fenv, b)?;
+            }
             Ok(f)
         } else {
             unreachable!()
@@ -631,22 +638,20 @@ impl Flatten {
     fn flatten_sequence(
         &mut self,
         block_id: BlockId,
-        mut seq: Vec<AstNode>,
+        seq: Vec<AstNode>,
         fenv: &mut FlattenEnvironment,
         b: &mut NodeBuilder,
     ) -> Result<FlattenResult> {
-        let r = if seq.is_empty() {
-            FlattenResult::new(block_id, None, AstType::Unit)
-        } else {
-            let rem = seq.split_off(1);
-            let node = seq.pop().unwrap();
-            let r = self.flatten(block_id, node, fenv, b)?;
-            let block = self.get_block_mut(r.block_id);
-            block.ast = Some(Ast::Sequence(rem).into());
-            self.ast_blocks.push(r.block_id);
-            r
-        };
-        Ok(r)
+        let mut current_block_id = block_id;
+        let mut ty = AstType::Unit;
+        let mut link_id = None;
+        for ast in seq {
+            let r = self.flatten(current_block_id, ast, fenv, b)?;
+            current_block_id = r.block_id;
+            ty = r.ty;
+            link_id = r.link_id;
+        }
+        Ok(FlattenResult::new(current_block_id, link_id, ty, true))
     }
 
     pub fn add_return_block(
@@ -810,6 +815,7 @@ impl Flatten {
                 current_block_id,
                 Some(link_id),
                 *ret.clone(),
+                false,
             ))
         } else {
             b.push_error(&format!("Type not function: {:?}", fun_ty), span_id);
@@ -830,6 +836,7 @@ impl Flatten {
 
         if let Some(body) = def.body {
             let fun_scope_id = fenv.new_scope(scope_type);
+
             let span_id = body.span_id;
             let fun_block_id = self.successor(
                 block_id,
@@ -936,7 +943,7 @@ impl Flatten {
                                 VarDefinitionSpace::Static,
                             );
 
-                            Ok(FlattenResult::new(block_id, Some(link_id), fun_ty))
+                            Ok(FlattenResult::new(block_id, Some(link_id), fun_ty, false))
                         } else {
                             let fun_ty = def_to_type(&def, b);
                             let code = LCode::DeclareFunction(None);
@@ -949,7 +956,7 @@ impl Flatten {
                                 VarDefinitionSpace::Static,
                             );
                             let link_id = self.push_entry_with_link(entry);
-                            Ok(FlattenResult::new(block_id, Some(link_id), fun_ty))
+                            Ok(FlattenResult::new(block_id, Some(link_id), fun_ty, false))
                         }
                     }
 
@@ -999,7 +1006,7 @@ impl Flatten {
                             VarDefinitionSpace::Static,
                         );
 
-                        Ok(FlattenResult::new(block_id, Some(link_id), ast_ty))
+                        Ok(FlattenResult::new(block_id, Some(link_id), ast_ty, false))
                     }
                     _ => unreachable!(),
                 }
@@ -1015,7 +1022,7 @@ impl Flatten {
                         } else {
                             b.push_error("Expected string", span_id);
                         }
-                        Ok(FlattenResult::new(block_id, None, AstType::Unit))
+                        Ok(FlattenResult::new(block_id, None, AstType::Unit, false))
                     }
                     _ => {
                         let ty = bi.get_return_type();
@@ -1053,7 +1060,7 @@ impl Flatten {
                             VarDefinitionSpace::Default,
                         );
                         let link_id = self.push_entry_with_link(entry);
-                        Ok(FlattenResult::new(block_id, Some(link_id), ty))
+                        Ok(FlattenResult::new(block_id, Some(link_id), ty, false))
                     }
                 }
             }
@@ -1072,7 +1079,7 @@ impl Flatten {
                 }
 
                 self.add_jump(block_id, ret_block_id, jump_args, node.span_id);
-                Ok(FlattenResult::new(block_id, None, AstType::Unit)) //Some(link_id)))
+                Ok(FlattenResult::new(block_id, None, AstType::Unit, true)) //Some(link_id)))
             }
 
             Ast::Literal(lit) => {
@@ -1088,7 +1095,7 @@ impl Flatten {
                     VarDefinitionSpace::Default,
                 );
                 let link_id = self.push_entry_with_link(entry);
-                Ok(FlattenResult::new(block_id, Some(link_id), ty))
+                Ok(FlattenResult::new(block_id, Some(link_id), ty, false))
             }
 
             Ast::BinaryOp(op, x, y) => {
@@ -1109,7 +1116,7 @@ impl Flatten {
                     VarDefinitionSpace::Default,
                 );
                 let link_id = self.push_entry_with_link(entry);
-                Ok(FlattenResult::new(ry.block_id, Some(link_id), ty))
+                Ok(FlattenResult::new(ry.block_id, Some(link_id), ty, false))
             }
 
             Ast::Identifier(key) => {
@@ -1125,7 +1132,7 @@ impl Flatten {
                     let entry =
                         CodeEntry::new(block_id, code, ty.clone(), None, node.span_id, data.mem);
                     let link_id = self.push_entry_with_link(entry);
-                    Ok(FlattenResult::new(block_id, Some(link_id), ty))
+                    Ok(FlattenResult::new(block_id, Some(link_id), ty, false))
                 } else {
                     b.push_error("Name not found", node.span_id);
                     let s = b.labels.r(key.into());
@@ -1147,7 +1154,7 @@ impl Flatten {
                     let scope_id = block.stack.last().unwrap();
                     let scope = fenv.get_scope_mut(*scope_id);
                     scope.lambdas.insert(name.into(), template_id);
-                    return Ok(FlattenResult::new(block_id, None, ty));
+                    return Ok(FlattenResult::new(block_id, None, ty, false));
                 }
 
                 let r = self.flatten(block_id, *expr, fenv, b)?;
@@ -1194,7 +1201,12 @@ impl Flatten {
                     VarDefinitionSpace::Default,
                 );
                 let link_id = self.push_entry_with_link(entry);
-                Ok(FlattenResult::new(block_id, Some(link_id), AstType::Unit))
+                Ok(FlattenResult::new(
+                    block_id,
+                    Some(link_id),
+                    AstType::Unit,
+                    false,
+                ))
             }
 
             Ast::Call(expr, args, _ret_ty) => {
@@ -1257,20 +1269,87 @@ impl Flatten {
                     VarDefinitionSpace::Reg,
                 );
                 let link_id = self.push_entry_with_link(entry);
-                Ok(FlattenResult::new(block_id, Some(link_id), r.ty))
+                Ok(FlattenResult::new(block_id, Some(link_id), r.ty, false))
+            }
 
-                /*
-                let v = self.push_code(
+            Ast::Conditional(condition, then_expr, maybe_else_expr) => {
+                let block = self.get_block(block_id);
+                let v_next = block.next.unwrap();
+                let v_ret = block.ret.unwrap();
+
+                let then_scope_id = fenv.new_scope(ScopeType::Block);
+                let span_id = then_expr.span_id;
+                let then_block_id = self.successor(
+                    block_id,
+                    Some(*then_expr),
+                    Some(then_scope_id),
+                    Successor::BlockScope,
+                );
+                let block = self.get_block_mut(then_block_id);
+                block.next = Some(v_next);
+                block.ret = Some(v_ret);
+
+                self.ast_blocks.push(then_block_id);
+                let name = b.labels.s("then");
+                let code = LCode::Label(0, 0);
+                let entry = CodeEntry::new(
+                    then_block_id,
                     code,
-                    node.span_id,
-                    scope_id,
-                    v_block,
-                    ty,
-                    //self.get_type(vx.into()),
+                    AstType::Unit,
+                    Some(name),
+                    span_id,
                     VarDefinitionSpace::Reg,
                 );
-                Ok(AddResult::new(Some(v), false, v_block))
-                    */
+                self.push_entry_with_link(entry);
+
+                let else_block_id = if let Some(else_expr) = maybe_else_expr {
+                    let span_id = else_expr.span_id;
+                    let else_scope_id = fenv.new_scope(ScopeType::Block);
+                    let else_block_id = self.successor(
+                        block_id,
+                        Some(*else_expr),
+                        Some(else_scope_id),
+                        Successor::BlockScope,
+                    );
+                    let block = self.get_block_mut(then_block_id);
+                    block.next = Some(v_next);
+                    block.ret = Some(v_ret);
+
+                    self.ast_blocks.push(else_block_id);
+                    let code = LCode::Label(0, 0);
+                    let name = b.labels.s("else");
+                    let entry = CodeEntry::new(
+                        else_block_id,
+                        code,
+                        AstType::Unit,
+                        Some(name),
+                        span_id,
+                        VarDefinitionSpace::Reg,
+                    );
+                    self.push_entry_with_link(entry);
+                    else_block_id
+                } else {
+                    v_next
+                };
+
+                // condition
+                let span_id = condition.span_id;
+                let r = self.flatten(block_id, *condition, fenv, b)?;
+                let code = LCode::Branch(
+                    r.link_id.unwrap().into(),
+                    then_block_id.into(),
+                    else_block_id.into(),
+                );
+                let entry = CodeEntry::new(
+                    block_id,
+                    code,
+                    AstType::Unit,
+                    None,
+                    span_id,
+                    VarDefinitionSpace::Reg,
+                );
+                let v = self.push_entry_with_link(entry);
+                Ok(FlattenResult::new(block_id, Some(v), AstType::Unit, true))
             }
 
             /*
@@ -1285,8 +1364,6 @@ impl Flatten {
 
 
 
-            Ast::Conditional(condition, then_expr, maybe_else_expr) => {
-            }
 
             Ast::Ternary(c, x, y) => {
             }

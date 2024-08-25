@@ -53,7 +53,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let ast = result?;
 
         let mut fenv = FlattenEnvironment::new();
-        let r = Flatten::flatten_module(ast, &mut fenv);
+        let r = Flatten::flatten_module(ast, &mut fenv, &mut b);
         b.spans.diagnostics_dump();
         let mut f = r?;
         let r = f.run_loop(&mut fenv, &mut b);

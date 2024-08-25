@@ -70,7 +70,7 @@ pub fn code_to_string(v: ValueId, blockify: &Blockify, b: &NodeBuilder) -> Strin
         }
 
         LCode::Branch(c, x, y) => {
-            format!("Branch({},{},{})", c.index(), x, y)
+            format!("Branch({:?},{},{})", c, x, y)
         }
 
         _ => {

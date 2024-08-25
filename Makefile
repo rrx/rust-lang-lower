@@ -6,6 +6,8 @@ run:
 	RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/test_global.star
 	RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/static_var.star
 	RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/test_float.star
+	RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/fix.star
+	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/test_cond.star
 
 run0:
 	RUST_BACKTRACE=1 cargo run --bin parse -- -v tests/static_var.star

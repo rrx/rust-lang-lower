@@ -71,7 +71,7 @@ pub enum LCode {
     // jump to block, with num args
     Jump(BlockId, u8),
 
-    Branch(ValueId, BlockId, BlockId),
+    Branch(CodeOffset, BlockId, BlockId),
     Ternary(ValueId, BlockId, BlockId), // condition, then_entry, else_entry
     Builtin(BuiltinId, u8, u8),
     Call(CodeOffset, u8, u8),
@@ -303,7 +303,7 @@ pub trait ICodeModule {
             }
 
             LCode::Branch(c, x, y) => {
-                format!("Branch({},{},{})", c.0, x, y)
+                format!("Branch({:?},{},{})", c, x, y)
             }
 
             _ => {
@@ -1726,7 +1726,7 @@ impl Blockify {
                 let v = r.value_id.unwrap();
 
                 // branch
-                let code = LCode::Branch(v, then_block_id.into(), else_block_id.into());
+                let code = LCode::Branch(v.into(), then_block_id.into(), else_block_id.into());
                 let v = self.push_code(
                     code,
                     span_id,
