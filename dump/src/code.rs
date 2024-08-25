@@ -33,12 +33,12 @@ pub fn code_to_string(v: ValueId, blockify: &Blockify, b: &NodeBuilder) -> Strin
     let code = blockify.get_code(v);
     match code {
         LCode::Declare => {
-            let code_str = b.labels.r(blockify.get_name(v).unwrap());
-            format!("declare {}: {:?}", code_str, blockify.get_type(v))
+            let code_str = b.labels.r(blockify.get_name(v.into()).unwrap());
+            format!("declare {}: {:?}", code_str, blockify.get_type(v.into()))
         }
 
         LCode::DeclareFunction(maybe_entry) => {
-            let code_str = b.labels.r(blockify.get_name(v).unwrap());
+            let code_str = b.labels.r(blockify.get_name(v.into()).unwrap());
             if let Some(entry_id) = maybe_entry {
                 format!("declare_function({},{:?})", code_str, entry_id)
             } else {
@@ -47,7 +47,7 @@ pub fn code_to_string(v: ValueId, blockify: &Blockify, b: &NodeBuilder) -> Strin
         }
 
         LCode::Label(args, kwargs) => {
-            if let Some(key) = blockify.get_name(v) {
+            if let Some(key) = blockify.get_name(v.into()) {
                 format!("label({}, {}, {})", b.labels.r(key), args, kwargs,)
             } else {
                 format!("label(-, {}, {})", args, kwargs,)

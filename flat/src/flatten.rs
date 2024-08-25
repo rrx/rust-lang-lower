@@ -2,12 +2,12 @@ use anyhow::Error;
 use anyhow::Result;
 use compile_core::{
     Argument,
-    //AssignTarget,
+    AssignTarget,
     Ast,
     AstNode,
     AstType,
     //BinaryOperation, BuiltinId, ControlFlowMarker,
-    //Lambda,
+    Lambda,
     LinkOptions,
     //Literal,
     //ParameterNode,
@@ -24,22 +24,23 @@ use std::convert::From;
 use std::convert::Into;
 
 use crate::{
+    scope::Data,
     BlockId,
     BlockifyError,
     Builtin,
     CodeOffset,
     CodeRow,
+    FlattenEnvironment,
     ICodeModule,
     LCode,
     LinkId,
     NodeBuilder,
     ScopeId,
-    ScopeLayer,
     //NodeBuilder as NB,
     ScopeType,
     StringLabel,
     Successor,
-    //TemplateId,
+    TemplateId,
     ValueId,
 };
 
@@ -67,73 +68,6 @@ impl From<NodeIndex> for BlockId {
     }
 }
 
-pub struct FlattenEnvironment {
-    current_block: Option<BlockId>,
-    static_block: Option<BlockId>,
-    static_scope: Option<ScopeId>,
-    stack: Vec<ScopeId>,
-    scopes: Vec<ScopeLayer>,
-}
-
-impl FlattenEnvironment {
-    pub fn new() -> Self {
-        Self {
-            current_block: None,
-            static_block: None,
-            static_scope: None,
-            stack: vec![],
-            scopes: vec![],
-        }
-    }
-
-    pub fn static_scope_id(&self) -> ScopeId {
-        self.static_scope.unwrap()
-    }
-
-    pub fn static_block_id(&self) -> BlockId {
-        self.static_block.unwrap()
-    }
-
-    pub fn new_scope(&mut self, scope_type: ScopeType) -> ScopeId {
-        let offset = self.scopes.len();
-        let scope = ScopeLayer::new(scope_type);
-        self.scopes.push(scope);
-        ScopeId(offset as u32)
-    }
-
-    pub fn current_scope(&self) -> Option<ScopeId> {
-        self.stack.last().cloned()
-    }
-
-    pub fn enter_scope(&mut self, scope_id: ScopeId) {
-        self.stack.push(scope_id);
-    }
-
-    pub fn exit_scope(&mut self) {
-        self.stack.pop().unwrap();
-    }
-
-    pub fn get_scope(&self, scope_id: ScopeId) -> &ScopeLayer {
-        self.scopes.get(scope_id.0 as usize).unwrap()
-    }
-
-    pub fn get_scope_mut(&mut self, scope_id: ScopeId) -> &mut ScopeLayer {
-        self.scopes.get_mut(scope_id.0 as usize).unwrap()
-    }
-
-    pub fn push_block(&mut self, block_id: BlockId) {
-        self.current_block = Some(block_id);
-    }
-
-    pub fn current_block(&mut self) -> BlockId {
-        self.current_block.unwrap().clone()
-    }
-
-    pub fn pop_block(&mut self) -> BlockId {
-        self.current_block.take().unwrap()
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct ModuleEntry {
     value_id: ValueId,
@@ -143,6 +77,7 @@ pub struct ModuleEntry {
     name: Option<StringKey>,
     link: Option<LinkId>,
     block_id: BlockId,
+    scope_id: ScopeId,
     ty: AstType,
     span_id: SpanId,
     mem: VarDefinitionSpace,
@@ -154,6 +89,7 @@ impl ModuleEntry {
         value_id: ValueId,
         next: ValueId,
         prev: ValueId,
+        scope_id: ScopeId,
         scope_type: ScopeType,
         entry: CodeEntry,
     ) -> ModuleEntry {
@@ -161,6 +97,7 @@ impl ModuleEntry {
             value_id,
             next,
             prev,
+            scope_id,
             scope_type,
             code: entry.code,
             name: entry.name,
@@ -272,13 +209,15 @@ impl ICodeModule for FlattenModule {
         entry.span_id
     }
 
-    fn get_name(&self, v: ValueId) -> Option<StringLabel> {
-        self.get_entry(v).name.map(|n| n.into())
+    fn get_name(&self, offset: CodeOffset) -> Option<StringLabel> {
+        let value_id = self.resolve_code_offset(offset);
+        self.get_entry(value_id).name.map(|n| n.into())
     }
 
     fn get_code(&self, value_id: ValueId) -> &LCode {
         &self.get_entry(value_id).code
     }
+
     fn get_next(&self, value_id: ValueId) -> Option<ValueId> {
         let entry = self.get_entry(value_id);
         if entry.next != value_id {
@@ -307,8 +246,9 @@ impl ICodeModule for FlattenModule {
             .collect::<Vec<_>>()
     }
 
-    fn get_type(&self, v: ValueId) -> AstType {
-        let entry = self.get_entry(v);
+    fn get_type(&self, v: CodeOffset) -> AstType {
+        let value_id = self.resolve_code_offset(v);
+        let entry = self.get_entry(value_id);
         entry.clone().ty
     }
 
@@ -317,8 +257,9 @@ impl ICodeModule for FlattenModule {
         *self.block_map.get(&block_id).unwrap()
     }
 
-    fn is_in_static_scope(&self, v: ValueId) -> bool {
-        self.get_entry(v).scope_type == ScopeType::Static
+    fn is_in_static_scope(&self, offset: CodeOffset) -> bool {
+        let value_id = self.resolve_code_offset(offset);
+        self.get_entry(value_id).scope_type == ScopeType::Static
     }
 
     fn get_mem(&self, value_id: ValueId) -> &VarDefinitionSpace {
@@ -346,21 +287,6 @@ impl ICodeModule for FlattenModule {
         for entry in self.entries.iter() {
             let row = self.get_code_row(entry.value_id, b);
             rows.push(row);
-            /*
-            let name = entry.name.map(|n| b.labels.r(n.into()));
-            println!(
-                "IR: V: {}, Nx: {}, Pr: {}, B: {}, L:{}, N: {:?}, C: {:?}, T: {:?}, S: {:?}",
-                entry.value_id,
-                entry.next,
-                entry.prev,
-                entry.block_id,
-                entry.link.unwrap(),
-                name.unwrap_or("".into()),
-                entry.code,
-                entry.ty,
-                entry.scope_type,
-            );
-            */
         }
         let s = Table::new(rows).with(Style::sharp()).to_string();
         println!("{}", s);
@@ -381,7 +307,6 @@ impl FlattenModule {
     }
 
     pub fn add(&mut self, mentry: ModuleEntry) {
-        //println!("add: {:?}", mentry);
         self.link_map.insert(mentry.link.unwrap(), mentry.value_id);
         if let LCode::Label(_, _) = mentry.code {
             self.block_map.insert(mentry.block_id, mentry.value_id);
@@ -406,11 +331,10 @@ impl FlattenModule {
     pub fn get_code_row(&self, v: ValueId, b: &NodeBuilder) -> CodeRow {
         let entry = self.get_entry(v);
         let code = self.get_code(v);
-        let ty = self.get_type(v);
+        let ty = self.get_type(v.into());
         let mem = self.get_mem(v);
         //let next = self.get_next(v).unwrap_or(v).index();
         //let prev = self.get_prev(v).unwrap_or(v).index();
-        let scope_id = ScopeId(0); //self.get_scope_id(v);
         let entry_id = self.get_entry_id(v);
         let block_id = entry.block_id;
 
@@ -423,12 +347,12 @@ impl FlattenModule {
             ty,
             mem: format!("{:?}", mem),
             name: self
-                .get_name(v)
+                .get_name(v.into())
                 .map(|key| b.labels.r(key))
                 .unwrap_or("".to_string())
                 .to_string(),
             span_id: self.get_span_id(v).index(),
-            scope_id: scope_id.index(),
+            scope_id: entry.scope_id.index(),
             entry_id: entry_id.index(),
             block_id: block_id.index(),
             term: code.is_term(),
@@ -442,6 +366,7 @@ pub struct Flatten {
     link: LinkOptions,
     entries: Vec<CodeEntry>,
     gblocks: BlockGraph,
+    templates: Vec<Lambda>,
 }
 
 impl Flatten {
@@ -452,7 +377,34 @@ impl Flatten {
             entries: vec![],
             gblocks: BlockGraph::new(),
             link: LinkOptions::new(),
+            templates: vec![],
         }
+    }
+
+    pub fn dump_scope(&self, block_id: BlockId, fenv: &FlattenEnvironment, b: &NodeBuilder) {
+        println!("DumpScope");
+        let block = self.get_block(block_id);
+        for scope_id in block.stack.iter() {
+            let scope = fenv.get_scope(*scope_id);
+            scope.dump(b);
+        }
+    }
+
+    pub fn resolve_name(
+        &self,
+        block_id: BlockId,
+        name: StringKey,
+        fenv: &FlattenEnvironment,
+    ) -> Option<Data> {
+        // resolve scope through the tree, starting at the current scope
+        let block = self.get_block(block_id);
+        for scope_id in block.stack.iter().rev() {
+            let scope = fenv.get_scope(*scope_id);
+            if let Some(data) = scope.names.get(&name) {
+                return Some(data.clone());
+            }
+        }
+        None
     }
 
     pub fn module(self, fenv: &FlattenEnvironment, _b: &NodeBuilder) -> FlattenModule {
@@ -479,7 +431,8 @@ impl Flatten {
                 }
                 let scope_id = block.stack.last().unwrap();
                 let scope = fenv.get_scope(*scope_id);
-                let mentry = ModuleEntry::from_code_entry(v, next, prev, scope.scope_type, entry);
+                let mentry =
+                    ModuleEntry::from_code_entry(v, next, prev, *scope_id, scope.scope_type, entry);
                 m.add(mentry);
                 value_count += 1;
             }
@@ -631,6 +584,16 @@ impl Flatten {
         self.entries.get_mut(link_id.index()).unwrap()
     }
 
+    pub fn push_template(&mut self, def: Lambda) -> TemplateId {
+        let offset = self.templates.len();
+        self.templates.push(def);
+        TemplateId(offset as u32)
+    }
+
+    pub fn get_template(&mut self, template_id: TemplateId) -> &Lambda {
+        self.templates.get(template_id.index()).unwrap()
+    }
+
     fn flatten_sequence(
         &mut self,
         block_id: BlockId,
@@ -766,7 +729,7 @@ impl Flatten {
                                 Some(fun_scope_id),
                                 Successor::FunctionDeclaration,
                             );
-                            let code = LCode::Label(0, 0);
+                            let code = LCode::Label(def.params.len() as u8, 0);
 
                             let entry = CodeEntry::new(
                                 fun_block_id,
@@ -776,6 +739,26 @@ impl Flatten {
                                 span_id,
                             );
                             self.push_entry_with_link(fun_block_id, entry);
+
+                            for (i, p) in def.params.iter().enumerate() {
+                                let ty = b.types.r(p.ty);
+                                let code = LCode::Arg(i as u8);
+                                let entry = CodeEntry::new(
+                                    fun_block_id,
+                                    code,
+                                    ty.clone(),
+                                    Some(p.name),
+                                    span_id,
+                                );
+                                let link_id = self.push_entry_with_link(fun_block_id, entry);
+                                fenv.scope_define(
+                                    fun_scope_id,
+                                    p.name,
+                                    link_id.into(),
+                                    ty.clone(),
+                                    VarDefinitionSpace::Arg,
+                                );
+                            }
 
                             //self.ir_blocks.push(fun_block_id);
                             let ret_ty = b.types.r(def.return_type).clone();
@@ -903,6 +886,90 @@ impl Flatten {
                 Ok(FlattenResult::new(block_id, Some(link_id)))
             }
 
+            Ast::BinaryOp(op, x, y) => {
+                // expression, non-terminal
+                let rx = self.flatten(block_id, *x, fenv, b)?;
+                let ry = self.flatten(rx.block_id, *y, fenv, b)?;
+                let vx = rx.link_id.unwrap();
+                let vy = ry.link_id.unwrap();
+                let code = LCode::Op2(op.node, vx.into(), vy.into());
+                let entry = self.get_entry(vx);
+                let ty = entry.ty.clone();
+                let entry = CodeEntry::new(ry.block_id, code, ty, None, node.span_id);
+                let link_id = self.push_entry_with_link(ry.block_id, entry);
+                Ok(FlattenResult::new(ry.block_id, Some(link_id)))
+            }
+
+            Ast::Identifier(key) => {
+                // identifier is expression, non-terminal
+                self.dump_scope(block_id, fenv, b);
+                if let Some(data) = self.resolve_name(block_id, key, fenv) {
+                    let ty = data.ty.clone();
+                    let code = if let VarDefinitionSpace::Arg = data.mem {
+                        LCode::Value(data.offset)
+                    } else {
+                        LCode::Load(data.offset)
+                    };
+                    let entry = CodeEntry::new(block_id, code, ty, None, node.span_id);
+                    let link_id = self.push_entry_with_link(block_id, entry);
+                    Ok(FlattenResult::new(block_id, Some(link_id)))
+                } else {
+                    b.push_error("Name not found", node.span_id);
+                    let s = b.labels.r(key.into());
+                    Err(Error::new(BlockifyError::NotFound(s)))
+                }
+            }
+
+            Ast::Assign(target, expr) => {
+                // assign is expression, non-terminal
+                let name = match target {
+                    AssignTarget::Identifier(name) | AssignTarget::Alloca(name) => name,
+                };
+
+                // push the definition into the lambda list
+                if let Ast::Lambda(def) = expr.node {
+                    let template_id = self.push_template(def);
+                    let block = self.get_block(block_id);
+                    let scope_id = block.stack.last().unwrap();
+                    let scope = fenv.get_scope_mut(*scope_id);
+                    scope.lambdas.insert(name.into(), template_id);
+                    return Ok(FlattenResult::new(block_id, None));
+                }
+
+                let r = self.flatten(block_id, *expr, fenv, b)?;
+                let v_expr = r.link_id.unwrap();
+                let expr_ty = self.get_entry(v_expr).ty.clone();
+                let v_block = r.block_id;
+
+                self.dump_scope(block_id, fenv, b);
+                let offset_decl = if let Some(data) = self.resolve_name(block_id, name, fenv) {
+                    assert_eq!(data.ty, expr_ty);
+                    data.offset
+                } else {
+                    let block = self.get_block(block_id);
+                    let scope_id = block.stack.last().unwrap().clone();
+                    //let scope = fenv.get_scope_mut(*scope_id);
+                    let code = LCode::Declare;
+                    let expr_ty = self.get_entry(v_expr).ty.clone();
+                    let entry =
+                        CodeEntry::new(v_block, code, expr_ty.clone(), Some(name), node.span_id);
+                    let link_id = self.push_entry_with_link(block_id, entry);
+                    fenv.scope_define(
+                        scope_id,
+                        name,
+                        link_id.into(),
+                        expr_ty,
+                        VarDefinitionSpace::Stack,
+                    );
+                    link_id.into()
+                };
+
+                let code = LCode::Store(offset_decl, v_expr.into());
+                let entry = CodeEntry::new(v_block, code, AstType::Unit, Some(name), node.span_id);
+                let link_id = self.push_entry_with_link(block_id, entry);
+                Ok(FlattenResult::new(block_id, Some(link_id)))
+            }
+
             /*
             Ast::Lambda(_def) => {
             }
@@ -916,11 +983,6 @@ impl Flatten {
             Ast::ControlFlowMarker(ControlFlowMarker::Goto(label)) => {
             }
 
-            Ast::Identifier(key) => {
-            }
-
-            Ast::Assign(target, expr) => {
-            }
 
             Ast::UnaryOp(op, x) => {
             }
@@ -929,9 +991,6 @@ impl Flatten {
             }
 
             Ast::Ternary(c, x, y) => {
-            }
-
-            Ast::BinaryOp(op, x, y) => {
             }
 
             Ast::Yield(maybe_expr) => {

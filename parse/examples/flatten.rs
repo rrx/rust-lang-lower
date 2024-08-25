@@ -34,7 +34,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     SimpleLogger::new().init().unwrap();
     let config: Config = argh::from_env();
 
-    println!("Config: {:?}", config);
     if config.verbose {
         log::set_max_level(log::LevelFilter::Trace);
     } else {
@@ -54,9 +53,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         let ast = result?;
 
         let mut fenv = FlattenEnvironment::new();
-        let mut f = Flatten::flatten_module(ast, &mut fenv)?;
-        f.run_loop(&mut fenv, &mut b)?;
+        let r = Flatten::flatten_module(ast, &mut fenv);
+        b.spans.diagnostics_dump();
+        let mut f = r?;
+        let r = f.run_loop(&mut fenv, &mut b);
         f.dump_ast(&b);
+        b.spans.diagnostics_dump();
+        let _ = r?;
         let m = f.module(&mut fenv, &b);
         m.dump(&b);
 
@@ -79,6 +82,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     if config.exec {
         let exit_code = p.exec_main(&context, &mut module, "target/debug", config.verbose);
+        println!("Exit: {}", exit_code);
         std::process::exit(exit_code);
     }
 

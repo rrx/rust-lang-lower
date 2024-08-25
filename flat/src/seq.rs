@@ -364,11 +364,11 @@ impl Blockify {
         let mut block_id = block_id.into();
         let v_args = if let Some(arg) = arg {
             let r = self.add(block_id, None, arg, b)?;
-            let ty = self.get_type(r.value_id.unwrap());
+            let ty = self.get_type(r.value_id.unwrap().into());
 
             block_id = r.entry_id;
             self.push_code(
-                LCode::Value(r.value_id.unwrap()),
+                LCode::Value(r.value_id.unwrap().into()),
                 span_id,
                 scope_id,
                 block_id,

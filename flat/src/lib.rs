@@ -4,6 +4,7 @@ pub mod builder;
 pub mod builtin;
 mod dump;
 pub mod flatten;
+pub mod flatten_env;
 pub mod graph;
 pub mod scope;
 pub mod seq;
@@ -13,6 +14,7 @@ pub use blockify::{Blockify, BlockifyError, ICodeModule, LCode};
 pub use builder::*;
 pub use builtin::*;
 pub use flatten::*;
+pub use flatten_env::*;
 pub use graph::{Node, CFG};
 pub use scope::{Environment, ScopeId, ScopeLayer, ScopeType, Successor, TemplateId};
 

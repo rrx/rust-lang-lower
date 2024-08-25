@@ -38,6 +38,8 @@ use tabled::{
 pub enum BlockifyError {
     #[error("BlockifyError")]
     Invalid,
+    #[error("NotFound")]
+    NotFound(String),
 }
 
 #[derive(Debug)]
@@ -52,16 +54,16 @@ pub enum LCode {
     Noop,
     Declare,
     DeclareFunction(Option<BlockId>), // optional entry block
-    Value(ValueId),
+    Value(CodeOffset),
     Link(LinkId),
     Arg(u8), // get the value of a positional arg
     Const(Literal),
     Op1(UnaryOperation, ValueId),
-    Op2(BinaryOperation, ValueId, ValueId),
-    Load(ValueId),
-    Store(ValueId, ValueId), // memref, value to store
-    Return(u8),              // return values
-    Yield(u8),               // yield values
+    Op2(BinaryOperation, CodeOffset, CodeOffset),
+    Load(CodeOffset),
+    Store(CodeOffset, CodeOffset), // memref, value to store
+    Return(u8),                    // return values
+    Yield(u8),                     // yield values
 
     //jump to named block, with 0 args
     //Goto(StringKey),
@@ -157,7 +159,7 @@ pub struct PendingResult {
 pub trait ICodeModule {
     fn shared_libraries(&self) -> Vec<String>;
     fn get_span_id(&self, value_id: ValueId) -> SpanId;
-    fn get_name(&self, v: ValueId) -> Option<StringLabel>;
+    fn get_name(&self, v: CodeOffset) -> Option<StringLabel>;
     fn get_code(&self, value_id: ValueId) -> &LCode;
     fn get_next(&self, value_id: ValueId) -> Option<ValueId>;
     fn get_prev(&self, value_id: ValueId) -> Option<ValueId>;
@@ -208,10 +210,11 @@ pub trait ICodeModule {
         cfg
     }
 
-    fn resolve_declaration<'c>(&self, value_id: ValueId) -> Option<ValueId> {
-        let mut current = value_id;
+    fn resolve_declaration<'c>(&self, offset: CodeOffset) -> Option<CodeOffset> {
+        let mut current = offset;
         loop {
-            let code = self.get_code(current);
+            let value_id = self.resolve_code_offset(current);
+            let code = self.get_code(value_id);
             if let LCode::Value(next_value_id) = code {
                 current = *next_value_id;
             } else {
@@ -220,27 +223,28 @@ pub trait ICodeModule {
         }
     }
 
-    fn get_previous_values(&self, v: ValueId, num: usize) -> Vec<ValueId> {
+    fn get_previous_values(&self, v: ValueId, num: usize) -> Vec<CodeOffset> {
         let mut values = vec![];
         for i in 0..num {
             let v = ValueId((v.0 as usize - num + i) as u32);
             let code = self.get_code(v);
             if let LCode::Value(value_id) = code {
-                values.push(*value_id);
+                values.push((*value_id).into());
                 continue;
             }
             if let LCode::Link(link_id) = code {
-                let v = (*link_id).into();
-                values.push(self.resolve_code_offset(v));
+                values.push((*link_id).into());
+                //let v = (*link_id).into();
+                //values.push(self.resolve_code_offset(v));
                 continue;
             }
         }
         values
     }
 
-    fn get_type(&self, v: ValueId) -> AstType;
+    fn get_type(&self, v: CodeOffset) -> AstType;
     fn get_entry_id(&self, value_id: ValueId) -> ValueId;
-    fn is_in_static_scope(&self, v: ValueId) -> bool;
+    fn is_in_static_scope(&self, v: CodeOffset) -> bool;
     fn get_mem(&self, value_id: ValueId) -> &VarDefinitionSpace;
     fn resolve_code_offset(&self, code_offset: CodeOffset) -> ValueId;
 
@@ -256,12 +260,12 @@ pub trait ICodeModule {
         let code = self.get_code(v);
         match code {
             LCode::Declare => {
-                let code_str = b.labels.r(self.get_name(v).unwrap());
-                format!("declare {}: {:?}", code_str, self.get_type(v))
+                let code_str = b.labels.r(self.get_name(v.into()).unwrap());
+                format!("declare {}: {:?}", code_str, self.get_type(v.into()))
             }
 
             LCode::DeclareFunction(maybe_entry) => {
-                let code_str = b.labels.r(self.get_name(v).unwrap());
+                let code_str = b.labels.r(self.get_name(v.into()).unwrap());
                 if let Some(entry_id) = maybe_entry {
                     format!("declare_function({},{:?})", code_str, entry_id)
                 } else {
@@ -270,7 +274,7 @@ pub trait ICodeModule {
             }
 
             LCode::Label(args, kwargs) => {
-                if let Some(key) = self.get_name(v) {
+                if let Some(key) = self.get_name(v.into()) {
                     format!("label({}, {}, {})", b.labels.r(key), args, kwargs,)
                 } else {
                     format!("label(-, {}, {})", args, kwargs,)
@@ -335,8 +339,9 @@ impl ICodeModule for Blockify {
         self.span.get(value_id.index()).unwrap().clone()
     }
 
-    fn get_name(&self, v: ValueId) -> Option<StringLabel> {
-        self.names.get(&v).cloned()
+    fn get_name(&self, offset: CodeOffset) -> Option<StringLabel> {
+        let value_id = self.resolve_code_offset(offset);
+        self.names.get(&value_id).cloned()
     }
 
     fn get_code(&self, value_id: ValueId) -> &LCode {
@@ -374,12 +379,14 @@ impl ICodeModule for Blockify {
         self.env.get_block_by_block_id(block_id).entry_id.unwrap()
     }
 
-    fn get_type(&self, v: ValueId) -> AstType {
-        self.types.get(v.0 as usize).unwrap().clone()
+    fn get_type(&self, v: CodeOffset) -> AstType {
+        let value_id = self.resolve_code_offset(v);
+        self.types.get(value_id.index()).unwrap().clone()
     }
 
-    fn is_in_static_scope(&self, v: ValueId) -> bool {
-        let scope_id = self.get_scope_id(v);
+    fn is_in_static_scope(&self, offset: CodeOffset) -> bool {
+        let value_id = self.resolve_code_offset(offset);
+        let scope_id = self.get_scope_id(value_id);
         let scope = self.env.get_scope(scope_id);
         if let ScopeType::Static = scope.scope_type {
             true
@@ -1040,7 +1047,7 @@ impl Blockify {
 
         for v_arg in v_args.iter() {
             self.push_code(
-                LCode::Value(*v_arg),
+                LCode::Value((*v_arg).into()),
                 span_id,
                 scope_id,
                 entry_id.into(),
@@ -1226,11 +1233,11 @@ impl Blockify {
 
         for value_id in values {
             self.push_code(
-                LCode::Value(value_id),
+                LCode::Value(value_id.into()),
                 span_id,
                 scope_id,
                 entry_id,
-                self.get_type(value_id),
+                self.get_type(value_id.into()),
                 VarDefinitionSpace::Reg,
             );
         }
@@ -1279,7 +1286,7 @@ impl Blockify {
         span_id: SpanId,
         b: &mut NodeBuilder,
     ) -> Result<AddResult> {
-        let ty = self.get_type(v_func);
+        let ty = self.get_type(v_func.into());
 
         if let AstType::Func(func_arg_types, ret) = &ty {
             if func_arg_types.len() != args.len() {
@@ -1301,7 +1308,7 @@ impl Blockify {
                     Argument::Positional(expr) => {
                         let r = self.add(entry_id, None, *expr, b)?;
                         let v = r.value_id.unwrap();
-                        values.push((LCode::Value(v), ty.clone()));
+                        values.push((LCode::Value(v.into()), ty.clone()));
                     }
                 }
             }
@@ -1325,7 +1332,7 @@ impl Blockify {
             );
             Ok(AddResult::new(Some(v), false, entry_id))
         } else {
-            let name = b.labels.r(self.get_name(v_func).unwrap());
+            let name = b.labels.r(self.get_name(v_func.into()).unwrap());
             b.push_error(&format!("Type not function: {}, {:?}", name, ty), span_id);
             return Err(Error::new(BlockifyError::Invalid));
         }
@@ -1408,7 +1415,7 @@ impl Blockify {
         self.env.exit_scope();
         let block_id = self.resolve_block_id(pending.block_id.into());
         let v_result = r.value_id.unwrap();
-        let ty = self.get_type(v_result);
+        let ty = self.get_type(v_result.into());
         let type_id1 = b.types.s(&pending.ty);
         let type_id2 = b.types.s(&ty);
         b.types.unify(type_id1, type_id2);
@@ -1464,10 +1471,11 @@ impl Blockify {
                 Ast::Identifier(ident) => {
                     let name = b.labels.r(ident.into());
                     if let Some(data) = self.env.resolve_name(*ident) {
+                        let value_id = self.resolve_code_offset(data.offset);
                         return self.add_function_call(
                             scope_id,
                             entry_id,
-                            data.value_id,
+                            value_id,
                             args,
                             node.span_id,
                             b,
@@ -1532,9 +1540,9 @@ impl Blockify {
                 if let Some(data) = self.env.resolve_name(key) {
                     let ty = data.ty.clone();
                     let code = if let VarDefinitionSpace::Arg = data.mem {
-                        LCode::Value(data.value_id)
+                        LCode::Value(data.offset)
                     } else {
-                        LCode::Load(data.value_id)
+                        LCode::Load(data.offset)
                     };
                     let v = self.push_code(
                         code,
@@ -1570,11 +1578,11 @@ impl Blockify {
                 let v_expr = r.value_id.unwrap();
                 let v_block = r.entry_id;
 
-                let expr_ty = self.get_type(v_expr);
+                let expr_ty = self.get_type(v_expr.into());
 
                 let v_decl = if let Some(data) = self.env.resolve_name(name) {
                     assert_eq!(data.ty, expr_ty);
-                    data.value_id
+                    self.resolve_code_offset(data.offset)
                 } else {
                     self.push_code_with_name(
                         LCode::Declare,
@@ -1588,7 +1596,7 @@ impl Blockify {
                 };
 
                 let v = self.push_code(
-                    LCode::Store(v_decl, v_expr),
+                    LCode::Store(v_decl.into(), v_expr.into()),
                     node.span_id,
                     scope_id,
                     v_block,
@@ -1619,13 +1627,13 @@ impl Blockify {
                             let Argument::Positional(expr) = a;
                             let r = self.add(entry_id, None, *expr, b)?;
                             let v = r.value_id.unwrap();
-                            let ty = self.get_type(v);
+                            let ty = self.get_type(v.into());
                             values.push((v, ty));
                         }
 
                         for (v, ty) in values {
                             self.push_code(
-                                LCode::Value(v),
+                                LCode::Value(v.into()),
                                 node.span_id,
                                 scope_id,
                                 entry_id,
@@ -1673,7 +1681,7 @@ impl Blockify {
                     node.span_id,
                     scope_id,
                     v_block,
-                    self.get_type(vx),
+                    self.get_type(vx.into()),
                     VarDefinitionSpace::Reg,
                 );
                 Ok(AddResult::new(Some(v), false, v_block))
@@ -1823,8 +1831,8 @@ impl Blockify {
                 let r = self.add(v_block, None, *y, b)?;
                 let vy = r.value_id.unwrap();
                 let v_block = r.entry_id;
-                let code = LCode::Op2(op.node, vx, vy);
-                let ty = self.get_type(vx);
+                let code = LCode::Op2(op.node, vx.into(), vy.into());
+                let ty = self.get_type(vx.into());
                 let v = self.push_code(
                     code,
                     node.span_id,
@@ -1859,12 +1867,12 @@ impl Blockify {
                 if let Some(expr) = maybe_expr {
                     let r = self.add(entry_id, None, *expr, b)?;
                     if let Some(v) = r.value_id {
-                        ty = self.get_type(v);
+                        ty = self.get_type(v.into());
                         n_args = 1;
                         v_block = r.entry_id;
 
                         // push single arg
-                        let code = LCode::Value(v);
+                        let code = LCode::Value(v.into());
                         self.push_code(
                             code,
                             node.span_id,
@@ -1920,7 +1928,7 @@ impl Blockify {
                     );
 
                     let v = self.push_code_with_name(
-                        LCode::Value(v),
+                        LCode::Value(v.into()),
                         expr.span_id,
                         scope_id,
                         self.resolve_block_id(entry_id),

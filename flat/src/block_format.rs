@@ -79,10 +79,10 @@ impl Blockify {
 
     pub fn get_code_row(&self, v: ValueId, b: &NodeBuilder) -> CodeRow {
         let code = self.get_code(v);
-        let ty = self.get_type(v);
+        let ty = self.get_type(v.into());
         let mem = self.get_mem(v);
-        let next = self.get_next(v).unwrap_or(v).index();
-        let prev = self.get_prev(v).unwrap_or(v).index();
+        //let next = self.get_next(v).unwrap_or(v).index();
+        //let prev = self.get_prev(v).unwrap_or(v).index();
         let scope_id = self.get_scope_id(v);
         let entry_id = self.get_entry_id(v);
         let block_id = self.env.block_map.get(&entry_id).unwrap();
@@ -96,7 +96,7 @@ impl Blockify {
             ty,
             mem: format!("{:?}", mem),
             name: self
-                .get_name(v)
+                .get_name(v.into())
                 .map(|key| b.labels.r(key))
                 .unwrap_or("".to_string())
                 .to_string(),
