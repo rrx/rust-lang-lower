@@ -1,21 +1,28 @@
-use crate::{
-    scope::Data,
-    BlockId,
-    //NodeBuilder,
-    CodeOffset,
-    //LinkId,
-    ScopeId,
-    ScopeLayer,
-    ScopeType,
-};
+use petgraph::graph::DiGraph;
+use petgraph::graph::NodeIndex;
+
+use crate::{scope::Data, BlockId, CodeOffset, NodeBuilder, ScopeId, ScopeLayer, ScopeType};
 use compile_core::{AstType, StringKey, VarDefinitionSpace};
+
+pub type ScopeGraph = DiGraph<ScopeLayer, ()>;
+
+impl Into<NodeIndex> for ScopeId {
+    fn into(self) -> NodeIndex {
+        NodeIndex::new(self.index())
+    }
+}
+
+impl From<NodeIndex> for ScopeId {
+    fn from(item: NodeIndex) -> Self {
+        Self(item.index() as u32)
+    }
+}
 
 pub struct FlattenEnvironment {
     pub(crate) current_block: Option<BlockId>,
     pub(crate) static_block: Option<BlockId>,
     pub(crate) static_scope: Option<ScopeId>,
-    //pub(crate) stack: Vec<ScopeId>,
-    pub(crate) scopes: Vec<ScopeLayer>,
+    pub(crate) scopes: ScopeGraph,
 }
 
 impl FlattenEnvironment {
@@ -24,8 +31,7 @@ impl FlattenEnvironment {
             current_block: None,
             static_block: None,
             static_scope: None,
-            //stack: vec![],
-            scopes: vec![],
+            scopes: ScopeGraph::new(),
         }
     }
 
@@ -38,44 +44,25 @@ impl FlattenEnvironment {
     }
 
     pub fn new_scope(&mut self, scope_type: ScopeType) -> ScopeId {
-        let offset = self.scopes.len();
         let scope = ScopeLayer::new(scope_type);
-        self.scopes.push(scope);
-        ScopeId(offset as u32)
+        let index = self.scopes.add_node(scope);
+        ScopeId(index.index() as u32)
     }
-
-    /*
-    pub fn current_scope(&self) -> Option<ScopeId> {
-        self.stack.last().cloned()
-    }
-
-    pub fn enter_scope(&mut self, scope_id: ScopeId) {
-        self.stack.push(scope_id);
-    }
-
-    pub fn exit_scope(&mut self) {
-        self.stack.pop().unwrap();
-    }
-    */
 
     pub fn get_scope(&self, scope_id: ScopeId) -> &ScopeLayer {
-        self.scopes.get(scope_id.0 as usize).unwrap()
+        let index = NodeIndex::new(scope_id.index());
+        self.scopes.node_weight(index).unwrap()
     }
 
     pub fn get_scope_mut(&mut self, scope_id: ScopeId) -> &mut ScopeLayer {
-        self.scopes.get_mut(scope_id.0 as usize).unwrap()
+        let index = NodeIndex::new(scope_id.index());
+        self.scopes.node_weight_mut(index).unwrap()
     }
 
-    pub fn push_block(&mut self, block_id: BlockId) {
-        self.current_block = Some(block_id);
-    }
-
-    pub fn current_block(&mut self) -> BlockId {
-        self.current_block.unwrap().clone()
-    }
-
-    pub fn pop_block(&mut self) -> BlockId {
-        self.current_block.take().unwrap()
+    pub fn scope_succ(&mut self, source_scope_id: ScopeId, target_scope_id: ScopeId) {
+        println!("succ: {}, {}", source_scope_id, target_scope_id);
+        self.scopes
+            .add_edge(source_scope_id.into(), target_scope_id.into(), ());
     }
 
     pub fn scope_define(
@@ -87,11 +74,34 @@ impl FlattenEnvironment {
         mem: VarDefinitionSpace,
     ) {
         let data = Data::new(offset, ty, mem);
-        self.scopes
-            .get_mut(scope_id.0 as usize)
-            .unwrap()
-            .names
-            .insert(name, data);
+        let scope = self.get_scope_mut(scope_id);
+        scope.names.insert(name, data);
+    }
+
+    pub fn walk_scopes(&self, scope_id: ScopeId) -> Vec<ScopeId> {
+        let mut out = vec![];
+        let mut current = scope_id;
+        loop {
+            out.push(current);
+            let incoming = self
+                .scopes
+                .neighbors_directed(current.into(), petgraph::Direction::Incoming)
+                .collect::<Vec<_>>();
+            if incoming.len() == 0 {
+                break;
+            }
+            assert_eq!(1, incoming.len());
+            current = incoming.first().unwrap().clone().into();
+        }
+        out
+    }
+
+    pub fn dump_scope(&self, scope_id: ScopeId, b: &NodeBuilder) {
+        println!("DumpScope: {}, {:?}", scope_id, self.walk_scopes(scope_id));
+        for scope_id in self.walk_scopes(scope_id) {
+            let scope = self.get_scope(scope_id);
+            scope.dump(b);
+        }
     }
 
     /*
