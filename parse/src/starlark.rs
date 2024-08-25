@@ -15,14 +15,7 @@ use compile_core::{
     LinkOptions, SpanId, StringKey,
 };
 
-use flat::{
-    Blockify,
-    //Flatten, FlattenEnvironment,
-    ICodeModule,
-    NodeBuilder,
-    NodeBuilder as NB,
-    ValueId,
-};
+use flat::{Blockify, ICodeModule, NodeBuilder, NodeBuilder as NB, ValueId};
 
 use lower_mlir::Module;
 
@@ -986,6 +979,7 @@ impl StarlarkParser {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::StarlarkParser;
+    use flat::{Flatten, FlattenEnvironment, ICodeModule, ValueId};
     use lower_mlir::Location;
     use test_log::test;
 
@@ -1012,9 +1006,54 @@ pub(crate) mod tests {
         assert_eq!(expected, r);
     }
 
+    fn run_test_flatten(filename: &str, expected: i32) {
+        let mut p: StarlarkParser = StarlarkParser::new();
+        let mut b = flat::NodeBuilder::new();
+        let result = p.parse(filename, &mut b, true);
+        b.spans.diagnostics_dump();
+        let ast = result.unwrap();
+
+        let context = lower_mlir::default_context();
+        let mut module = lower_mlir::Module::new(Location::unknown(&context));
+
+        let mut fenv = FlattenEnvironment::new();
+        let r = Flatten::flatten_module(ast, &mut fenv, &mut b);
+        b.spans.diagnostics_dump();
+        let mut f = r.unwrap();
+        let r = f.run_loop(&mut fenv, &mut b);
+        f.dump_ast(&b);
+        b.spans.diagnostics_dump();
+        let _ = r.unwrap();
+        let m = f.module(&mut fenv, &b);
+        m.dump(&b);
+
+        let r = p.lower(&m, ValueId::new(0), &context, &mut module, &mut b);
+        b.spans.diagnostics_dump();
+        r.unwrap();
+
+        let verify = module.as_operation().verify();
+        module.as_operation().dump();
+        assert!(verify);
+        let r = p.exec_main(&context, &mut module, "../target/debug/", true);
+        assert_eq!(expected, r);
+    }
+
     #[test]
     fn test_recursive() {
         run_test_ir("../tests/test_recursive.star", 0);
+        run_test_flatten("../tests/test_recursive.star", 0);
+    }
+
+    #[test]
+    fn test_recursive2() {
+        run_test_ir("../tests/test_recursive2.star", 0);
+        //run_test_flatten("../tests/test_recursive.star", 0);
+    }
+
+    #[test]
+    fn test_local() {
+        run_test_ir("../tests/test_local.star", 0);
+        run_test_flatten("../tests/test_local.star", 0);
     }
 
     #[test]
@@ -1025,11 +1064,13 @@ pub(crate) mod tests {
     #[test]
     fn test_bare() {
         run_test_ir("../tests/bare.star", 0);
+        run_test_flatten("../tests/bare.star", 0);
     }
 
     #[test]
     fn test_fix() {
         run_test_ir("../tests/fix.star", 0);
+        run_test_flatten("../tests/fix.star", 0);
     }
 
     #[test]
@@ -1040,16 +1081,19 @@ pub(crate) mod tests {
     #[test]
     fn test_global() {
         run_test_ir("../tests/test_global.star", 0);
+        run_test_flatten("../tests/test_global.star", 0);
     }
 
     #[test]
     fn test_static() {
         run_test_ir("../tests/test_static.star", 0);
+        run_test_flatten("../tests/test_static.star", 0);
     }
 
     #[test]
     fn test_float() {
         run_test_ir("../tests/test_float.star", 0);
+        run_test_flatten("../tests/test_float.star", 0);
     }
 
     #[test]
@@ -1070,5 +1114,6 @@ pub(crate) mod tests {
     #[test]
     fn test_static_var() {
         run_test_ir("../tests/static_var.star", 0);
+        run_test_flatten("../tests/static_var.star", 0);
     }
 }
