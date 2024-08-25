@@ -8,7 +8,6 @@ def fibonacci_recursive2(n: int, a:int, c:int) -> int:
     return c
   else:
     return fibonacci_recursive2(n - 1, c, a + c)
-  return out
 
 def fib(n: int) -> int:
   return fibonacci_recursive2(n, 0, 1)

@@ -9,11 +9,10 @@ def cond(n: int) -> int:
     out = 2
   else:
     out = 3
-  q.print(0)
   return out
 
 def main() -> int:
-  q.print(cond(0))
-  q.print(cond(1))
-  q.print(cond(2))
+  q.check(1 == cond(0))
+  q.check(2 == cond(1))
+  q.check(3 == cond(2))
   return 0

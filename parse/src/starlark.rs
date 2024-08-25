@@ -1047,7 +1047,7 @@ pub(crate) mod tests {
     #[test]
     fn test_recursive2() {
         run_test_ir("../tests/test_recursive2.star", 0);
-        //run_test_flatten("../tests/test_recursive.star", 0);
+        run_test_flatten("../tests/test_recursive2.star", 0);
     }
 
     #[test]
@@ -1076,6 +1076,7 @@ pub(crate) mod tests {
     #[test]
     fn test_nothing() {
         run_test_ir("../tests/test.star", 0);
+        run_test_flatten("../tests/test.star", 0);
     }
 
     #[test]
@@ -1099,6 +1100,7 @@ pub(crate) mod tests {
     #[test]
     fn test_cond() {
         run_test_ir("../tests/test_cond.star", 0);
+        run_test_flatten("../tests/test_cond.star", 0);
     }
 
     #[test]

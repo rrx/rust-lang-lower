@@ -1,11 +1,8 @@
 default: run
 
 run:
-	RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/test_recursive.star
-	RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/test_recursive2.star
+	RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/nested_func.star
 	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/test_simple.py
-	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/test.star
-	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/test_cond.star
 
 run0:
 	RUST_BACKTRACE=1 cargo run --bin parse -- -v tests/static_var.star
