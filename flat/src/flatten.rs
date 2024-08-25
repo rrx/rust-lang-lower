@@ -627,23 +627,12 @@ impl Flatten {
         fenv: &mut FlattenEnvironment,
         b: &mut NodeBuilder,
     ) -> Result<FlattenResult> {
-        let block = self.get_block_mut(block_id);
-        let is_static = block.stack.len() == 1;
         let r = if seq.is_empty() {
-            if is_static {
-                // don't do anything, static block is already present
-            } else {
-                //self.ir_blocks.push(block_id);
-            }
             FlattenResult::new(block_id, None)
         } else {
             let rem = seq.split_off(1);
             let node = seq.pop().unwrap();
             let r = self.flatten(block_id, node, fenv, b)?;
-            if r.block_id != block_id {
-                //self.ir_blocks.push(block_id);
-            }
-
             let block = self.get_block_mut(r.block_id);
             block.ast = Some(Ast::Sequence(rem).into());
             self.ast_blocks.push(r.block_id);
@@ -788,8 +777,6 @@ impl Flatten {
                     Argument::Positional(expr) => {
                         let r = self.flatten(current_block_id, *expr, fenv, b)?;
                         current_block_id = r.block_id;
-                        //let r = self.add(entry_id, None, *expr, b)?;
-                        //let v = r.value_id.unwrap();
                         values.push((r.link_id.unwrap(), ty.clone()));
                     }
                 }
@@ -824,107 +811,6 @@ impl Flatten {
             return Err(Error::new(BlockifyError::Invalid));
         }
     }
-
-    /*
-        pub fn add_lambda(
-            &mut self,
-            block_id: BlockId,
-            template_id: TemplateId,
-            args: Vec<Argument>,
-            span_id: SpanId,
-            fenv: &mut FlattenEnvironment,
-            b: &mut NodeBuilder,
-        ) -> Result<FlattenResult> {
-            // TODO: Emit blocks for the definition, and jump to the entry block
-            // return value for body is the next block, which we need to create here
-            //let scope_id = self.env.current_scope().unwrap();
-
-            // get clone and push back
-            let mut def = self.get_template(template_id).clone();
-
-            //let params = def.params.iter().map(|p| p.ty.clone()).collect::<Vec<_>>();
-
-            let args_size = args.len() as u8;
-
-            let body = def.body.take().unwrap();
-            let body_scope_id = fenv.new_scope(ScopeType::Block);
-
-            // entry first
-            let label_name = b.labels.fresh_var_id();
-            let new_block_id = self.env.new_block();
-            let new_entry_id = self.push_label_with_block(
-                label_name,
-                span_id,
-                body_scope_id,
-                new_block_id,
-                &[],
-                &def.params,
-                b,
-            );
-
-            let mut jump_args = vec![];
-            for a in args.into_iter() {
-                let Argument::Positional(expr) = a;
-                let r = self.flatten(block_id, *expr, fenv, b)?;
-                jump_args.push(r);
-            }
-
-            assert_eq!(args_size as usize, jump_args.len());
-            // jump to entry
-            let new_block_id = self.resolve_block_id(new_entry_id.into());
-            let _r = self.add_jump(current_entry_id.into(), new_block_id, jump_args, span_id, b)?;
-            self.env.add_succ_block(
-                current_entry_id,
-                //self.env.resolve_code_offset(current_entry_id.into()),
-                new_entry_id.into(),
-            );
-            // return block is the next block
-
-            // handle body
-            //let return_type = *def.return_type;
-            let return_type = b.types.r(def.return_type).clone();
-            let return_type_args = match &return_type {
-                AstType::Unit => vec![],
-                _ => vec![return_type.clone()],
-            };
-
-            let name = b.labels.s("lambda_result");
-            let b_next = self.env.new_block();
-            let v_next = self.push_label_with_block(
-                name.into(),
-                span_id,
-                scope_id,
-                b_next,
-                &return_type_args,
-                &[],
-                b,
-            );
-            let v_next = self.resolve_block_id(v_next.into());
-
-            // push Arg to next block
-            let v_expr = self.push_code(
-                LCode::Arg(0),
-                span_id,
-                scope_id,
-                v_next.into(),
-                return_type,
-                VarDefinitionSpace::Reg,
-            );
-
-            let ret_block_id = self.resolve_block_id(v_next.into());
-            let scope = self.env.get_scope_mut(body_scope_id);
-            scope.return_block = Some(ret_block_id);
-            scope.entry_block = Some(new_block_id); //new_entry_id.into());
-            self.env.enter_scope(body_scope_id, new_block_id);
-            let _r1 = self.add_with_next(current_entry_id.into(), *body, v_next, b)?;
-            self.env.exit_scope();
-
-            // we return the value of the arg in the next block
-            let r2 = AddResult::new(Some(v_expr), false, v_next.into());
-            //println!("lambda: {:?}", (&r1, &r2));
-            Ok(r2)
-        }
-    */
 
     fn add_lambda(
         &mut self,
@@ -1016,68 +902,13 @@ impl Flatten {
                                 fenv,
                                 b,
                             )?;
-                            /*
 
-                            let params = def
-                                .params
-                                .iter()
-                                .map(|p| {
-                                    let ty = b.types.r(p.ty);
-                                    ty.clone()
-                                })
-                                .collect();
-                            let return_type = b.types.r(def.return_type).clone();
-                            let fun_ty = AstType::Func(params, return_type.into());
-
-                            let r = if let Some(body) = def.body {
-                                let fun_scope_id = fenv.new_scope(ScopeType::Function);
-                                let fun_block_id = self.successor(
-                                    block_id,
-                                    Some(*body),
-                                    Some(fun_scope_id),
-                                    Successor::FunctionDeclaration,
-                                );
-                                let code = LCode::Label(def.params.len() as u8, 0);
-
-                                let entry = CodeEntry::new(
-                                    fun_block_id,
-                                    code,
-                                    fun_ty.clone(),
-                                    Some(name),
-                                    span_id,
-                                );
-                                self.push_entry_with_link(fun_block_id, entry);
-
-                                for (i, p) in def.params.iter().enumerate() {
-                                    let ty = b.types.r(p.ty);
-                                    let code = LCode::Arg(i as u8);
-                                    let entry = CodeEntry::new(
-                                        fun_block_id,
-                                        code,
-                                        ty.clone(),
-                                        Some(p.name),
-                                        span_id,
-                                    );
-                                    let link_id = self.push_entry_with_link(fun_block_id, entry);
-                                    fenv.scope_define(
-                                        fun_scope_id,
-                                        p.name,
-                                        link_id.into(),
-                                        ty.clone(),
-                                        VarDefinitionSpace::Arg,
-                                    );
-                                }
-                            */
-
-                            //let ret_ty = b.types.r(def.return_type).clone();
                             let ret_block_id =
                                 self.add_return_block(fun_block_id, fun_scope_id, ret_ty, b);
 
                             let fun_block = self.get_block_mut(fun_block_id);
                             fun_block.ret = Some(ret_block_id);
                             fun_block.next = Some(ret_block_id);
-
-                            //self.ast_blocks.push(fun_block_id);
 
                             // push declaration into static block
                             let code = LCode::DeclareFunction(Some(fun_block_id));
@@ -1092,7 +923,6 @@ impl Flatten {
                             let link_id = self.push_entry_with_link(block_id, entry);
 
                             let scope_id = fenv.static_scope_id();
-                            //let scope_id = block.stack.last().unwrap();
                             fenv.scope_define(
                                 scope_id,
                                 name,
