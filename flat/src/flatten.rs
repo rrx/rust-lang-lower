@@ -675,64 +675,6 @@ impl Flatten {
         Ok(FlattenResult::new(current_block_id, link_id, ty, is_term))
     }
 
-    /*
-    pub fn add_next_block(
-        &mut self,
-        block_id: BlockId,
-        scope_id: ScopeId,
-        return_type: AstType,
-        next: Option<BlockId>,
-        fenv: &mut FlattenEnvironment,
-        b: &mut NB,
-    ) {
-        let span_id = b.spans.get_span_unknown();
-        let name = b.labels.s("ret");
-        let args = match &return_type {
-            AstType::Unit => vec![],
-            _ => vec![return_type.clone()],
-        };
-
-        let v_args = self.start_block(
-            block_id,
-            scope_id,
-            &args,
-            &[],
-            AstType::Unit,
-            Some(name),
-            span_id,
-            VarDefinitionSpace::Reg,
-            fenv,
-            b,
-        );
-
-
-        for (link_id, ty) in v_args.iter() {
-            let code = LCode::Link(*link_id);
-            let entry = CodeEntry::new(
-                ret_block_id,
-                code,
-                ty.clone(),
-                None,
-                span_id,
-                VarDefinitionSpace::Reg,
-            );
-            self.push_entry_with_link(entry);
-        }
-
-        let code = LCode::Return(v_args.len() as u8);
-        let entry = CodeEntry::new(
-            ret_block_id,
-            code,
-            AstType::Unit,
-            None,
-            span_id,
-            VarDefinitionSpace::Reg,
-        );
-        self.push_entry_with_link(entry);
-        //ret_block_id
-    }
-    */
-
     pub fn add_return(
         &mut self,
         block_id: BlockId,
@@ -800,70 +742,7 @@ impl Flatten {
             b,
         );
 
-        for (link_id, ty) in v_args.iter() {
-            let code = LCode::Link(*link_id);
-            let entry = CodeEntry::new(
-                ret_block_id,
-                code,
-                ty.clone(),
-                //return_type.clone(),
-                None,
-                span_id,
-                VarDefinitionSpace::Reg,
-            );
-            self.push_entry_with_link(entry);
-        }
-
-        let code = LCode::Return(v_args.len() as u8);
-        let entry = CodeEntry::new(
-            ret_block_id,
-            code,
-            AstType::Unit,
-            None,
-            span_id,
-            VarDefinitionSpace::Reg,
-        );
-        self.push_entry_with_link(entry);
-        ret_block_id
-    }
-
-    pub fn add_return_block2(
-        &mut self,
-        fun_block_id: BlockId,
-        scope_id: ScopeId,
-        return_type: AstType,
-        fenv: &mut FlattenEnvironment,
-        b: &mut NB,
-    ) -> BlockId {
-        let ret_block_id = self.successor(
-            fun_block_id,
-            None,
-            Some(scope_id),
-            Successor::BlockScope,
-            None,
-        );
-
-        let span_id = b.spans.get_span_unknown();
-        let name = b.labels.s("ret");
-        let args = match &return_type {
-            AstType::Unit => vec![],
-            _ => vec![return_type.clone()],
-        };
-
-        let link_ids = self.start_block(
-            fun_block_id,
-            scope_id,
-            &args,
-            &[],
-            AstType::Unit,
-            Some(name),
-            span_id,
-            VarDefinitionSpace::Reg,
-            fenv,
-            b,
-        );
-
-        self.add_return(ret_block_id, link_ids, b);
+        self.add_return(ret_block_id, v_args, b);
         ret_block_id
     }
 
