@@ -66,7 +66,7 @@ pub fn code_to_string(v: ValueId, blockify: &Blockify, b: &NodeBuilder) -> Strin
         }
 
         LCode::Ternary(c, x, y) => {
-            format!("Ternary({},{},{})", c.index(), x, y)
+            format!("Ternary({:?},{},{})", c, x, y)
         }
 
         LCode::Branch(c, x, y) => {

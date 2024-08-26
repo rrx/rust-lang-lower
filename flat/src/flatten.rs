@@ -19,6 +19,7 @@ use compile_core::{
 };
 use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
+use petgraph::visit::EdgeRef;
 use std::collections::HashMap;
 use std::convert::From;
 use std::convert::Into;
@@ -222,10 +223,30 @@ impl ICodeModule for FlattenModule {
         let entry = self.get_entry(entry_id);
         let block_id = entry.block_id;
         let index = NodeIndex::new(block_id.index());
+        let edges = self.gblocks.edges_directed(index, petgraph::Direction::Outgoing).collect::<Vec<_>>();
+        let mut out = vec![];
+        for edge in edges {
+            let succ_type = edge.weight();
+            let i = edge.target();
+            let block_id = BlockId(i.index() as u32).into();
+            println!("edges: {:?}", (index, i, succ_type, block_id));
+            out.push((*succ_type, block_id)); 
+        }
+        out
+
+        /*
         self.gblocks
             .neighbors_directed(index, petgraph::Direction::Outgoing)
-            .map(|i| (Successor::BlockScope, BlockId(i.index() as u32).into()))
+            .map(|i| {
+                let edges = self.gblocks.edges_connecting(i, index).collect::<Vec<_>>();
+                let d1 = self.gblocks.find_edge(i, index);
+                println!("edges: {:?}", (i, index, edges, d1));
+                let edge = self.gblocks.edges_connecting(i, index).last().unwrap().weight().clone();
+                let block_id = BlockId(i.index() as u32).into();
+                (edge, block_id)
+            })
             .collect::<Vec<_>>()
+        */
     }
 
     fn get_type(&self, v: CodeOffset) -> AstType {
@@ -1534,6 +1555,106 @@ impl Flatten {
                 ))
             }
 
+            Ast::Ternary(c, x, y) => {
+                // expression, non-terminal
+                //let _condition_span_id = c.span_id;
+                let block = self.get_block(block_id);
+                let scope_id = block.scope_id;
+
+                let rc = self.flatten(block_id, *c, fenv, b)?;
+
+                let then_scope_id = fenv.new_scope(ScopeType::Region);
+                fenv.scope_succ(scope_id, then_scope_id);
+                let span_id = x.span_id;
+                //let then_ty_id = x.type_id();
+                let then_ty = AstType::Int;//b.types.r(then_ty_id);
+                                                    //
+                let then_block_id = self.new_block( Some(AstNode::make_yield(*x)), then_scope_id);
+                self.block_succ(rc.block_id, then_block_id, Successor::Operation);
+                                                    //
+
+                /*
+                let then_block_id = self.successor(
+                    rc.block_id,
+                    Some(AstNode::make_yield(*x)),
+                    Some(then_scope_id),
+                    Successor::BlockScope,
+                    None,
+                );
+                */
+                println!("P1: {:?}", then_block_id);
+                self.ast_blocks.insert(0, then_block_id);
+                let name = b.labels.s("then");
+                let code = LCode::Label(0, 0);
+                let entry = CodeEntry::new(
+                    then_block_id,
+                    code,
+                    AstType::Unit,
+                    Some(name),
+                    span_id,
+                    VarDefinitionSpace::Reg,
+                );
+                let _then_link_id = self.push_entry_with_link(entry);
+
+                let span_id = y.span_id;
+                let else_scope_id = fenv.new_scope(ScopeType::Region);
+                fenv.scope_succ(scope_id, else_scope_id);
+
+                let else_block_id = self.new_block( Some(AstNode::make_yield(*y)), else_scope_id);
+                self.block_succ(rc.block_id, else_block_id, Successor::Operation);
+                /*
+                let else_block_id = self.successor(
+                    block_id,
+                    Some(AstNode::make_yield(*y)),
+                    Some(else_scope_id),
+                    Successor::BlockScope,
+                    None,
+                );
+                */
+                println!("P: {:?}", else_block_id);
+                self.ast_blocks.insert(0, else_block_id);
+                let code = LCode::Label(0, 0);
+                let name = b.labels.s("else");
+                let entry = CodeEntry::new(
+                    else_block_id,
+                    code,
+                    AstType::Unit,
+                    Some(name),
+                    span_id,
+                    VarDefinitionSpace::Reg,
+                );
+                let _else_link_id = self.push_entry_with_link(entry);
+
+                let code = LCode::Ternary(rc.link_id.unwrap().into(), then_block_id, else_block_id);
+                let entry = CodeEntry::new(rc.block_id, code, then_ty.clone(), None, span_id, VarDefinitionSpace::Reg);
+                let v = self.push_entry_with_link(entry);
+                Ok(FlattenResult::new(rc.block_id, Some(v), AstType::Unit, false))
+            }
+
+            Ast::Yield(maybe_expr) => {
+                // yield is terminal
+                let mut n_args = 0;
+                let mut v_block = block_id;
+                let mut ty = AstType::Unit;
+                if let Some(expr) = maybe_expr {
+                    let r = self.flatten(block_id, *expr, fenv, b)?;
+                    if let Some(v) = r.link_id {
+                        n_args = 1;
+                        v_block = r.block_id;
+                        ty = r.ty.clone();
+                        // push single arg
+                        let code = LCode::Link(v.into());
+                        let entry = CodeEntry::new(v_block, code, r.ty, None, node.span_id, VarDefinitionSpace::Reg);
+                        let _ = self.push_entry_with_link(entry);
+                    }
+                }
+
+                let code = LCode::Yield(n_args);
+                let entry = CodeEntry::new(v_block, code, ty.clone(), None, node.span_id, VarDefinitionSpace::Reg);
+                let v = self.push_entry_with_link(entry);
+                Ok(FlattenResult::new(v_block, Some(v), ty, true))
+            }
+
             /*
             Ast::Lambda(_def) => {
             }
@@ -1543,16 +1664,6 @@ impl Flatten {
 
             Ast::ControlFlowMarker(ControlFlowMarker::Goto(label)) => {
             }
-
-
-
-
-            Ast::Ternary(c, x, y) => {
-            }
-
-            Ast::Yield(maybe_expr) => {
-            }
-
 
             Ast::Loop(name, body) => {
             }

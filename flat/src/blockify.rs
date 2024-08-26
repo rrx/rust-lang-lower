@@ -72,7 +72,7 @@ pub enum LCode {
     Jump(BlockId, u8),
 
     Branch(CodeOffset, BlockId, BlockId),
-    Ternary(ValueId, BlockId, BlockId), // condition, then_entry, else_entry
+    Ternary(CodeOffset, BlockId, BlockId), // condition, then_entry, else_entry
     Builtin(BuiltinId, u8, u8),
     Call(CodeOffset, u8, u8),
 }
@@ -299,7 +299,7 @@ pub trait ICodeModule {
             }
 
             LCode::Ternary(c, x, y) => {
-                format!("Ternary({},{},{})", c.0, x, y)
+                format!("Ternary({:?},{},{})", c, x, y)
             }
 
             LCode::Branch(c, x, y) => {
@@ -1772,7 +1772,7 @@ impl Blockify {
                 let r = self.add(entry_id, None, *c, b)?;
                 let v_c = r.value_id.unwrap();
 
-                let scope_id = self.env.new_scope(ScopeType::Block);
+                let scope_id = self.env.new_scope(ScopeType::Region);
                 let p_then = self.new_pending(
                     b.labels.s("then").into(),
                     AstNode::make_yield(*x),
@@ -1785,7 +1785,7 @@ impl Blockify {
                 let then_block_id = p_then.block_id;
                 let then_ty = p_then.ty.clone();
 
-                let scope_id = self.env.new_scope(ScopeType::Block);
+                let scope_id = self.env.new_scope(ScopeType::Region);
                 let p_else = self.new_pending(
                     b.labels.s("else").into(),
                     AstNode::make_yield(*y),
@@ -1817,7 +1817,7 @@ impl Blockify {
 
                 //assert_eq!(then_ty, else_ty);
 
-                let code = LCode::Ternary(v_c, then_block_id, else_block_id);
+                let code = LCode::Ternary(v_c.into(), then_block_id, else_block_id);
                 let v = self.push_code(
                     code,
                     condition_span_id,

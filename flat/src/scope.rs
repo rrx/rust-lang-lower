@@ -22,6 +22,7 @@ pub enum ScopeType {
     Static,
     Function,
     Block,
+    Region,
     Loop,
 }
 
