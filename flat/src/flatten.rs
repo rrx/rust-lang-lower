@@ -963,11 +963,15 @@ impl Flatten {
 
                         if let Some(body) = def.body {
                             let span_id = body.span_id;
-                            let block = self.get_block(block_id);
+                            //let block = self.get_block(block_id);
                             let fun_scope_id = fenv.new_scope(ScopeType::Function);
-                            fenv.scope_succ(block.scope_id, fun_scope_id);
+                            fenv.scope_succ(fenv.static_scope_id(), fun_scope_id);
                             let fun_block_id = self.new_block(Some(*body), fun_scope_id);
-                            self.block_succ(block_id, fun_block_id, Successor::FunctionDeclaration);
+                            self.block_succ(
+                                fenv.static_block_id(),
+                                fun_block_id,
+                                Successor::FunctionDeclaration,
+                            );
                             self.start_block(
                                 fun_block_id,
                                 fun_scope_id,
@@ -1001,7 +1005,8 @@ impl Flatten {
                             // push declaration into static block
                             let code = LCode::DeclareFunction(Some(fun_block_id));
                             let entry = CodeEntry::new(
-                                block_id,
+                                fenv.static_block_id(),
+                                //block_id,
                                 code,
                                 fun_ty.clone(),
                                 Some(name),
@@ -1246,7 +1251,7 @@ impl Flatten {
                 let expr_ty = self.get_entry(v_expr).ty.clone();
                 let v_block = r.block_id;
 
-                self.dump_scope(block_id, fenv, b);
+                //self.dump_scope(block_id, fenv, b);
                 let offset_decl = if let Some(data) = self.resolve_name(block_id, name, fenv) {
                     assert_eq!(data.ty, expr_ty);
                     data.offset
@@ -1317,12 +1322,9 @@ impl Flatten {
                             let label: StringLabel = (*ident).into();
                             let template_id = scope.lambdas.get(&label).unwrap();
                             let def = self.get_template(*template_id).clone();
-                            let fun_ty = def_to_type(&def, b);
 
                             let ret_ty_id = def.return_type.clone();
                             let ret_ty = b.types.r(ret_ty_id);
-
-                            //let span_id = body.span_id;
 
                             // create a new block for the lambda
                             // we call the lambda by jumping to it
@@ -1359,7 +1361,7 @@ impl Flatten {
                             );
 
                             // LAMBDA BLOCK
-                            let fun_scope_id = fenv.new_scope(ScopeType::Block);
+                            let fun_scope_id = fenv.new_scope(ScopeType::Function);
                             fenv.scope_succ(scope_id, fun_scope_id);
 
                             let body = def.body.unwrap();
@@ -1367,7 +1369,7 @@ impl Flatten {
                                 block_id,
                                 Some(*body),
                                 Some(fun_scope_id),
-                                Successor::BlockScope,
+                                Successor::FunctionDeclaration,
                                 Some(next_block_id),
                             );
 
@@ -1384,48 +1386,16 @@ impl Flatten {
                                 b,
                             );
 
-                            /*
-                            let fun_block_id = self.start_block(
-                                block_id,
-                                fun_scope_id,
-                                &[],
-                                &def.params,
-                                Some(body),
-                                fun_ty.clone(),
-                                Some((*ident).into()),
-                                Successor::FunctionDeclaration,
-                                span_id,
-                                VarDefinitionSpace::Static,
-                                Some(next_block_id),
-                                fenv,
-                                b,
-                            )?;
-                            */
-
                             //let r = self.flatten(fun_block_id, *body, fenv, b)?;
                             self.ast_blocks.push(fun_block_id);
 
-                            //let next_block_id = self.new_block(None, scope_id);
-                            //self.start_block(next_block_id, scope_id,
-                            let _link_id =
-                                self.add_jump(next_block_id, fun_block_id, link_ids, node.span_id);
+                            self.add_jump(next_block_id, fun_block_id, link_ids, node.span_id);
                             return Ok(FlattenResult::new(
                                 next_block_id,
                                 None,
                                 AstType::Unit,
                                 false,
                             ));
-                            /*
-                            return self.add_function_call(
-                                fun_block_id,
-                                fun_block_id.into(),
-                                fun_ty,
-                                args,
-                                node.span_id,
-                                fenv,
-                                b,
-                            );
-                            */
                         }
                         b.push_error(&format!("Call name not found: {}", name), node.span_id);
                         return Err(Error::new(BlockifyError::Invalid));

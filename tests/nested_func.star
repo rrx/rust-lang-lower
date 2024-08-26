@@ -5,13 +5,13 @@ def x1():
     t = 0
 
 def main() -> int:
-  #r = 0
+  r = 0
   def f() -> int:
-    return 1
-  #r = f()
-  #r = r - 1
+    return 0
+  r = f()
+  r = r - 1
   r = -f()
-  #y = 1 + f()
+  y = 1 + f()
   x = 1 + f() + 1
-  return 0
-  #return r
+  #return 0
+  return r
