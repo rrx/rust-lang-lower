@@ -1106,7 +1106,7 @@ pub(crate) mod tests {
     #[test]
     fn test_ternary() {
         run_test_ir("../tests/test_ternary.star", 0);
-        //run_test_flatten("../tests/test_ternary.star", 0);
+        run_test_flatten("../tests/test_ternary.star", 0);
     }
 
     #[test]
