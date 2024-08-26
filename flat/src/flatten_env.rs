@@ -1,7 +1,9 @@
 use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
 
-use crate::{scope::Data, BlockId, CodeOffset, NodeBuilder, ScopeId, ScopeLayer, ScopeType};
+use crate::{
+    scope::Data, BlockId, CodeOffset, NodeBuilder, ScopeId, ScopeLayer, ScopeType, StringLabel,
+};
 use compile_core::{AstType, StringKey, VarDefinitionSpace};
 
 pub type ScopeGraph = DiGraph<ScopeLayer, ()>;
@@ -104,6 +106,16 @@ impl FlattenEnvironment {
             current = incoming.first().unwrap().clone().into();
         }
         out
+    }
+
+    pub fn resolve_block_id(&self, start_scope_id: ScopeId, name: StringLabel) -> Option<BlockId> {
+        for scope_id in self.walk_scopes(start_scope_id) {
+            let scope = self.get_scope(scope_id);
+            if let Some(block_id) = scope.block_labels.get(&name) {
+                return Some(*block_id);
+            }
+        }
+        None
     }
 
     pub fn dump_scope(&self, scope_id: ScopeId, b: &NodeBuilder) {
