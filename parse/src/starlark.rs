@@ -1113,6 +1113,7 @@ pub(crate) mod tests {
     #[test]
     fn test_loop() {
         run_test_ir("../tests/loop.star", 0);
+        run_test_flatten("../tests/loop.star", 0);
     }
 
     #[test]

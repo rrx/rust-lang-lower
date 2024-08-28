@@ -361,13 +361,8 @@ impl<'c> Lower<'c> {
             }
 
             LCode::Jump(target, num_args) => {
-                let target_entry_id = blockify.get_entry_id_from_block_id(*target);
-                //let target_entry_id = blockify
-                //.env
-                //.get_block_by_block_id(*target)
-                //.entry_id
-                //.unwrap();
-                self.lower_jump(blockify, blocks, v, target_entry_id, *num_args, b)?;
+                let target_value_id = blockify.resolve_code_offset(*target);
+                self.lower_jump(blockify, blocks, v, target_value_id, *num_args, b)?;
             }
 
             LCode::Const(lit) => {

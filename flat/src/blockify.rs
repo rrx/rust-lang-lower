@@ -69,7 +69,7 @@ pub enum LCode {
     //Goto(StringKey),
 
     // jump to block, with num args
-    Jump(BlockId, u8),
+    Jump(CodeOffset, u8),
 
     Branch(CodeOffset, BlockId, BlockId),
     Ternary(CodeOffset, BlockId, BlockId), // condition, then_entry, else_entry

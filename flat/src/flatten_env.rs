@@ -2,7 +2,7 @@ use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
 
 use crate::{
-    scope::Data, BlockId, CodeOffset, NodeBuilder, ScopeId, ScopeLayer, ScopeType, StringLabel,
+    scope::{Data, LoopScope}, BlockId, CodeOffset, NodeBuilder, ScopeId, ScopeLayer, ScopeType, StringLabel,
 };
 use compile_core::{AstType, StringKey, VarDefinitionSpace};
 
@@ -89,6 +89,36 @@ impl FlattenEnvironment {
         }
         None
     }
+
+    pub fn push_loop_blocks(
+        &mut self,
+        scope_id: ScopeId,
+        maybe_name: Option<StringKey>,
+        next_block: CodeOffset,
+        start_block: CodeOffset,
+    ) {
+        let scope = self.get_scope_mut(scope_id);
+        let loop_scope = LoopScope {
+            name: maybe_name,
+            next_block,
+            start_block,
+        };
+        scope.loop_block = Some(loop_scope);
+    }
+
+    pub fn get_loop_scope(&self, start_scope_id: ScopeId, maybe_name: Option<StringKey>) -> Option<LoopScope> {
+        // move up the stack until we find a matching loop
+        for scope_id in self.walk_scopes(start_scope_id) {
+            let scope = self.get_scope(scope_id);
+            if let Some(loop_scope) = scope.loop_block {
+                if maybe_name.is_none() || loop_scope.name == maybe_name {
+                    return Some(loop_scope);
+                }
+            }
+        }
+        None
+    }
+
 
     pub fn walk_scopes(&self, scope_id: ScopeId) -> Vec<ScopeId> {
         let mut out = vec![];

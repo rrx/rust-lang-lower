@@ -417,6 +417,7 @@ impl Flatten {
     pub fn module(self, fenv: &FlattenEnvironment, _b: &NB) -> FlattenModule {
         assert!(self.ast_blocks.is_empty());
         let mut m = FlattenModule::new();
+        m.link = self.link.clone();
 
         let mut value_count = 0;
         let mut dfs = petgraph::visit::Dfs::new(&self.gblocks, NodeIndex::new(0));
@@ -725,7 +726,7 @@ impl Flatten {
         if !is_term {
             let block = self.get_block(current_block_id);
             //println!("missing term: {:?}", block.next);
-            self.add_jump(current_block_id, block.next.unwrap(), vec![], span_id);
+            self.add_jump(current_block_id, block.next.unwrap().into(), vec![], span_id);
         }
         Ok(FlattenResult::new(current_block_id, link_id, ty, is_term))
     }
@@ -804,7 +805,7 @@ impl Flatten {
     pub fn add_jump(
         &mut self,
         block_id: BlockId,
-        target_id: BlockId,
+        target_id: CodeOffset,
         jump_args: Vec<(LinkId, AstType)>,
         span_id: SpanId,
     ) -> LinkId {
@@ -1153,6 +1154,7 @@ impl Flatten {
                     Builtin::Import => {
                         let arg = args.pop().unwrap();
                         if let Some(s) = arg.try_string() {
+                            println!("adding: {}", s);
                             self.link.add_library(&s);
                         } else {
                             b.push_error("Expected string", span_id);
@@ -1219,7 +1221,7 @@ impl Flatten {
                 let scope = fenv.get_scope(fun_scope_id);
                 self.add_jump(
                     block_id,
-                    scope.return_block.unwrap(),
+                    scope.return_block.unwrap().into(),
                     jump_args,
                     node.span_id,
                 );
@@ -1444,7 +1446,7 @@ impl Flatten {
                             //let r = self.flatten(fun_block_id, *body, fenv, b)?;
                             self.ast_blocks.push(fun_block_id);
 
-                            self.add_jump(next_block_id, fun_block_id, link_ids, node.span_id);
+                            self.add_jump(next_block_id, fun_block_id.into(), link_ids, node.span_id);
                             return Ok(FlattenResult::new(
                                 next_block_id,
                                 None,
@@ -1713,7 +1715,7 @@ impl Flatten {
             Ast::ControlFlowMarker(ControlFlowMarker::Goto(label)) => {
                 // Goto is terminal
                 if let Some(target_block_id) = fenv.resolve_block_id(block.scope_id, label.into()) {
-                    let link_id = self.add_jump(block_id, target_block_id, vec![], node.span_id);
+                    let link_id = self.add_jump(block_id, target_block_id.into(), vec![], node.span_id);
                     Ok(FlattenResult::new(
                         block_id,
                         Some(link_id),
@@ -1729,11 +1731,117 @@ impl Flatten {
                 }
             }
 
-            /*
-            Ast::Lambda(_def) => {
+            Ast::Loop(name, body) => {
+                let block = self.get_block(block_id);
+                let next = block.next.unwrap();
+                let scope_id = block.scope_id;
+                let span_id = body.span_id;
+                let loop_scope_id = fenv.new_scope(ScopeType::Region);
+                fenv.scope_succ(scope_id, loop_scope_id);
+                let loop_block_id = self.new_block(Some(*body), loop_scope_id);
+                self.block_succ(block_id, loop_block_id, Successor::BlockScope);
+                fenv.push_loop_blocks(loop_scope_id, Some(name), next.into(), loop_block_id.into());
+
+                let loop_block = self.get_block_mut(loop_block_id);
+                loop_block.next = Some(next);
+
+                self.ast_blocks.push(loop_block_id);
+                let code = LCode::Label(0, 0);
+                let entry = CodeEntry::new(
+                    loop_block_id,
+                    code,
+                    AstType::Unit,
+                    Some(name),
+                    span_id,
+                    VarDefinitionSpace::Reg,
+                );
+                let _loop_link_id = self.push_entry_with_link(entry);
+
+                self.add_jump(block_id, loop_block_id.into(), vec![], span_id);
+
+                Ok(FlattenResult::new(
+                        block_id,
+                        None,
+                        AstType::Unit,
+                        true,
+                ))
+
+                    /*
+                let span_id = body.span_id;
+                let loop_scope_id = fenv.new_scope(ScopeType::Loop);
+
+
+                let v_loop = self.push_label(name.into(), span_id, loop_scope_id, &[], &[], b);
+                let b_loop = self.resolve_block_id(v_loop.into());
+                self.env
+                    .push_loop_blocks(Some(name), v_next.into(), v_loop.into());
+
+                self.env.enter_scope(loop_scope_id, b_loop);
+                let _ = self.add_with_next(v_loop.into(), body, v_next.into(), b)?;
+                self.env.exit_scope();
+
+                // enter loop
+                let r = self.add_jump(entry_id, b_loop, vec![], span_id, b)?;
+                Ok(AddResult::new(
+                        Some(r.value_id.unwrap()),
+                        true,
+                        v_next.into(),
+                ))
+                    */
+
             }
 
-            Ast::Loop(name, body) => {
+            Ast::Continue(maybe_name, args) => {
+                let block = self.get_block(block_id);
+                let scope_id = block.scope_id;
+
+                // args not implemented yet
+                assert_eq!(args.len(), 0);
+                // loop up loop blocks by name
+                if let Some(loop_scope) = fenv.get_loop_scope(scope_id, maybe_name) {
+                    let link_id = self.add_jump(block_id, loop_scope.start_block, vec![], node.span_id);
+                    Ok(FlattenResult::new(
+                            block_id,
+                            Some(link_id),
+                            AstType::Unit,
+                            true,
+                    ))
+
+                } else {
+                    // mismatch name
+                    b.push_error(&format!("Continue without loop"), node.span_id);
+                    Err(Error::new(BlockifyError::Invalid))
+                }
+
+            }
+
+            Ast::Break(maybe_name, args) => {
+                let block = self.get_block(block_id);
+                let scope_id = block.scope_id;
+
+                // args not implemented yet
+                assert_eq!(args.len(), 0);
+                // loop up loop blocks by name
+                if let Some(loop_scope) = fenv.get_loop_scope(scope_id, maybe_name) {
+                    let link_id = self.add_jump(block_id, loop_scope.next_block, vec![], node.span_id);
+                    Ok(FlattenResult::new(
+                            block_id,
+                            Some(link_id),
+                            AstType::Unit,
+                            true,
+                    ))
+
+                } else {
+                    // mismatch name
+                    b.push_error(&format!("Break without loop"), node.span_id);
+                    Err(Error::new(BlockifyError::Invalid))
+                }
+
+
+            }
+
+            /*
+            Ast::Lambda(_def) => {
             }
 
             Ast::CloseBlock => {
