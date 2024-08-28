@@ -726,7 +726,12 @@ impl Flatten {
         if !is_term {
             let block = self.get_block(current_block_id);
             //println!("missing term: {:?}", block.next);
-            self.add_jump(current_block_id, block.next.unwrap().into(), vec![], span_id);
+            self.add_jump(
+                current_block_id,
+                block.next.unwrap().into(),
+                vec![],
+                span_id,
+            );
         }
         Ok(FlattenResult::new(current_block_id, link_id, ty, is_term))
     }
@@ -1446,7 +1451,12 @@ impl Flatten {
                             //let r = self.flatten(fun_block_id, *body, fenv, b)?;
                             self.ast_blocks.push(fun_block_id);
 
-                            self.add_jump(next_block_id, fun_block_id.into(), link_ids, node.span_id);
+                            self.add_jump(
+                                next_block_id,
+                                fun_block_id.into(),
+                                link_ids,
+                                node.span_id,
+                            );
                             return Ok(FlattenResult::new(
                                 next_block_id,
                                 None,
@@ -1715,7 +1725,8 @@ impl Flatten {
             Ast::ControlFlowMarker(ControlFlowMarker::Goto(label)) => {
                 // Goto is terminal
                 if let Some(target_block_id) = fenv.resolve_block_id(block.scope_id, label.into()) {
-                    let link_id = self.add_jump(block_id, target_block_id.into(), vec![], node.span_id);
+                    let link_id =
+                        self.add_jump(block_id, target_block_id.into(), vec![], node.span_id);
                     Ok(FlattenResult::new(
                         block_id,
                         Some(link_id),
@@ -1743,7 +1754,7 @@ impl Flatten {
                 fenv.push_loop_blocks(loop_scope_id, Some(name), next.into(), loop_block_id.into());
 
                 let loop_block = self.get_block_mut(loop_block_id);
-                loop_block.next = Some(next);
+                loop_block.next = Some(loop_block_id);
 
                 self.ast_blocks.push(loop_block_id);
                 let code = LCode::Label(0, 0);
@@ -1759,36 +1770,7 @@ impl Flatten {
 
                 self.add_jump(block_id, loop_block_id.into(), vec![], span_id);
 
-                Ok(FlattenResult::new(
-                        block_id,
-                        None,
-                        AstType::Unit,
-                        true,
-                ))
-
-                    /*
-                let span_id = body.span_id;
-                let loop_scope_id = fenv.new_scope(ScopeType::Loop);
-
-
-                let v_loop = self.push_label(name.into(), span_id, loop_scope_id, &[], &[], b);
-                let b_loop = self.resolve_block_id(v_loop.into());
-                self.env
-                    .push_loop_blocks(Some(name), v_next.into(), v_loop.into());
-
-                self.env.enter_scope(loop_scope_id, b_loop);
-                let _ = self.add_with_next(v_loop.into(), body, v_next.into(), b)?;
-                self.env.exit_scope();
-
-                // enter loop
-                let r = self.add_jump(entry_id, b_loop, vec![], span_id, b)?;
-                Ok(AddResult::new(
-                        Some(r.value_id.unwrap()),
-                        true,
-                        v_next.into(),
-                ))
-                    */
-
+                Ok(FlattenResult::new(block_id, None, AstType::Unit, true))
             }
 
             Ast::Continue(maybe_name, args) => {
@@ -1799,20 +1781,19 @@ impl Flatten {
                 assert_eq!(args.len(), 0);
                 // loop up loop blocks by name
                 if let Some(loop_scope) = fenv.get_loop_scope(scope_id, maybe_name) {
-                    let link_id = self.add_jump(block_id, loop_scope.start_block, vec![], node.span_id);
+                    let link_id =
+                        self.add_jump(block_id, loop_scope.start_block, vec![], node.span_id);
                     Ok(FlattenResult::new(
-                            block_id,
-                            Some(link_id),
-                            AstType::Unit,
-                            true,
+                        block_id,
+                        Some(link_id),
+                        AstType::Unit,
+                        true,
                     ))
-
                 } else {
                     // mismatch name
                     b.push_error(&format!("Continue without loop"), node.span_id);
                     Err(Error::new(BlockifyError::Invalid))
                 }
-
             }
 
             Ast::Break(maybe_name, args) => {
@@ -1823,21 +1804,19 @@ impl Flatten {
                 assert_eq!(args.len(), 0);
                 // loop up loop blocks by name
                 if let Some(loop_scope) = fenv.get_loop_scope(scope_id, maybe_name) {
-                    let link_id = self.add_jump(block_id, loop_scope.next_block, vec![], node.span_id);
+                    let link_id =
+                        self.add_jump(block_id, loop_scope.next_block, vec![], node.span_id);
                     Ok(FlattenResult::new(
-                            block_id,
-                            Some(link_id),
-                            AstType::Unit,
-                            true,
+                        block_id,
+                        Some(link_id),
+                        AstType::Unit,
+                        true,
                     ))
-
                 } else {
                     // mismatch name
                     b.push_error(&format!("Break without loop"), node.span_id);
                     Err(Error::new(BlockifyError::Invalid))
                 }
-
-
             }
 
             /*
@@ -1845,12 +1824,6 @@ impl Flatten {
             }
 
             Ast::CloseBlock => {
-            }
-
-            Ast::Break(maybe_name, args) => {
-            }
-
-            Ast::Continue(maybe_name, args) => {
             }
             */
             Ast::Error => {
