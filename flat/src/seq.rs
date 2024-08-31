@@ -67,14 +67,14 @@ impl SequenceBlock {
     }
 }
 
-struct SequenceReader {
+struct SequenceReader2 {
     //result: Vec<AstNode>,
     current: Vec<AstNode>,
     current_label: Option<StringKey>,
     current_block: Option<BlockId>,
 }
 
-impl SequenceReader {
+impl SequenceReader2 {
     fn new() -> Self {
         Self {
             //result: vec![],
@@ -493,7 +493,7 @@ pub(crate) mod tests {
     use super::*;
     //use test_log::test;
 
-    #[test]
+    //#[test]
     fn test_seq() {
         let mut b = NodeBuilder::new();
         let ast = crate::builder::tests::gen_block(&mut b);

@@ -63,7 +63,6 @@ impl FlattenEnvironment {
     }
 
     pub fn scope_succ(&mut self, source_scope_id: ScopeId, target_scope_id: ScopeId) {
-        println!("succ: {}, {}", source_scope_id, target_scope_id);
         self.scopes
             .add_edge(source_scope_id.into(), target_scope_id.into(), ());
     }

@@ -5,6 +5,7 @@ pub mod builtin;
 mod dump;
 pub mod flatten;
 pub mod flatten_env;
+pub mod flatten_seq;
 pub mod graph;
 pub mod scope;
 pub mod seq;
@@ -15,6 +16,7 @@ pub use builder::*;
 pub use builtin::*;
 pub use flatten::*;
 pub use flatten_env::*;
+pub use flatten_seq::*;
 pub use graph::{Node, CFG};
 pub use scope::{Environment, ScopeId, ScopeLayer, ScopeType, Successor, TemplateId};
 

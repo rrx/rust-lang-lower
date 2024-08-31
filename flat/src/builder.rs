@@ -37,6 +37,12 @@ impl LabelBuilder {
         }
     }
 
+    pub fn fresh_key(&mut self) -> StringKey {
+        let offset = self.unique_count;
+        self.unique_count += 1;
+        self.s(&format!("_V{}", offset))
+    }
+
     pub fn fresh_var_id(&mut self) -> StringLabel {
         let offset = self.unique_count;
         self.unique_count += 1;
@@ -398,11 +404,11 @@ impl NodeBuilder {
     }
 
     pub fn label(name: StringKey) -> AstNode {
-        ControlFlowMarker::BlockStart(name, vec![]).into()
+        ControlFlowMarker::BlockStart(Some(name), vec![]).into()
     }
 
     pub fn block_start(name: StringKey, params: Vec<ParameterNode>) -> AstNode {
-        ControlFlowMarker::BlockStart(name, params).into()
+        ControlFlowMarker::BlockStart(Some(name), params).into()
     }
 
     pub fn goto(name: StringKey) -> AstNode {

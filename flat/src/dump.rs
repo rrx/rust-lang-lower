@@ -71,7 +71,11 @@ impl NodeBuilder {
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(name, params)) => {
-                let s = format!("block_start: {}", self.labels.r((*name).into()),);
+                let s = if let Some(name) = name {
+                    format!("block_start: {}", self.labels.r((*name).into()))
+                } else {
+                    "block_start".into()
+                };
                 out.push((depth, s, node.span_id));
                 for e in params {
                     let s = format!("arg: {}, {:?}", self.labels.r(e.name.into()), e.ty,);
@@ -81,6 +85,11 @@ impl NodeBuilder {
 
             Ast::ControlFlowMarker(ControlFlowMarker::Goto(key)) => {
                 let s = format!("goto: {}", self.labels.r(key.into()),);
+                out.push((depth, s, node.span_id));
+            }
+
+            Ast::ControlFlowMarker(ControlFlowMarker::BlockEnd) => {
+                let s = format!("end");
                 out.push((depth, s, node.span_id));
             }
 
@@ -227,6 +236,15 @@ impl NodeBuilder {
             Ast::CloseBlock => {
                 let s = "close_block";
                 out.push((depth, s.into(), node.span_id));
+            }
+
+            Ast::Yield(body) => {
+                let s = "yield".into();
+                out.push((depth, s, node.span_id));
+                depth += 1;
+                if let Some(result) = body {
+                    self.dump_strings(result, out, depth);
+                }
             }
 
             _ => unimplemented!("{:?}", node),

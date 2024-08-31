@@ -32,10 +32,7 @@ use crate::{
     TemplateId, ValueId,
 };
 
-use tabled::{
-    settings::Style,
-    Table,
-};
+use tabled::{settings::Style, Table};
 
 pub type BlockGraph = DiGraph<IRBlock, Successor>;
 
@@ -746,26 +743,30 @@ impl Flatten {
         // this needs to be done first as a forward declaration
         for expr in seq.iter() {
             if let Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(name, args)) = &expr.node {
-                let label: StringLabel = (*name).into();
-                if fenv.resolve_block_id(scope_id, label).is_none() {
+                let label = if let Some(name) = name {
+                    name.clone().into()
+                } else {
+                    b.labels.fresh_key()
+                };
+                if fenv.resolve_block_id(scope_id, label.into()).is_none() {
                     assert_eq!(0, args.len());
                     let new_block_id = self.new_block(None, scope_id);
                     self.block_succ(block_id, new_block_id, Successor::BlockScope);
                     let scope = fenv.get_scope_mut(scope_id);
-                    scope.block_labels.insert(label, new_block_id);
+                    scope.block_labels.insert(label.into(), new_block_id);
                     self.start_block(
                         new_block_id,
                         scope_id,
                         &[],
                         &[],
                         AstType::Unit,
-                        Some(*name),
+                        Some(label),
                         span_id,
                         VarDefinitionSpace::Reg,
                         fenv,
                         b,
                     );
-                    println!("start: {:?}", (new_block_id, b.labels.r(label)));
+                    println!("start: {:?}", (new_block_id, b.labels.r(label.into())));
                 }
             }
         }
@@ -780,8 +781,13 @@ impl Flatten {
                         if let Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(ref key, _)) =
                             next_seq.first().as_ref().unwrap().node
                         {
-                            let label: StringLabel = key.into();
-                            let block_id = fenv.resolve_block_id(scope_id, label).unwrap();
+                            let label = if let Some(name) = key {
+                                name.clone().into()
+                            } else {
+                                b.labels.fresh_key()
+                            };
+                            //let label: StringLabel = key.into();
+                            let block_id = fenv.resolve_block_id(scope_id, label.into()).unwrap();
                             let block = self.get_block_mut(block_id);
                             let next_node = AstNode {
                                 node: Ast::Sequence(next_seq),
@@ -1816,6 +1822,7 @@ impl Flatten {
 
             Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(name, args)) => {
                 // all blocks should have been forward declared in the sequence
+                let name = name.unwrap();
                 let block_id = fenv.resolve_block_id(block.scope_id, name.into()).unwrap();
                 assert_eq!(0, args.len());
                 let block = self.get_block(block_id);

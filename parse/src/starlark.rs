@@ -255,15 +255,11 @@ fn from_assign_target<P: syntax::ast::AstPayload>(
     }
 }
 
-pub struct Parser {
-    //u: TypeUnify,
-}
+pub struct Parser {}
 
 impl Parser {
     pub fn new() -> Self {
-        Self {
-            //u: TypeUnify::new(),
-        }
+        Self {}
     }
 
     pub fn parse<'a>(
@@ -545,24 +541,28 @@ impl Parser {
             ExprP::Dot(expr, name) => {
                 if let ExprP::Identifier(ident) = &expr.node {
                     if &ident.node.ident == "q" {
-                        // builtin namespace
-                        if let Some(ast) = b.build_builtin_from_name(&name, vec![], span_id) {
-                            Ok(ast)
-                        } else if let Some(extra) = ExtraAst::from_name(&name, &[], b) {
-                            match extra {
+                        // check for keywords
+                        if let Some(extra) = ExtraAst::from_name(&name, &[], b) {
+                            return match extra {
                                 ExtraAst::LoopBreak(maybe_key) => Ok(NB::loop_break(maybe_key)),
                                 ExtraAst::LoopContinue(maybe_key) => {
                                     Ok(NB::loop_continue(maybe_key))
                                 }
-                                _ => unimplemented!(),
-                            }
-                        } else {
-                            assert!(false);
-                            b.spans
-                                .push_diagnostic(env.error(name.span, "Builtin not found"));
-                            let span_id = env.span_id(item.span, b);
-                            Ok(Ast::Error.node(span_id))
+                                _ => unimplemented!("{:?}", extra),
+                            };
                         }
+
+                        // check builtin namespace
+                        if let Some(ast) = b.build_builtin_from_name(&name, vec![], span_id) {
+                            return Ok(ast);
+                        }
+
+                        // didn't find anything matching
+                        //assert!(false);
+                        b.spans
+                            .push_diagnostic(env.error(name.span, "Builtin not found"));
+                        let span_id = env.span_id(item.span, b);
+                        Ok(Ast::Error.node(span_id))
                     } else {
                         b.spans.push_diagnostic(env.error(
                             name.span,
@@ -832,7 +832,6 @@ impl<P: syntax::ast::AstPayload> StatementReader<P> {
                 }
                 ExtraAst::Label(key) => {
                     self.start_block(key, span_id);
-                    //self.push_ast(NB::block_start(key, vec![]))
                 }
                 ExtraAst::Goto(key) => {
                     if self.is_block() {

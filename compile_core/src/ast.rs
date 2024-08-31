@@ -143,10 +143,11 @@ pub enum AssignTarget {
 
 #[derive(Debug, Clone)]
 pub enum ControlFlowMarker {
-    Start(Option<StringKey>),
-    Break(Option<StringKey>),
-    Continue(Option<StringKey>),
-    BlockStart(StringKey, Vec<ParameterNode>),
+    LoopStart(Option<StringKey>),
+    LoopBreak(Option<StringKey>),
+    LoopContinue(Option<StringKey>),
+    BlockStart(Option<StringKey>, Vec<ParameterNode>),
+    BlockEnd,
     Goto(StringKey),
 }
 
@@ -216,7 +217,7 @@ impl Ast {
 
     pub fn get_label(&self) -> Option<StringKey> {
         match self {
-            Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(key, _)) => Some(*key),
+            Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(key, _)) => *key,
             Ast::Block(key, _, _) => Some(*key),
             _ => None,
         }

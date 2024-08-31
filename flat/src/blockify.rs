@@ -112,7 +112,7 @@ impl NextSeqState {
             match next_node.node {
                 //Ast::Return(_) => Self::NextReturn,
                 Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(key, _)) => {
-                    (is_term, Self::NextLabel(key))
+                    (is_term, Self::NextLabel(key.unwrap()))
                 }
                 _ => (is_term, Self::Other),
             }
@@ -744,7 +744,7 @@ impl Blockify {
                 assert_eq!(0, args.len());
                 let block_id = self.env.new_block();
                 let _ = self.push_label_with_block(
-                    name.into(),
+                    name.unwrap().into(),
                     expr.span_id,
                     scope_id,
                     block_id,
@@ -1512,7 +1512,7 @@ impl Blockify {
 
             Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(name, args)) => {
                 // all blocks should have been forward declared in the sequence
-                let value_id = self.env.resolve_block(name.into()).unwrap();
+                let value_id = self.env.resolve_block(name.unwrap().into()).unwrap();
                 assert_eq!(0, args.len());
 
                 let block = self.env.get_block(self.env.resolve_code_offset(entry_id));
