@@ -28,13 +28,14 @@ pub struct CodeRow {
     pub block_id: usize,
     pub entry_id: usize,
     pub term: bool,
+    pub dead: bool,
 }
 
 impl CodeRow {
     pub fn header() -> Vec<&'static str> {
         vec![
             "pos", "link", "next", "prev", "value", "ty", "mem", "name", "span_id", "scope_id",
-            "block_id", "term",
+            "block_id", "term", "dead",
         ]
     }
 }
@@ -105,6 +106,7 @@ impl Blockify {
             entry_id: entry_id.index(),
             block_id: block_id.index(),
             term: code.is_term(),
+            dead: false,
         }
     }
 }

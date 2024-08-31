@@ -1117,6 +1117,11 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn test_nested_loops() {
+        run_test_flatten("../tests/nested_loops.star", 0);
+    }
+
+    #[test]
     fn test_nested_func() {
         run_test_ir("../tests/nested_func.star", 0);
         run_test_flatten("../tests/nested_func.star", 0);

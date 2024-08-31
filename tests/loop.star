@@ -31,5 +31,9 @@ def main() -> int:
   q.loop_continue
   q.end
 
+  q.loop
+  q.loop_break
+  q.end
+
   return y + z
 

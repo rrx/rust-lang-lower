@@ -62,6 +62,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         let _ = r?;
         let m = f.module(&mut fenv, &b);
         m.dump(&b);
+        m.block_graph("blocks.dot", &b);
+
+        flat::flatten::scope_graph("scopes.dot", &fenv);
 
         let r = p.lower(&m, ValueId::new(0), &context, &mut module, &mut b);
         b.spans.diagnostics_dump();

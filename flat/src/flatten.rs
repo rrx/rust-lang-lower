@@ -21,7 +21,8 @@ use compile_core::{
 use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+
 use std::convert::From;
 use std::convert::Into;
 
@@ -32,11 +33,7 @@ use crate::{
 };
 
 use tabled::{
-    settings::{
-        //object::Rows,
-        //Border,
-        Style,
-    },
+    settings::Style,
     Table,
 };
 
@@ -133,8 +130,10 @@ impl CodeEntry {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct IRBlock {
     scope_id: ScopeId,
+    pub dead: bool,
     ast: Option<AstNode>,
     next: Option<BlockId>,
     links: Vec<LinkId>,
@@ -144,6 +143,7 @@ impl IRBlock {
     pub fn new(scope_id: ScopeId, ast: Option<AstNode>) -> Self {
         Self {
             scope_id,
+            dead: false,
             ast,
             links: vec![],
             next: None,
@@ -178,7 +178,7 @@ pub struct FlattenModule {
     entries: Vec<ModuleEntry>,
     link_map: HashMap<LinkId, ValueId>,
     block_map: HashMap<BlockId, ValueId>,
-    succ: HashMap<BlockId, Vec<(Successor, CodeOffset)>>,
+    function_entries: HashSet<BlockId>,
     link: LinkOptions,
     gblocks: BlockGraph,
 }
@@ -232,8 +232,11 @@ impl ICodeModule for FlattenModule {
         for edge in edges {
             let succ_type = edge.weight();
             let i = edge.target();
-            let block_id = BlockId(i.index() as u32).into();
-            out.push((*succ_type, block_id));
+            let block = self.gblocks.node_weight(i).unwrap();
+            if !block.dead {
+                let block_id = BlockId(i.index() as u32).into();
+                out.push((*succ_type, block_id));
+            }
         }
         out
     }
@@ -295,9 +298,104 @@ impl FlattenModule {
             link: LinkOptions::new(),
             link_map: HashMap::new(),
             block_map: HashMap::new(),
-            succ: HashMap::new(),
+            function_entries: HashSet::new(),
             gblocks: BlockGraph::new(),
         }
+    }
+
+    pub fn find_dead_blocks(&mut self) {
+        let mut dfs = petgraph::visit::Dfs::new(&self.gblocks, BlockId(0).into());
+        let mut entries = HashSet::new();
+        while let Some(visited) = dfs.next(&self.gblocks) {
+            for edge in self.gblocks.edges(visited) {
+                if Successor::FunctionDeclaration == *edge.weight() {
+                    entries.insert(edge.target());
+                }
+            }
+        }
+
+        let subgraph = self.gblocks.filter_map(
+            |_n_index, n| Some(n.clone()),
+            |_e_index, e| {
+                if let Successor::Jump = e {
+                    Some(e.clone())
+                } else {
+                    None
+                }
+            },
+        );
+
+        for entry in entries {
+            let mut reachable = HashSet::new();
+            let mut all = HashSet::new();
+            reachable.insert(entry.into());
+            all.insert(entry.into());
+
+            let mut dfs = petgraph::visit::Dfs::new(&subgraph, entry.into());
+            while let Some(visited) = dfs.next(&self.gblocks) {
+                for edge in self.gblocks.edges(visited) {
+                    let b: BlockId = edge.target().into();
+                    all.insert(b);
+                }
+            }
+
+            let mut dfs = petgraph::visit::Dfs::new(&subgraph, entry.into());
+            while let Some(visited) = dfs.next(&subgraph) {
+                for edge in subgraph.edges(visited) {
+                    if Successor::Jump == *edge.weight() {
+                        let b: BlockId = edge.target().into();
+                        reachable.insert(b);
+                    }
+                }
+            }
+            let dead = all.difference(&reachable);
+            println!("[{:?}] Dead: {:?}", entry, &dead);
+            println!("[{:?}] All: {:?}", entry, &all);
+            println!("[{:?}] Reachable: {:?}", entry, &reachable);
+            for index in dead {
+                let block = self.gblocks.node_weight_mut((*index).into()).unwrap();
+                block.dead = true;
+            }
+        }
+    }
+
+    pub fn block_graph(&self, filename: &str, b: &NB) {
+        use petgraph::dot::{Config, Dot};
+        let g = self.gblocks.filter_map(
+            |_n_index, n| Some(n.clone()),
+            |_e_index, e| {
+                if let Successor::Jump = e {
+                    Some(e.clone())
+                } else {
+                    None
+                }
+            },
+        );
+        let num = petgraph::algo::connected_components(&g);
+        println!("components: {}", num);
+
+        let s = format!(
+            "{:?}",
+            Dot::with_attr_getters(
+                &g,
+                &[Config::NodeNoLabel],
+                &|_, _er| String::new(),
+                &|_, (index, block)| {
+                    let block_id: BlockId = index.into();
+                    let key = self.get_name(block_id.into()).unwrap();
+                    let name = b.labels.r(key);
+                    format!(
+                        "label = \"B{:?}:{}\" shape=\"{:?}\"",
+                        index.index(),
+                        name,
+                        &block.scope_id,
+                    )
+                }
+            )
+        );
+        println!("saved graph {:?}", filename);
+        println!("{}", s);
+        std::fs::write(filename, s).unwrap();
     }
 
     pub fn add(&mut self, mentry: ModuleEntry) {
@@ -331,6 +429,7 @@ impl FlattenModule {
         //let prev = self.get_prev(v).unwrap_or(v).index();
         let entry_id = self.get_entry_id(v);
         let block_id = entry.block_id;
+        let block = self.gblocks.node_weight(block_id.into()).unwrap();
 
         CodeRow {
             pos: v.index(),
@@ -350,6 +449,7 @@ impl FlattenModule {
             entry_id: entry_id.index(),
             block_id: block_id.index(),
             term: code.is_term(),
+            dead: block.dead,
         }
     }
 }
@@ -445,7 +545,7 @@ impl Flatten {
             }
         }
         m.gblocks = self.gblocks;
-
+        m.find_dead_blocks();
         m
     }
 
@@ -819,6 +919,10 @@ impl Flatten {
             let code = LCode::Link(link_id);
             let entry = CodeEntry::new(block_id, code, ty, None, span_id, VarDefinitionSpace::Reg);
             self.push_entry_with_link(entry);
+        }
+
+        if let CodeOffset::Block(target_block_id) = target_id {
+            self.block_succ(block_id, target_block_id, Successor::Jump);
         }
 
         let code = LCode::Jump(target_id.into(), num_args as u8);
@@ -1211,7 +1315,6 @@ impl Flatten {
                 let fun_scope_id = fenv
                     .find_nearest_scope(block.scope_id, ScopeType::Function)
                     .unwrap();
-                //let ret_block_id = block.ret.as_ref().unwrap().clone();
 
                 let mut jump_args = vec![];
                 let mut block_id = block_id;
@@ -1313,7 +1416,6 @@ impl Flatten {
                 let expr_ty = self.get_entry(v_expr).ty.clone();
                 let v_block = r.block_id;
 
-                //self.dump_scope(block_id, fenv, b);
                 let offset_decl = if let Some(data) = self.resolve_name(block_id, name, fenv) {
                     assert_eq!(data.ty, expr_ty);
                     data.offset
@@ -1492,7 +1594,6 @@ impl Flatten {
             Ast::Conditional(condition, then_expr, maybe_else_expr) => {
                 let block = self.get_block(block_id);
                 let v_next = block.next.unwrap();
-                //let v_ret = block.ret.unwrap();
                 let parent_scope_id = block.scope_id;
 
                 let then_scope_id = fenv.new_scope(ScopeType::Block);
@@ -1505,6 +1606,8 @@ impl Flatten {
                     Successor::BlockScope,
                     Some(v_next),
                 );
+                self.block_succ(block_id, then_block_id, Successor::Jump);
+
                 let block = self.get_block_mut(then_block_id);
                 block.next = Some(v_next);
 
@@ -1532,6 +1635,8 @@ impl Flatten {
                         Successor::BlockScope,
                         Some(v_next),
                     );
+
+                    self.block_succ(block_id, else_block_id, Successor::Jump);
                     let block = self.get_block_mut(then_block_id);
                     block.next = Some(v_next);
 
@@ -1549,6 +1654,7 @@ impl Flatten {
                     self.push_entry_with_link(entry);
                     else_block_id
                 } else {
+                    self.block_succ(block_id, v_next, Successor::Jump);
                     v_next
                 };
 
@@ -1617,6 +1723,8 @@ impl Flatten {
                 let then_ty = AstType::Int; //b.types.r(then_ty_id);
                 let then_block_id = self.new_block(Some(AstNode::make_yield(*x)), then_scope_id);
                 self.block_succ(rc.block_id, then_block_id, Successor::Operation);
+                self.block_succ(rc.block_id, then_block_id, Successor::Jump);
+
                 self.ast_blocks.insert(0, then_block_id);
                 let name = b.labels.s("then");
                 let code = LCode::Label(0, 0);
@@ -1636,6 +1744,7 @@ impl Flatten {
                 fenv.scope_succ(scope_id, else_scope_id);
                 let else_block_id = self.new_block(Some(AstNode::make_yield(*y)), else_scope_id);
                 self.block_succ(rc.block_id, else_block_id, Successor::Operation);
+                self.block_succ(rc.block_id, else_block_id, Successor::Jump);
                 self.ast_blocks.insert(0, else_block_id);
                 let code = LCode::Label(0, 0);
                 let name = b.labels.s("else");
@@ -1836,6 +1945,29 @@ impl Flatten {
     }
 }
 
+pub fn scope_graph(filename: &str, fenv: &FlattenEnvironment) {
+    use petgraph::dot::{Config, Dot};
+    let s = format!(
+        "{:?}",
+        Dot::with_attr_getters(
+            &fenv.scopes,
+            &[Config::EdgeNoLabel, Config::NodeNoLabel],
+            &|_, _er| String::new(),
+            &|_, (index, scope)| {
+                format!(
+                    "label = \"S{}:{:?}\" shape=\"{:?}\"",
+                    index.index(),
+                    &scope.scope_type,
+                    &scope.scope_type
+                )
+            }
+        )
+    );
+    println!("saved graph {:?}", filename);
+    println!("{}", s);
+    std::fs::write(filename, s).unwrap();
+}
+
 pub fn save_graph(blockify: &dyn ICodeModule, filename: &str, b: &NB) {
     use petgraph::dot::{Config, Dot};
     let cfg = blockify.get_graph(ValueId::new(0), None, b);
@@ -1849,7 +1981,7 @@ pub fn save_graph(blockify: &dyn ICodeModule, filename: &str, b: &NB) {
                 match data.code_offset {
                     CodeOffset::Link(link_id) => {
                         format!(
-                            "label = \"L{}:{}\" shape={:?}",
+                            "label = \"L{}:{}\" shape=\"{:?}\"",
                             link_id.index(),
                             &data.name,
                             &data.ty.to_string()

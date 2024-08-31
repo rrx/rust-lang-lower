@@ -104,6 +104,7 @@ impl ScopeLayer {
 pub enum Successor {
     BlockScope,
     Operation,
+    Jump,
     FunctionDeclaration,
 }
 
