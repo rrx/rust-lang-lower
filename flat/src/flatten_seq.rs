@@ -251,7 +251,7 @@ mod tests {
         Ok(())
     }
 
-    //#[test]
+    #[test]
     fn test_seq1() {
         let mut b = builder();
         let a = b.labels.s("a");
