@@ -985,7 +985,6 @@ impl Flatten {
 
     pub fn add_return_block(
         &mut self,
-        fun_block_id: BlockId,
         ret_block_id: BlockId,
         scope_id: ScopeId,
         return_type: AstType,
@@ -993,12 +992,12 @@ impl Flatten {
         b: &mut NB,
     ) {
         let span_id = b.spans.get_span_unknown();
-        let name = b.labels.s("ret");
+        let name = b.labels.fresh_key();
+        //let name = b.labels.s("ret");
         let args = match &return_type {
             AstType::Unit => vec![],
             _ => vec![return_type.clone()],
         };
-        self.block_succ(fun_block_id, ret_block_id, Successor::BlockScope);
 
         /*
         let ret_block_id = self.successor(
@@ -1268,14 +1267,14 @@ impl Flatten {
 
                         if let Some(body) = def.body {
                             let span_id = body.span_id;
-                            //let block = self.get_block(block_id);
+
+                            // create function scope
                             let fun_scope_id = fenv.new_scope(ScopeType::Function);
                             fenv.scope_succ(fenv.static_scope_id(), fun_scope_id);
 
-                            let fun_block_id = self.new_block(Some(*body), fun_scope_id);
+                            // create function block and return block
+                            let fun_block_id = self.new_block(None, fun_scope_id);
                             let ret_block_id = self.new_block(None, fun_scope_id);
-
-                            //let fun_block_id = self.new_block(Some(*body), fun_scope_id);
 
                             //let ast_block = Ast::Block(name, def.params.clone(), body).into();
 
@@ -1287,15 +1286,13 @@ impl Flatten {
                             let fun_block = self.get_block_mut(fun_block_id);
                             fun_block.next = Some(ret_block_id);
 
+                            // block graph
                             self.block_succ(
                                 fenv.static_block_id(),
                                 fun_block_id,
                                 Successor::FunctionDeclaration,
                             );
-
-                            //let r = self.flatten_block(name, def.params, body)?;
-                            //let r = self.flatten(fun_block_id, ast_block, fenv, b)?;
-
+                            self.block_succ(fun_block_id, ret_block_id, Successor::BlockScope);
 
                             self.start_block(
                                 fun_block_id,
@@ -1310,18 +1307,17 @@ impl Flatten {
                                 b,
                             );
 
-                            //let r = self.flatten(fun_block_id, *body, fenv, b)?;
-                            self.ast_blocks.push(fun_block_id);
+                            // flatten function block later
+                            let _ = self.flatten(fun_block_id, *body, fenv, b)?;
 
+                            // write out return block
                             self.add_return_block(
-                                fun_block_id,
                                 ret_block_id,
                                 fun_scope_id,
                                 ret_ty.clone(),
                                 fenv,
                                 b,
                             );
-
 
                             // push declaration into static block
                             let code = LCode::DeclareFunction(Some(fun_block_id));
@@ -1886,7 +1882,7 @@ impl Flatten {
                 self.block_succ(rc.block_id, then_block_id, Successor::Jump);
 
                 self.ast_blocks.insert(0, then_block_id);
-                let name = b.labels.s("then");
+                let name = b.labels.s("t_then");
                 let code = LCode::Label(0, 0);
                 let entry = CodeEntry::new(
                     then_block_id,
@@ -1907,7 +1903,7 @@ impl Flatten {
                 self.block_succ(rc.block_id, else_block_id, Successor::Jump);
                 self.ast_blocks.insert(0, else_block_id);
                 let code = LCode::Label(0, 0);
-                let name = b.labels.s("else");
+                let name = b.labels.s("t_else");
                 let entry = CodeEntry::new(
                     else_block_id,
                     code,
