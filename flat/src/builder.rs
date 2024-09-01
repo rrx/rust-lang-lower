@@ -210,6 +210,11 @@ impl NodeBuilder {
         self.builtins.insert(b);
     }
 
+    pub fn ensure_seq(ast: AstNode) -> AstNode {
+        let span_id = ast.span_id;
+        Self::seq(ast.to_vec(), span_id)
+    }
+
     pub fn build_literal_from_identifier(&self, name: &str) -> Option<AstNode> {
         match name {
             "True" => Some(true.into()),
