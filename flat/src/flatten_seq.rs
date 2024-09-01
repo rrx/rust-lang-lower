@@ -168,8 +168,6 @@ impl SequenceReader {
             match stack_type {
                 StackType::Block => {
                     self.close_block();
-                    //let ast = self.end_block();
-                    //self.push_stack(ast);
                 }
                 StackType::Loop => {
                     let ast = self.end_loop();

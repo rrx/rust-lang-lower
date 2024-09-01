@@ -986,17 +986,21 @@ impl Flatten {
     pub fn add_return_block(
         &mut self,
         fun_block_id: BlockId,
+        ret_block_id: BlockId,
         scope_id: ScopeId,
         return_type: AstType,
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
-    ) -> BlockId {
+    ) {
         let span_id = b.spans.get_span_unknown();
         let name = b.labels.s("ret");
         let args = match &return_type {
             AstType::Unit => vec![],
             _ => vec![return_type.clone()],
         };
+        self.block_succ(fun_block_id, ret_block_id, Successor::BlockScope);
+
+        /*
         let ret_block_id = self.successor(
             fun_block_id,
             None,
@@ -1004,6 +1008,7 @@ impl Flatten {
             Successor::BlockScope,
             None,
         );
+        */
 
         let v_args = self.start_block(
             ret_block_id,
@@ -1019,7 +1024,6 @@ impl Flatten {
         );
 
         self.add_return(ret_block_id, v_args, b);
-        ret_block_id
     }
 
     pub fn add_jump(
@@ -1267,13 +1271,32 @@ impl Flatten {
                             //let block = self.get_block(block_id);
                             let fun_scope_id = fenv.new_scope(ScopeType::Function);
                             fenv.scope_succ(fenv.static_scope_id(), fun_scope_id);
+
                             let fun_block_id = self.new_block(Some(*body), fun_scope_id);
+                            let ret_block_id = self.new_block(None, fun_scope_id);
+
+                            //let fun_block_id = self.new_block(Some(*body), fun_scope_id);
+
+                            //let ast_block = Ast::Block(name, def.params.clone(), body).into();
+
+                            // return in scope
+                            let fun_scope = fenv.get_scope_mut(fun_scope_id);
+                            fun_scope.return_block = Some(ret_block_id);
+
+                            // next in scope
+                            let fun_block = self.get_block_mut(fun_block_id);
+                            fun_block.next = Some(ret_block_id);
 
                             self.block_succ(
                                 fenv.static_block_id(),
                                 fun_block_id,
                                 Successor::FunctionDeclaration,
                             );
+
+                            //let r = self.flatten_block(name, def.params, body)?;
+                            //let r = self.flatten(fun_block_id, ast_block, fenv, b)?;
+
+
                             self.start_block(
                                 fun_block_id,
                                 fun_scope_id,
@@ -1286,23 +1309,19 @@ impl Flatten {
                                 fenv,
                                 b,
                             );
+
                             //let r = self.flatten(fun_block_id, *body, fenv, b)?;
                             self.ast_blocks.push(fun_block_id);
 
-                            let ret_block_id = self.add_return_block(
+                            self.add_return_block(
                                 fun_block_id,
+                                ret_block_id,
                                 fun_scope_id,
                                 ret_ty.clone(),
                                 fenv,
                                 b,
                             );
 
-                            let fun_scope = fenv.get_scope_mut(fun_scope_id);
-                            fun_scope.return_block = Some(ret_block_id);
-
-                            let fun_block = self.get_block_mut(fun_block_id);
-                            //fun_block.ret = Some(ret_block_id);
-                            fun_block.next = Some(ret_block_id);
 
                             // push declaration into static block
                             let code = LCode::DeclareFunction(Some(fun_block_id));
