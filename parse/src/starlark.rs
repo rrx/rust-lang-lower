@@ -1018,11 +1018,11 @@ pub(crate) mod tests {
         let mut fenv = FlattenEnvironment::new();
         let r = Flatten::flatten_module(ast, &mut fenv, &mut b);
         b.spans.diagnostics_dump();
-        let mut f = r.unwrap();
-        let r = f.run_loop(&mut fenv, &mut b);
-        f.dump_ast(&b);
+        let f = r.unwrap();
+        //let r = f.run_loop(&mut fenv, &mut b);
+        //f.dump_ast(&b);
         b.spans.diagnostics_dump();
-        let _ = r.unwrap();
+        //let _ = r.unwrap();
         let m = f.module(&mut fenv, &b);
         m.dump(&b);
 

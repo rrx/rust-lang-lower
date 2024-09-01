@@ -55,11 +55,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         let mut fenv = FlattenEnvironment::new();
         let r = Flatten::flatten_module(ast, &mut fenv, &mut b);
         b.spans.diagnostics_dump();
-        let mut f = r?;
-        let r = f.run_loop(&mut fenv, &mut b);
-        f.dump_ast(&b);
+        let f = r?;
         b.spans.diagnostics_dump();
-        let _ = r?;
+        //let _ = r?;
         let m = f.module(&mut fenv, &b);
         m.dump(&b);
         m.block_graph("blocks.dot", &b);

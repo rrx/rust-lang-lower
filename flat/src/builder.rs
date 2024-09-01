@@ -37,10 +37,10 @@ impl LabelBuilder {
         }
     }
 
-    pub fn fresh_key(&mut self) -> StringKey {
+    pub fn fresh_key(&mut self, prefix: &str) -> StringKey {
         let offset = self.unique_count;
         self.unique_count += 1;
-        self.s(&format!("_V{}", offset))
+        self.s(&format!(".{}{}", prefix, offset))
     }
 
     pub fn fresh_var_id(&mut self) -> StringLabel {

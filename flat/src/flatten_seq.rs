@@ -212,7 +212,7 @@ impl Flatten {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Flatten, FlattenEnvironment, ICodeModule, NodeBuilder as NB, ScopeType};
+    use crate::{Flatten, FlattenEnvironment, ICodeModule, NodeBuilder as NB};
     use anyhow::Result;
     use compile_core::AstType;
     use test_log::test;
@@ -237,11 +237,11 @@ mod tests {
         b.dump_ast(&module);
         let r = Flatten::flatten_module(module, &mut fenv, b);
         b.spans.diagnostics_dump();
-        let mut f = r?;
-        let r = f.run_loop(&mut fenv, b);
-        f.dump_ast(&b);
+        let f = r?;
+        //let r = f.run_loop(&mut fenv, b);
+        //f.dump_ast(&b);
         b.spans.diagnostics_dump();
-        let _ = r?;
+        //let _ = r?;
         let m = f.module(&mut fenv, &b);
         m.dump(&b);
         m.block_graph("blocks.dot", &b);

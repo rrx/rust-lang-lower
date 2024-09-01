@@ -457,7 +457,6 @@ impl FlattenModule {
 
 pub struct Flatten {
     module_key: Option<StringKey>,
-    //ast_blocks: Vec<BlockId>,
     link: LinkOptions,
     entries: Vec<CodeEntry>,
     gblocks: BlockGraph,
@@ -468,7 +467,6 @@ impl Flatten {
     pub fn new() -> Self {
         Self {
             module_key: None,
-            //ast_blocks: vec![],
             entries: vec![],
             gblocks: BlockGraph::new(),
             link: LinkOptions::new(),
@@ -525,7 +523,6 @@ impl Flatten {
 
     pub fn module(self, fenv: &FlattenEnvironment, _b: &NB) -> FlattenModule {
         self.dump_blocks();
-        //assert!(self.ast_blocks.is_empty());
         let mut m = FlattenModule::new();
         m.link = self.link.clone();
 
@@ -559,29 +556,6 @@ impl Flatten {
         m
     }
 
-    pub fn dump_ast(&self, b: &NB) {
-        /*
-        for block_id in self.ast_blocks.iter() {
-            let block = self.get_block(*block_id);
-            for link_id in block.links.iter() {
-                let entry = self.get_entry(*link_id);
-                let name = entry.name.map(|n| b.labels.r(n.into()));
-                let ast = if let Some(ast) = &block.ast {
-                    println!("AST");
-                    b.dump_ast(ast);
-                    Some(ast)
-                } else {
-                    None
-                };
-                println!(
-                    "AST: B: {}, N: {:?}, C: {:?}, T: {:?}, A: {:?}",
-                    block_id, name, entry.code, entry.ty, ast
-                );
-            }
-        }
-        */
-    }
-
     pub fn flatten_module(
         node: AstNode,
         fenv: &mut FlattenEnvironment,
@@ -611,29 +585,6 @@ impl Flatten {
         } else {
             unreachable!()
         }
-    }
-
-        /*
-    pub fn step(&mut self, fenv: &mut FlattenEnvironment, b: &mut NB) -> Result<bool> {
-        if let Some(block_id) = self.ast_blocks.pop() {
-            let block = self.get_block_mut(block_id);
-            let ast = block.ast.take().unwrap();
-            self.flatten(block_id, ast, fenv, b)?;
-        }
-        Ok(self.ast_blocks.is_empty())
-        Ok(true)
-    }
-        */
-
-    pub fn run_loop(&mut self, fenv: &mut FlattenEnvironment, b: &mut NB) -> Result<()> {
-        /*
-        loop {
-            if self.step(fenv, b)? {
-                break;
-            }
-        }
-        */
-        Ok(())
     }
 
     pub fn push(&mut self, mut entry: CodeEntry) -> LinkId {
@@ -788,7 +739,7 @@ impl Flatten {
                     let label = if let Some(name) = name {
                         name.clone().into()
                     } else {
-                        b.labels.fresh_key()
+                        b.labels.fresh_key("block")
                     };
                     if fenv.resolve_block_id(scope_id, label.into()).is_none() {
                         assert_eq!(0, args.len());
@@ -851,7 +802,7 @@ impl Flatten {
                             let label = if let Some(name) = key {
                                 name.clone().into()
                             } else {
-                                b.labels.fresh_key()
+                                b.labels.fresh_key("block")
                             };
                             //let label: StringLabel = key.into();
                             let block_id = fenv.resolve_block_id(scope_id, label.into()).unwrap();
@@ -960,7 +911,7 @@ impl Flatten {
         b: &mut NB,
     ) {
         let span_id = b.spans.get_span_unknown();
-        let name = b.labels.fresh_key();
+        let name = b.labels.fresh_key("ret");
         //let name = b.labels.s("ret");
         let args = match &return_type {
             AstType::Unit => vec![],
@@ -1680,7 +1631,7 @@ impl Flatten {
                 let block = self.get_block_mut(then_block_id);
                 block.next(v_next);
 
-                let name = b.labels.s("then");
+                let name = b.labels.fresh_key("then");
                 let code = LCode::Label(0, 0);
                 let entry = CodeEntry::new(
                     then_block_id,
@@ -1705,7 +1656,7 @@ impl Flatten {
                     let block = self.get_block_mut(else_block_id);
                     block.next = Some(v_next);
 
-                    let name = b.labels.s("else");
+                    let name = b.labels.fresh_key("else");
                     let code = LCode::Label(0, 0);
                     let entry = CodeEntry::new(
                         else_block_id,
@@ -1796,7 +1747,7 @@ impl Flatten {
                 self.block_succ(rc.block_id, then_block_id, Successor::Operation);
                 self.block_succ(rc.block_id, then_block_id, Successor::Jump);
 
-                let name = b.labels.s("t_then");
+                let name = b.labels.fresh_key("t_then");
                 let code = LCode::Label(0, 0);
                 let entry = CodeEntry::new(
                     then_block_id,
@@ -1818,7 +1769,7 @@ impl Flatten {
                 self.block_succ(rc.block_id, else_block_id, Successor::Operation);
                 self.block_succ(rc.block_id, else_block_id, Successor::Jump);
                 let code = LCode::Label(0, 0);
-                let name = b.labels.s("t_else");
+                let name = b.labels.fresh_key("t_else");
                 let entry = CodeEntry::new(
                     else_block_id,
                     code,
