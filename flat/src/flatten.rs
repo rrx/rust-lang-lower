@@ -669,7 +669,8 @@ impl Flatten {
             .add_edge(source_block_id.into(), target_block_id.into(), succ_type);
     }
 
-    pub fn successor(
+    /*
+    pub fn successor2(
         &mut self,
         block_id: BlockId,
         ast: Option<AstNode>,
@@ -677,7 +678,7 @@ impl Flatten {
         succ_type: Successor,
         next: Option<BlockId>,
     ) -> BlockId {
-        let succ_block_id = self._successor(block_id, ast, scope_id, next);
+        let succ_block_id = self._successor2(block_id, ast, scope_id, next);
         self.block_succ(block_id, succ_block_id, succ_type);
         succ_block_id
     }
@@ -691,10 +692,10 @@ impl Flatten {
     ) -> BlockId {
         let fun_scope_id = fenv.new_scope(ScopeType::Function);
         fenv.scope_succ(fenv.static_scope_id(), fun_scope_id);
-        self._successor(block_id, ast, Some(fun_scope_id), Some(next))
+        self._successor2(block_id, ast, Some(fun_scope_id), Some(next))
     }
 
-    pub fn _successor(
+    pub fn _successor2(
         &mut self,
         block_id: BlockId,
         ast: Option<AstNode>,
@@ -711,6 +712,7 @@ impl Flatten {
         new_block.next = next;
         new_block_id
     }
+    */
 
     pub fn get_block(&self, block_id: BlockId) -> &IRBlock {
         let index = NodeIndex::new(block_id.index());
@@ -1178,6 +1180,7 @@ impl Flatten {
         v_args
     }
 
+    /*
     fn add_block(
         &mut self,
         scope_id: ScopeId,
@@ -1209,6 +1212,7 @@ impl Flatten {
         );
         Ok(new_block_id)
     }
+    */
 
     /*
     pub fn add_lambda(
