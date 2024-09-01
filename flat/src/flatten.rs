@@ -736,11 +736,15 @@ impl Flatten {
                     }
                 */
                 Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(name, args)) => {
+                    let label = name.unwrap();
+                    /*
                     let label = if let Some(name) = name {
                         name.clone().into()
                     } else {
                         b.labels.fresh_key("block")
                     };
+                    */
+                    //assert!(fenv.resolve_block_id(scope_id, label.into()).is_none());
                     if fenv.resolve_block_id(scope_id, label.into()).is_none() {
                         assert_eq!(0, args.len());
                         let new_block_id = self.new_block(None, scope_id);
@@ -753,8 +757,11 @@ impl Flatten {
                         self.block_succ(block_id, new_block_id, Successor::BlockScope);
                         let block = self.get_block_mut(block_id);
                         block.next = seq_next_block_id;
+
+                        // add label to scope
                         let scope = fenv.get_scope_mut(scope_id);
                         scope.block_labels.insert(label.into(), new_block_id);
+
                         self.start_block(
                             new_block_id,
                             scope_id,
@@ -799,14 +806,18 @@ impl Flatten {
                         }
                         */
                         Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(ref key, _)) => {
+                            let label = key.unwrap();
+                            /*
                             let label = if let Some(name) = key {
                                 name.clone().into()
                             } else {
                                 b.labels.fresh_key("block")
                             };
+                            */
                             //let label: StringLabel = key.into();
-                            let block_id = fenv.resolve_block_id(scope_id, label.into()).unwrap();
-                            let block = self.get_block_mut(block_id);
+                            let new_block_id =
+                                fenv.resolve_block_id(scope_id, label.into()).unwrap();
+                            let block = self.get_block_mut(new_block_id);
                             let next_node = AstNode {
                                 node: Ast::Sequence(next_seq),
                                 span_id,
@@ -815,7 +826,22 @@ impl Flatten {
                             block.next = seq_next_block_id;
 
                             let ast = block.ast.take().unwrap();
-                            self.flatten(block_id, ast, fenv, b)?;
+                            /*
+                            self.start_block(
+                                new_block_id,
+                                scope_id,
+                                &[],
+                                &[],
+                                AstType::Unit,
+                                Some(label),
+                                span_id,
+                                VarDefinitionSpace::Reg,
+                                fenv,
+                                b,
+                            );
+                            */
+
+                            self.flatten(block_id, NB::ensure_seq(ast), fenv, b)?;
 
                             //self.ast_blocks.push(block_id);
                             block_id
@@ -912,7 +938,6 @@ impl Flatten {
     ) {
         let span_id = b.spans.get_span_unknown();
         let name = b.labels.fresh_key("ret");
-        //let name = b.labels.s("ret");
         let args = match &return_type {
             AstType::Unit => vec![],
             _ => vec![return_type.clone()],
@@ -930,7 +955,6 @@ impl Flatten {
             fenv,
             b,
         );
-
         self.add_return(ret_block_id, v_args, b);
     }
 
@@ -965,16 +989,15 @@ impl Flatten {
         self.push_entry_with_link(entry)
     }
 
-    pub fn add_function_call(
+    pub fn add_function_args(
         &mut self,
         block_id: BlockId,
-        fun_offset: CodeOffset,
         fun_ty: AstType,
         args: Vec<Argument>,
         span_id: SpanId,
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
-    ) -> Result<FlattenResult> {
+    ) -> Result<(BlockId, AstType, Vec<(LinkId, AstType)>)> {
         if let AstType::Func(func_arg_types, ret) = &fun_ty {
             if func_arg_types.len() != args.len() {
                 b.push_error(
@@ -988,52 +1011,73 @@ impl Flatten {
                 return Err(Error::new(BlockifyError::Invalid));
             }
 
-            let args_size = args.len() as u8;
+            //let args_size = args.len() as u8;
             let mut values = vec![];
             let mut current_block_id = block_id;
+            let mut link_ids = vec![];
             for (a, ty) in args.into_iter().zip(func_arg_types.iter()) {
                 match a {
                     Argument::Positional(expr) => {
                         let r = self.flatten(current_block_id, *expr, fenv, b)?;
                         current_block_id = r.block_id;
-                        values.push((r.link_id.unwrap(), ty.clone()));
+                        let link_id = r.link_id.unwrap();
+                        values.push((link_id, ty.clone()));
+                        link_ids.push(link_id);
                     }
                 }
             }
-
-            for (link_id, ty) in values {
-                let code = LCode::Link(link_id);
-                let entry = CodeEntry::new(
-                    current_block_id,
-                    code,
-                    ty,
-                    None,
-                    span_id,
-                    VarDefinitionSpace::Reg,
-                );
-                self.push_entry_with_link(entry);
-            }
-
-            let code = LCode::Call(fun_offset, args_size, 0);
-            let entry = CodeEntry::new(
-                current_block_id,
-                code,
-                *ret.clone(),
-                None,
-                span_id,
-                VarDefinitionSpace::Default,
-            );
-            let link_id = self.push_entry_with_link(entry);
-            Ok(FlattenResult::new(
-                current_block_id,
-                Some(link_id),
-                *ret.clone(),
-                false,
-            ))
+            Ok((current_block_id, *ret.clone(), values))
         } else {
             b.push_error(&format!("Type not function: {:?}", fun_ty), span_id);
             return Err(Error::new(BlockifyError::Invalid));
         }
+    }
+
+    pub fn add_function_call(
+        &mut self,
+        block_id: BlockId,
+        fun_offset: CodeOffset,
+        fun_ty: AstType,
+        args: Vec<Argument>,
+        span_id: SpanId,
+        fenv: &mut FlattenEnvironment,
+        b: &mut NB,
+    ) -> Result<FlattenResult> {
+        let args_size = args.len();
+        let (current_block_id, ret_ty, values) =
+            self.add_function_args(block_id, fun_ty, args, span_id, fenv, b)?;
+
+        // Add links
+        for (link_id, ty) in values {
+            let code = LCode::Link(link_id);
+            let entry = CodeEntry::new(
+                current_block_id,
+                code,
+                ty,
+                None,
+                span_id,
+                VarDefinitionSpace::Reg,
+            );
+            self.push_entry_with_link(entry);
+        }
+
+        // Make call
+        let code = LCode::Call(fun_offset, args_size as u8, 0);
+        let entry = CodeEntry::new(
+            current_block_id,
+            code,
+            ret_ty.clone(),
+            None,
+            span_id,
+            VarDefinitionSpace::Default,
+        );
+        let link_id = self.push_entry_with_link(entry);
+        Ok(FlattenResult::new(
+            current_block_id,
+            Some(link_id),
+            ret_ty.clone(),
+            false,
+        ))
     }
 
     fn start_block(
@@ -1194,8 +1238,6 @@ impl Flatten {
                                 fenv,
                                 b,
                             );
-
-                            // flatten function block later
                             let _ = self.flatten(fun_block_id, *body, fenv, b)?;
 
                             // write out return block
@@ -1510,93 +1552,129 @@ impl Flatten {
                             );
                         }
 
-                        if let Some(scope_id) =
-                            self.resolve_lambda_scope(block_id, ident.into(), fenv)
-                        {
-                            let scope = fenv.get_scope(scope_id);
-                            let label: StringLabel = (*ident).into();
-                            let template_id = scope.lambdas.get(&label).unwrap();
-                            let def = self.get_template(*template_id).clone();
+                        match self.resolve_lambda_scope(block_id, ident.into(), fenv) {
+                            Some(scope_id) => {
+                                // create a new block for the lambda
+                                // we call the lambda by jumping to it
+                                // the new block points to a next block
+                                // which we create here, and we return next block to the sequence
+                                // This involves creating a new lambda block for each call site.  This
+                                // is not efficient, if we call more than once.  In this other case, we
+                                // want to pass the continuation into the block, so next is not
+                                // required.
 
-                            let ret_ty_id = def.return_type.clone();
-                            let ret_ty = b.types.r(ret_ty_id);
+                                let scope = fenv.get_scope(scope_id);
+                                let label: StringLabel = (*ident).into();
+                                let template_id = scope.lambdas.get(&label).unwrap();
+                                let def = self.get_template(*template_id).clone();
+                                let fun_ty = def_to_type(&def, b);
+                                //let ret_ty_id = def.return_type.clone();
+                                //let ret_ty = b.types.r(ret_ty_id);
 
-                            // create a new block for the lambda
-                            // we call the lambda by jumping to it
-                            // the new block points to a next block
-                            // which we create here, and we return next block to the sequence
+                                // New Lambda Scope
+                                let fun_scope_id = fenv.new_scope(ScopeType::Function);
+                                fenv.scope_succ(scope_id, fun_scope_id);
 
-                            // Lambda Body
-                            let body = def.body.unwrap();
+                                // Lambda Block
+                                let fun_block_id = self.new_block(None, fun_scope_id);
+                                self.block_succ(
+                                    block_id,
+                                    fun_block_id,
+                                    Successor::FunctionDeclaration,
+                                );
 
-                            // Lambda Scope
-                            let fun_scope_id = fenv.new_scope(ScopeType::Function);
-                            fenv.scope_succ(scope_id, fun_scope_id);
+                                // NEXT BLOCK(ret_ty)
+                                // We create a new block for the lambda to return to
+                                // this is the continuation
+                                let next_block_id = self.new_block(None, scope_id);
+                                self.block_succ(block_id, next_block_id, Successor::BlockScope);
 
-                            // Lambda Block
-                            let fun_block_id = self.new_block(None, fun_scope_id);
-                            self.block_succ(block_id, fun_block_id, Successor::FunctionDeclaration);
+                                // process arguments
+                                // block may have changed so we use the new block returned from the
+                                // args
+                                //let args_size = args.len();
+                                let (current_block_id, ret_ty, call_values) = self
+                                    .add_function_args(block_id, fun_ty, args, span_id, fenv, b)?;
+                                // now that we have the arguments calculated
+                                // jump to the function baked as a block
+                                // complete this block with a jump
+                                self.add_jump(
+                                    current_block_id,
+                                    fun_block_id.into(),
+                                    call_values,
+                                    node.span_id,
+                                );
 
-                            // NEXT BLOCK(ret_ty)
-                            let next_block_id = self.new_block(None, scope_id);
-                            self.block_succ(block_id, next_block_id, Successor::BlockScope);
-                            let block = self.get_block(block_id);
-                            let next = block.next;
-                            let next_block = self.get_block_mut(next_block_id);
-                            next_block.next = next;
+                                // Lambda Body
+                                let body = def.body.unwrap();
 
-                            let args = match &ret_ty {
-                                AstType::Unit => vec![],
-                                _ => vec![ret_ty.clone()],
-                            };
-                            let link_ids = self.start_block(
-                                block_id,
-                                scope_id,
-                                &args,
-                                &[],
-                                AstType::Unit,
-                                Some(b.fresh_block_name()),
-                                span_id,
-                                VarDefinitionSpace::Reg,
-                                fenv,
-                                b,
-                            );
+                                // get the next block
+                                let block = self.get_block(current_block_id);
+                                let next = block.next;
 
-                            self.add_jump(
-                                next_block_id,
-                                fun_block_id.into(),
-                                link_ids,
-                                node.span_id,
-                            );
+                                // set next for lambda block, which is the new continuation we just
+                                // created
+                                let next_block = self.get_block_mut(fun_block_id);
+                                next_block.next(next_block_id);
 
-                            self.start_block(
-                                fun_block_id,
-                                fun_scope_id,
-                                &[],
-                                &def.params,
-                                AstType::Unit,
-                                Some(b.fresh_block_name()),
-                                span_id,
-                                VarDefinitionSpace::Reg,
-                                fenv,
-                                b,
-                            );
+                                // set next for the continuation block, which should be next of the
+                                // containing block
+                                let next_block = self.get_block_mut(next_block_id);
+                                next_block.next = next;
 
-                            let _ = self.flatten(fun_block_id, *body, fenv, b)?;
+                                // setup arguments for continuation block with appropriate parameters
+                                // matching the return type of the lambda block
+                                let next_args = match &ret_ty {
+                                    AstType::Unit => vec![],
+                                    _ => vec![ret_ty.clone()],
+                                };
+                                // start next block
+                                let next_link_ids = self.start_block(
+                                    next_block_id,
+                                    scope_id,
+                                    &next_args,
+                                    &[],
+                                    AstType::Unit,
+                                    Some(b.labels.fresh_key("cont")),
+                                    span_id,
+                                    VarDefinitionSpace::Reg,
+                                    fenv,
+                                    b,
+                                );
 
-                            return Ok(FlattenResult::new(
-                                next_block_id,
-                                None,
-                                AstType::Unit,
-                                false,
-                            ));
+                                // Start lambda block
+                                self.start_block(
+                                    fun_block_id,
+                                    fun_scope_id,
+                                    &[],
+                                    &def.params,
+                                    AstType::Unit,
+                                    Some(b.labels.fresh_key("lambda")),
+                                    span_id,
+                                    VarDefinitionSpace::Reg,
+                                    fenv,
+                                    b,
+                                );
+                                // flatten lambda block
+                                let _ = self.flatten(fun_block_id, *body, fenv, b)?;
+
+                                Ok(FlattenResult::new(
+                                    next_block_id,
+                                    None,
+                                    AstType::Unit,
+                                    false,
+                                ))
+                            }
+                            None => {
+                                b.push_error(
+                                    &format!("Call name not found: {}", name),
+                                    node.span_id,
+                                );
+                                Err(Error::new(BlockifyError::Invalid))
+                            }
                         }
-                        b.push_error(&format!("Call name not found: {}", name), node.span_id);
-                        return Err(Error::new(BlockifyError::Invalid));
                     }
-                    _ => {
-                        unimplemented!("{:?}", expr.node);
-                    }
+                    _ => unimplemented!("{:?}", expr.node),
                 }
             }
 
@@ -1717,7 +1795,6 @@ impl Flatten {
                     fenv,
                     b,
                 );
-
                 let r = self.flatten(new_block_id, *body, fenv, b)?;
 
                 Ok(FlattenResult::new(
