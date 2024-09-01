@@ -999,16 +999,6 @@ impl Flatten {
             _ => vec![return_type.clone()],
         };
 
-        /*
-        let ret_block_id = self.successor(
-            fun_block_id,
-            None,
-            Some(scope_id),
-            Successor::BlockScope,
-            None,
-        );
-        */
-
         let v_args = self.start_block(
             ret_block_id,
             scope_id,
@@ -1819,23 +1809,28 @@ impl Flatten {
 
             Ast::Block(name, args, body) => {
                 let block = self.get_block(block_id);
+                let next = block.next;
                 let new_scope_id = fenv.new_scope(ScopeType::Block);
                 fenv.scope_succ(block.scope_id, new_scope_id);
-                let new_block_id = self.add_block(
+
+                let new_block_id = self.new_block(None, new_scope_id);
+                self.block_succ(block_id, new_block_id, Successor::BlockScope);
+                let new_block = self.get_block_mut(new_block_id);
+                new_block.next = next;
+
+                self.start_block(
+                    new_block_id,
                     new_scope_id,
-                    block_id,
                     &[],
                     &args,
-                    None,
                     AstType::Unit,
                     Some(name),
-                    Successor::BlockScope,
                     span_id,
                     VarDefinitionSpace::Static,
-                    block.next,
                     fenv,
                     b,
-                )?;
+                );
+
                 let r = self.flatten(new_block_id, *body, fenv, b)?;
 
                 Ok(FlattenResult::new(
@@ -2020,7 +2015,6 @@ impl Flatten {
 
                 self.add_jump(block_id, loop_block_id.into(), vec![], span_id);
 
-                //self.ast_blocks.push(loop_block_id);
                 self.flatten(loop_block_id, *body, fenv, b)?;
 
                 Ok(FlattenResult::new(block_id, None, AstType::Unit, true))
