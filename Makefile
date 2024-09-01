@@ -3,8 +3,16 @@ default: run
 run:
 	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/bare.star
 	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/test_cond.star
+	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/static_var.star
 	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/nested_func.star
-	RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/loop.star
+	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/test.star || true
+	RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/goto.star || true
+
+	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/test_cond.star
+	dot out.dot -Tpng -o out.png
+	dot blocks.dot -Tpng -o blocks.png
+	dot scopes.dot -Tpng -o scopes.png
+
 
 run0:
 	RUST_BACKTRACE=1 cargo run --bin parse -- -v tests/goto.star
@@ -32,7 +40,7 @@ run_test:
 	./target/debug/out ; echo $$?
 
 test: examples
-	cargo test -- --nocapture
+	cargo test -j1 -- --nocapture
 fmt:
 	cargo fmt
 
