@@ -457,7 +457,7 @@ impl FlattenModule {
 
 pub struct Flatten {
     module_key: Option<StringKey>,
-    ast_blocks: Vec<BlockId>,
+    //ast_blocks: Vec<BlockId>,
     link: LinkOptions,
     entries: Vec<CodeEntry>,
     gblocks: BlockGraph,
@@ -468,7 +468,7 @@ impl Flatten {
     pub fn new() -> Self {
         Self {
             module_key: None,
-            ast_blocks: vec![],
+            //ast_blocks: vec![],
             entries: vec![],
             gblocks: BlockGraph::new(),
             link: LinkOptions::new(),
@@ -525,7 +525,7 @@ impl Flatten {
 
     pub fn module(self, fenv: &FlattenEnvironment, _b: &NB) -> FlattenModule {
         self.dump_blocks();
-        assert!(self.ast_blocks.is_empty());
+        //assert!(self.ast_blocks.is_empty());
         let mut m = FlattenModule::new();
         m.link = self.link.clone();
 
@@ -560,6 +560,7 @@ impl Flatten {
     }
 
     pub fn dump_ast(&self, b: &NB) {
+        /*
         for block_id in self.ast_blocks.iter() {
             let block = self.get_block(*block_id);
             for link_id in block.links.iter() {
@@ -578,6 +579,7 @@ impl Flatten {
                 );
             }
         }
+        */
     }
 
     pub fn flatten_module(
@@ -611,6 +613,7 @@ impl Flatten {
         }
     }
 
+        /*
     pub fn step(&mut self, fenv: &mut FlattenEnvironment, b: &mut NB) -> Result<bool> {
         if let Some(block_id) = self.ast_blocks.pop() {
             let block = self.get_block_mut(block_id);
@@ -618,14 +621,18 @@ impl Flatten {
             self.flatten(block_id, ast, fenv, b)?;
         }
         Ok(self.ast_blocks.is_empty())
+        Ok(true)
     }
+        */
 
     pub fn run_loop(&mut self, fenv: &mut FlattenEnvironment, b: &mut NB) -> Result<()> {
+        /*
         loop {
             if self.step(fenv, b)? {
                 break;
             }
         }
+        */
         Ok(())
     }
 
@@ -668,51 +675,6 @@ impl Flatten {
         self.gblocks
             .add_edge(source_block_id.into(), target_block_id.into(), succ_type);
     }
-
-    /*
-    pub fn successor2(
-        &mut self,
-        block_id: BlockId,
-        ast: Option<AstNode>,
-        scope_id: Option<ScopeId>,
-        succ_type: Successor,
-        next: Option<BlockId>,
-    ) -> BlockId {
-        let succ_block_id = self._successor2(block_id, ast, scope_id, next);
-        self.block_succ(block_id, succ_block_id, succ_type);
-        succ_block_id
-    }
-
-    pub fn function_successor(
-        &mut self,
-        block_id: BlockId,
-        ast: Option<AstNode>,
-        next: BlockId,
-        fenv: &mut FlattenEnvironment,
-    ) -> BlockId {
-        let fun_scope_id = fenv.new_scope(ScopeType::Function);
-        fenv.scope_succ(fenv.static_scope_id(), fun_scope_id);
-        self._successor2(block_id, ast, Some(fun_scope_id), Some(next))
-    }
-
-    pub fn _successor2(
-        &mut self,
-        block_id: BlockId,
-        ast: Option<AstNode>,
-        new_scope_id: Option<ScopeId>,
-        next: Option<BlockId>,
-    ) -> BlockId {
-        let block = self.get_block(block_id);
-        let mut scope_id = block.scope_id;
-        if let Some(new_scope_id) = new_scope_id {
-            scope_id = new_scope_id;
-        }
-        let new_block_id = self.new_block(ast, scope_id);
-        let new_block = self.get_block_mut(new_block_id);
-        new_block.next = next;
-        new_block_id
-    }
-    */
 
     pub fn get_block(&self, block_id: BlockId) -> &IRBlock {
         let index = NodeIndex::new(block_id.index());
@@ -900,7 +862,11 @@ impl Flatten {
                             };
                             block.ast = Some(next_node);
                             block.next = seq_next_block_id;
-                            self.ast_blocks.push(block_id);
+
+                            let ast = block.ast.take().unwrap();
+                            self.flatten(block_id, ast, fenv, b)?;
+
+                            //self.ast_blocks.push(block_id);
                             block_id
                         }
                         _ => {
@@ -1179,40 +1145,6 @@ impl Flatten {
 
         v_args
     }
-
-    /*
-    fn add_block(
-        &mut self,
-        scope_id: ScopeId,
-        parent_block_id: BlockId,
-        args: &[AstType],
-        kwargs: &[ParameterNode],
-        ast: Option<AstNode>,
-        ty: AstType,
-        name: Option<StringKey>,
-        succ_type: Successor,
-        span_id: SpanId,
-        mem: VarDefinitionSpace,
-        next: Option<BlockId>,
-        fenv: &mut FlattenEnvironment,
-        b: &mut NB,
-    ) -> Result<BlockId> {
-        let new_block_id = self.successor(parent_block_id, ast, Some(scope_id), succ_type, next);
-        self.start_block(
-            new_block_id,
-            scope_id,
-            args,
-            kwargs,
-            ty,
-            name,
-            span_id,
-            mem,
-            fenv,
-            b,
-        );
-        Ok(new_block_id)
-    }
-    */
 
     /*
     pub fn add_lambda(
