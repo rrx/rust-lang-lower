@@ -1,3 +1,12 @@
+def test1():
+  q.goto("a")
+  q.label("a")
+  1
+
+def test2():
+  q.goto("a")
+  q.label("a")
+
 def main() -> int:
   q.goto("a")
   q.label("a")

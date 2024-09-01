@@ -1,6 +1,6 @@
-use compile_core::{Ast, AstNode, ControlFlowMarker, SpanId, StringKey};
+use compile_core::{Ast, AstNode, ControlFlowMarker, SpanId, StringKey, AstType};
 
-use crate::NodeBuilder as NB;
+use crate::{NodeBuilder as NB};
 
 #[derive(Debug)]
 pub struct SequenceReader {
@@ -111,10 +111,6 @@ impl SequenceReader {
 
             Ast::ControlFlowMarker(ControlFlowMarker::BlockEnd) => {
                 self.close();
-                //let x = self.stack.last().unwrap();
-                //println!("x: {:?}", x);
-                //let ast = self.end_loop();
-                //self.push_stack(ast);
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(maybe_key, params)) => {
@@ -129,10 +125,22 @@ impl SequenceReader {
                     self.push_stack(NB::goto(key.clone()));
                 }
             }
+            Ast::Block(_key, _params, _body) => {
+                self.close_block();
+                self.push_stack(node);
+            }
             _ => {
                 self.push_stack(node);
             }
         }
+    }
+
+    pub fn close_block(&mut self) {
+        assert!(self.stack.len() > 0);
+        let (stack_type, _) = self.stack.last().unwrap();
+        assert_eq!(stack_type, &StackType::Block);
+        let ast = self.end_block();
+        self.push_stack(ast);
     }
 
     pub fn close(&mut self) {
@@ -161,10 +169,32 @@ impl SequenceReader {
     }
 }
 
+/*
+impl Flatten {
+    pub fn flatten_sequence_step(
+        &mut self,
+        block_id: BlockId,
+        mut seq: Vec<AstNode>,
+        fenv: &mut FlattenEnvironment,
+        b: &mut NB,
+    ) -> Result<(Vec<AstNode>, FlattenResult)> {
+        let mut current_block_id = block_id;
+        let mut ty = AstType::Unit;
+        let mut link_id = None;
+        let mut is_term = false;
+        let mut span_id = b.spans.get_span_unknown();
+        let block = self.get_block(block_id);
+        let scope_id = block.scope_id;
+
+        Ok(FlattenResult::new(current_block_id, link_id, ty, is_term))
+    }
+}
+*/
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Flatten, FlattenEnvironment, FlattenResult, NodeBuilder as NB, ScopeType};
+    use crate::{Flatten, FlattenEnvironment, NodeBuilder as NB, ScopeType, ICodeModule};
     use anyhow::Result;
     use test_log::test;
 
@@ -174,25 +204,53 @@ mod tests {
         b
     }
 
-    fn run(seq: Vec<AstNode>, b: &mut NB) -> Result<FlattenResult> {
+    fn build_module(seq: Vec<AstNode>, b: &mut NB) -> AstNode {
+        let name = b.labels.s("func");
+        let module_name = b.labels.s("module");
+        let span_id = b.spans.get_span_unknown();
+        let f = b.func(name, &[], AstType::Unit, NB::seq(seq, span_id));
+        NB::module(module_name, f)
+    }
+
+    fn run(seq: Vec<AstNode>, b: &mut NB) -> Result<()> {
         let mut fenv = FlattenEnvironment::new();
-        let mut f = Flatten::new();
-        let scope_id = fenv.new_scope(ScopeType::Function);
-        let block_id = f.new_block(None, scope_id);
-        let r = f.flatten_sequence(block_id, seq, &mut fenv, b);
+        let module = build_module(seq, b);
+        b.dump_ast(&module);
+        let r = Flatten::flatten_module(module, &mut fenv, b);
+        b.spans.diagnostics_dump();
+        let mut f = r?;
+        let r = f.run_loop(&mut fenv, b);
         f.dump_ast(&b);
-        r
+        b.spans.diagnostics_dump();
+        let _ = r?;
+        let m = f.module(&mut fenv, &b);
+        m.dump(&b);
+        m.block_graph("blocks.dot", &b);
+        
+        Ok(())
     }
 
     #[test]
-    fn test_seq() {
+    fn test_seq1() {
         let mut b = builder();
         let a = b.labels.s("a");
-        let seq = vec![NB::goto(a).into()];
-        let r = run(seq, &mut b);
-        let message = b.spans.diagnostics.first().unwrap().message.clone();
-        println!("r: {:?}", (&message, &r));
+        let seq = vec![
+            NB::goto(a).into(),
+            NB::label(a).into(),
+            NB::index(0).into()
+        ];
+        let _ = run(seq, &mut b).unwrap();
         b.spans.diagnostics_dump();
-        assert_eq!("Block name not found: a", &message);
+    }
+
+    #[test]
+    fn test_seq2() {
+        let mut b = builder();
+        let a = b.labels.s("a");
+        let seq = vec![
+            NB::label(a).into(),
+        ];
+        let _ = run(seq, &mut b).unwrap();
+        b.spans.diagnostics_dump();
     }
 }
