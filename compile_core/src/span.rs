@@ -76,7 +76,7 @@ pub type SpanPool = InternPool<SpanId, Span>;
 pub struct SpanBuilder {
     pool: SpanPool,
     files: crate::FileDB,
-    diagnostics: Vec<Diagnostic<usize>>,
+    pub diagnostics: Vec<Diagnostic<usize>>,
     pub has_errors: bool,
 }
 
@@ -105,9 +105,7 @@ pub fn diagnostic_error(msg: &str, span: Span) -> Diagnostic<usize> {
         labels = vec![Label::primary(span.file_id, r).with_message(msg)];
     }
 
-    let error = Diagnostic::error()
-        .with_labels(labels)
-        .with_message("error");
+    let error = Diagnostic::error().with_labels(labels).with_message(msg);
     error
 }
 

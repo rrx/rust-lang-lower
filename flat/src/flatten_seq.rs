@@ -160,3 +160,39 @@ impl SequenceReader {
         self.seq.drain(..).collect()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Flatten, FlattenEnvironment, FlattenResult, NodeBuilder as NB, ScopeType};
+    use anyhow::Result;
+    use test_log::test;
+
+    fn builder() -> NB {
+        let mut b = NB::new();
+        let _file_id = b.spans.add_source("test".to_string(), "".to_string());
+        b
+    }
+
+    fn run(seq: Vec<AstNode>, b: &mut NB) -> Result<FlattenResult> {
+        let mut fenv = FlattenEnvironment::new();
+        let mut f = Flatten::new();
+        let scope_id = fenv.new_scope(ScopeType::Function);
+        let block_id = f.new_block(None, scope_id);
+        let r = f.flatten_sequence(block_id, seq, &mut fenv, b);
+        f.dump_ast(&b);
+        r
+    }
+
+    #[test]
+    fn test_seq() {
+        let mut b = builder();
+        let a = b.labels.s("a");
+        let seq = vec![NB::goto(a).into()];
+        let r = run(seq, &mut b);
+        let message = b.spans.diagnostics.first().unwrap().message.clone();
+        println!("r: {:?}", (&message, &r));
+        b.spans.diagnostics_dump();
+        assert_eq!("Block name not found: a", &message);
+    }
+}

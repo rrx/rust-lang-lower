@@ -724,7 +724,7 @@ impl Flatten {
         self.templates.get(template_id.index()).unwrap()
     }
 
-    fn flatten_sequence(
+    pub fn flatten_sequence(
         &mut self,
         block_id: BlockId,
         mut seq: Vec<AstNode>,
