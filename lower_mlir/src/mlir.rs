@@ -323,7 +323,10 @@ impl<'c> Lower<'c> {
             .collect();
         let rs = blocks.values(indicies);
 
-        let c = blocks.blocks.get(&target_value_id).unwrap();
+        let c = blocks
+            .blocks
+            .get(&target_value_id)
+            .expect(&format!("missing block at {}", target_value_id));
         let arg_count = c.block.as_ref().unwrap().argument_count();
         assert_eq!(arg_count, num_args as usize);
 

@@ -95,7 +95,7 @@ impl SequenceReader {
 
     fn push_node(&mut self, index: usize, node: AstNode, b: &mut NB) {
         let span_id = node.span_id;
-        b.dump_ast(&node);
+        //b.dump_ast(&node);
         match &node.node {
             Ast::ControlFlowMarker(ControlFlowMarker::LoopStart(maybe_key)) => {
                 let key = if let Some(key) = maybe_key {
@@ -118,27 +118,40 @@ impl SequenceReader {
 
             Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(maybe_key, params)) => {
                 if index == 0 {
-                    self.push_stack(NB::goto(maybe_key.unwrap().clone()));
+                    //self.push_stack(NB::goto(maybe_key.unwrap().clone()));
                 }
 
                 assert_eq!(params.len(), 0);
                 self.start_block(maybe_key.clone(), span_id);
             }
             Ast::ControlFlowMarker(ControlFlowMarker::Goto(key)) => {
+                //let ast = self.end_block();
+                //self.push_stack(ast);
+                self.push_stack(NB::goto(key.clone()));
                 if self.is_block() {
                     let ast = self.end_block();
                     self.push_stack(ast);
-                } else {
-                    self.push_stack(NB::goto(key.clone()));
+                    //} else {
                 }
             }
-            Ast::Block(key, _params, _body) => {
+            Ast::Block(key, params, body) => {
+                let span_id = node.span_id;
                 if index == 0 {
-                    self.push_stack(NB::goto(key.clone()));
+                    //self.push_stack(NB::goto(key.clone()));
                 }
                 if self.stack.len() > 0 {
                     self.close_block();
                 }
+                let mut seq = body.clone().to_vec();
+                if let Some(last_node) = seq.last() {
+                    if !last_node.node.is_term() {
+                        seq.push(Ast::CloseBlock.into());
+                    }
+                } else {
+                    seq.push(Ast::CloseBlock.into());
+                }
+
+                let node = Ast::Block(*key, params.clone(), NB::seq(seq, span_id).into()).into();
                 self.push_stack(node);
             }
             _ => {
@@ -153,7 +166,7 @@ impl SequenceReader {
         assert_eq!(stack_type, &StackType::Block);
         let seq = &self.stack.last().as_ref().unwrap().1;
         let is_term = seq.last().map_or_else(|| false, |ast| ast.node.is_term());
-        println!("is_term: {}", is_term);
+        //println!("is_term: {}", is_term);
         if !is_term {
             self.push_stack(Ast::CloseBlock.into());
         }

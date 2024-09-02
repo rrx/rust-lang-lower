@@ -5,15 +5,15 @@ seq:
 	make graphs
 
 bare:
-	RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/test_recursive.star
+	RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/bare.star
 
 run:
-	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/test_cond.star
-	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/static_var.star
+	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/test_cond.star || true
+	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/static_var.star || true
 	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/nested_func2.star || true
 	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/test.star || true
-	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/goto.star
 	RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/goto.star || true
+	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/dup_func.star || true
 	dot out.dot -Tpng -o out.png
 	dot blocks.dot -Tpng -o blocks.png
 	dot scopes.dot -Tpng -o scopes.png
