@@ -1568,8 +1568,6 @@ impl Flatten {
                                 let template_id = scope.lambdas.get(&label).unwrap();
                                 let def = self.get_template(*template_id).clone();
                                 let fun_ty = def_to_type(&def, b);
-                                //let ret_ty_id = def.return_type.clone();
-                                //let ret_ty = b.types.r(ret_ty_id);
 
                                 // New Lambda Scope
                                 let fun_scope_id = fenv.new_scope(ScopeType::Function);
@@ -1577,17 +1575,7 @@ impl Flatten {
 
                                 // Lambda Block
                                 let fun_block_id = self.new_block(None, fun_scope_id);
-                                self.block_succ(
-                                    block_id,
-                                    fun_block_id,
-                                    Successor::FunctionDeclaration,
-                                );
-
-                                // NEXT BLOCK(ret_ty)
-                                // We create a new block for the lambda to return to
-                                // this is the continuation
-                                let next_block_id = self.new_block(None, scope_id);
-                                self.block_succ(block_id, next_block_id, Successor::BlockScope);
+                                self.block_succ(block_id, fun_block_id, Successor::BlockScope);
 
                                 // process arguments
                                 // block may have changed so we use the new block returned from the
@@ -1595,15 +1583,12 @@ impl Flatten {
                                 //let args_size = args.len();
                                 let (current_block_id, ret_ty, call_values) = self
                                     .add_function_args(block_id, fun_ty, args, span_id, fenv, b)?;
-                                // now that we have the arguments calculated
-                                // jump to the function baked as a block
-                                // complete this block with a jump
-                                self.add_jump(
-                                    current_block_id,
-                                    fun_block_id.into(),
-                                    call_values,
-                                    node.span_id,
-                                );
+
+                                // NEXT BLOCK(ret_ty)
+                                // We create a new block for the lambda to return to
+                                // this is the continuation
+                                let next_block_id = self.new_block(None, scope_id);
+                                self.block_succ(block_id, next_block_id, Successor::BlockScope);
 
                                 // Lambda Body
                                 let body = def.body.unwrap();
@@ -1616,6 +1601,9 @@ impl Flatten {
                                 // created
                                 let next_block = self.get_block_mut(fun_block_id);
                                 next_block.next(next_block_id);
+
+                                let fun_scope = fenv.get_scope_mut(fun_scope_id);
+                                fun_scope.return_block = Some(next_block_id);
 
                                 // set next for the continuation block, which should be next of the
                                 // containing block
@@ -1657,6 +1645,16 @@ impl Flatten {
                                 );
                                 // flatten lambda block
                                 let _ = self.flatten(fun_block_id, *body, fenv, b)?;
+
+                                // now that we have the arguments calculated
+                                // jump to the function baked as a block
+                                // complete this block with a jump
+                                self.add_jump(
+                                    current_block_id,
+                                    fun_block_id.into(),
+                                    call_values,
+                                    node.span_id,
+                                );
 
                                 Ok(FlattenResult::new(
                                     next_block_id,

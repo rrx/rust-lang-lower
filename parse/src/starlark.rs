@@ -353,6 +353,7 @@ impl Parser {
             StmtP::Def(def) => {
                 let name = b.labels.s(&def.name.ident);
                 let span_id = env.span_id(item.span, b);
+                let is_nested = env.is_in_func();
 
                 env.enter_func();
 
@@ -386,7 +387,11 @@ impl Parser {
                 });
 
                 env.define(name);
-                Ok(NB::global(name, def_ast.node(span_id)))
+                if is_nested {
+                    Ok(NB::assign(name, def_ast.node(span_id)))
+                } else {
+                    Ok(NB::global(name, def_ast.node(span_id)))
+                }
             }
 
             StmtP::If(expr, truestmt) => {
@@ -1019,10 +1024,7 @@ pub(crate) mod tests {
         let r = Flatten::flatten_module(ast, &mut fenv, &mut b);
         b.spans.diagnostics_dump();
         let f = r.unwrap();
-        //let r = f.run_loop(&mut fenv, &mut b);
-        //f.dump_ast(&b);
         b.spans.diagnostics_dump();
-        //let _ = r.unwrap();
         let m = f.module(&mut fenv, &b);
         m.dump(&b);
 
