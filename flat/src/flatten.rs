@@ -677,36 +677,13 @@ impl Flatten {
         let mut ty = AstType::Unit;
         let mut link_id = None;
         let mut is_term = false;
-        let mut span_id = b.spans.get_span_unknown();
+        let span_id = b.spans.get_span_unknown();
         let block = self.get_block(block_id);
-        let mut seq_next_block_id = block.next;
+        let seq_next_block_id = block.next;
         let scope_id = block.scope_id;
-        println!("flatten: {:?}", seq);
-        /*
-        if let Some(f) = seq.first() {
-            match &f.node {
-                Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(name, args)) => {
-                    let key = name.unwrap();
-                }
-                Ast::Block(key, _, _) => {
-                    let key = *key;
 
-                    self.add_jump(block_id, target_id, vec![], span_id);
-                }
-                _ => ()
-            }
-        }
-        */
-
-        //println!("flatten");
-        //let ast = NB::seq(seq.clone(), span_id);
-        //b.dump_ast(&ast);
         let mut r = SequenceReader::new(seq_next_block_id);
         let mut seq = r.build(seq.clone(), b);
-        //println!("R:{:?}", r);
-        //let ast = NB::seq(seq.clone(), span_id);
-        //b.dump_ast(&ast);
-        //println!("flatten end");
 
         for expr in seq.iter() {
             match &expr.node {
@@ -723,15 +700,8 @@ impl Flatten {
                         new_block.next = seq_next_block_id;
                         self.block_succ(current_block_id, new_block_id, Successor::BlockScope);
 
-                        // if start block is the first entry in the set, then we want to jump to it
-                        //if index == 0 {
-                        //self.add_jump(block_id, new_block_id.into(), vec![], span_id);
-                        //}
-
                         let scope = fenv.get_scope_mut(scope_id);
                         scope.block_labels.insert(key.into(), new_block_id);
-                        //fenv.scope_succ(block.scope_id, scope_id);
-                        //current_block_id = new_block_id;
                     }
                 }
                 _ => (),
@@ -745,7 +715,6 @@ impl Flatten {
                 let span_id = expr.span_id;
                 let expr_is_term = expr.node.is_term();
                 let is_last = d.len() == 0;
-                //let mut next_block_id = None;
 
                 println!(
                     "current: {:?}",
@@ -762,7 +731,6 @@ impl Flatten {
                             new_block_id
                         }
                         _ => {
-                            //let next_node = seq.get(index+1).unwrap();
                             let new_block_id = self.new_block(None, scope_id);
                             println!("term new: {:?}", (new_block_id, &next_node));
                             self.start_block(
@@ -781,13 +749,6 @@ impl Flatten {
                             let new_block = self.get_block_mut(new_block_id);
                             new_block.next = seq_next_block_id;
                             new_block_id
-
-                            //block.ast = Some(next_node);
-
-                            //let block = self.get_block_mut(new_block_id);
-                            //block.next = seq_next_block_id;
-
-                            //Some(new_block_id)
                         }
                     };
 
@@ -796,17 +757,8 @@ impl Flatten {
                     block.next(new_block_id);
 
                     // flatten expr
-                    //b.dump_ast(&ast);
                     println!("expr: {:?}", (&expr));
-                    let r = self.flatten(current_block_id, expr, fenv, b)?;
-                    //current_block_id = r.block_id;
-                    //next_block_id = Some(r.block_id);
-                    /*
-                    current_block_id = r.block_id;
-                    ty = r.ty;
-                    link_id = r.link_id;
-                    is_term = r.is_term;
-                    */
+                    let _ = self.flatten(current_block_id, expr, fenv, b)?;
 
                     // flatten next
                     let next_node = AstNode {
@@ -816,329 +768,20 @@ impl Flatten {
                     println!("next: {:?}", (&next_node));
                     let r = self.flatten(new_block_id, next_node, fenv, b)?;
                     println!("next2: {:?}", (&r));
-                    //current_block_id = r.block_id;
                     return Ok(r);
-                    //break;
                 }
 
-                //let block = self.get_block(current_block_id);
                 // handle expr
                 match &expr.node {
                     _ => {
                         //b.dump_ast(&ast);
                         let r = self.flatten(current_block_id, expr, fenv, b)?;
-                        //next_block_id = Some(r.block_id);
                         current_block_id = r.block_id;
                         ty = r.ty;
                         link_id = r.link_id;
                         is_term = r.is_term;
                     }
                 };
-
-                /*
-                let next_block_id = if !is_last && expr_is_term {
-                    let next_node = d.next().unwrap();
-                    if let Ast::Return(_) = &next_node.node {
-                        let r = self.flatten(current_block_id, next_node, fenv, b)?;
-                        Some(r.block_id)
-                    } else if next_node.node.is_label() {
-                        let label = next_node.node.get_label().unwrap();
-                        let new_block_id = fenv.resolve_block_id(scope_id, label.into()).unwrap();
-                        let r = self.flatten(new_block_id, next_node, fenv, b)?;
-                        Some(r.block_id)
-                        //current_block_id = r.block_id;
-                    } else {
-
-                        //let next_node = seq.get(index+1).unwrap();
-                        let new_block_id = self.new_block(None, scope_id);
-                        println!("term new: {:?}", (new_block_id, &next_node));
-                        self.start_block(
-                            new_block_id, scope_id, &[], &[], AstType::Unit,
-                            Some(b.labels.fresh_key("new")), span_id, VarDefinitionSpace::Default,
-                            fenv, b);
-                        self.block_succ(current_block_id, new_block_id, Successor::BlockScope);
-                        let new_block = self.get_block_mut(new_block_id);
-                        new_block.next = seq_next_block_id;
-
-                        let block = self.get_block_mut(current_block_id);
-                        block.next(new_block_id);
-                        Some(new_block_id)
-                    }
-
-                    //let next_block =
-                    //Ast::Block(block_name, vec![], Box::new(next_node)).into();
-                    //let next_r = self.flatten(current_block_id, next_block, fenv, b)?;
-                    //next_r.block_id
-                } else {
-                    None
-                };
-
-                if let Some(next) = next_block_id {
-                    current_block_id = next;
-                }
-                */
-            } else {
-                break;
-            }
-        }
-
-        /*
-        let seq_size = seq.len();
-        for (index, expr) in seq.into_iter().enumerate() {
-            let is_last = index == seq_size - 1;
-            let mut next_block_id = None;
-            if !is_last && expr.node.is_term() {
-                //let next_node = seq.get(index+1).unwrap();
-                println!("term: {:?}", (&expr));
-                let new_block_id = self.new_block(None, scope_id);
-                let span_id = expr.span_id;
-                self.start_block(
-                    new_block_id, scope_id, &[], &[], AstType::Unit,
-                    Some(b.labels.fresh_key("new")), span_id, VarDefinitionSpace::Default,
-                    fenv, b);
-                self.block_succ(current_block_id, new_block_id, Successor::BlockScope);
-                let new_block = self.get_block_mut(new_block_id);
-                new_block.next = seq_next_block_id;
-
-                let block = self.get_block_mut(current_block_id);
-                block.next(new_block_id);
-                next_block_id = Some(new_block_id);
-
-                //let next_block =
-                    //Ast::Block(block_name, vec![], Box::new(next_node)).into();
-                //let next_r = self.flatten(current_block_id, next_block, fenv, b)?;
-                //tests/nested_func2.star  //println!("next_node: {:?}", next_block);
-                //next_r.block_id
-            }
-
-            match &expr.node {
-                _ => {
-                    b.dump_ast(&ast);
-                    let r = self.flatten(current_block_id, expr, fenv, b)?;
-                    current_block_id = r.block_id;
-                    ty = r.ty;
-                    link_id = r.link_id;
-                    is_term = r.is_term;
-                }
-            }
-            if let Some(next_block_id) = next_block_id {
-                current_block_id = next_block_id;
-            }
-        }
-        */
-
-        if !is_term {
-            let block = self.get_block(current_block_id);
-            if let Some(next) = block.next {
-                println!("adding term on block: {}, jump: {}", current_block_id, next);
-                let jump_link_id = self.add_jump(current_block_id, next.into(), vec![], span_id);
-                link_id = Some(jump_link_id);
-            } else {
-                println!("missing term on block: {}", current_block_id);
-                b.push_error(
-                    &format!("Missing next block on block_id={}", current_block_id),
-                    span_id,
-                );
-            }
-        }
-
-        return Ok(FlattenResult::new(current_block_id, link_id, ty, is_term));
-
-        /*
-
-            // generate blocks for all predefined labels
-            // this needs to be done first as a forward declaration
-            for (index, expr) in seq.iter().enumerate() {
-                match &expr.node {
-                    Ast::Block(key, args, body) => {
-                        if fenv.resolve_block_id(scope_id, key.into()).is_none() {
-                            assert_eq!(0, args.len());
-                            let new_block_id = self.new_block(None, scope_id);
-                            println!("new block1: {}", new_block_id);
-                            println!("new block2: {:?}", (new_block_id, b.labels.r(key.into()), body));
-
-                            // if start block is the first entry in the set, then we want to jump to it
-                            if index == 0 {
-                                self.add_jump(block_id, new_block_id.into(), vec![], span_id);
-                            }
-
-                            let scope = fenv.get_scope_mut(scope_id);
-                            scope.block_labels.insert(key.into(), new_block_id);
-                            //fenv.scope_succ(block.scope_id, scope_id);
-                        }
-                    }
-                    Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(name, args)) => {
-                        assert!(false);
-                        let label = name.unwrap();
-                        /*
-                        let label = if let Some(name) = name {
-                            name.clone().into()
-                        } else {
-                            b.labels.fresh_key("block")
-                        };
-                        */
-                        //assert!(fenv.resolve_block_id(scope_id, label.into()).is_none());
-                        if fenv.resolve_block_id(scope_id, label.into()).is_none() {
-                            assert_eq!(0, args.len());
-                            let new_block_id = self.new_block(None, scope_id);
-
-                            // if start block is the first entry in the set, then we want to jump to it
-                            if index == 0 {
-                                self.add_jump(block_id, new_block_id.into(), vec![], span_id);
-                            }
-
-                            //self.block_succ(block_id, new_block_id, Successor::BlockScope);
-                            //let block = self.get_block_mut(block_id);
-                            //block.next = seq_next_block_id;
-
-                            // add label to scope
-                            let scope = fenv.get_scope_mut(scope_id);
-                            scope.block_labels.insert(label.into(), new_block_id);
-
-                            /*
-                            self.start_block(
-                                new_block_id,
-                                scope_id,
-                                &[],
-                                &[],
-                                AstType::Unit,
-                                Some(label),
-                                span_id,
-                                VarDefinitionSpace::Reg,
-                                fenv,
-                                b,
-                            );
-                            */
-                            println!("start: {:?}", (new_block_id, b.labels.r(label.into())));
-                        }
-                    }
-                    _ => (),
-                }
-            }
-
-        */
-        let mut d = seq.drain(..);
-        loop {
-            if let Some(ast) = d.next() {
-                span_id = ast.span_id;
-                if d.len() > 0 && ast.node.is_term() {
-                    //println!("*** trail");
-                    let next_seq = d.collect::<Vec<_>>();
-                    let next_node = &next_seq.first().as_ref().unwrap().node;
-
-                    let next_block_id = match next_node {
-                        /*
-                            Ast::Block(key, _, body)  => {
-                                let next_block_id = fenv.resolve_block_id(scope_id, key.into()).unwrap();
-                                println!("new block2: {:?}", (next_block_id, body));
-                                println!("new block3: {:?}", (next_block_id, &next_seq));
-                                println!("next block: {}", next_block_id);
-                                /*1
-                                self.block_succ(current_block_id, next_block_id, Successor::BlockScope);
-                                let next_block = self.get_block_mut(next_block_id);
-                                next_block.next = seq_next_block_id;
-
-                                self.start_block(
-                                    next_block_id,
-                                    scope_id,
-                                    &[],
-                                    &[],
-                                    AstType::Unit,
-                                    Some(*key),
-                                    span_id,
-                                    VarDefinitionSpace::Reg,
-                                    fenv,
-                                    b,
-                                );
-
-                                self.flatten(next_block_id, *body.clone(), fenv, b)?;
-
-                                */
-                                //self.flatten(current_block_id,
-                                /*
-                                let next_block = self.get_block_mut(next_block_id);
-                                next_block.ast = Some(*body.clone());
-
-                                // set next
-                                let block = self.get_block_mut(block_id);
-                                block.next = Some(next_block_id);
-
-                                self.ast_blocks.push(next_block_id);
-                                */
-                                next_block_id
-                            }
-                        */
-                        Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(ref key, _)) => {
-                            let label = key.unwrap();
-                            /*
-                            let label = if let Some(name) = key {
-                                name.clone().into()
-                            } else {
-                                b.labels.fresh_key("block")
-                            };
-                            */
-                            //let label: StringLabel = key.into();
-                            let new_block_id =
-                                fenv.resolve_block_id(scope_id, label.into()).unwrap();
-                            let block = self.get_block_mut(new_block_id);
-                            let next_node = AstNode {
-                                node: Ast::Sequence(next_seq),
-                                span_id,
-                            };
-                            //block.ast = Some(next_node);
-                            block.next = seq_next_block_id;
-                            self.block_succ(current_block_id, new_block_id, Successor::BlockScope);
-
-                            //let ast = block.ast.take().unwrap();
-                            self.start_block(
-                                new_block_id,
-                                scope_id,
-                                &[],
-                                &[],
-                                AstType::Unit,
-                                Some(label),
-                                span_id,
-                                VarDefinitionSpace::Reg,
-                                fenv,
-                                b,
-                            );
-
-                            self.flatten(new_block_id, next_node, fenv, b)?;
-
-                            //self.ast_blocks.push(block_id);
-                            block_id
-                        }
-                        _ => {
-                            println!("term: {:?}", (&ast, &next_seq));
-                            let next_node = AstNode {
-                                node: Ast::Sequence(next_seq),
-                                span_id,
-                            };
-                            let block_name = b.fresh_block_name();
-                            let next_block =
-                                Ast::Block(block_name, vec![], Box::new(next_node)).into();
-                            let next_r = self.flatten(current_block_id, next_block, fenv, b)?;
-                            //tests/nested_func2.star  //println!("next_node: {:?}", next_block);
-                            next_r.block_id
-                        }
-                    };
-                    let block = self.get_block_mut(current_block_id);
-                    block.next = Some(next_block_id);
-                    let r = self.flatten(current_block_id, ast, fenv, b)?;
-                    current_block_id = r.block_id;
-                    ty = r.ty;
-                    link_id = r.link_id;
-                    is_term = r.is_term;
-                    return Ok(FlattenResult::new(current_block_id, link_id, ty, is_term));
-                }
-
-                println!("next");
-                b.dump_ast(&ast);
-                let r = self.flatten(current_block_id, ast, fenv, b)?;
-                current_block_id = r.block_id;
-                ty = r.ty;
-                link_id = r.link_id;
-                is_term = r.is_term;
             } else {
                 break;
             }
@@ -1158,6 +801,7 @@ impl Flatten {
                 );
             }
         }
+
         Ok(FlattenResult::new(current_block_id, link_id, ty, is_term))
     }
 
@@ -1276,7 +920,6 @@ impl Flatten {
                 return Err(Error::new(BlockifyError::Invalid));
             }
 
-            //let args_size = args.len() as u8;
             let mut values = vec![];
             let mut current_block_id = block_id;
             let mut link_ids = vec![];
@@ -1406,27 +1049,6 @@ impl Flatten {
         v_args
     }
 
-    /*
-    pub fn add_lambda(
-        &mut self,
-        block_id: BlockId,
-        name: StringKey,
-        params: Vec<ParameterNode>,
-        body: AstNode,
-        ret_ty: AstType,
-        fenv: &mut FlattenEnvironment,
-        b: &mut NB,
-    ) {
-        let name = b.labels.s("ret");
-        let args = match &ret_ty {
-            AstType::Unit => vec![],
-            _ => vec![return_type.clone()],
-        };
-        let ret_block = Ast::Block(name, vec![ParameterNode
-        let ast_block = Ast::Block(name, params, body.into());
-    }
-    */
-
     pub fn flatten(
         &mut self,
         block_id: BlockId,
@@ -1462,7 +1084,6 @@ impl Flatten {
                             let fun_block_id = self.new_block(None, fun_scope_id);
                             let ret_block_id = self.new_block(None, fun_scope_id);
 
-                            //let scope_id = fenv.static_scope_id();
                             // add the name to static scope
                             // do this early for recursive functions
                             fenv.scope_define(
@@ -1472,8 +1093,6 @@ impl Flatten {
                                 fun_ty.clone(),
                                 VarDefinitionSpace::Static,
                             );
-
-                            //let ast_block = Ast::Block(name, def.params.clone(), body).into();
 
                             // return in scope
                             let fun_scope = fenv.get_scope_mut(fun_scope_id);
@@ -2053,7 +1672,6 @@ impl Flatten {
             }
 
             Ast::Block(name, args, body) => {
-                //assert!(false);
                 let new_block_id =
                     fenv.resolve_block_id(block.scope_id, name.into())
                         .expect(&format!(
@@ -2062,18 +1680,9 @@ impl Flatten {
                             name
                         ));
 
-                //
                 let new_block = self.get_block(new_block_id);
                 let new_scope_id = new_block.scope_id;
-                //let next = block.next;
-                //let new_scope_id = fenv.new_scope(ScopeType::Block);
-                //fenv.scope_succ(block.scope_id, new_scope_id);
-
-                //let new_block_id = self.new_block(None, new_scope_id);
                 self.block_succ(block_id, new_block_id, Successor::BlockScope);
-                //let new_block = self.get_block_mut(new_block_id);
-                //new_block.next = next;
-
                 self.start_block(
                     new_block_id,
                     new_scope_id,
@@ -2098,7 +1707,6 @@ impl Flatten {
 
             Ast::Ternary(c, x, y) => {
                 // expression, non-terminal
-                //let _condition_span_id = c.span_id;
                 let block = self.get_block(block_id);
                 let scope_id = block.scope_id;
 
@@ -2230,18 +1838,6 @@ impl Flatten {
                     b,
                 );
 
-                /*
-                let last_block = self.get_block(block_id);
-                if let Some(last_link_id) = block.links.last() {
-                    // check to ensure that the previous block was terminated
-                    let entry = self.get_entry(*last_link_id);
-                    if entry.code.is_term() {
-                        // TODO: add implicit jump to this block
-                        // Ast labels have no arguments, so this should be trivial
-                        unreachable!();
-                    }
-                }
-                */
                 Ok(FlattenResult::new(
                     current_block_id,
                     None,

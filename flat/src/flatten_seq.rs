@@ -58,15 +58,6 @@ impl SequenceReader {
         let span_id = self.spans.pop().unwrap();
         let key = self.block_names.pop().unwrap();
         Ast::Block(key, vec![], NB::seq(seq, span_id).into()).into()
-
-        /*
-        let mut new_seq = vec![];
-        new_seq.push(Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(Some(key), vec![])).into());
-        new_seq.extend(seq);
-        new_seq.push(Ast::ControlFlowMarker(ControlFlowMarker::BlockEnd).into());
-        //new_seq.push(Ast::CloseBlock.into());
-        NB::seq(new_seq, span_id).into()
-           */
     }
 
     fn is_type(&self, t: StackType) -> bool {
@@ -93,9 +84,8 @@ impl SequenceReader {
         }
     }
 
-    fn push_node(&mut self, index: usize, node: AstNode, b: &mut NB) {
+    fn push_node(&mut self, node: AstNode, b: &mut NB) {
         let span_id = node.span_id;
-        //b.dump_ast(&node);
         match &node.node {
             Ast::ControlFlowMarker(ControlFlowMarker::LoopStart(maybe_key)) => {
                 let key = if let Some(key) = maybe_key {
@@ -117,28 +107,18 @@ impl SequenceReader {
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(maybe_key, params)) => {
-                if index == 0 {
-                    //self.push_stack(NB::goto(maybe_key.unwrap().clone()));
-                }
-
                 assert_eq!(params.len(), 0);
                 self.start_block(maybe_key.clone(), span_id);
             }
             Ast::ControlFlowMarker(ControlFlowMarker::Goto(key)) => {
-                //let ast = self.end_block();
-                //self.push_stack(ast);
                 self.push_stack(NB::goto(key.clone()));
                 if self.is_block() {
                     let ast = self.end_block();
                     self.push_stack(ast);
-                    //} else {
                 }
             }
             Ast::Block(key, params, body) => {
                 let span_id = node.span_id;
-                if index == 0 {
-                    //self.push_stack(NB::goto(key.clone()));
-                }
                 if self.stack.len() > 0 {
                     self.close_block();
                 }
@@ -191,8 +171,8 @@ impl SequenceReader {
     }
 
     pub fn build(&mut self, exprs: Vec<AstNode>, b: &mut NB) -> Vec<AstNode> {
-        for (index, expr) in exprs.into_iter().enumerate() {
-            self.push_node(index, expr, b);
+        for expr in exprs.into_iter() {
+            self.push_node(expr, b);
         }
 
         self.close();
@@ -200,34 +180,12 @@ impl SequenceReader {
     }
 }
 
-/*
-impl Flatten {
-    pub fn flatten_sequence_step(
-        &mut self,
-        block_id: BlockId,
-        mut seq: Vec<AstNode>,
-        fenv: &mut FlattenEnvironment,
-        b: &mut NB,
-    ) -> Result<(Vec<AstNode>, FlattenResult)> {
-        let mut current_block_id = block_id;
-        let mut ty = AstType::Unit;
-        let mut link_id = None;
-        let mut is_term = false;
-        let mut span_id = b.spans.get_span_unknown();
-        let block = self.get_block(block_id);
-        let scope_id = block.scope_id;
-
-        Ok(FlattenResult::new(current_block_id, link_id, ty, is_term))
-    }
-}
-*/
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{Flatten, FlattenEnvironment, ICodeModule, NodeBuilder as NB};
     use anyhow::Result;
-    use compile_core::{AstType, ControlFlowMarker};
+    use compile_core::AstType;
     use test_log::test;
 
     fn builder() -> NB {
@@ -272,10 +230,7 @@ mod tests {
     fn test_seq2() {
         let mut b = builder();
         let a = b.labels.s("a");
-        let seq = vec![
-            NB::label(a).into(),
-            //Ast::CloseBlock.into(),
-        ];
+        let seq = vec![NB::label(a).into(), Ast::CloseBlock.into()];
         let _ = run(seq, &mut b).unwrap();
         b.spans.diagnostics_dump();
     }
