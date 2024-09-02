@@ -1,10 +1,9 @@
 use compile_core::{Ast, AstNode, ControlFlowMarker, SpanId, StringKey};
 
-use crate::{BlockId, NodeBuilder as NB};
+use crate::NodeBuilder as NB;
 
 #[derive(Debug)]
 pub struct SequenceReader {
-    next: Option<BlockId>,
     loop_names: Vec<StringKey>,
     block_names: Vec<StringKey>,
     stack: Vec<(StackType, Vec<AstNode>)>,
@@ -19,9 +18,8 @@ pub enum StackType {
 }
 
 impl SequenceReader {
-    pub fn new(next: Option<BlockId>) -> Self {
+    pub fn new() -> Self {
         Self {
-            next,
             loop_names: vec![],
             block_names: vec![],
             stack: vec![],
@@ -240,7 +238,7 @@ mod tests {
         let mut b = builder();
         let a = b.labels.s("a");
         let seq = vec![NB::label(a).into()];
-        let mut r = SequenceReader::new(Some(BlockId(0)));
+        let mut r = SequenceReader::new();
         let seq = r.build(seq, &mut b);
         for ast in seq.iter() {
             b.dump_ast(ast);

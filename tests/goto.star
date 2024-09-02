@@ -11,13 +11,10 @@ def test2():
 
 # empty label
 def test3():
-  q.goto("a")
-  
   q.label("a")
 
 # non-empty label
 def test4():
-  q.goto("a")
   q.label("a")
   1
 

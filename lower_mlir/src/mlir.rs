@@ -490,13 +490,7 @@ impl<'c> Lower<'c> {
             }
 
             LCode::Call(v_f, args, _kwargs) => {
-                // ensure calling static
-                let mem = blockify.get_mem((*v_f).into());
-                if let VarDefinitionSpace::Static = mem {
-                } else {
-                    // not supported
-                    unreachable!("{:?}", mem)
-                }
+                // TODO: ensure calling static
 
                 // function to call
                 let key = blockify.get_name((*v_f).into()).unwrap();
