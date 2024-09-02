@@ -214,7 +214,7 @@ mod tests {
     use super::*;
     use crate::{Flatten, FlattenEnvironment, ICodeModule, NodeBuilder as NB};
     use anyhow::Result;
-    use compile_core::AstType;
+    use compile_core::{AstType, ControlFlowMarker};
     use test_log::test;
 
     fn builder() -> NB {
@@ -259,7 +259,10 @@ mod tests {
     fn test_seq2() {
         let mut b = builder();
         let a = b.labels.s("a");
-        let seq = vec![NB::label(a).into()];
+        let seq = vec![
+            NB::label(a).into(),
+            //Ast::CloseBlock.into(),
+        ];
         let _ = run(seq, &mut b).unwrap();
         b.spans.diagnostics_dump();
     }

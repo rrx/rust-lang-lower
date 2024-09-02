@@ -1,11 +1,22 @@
+# jump to non empty label
 def test1():
   q.goto("a")
   q.label("a")
   1
 
+# jump to empty label
 def test2():
   q.goto("a")
   q.label("a")
+
+# empty label
+def test3():
+  q.label("a")
+
+# non-empty label
+def test4():
+  q.label("a")
+  1
 
 def main() -> int:
   q.goto("a")

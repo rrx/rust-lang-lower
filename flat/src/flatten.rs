@@ -546,11 +546,11 @@ impl Flatten {
                 let scope_id = block.scope_id;
                 let scope = fenv.get_scope(scope_id);
 
-                if index == block.links.len() - 1 && !entry.code.is_term() && scope.scope_type != ScopeType::Static {
-                    b.push_error(
-                        &format!("Unterminated Block: {}", block_id),
-                        entry.span_id,
-                    );
+                if index == block.links.len() - 1
+                    && !entry.code.is_term()
+                    && scope.scope_type != ScopeType::Static
+                {
+                    b.push_error(&format!("Unterminated Block: {}", block_id), entry.span_id);
                 }
 
                 let mentry =
@@ -770,6 +770,7 @@ impl Flatten {
                         let scope = fenv.get_scope_mut(scope_id);
                         scope.block_labels.insert(label.into(), new_block_id);
 
+                        /*
                         self.start_block(
                             new_block_id,
                             scope_id,
@@ -782,6 +783,7 @@ impl Flatten {
                             fenv,
                             b,
                         );
+                        */
                         println!("start: {:?}", (new_block_id, b.labels.r(label.into())));
                     }
                 }
@@ -794,6 +796,7 @@ impl Flatten {
             if let Some(ast) = d.next() {
                 span_id = ast.span_id;
                 if d.len() > 0 && ast.node.is_term() {
+                    println!("*** trail");
                     let next_seq = d.collect::<Vec<_>>();
                     let next_node = &next_seq.first().as_ref().unwrap().node;
 
@@ -830,11 +833,10 @@ impl Flatten {
                                 node: Ast::Sequence(next_seq),
                                 span_id,
                             };
-                            block.ast = Some(next_node);
+                            //block.ast = Some(next_node);
                             block.next = seq_next_block_id;
 
-                            let ast = block.ast.take().unwrap();
-                            /*
+                            //let ast = block.ast.take().unwrap();
                             self.start_block(
                                 new_block_id,
                                 scope_id,
@@ -847,9 +849,8 @@ impl Flatten {
                                 fenv,
                                 b,
                             );
-                            */
 
-                            self.flatten(block_id, NB::ensure_seq(ast), fenv, b)?;
+                            self.flatten(new_block_id, next_node, fenv, b)?;
 
                             //self.ast_blocks.push(block_id);
                             block_id
@@ -878,6 +879,8 @@ impl Flatten {
                     return Ok(FlattenResult::new(current_block_id, link_id, ty, is_term));
                 }
 
+                println!("next");
+                b.dump_ast(&ast);
                 let r = self.flatten(current_block_id, ast, fenv, b)?;
                 current_block_id = r.block_id;
                 ty = r.ty;
@@ -1500,7 +1503,10 @@ impl Flatten {
                 let offset_decl =
                     if let Some(data) = self.resolve_name(current_block_id, name, fenv) {
                         if data.ty != expr_ty {
-                            b.push_error(&format!("Type Mismatch: {:?}, {:?}", data.ty, expr_ty), node.span_id);
+                            b.push_error(
+                                &format!("Type Mismatch: {:?}, {:?}", data.ty, expr_ty),
+                                node.span_id,
+                            );
                         }
                         //assert_eq!(data.ty, expr_ty);
                         data.offset
@@ -1706,7 +1712,12 @@ impl Flatten {
                     VarDefinitionSpace::Reg,
                 );
                 let link_id = self.push_entry_with_link(entry);
-                Ok(FlattenResult::new(current_block_id, Some(link_id), r.ty, false))
+                Ok(FlattenResult::new(
+                    current_block_id,
+                    Some(link_id),
+                    r.ty,
+                    false,
+                ))
             }
 
             Ast::Conditional(condition, then_expr, maybe_else_expr) => {
@@ -1931,10 +1942,30 @@ impl Flatten {
 
             Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(name, args)) => {
                 // all blocks should have been forward declared in the sequence
+                println!("blockstart");
                 let name = name.unwrap();
-                let block_id = fenv.resolve_block_id(block.scope_id, name.into()).unwrap();
+                let current_block_id = fenv.resolve_block_id(block.scope_id, name.into()).unwrap();
                 assert_eq!(0, args.len());
-                let block = self.get_block(block_id);
+                let next = block.next;
+                let current_block = self.get_block_mut(current_block_id);
+                current_block.next = next;
+                let current_scope_id = current_block.scope_id;
+
+                self.start_block(
+                    current_block_id,
+                    current_scope_id,
+                    &[],
+                    &[],
+                    AstType::Unit,
+                    Some(name),
+                    span_id,
+                    VarDefinitionSpace::Reg,
+                    fenv,
+                    b,
+                );
+
+                /*
+                let last_block = self.get_block(block_id);
                 if let Some(last_link_id) = block.links.last() {
                     // check to ensure that the previous block was terminated
                     let entry = self.get_entry(*last_link_id);
@@ -1944,7 +1975,13 @@ impl Flatten {
                         unreachable!();
                     }
                 }
-                Ok(FlattenResult::new(block_id, None, AstType::Unit, false))
+                */
+                Ok(FlattenResult::new(
+                    current_block_id,
+                    None,
+                    AstType::Unit,
+                    false,
+                ))
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::Goto(label)) => {
@@ -2046,6 +2083,7 @@ impl Flatten {
             }
 
             Ast::CloseBlock => {
+                println!("closeblock");
                 let block = self.get_block(block_id);
                 if let Some(next) = block.next {
                     let link_id = self.add_jump(block_id, next.into(), vec![], span_id);
