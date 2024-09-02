@@ -238,11 +238,8 @@ mod tests {
         let r = Flatten::flatten_module(module, &mut fenv, b);
         b.spans.diagnostics_dump();
         let f = r?;
-        //let r = f.run_loop(&mut fenv, b);
-        //f.dump_ast(&b);
         b.spans.diagnostics_dump();
-        //let _ = r?;
-        let m = f.module(&mut fenv, &b);
+        let m = f.module(&mut fenv, b);
         m.dump(&b);
         m.block_graph("blocks.dot", &b);
 

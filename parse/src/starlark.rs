@@ -1025,7 +1025,7 @@ pub(crate) mod tests {
         b.spans.diagnostics_dump();
         let f = r.unwrap();
         b.spans.diagnostics_dump();
-        let m = f.module(&mut fenv, &b);
+        let m = f.module(&mut fenv, &mut b);
         m.dump(&b);
 
         let r = p.lower(&m, ValueId::new(0), &context, &mut module, &mut b);

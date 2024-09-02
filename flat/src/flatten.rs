@@ -521,7 +521,7 @@ impl Flatten {
         None
     }
 
-    pub fn module(self, fenv: &FlattenEnvironment, _b: &NB) -> FlattenModule {
+    pub fn module(self, fenv: &FlattenEnvironment, b: &mut NB) -> FlattenModule {
         self.dump_blocks();
         let mut m = FlattenModule::new();
         m.link = self.link.clone();
@@ -545,6 +545,14 @@ impl Flatten {
                 }
                 let scope_id = block.scope_id;
                 let scope = fenv.get_scope(scope_id);
+
+                if index == block.links.len() - 1 && !entry.code.is_term() && scope.scope_type != ScopeType::Static {
+                    b.push_error(
+                        &format!("Unterminated Block: {}", block_id),
+                        entry.span_id,
+                    );
+                }
+
                 let mentry =
                     ModuleEntry::from_code_entry(v, next, prev, scope_id, scope.scope_type, entry);
                 m.add(mentry);
@@ -1491,7 +1499,10 @@ impl Flatten {
 
                 let offset_decl =
                     if let Some(data) = self.resolve_name(current_block_id, name, fenv) {
-                        assert_eq!(data.ty, expr_ty);
+                        if data.ty != expr_ty {
+                            b.push_error(&format!("Type Mismatch: {:?}, {:?}", data.ty, expr_ty), node.span_id);
+                        }
+                        //assert_eq!(data.ty, expr_ty);
                         data.offset
                     } else {
                         let block = self.get_block(current_block_id);
@@ -1664,7 +1675,7 @@ impl Flatten {
                                 Ok(FlattenResult::new(
                                     next_block_id,
                                     next_link_id,
-                                    AstType::Unit,
+                                    ret_ty,
                                     false,
                                 ))
                             }
@@ -1684,9 +1695,10 @@ impl Flatten {
             Ast::UnaryOp(op, x) => {
                 // op1 is expression, non-terminal
                 let r = self.flatten(block_id, *x, fenv, b)?;
+                let current_block_id = r.block_id;
                 let code = LCode::Op1(op, r.link_id.unwrap().into());
                 let entry = CodeEntry::new(
-                    block_id,
+                    current_block_id,
                     code,
                     r.ty.clone(),
                     None,
@@ -1694,7 +1706,7 @@ impl Flatten {
                     VarDefinitionSpace::Reg,
                 );
                 let link_id = self.push_entry_with_link(entry);
-                Ok(FlattenResult::new(block_id, Some(link_id), r.ty, false))
+                Ok(FlattenResult::new(current_block_id, Some(link_id), r.ty, false))
             }
 
             Ast::Conditional(condition, then_expr, maybe_else_expr) => {
