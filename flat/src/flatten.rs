@@ -1485,40 +1485,41 @@ impl Flatten {
                 }
 
                 let r = self.flatten(block_id, *expr, fenv, b)?;
+                let current_block_id = r.block_id;
                 let v_expr = r.link_id.unwrap();
                 let expr_ty = self.get_entry(v_expr).ty.clone();
-                let v_block = r.block_id;
 
-                let offset_decl = if let Some(data) = self.resolve_name(block_id, name, fenv) {
-                    assert_eq!(data.ty, expr_ty);
-                    data.offset
-                } else {
-                    let block = self.get_block(block_id);
-                    let scope_id = block.scope_id;
-                    let code = LCode::Declare;
-                    let expr_ty = self.get_entry(v_expr).ty.clone();
-                    let entry = CodeEntry::new(
-                        v_block,
-                        code,
-                        expr_ty.clone(),
-                        Some(name),
-                        node.span_id,
-                        VarDefinitionSpace::Default,
-                    );
-                    let link_id = self.push_entry_with_link(entry);
-                    fenv.scope_define(
-                        scope_id,
-                        name,
-                        link_id.into(),
-                        expr_ty,
-                        VarDefinitionSpace::Stack,
-                    );
-                    link_id.into()
-                };
+                let offset_decl =
+                    if let Some(data) = self.resolve_name(current_block_id, name, fenv) {
+                        assert_eq!(data.ty, expr_ty);
+                        data.offset
+                    } else {
+                        let block = self.get_block(current_block_id);
+                        let scope_id = block.scope_id;
+                        let code = LCode::Declare;
+                        let expr_ty = self.get_entry(v_expr).ty.clone();
+                        let entry = CodeEntry::new(
+                            current_block_id,
+                            code,
+                            expr_ty.clone(),
+                            Some(name),
+                            node.span_id,
+                            VarDefinitionSpace::Default,
+                        );
+                        let link_id = self.push_entry_with_link(entry);
+                        fenv.scope_define(
+                            scope_id,
+                            name,
+                            link_id.into(),
+                            expr_ty,
+                            VarDefinitionSpace::Stack,
+                        );
+                        link_id.into()
+                    };
 
                 let code = LCode::Store(offset_decl, v_expr.into());
                 let entry = CodeEntry::new(
-                    v_block,
+                    current_block_id,
                     code,
                     AstType::Unit,
                     Some(name),
@@ -1527,7 +1528,7 @@ impl Flatten {
                 );
                 let link_id = self.push_entry_with_link(entry);
                 Ok(FlattenResult::new(
-                    block_id,
+                    current_block_id,
                     Some(link_id),
                     AstType::Unit,
                     false,
@@ -1583,6 +1584,15 @@ impl Flatten {
                                 //let args_size = args.len();
                                 let (current_block_id, ret_ty, call_values) = self
                                     .add_function_args(block_id, fun_ty, args, span_id, fenv, b)?;
+                                // now that we have the arguments calculated
+                                // jump to the function baked as a block
+                                // complete this block with a jump
+                                self.add_jump(
+                                    current_block_id,
+                                    fun_block_id.into(),
+                                    call_values,
+                                    node.span_id,
+                                );
 
                                 // NEXT BLOCK(ret_ty)
                                 // We create a new block for the lambda to return to
@@ -1630,6 +1640,11 @@ impl Flatten {
                                     b,
                                 );
 
+                                let next_link_id = match &ret_ty {
+                                    AstType::Unit => None,
+                                    _ => Some(next_link_ids.first().unwrap().0),
+                                };
+
                                 // Start lambda block
                                 self.start_block(
                                     fun_block_id,
@@ -1646,19 +1661,9 @@ impl Flatten {
                                 // flatten lambda block
                                 let _ = self.flatten(fun_block_id, *body, fenv, b)?;
 
-                                // now that we have the arguments calculated
-                                // jump to the function baked as a block
-                                // complete this block with a jump
-                                self.add_jump(
-                                    current_block_id,
-                                    fun_block_id.into(),
-                                    call_values,
-                                    node.span_id,
-                                );
-
                                 Ok(FlattenResult::new(
                                     next_block_id,
-                                    None,
+                                    next_link_id,
                                     AstType::Unit,
                                     false,
                                 ))

@@ -602,7 +602,10 @@ impl<'c> Lower<'c> {
                     let index = c.push(op);
                     self.index.insert(v, index);
                 } else {
-                    let decl_index = self.resolve_value(blockify, v_decl).unwrap();
+                    let decl_index = self.resolve_value(blockify, v_decl).expect(&format!(
+                        "Unable to resolve declaration {} for load {}",
+                        v_decl, v
+                    ));
                     let r_addr = blocks.value0(decl_index);
                     let op = memref::load(r_addr, &[], location);
                     let c = blocks.blocks.get_mut(&block_id).unwrap();
