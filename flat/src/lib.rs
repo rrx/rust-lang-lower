@@ -8,7 +8,6 @@ pub mod flatten_env;
 pub mod flatten_seq;
 pub mod graph;
 pub mod scope;
-pub mod seq;
 
 pub use block_format::*;
 pub use blockify::{Blockify, BlockifyError, ICodeModule, LCode};

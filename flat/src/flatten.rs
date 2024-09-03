@@ -794,19 +794,13 @@ impl Flatten {
 
         for expr in seq.iter() {
             match &expr.node {
-                Ast::Block(key, args, body) => {
+                Ast::Block(key, args, _body) => {
                     if fenv.resolve_block_id(scope_id, key.into()).is_none() {
                         assert_eq!(0, args.len());
                         let new_block_id = self.new_block(None, scope_id);
-                        //println!("new block1: {}", new_block_id);
-                        //println!(
-                        //"new block2: {:?}",
-                        //(new_block_id, b.labels.r(key.into()), body)
-                        //);
                         let new_block = self.get_block_mut(new_block_id);
                         new_block.next = seq_next_block_id;
                         self.block_succ(current_block_id, new_block_id, Successor::BlockScope);
-
                         let scope = fenv.get_scope_mut(scope_id);
                         scope.block_labels.insert(key.into(), new_block_id);
                     }
@@ -2173,10 +2167,9 @@ fn jump_if_needed(ast: AstNode, b: &mut NB) -> AstNode {
     let span_id = ast.span_id;
     let mut reader = SequenceReader::new();
     let mut seq = reader.build(ast.to_vec(), b);
-    println!("seq: {:?}", (seq));
     if let Some(first) = seq.first() {
         if let Ast::Block(key, _args, _body) = &first.node {
-            let jump = NB::goto(*key).into();
+            let jump = NB::goto(*key).node(span_id);
             seq.insert(0, jump);
         }
     }

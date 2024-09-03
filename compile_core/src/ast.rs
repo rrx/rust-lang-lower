@@ -157,6 +157,12 @@ impl From<ControlFlowMarker> for AstNode {
     }
 }
 
+impl From<ControlFlowMarker> for Ast {
+    fn from(c: ControlFlowMarker) -> Self {
+        Ast::ControlFlowMarker(c)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Ast {
     BinaryOp(BinOpNode, Box<AstNode>, Box<AstNode>),

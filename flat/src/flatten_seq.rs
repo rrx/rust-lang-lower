@@ -109,7 +109,7 @@ impl SequenceReader {
                 self.start_block(maybe_key.clone(), span_id);
             }
             Ast::ControlFlowMarker(ControlFlowMarker::Goto(key)) => {
-                self.push_stack(NB::goto(key.clone()));
+                self.push_stack(NB::goto(key.clone()).node(span_id));
                 if self.is_block() {
                     let ast = self.end_block();
                     self.push_stack(ast);

@@ -416,7 +416,7 @@ impl NodeBuilder {
         ControlFlowMarker::BlockStart(Some(name), params).into()
     }
 
-    pub fn goto(name: StringKey) -> AstNode {
+    pub fn goto(name: StringKey) -> Ast {
         ControlFlowMarker::Goto(name).into()
     }
 

@@ -30,7 +30,7 @@ use melior::{
 };
 use std::collections::VecDeque;
 
-use compile_core::{AstType, Span, UnaryOperation, VarDefinitionSpace};
+use compile_core::{AstType, Span, UnaryOperation};
 
 use std::collections::HashMap;
 
