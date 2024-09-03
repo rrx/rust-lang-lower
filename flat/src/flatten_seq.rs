@@ -39,7 +39,7 @@ impl SequenceReader {
         assert_eq!(stack_type, StackType::Loop);
         let span_id = self.spans.pop().unwrap();
         let key = self.loop_names.pop().unwrap();
-        Ast::Loop(key, NB::seq(seq, span_id).into()).into()
+        Ast::Loop(key, NB::seq(seq, span_id).into()).node(span_id)
     }
 
     fn start_block(&mut self, maybe_key: Option<StringKey>, span_id: SpanId) {
@@ -55,7 +55,7 @@ impl SequenceReader {
         assert_eq!(stack_type, StackType::Block);
         let span_id = self.spans.pop().unwrap();
         let key = self.block_names.pop().unwrap();
-        Ast::Block(key, vec![], NB::seq(seq, span_id).into()).into()
+        Ast::Block(key, vec![], NB::seq(seq, span_id).into()).node(span_id)
     }
 
     fn is_type(&self, t: StackType) -> bool {
@@ -94,10 +94,10 @@ impl SequenceReader {
                 self.start_loop(key, span_id);
             }
             Ast::ControlFlowMarker(ControlFlowMarker::LoopBreak(maybe_key)) => {
-                self.push_stack(NB::loop_break(maybe_key.clone()));
+                self.push_stack(NB::loop_break(maybe_key.clone()).node(span_id));
             }
             Ast::ControlFlowMarker(ControlFlowMarker::LoopContinue(maybe_key)) => {
-                self.push_stack(NB::loop_continue(maybe_key.clone()));
+                self.push_stack(NB::loop_continue(maybe_key.clone()).node(span_id));
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::BlockEnd) => {
@@ -126,13 +126,14 @@ impl SequenceReader {
                 let mut seq = body.clone().to_vec();
                 if let Some(last_node) = seq.last() {
                     if !last_node.node.is_term() {
-                        seq.push(Ast::CloseBlock.into());
+                        seq.push(Ast::CloseBlock.node(last_node.span_id));
                     }
                 } else {
-                    seq.push(Ast::CloseBlock.into());
+                    seq.push(Ast::CloseBlock.node(span_id));
                 }
 
-                let node = Ast::Block(*key, params.clone(), NB::seq(seq, span_id).into()).into();
+                let node =
+                    Ast::Block(*key, params.clone(), NB::seq(seq, span_id).into()).node(span_id);
                 self.push_stack(node);
             }
             _ => {
@@ -146,9 +147,10 @@ impl SequenceReader {
         let (stack_type, _) = self.stack.last().unwrap();
         assert_eq!(stack_type, &StackType::Block);
         let seq = &self.stack.last().as_ref().unwrap().1;
-        let is_term = seq.last().map_or_else(|| false, |ast| ast.node.is_term());
-        if !is_term {
-            self.push_stack(Ast::CloseBlock.into());
+        if let Some(last) = seq.last() {
+            if !last.node.is_term() {
+                self.push_stack(Ast::CloseBlock.node(last.span_id));
+            }
         }
 
         let ast = self.end_block();
@@ -198,7 +200,11 @@ mod tests {
     fn build_module(seq: Vec<AstNode>, b: &mut NB) -> AstNode {
         let name = b.labels.s("func");
         let module_name = b.labels.s("module");
-        let span_id = b.spans.get_span_unknown();
+        let span_id = if let Some(first) = seq.first() {
+            first.span_id
+        } else {
+            b.spans.get_span_unknown()
+        };
         let f = b.func(name, &[], AstType::Unit, NB::seq(seq, span_id));
         NB::module(module_name, f)
     }

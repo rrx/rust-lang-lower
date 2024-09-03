@@ -6,16 +6,16 @@ use tabled::{
     Table,
 };
 
-pub fn print_with_indent(s: &str, depth: usize) {
-    println!("{:width$}{}", "", s, width = depth * 2);
+pub fn print_with_indent(s: &str, span_id: SpanId, depth: usize) {
+    println!("{:width$}{}, {}", "", s, span_id, width = depth * 2);
 }
 
 impl NodeBuilder {
     pub fn dump_ast(&self, node: &AstNode) {
         let mut out = vec![];
         self.dump_strings(node, &mut out, 0);
-        for (depth, s, _span) in out {
-            print_with_indent(&s, depth);
+        for (depth, s, span_id) in out {
+            print_with_indent(&s, span_id, depth);
         }
     }
 
@@ -25,23 +25,24 @@ impl NodeBuilder {
         out: &mut Vec<(usize, String, SpanId)>,
         mut depth: usize,
     ) {
+        let span_id = node.span_id;
         match &node.node {
             Ast::Module(name, body) => {
-                let s = format!("module({})", self.labels.r((*name).into()));
+                let s = format!("module({},{})", self.labels.r((*name).into()), span_id);
                 out.push((depth, s, node.span_id));
                 depth += 1;
                 self.dump_strings(body, out, depth);
             }
 
             Ast::Block(name, _args, body) => {
-                let s = format!("block({})", self.labels.r((*name).into()));
+                let s = format!("block({},{})", self.labels.r((*name).into()), span_id);
                 out.push((depth, s, node.span_id));
                 depth += 1;
                 self.dump_strings(body, out, depth);
             }
 
             Ast::Sequence(exprs) => {
-                let _s = format!("sequence:");
+                let _s = format!("sequence({})", span_id);
                 depth += 1;
                 for expr in exprs {
                     self.dump_strings(expr, out, depth);
@@ -49,7 +50,7 @@ impl NodeBuilder {
             }
 
             Ast::Return(maybe_result) => {
-                let s = format!("ret:");
+                let s = format!("ret({}):", span_id);
                 out.push((depth, s, node.span_id));
                 if let Some(result) = maybe_result {
                     self.dump_strings(result, out, depth + 1);
@@ -57,7 +58,7 @@ impl NodeBuilder {
             }
 
             Ast::Builtin(bi, args) => {
-                let s = format!("builtin({:?})", bi);
+                let s = format!("builtin({:?},{})", bi, span_id);
                 out.push((depth, s, node.span_id));
                 for a in args {
                     let Argument::Positional(expr) = a;
@@ -66,13 +67,13 @@ impl NodeBuilder {
             }
 
             Ast::Literal(lit) => {
-                let s = format!("{:?}", lit);
+                let s = format!("({:?}[{}])", lit, span_id);
                 out.push((depth, s, node.span_id));
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::LoopStart(name)) => {
                 let s = if let Some(name) = name {
-                    format!("loop_start: {}", self.labels.r((*name).into()))
+                    format!("loop_start({},{}):", self.labels.r((*name).into()), span_id)
                 } else {
                     "loop_start".into()
                 };
@@ -81,13 +82,22 @@ impl NodeBuilder {
 
             Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(name, params)) => {
                 let s = if let Some(name) = name {
-                    format!("block_start: {}", self.labels.r((*name).into()))
+                    format!(
+                        "block_start({},{}):",
+                        self.labels.r((*name).into()),
+                        span_id
+                    )
                 } else {
-                    "block_start".into()
+                    format!("block_start({}):", span_id)
                 };
                 out.push((depth, s, node.span_id));
                 for e in params {
-                    let s = format!("arg: {}, {:?}", self.labels.r(e.name.into()), e.ty,);
+                    let s = format!(
+                        "arg: {}, {:?}, {}",
+                        self.labels.r(e.name.into()),
+                        e.ty,
+                        e.span_id
+                    );
                     out.push((depth, s, node.span_id));
                 }
             }
@@ -98,18 +108,23 @@ impl NodeBuilder {
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::BlockEnd) => {
-                let s = format!("end");
+                let s = format!("end({})", node.span_id);
                 out.push((depth, s, node.span_id));
             }
 
             Ast::Lambda(def) => {
                 //let s = format!("func({}):", b.r(def.name));
-                let s = "func:";
+                let s = format!("func({}):", node.span_id);
                 out.push((depth, s.into(), node.span_id));
                 depth += 1;
 
                 for a in &def.params {
-                    let s = format!("arg: {}: {:?}", self.labels.r(a.name.into()), a.ty,);
+                    let s = format!(
+                        "arg: {}: {:?}, {}",
+                        self.labels.r(a.name.into()),
+                        a.ty,
+                        a.span_id
+                    );
                     out.push((depth, s, node.span_id));
                 }
                 if let Some(ref body) = def.body {
@@ -118,13 +133,13 @@ impl NodeBuilder {
             }
 
             Ast::Global(key, value) => {
-                let s = format!("global: {}", self.labels.r(key.into()));
+                let s = format!("global: {}, {}", self.labels.r(key.into()), node.span_id);
                 out.push((depth, s, node.span_id));
                 self.dump_strings(value, out, depth + 1);
             }
 
             Ast::Assign(target, value) => {
-                let s = format!("assign");
+                let s = format!("assign({})", node.span_id);
                 out.push((depth, s, node.span_id));
                 depth += 1;
                 match target {
@@ -141,25 +156,25 @@ impl NodeBuilder {
             }
 
             Ast::BinaryOp(op, x, y) => {
-                let s = format!("binop: {:?}", op);
+                let s = format!("binop: {:?}, {}", op, node.span_id);
                 out.push((depth, s, node.span_id));
                 self.dump_strings(x, out, depth + 1);
                 self.dump_strings(y, out, depth + 1);
             }
 
             Ast::UnaryOp(op, expr) => {
-                let s = format!("unary: {:?}", op);
+                let s = format!("unary: {:?}, {}", op, node.span_id);
                 out.push((depth, s, node.span_id));
                 self.dump_strings(expr, out, depth + 1);
             }
 
             Ast::Identifier(key) => {
-                let s = format!("ident: {}", self.labels.r(key.into()),);
+                let s = format!("ident: {}, {}", self.labels.r(key.into()), node.span_id);
                 out.push((depth, s, node.span_id));
             }
 
             Ast::Conditional(c, a, mb) => {
-                let s = format!("cond:");
+                let s = format!("cond({}):", node.span_id);
                 out.push((depth, s, node.span_id));
                 depth += 1;
                 self.dump_strings(c, out, depth);
@@ -174,7 +189,7 @@ impl NodeBuilder {
             }
 
             Ast::Ternary(c, then_expr, else_expr) => {
-                let s = format!("ternary:");
+                let s = format!("ternary({}):", node.span_id);
                 out.push((depth, s, node.span_id));
                 depth += 1;
                 self.dump_strings(c, out, depth);
@@ -188,16 +203,17 @@ impl NodeBuilder {
 
             Ast::Branch(c, then_key, else_key) => {
                 let s = format!(
-                    "branch: {}, {}",
+                    "branch({},{},{})",
                     self.labels.r(then_key.into()),
                     self.labels.r(else_key.into()),
+                    node.span_id
                 );
                 out.push((depth, s, node.span_id));
                 self.dump_strings(c, out, depth + 1);
             }
 
             Ast::Call(f, args, ret_ty) => {
-                let s = format!("call: {:?}", ret_ty);
+                let s = format!("call: {:?}, {}", ret_ty, node.span_id);
                 out.push((depth, s, node.span_id));
                 self.dump_strings(f, out, depth + 1);
                 if args.len() > 0 {
@@ -209,39 +225,42 @@ impl NodeBuilder {
             }
 
             Ast::Loop(key, body) => {
-                let s = format!("loop({})", self.labels.r(key.into()));
+                let s = format!("loop({},{})", self.labels.r(key.into()), node.span_id);
                 out.push((depth, s, node.span_id));
                 self.dump_strings(body, out, depth + 1);
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::LoopBreak(maybe_key)) => {
                 let s = format!(
-                    "loop_break({})",
+                    "loop_break({},{})",
                     maybe_key
                         .map(|key| self.labels.r(key.into()))
                         .or(Some("".into()))
-                        .unwrap()
+                        .unwrap(),
+                    node.span_id,
                 );
                 out.push((depth, s, node.span_id));
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::LoopContinue(maybe_key)) => {
                 let s = format!(
-                    "loop_continue({})",
+                    "loop_continue({},{})",
                     maybe_key
                         .map(|key| self.labels.r(key.into()))
                         .or(Some("".into()))
-                        .unwrap()
+                        .unwrap(),
+                    node.span_id,
                 );
                 out.push((depth, s, node.span_id));
             }
             Ast::Break(maybe_key, args) => {
                 let s = format!(
-                    "break({})",
+                    "break({},{})",
                     maybe_key
                         .map(|key| self.labels.r(key.into()))
                         .or(Some("".into()))
-                        .unwrap()
+                        .unwrap(),
+                    node.span_id,
                 );
                 out.push((depth, s, node.span_id));
                 for expr in args {
@@ -251,11 +270,12 @@ impl NodeBuilder {
 
             Ast::Continue(maybe_key, args) => {
                 let s = format!(
-                    "continue({})",
+                    "continue({},{})",
                     maybe_key
                         .map(|key| self.labels.r(key.into()))
                         .or(Some("".into()))
-                        .unwrap()
+                        .unwrap(),
+                    node.span_id
                 );
                 out.push((depth, s, node.span_id));
                 for expr in args {
@@ -264,12 +284,12 @@ impl NodeBuilder {
             }
 
             Ast::CloseBlock => {
-                let s = "close_block";
+                let s = format!("close_block({})", node.span_id);
                 out.push((depth, s.into(), node.span_id));
             }
 
             Ast::Yield(body) => {
-                let s = "yield".into();
+                let s = format!("yield({})", node.span_id);
                 out.push((depth, s, node.span_id));
                 depth += 1;
                 if let Some(result) = body {

@@ -208,6 +208,9 @@ impl NodeBuilder {
         let ty = self.types.s(&ty);
         let b = compile_core::Builtin::new("print".into(), ty);
         self.builtins.insert(b);
+
+        // get unknown initially (so it's 0)
+        let _ = self.spans.get_span_unknown();
     }
 
     pub fn ensure_seq(ast: AstNode) -> AstNode {
@@ -353,19 +356,20 @@ impl NodeBuilder {
     }
 
     pub fn global(name: StringKey, value: AstNode) -> AstNode {
-        Ast::Global(name, value.into()).into()
+        let span_id = value.span_id;
+        Ast::Global(name, value.into()).node(span_id)
     }
 
     pub fn while_loop(condition: AstNode, body: AstNode) -> AstNode {
         Ast::While(condition.into(), body.into()).into()
     }
 
-    pub fn loop_break(key: Option<StringKey>) -> AstNode {
-        Ast::Break(key, vec![]).into()
+    pub fn loop_break(key: Option<StringKey>) -> Ast {
+        Ast::Break(key, vec![])
     }
 
-    pub fn loop_continue(key: Option<StringKey>) -> AstNode {
-        Ast::Continue(key, vec![]).into()
+    pub fn loop_continue(key: Option<StringKey>) -> Ast {
+        Ast::Continue(key, vec![])
     }
 
     pub fn func(
@@ -470,11 +474,11 @@ pub(crate) mod tests {
                 NB::label(entry),
                 NB::assign(yy, 1.into()),
                 NB::alloca(y, 999.into()),
-                NB::goto(asdf.into()),
+                NB::goto(asdf.into()).into(),
                 // asdf
                 NB::label(asdf),
                 NB::assign(yy, 2.into()),
-                NB::goto(asdf2),
+                NB::goto(asdf2).into(),
                 // asdf2
                 NB::label(asdf2),
                 NB::assign(yy, 3.into()),

@@ -25,6 +25,11 @@ impl SpanId {
         self.0 as usize
     }
 }
+impl fmt::Display for SpanId {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Sp{}", self.index())
+    }
+}
 
 #[derive(Debug, Clone, Default, Copy, Hash, Eq, PartialEq)]
 pub struct CodeLocation {

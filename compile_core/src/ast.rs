@@ -163,6 +163,13 @@ impl From<ControlFlowMarker> for Ast {
     }
 }
 
+impl ControlFlowMarker {
+    pub fn node(self, span_id: SpanId) -> AstNode {
+        let ast: Ast = self.into();
+        ast.node(span_id)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Ast {
     BinaryOp(BinOpNode, Box<AstNode>, Box<AstNode>),

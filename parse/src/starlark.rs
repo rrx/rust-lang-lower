@@ -35,19 +35,28 @@ fn get_string_arg(args: &[Argument], b: &mut NodeBuilder) -> Option<StringKey> {
 struct ExtraAst {}
 
 impl ExtraAst {
-    pub fn from_name(name: &str, args: &[Argument], b: &mut NodeBuilder) -> Option<AstNode> {
+    pub fn from_name(
+        name: &str,
+        args: &[Argument],
+        span_id: SpanId,
+        b: &mut NodeBuilder,
+    ) -> Option<AstNode> {
         match name {
-            "loop" => Some(ControlFlowMarker::LoopStart(get_string_arg(args, b)).into()),
-            "loop_break" => Some(ControlFlowMarker::LoopBreak(get_string_arg(args, b)).into()),
+            "loop" => Some(ControlFlowMarker::LoopStart(get_string_arg(args, b)).node(span_id)),
+            "loop_break" => {
+                Some(ControlFlowMarker::LoopBreak(get_string_arg(args, b)).node(span_id))
+            }
             "loop_continue" => {
-                Some(ControlFlowMarker::LoopContinue(get_string_arg(args, b)).into())
+                Some(ControlFlowMarker::LoopContinue(get_string_arg(args, b)).node(span_id))
             }
             "end" => {
                 assert_eq!(args.len(), 0);
-                Some(Ast::CloseBlock.into())
+                Some(Ast::CloseBlock.node(span_id))
             }
-            "goto" => Some(ControlFlowMarker::Goto(get_string_arg(args, b).unwrap()).into()),
-            "label" => Some(ControlFlowMarker::BlockStart(get_string_arg(args, b), vec![]).into()),
+            "goto" => Some(ControlFlowMarker::Goto(get_string_arg(args, b).unwrap()).node(span_id)),
+            "label" => {
+                Some(ControlFlowMarker::BlockStart(get_string_arg(args, b), vec![]).node(span_id))
+            }
             _ => None,
         }
     }
@@ -269,8 +278,9 @@ impl Parser {
         let (codemap, stmt, _dialect, _typecheck) = m.into_parts();
         let mut env = Environment::new(&codemap, file_id);
         let mut seq = b.prelude();
+        let span_id = env.span_id(codemap.full_span(), b);
         let ast: compile_core::AstNode = self.from_stmt(&stmt, &mut env, b)?;
-        let span_id = ast.span_id.clone();
+        //let span_id = ast.span_id.clone();
         seq.push(ast);
         Ok(Ast::Module(module_key, NB::seq(seq, span_id).into()).node(span_id))
     }
@@ -467,7 +477,8 @@ impl Parser {
                 ExprP::Dot(expr, name) => {
                     if let ExprP::Identifier(ident) = &expr.node {
                         if &ident.node.ident == "q" {
-                            if let Some(extra) = ExtraAst::from_name(&name, &[], b) {
+                            let span_id = env.span_id(item.span, b);
+                            if let Some(extra) = ExtraAst::from_name(&name, &[], span_id, b) {
                                 return Ok(Some(extra));
                             }
                         }
@@ -483,7 +494,8 @@ impl Parser {
                                 for arg in expr_args {
                                     args.push(self.from_argument(arg, env, b)?.into());
                                 }
-                                if let Some(extra) = ExtraAst::from_name(&name, &args, b) {
+                                let span_id = env.span_id(item.span, b);
+                                if let Some(extra) = ExtraAst::from_name(&name, &args, span_id, b) {
                                     return Ok(Some(extra));
                                 }
                             }
@@ -511,7 +523,7 @@ impl Parser {
                 if let ExprP::Identifier(ident) = &expr.node {
                     if &ident.node.ident == "q" {
                         // check for keywords
-                        if let Some(extra) = ExtraAst::from_name(&name, &[], b) {
+                        if let Some(extra) = ExtraAst::from_name(&name, &[], span_id, b) {
                             return Ok(extra);
                         }
 
@@ -523,14 +535,12 @@ impl Parser {
                         // didn't find anything matching
                         b.spans
                             .push_diagnostic(env.error(name.span, "Builtin not found"));
-                        let span_id = env.span_id(item.span, b);
                         Ok(Ast::Error.node(span_id))
                     } else {
                         b.spans.push_diagnostic(env.error(
                             name.span,
                             &format!("Variable not in scope: {}", ident.node.ident),
                         ));
-                        let span_id = env.span_id(item.span, b);
                         Ok(Ast::Error.node(span_id))
                     }
                 } else {
@@ -551,11 +561,9 @@ impl Parser {
                 let condition = &args.0;
                 let then_expr = &args.1;
                 let else_expr = &args.2;
-                //let (condition, then_expr, else_expr) = *args;
                 let condition = self.from_expr(&condition, env, b)?;
                 let then_expr = self.from_expr(&then_expr, env, b)?;
                 let else_expr = self.from_expr(&else_expr, env, b)?;
-                let span_id = env.span_id(item.span, b);
                 Ok(
                     Ast::Ternary(condition.into(), then_expr.into(), else_expr.into())
                         .node(span_id),
@@ -579,7 +587,6 @@ impl Parser {
                             Ok(ast)
                         } else {
                             b.spans.push_diagnostic(env.error(ident.span, "Not found"));
-                            let span_id = env.span_id(item.span, b);
                             Ok(Ast::Error.node(span_id))
                         }
                     }
@@ -595,7 +602,7 @@ impl Parser {
                                 Ok(ast)
                             } else if &ident.node.ident == "q" {
                                 // builtin namespace
-                                if let Some(extra) = ExtraAst::from_name(&name, &args, b) {
+                                if let Some(extra) = ExtraAst::from_name(&name, &args, span_id, b) {
                                     return Ok(extra);
                                 }
 
@@ -611,7 +618,6 @@ impl Parser {
                                 } else {
                                     b.spans
                                         .push_diagnostic(env.error(name.span, "Builtin not found"));
-                                    let span_id = env.span_id(item.span, b);
                                     Ok(Ast::Error.node(span_id))
                                 }
                             } else {
@@ -619,7 +625,6 @@ impl Parser {
                                     name.span,
                                     &format!("Variable not in scope: {}", ident.node.ident),
                                 ));
-                                let span_id = env.span_id(item.span, b);
                                 Ok(Ast::Error.node(span_id))
                             }
                         } else {
