@@ -1838,7 +1838,7 @@ impl Flatten {
                 let then_scope_id = fenv.new_scope(ScopeType::Region);
                 fenv.scope_succ(scope_id, then_scope_id);
                 let span_id = x.span_id;
-                let then_ty = AstType::Int; //b.types.r(then_ty_id);
+                //let then_ty = AstType::Int; //b.types.r(then_ty_id);
                 let then_ast = AstNode::make_yield(*x);
                 let then_block_id = self.new_block(None, then_scope_id);
                 self.block_succ(rc.block_id, then_block_id, Successor::Operation);
@@ -1855,7 +1855,8 @@ impl Flatten {
                     VarDefinitionSpace::Reg,
                 );
                 let _then_link_id = self.push_entry_with_link(entry);
-                self.flatten(then_block_id, then_ast, fenv, b)?;
+                let r = self.flatten(then_block_id, then_ast, fenv, b)?;
+                let then_ty = r.ty;
 
                 // ELSE
                 let span_id = y.span_id;
@@ -1876,7 +1877,9 @@ impl Flatten {
                     VarDefinitionSpace::Reg,
                 );
                 let _else_link_id = self.push_entry_with_link(entry);
-                self.flatten(else_block_id, else_ast, fenv, b)?;
+                let r = self.flatten(else_block_id, else_ast, fenv, b)?;
+                let else_ty = r.ty;
+                assert_eq!(else_ty, then_ty);
 
                 let code = LCode::Ternary(rc.link_id.unwrap().into(), then_block_id, else_block_id);
                 let entry = CodeEntry::new(
@@ -1888,12 +1891,7 @@ impl Flatten {
                     VarDefinitionSpace::Reg,
                 );
                 let v = self.push_entry_with_link(entry);
-                Ok(FlattenResult::new(
-                    rc.block_id,
-                    Some(v),
-                    AstType::Unit,
-                    false,
-                ))
+                Ok(FlattenResult::new(rc.block_id, Some(v), then_ty, false))
             }
 
             Ast::Yield(maybe_expr) => {

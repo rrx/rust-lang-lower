@@ -130,17 +130,6 @@ impl<'a> Environment<'a> {
         b.spans.get_span(self.file_id, begin.clone(), end.clone())
     }
 
-    pub fn push_loop(&mut self, name: StringKey) {
-        self.layers.last_mut().unwrap().loops.push(name);
-    }
-
-    pub fn pop_loop(&mut self) -> StringKey {
-        for layer in self.layers.iter_mut().rev() {
-            return layer.loops.pop().unwrap();
-        }
-        unreachable!()
-    }
-
     pub fn enter_func(&mut self) {
         self.in_func.push(true);
     }
@@ -280,7 +269,6 @@ impl Parser {
         let mut seq = b.prelude();
         let span_id = env.span_id(codemap.full_span(), b);
         let ast: compile_core::AstNode = self.from_stmt(&stmt, &mut env, b)?;
-        //let span_id = ast.span_id.clone();
         seq.push(ast);
         Ok(Ast::Module(module_key, NB::seq(seq, span_id).into()).node(span_id))
     }
