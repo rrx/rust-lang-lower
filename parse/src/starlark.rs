@@ -19,16 +19,6 @@ use flat::{Blockify, ICodeModule, NodeBuilder, NodeBuilder as NB, ValueId};
 
 use lower_mlir::Module;
 
-#[derive(Debug, Clone)]
-pub enum ExtraAst {
-    LoopStart(Option<StringKey>),
-    LoopBreak(Option<StringKey>),
-    LoopContinue(Option<StringKey>),
-    Label(StringKey),
-    Goto(StringKey),
-    BlockEnd,
-}
-
 fn get_string_arg(args: &[Argument], b: &mut NodeBuilder) -> Option<StringKey> {
     if args.len() == 0 {
         None
@@ -42,31 +32,22 @@ fn get_string_arg(args: &[Argument], b: &mut NodeBuilder) -> Option<StringKey> {
     }
 }
 
-impl ExtraAst {
-    pub fn is_extra(name: &str) -> bool {
-        name == "loop" || name == "loop_break" || name == "loop_continue" || name == "end"
-        //|| name == "goto" || name == "label"
-    }
+struct ExtraAst {}
 
+impl ExtraAst {
     pub fn from_name(name: &str, args: &[Argument], b: &mut NodeBuilder) -> Option<AstNode> {
         match name {
             "loop" => Some(ControlFlowMarker::LoopStart(get_string_arg(args, b)).into()),
-            //"loop" => Some(Self::LoopStart(get_string_arg(args, b))),
             "loop_break" => Some(ControlFlowMarker::LoopBreak(get_string_arg(args, b)).into()),
-            //"loop_break" => Some(Self::LoopBreak(get_string_arg(args, b))),
             "loop_continue" => {
                 Some(ControlFlowMarker::LoopContinue(get_string_arg(args, b)).into())
             }
-            //"loop_continue" => Some(Self::LoopContinue(get_string_arg(args, b))),
             "end" => {
                 assert_eq!(args.len(), 0);
                 Some(Ast::CloseBlock.into())
-                //Some(ExtraAst::BlockEnd)
             }
             "goto" => Some(ControlFlowMarker::Goto(get_string_arg(args, b).unwrap()).into()),
-            //"goto" => Some(Self::Goto(get_string_arg(args, b).unwrap())),
             "label" => Some(ControlFlowMarker::BlockStart(get_string_arg(args, b), vec![]).into()),
-            //"label" => Some(Self::Label(get_string_arg(args, b).unwrap())),
             _ => None,
         }
     }
@@ -361,7 +342,6 @@ impl Parser {
                     seq.push(ast);
                 }
                 Ok(NodeBuilder::seq(seq, span_id))
-                //StatementReader::build(self, stmts, span_id, env, b)
             }
 
             StmtP::Def(def) => {
@@ -473,37 +453,6 @@ impl Parser {
         }
     }
 
-    fn is_extra<P: syntax::ast::AstPayload>(&mut self, item: &syntax::ast::AstStmtP<P>) -> bool {
-        use syntax::ast::ExprP;
-        use syntax::ast::StmtP;
-
-        if let StmtP::Expression(expr) = &item.node {
-            match &expr.node {
-                ExprP::Dot(expr, name) => {
-                    if let ExprP::Identifier(ident) = &expr.node {
-                        if &ident.node.ident == "q" && ExtraAst::is_extra(&name) {
-                            return true;
-                        }
-                    } else {
-                        unimplemented!("{:?}", (expr, name))
-                    }
-                }
-                ExprP::Call(expr, _) => match &expr.node {
-                    ExprP::Dot(expr, name) => {
-                        if let ExprP::Identifier(ident) = &expr.node {
-                            if &ident.node.ident == "q" && ExtraAst::is_extra(&name) {
-                                return true;
-                            }
-                        }
-                    }
-                    _ => (),
-                },
-                _ => (),
-            };
-        }
-        false
-    }
-
     fn read_extra<P: syntax::ast::AstPayload>(
         &mut self,
         item: &syntax::ast::AstStmtP<P>,
@@ -517,7 +466,7 @@ impl Parser {
             match &expr.node {
                 ExprP::Dot(expr, name) => {
                     if let ExprP::Identifier(ident) = &expr.node {
-                        if &ident.node.ident == "q" && ExtraAst::is_extra(&name) {
+                        if &ident.node.ident == "q" {
                             if let Some(extra) = ExtraAst::from_name(&name, &[], b) {
                                 return Ok(Some(extra));
                             }
@@ -529,7 +478,7 @@ impl Parser {
                 ExprP::Call(expr, expr_args) => match &expr.node {
                     ExprP::Dot(expr, name) => {
                         if let ExprP::Identifier(ident) = &expr.node {
-                            if &ident.node.ident == "q" && ExtraAst::is_extra(&name) {
+                            if &ident.node.ident == "q" {
                                 let mut args = vec![];
                                 for arg in expr_args {
                                     args.push(self.from_argument(arg, env, b)?.into());
@@ -564,13 +513,6 @@ impl Parser {
                         // check for keywords
                         if let Some(extra) = ExtraAst::from_name(&name, &[], b) {
                             return Ok(extra);
-                            /*
-                            return match &extra.node {
-                                Ast::ControlFlowMarker(ControlFlowMarker::LoopBreak(_)) => Ok(extra),
-                                Ast::ControlFlowMarker(ControlFlowMarker::LoopContinue(_)) => Ok(extra),
-                                _ => unimplemented!("{:?}", extra),
-                            };
-                            */
                         }
 
                         // check builtin namespace
@@ -579,7 +521,6 @@ impl Parser {
                         }
 
                         // didn't find anything matching
-                        //assert!(false);
                         b.spans
                             .push_diagnostic(env.error(name.span, "Builtin not found"));
                         let span_id = env.span_id(item.span, b);
@@ -654,16 +595,8 @@ impl Parser {
                                 Ok(ast)
                             } else if &ident.node.ident == "q" {
                                 // builtin namespace
-                                if ExtraAst::is_extra(&name) {
-                                    let extra = ExtraAst::from_name(&name, &args, b).unwrap();
+                                if let Some(extra) = ExtraAst::from_name(&name, &args, b) {
                                     return Ok(extra);
-                                    /*
-                                    return match &extra.node {
-                                        Ast::ControlFlowMarker(ControlFlowMarker::LoopBreak(_)) => Ok(extra),
-                                        Ast::ControlFlowMarker(ControlFlowMarker::LoopContinue(_)) => Ok(extra),
-                                        _ => unimplemented!("{:?}", extra),
-                                    };
-                                        */
                                 }
 
                                 if let Some(ast) = b.build_builtin_from_name(&name, args, span_id) {
@@ -741,125 +674,6 @@ impl Parser {
             ArgumentP::Positional(expr) => Ok(self.from_expr(expr, env, b)?.into()),
             _ => unimplemented!(),
         }
-    }
-}
-
-struct StatementReader<P: syntax::ast::AstPayload> {
-    loop_names: Vec<StringKey>,
-    block_names: Vec<StringKey>,
-    stack: Vec<(StackType, Vec<AstNode>)>,
-    spans: Vec<SpanId>,
-    seq: Vec<AstNode>,
-    _p: std::marker::PhantomData<P>,
-}
-
-#[derive(Debug, PartialEq, Eq)]
-enum StackType {
-    Loop,
-    Block,
-}
-
-impl<P: syntax::ast::AstPayload> StatementReader<P> {
-    fn new() -> Self {
-        Self {
-            loop_names: vec![],
-            block_names: vec![],
-            stack: vec![],
-            spans: vec![],
-            seq: vec![],
-            _p: std::marker::PhantomData::default(),
-        }
-    }
-
-    fn start_loop(&mut self, key: StringKey, span_id: SpanId) {
-        self.loop_names.push(key);
-        self.stack.push((StackType::Loop, vec![]));
-        self.spans.push(span_id)
-    }
-
-    fn end_loop(&mut self) -> AstNode {
-        let (stack_type, seq) = self.stack.pop().unwrap();
-        assert_eq!(stack_type, StackType::Loop);
-        let span_id = self.spans.pop().unwrap();
-        let key = self.loop_names.pop().unwrap();
-        Ast::Loop(key, NB::seq(seq, span_id).into()).into()
-    }
-
-    fn start_block(&mut self, key: StringKey, span_id: SpanId) {
-        self.block_names.push(key);
-        self.stack.push((StackType::Block, vec![]));
-        self.spans.push(span_id)
-    }
-
-    fn end_block(&mut self) -> AstNode {
-        let (stack_type, seq) = self.stack.pop().unwrap();
-        assert_eq!(stack_type, StackType::Block);
-        let span_id = self.spans.pop().unwrap();
-        let key = self.block_names.pop().unwrap();
-        Ast::Block(key, vec![], NB::seq(seq, span_id).into()).into()
-    }
-
-    fn is_type(&self, t: StackType) -> bool {
-        self.stack
-            .last()
-            .as_ref()
-            .map(|v| v.0 == t)
-            .unwrap_or(false)
-    }
-
-    fn is_block(&self) -> bool {
-        self.is_type(StackType::Block)
-    }
-
-    fn is_loop(&self) -> bool {
-        self.is_type(StackType::Loop)
-    }
-
-    fn push_ast(&mut self, ast: AstNode) {
-        if self.stack.len() == 0 {
-            self.seq.push(ast);
-        } else {
-            self.stack.last_mut().unwrap().1.push(ast);
-        }
-    }
-
-    fn push_stmt(
-        &mut self,
-        stmt: &syntax::ast::AstStmtP<P>,
-        parse: &mut Parser,
-        env: &mut Environment,
-        b: &mut NodeBuilder,
-    ) -> Result<()> {
-        let extra = parse.read_extra(stmt, env, b)?;
-        if let Some(extra) = extra {
-            self.push_ast(extra);
-            return Ok(());
-        }
-
-        let ast = parse.from_stmt(stmt, env, b)?;
-        self.push_ast(ast);
-        Ok(())
-    }
-
-    fn build(
-        parse: &mut Parser,
-        stmts: &Vec<syntax::ast::AstStmtP<P>>,
-        span_id: SpanId,
-        env: &mut Environment,
-        b: &mut NodeBuilder,
-    ) -> Result<AstNode> {
-        let mut reader = Self::new();
-        for stmt in stmts {
-            reader.push_stmt(stmt, parse, env, b)?;
-        }
-
-        if reader.stack.len() > 0 {
-            let span = b.spans.lookup(span_id);
-            b.spans
-                .push_diagnostic(b.spans.error("Mismatched end loop", &span));
-        }
-
-        Ok(NB::seq(reader.seq.drain(..).collect(), span_id))
     }
 }
 
@@ -979,7 +793,6 @@ pub(crate) mod tests {
         let result = p.parse(filename, &mut b, true);
         b.spans.diagnostics_dump();
         let ast = result.unwrap();
-        //return;
 
         let result = p.blockify(ast, &mut b, true);
         let (blockify, module_block_id) = result.unwrap();
