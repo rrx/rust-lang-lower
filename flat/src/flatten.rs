@@ -1432,10 +1432,21 @@ impl Flatten {
 
             Ast::BinaryOp(op, x, y) => {
                 // expression, non-terminal
+                let x_span_id = x.span_id;
                 let rx = self.flatten(block_id, *x, fenv, b)?;
                 let ry = self.flatten(rx.block_id, *y, fenv, b)?;
                 let vx = rx.link_id.unwrap();
                 let vy = ry.link_id.unwrap();
+
+                let x_ty = rx.ty;
+                let y_ty = ry.ty;
+                if x_ty != y_ty {
+                    b.push_error(
+                        &format!("Binary op type mismatch: {}, {}", x_ty, y_ty),
+                        x_span_id,
+                    );
+                }
+
                 let code = LCode::Op2(op.node, vx.into(), vy.into());
                 let entry = self.get_entry(vx);
                 let ty = entry.ty.clone();
@@ -1837,7 +1848,7 @@ impl Flatten {
                 // THEN
                 let then_scope_id = fenv.new_scope(ScopeType::Region);
                 fenv.scope_succ(scope_id, then_scope_id);
-                let span_id = x.span_id;
+                let then_span_id = x.span_id;
                 //let then_ty = AstType::Int; //b.types.r(then_ty_id);
                 let then_ast = AstNode::make_yield(*x);
                 let then_block_id = self.new_block(None, then_scope_id);
@@ -1851,7 +1862,7 @@ impl Flatten {
                     code,
                     AstType::Unit,
                     Some(name),
-                    span_id,
+                    then_span_id,
                     VarDefinitionSpace::Reg,
                 );
                 let _then_link_id = self.push_entry_with_link(entry);
@@ -1859,7 +1870,7 @@ impl Flatten {
                 let then_ty = r.ty;
 
                 // ELSE
-                let span_id = y.span_id;
+                let else_span_id = y.span_id;
                 let else_scope_id = fenv.new_scope(ScopeType::Region);
                 fenv.scope_succ(scope_id, else_scope_id);
                 let else_ast = AstNode::make_yield(*y);
@@ -1873,13 +1884,19 @@ impl Flatten {
                     code,
                     AstType::Unit,
                     Some(name),
-                    span_id,
+                    else_span_id,
                     VarDefinitionSpace::Reg,
                 );
                 let _else_link_id = self.push_entry_with_link(entry);
                 let r = self.flatten(else_block_id, else_ast, fenv, b)?;
                 let else_ty = r.ty;
-                assert_eq!(else_ty, then_ty);
+                if else_ty != then_ty {
+                    b.push_error(
+                        &format!("Ternary branches type mismatch: {}, {}", then_ty, else_ty),
+                        then_span_id,
+                    );
+                }
+                //assert_eq!(else_ty, then_ty);
 
                 let code = LCode::Ternary(rc.link_id.unwrap().into(), then_block_id, else_block_id);
                 let entry = CodeEntry::new(
