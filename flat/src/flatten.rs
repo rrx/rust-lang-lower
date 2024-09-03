@@ -632,16 +632,39 @@ impl Flatten {
     }
 
     pub fn module(self, fenv: &FlattenEnvironment, b: &mut NB) -> FlattenModule {
+        // we want to output the blocks in a particular order
+        // we use DFS post order search on each function, to ensure that the leaf
+        // nodes show up last, such as the return block
+        // This seems to create a nice ordering.
         self.dump_blocks();
         let mut m = FlattenModule::new();
         m.link = self.link.clone();
 
-        let mut value_count = 0;
-        let mut dfs = petgraph::visit::Dfs::new(&self.gblocks, NodeIndex::new(0));
-        while let Some(index) = dfs.next(&self.gblocks) {
-            let block_id = BlockId(index.index() as u32);
-            let block = self.get_block(block_id);
+        let mut dfs = petgraph::visit::Dfs::new(&self.gblocks, BlockId(0).into());
+        let mut blocks = vec![BlockId(0).into()];
 
+        let mut entries = vec![];
+        while let Some(visited) = dfs.next(&self.gblocks) {
+            for edge in self.gblocks.edges(visited) {
+                if Successor::FunctionDeclaration == *edge.weight() {
+                    entries.push(edge.target());
+                }
+            }
+        }
+
+        let mut value_count = 0;
+        for index in entries {
+            let mut seq = vec![];
+            let mut dfs = petgraph::visit::DfsPostOrder::new(&self.gblocks, index);
+            while let Some(index) = dfs.next(&self.gblocks) {
+                seq.push(index);
+            }
+            blocks.extend(seq.into_iter().rev());
+        }
+
+        for index in blocks.into_iter() {
+            let block_id = index.into();
+            let block = self.get_block(block_id);
             for (index, link_id) in block.links.iter().enumerate() {
                 let entry = self.get_entry(*link_id).clone();
                 let v = ValueId(value_count);
