@@ -66,6 +66,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         let r = p.lower(&m, ValueId::new(0), &context, &mut module, &mut b);
         b.spans.diagnostics_dump();
+        m.block_graph2("cfg.mmd", &b)?;
         r?;
     }
 

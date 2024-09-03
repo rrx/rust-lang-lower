@@ -14,11 +14,13 @@ run:
 	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/test_recursive.star
 	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/fix.star
 	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/test.star || true
-	RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/goto.star || true
+	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/goto.star || true
+	RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/nested_loops.star || true
 	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/dup_func.star || true
 	dot out.dot -Tpng -o out.png
 	dot blocks.dot -Tpng -o blocks.png
 	dot scopes.dot -Tpng -o scopes.png
+	mmdc -o test.png -i cfg.mmd
 
 	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/test_cond.star
 

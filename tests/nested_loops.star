@@ -11,8 +11,9 @@ def main() -> int:
 
   # loop 2
   q.loop_break
+  return 1
   q.end
   q.loop_break
+  1
   q.end
   return 0
-  
