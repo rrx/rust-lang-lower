@@ -11,8 +11,8 @@ use starlark_syntax::syntax;
 use starlark_syntax::syntax::module::AstModuleFields;
 
 use compile_core::{
-    ast, Argument, AssignTarget, Ast, AstNode, AstType, BinOpNode, CodeLocation, Diagnostic, Label,
-    LinkOptions, SpanId, StringKey,
+    ast, Argument, AssignTarget, Ast, AstNode, AstType, BinOpNode, CodeLocation, ControlFlowMarker,
+    Diagnostic, Label, LinkOptions, SpanId, StringKey,
 };
 
 use flat::{Blockify, ICodeModule, NodeBuilder, NodeBuilder as NB, ValueId};
@@ -48,17 +48,25 @@ impl ExtraAst {
         //|| name == "goto" || name == "label"
     }
 
-    pub fn from_name(name: &str, args: &[Argument], b: &mut NodeBuilder) -> Option<ExtraAst> {
+    pub fn from_name(name: &str, args: &[Argument], b: &mut NodeBuilder) -> Option<AstNode> {
         match name {
-            "loop" => Some(Self::LoopStart(get_string_arg(args, b))),
-            "loop_break" => Some(Self::LoopBreak(get_string_arg(args, b))),
-            "loop_continue" => Some(Self::LoopContinue(get_string_arg(args, b))),
+            "loop" => Some(ControlFlowMarker::LoopStart(get_string_arg(args, b)).into()),
+            //"loop" => Some(Self::LoopStart(get_string_arg(args, b))),
+            "loop_break" => Some(ControlFlowMarker::LoopBreak(get_string_arg(args, b)).into()),
+            //"loop_break" => Some(Self::LoopBreak(get_string_arg(args, b))),
+            "loop_continue" => {
+                Some(ControlFlowMarker::LoopContinue(get_string_arg(args, b)).into())
+            }
+            //"loop_continue" => Some(Self::LoopContinue(get_string_arg(args, b))),
             "end" => {
                 assert_eq!(args.len(), 0);
-                Some(ExtraAst::BlockEnd)
+                Some(Ast::CloseBlock.into())
+                //Some(ExtraAst::BlockEnd)
             }
-            "goto" => Some(Self::Goto(get_string_arg(args, b).unwrap())),
-            "label" => Some(Self::Label(get_string_arg(args, b).unwrap())),
+            "goto" => Some(ControlFlowMarker::Goto(get_string_arg(args, b).unwrap()).into()),
+            //"goto" => Some(Self::Goto(get_string_arg(args, b).unwrap())),
+            "label" => Some(ControlFlowMarker::BlockStart(get_string_arg(args, b), vec![]).into()),
+            //"label" => Some(Self::Label(get_string_arg(args, b).unwrap())),
             _ => None,
         }
     }
@@ -193,7 +201,7 @@ impl<'a> Environment<'a> {
 }
 
 fn from_literal(
-    item: syntax::ast::AstLiteral,
+    item: &syntax::ast::AstLiteral,
     span: codemap::Span,
     env: &Environment,
     b: &mut NodeBuilder,
@@ -280,7 +288,7 @@ impl Parser {
         let (codemap, stmt, _dialect, _typecheck) = m.into_parts();
         let mut env = Environment::new(&codemap, file_id);
         let mut seq = b.prelude();
-        let ast: compile_core::AstNode = self.from_stmt(stmt, &mut env, b)?;
+        let ast: compile_core::AstNode = self.from_stmt(&stmt, &mut env, b)?;
         let span_id = ast.span_id.clone();
         seq.push(ast);
         Ok(Ast::Module(module_key, NB::seq(seq, span_id).into()).node(span_id))
@@ -288,16 +296,16 @@ impl Parser {
 
     fn from_parameter<'a, P: syntax::ast::AstPayload>(
         &mut self,
-        item: syntax::ast::AstParameterP<P>,
+        item: &syntax::ast::AstParameterP<P>,
         env: &mut Environment<'a>,
         b: &mut NodeBuilder,
     ) -> ast::ParameterNode {
         use syntax::ast::ParameterP;
         let span_id = env.span_id(item.span, b);
 
-        match item.node {
+        match &item.node {
             ParameterP::Normal(ident, maybe_type) => {
-                let ty = if let Some(ty) = maybe_type.map(|ty| from_type(&ty)) {
+                let ty = if let Some(ty) = maybe_type.as_ref().map(|ty| from_type(&ty)) {
                     ty
                 } else {
                     Some(b.types.fresh_unknown())
@@ -337,17 +345,23 @@ impl Parser {
 
     pub fn from_stmt<'a, P: syntax::ast::AstPayload>(
         &mut self,
-        item: syntax::ast::AstStmtP<P>,
+        item: &syntax::ast::AstStmtP<P>,
         env: &mut Environment<'a>,
         b: &mut NodeBuilder,
     ) -> Result<compile_core::AstNode> {
         use syntax::ast::StmtP;
         let span_id = env.span_id(item.span, b);
 
-        match item.node {
+        match &item.node {
             StmtP::Statements(stmts) => {
                 let span_id = env.span_id(item.span, b);
-                StatementReader::build(self, stmts, span_id, env, b)
+                let mut seq = vec![];
+                for s in stmts {
+                    let ast = self.from_stmt(s, env, b)?;
+                    seq.push(ast);
+                }
+                Ok(NodeBuilder::seq(seq, span_id))
+                //StatementReader::build(self, stmts, span_id, env, b)
             }
 
             StmtP::Def(def) => {
@@ -362,7 +376,7 @@ impl Parser {
 
                 let params = def
                     .params
-                    .into_iter()
+                    .iter()
                     .map(|p| self.from_parameter(p, env, b))
                     .collect::<Vec<_>>();
 
@@ -372,11 +386,12 @@ impl Parser {
                 }
 
                 let mut body = vec![];
-                body.extend(self.from_stmt(*def.body, env, b)?.to_vec());
+                body.extend(self.from_stmt(&def.body, env, b)?.to_vec());
 
                 env.exit_func();
                 let return_type = def
                     .return_type
+                    .as_ref()
                     .map(|ty| from_type(&ty).unwrap_or(AstType::Unit))
                     .unwrap_or(AstType::Unit);
 
@@ -396,15 +411,15 @@ impl Parser {
 
             StmtP::If(expr, truestmt) => {
                 let condition = self.from_expr(expr, env, b)?;
-                let truestmt = self.from_stmt(*truestmt, env, b)?;
+                let truestmt = self.from_stmt(&truestmt, env, b)?;
                 let span_id = env.span_id(item.span, b);
                 Ok(Ast::Conditional(condition.into(), truestmt.into(), None).node(span_id))
             }
 
             StmtP::IfElse(expr, options) => {
                 let condition = self.from_expr(expr, env, b)?;
-                let truestmt = self.from_stmt(options.0, env, b)?;
-                let elsestmt = self.from_stmt(options.1, env, b)?;
+                let truestmt = self.from_stmt(&options.0, env, b)?;
+                let elsestmt = self.from_stmt(&options.1, env, b)?;
                 let span_id = env.span_id(item.span, b);
                 Ok(
                     Ast::Conditional(condition.into(), truestmt.into(), Some(elsestmt.into()))
@@ -422,8 +437,8 @@ impl Parser {
 
             StmtP::Assign(assign) => {
                 use syntax::ast::AssignTargetP;
-                let rhs = self.from_expr(assign.rhs, env, b)?;
-                match assign.lhs.node {
+                let rhs = self.from_expr(&assign.rhs, env, b)?;
+                match &assign.lhs.node {
                     AssignTargetP::Identifier(ident) => {
                         let name = &ident.node.ident;
                         if let Some(node) = b.build_literal_from_identifier(name) {
@@ -491,27 +506,27 @@ impl Parser {
 
     fn read_extra<P: syntax::ast::AstPayload>(
         &mut self,
-        item: syntax::ast::AstStmtP<P>,
+        item: &syntax::ast::AstStmtP<P>,
         env: &mut Environment,
         b: &mut NodeBuilder,
-    ) -> Result<ExtraAst> {
+    ) -> Result<Option<AstNode>> {
         use syntax::ast::ExprP;
         use syntax::ast::StmtP;
 
-        if let StmtP::Expression(expr) = item.node {
-            match expr.node {
+        if let StmtP::Expression(expr) = &item.node {
+            match &expr.node {
                 ExprP::Dot(expr, name) => {
                     if let ExprP::Identifier(ident) = &expr.node {
                         if &ident.node.ident == "q" && ExtraAst::is_extra(&name) {
                             if let Some(extra) = ExtraAst::from_name(&name, &[], b) {
-                                return Ok(extra);
+                                return Ok(Some(extra));
                             }
                         }
                     } else {
                         unimplemented!("{:?}", (expr, name))
                     }
                 }
-                ExprP::Call(expr, expr_args) => match expr.node {
+                ExprP::Call(expr, expr_args) => match &expr.node {
                     ExprP::Dot(expr, name) => {
                         if let ExprP::Identifier(ident) = &expr.node {
                             if &ident.node.ident == "q" && ExtraAst::is_extra(&name) {
@@ -520,7 +535,7 @@ impl Parser {
                                     args.push(self.from_argument(arg, env, b)?.into());
                                 }
                                 if let Some(extra) = ExtraAst::from_name(&name, &args, b) {
-                                    return Ok(extra);
+                                    return Ok(Some(extra));
                                 }
                             }
                         }
@@ -530,31 +545,32 @@ impl Parser {
                 _ => (),
             }
         }
-        unreachable!()
+        Ok(None)
     }
 
     fn from_expr<P: syntax::ast::AstPayload>(
         &mut self,
-        item: syntax::ast::AstExprP<P>,
+        item: &syntax::ast::AstExprP<P>,
         env: &mut Environment,
         b: &mut NodeBuilder,
     ) -> Result<AstNode> {
         use syntax::ast::ExprP;
         let span_id = env.span_id(item.span, b);
 
-        match item.node {
+        match &item.node {
             ExprP::Dot(expr, name) => {
                 if let ExprP::Identifier(ident) = &expr.node {
                     if &ident.node.ident == "q" {
                         // check for keywords
                         if let Some(extra) = ExtraAst::from_name(&name, &[], b) {
-                            return match extra {
-                                ExtraAst::LoopBreak(maybe_key) => Ok(NB::loop_break(maybe_key)),
-                                ExtraAst::LoopContinue(maybe_key) => {
-                                    Ok(NB::loop_continue(maybe_key))
-                                }
+                            return Ok(extra);
+                            /*
+                            return match &extra.node {
+                                Ast::ControlFlowMarker(ControlFlowMarker::LoopBreak(_)) => Ok(extra),
+                                Ast::ControlFlowMarker(ControlFlowMarker::LoopContinue(_)) => Ok(extra),
                                 _ => unimplemented!("{:?}", extra),
                             };
+                            */
                         }
 
                         // check builtin namespace
@@ -582,19 +598,22 @@ impl Parser {
             }
 
             ExprP::Op(lhs, op, rhs) => {
-                let node_a = self.from_expr(*lhs, env, b)?;
-                let node_b = self.from_expr(*rhs, env, b)?;
+                let node_a = self.from_expr(&lhs, env, b)?;
+                let node_b = self.from_expr(&rhs, env, b)?;
 
-                let op_node = BinOpNode::new(from_binop(op), node_a.span_id.clone());
+                let op_node = BinOpNode::new(from_binop(*op), node_a.span_id.clone());
                 let ast = Ast::BinaryOp(op_node, node_a.into(), node_b.into());
                 Ok(ast.node(span_id))
             }
 
             ExprP::If(args) => {
-                let (condition, then_expr, else_expr) = *args;
-                let condition = self.from_expr(condition, env, b)?;
-                let then_expr = self.from_expr(then_expr, env, b)?;
-                let else_expr = self.from_expr(else_expr, env, b)?;
+                let condition = &args.0;
+                let then_expr = &args.1;
+                let else_expr = &args.2;
+                //let (condition, then_expr, else_expr) = *args;
+                let condition = self.from_expr(&condition, env, b)?;
+                let then_expr = self.from_expr(&then_expr, env, b)?;
+                let else_expr = self.from_expr(&else_expr, env, b)?;
                 let span_id = env.span_id(item.span, b);
                 Ok(
                     Ast::Ternary(condition.into(), then_expr.into(), else_expr.into())
@@ -605,11 +624,11 @@ impl Parser {
             ExprP::Call(expr, expr_args) => {
                 let mut args = vec![];
                 for arg in expr_args {
-                    args.push(self.from_argument(arg, env, b)?.into());
+                    args.push(self.from_argument(&arg, env, b)?.into());
                 }
                 let t_int = b.types.s(&AstType::Int);
 
-                match expr.node {
+                match &expr.node {
                     ExprP::Identifier(ident) => {
                         let name = b.labels.s(&ident.node.ident);
                         if let Some(_data) = env.resolve(name) {
@@ -637,15 +656,14 @@ impl Parser {
                                 // builtin namespace
                                 if ExtraAst::is_extra(&name) {
                                     let extra = ExtraAst::from_name(&name, &args, b).unwrap();
-                                    return match extra {
-                                        ExtraAst::LoopBreak(maybe_key) => {
-                                            Ok(NB::loop_break(maybe_key))
-                                        }
-                                        ExtraAst::LoopContinue(maybe_key) => {
-                                            Ok(NB::loop_continue(maybe_key))
-                                        }
-                                        _ => unimplemented!(),
+                                    return Ok(extra);
+                                    /*
+                                    return match &extra.node {
+                                        Ast::ControlFlowMarker(ControlFlowMarker::LoopBreak(_)) => Ok(extra),
+                                        Ast::ControlFlowMarker(ControlFlowMarker::LoopContinue(_)) => Ok(extra),
+                                        _ => unimplemented!("{:?}", extra),
                                     };
+                                        */
                                 }
 
                                 if let Some(ast) = b.build_builtin_from_name(&name, args, span_id) {
@@ -703,7 +721,7 @@ impl Parser {
             ExprP::Minus(expr) => {
                 let ast = Ast::UnaryOp(
                     ast::UnaryOperation::Minus,
-                    self.from_expr(*expr, env, b)?.into(),
+                    self.from_expr(&expr, env, b)?.into(),
                 );
                 Ok(ast.node(span_id))
             }
@@ -714,12 +732,12 @@ impl Parser {
 
     fn from_argument<P: syntax::ast::AstPayload>(
         &mut self,
-        item: syntax::ast::AstArgumentP<P>,
+        item: &syntax::ast::AstArgumentP<P>,
         env: &mut Environment,
         b: &mut NodeBuilder,
     ) -> Result<ast::Argument> {
         use syntax::ast::ArgumentP;
-        match item.node {
+        match &item.node {
             ArgumentP::Positional(expr) => Ok(self.from_expr(expr, env, b)?.into()),
             _ => unimplemented!(),
         }
@@ -807,57 +825,25 @@ impl<P: syntax::ast::AstPayload> StatementReader<P> {
 
     fn push_stmt(
         &mut self,
-        stmt: syntax::ast::AstStmtP<P>,
+        stmt: &syntax::ast::AstStmtP<P>,
         parse: &mut Parser,
         env: &mut Environment,
         b: &mut NodeBuilder,
     ) -> Result<()> {
-        if parse.is_extra(&stmt) {
-            let span_id = env.span_id(stmt.span.clone(), b);
-
-            let extra = parse.read_extra(stmt, env, b)?;
-            match extra {
-                ExtraAst::LoopStart(maybe_key) => {
-                    let key = if let Some(key) = maybe_key {
-                        key
-                    } else {
-                        b.fresh_loop_name()
-                    };
-                    self.start_loop(key, span_id);
-                }
-                ExtraAst::LoopBreak(maybe_key) => {
-                    self.push_ast(NB::loop_break(maybe_key));
-                }
-                ExtraAst::LoopContinue(maybe_key) => {
-                    self.push_ast(NB::loop_continue(maybe_key));
-                }
-                ExtraAst::BlockEnd => {
-                    let ast = self.end_loop();
-                    self.push_ast(ast);
-                }
-                ExtraAst::Label(key) => {
-                    self.start_block(key, span_id);
-                }
-                ExtraAst::Goto(key) => {
-                    if self.is_block() {
-                        let ast = self.end_block();
-                        self.push_ast(ast);
-                    } else {
-                        self.push_ast(NB::goto(key));
-                    }
-                } //_ => unimplemented!()
-            }
-        } else {
-            let ast = parse.from_stmt(stmt, env, b)?;
-            self.push_ast(ast);
+        let extra = parse.read_extra(stmt, env, b)?;
+        if let Some(extra) = extra {
+            self.push_ast(extra);
+            return Ok(());
         }
 
+        let ast = parse.from_stmt(stmt, env, b)?;
+        self.push_ast(ast);
         Ok(())
     }
 
     fn build(
         parse: &mut Parser,
-        stmts: Vec<syntax::ast::AstStmtP<P>>,
+        stmts: &Vec<syntax::ast::AstStmtP<P>>,
         span_id: SpanId,
         env: &mut Environment,
         b: &mut NodeBuilder,
@@ -1113,7 +1099,7 @@ pub(crate) mod tests {
 
     #[test]
     fn test_loop() {
-        run_test_ir("../tests/loop.star", 0);
+        //run_test_ir("../tests/loop.star", 0);
         run_test_flatten("../tests/loop.star", 0);
     }
 

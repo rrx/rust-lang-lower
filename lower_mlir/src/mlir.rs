@@ -328,7 +328,7 @@ impl<'c> Lower<'c> {
             .get(&target_value_id)
             .expect(&format!("missing block at {}", target_value_id));
         let arg_count = c.block.as_ref().unwrap().argument_count();
-        assert_eq!(arg_count, num_args as usize);
+        assert_eq!(arg_count, num_args as usize, "mismatch arity on jump");
 
         let location = Lower::get_location(blockify, v, self.context, b);
         let op = cf::br(&c.block.as_ref().unwrap(), &rs, location);

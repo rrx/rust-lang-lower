@@ -115,6 +115,9 @@ impl SequenceReader {
                     self.push_stack(ast);
                 }
             }
+            Ast::CloseBlock => {
+                self.close();
+            }
             Ast::Block(key, params, body) => {
                 let span_id = node.span_id;
                 if self.stack.len() > 0 {
@@ -144,7 +147,6 @@ impl SequenceReader {
         assert_eq!(stack_type, &StackType::Block);
         let seq = &self.stack.last().as_ref().unwrap().1;
         let is_term = seq.last().map_or_else(|| false, |ast| ast.node.is_term());
-        //println!("is_term: {}", is_term);
         if !is_term {
             self.push_stack(Ast::CloseBlock.into());
         }
@@ -174,6 +176,7 @@ impl SequenceReader {
         }
 
         self.close();
+        assert_eq!(self.stack.len(), 0);
         self.seq.drain(..).collect()
     }
 }

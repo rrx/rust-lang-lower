@@ -70,6 +70,15 @@ impl NodeBuilder {
                 out.push((depth, s, node.span_id));
             }
 
+            Ast::ControlFlowMarker(ControlFlowMarker::LoopStart(name)) => {
+                let s = if let Some(name) = name {
+                    format!("loop_start: {}", self.labels.r((*name).into()))
+                } else {
+                    "loop_start".into()
+                };
+                out.push((depth, s, node.span_id));
+            }
+
             Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(name, params)) => {
                 let s = if let Some(name) = name {
                     format!("block_start: {}", self.labels.r((*name).into()))
@@ -205,6 +214,27 @@ impl NodeBuilder {
                 self.dump_strings(body, out, depth + 1);
             }
 
+            Ast::ControlFlowMarker(ControlFlowMarker::LoopBreak(maybe_key)) => {
+                let s = format!(
+                    "loop_break({})",
+                    maybe_key
+                        .map(|key| self.labels.r(key.into()))
+                        .or(Some("".into()))
+                        .unwrap()
+                );
+                out.push((depth, s, node.span_id));
+            }
+
+            Ast::ControlFlowMarker(ControlFlowMarker::LoopContinue(maybe_key)) => {
+                let s = format!(
+                    "loop_continue({})",
+                    maybe_key
+                        .map(|key| self.labels.r(key.into()))
+                        .or(Some("".into()))
+                        .unwrap()
+                );
+                out.push((depth, s, node.span_id));
+            }
             Ast::Break(maybe_key, args) => {
                 let s = format!(
                     "break({})",
