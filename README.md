@@ -28,8 +28,8 @@ Currently the frontend uses a Rust based Starlark parser, which I have extended 
 - [x] basic C interop, with static functions
 - [x] nested blocked and loops
 - [x] static compilation with MLIR
-- [ ] structs, unions, and tagged unions
 - [ ] arrays
+- [ ] structs, unions, and tagged unions
 - [ ] module loading and import
 - [ ] flexible memory layout (C ABI, packed, struct of arrays (SOA))
 - [ ] pointers

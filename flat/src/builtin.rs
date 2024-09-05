@@ -1,4 +1,7 @@
-use compile_core::{AstType, BuiltinId, BuiltinPool};
+use crate::NodeBuilder;
+use compile_core::{
+    Argument, Ast, AstNode, AstType, BuiltinId, BuiltinPool, ControlFlowMarker, SpanId, StringKey,
+};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
@@ -8,15 +11,77 @@ pub enum Builtin {
     Import,
 }
 
-pub fn builtin_from_name(name: &str) -> Option<Builtin> {
-    if name == "check" {
-        Some(Builtin::Assert)
-    } else if name == "print" {
-        Some(Builtin::Print)
-    } else if name == "use" {
-        Some(Builtin::Import)
-    } else {
+fn get_string_arg(args: &[Argument], b: &mut NodeBuilder) -> Option<StringKey> {
+    if args.len() == 0 {
         None
+    } else if args.len() == 1 {
+        let Argument::Positional(arg) = args.get(0).unwrap();
+        let s = arg.try_string().unwrap();
+        let key = b.labels.s(&s);
+        Some(key)
+    } else {
+        unreachable!()
+    }
+}
+
+pub fn builtin_from_name(
+    name: &str,
+    args: &[Argument],
+    span_id: SpanId,
+    b: &mut NodeBuilder,
+) -> Option<AstNode> {
+    match name {
+        "loop" => Some(ControlFlowMarker::LoopStart(get_string_arg(args, b)).node(span_id)),
+        "loop_break" => Some(ControlFlowMarker::LoopBreak(get_string_arg(args, b)).node(span_id)),
+        "loop_continue" => {
+            Some(ControlFlowMarker::LoopContinue(get_string_arg(args, b)).node(span_id))
+        }
+        "end" => {
+            assert_eq!(args.len(), 0);
+            Some(Ast::CloseBlock.node(span_id))
+        }
+        "goto" => Some(ControlFlowMarker::Goto(get_string_arg(args, b).unwrap()).node(span_id)),
+        "label" => {
+            Some(ControlFlowMarker::BlockStart(get_string_arg(args, b), vec![]).node(span_id))
+        }
+        "static" => {
+            println!("args: {:?}", args);
+            let Argument::Positional(name_node) = args.get(0).unwrap();
+            let Argument::Positional(value) = args.get(1).unwrap().clone();
+            let name = b.labels.s(&name_node.try_string().unwrap());
+            Some(Ast::global(name, *value).node(span_id))
+        }
+        "ternary" => {
+            let Argument::Positional(condition) = args.get(0).unwrap();
+            let Argument::Positional(then_expr) = args.get(1).unwrap();
+            let Argument::Positional(else_expr) = args.get(2).unwrap();
+            Some(
+                Ast::Ternary(
+                    condition.clone().into(),
+                    then_expr.clone().into(),
+                    else_expr.clone().into(),
+                )
+                .node(span_id),
+            )
+        }
+
+        "check" | "print" | "use" => {
+            let bb = match name {
+                "check" => Builtin::Assert,
+                "print" => Builtin::Print,
+                "use" => Builtin::Import,
+                _ => unimplemented!("builtin not found: {}", name),
+            };
+            let arity = bb.arity();
+            if arity != args.len() {
+                b.push_error(
+                    &format!("Builtin Call arity mismatch: {}<=>{}", arity, args.len()),
+                    span_id,
+                );
+            }
+            Some(Ast::Builtin(b.builtins.get_id(bb), args.to_vec()).node(span_id))
+        }
+        _ => None,
     }
 }
 
@@ -56,7 +121,12 @@ impl BuiltinBuilder {
 
     pub fn get_enum(&self, id: BuiltinId) -> Builtin {
         let b = self.pool.resolve(&id);
-        builtin_from_name(&b.name).unwrap()
+        match b.name.as_str() {
+            "check" => Builtin::Assert,
+            "print" => Builtin::Print,
+            "use" => Builtin::Import,
+            _ => unimplemented!("{}", &b.name),
+        }
     }
 
     pub fn get_id(&self, b: Builtin) -> BuiltinId {

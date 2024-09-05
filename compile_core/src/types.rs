@@ -28,6 +28,7 @@ pub enum AstType {
     Unit,
     Never,
     Type,
+    Array(Box<AstType>, Vec<u64>),
     Sum(Vec<AstType>),
     Ptr(Box<AstType>),
     Tuple(Vec<AstType>),

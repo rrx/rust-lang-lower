@@ -56,29 +56,39 @@ pub enum LowerError {
 }
 
 impl<'c> Lower<'c> {
-    pub fn from_type(&self, ty: &AstType, b: &NodeBuilder) -> Type<'c> {
+    pub fn from_type(&self, ty: &AstType, b: &NodeBuilder) -> (Type<'c>, Vec<u64>) {
         match ty {
-            AstType::Ptr(_) => Type::index(self.context),
+            AstType::Ptr(_) => (Type::index(self.context), vec![]),
             AstType::Tuple(args) => {
                 let types = args
                     .iter()
-                    .map(|a| self.from_type(a, b))
+                    .map(|a| self.from_type(a, b).0)
                     .collect::<Vec<_>>();
-                melior::ir::r#type::TupleType::new(self.context, &types).into()
+                (
+                    melior::ir::r#type::TupleType::new(self.context, &types).into(),
+                    vec![],
+                )
             }
             AstType::Func(args, ret) => {
                 let inputs = args
                     .iter()
-                    .map(|a| self.from_type(a, b))
+                    .map(|a| self.from_type(a, b).0)
                     .collect::<Vec<_>>();
-                let results = vec![self.from_type(ret, b)];
-                melior::ir::r#type::FunctionType::new(self.context, &inputs, &results).into()
+                let results = vec![self.from_type(ret, b).0];
+                (
+                    melior::ir::r#type::FunctionType::new(self.context, &inputs, &results).into(),
+                    vec![],
+                )
             }
-            AstType::Int => IntegerType::new(self.context, 64).into(),
-            AstType::Index => Type::index(self.context),
-            AstType::Float => Type::float64(self.context),
-            AstType::Bool => IntegerType::new(self.context, 1).into(),
-            AstType::Unit => Type::none(self.context),
+            AstType::Array(ast_ty, dims) => {
+                let ty = self.from_type(ast_ty, b).0;
+                (ty, dims.clone())
+            }
+            AstType::Int => (IntegerType::new(self.context, 64).into(), vec![]),
+            AstType::Index => (Type::index(self.context), vec![]),
+            AstType::Float => (Type::float64(self.context), vec![]),
+            AstType::Bool => (IntegerType::new(self.context, 1).into(), vec![]),
+            AstType::Unit => (Type::none(self.context), vec![]),
 
             // Resolve Variable
             AstType::Variable(_) => {
@@ -101,7 +111,7 @@ impl<'c> Lower<'c> {
         let (ast_ty, op) = match expr.node {
             Ast::Literal(Literal::Bool(x)) => {
                 let ast_ty = AstType::Bool;
-                let ty = self.from_type(&ast_ty, b);
+                let ty = self.from_type(&ast_ty, b).0;
                 let v = if x { 1 } else { 0 };
                 let value = IntegerAttribute::new(v, ty).into();
                 let op = build_static(self.context, &global_name, ty, value, false, location);
@@ -110,7 +120,7 @@ impl<'c> Lower<'c> {
 
             Ast::Literal(Literal::Int(x)) => {
                 let ast_ty = AstType::Int;
-                let ty = self.from_type(&ast_ty, b);
+                let ty = self.from_type(&ast_ty, b).0;
                 let value = IntegerAttribute::new(x, ty).into();
                 let op = build_static(self.context, &global_name, ty, value, false, location);
                 (ast_ty, op)
@@ -118,7 +128,7 @@ impl<'c> Lower<'c> {
 
             Ast::Literal(Literal::Index(x)) => {
                 let ast_ty = AstType::Int;
-                let ty = self.from_type(&ast_ty, b);
+                let ty = self.from_type(&ast_ty, b).0;
                 let value = IntegerAttribute::new(x as i64, ty).into();
                 let op = build_static(self.context, &global_name, ty, value, false, location);
                 (ast_ty, op)
@@ -126,7 +136,7 @@ impl<'c> Lower<'c> {
 
             Ast::Literal(Literal::Float(x)) => {
                 let ast_ty = AstType::Float;
-                let ty = self.from_type(&ast_ty, b);
+                let ty = self.from_type(&ast_ty, b).0;
                 let value = FloatAttribute::new(self.context, x, ty).into();
                 let op = build_static(self.context, &global_name, ty, value, false, location);
                 (ast_ty, op)
@@ -146,7 +156,7 @@ impl<'c> Lower<'c> {
         match lit {
             Literal::Bool(x) => {
                 let ast_ty = AstType::Bool;
-                let ty = self.from_type(&ast_ty, b);
+                let ty = self.from_type(&ast_ty, b).0;
                 let v = if *x { 1 } else { 0 };
                 let value = IntegerAttribute::new(v, ty).into();
                 (value, ast_ty)
@@ -154,21 +164,21 @@ impl<'c> Lower<'c> {
 
             Literal::Int(x) => {
                 let ast_ty = AstType::Int;
-                let ty = self.from_type(&ast_ty, b);
+                let ty = self.from_type(&ast_ty, b).0;
                 let value = IntegerAttribute::new(*x, ty).into();
                 (value, ast_ty)
             }
 
             Literal::Index(x) => {
                 let ast_ty = AstType::Int;
-                let ty = self.from_type(&ast_ty, b);
+                let ty = self.from_type(&ast_ty, b).0;
                 let value = IntegerAttribute::new(*x as i64, ty).into();
                 (value, ast_ty)
             }
 
             Literal::Float(x) => {
                 let ast_ty = AstType::Float;
-                let ty = self.from_type(&ast_ty, b);
+                let ty = self.from_type(&ast_ty, b).0;
                 let value = FloatAttribute::new(self.context, *x, ty).into();
                 (value, ast_ty)
             }

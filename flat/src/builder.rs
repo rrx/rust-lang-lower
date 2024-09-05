@@ -232,12 +232,8 @@ impl NodeBuilder {
         args: Vec<Argument>,
         span_id: SpanId,
     ) -> Option<AstNode> {
-        if let Some(b) = crate::builtin_from_name(name) {
-            assert_eq!(b.arity(), args.len());
-            let id = self.builtins.get_id(b);
-            Some(Ast::Builtin(id, args).node(span_id))
-        } else if let Some(ast) = ast_from_name(name, args, self) {
-            Some(ast.node(span_id))
+        if let Some(node) = crate::builtin_from_name(name, &args, span_id, self) {
+            Some(node)
         } else {
             None
         }
@@ -613,6 +609,7 @@ pub(crate) mod tests {
     }
 }
 
+/*
 pub fn ast_from_name(name: &str, mut args: Vec<Argument>, b: &mut NodeBuilder) -> Option<Ast> {
     if name == "goto" {
         let rest = args
@@ -668,3 +665,4 @@ pub fn ast_from_name(name: &str, mut args: Vec<Argument>, b: &mut NodeBuilder) -
         None
     }
 }
+*/

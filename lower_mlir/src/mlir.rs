@@ -267,14 +267,16 @@ impl<'c> Lower<'c> {
             let location = Lower::get_location(blockify, current, context, b);
 
             let next = blockify.get_next(current).unwrap();
-            let ty = self.from_type(&blockify.get_type(next.into()), b);
+            let (ty, dims) = self.from_type(&blockify.get_type(next.into()), b);
+            assert_eq!(dims.len(), 0);
             current = next;
             out.push((ty, location));
         }
         for _ in 0..num_kwargs {
             let location = Lower::get_location(blockify, current, context, b);
             let next = blockify.get_next(current).unwrap();
-            let ty = self.from_type(&blockify.get_type(next.into()), b);
+            let (ty, dims) = self.from_type(&blockify.get_type(next.into()), b);
+            assert_eq!(dims.len(), 0);
             current = next;
             out.push((ty, location));
         }
@@ -378,7 +380,8 @@ impl<'c> Lower<'c> {
 
                     // declare
                     let integer_type = IntegerType::new(self.context, 64).into();
-                    let ty = self.from_type(&ast_ty, b);
+                    let (ty, dims) = self.from_type(&ast_ty, b);
+                    assert_eq!(dims.len(), 0);
                     let alignment = IntegerAttribute::new(8, integer_type);
                     let memspace = IntegerAttribute::new(0, integer_type).into();
                     let constant = false;
@@ -395,7 +398,7 @@ impl<'c> Lower<'c> {
                         location,
                     );
 
-                    let ty = self.from_type(&ast_ty, b);
+                    //let ty = self.from_type(&ast_ty, b);
                     let attribute = DenseElementsAttribute::new(
                         RankedTensorType::new(&[], ty, None).into(),
                         &[value],
@@ -499,7 +502,8 @@ impl<'c> Lower<'c> {
                 let f = FlatSymbolRefAttribute::new(self.context, &name);
 
                 if let AstType::Func(_func_arg_types, ret) = &ty {
-                    let ret_type = self.from_type(&ret, b);
+                    let (ret_type, dims) = self.from_type(&ret, b);
+                    assert_eq!(dims.len(), 0);
                     // handle call arguments
 
                     let values = blockify.get_previous_values(v, *args as usize);
@@ -529,8 +533,8 @@ impl<'c> Lower<'c> {
             LCode::Declare => {
                 let block_id = blockify.get_entry_id(v);
                 let ast_ty = blockify.get_type(v.into());
-                let ty = self.from_type(&ast_ty, b);
-                let memref_ty = MemRefType::new(ty.into(), &[], None, None);
+                let (ty, dims) = self.from_type(&ast_ty, b);
+                let memref_ty = MemRefType::new(ty.into(), &dims, None, None);
                 let op = memref::alloca(self.context, memref_ty, &[], &[], None, location);
                 let c = blocks.blocks.get_mut(&block_id).unwrap();
                 let index = c.push(op);
@@ -547,7 +551,8 @@ impl<'c> Lower<'c> {
                     let rhs_ty = blockify.get_type(*v_value);
                     assert_eq!(lhs_ty, rhs_ty);
 
-                    let lower_ty = self.from_type(&lhs_ty, b);
+                    let (lower_ty, dims) = self.from_type(&lhs_ty, b);
+                    assert_eq!(dims.len(), 0);
                     let memref_ty = MemRefType::new(lower_ty, &[], None, None);
                     let static_name = b.labels.r(name);
                     // TODO: FIXME
@@ -585,7 +590,8 @@ impl<'c> Lower<'c> {
                 let v_decl = blockify.resolve_declaration(*v_decl).unwrap();
                 if blockify.is_in_static_scope(v_decl) {
                     let ast_ty = blockify.get_type(v.into());
-                    let lower_ty = self.from_type(&ast_ty, b);
+                    let (lower_ty, dims) = self.from_type(&ast_ty, b);
+                    assert_eq!(dims.len(), 0);
                     let memref_ty = MemRefType::new(lower_ty, &[], None, None);
                     // TODO: FIXME
                     let decl_name = blockify.get_name(v_decl).unwrap();
@@ -615,7 +621,8 @@ impl<'c> Lower<'c> {
                 let block_id = blockify.get_entry_id(v);
                 let x_index = self.resolve_value(blockify, (*x).into()).unwrap();
                 let ast_ty = blockify.get_type((*x).into());
-                let ty = self.from_type(&ast_ty, b);
+                let (ty, dims) = self.from_type(&ast_ty, b);
+                assert_eq!(dims.len(), 0);
 
                 match op {
                     UnaryOperation::Minus => {
@@ -943,7 +950,9 @@ impl<'c> Lower<'c> {
             )];
 
             for ty in params {
-                type_list.push(self.from_type(&ty, b));
+                let (p_ty, dims) = self.from_type(&ty, b);
+                assert_eq!(dims.len(), 0);
+                type_list.push(p_ty);
                 ast_types.push(ty.clone());
             }
 
@@ -952,7 +961,9 @@ impl<'c> Lower<'c> {
             let ret_type = if let AstType::Unit = *ast_ret_type {
                 vec![]
             } else {
-                vec![self.from_type(&ast_ret_type, b)]
+                let (ty, dims) = self.from_type(&ast_ret_type, b);
+                assert_eq!(dims.len(), 0);
+                vec![ty]
             };
 
             let func_type = FunctionType::new(self.context, &type_list, &ret_type);

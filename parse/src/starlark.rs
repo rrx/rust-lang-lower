@@ -11,29 +11,17 @@ use starlark_syntax::syntax;
 use starlark_syntax::syntax::module::AstModuleFields;
 
 use compile_core::{
-    ast, Argument, AssignTarget, Ast, AstNode, AstType, BinOpNode, CodeLocation, ControlFlowMarker,
-    Diagnostic, Label, LinkOptions, SpanId, StringKey,
+    ast, AssignTarget, Ast, AstNode, AstType, BinOpNode, CodeLocation, Diagnostic, Label,
+    LinkOptions, SpanId, StringKey,
 };
 
 use flat::{Blockify, ICodeModule, NodeBuilder, NodeBuilder as NB, ValueId};
 
 use lower_mlir::Module;
 
-fn get_string_arg(args: &[Argument], b: &mut NodeBuilder) -> Option<StringKey> {
-    if args.len() == 0 {
-        None
-    } else if args.len() == 1 {
-        let Argument::Positional(arg) = args.get(0).unwrap();
-        let s = arg.try_string().unwrap();
-        let key = b.labels.s(&s);
-        Some(key)
-    } else {
-        unreachable!()
-    }
-}
+//struct ExtraAst {}
 
-struct ExtraAst {}
-
+/*
 impl ExtraAst {
     pub fn from_name(
         name: &str,
@@ -61,6 +49,7 @@ impl ExtraAst {
         }
     }
 }
+*/
 
 #[derive(Debug, Clone)]
 pub enum DataType {
@@ -264,6 +253,7 @@ impl Parser {
             }
             None => syntax::AstModule::parse_file(&path, &dialect)?,
         };
+        println!("{:?}", m);
         let (codemap, stmt, _dialect, _typecheck) = m.into_parts();
         let mut env = Environment::new(&codemap, file_id);
         let mut seq = b.prelude();
@@ -466,7 +456,7 @@ impl Parser {
                     if let ExprP::Identifier(ident) = &expr.node {
                         if &ident.node.ident == "q" {
                             let span_id = env.span_id(item.span, b);
-                            if let Some(extra) = ExtraAst::from_name(&name, &[], span_id, b) {
+                            if let Some(extra) = b.build_builtin_from_name(&name, vec![], span_id) {
                                 return Ok(Some(extra));
                             }
                         }
@@ -483,7 +473,8 @@ impl Parser {
                                     args.push(self.from_argument(arg, env, b)?.into());
                                 }
                                 let span_id = env.span_id(item.span, b);
-                                if let Some(extra) = ExtraAst::from_name(&name, &args, span_id, b) {
+                                if let Some(extra) = b.build_builtin_from_name(&name, args, span_id)
+                                {
                                     return Ok(Some(extra));
                                 }
                             }
@@ -510,11 +501,6 @@ impl Parser {
             ExprP::Dot(expr, name) => {
                 if let ExprP::Identifier(ident) = &expr.node {
                     if &ident.node.ident == "q" {
-                        // check for keywords
-                        if let Some(extra) = ExtraAst::from_name(&name, &[], span_id, b) {
-                            return Ok(extra);
-                        }
-
                         // check builtin namespace
                         if let Some(ast) = b.build_builtin_from_name(&name, vec![], span_id) {
                             return Ok(ast);
@@ -590,10 +576,6 @@ impl Parser {
                                 Ok(ast)
                             } else if &ident.node.ident == "q" {
                                 // builtin namespace
-                                if let Some(extra) = ExtraAst::from_name(&name, &args, span_id, b) {
-                                    return Ok(extra);
-                                }
-
                                 if let Some(ast) = b.build_builtin_from_name(&name, args, span_id) {
                                     // define things appropriately
                                     match ast.node {
