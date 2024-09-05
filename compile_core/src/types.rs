@@ -45,6 +45,13 @@ impl std::fmt::Display for AstType {
 }
 
 impl AstType {
+    pub fn from_str(s: &str) -> Option<AstType> {
+        match s {
+            "int" => Some(AstType::Int),
+            _ => None,
+        }
+    }
+
     pub fn unknown(id: u32) -> Self {
         Self::Variable(id)
     }

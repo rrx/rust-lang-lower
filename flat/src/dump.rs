@@ -1,5 +1,5 @@
 use crate::{block_format::LCodeIterator, Blockify, Environment, ICodeModule, NodeBuilder};
-use compile_core::{Argument, AssignTarget, Ast, AstNode, ControlFlowMarker, SpanId};
+use compile_core::{Argument, AssignTarget, Ast, AstNode, ControlFlowMarker, Literal, SpanId};
 
 use tabled::{
     settings::{object::Rows, Border, Style},
@@ -58,7 +58,8 @@ impl NodeBuilder {
             }
 
             Ast::Builtin(bi, args) => {
-                let s = format!("builtin({:?},{})", bi, span_id);
+                let bb = self.builtins.pool.resolve(bi);
+                let s = format!("builtin({})", bb.name);
                 out.push((depth, s, node.span_id));
                 for a in args {
                     let Argument::Positional(expr) = a;
@@ -66,8 +67,13 @@ impl NodeBuilder {
                 }
             }
 
+            Ast::Literal(Literal::String(s)) => {
+                let s = format!("{}", s);
+                out.push((depth, s, node.span_id));
+            }
+
             Ast::Literal(lit) => {
-                let s = format!("({:?}[{}])", lit, span_id);
+                let s = format!("({:?})", lit);
                 out.push((depth, s, node.span_id));
             }
 
@@ -139,7 +145,7 @@ impl NodeBuilder {
             }
 
             Ast::Assign(target, value) => {
-                let s = format!("assign({})", node.span_id);
+                let s = format!("assign:");
                 out.push((depth, s, node.span_id));
                 depth += 1;
                 match target {
@@ -295,6 +301,17 @@ impl NodeBuilder {
                 if let Some(result) = body {
                     self.dump_strings(result, out, depth);
                 }
+            }
+
+            Ast::Error => {
+                let s = format!("error");
+                out.push((depth, s.into(), node.span_id));
+            }
+
+            Ast::Array(type_id, dims) => {
+                let ty = self.types.r(*type_id);
+                let s = format!("array({}, {:?})", ty, dims);
+                out.push((depth, s, node.span_id));
             }
 
             _ => unimplemented!("{:?}", node),

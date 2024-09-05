@@ -2116,6 +2116,11 @@ impl Flatten {
                 }
             }
 
+            Ast::Array(type_id, dims) => {
+                b.push_error(&format!("AST Error"), node.span_id);
+                Err(Error::new(BlockifyError::Invalid))
+            }
+
             /*
             Ast::Lambda(_def) => {
             }

@@ -19,38 +19,6 @@ use flat::{Blockify, ICodeModule, NodeBuilder, NodeBuilder as NB, ValueId};
 
 use lower_mlir::Module;
 
-//struct ExtraAst {}
-
-/*
-impl ExtraAst {
-    pub fn from_name(
-        name: &str,
-        args: &[Argument],
-        span_id: SpanId,
-        b: &mut NodeBuilder,
-    ) -> Option<AstNode> {
-        match name {
-            "loop" => Some(ControlFlowMarker::LoopStart(get_string_arg(args, b)).node(span_id)),
-            "loop_break" => {
-                Some(ControlFlowMarker::LoopBreak(get_string_arg(args, b)).node(span_id))
-            }
-            "loop_continue" => {
-                Some(ControlFlowMarker::LoopContinue(get_string_arg(args, b)).node(span_id))
-            }
-            "end" => {
-                assert_eq!(args.len(), 0);
-                Some(Ast::CloseBlock.node(span_id))
-            }
-            "goto" => Some(ControlFlowMarker::Goto(get_string_arg(args, b).unwrap()).node(span_id)),
-            "label" => {
-                Some(ControlFlowMarker::BlockStart(get_string_arg(args, b), vec![]).node(span_id))
-            }
-            _ => None,
-        }
-    }
-}
-*/
-
 #[derive(Debug, Clone)]
 pub enum DataType {
     Global,
@@ -253,7 +221,7 @@ impl Parser {
             }
             None => syntax::AstModule::parse_file(&path, &dialect)?,
         };
-        println!("{:?}", m);
+        println!("m: {:?}", m);
         let (codemap, stmt, _dialect, _typecheck) = m.into_parts();
         let mut env = Environment::new(&codemap, file_id);
         let mut seq = b.prelude();
@@ -612,16 +580,10 @@ impl Parser {
 
                 let name = b.labels.s(&ident.node.ident);
                 let span_id = env.span_id(item.span, b);
-                if let Some(_data) = env.resolve(name) {
-                    let ast = Ast::Identifier(name).node(span_id);
-                    Ok(ast)
-                } else {
-                    b.spans.push_diagnostic(env.error(
-                        ident.span,
-                        &format!("Variable not in scope: {}", ident.node.ident),
-                    ));
-                    Ok(Ast::Error.node(span_id))
-                }
+
+                // no need to check if it's in scope, we just pass along
+                // We check scope in the target AST
+                Ok(Ast::Identifier(name).node(span_id))
             }
 
             ExprP::Literal(lit) => Ok(from_literal(lit, item.span, env, b)),

@@ -23,4 +23,6 @@ criterion = "0.3"
 test-log = "^0.2"
 env_logger = "^0.10"
 
-
+[profile.dev]
+debug = 0
+strip = "debuginfo"

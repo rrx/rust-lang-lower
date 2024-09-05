@@ -176,6 +176,8 @@ pub enum Ast {
     UnaryOp(UnaryOperation, Box<AstNode>),
     // func, args, return type
     Call(Box<AstNode>, Vec<Argument>, TypeId),
+    // array(element type, dimensions), empty dim is the same as scalar
+    Array(TypeId, Vec<u64>),
     Identifier(StringKey),
     Literal(Literal),
     Sequence(Vec<AstNode>),
@@ -196,6 +198,7 @@ pub enum Ast {
     Break(Option<StringKey>, Vec<AstNode>),
     Continue(Option<StringKey>, Vec<AstNode>),
     Block(StringKey, Vec<ParameterNode>, Box<AstNode>),
+    Type(TypeId),
     Noop,
     Error,
 }

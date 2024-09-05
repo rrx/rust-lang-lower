@@ -1,8 +1,9 @@
 use crate::NodeBuilder;
 use compile_core::{
-    Argument, Ast, AstNode, AstType, BuiltinId, BuiltinPool, ControlFlowMarker, SpanId, StringKey,
+    Argument, Ast, AstNode, AstType, BuiltinId, BuiltinPool, ControlFlowMarker, Literal, SpanId,
+    StringKey,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 #[derive(Debug, Clone)]
 pub enum Builtin {
@@ -43,6 +44,35 @@ pub fn builtin_from_name(
         "goto" => Some(ControlFlowMarker::Goto(get_string_arg(args, b).unwrap()).node(span_id)),
         "label" => {
             Some(ControlFlowMarker::BlockStart(get_string_arg(args, b), vec![]).node(span_id))
+        }
+        "array" => {
+            let mut args = args.iter().collect::<VecDeque<_>>();
+            let Argument::Positional(ty_node) = args.pop_front().unwrap();
+            b.dump_ast(ty_node);
+            let type_id = match &ty_node.node {
+                Ast::Type(type_id) => *type_id,
+                Ast::Identifier(key) => {
+                    let s = b.labels.r(key.into());
+                    if let Some(ty) = AstType::from_str(&s) {
+                        b.types.s(&ty)
+                    } else {
+                        unimplemented!("{}", &s)
+                    }
+                }
+                _ => unimplemented!("{:?}", ty_node),
+            };
+            let dims = args
+                .into_iter()
+                .map(|arg| {
+                    let Argument::Positional(value) = arg;
+                    match &value.node {
+                        Ast::Literal(Literal::Int(x)) => *x as u64,
+                        Ast::Literal(Literal::Index(x)) => *x as u64,
+                        _ => unimplemented!(),
+                    }
+                })
+                .collect::<Vec<_>>();
+            Some(Ast::Array(type_id, dims).into())
         }
         "static" => {
             println!("args: {:?}", args);
