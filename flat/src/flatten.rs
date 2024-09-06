@@ -1316,7 +1316,7 @@ impl Flatten {
                         );
                         let link_id = self.push_entry_with_link(entry);
 
-                        let code = LCode::Link(link_id);
+                        let code = LCode::Value(link_id.into());
                         let entry = CodeEntry::new(
                             block_id,
                             code,
@@ -2135,7 +2135,6 @@ impl Flatten {
                     current_block_id = r.block_id;
                     link_ids.push(r.link_id.unwrap());
                 }
-                //LCode::
                 b.push_error(&format!("AST Error"), node.span_id);
                 Err(Error::new(BlockifyError::Invalid))
             }

@@ -6,17 +6,7 @@ use compile_core::{
 };
 
 use crate::{
-    BlockId,
-    CodeOffset,
-    Environment,
-    LinkId,
-    Node,
-    NodeBuilder,
-    //NodeBuilder as NB,
-    StringLabel,
-    Successor,
-    ValueId,
-    CFG,
+    BlockId, CodeOffset, Environment, Node, NodeBuilder, StringLabel, Successor, ValueId, CFG,
 };
 
 #[derive(Error, Debug)]
@@ -41,7 +31,6 @@ pub enum LCode {
     DeclareFunction(Option<BlockId>), // optional entry block
     Value(CodeOffset),
     CallValue(CodeOffset),
-    Link(LinkId),
     Arg(u8), // get the value of a positional arg
     Const(Literal),
     Op1(UnaryOperation),
@@ -143,10 +132,12 @@ pub trait ICodeModule {
                 continue;
             }
 
+            /*
             if let LCode::Link(next_link_id) = code {
                 current = (*next_link_id).into();
                 continue;
             }
+            */
 
             return Some(current);
         }
@@ -162,18 +153,6 @@ pub trait ICodeModule {
                 values.push_front((*value_id).into());
                 continue;
             }
-            /*
-            if let LCode::Value(value_id) = code {
-                values.push_front((*value_id).into());
-                continue;
-            }
-            if let LCode::Link(link_id) = code {
-                values.push_front((*link_id).into());
-                //let v = (*link_id).into();
-                //values.push(self.resolve_code_offset(v));
-                continue;
-            }
-            */
             break;
         }
         values.into()
@@ -235,9 +214,6 @@ pub trait ICodeModule {
                 }
             }
 
-            //LCode::Goto(block_id) => {
-            //format!("goto({})", b.labels.r((*block_id).into()))
-            //}
             LCode::Jump(value_id) => {
                 let values = self.get_previous_values(v);
                 format!("jump({:?}, {})", value_id, values.len())

@@ -238,12 +238,7 @@ impl<'c> Lower<'c> {
                     current = (*next_value_id).into();
                     continue;
                 }
-                if let LCode::Link(next_link_id) = code {
-                    let offset = (*next_link_id).into();
-                    current = offset;
-                } else {
-                    break;
-                }
+                break;
             }
             let v = blockify.resolve_code_offset(current);
             self.index.get(&v).cloned()
@@ -784,7 +779,6 @@ impl<'c> Lower<'c> {
 
             LCode::Value(_) => (),
             LCode::CallValue(_) => (),
-            LCode::Link(_) => (),
             LCode::Noop => (),
 
             LCode::Builtin(id, num_args, _num_kwargs) => {
