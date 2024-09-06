@@ -50,7 +50,7 @@ pub struct LoopLayer {
 
 #[derive(Debug, Clone)]
 pub enum LCode {
-    Label(u8, u8), // number of positional arguments, number of named arguments
+    Label, // number of positional arguments, number of named arguments
     Noop,
     Declare,
     DeclareFunction(Option<BlockId>), // optional entry block
@@ -64,7 +64,7 @@ pub enum LCode {
     Load(CodeOffset),
     Store(CodeOffset, CodeOffset), // memref, value to store
     Return,                        // return values
-    Yield,                     // yield values
+    Yield,                         // yield values
 
     //jump to named block, with 0 args
     //Goto(StringKey),
@@ -81,7 +81,7 @@ pub enum LCode {
 impl LCode {
     pub fn is_start(&self) -> bool {
         match self {
-            Self::Label(_, _) => true,
+            Self::Label => true,
             _ => false,
         }
     }
@@ -271,6 +271,22 @@ pub trait ICodeModule {
     fn get_entry_id_from_block_id(&self, block_id: BlockId) -> ValueId;
     fn dump(&self, b: &NodeBuilder);
 
+    fn get_label_args(&self, v: ValueId) -> Vec<AstType> {
+        let mut current = v;
+        let mut out = vec![];
+        loop {
+            current = self.get_next(current).unwrap();
+            let code = self.get_code(current);
+            if let LCode::Arg(_) = code {
+                let ty = self.get_type(current.into());
+                out.push(ty);
+            } else {
+                break;
+            }
+        }
+        out
+    }
+
     fn code_to_string(&self, v: ValueId, b: &NodeBuilder) -> String {
         let code = self.get_code(v);
         match code {
@@ -288,11 +304,12 @@ pub trait ICodeModule {
                 }
             }
 
-            LCode::Label(args, kwargs) => {
+            LCode::Label => {
+                let args = self.get_label_args(v);
                 if let Some(key) = self.get_name(v.into()) {
-                    format!("label({}, {}, {})", b.labels.r(key), args, kwargs,)
+                    format!("label({},{})", b.labels.r(key), args.len())
                 } else {
-                    format!("label(-, {}, {})", args, kwargs,)
+                    format!("label(_,{})", args.len())
                 }
             }
 
@@ -647,7 +664,7 @@ impl Blockify {
         b: &mut NodeBuilder,
     ) -> ValueId {
         self.env.enter_block(block_id);
-        let code = LCode::Label(args.len() as u8, kwargs.len() as u8);
+        let code = LCode::Label;
         let v_block = self._push_code(
             code,
             span_id,

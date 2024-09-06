@@ -257,12 +257,25 @@ impl<'c> Lower<'c> {
         blockify: &dyn ICodeModule,
         context: &'c Context,
         v: ValueId,
-        num_args: usize,
-        num_kwargs: usize,
         b: &NodeBuilder,
     ) -> Vec<(Type<'c>, Location<'c>)> {
         let mut current = v;
         let mut out = vec![];
+        loop {
+            current = blockify.get_next(current).unwrap();
+            let code = blockify.get_code(current);
+            if let LCode::Arg(_) = code {
+                let location = Lower::get_location(blockify, current, context, b);
+                let (ty, dims) = self.from_type(&blockify.get_type(current.into()), b);
+                assert_eq!(dims.len(), 0);
+                out.push((ty, location));
+            } else {
+                break;
+            }
+        }
+        //assert_eq!(num_args + num_kwargs, out.len());
+
+        /*
         for _ in 0..num_args {
             let location = Lower::get_location(blockify, current, context, b);
 
@@ -280,6 +293,7 @@ impl<'c> Lower<'c> {
             current = next;
             out.push((ty, location));
         }
+        */
         out
     }
 
@@ -291,13 +305,13 @@ impl<'c> Lower<'c> {
         b: &NodeBuilder,
     ) {
         let code = blockify.get_code(entry_id);
-        if let LCode::Label(num_args, num_kwargs) = code {
+        if let LCode::Label = code {
             let args = self.get_label_args(
                 blockify,
                 self.context,
                 entry_id,
-                *num_args as usize,
-                *num_kwargs as usize,
+                //*num_args as usize,
+                //*num_kwargs as usize,
                 b,
             );
             let block = Block::new(&args);
@@ -352,7 +366,7 @@ impl<'c> Lower<'c> {
         let location = Lower::get_location(blockify, v, self.context, b);
 
         match code {
-            LCode::Label(_num_args, _num_kwargs) => {
+            LCode::Label => {
                 // should already exist
                 assert!(blocks.blocks.get(&v).is_some());
             }

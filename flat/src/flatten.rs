@@ -511,7 +511,7 @@ graph TD\n\
 
     pub fn add(&mut self, mentry: ModuleEntry) {
         self.link_map.insert(mentry.link.unwrap(), mentry.value_id);
-        if let LCode::Label(_, _) = mentry.code {
+        if let LCode::Label = mentry.code {
             self.block_map.insert(mentry.block_id, mentry.value_id);
         }
         self.entries.push(mentry);
@@ -707,7 +707,7 @@ impl Flatten {
             f.module_key = Some(key);
             let static_scope = fenv.new_scope(ScopeType::Static);
             let block_id = f.new_block(None, static_scope);
-            let code = LCode::Label(0, 0);
+            let code = LCode::Label;
             let entry = CodeEntry::new(
                 block_id,
                 code,
@@ -1131,7 +1131,7 @@ impl Flatten {
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
     ) -> Vec<(LinkId, AstType)> {
-        let code = LCode::Label(args.len() as u8, kwargs.len() as u8);
+        let code = LCode::Label;
         let entry = CodeEntry::new(
             block_id,
             code,
@@ -1763,7 +1763,7 @@ impl Flatten {
                 block.next(v_next);
 
                 let name = b.labels.fresh_key("then");
-                let code = LCode::Label(0, 0);
+                let code = LCode::Label;
                 let entry = CodeEntry::new(
                     then_block_id,
                     code,
@@ -1788,7 +1788,7 @@ impl Flatten {
                     block.next = Some(v_next);
 
                     let name = b.labels.fresh_key("else");
-                    let code = LCode::Label(0, 0);
+                    let code = LCode::Label;
                     let entry = CodeEntry::new(
                         else_block_id,
                         code,
@@ -1878,7 +1878,7 @@ impl Flatten {
                 self.block_succ(rc.block_id, then_block_id, Successor::Jump);
 
                 let name = b.labels.fresh_key("t_then");
-                let code = LCode::Label(0, 0);
+                let code = LCode::Label;
                 let entry = CodeEntry::new(
                     then_block_id,
                     code,
@@ -1899,7 +1899,7 @@ impl Flatten {
                 let else_block_id = self.new_block(None, else_scope_id);
                 self.block_succ(rc.block_id, else_block_id, Successor::Operation);
                 self.block_succ(rc.block_id, else_block_id, Successor::Jump);
-                let code = LCode::Label(0, 0);
+                let code = LCode::Label;
                 let name = b.labels.fresh_key("t_else");
                 let entry = CodeEntry::new(
                     else_block_id,
@@ -2034,7 +2034,7 @@ impl Flatten {
                 let loop_block = self.get_block_mut(loop_block_id);
                 loop_block.next = Some(loop_block_id);
 
-                let code = LCode::Label(0, 0);
+                let code = LCode::Label;
                 let entry = CodeEntry::new(
                     loop_block_id,
                     code,

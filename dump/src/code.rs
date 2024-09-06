@@ -46,11 +46,12 @@ pub fn code_to_string(v: ValueId, blockify: &Blockify, b: &NodeBuilder) -> Strin
             }
         }
 
-        LCode::Label(args, kwargs) => {
+        LCode::Label => {
+            let args = blockify.get_label_args(v);
             if let Some(key) = blockify.get_name(v.into()) {
-                format!("label({}, {}, {})", b.labels.r(key), args, kwargs,)
+                format!("label({},{})", b.labels.r(key), args.len())
             } else {
-                format!("label(-, {}, {})", args, kwargs,)
+                format!("label(_,{})", args.len())
             }
         }
 
