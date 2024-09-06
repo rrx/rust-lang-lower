@@ -273,27 +273,6 @@ impl<'c> Lower<'c> {
                 break;
             }
         }
-        //assert_eq!(num_args + num_kwargs, out.len());
-
-        /*
-        for _ in 0..num_args {
-            let location = Lower::get_location(blockify, current, context, b);
-
-            let next = blockify.get_next(current).unwrap();
-            let (ty, dims) = self.from_type(&blockify.get_type(next.into()), b);
-            assert_eq!(dims.len(), 0);
-            current = next;
-            out.push((ty, location));
-        }
-        for _ in 0..num_kwargs {
-            let location = Lower::get_location(blockify, current, context, b);
-            let next = blockify.get_next(current).unwrap();
-            let (ty, dims) = self.from_type(&blockify.get_type(next.into()), b);
-            assert_eq!(dims.len(), 0);
-            current = next;
-            out.push((ty, location));
-        }
-        */
         out
     }
 
@@ -310,8 +289,6 @@ impl<'c> Lower<'c> {
                 blockify,
                 self.context,
                 entry_id,
-                //*num_args as usize,
-                //*num_kwargs as usize,
                 b,
             );
             let block = Block::new(&args);
