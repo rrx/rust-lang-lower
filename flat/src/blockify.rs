@@ -44,8 +44,8 @@ pub enum LCode {
     Link(LinkId),
     Arg(u8), // get the value of a positional arg
     Const(Literal),
-    Op1(UnaryOperation, CodeOffset),
-    Op2(BinaryOperation, CodeOffset, CodeOffset),
+    Op1(UnaryOperation),
+    Op2(BinaryOperation),
     Load(CodeOffset),
     Store(CodeOffset, CodeOffset), // memref, value to store
     Return,                        // return values

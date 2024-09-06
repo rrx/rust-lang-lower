@@ -7,16 +7,16 @@ pub mod flatten;
 pub mod flatten_env;
 pub mod flatten_seq;
 pub mod graph;
-pub mod scope;
 pub mod links;
+pub mod scope;
 
 pub use block_format::*;
 pub use blockify::{BlockifyError, ICodeModule, LCode};
 pub use builder::*;
-pub use links::*;
 pub use builtin::*;
 pub use flatten::*;
 pub use flatten_env::*;
 pub use flatten_seq::*;
 pub use graph::{Node, CFG};
+pub use links::*;
 pub use scope::{Environment, ScopeId, ScopeLayer, ScopeType, Successor, TemplateId};

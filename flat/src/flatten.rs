@@ -1445,6 +1445,7 @@ impl Flatten {
                 let x_span_id = x.span_id;
                 let rx = self.flatten(block_id, *x, fenv, b)?;
                 let ry = self.flatten(rx.block_id, *y, fenv, b)?;
+                let current_block_id = ry.block_id;
                 let vx = rx.link_id.unwrap();
                 let vy = ry.link_id.unwrap();
 
@@ -1457,7 +1458,20 @@ impl Flatten {
                     );
                 }
 
-                let code = LCode::Op2(op.node, vx.into(), vy.into());
+                for (v, ty) in [(vx, x_ty), (vy, y_ty)] {
+                    let code = LCode::Value(v.into());
+                    let entry = CodeEntry::new(
+                        current_block_id,
+                        code,
+                        ty,
+                        None,
+                        node.span_id,
+                        VarDefinitionSpace::Reg,
+                    );
+                    let _ = self.push_entry_with_link(entry);
+                }
+
+                let code = LCode::Op2(op.node);
                 let entry = self.get_entry(vx);
                 let ty = entry.ty.clone();
                 let entry = CodeEntry::new(
@@ -1717,7 +1731,19 @@ impl Flatten {
                 // op1 is expression, non-terminal
                 let r = self.flatten(block_id, *x, fenv, b)?;
                 let current_block_id = r.block_id;
-                let code = LCode::Op1(op, r.link_id.unwrap().into());
+
+                let code = LCode::Value(r.link_id.unwrap().into());
+                let entry = CodeEntry::new(
+                    current_block_id,
+                    code,
+                    r.ty.clone(),
+                    None,
+                    node.span_id,
+                    VarDefinitionSpace::Reg,
+                );
+                let _ = self.push_entry_with_link(entry);
+
+                let code = LCode::Op1(op);
                 let entry = CodeEntry::new(
                     current_block_id,
                     code,

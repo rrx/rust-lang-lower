@@ -195,8 +195,11 @@ pub enum Ast {
     Module(StringKey, Box<AstNode>),
     ControlFlowMarker(ControlFlowMarker),
     Loop(StringKey, Box<AstNode>),
+
+    // break and continue, yielding a value
     Break(Option<StringKey>, Vec<AstNode>),
     Continue(Option<StringKey>, Vec<AstNode>),
+
     Block(StringKey, Vec<ParameterNode>, Box<AstNode>),
     Type(TypeId),
     Noop,

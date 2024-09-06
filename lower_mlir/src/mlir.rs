@@ -603,10 +603,12 @@ impl<'c> Lower<'c> {
                 }
             }
 
-            LCode::Op1(op, x) => {
+            LCode::Op1(op) => {
+                let x = blockify.get_prev(v).unwrap().into();
+
                 let block_id = blockify.get_entry_id(v);
-                let x_index = self.resolve_value(blockify, (*x).into()).unwrap();
-                let ast_ty = blockify.get_type((*x).into());
+                let x_index = self.resolve_value(blockify, x).unwrap();
+                let ast_ty = blockify.get_type(x);
                 let (ty, dims) = self.from_type(&ast_ty, b);
                 assert_eq!(dims.len(), 0);
 
@@ -639,9 +641,12 @@ impl<'c> Lower<'c> {
                 }
             }
 
-            LCode::Op2(op, x, y) => {
-                let vx = blockify.resolve_code_offset(*x);
-                let vy = blockify.resolve_code_offset(*y);
+            LCode::Op2(op) => {
+                let y = blockify.get_prev(v).unwrap();
+                let x = blockify.get_prev(y).unwrap();
+
+                let vx = blockify.resolve_code_offset(x.into());
+                let vy = blockify.resolve_code_offset(y.into());
                 let block_id = blockify.get_entry_id(v);
                 let x_span_id = blockify.get_span_id(vx);
                 let y_span_id = blockify.get_span_id(vy);
