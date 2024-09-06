@@ -6,7 +6,7 @@ use std::io::Write;
 
 use lower_mlir::default_context;
 
-use flat::NodeBuilder;
+use flat::{BlockifyError, Flatten, FlattenEnvironment, ICodeModule, NodeBuilder, ValueId};
 use parse::starlark::StarlarkParser;
 
 #[derive(FromArgs, Debug)]
@@ -59,11 +59,28 @@ fn main() -> Result<(), Box<dyn Error>> {
     for filename in config.inputs {
         let result = p.parse(&filename, &mut b, true);
         b.spans.diagnostics_dump();
-        let ast = result.unwrap();
-        let result = p.blockify(ast, &mut b, true);
-        let (blockify, module_block_id) = result.unwrap();
+        let ast = result?;
 
-        let r = p.lower(&blockify, module_block_id, &context, &mut module, &mut b);
+        let mut fenv = FlattenEnvironment::new();
+        let r = Flatten::flatten_module(ast, &mut fenv, &mut b);
+        if r.is_err() {
+            b.spans.diagnostics_dump();
+        }
+        let f = r?;
+        //let _ = r?;
+        let m = f.module(&mut fenv, &mut b);
+        m.dump(&b);
+        m.block_graph("blocks.dot", &b);
+
+        flat::flatten::scope_graph("scopes.dot", &fenv);
+
+        b.spans.diagnostics_dump();
+        if b.spans.has_errors {
+            return Err(anyhow::Error::new(BlockifyError::Invalid).into());
+        }
+
+        let r = p.lower(&m, ValueId::new(0), &context, &mut module, &mut b);
+        m.block_graph2("cfg.mmd", &b)?;
         b.spans.diagnostics_dump();
         r?;
     }

@@ -10,7 +10,7 @@ pub mod graph;
 pub mod scope;
 
 pub use block_format::*;
-pub use blockify::{Blockify, BlockifyError, ICodeModule, LCode};
+pub use blockify::{BlockifyError, ICodeModule, LCode};
 pub use builder::*;
 pub use builtin::*;
 pub use flatten::*;

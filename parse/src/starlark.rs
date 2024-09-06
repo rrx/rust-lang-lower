@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::io::prelude::Write;
 use std::path::Path;
 
 use anyhow::Result;
@@ -15,7 +14,7 @@ use compile_core::{
     LinkOptions, SpanId, StringKey,
 };
 
-use flat::{Blockify, ICodeModule, NodeBuilder, NodeBuilder as NB, ValueId};
+use flat::{ICodeModule, NodeBuilder, NodeBuilder as NB, ValueId};
 
 use lower_mlir::Module;
 
@@ -643,25 +642,6 @@ impl StarlarkParser {
         b.dump_ast(&ast);
         let ast: AstNode = parser.parse(Path::new(filename), None, module_key, file_id, b)?;
         Ok(ast)
-    }
-
-    pub fn blockify(
-        &mut self,
-        ast: AstNode,
-        b: &mut NodeBuilder,
-        _verbose: bool,
-    ) -> Result<(Blockify, ValueId)> {
-        let mut blockify = Blockify::new();
-        let r = blockify.build_module(ast, b);
-        blockify.dump(b);
-        dump::code::save_graph(&blockify, "out.dot", b);
-
-        let j = dump::code::get_json(&blockify, b);
-        let mut file = std::fs::File::create("blocks.json").unwrap();
-        file.write_all(j.as_bytes()).unwrap();
-
-        let module_block_id = r?;
-        Ok((blockify, module_block_id))
     }
 
     pub fn lower<'c>(

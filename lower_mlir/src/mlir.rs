@@ -285,12 +285,7 @@ impl<'c> Lower<'c> {
     ) {
         let code = blockify.get_code(entry_id);
         if let LCode::Label = code {
-            let args = self.get_label_args(
-                blockify,
-                self.context,
-                entry_id,
-                b,
-            );
+            let args = self.get_label_args(blockify, self.context, entry_id, b);
             let block = Block::new(&args);
             let c = OpCollection::new(entry_id, block);
             blocks.blocks.insert(entry_id, c);

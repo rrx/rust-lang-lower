@@ -456,18 +456,6 @@ graph TD\n\
         let mut f = File::create(filename)?;
         f.write(s.as_bytes())?;
         Ok(())
-        /*
-        let g = self.gblocks.filter_map(
-            |_n_index, n| Some(n.clone()),
-            |_e_index, e| {
-                if let Successor::Jump = e {
-                    Some(e.clone())
-                } else {
-                    None
-                }
-            },
-        );
-        */
     }
 
     pub fn block_graph(&self, filename: &str, b: &NB) {
