@@ -64,7 +64,7 @@ pub enum LCode {
     Load(CodeOffset),
     Store(CodeOffset, CodeOffset), // memref, value to store
     Return,                        // return values
-    Yield(u8),                     // yield values
+    Yield,                     // yield values
 
     //jump to named block, with 0 args
     //Goto(StringKey),
@@ -92,7 +92,7 @@ impl LCode {
             //Self::Goto(_) => true,
             Self::Branch(_, _, _) => true,
             Self::Return => true,
-            Self::Yield(_) => true,
+            Self::Yield => true,
             _ => false,
         }
     }
@@ -1877,14 +1877,12 @@ impl Blockify {
 
             Ast::Yield(maybe_expr) => {
                 // yield is terminal
-                let mut n_args = 0;
                 let mut v_block = entry_id;
                 let mut ty = AstType::Unit;
                 if let Some(expr) = maybe_expr {
                     let r = self.add(entry_id, None, *expr, b)?;
                     if let Some(v) = r.value_id {
                         ty = self.get_type(v.into());
-                        n_args = 1;
                         v_block = r.entry_id;
 
                         // push single arg
@@ -1901,7 +1899,7 @@ impl Blockify {
                 }
 
                 let v = self.push_code(
-                    LCode::Yield(n_args),
+                    LCode::Yield,
                     node.span_id,
                     scope_id,
                     v_block,

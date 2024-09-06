@@ -1935,13 +1935,11 @@ impl Flatten {
 
             Ast::Yield(maybe_expr) => {
                 // yield is terminal
-                let mut n_args = 0;
                 let mut v_block = block_id;
                 let mut ty = AstType::Unit;
                 if let Some(expr) = maybe_expr {
                     let r = self.flatten(block_id, *expr, fenv, b)?;
                     if let Some(v) = r.link_id {
-                        n_args = 1;
                         v_block = r.block_id;
                         ty = r.ty.clone();
                         // push single arg
@@ -1958,7 +1956,7 @@ impl Flatten {
                     }
                 }
 
-                let code = LCode::Yield(n_args);
+                let code = LCode::Yield;
                 let entry = CodeEntry::new(
                     v_block,
                     code,

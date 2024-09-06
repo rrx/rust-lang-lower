@@ -777,10 +777,9 @@ impl<'c> Lower<'c> {
                 self.index.insert(v, index);
             }
 
-            LCode::Yield(n_args) => {
+            LCode::Yield => {
                 let block_id = blockify.get_entry_id(v);
                 let values = blockify.get_previous_values(v);
-                assert_eq!(values.len(), *n_args as usize);
                 let indicies = values
                     .iter()
                     .map(|value_id| self.resolve_value(blockify, *value_id).unwrap())
