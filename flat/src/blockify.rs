@@ -35,7 +35,7 @@ pub enum LCode {
     Const(Literal),
     Op1(UnaryOperation),
     Op2(BinaryOperation),
-    Load(CodeOffset),
+    Load(CodeOffset),              // memref
     Store(CodeOffset, CodeOffset), // memref, value to store
     Return,                        // return values
     Yield,                         // yield values

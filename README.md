@@ -12,7 +12,7 @@ Currently the frontend uses a Rust based Starlark parser, which I have extended 
 - Full type inteference that stays out of your way, but is useful
 - Strong type system that makes refactoring easier (not heavy like Rust)
 - Be flexible, allowing multiple frontends and backends
-- Support LLVM only using MLIR, but not be locked in (cranelift)
+- Support LLVM only using MLIR, but not be locked in (ex: cranelift)
 
 # Non-Goals
 
@@ -26,15 +26,18 @@ Currently the frontend uses a Rust based Starlark parser, which I have extended 
 - [x] global/static variables
 - [x] function calling with recursion
 - [x] basic C interop, with static functions
-- [x] nested blocked and loops
+- [x] nested blocks and loops
 - [x] static compilation with MLIR
 - [ ] arrays
 - [ ] structs, unions, and tagged unions
 - [ ] module loading and import
-- [ ] flexible memory layout (C ABI, packed, struct of arrays (SOA))
-- [ ] pointers
-- [ ] return value semantics
+- [ ] LSP support
+- [ ] Linter support
 - [ ] lambdas using CPS
+- [ ] pointers
+- [ ] short-circuit operators (and, or)
+- [ ] flexible memory layout (C ABI, packed, struct of arrays (SOA))
+- [ ] return value semantics
 - [ ] type inference - Hindley-Milner
 - [ ] type inference - Biunification
 - [ ] lifetime inference
@@ -43,8 +46,9 @@ Currently the frontend uses a Rust based Starlark parser, which I have extended 
 - [ ] full C interop with shared libraries and headers
 - [ ] integration with MUSL
 - [ ] integration with SDL
-- [ ] add alternative frontends (Python, Lang3)
+- [ ] integration with GPUs
+- [ ] add alternative frontends (Python, Lang3, Lisp)
 - [ ] integrate with a dynamic hotreloading linker
-- [ ] lower using cranelift
+- [ ] lower using cranelift (for faster debug builds)
 
 

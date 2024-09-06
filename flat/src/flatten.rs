@@ -1934,7 +1934,7 @@ impl Flatten {
                 }
                 //assert_eq!(else_ty, then_ty);
 
-                let code = LCode::Ternary(rc.link_id.unwrap().into(), then_block_id, else_block_id);
+                let code = LCode::Ternary(rc.link_id.unwrap().into(), then_block_id.into(), else_block_id.into());
                 let entry = CodeEntry::new(
                     rc.block_id,
                     code,
