@@ -55,6 +55,7 @@ pub enum LCode {
     Declare,
     DeclareFunction(Option<BlockId>), // optional entry block
     Value(CodeOffset),
+    CallValue(CodeOffset),
     Link(LinkId),
     Arg(u8), // get the value of a positional arg
     Const(Literal),
@@ -62,14 +63,14 @@ pub enum LCode {
     Op2(BinaryOperation, CodeOffset, CodeOffset),
     Load(CodeOffset),
     Store(CodeOffset, CodeOffset), // memref, value to store
-    Return(u8),                    // return values
+    Return,                        // return values
     Yield(u8),                     // yield values
 
     //jump to named block, with 0 args
     //Goto(StringKey),
 
     // jump to block, with num args
-    Jump(CodeOffset, u8),
+    Jump(CodeOffset),
 
     Branch(CodeOffset, BlockId, BlockId),
     Ternary(CodeOffset, BlockId, BlockId), // condition, then_entry, else_entry
@@ -87,10 +88,10 @@ impl LCode {
 
     pub fn is_term(&self) -> bool {
         match self {
-            Self::Jump(_, _) => true,
+            Self::Jump(_) => true,
             //Self::Goto(_) => true,
             Self::Branch(_, _, _) => true,
-            Self::Return(_) => true,
+            Self::Return => true,
             Self::Yield(_) => true,
             _ => false,
         }
@@ -229,23 +230,31 @@ pub trait ICodeModule {
         }
     }
 
-    fn get_previous_values(&self, v: ValueId, num: usize) -> Vec<CodeOffset> {
-        let mut values = vec![];
-        for i in 0..num {
-            let v = ValueId((v.0 as usize - num + i) as u32);
+    fn get_previous_values(&self, v: ValueId) -> Vec<CodeOffset> {
+        let mut values = VecDeque::new();
+        loop {
+            let i = values.len();
+            let v = ValueId((v.index() - 1 - i) as u32);
             let code = self.get_code(v);
+            if let LCode::CallValue(value_id) = code {
+                values.push_front((*value_id).into());
+                continue;
+            }
+            /*
             if let LCode::Value(value_id) = code {
-                values.push((*value_id).into());
+                values.push_front((*value_id).into());
                 continue;
             }
             if let LCode::Link(link_id) = code {
-                values.push((*link_id).into());
+                values.push_front((*link_id).into());
                 //let v = (*link_id).into();
                 //values.push(self.resolve_code_offset(v));
                 continue;
             }
+            */
+            break;
         }
-        values
+        values.into()
     }
 
     fn get_type(&self, v: CodeOffset) -> AstType;
@@ -290,8 +299,9 @@ pub trait ICodeModule {
             //LCode::Goto(block_id) => {
             //format!("goto({})", b.labels.r((*block_id).into()))
             //}
-            LCode::Jump(value_id, args) => {
-                format!("jump({:?}, {})", value_id, args,)
+            LCode::Jump(value_id) => {
+                let values = self.get_previous_values(v);
+                format!("jump({:?}, {})", value_id, values.len())
             }
 
             LCode::Const(Literal::String(s)) => {
@@ -545,7 +555,7 @@ impl Blockify {
         let entry_id = self.env.resolve_code_offset(entry_id);
         let block_id = self.resolve_block_id(entry_id.into());
         match &code {
-            LCode::Jump(target, _) => {
+            LCode::Jump(target) => {
                 // XXX: This is causing us to terminate the loop we are currently generating
                 // If it knows about the loop, then it tries to terminate it
                 self.env.add_succ_block(block_id, (*target).into());
@@ -1064,7 +1074,7 @@ impl Blockify {
         }
 
         self.push_code(
-            LCode::Return(v_args.len() as u8),
+            LCode::Return,
             span_id,
             scope_id,
             entry_id.into(),
@@ -1229,7 +1239,6 @@ impl Blockify {
         b: &mut NodeBuilder,
     ) -> Result<AddResult> {
         let scope_id = self.env.current_scope().unwrap();
-        let num_args = jump_args.len();
 
         let mut values = vec![];
         for arg in jump_args.into_iter() {
@@ -1250,7 +1259,7 @@ impl Blockify {
         }
 
         let v = self.push_code(
-            LCode::Jump(target_id.into(), num_args as u8),
+            LCode::Jump(target_id.into()),
             span_id,
             scope_id,
             entry_id,

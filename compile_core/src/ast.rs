@@ -177,7 +177,7 @@ pub enum Ast {
     // func, args, return type
     Call(Box<AstNode>, Vec<Argument>, TypeId),
     // array(element type, dimensions), empty dim is the same as scalar
-    Array(TypeId, Vec<u64>),
+    Array(TypeId, Vec<AstNode>),
     Identifier(StringKey),
     Literal(Literal),
     Sequence(Vec<AstNode>),

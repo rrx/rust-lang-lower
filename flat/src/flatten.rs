@@ -944,7 +944,7 @@ impl Flatten {
         span_id: SpanId,
     ) -> LinkId {
         for (link_id, ty) in link_ids.iter() {
-            let code = LCode::Link(*link_id);
+            let code = LCode::CallValue((*link_id).into());
             let entry = CodeEntry::new(
                 block_id,
                 code,
@@ -956,7 +956,7 @@ impl Flatten {
             self.push_entry_with_link(entry);
         }
 
-        let code = LCode::Return(link_ids.len() as u8);
+        let code = LCode::Return;
         let entry = CodeEntry::new(
             block_id,
             code,
@@ -1005,9 +1005,8 @@ impl Flatten {
         jump_args: Vec<(LinkId, AstType)>,
         span_id: SpanId,
     ) -> LinkId {
-        let num_args = jump_args.len();
         for (link_id, ty) in jump_args.into_iter() {
-            let code = LCode::Link(link_id);
+            let code = LCode::CallValue(link_id.into());
             let entry = CodeEntry::new(block_id, code, ty, None, span_id, VarDefinitionSpace::Reg);
             self.push_entry_with_link(entry);
         }
@@ -1016,7 +1015,7 @@ impl Flatten {
             self.block_succ(block_id, target_block_id, Successor::Jump);
         }
 
-        let code = LCode::Jump(target_id.into(), num_args as u8);
+        let code = LCode::Jump(target_id.into());
         let entry = CodeEntry::new(
             block_id,
             code,
@@ -1088,7 +1087,7 @@ impl Flatten {
 
         // Add links
         for (link_id, ty) in values {
-            let code = LCode::Link(link_id);
+            let code = LCode::CallValue(link_id.into());
             let entry = CodeEntry::new(
                 current_block_id,
                 code,
@@ -1381,7 +1380,7 @@ impl Flatten {
                         }
 
                         for (link_id, ty) in values {
-                            let code = LCode::Link(link_id);
+                            let code = LCode::CallValue(link_id.into());
                             let entry = CodeEntry::new(
                                 block_id,
                                 code,
@@ -1946,7 +1945,7 @@ impl Flatten {
                         v_block = r.block_id;
                         ty = r.ty.clone();
                         // push single arg
-                        let code = LCode::Link(v.into());
+                        let code = LCode::CallValue(v.into());
                         let entry = CodeEntry::new(
                             v_block,
                             code,
@@ -2117,6 +2116,14 @@ impl Flatten {
             }
 
             Ast::Array(type_id, dims) => {
+                let mut link_ids = vec![];
+                let mut current_block_id = block_id;
+                for d in dims {
+                    let r = self.flatten(current_block_id, d, fenv, b)?;
+                    current_block_id = r.block_id;
+                    link_ids.push(r.link_id.unwrap());
+                }
+                //LCode::
                 b.push_error(&format!("AST Error"), node.span_id);
                 Err(Error::new(BlockifyError::Invalid))
             }

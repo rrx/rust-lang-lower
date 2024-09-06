@@ -724,28 +724,6 @@ pub(crate) mod tests {
     use lower_mlir::Location;
     use test_log::test;
 
-    fn run_test_ir(filename: &str, expected: i32) {
-        let mut p: StarlarkParser = StarlarkParser::new();
-        let mut b = flat::NodeBuilder::new();
-        let result = p.parse(filename, &mut b, true);
-        b.spans.diagnostics_dump();
-        let ast = result.unwrap();
-
-        let result = p.blockify(ast, &mut b, true);
-        let (blockify, module_block_id) = result.unwrap();
-
-        let context = lower_mlir::default_context();
-        let mut module = lower_mlir::Module::new(Location::unknown(&context));
-        let r = p.lower(&blockify, module_block_id, &context, &mut module, &mut b);
-        b.spans.diagnostics_dump();
-        r.unwrap();
-        let verify = module.as_operation().verify();
-        module.as_operation().dump();
-        assert!(verify);
-        let r = p.exec_main(&context, &mut module, "../target/debug/", true);
-        assert_eq!(expected, r);
-    }
-
     fn run_test_flatten(filename: &str, expected: i32) {
         let mut p: StarlarkParser = StarlarkParser::new();
         let mut b = flat::NodeBuilder::new();
@@ -777,79 +755,66 @@ pub(crate) mod tests {
 
     #[test]
     fn test_recursive() {
-        run_test_ir("../tests/test_recursive.star", 0);
         run_test_flatten("../tests/test_recursive.star", 0);
     }
 
     #[test]
     fn test_recursive2() {
-        run_test_ir("../tests/test_recursive2.star", 0);
         run_test_flatten("../tests/test_recursive2.star", 0);
     }
 
     #[test]
     fn test_local() {
-        run_test_ir("../tests/test_local.star", 0);
         run_test_flatten("../tests/test_local.star", 0);
     }
 
     #[test]
     fn test_goto() {
-        //run_test_ir("../tests/goto.star", 0);
         run_test_flatten("../tests/goto.star", 0);
     }
 
     #[test]
     fn test_bare() {
-        run_test_ir("../tests/bare.star", 0);
         run_test_flatten("../tests/bare.star", 0);
     }
 
     #[test]
     fn test_fix() {
-        run_test_ir("../tests/fix.star", 0);
         run_test_flatten("../tests/fix.star", 0);
     }
 
     #[test]
     fn test_nothing() {
-        run_test_ir("../tests/test.star", 0);
         run_test_flatten("../tests/test.star", 0);
     }
 
     #[test]
     fn test_global() {
-        run_test_ir("../tests/test_global.star", 0);
         run_test_flatten("../tests/test_global.star", 0);
     }
 
     #[test]
     fn test_static() {
-        run_test_ir("../tests/test_static.star", 0);
         run_test_flatten("../tests/test_static.star", 0);
     }
 
     #[test]
     fn test_float() {
-        run_test_ir("../tests/test_float.star", 0);
         run_test_flatten("../tests/test_float.star", 0);
     }
 
     #[test]
     fn test_cond() {
-        run_test_ir("../tests/test_cond.star", 0);
         run_test_flatten("../tests/test_cond.star", 0);
     }
 
     #[test]
     fn test_ternary() {
-        run_test_ir("../tests/test_ternary.star", 0);
         run_test_flatten("../tests/test_ternary.star", 0);
     }
 
     #[test]
     fn test_loop() {
-        //run_test_ir("../tests/loop.star", 0);
         run_test_flatten("../tests/loop.star", 0);
     }
 
@@ -860,13 +825,11 @@ pub(crate) mod tests {
 
     #[test]
     fn test_nested_func() {
-        //run_test_ir("../tests/nested_func.star", 0);
         run_test_flatten("../tests/nested_func.star", 0);
     }
 
     #[test]
     fn test_static_var() {
-        run_test_ir("../tests/static_var.star", 0);
         run_test_flatten("../tests/static_var.star", 0);
     }
 }

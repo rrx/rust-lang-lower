@@ -1,10 +1,9 @@
 use argh::FromArgs;
+use lower_mlir::default_context;
 use simple_logger::{set_up_color_terminal, SimpleLogger};
 use std::error::Error;
 use std::fs::File;
 use std::io::Write;
-
-use lower_mlir::default_context;
 
 use flat::{BlockifyError, Flatten, FlattenEnvironment, ICodeModule, NodeBuilder, ValueId};
 use parse::starlark::StarlarkParser;

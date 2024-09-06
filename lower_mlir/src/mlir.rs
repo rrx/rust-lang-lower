@@ -314,11 +314,10 @@ impl<'c> Lower<'c> {
         blocks: &mut LowerBlocks<'c>,
         v: ValueId,
         target_value_id: ValueId,
-        num_args: u8,
         b: &NodeBuilder,
     ) -> Result<()> {
         let block_id = blockify.get_entry_id(v);
-        let values = blockify.get_previous_values(v, num_args as usize);
+        let values = blockify.get_previous_values(v);
         let indicies = values
             .iter()
             .map(|value_id| self.resolve_value(blockify, *value_id).unwrap())
@@ -330,7 +329,7 @@ impl<'c> Lower<'c> {
             .get(&target_value_id)
             .expect(&format!("missing block at {}", target_value_id));
         let arg_count = c.block.as_ref().unwrap().argument_count();
-        assert_eq!(arg_count, num_args as usize, "mismatch arity on jump");
+        assert_eq!(arg_count, values.len(), "mismatch arity on jump");
 
         let location = Lower::get_location(blockify, v, self.context, b);
         let op = cf::br(&c.block.as_ref().unwrap(), &rs, location);
@@ -365,9 +364,9 @@ impl<'c> Lower<'c> {
                 self.index.insert(v, index);
             }
 
-            LCode::Jump(target, num_args) => {
+            LCode::Jump(target) => {
                 let target_value_id = blockify.resolve_code_offset(*target);
-                self.lower_jump(blockify, blocks, v, target_value_id, *num_args, b)?;
+                self.lower_jump(blockify, blocks, v, target_value_id, b)?;
             }
 
             LCode::Const(lit) => {
@@ -428,9 +427,9 @@ impl<'c> Lower<'c> {
                 }
             }
 
-            LCode::Return(num_args) => {
+            LCode::Return => {
                 //let num = *num_args as usize;
-                let values = blockify.get_previous_values(v, *num_args as usize);
+                let values = blockify.get_previous_values(v);
                 let indicies = values
                     .iter()
                     .map(|value_id| self.resolve_value(blockify, *value_id).unwrap())
@@ -506,7 +505,8 @@ impl<'c> Lower<'c> {
                     assert_eq!(dims.len(), 0);
                     // handle call arguments
 
-                    let values = blockify.get_previous_values(v, *args as usize);
+                    let values = blockify.get_previous_values(v);
+                    assert_eq!(values.len(), *args as usize);
                     let indicies = values
                         .iter()
                         .map(|value_id| self.resolve_value(blockify, *value_id).unwrap())
@@ -779,7 +779,8 @@ impl<'c> Lower<'c> {
 
             LCode::Yield(n_args) => {
                 let block_id = blockify.get_entry_id(v);
-                let values = blockify.get_previous_values(v, *n_args as usize);
+                let values = blockify.get_previous_values(v);
+                assert_eq!(values.len(), *n_args as usize);
                 let indicies = values
                     .iter()
                     .map(|value_id| self.resolve_value(blockify, *value_id).unwrap())
@@ -792,6 +793,7 @@ impl<'c> Lower<'c> {
             }
 
             LCode::Value(_) => (),
+            LCode::CallValue(_) => (),
             LCode::Link(_) => (),
             LCode::Noop => (),
 
@@ -805,7 +807,8 @@ impl<'c> Lower<'c> {
                         unreachable!()
                     }
                     Builtin::Assert => {
-                        let values = blockify.get_previous_values(v, *num_args as usize);
+                        let values = blockify.get_previous_values(v);
+                        assert_eq!(values.len(), *num_args as usize);
                         let indicies = values
                             .iter()
                             .map(|value_id| self.resolve_value(blockify, *value_id).unwrap())
@@ -821,7 +824,8 @@ impl<'c> Lower<'c> {
                         self.index.insert(v, index);
                     }
                     Builtin::Print => {
-                        let values = blockify.get_previous_values(v, *num_args as usize);
+                        let values = blockify.get_previous_values(v);
+                        assert_eq!(values.len(), *num_args as usize);
                         let indicies = values
                             .iter()
                             .map(|value_id| self.resolve_value(blockify, *value_id).unwrap())

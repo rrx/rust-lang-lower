@@ -65,11 +65,12 @@ pub fn builtin_from_name(
                 .into_iter()
                 .map(|arg| {
                     let Argument::Positional(value) = arg;
-                    match &value.node {
+                    let i = match &value.node {
                         Ast::Literal(Literal::Int(x)) => *x as u64,
                         Ast::Literal(Literal::Index(x)) => *x as u64,
                         _ => unimplemented!(),
-                    }
+                    };
+                    Ast::Literal(Literal::Index(i as usize)).node(value.span_id)
                 })
                 .collect::<Vec<_>>();
             Some(Ast::Array(type_id, dims).into())

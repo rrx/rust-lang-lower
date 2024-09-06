@@ -57,8 +57,9 @@ pub fn code_to_string(v: ValueId, blockify: &Blockify, b: &NodeBuilder) -> Strin
         //LCode::Goto(block_id) => {
         //format!("goto({})", b.labels.r((*block_id).into()))
         //}
-        LCode::Jump(value_id, args) => {
-            format!("jump({:?}, {})", value_id, args,)
+        LCode::Jump(value_id) => {
+            let values = blockify.get_previous_values(v);
+            format!("jump({:?}, {})", value_id, values.len())
         }
 
         LCode::Const(Literal::String(s)) => {
