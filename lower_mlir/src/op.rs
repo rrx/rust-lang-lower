@@ -59,10 +59,23 @@ impl<'c> Lower<'c> {
     pub fn from_type(&self, ty: &AstType, b: &NodeBuilder) -> (Type<'c>, Vec<u64>) {
         match ty {
             AstType::Ptr(_) => (Type::index(self.context), vec![]),
-            AstType::Tuple(args) => {
+            AstType::Struct(args) => {
                 let types = args
                     .iter()
-                    .map(|a| self.from_type(a, b).0)
+                    .map(|(_, a)| self.from_type(a, b).0)
+                    .collect::<Vec<_>>();
+                (
+                    melior::ir::r#type::TupleType::new(self.context, &types).into(),
+                    vec![],
+                )
+            }
+            AstType::Union(args) => {
+                //let byte_ty - IntegerType::width(8);
+                //let memref = MemRefType::new(byte_type, &[size], None, None);
+                // get the sizes and just create a type that has the max size of all fields
+                let types = args
+                    .iter()
+                    .map(|(_, a)| self.from_type(a, b).0)
                     .collect::<Vec<_>>();
                 (
                     melior::ir::r#type::TupleType::new(self.context, &types).into(),

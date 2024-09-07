@@ -96,20 +96,20 @@ fn ast_unify_values(value1: &AstType, value2: &AstType) -> Result<AstType, UErro
                     }
                 }
             }
-            (AstType::Tuple(c1), AstType::Tuple(c2)) => {
+            (AstType::Struct(c1), AstType::Struct(c2)) => {
                 if c1.len() != c2.len() {
                     Err(UError::Bad)
                 } else {
                     let result = c1
                         .iter()
                         .zip(c2.iter())
-                        .map_while(|(a, b)| match ast_unify_values(a, b) {
-                            Ok(s) => Some(s),
+                        .map_while(|((_, a), (_, b))| match ast_unify_values(a, b) {
+                            Ok(s) => Some((None, s)),
                             Err(_) => None,
                         })
                         .collect::<Vec<_>>();
                     if result.len() == c1.len() {
-                        Ok(AstType::Tuple(result))
+                        Ok(AstType::Struct(result))
                     } else {
                         Err(UError::Bad)
                     }
@@ -186,8 +186,8 @@ impl TypeUnify {
                 self.ut.unify_var_var(k1, k2)
             }
             (AstType::Ptr(v1), AstType::Ptr(v2)) => self.unify(&*v1, &*v2),
-            (AstType::Tuple(vs1), AstType::Tuple(vs2)) => {
-                for (x, y) in vs1.iter().zip(vs2.iter()) {
+            (AstType::Struct(vs1), AstType::Struct(vs2)) => {
+                for ((_, x), (_, y)) in vs1.iter().zip(vs2.iter()) {
                     if self.unify(x, y).is_err() {
                         return Err(UError::Bad);
                     }
@@ -218,14 +218,14 @@ impl TypeUnify {
     pub fn resolve(&mut self, a: &AstType) -> Option<AstType> {
         match a {
             AstType::Ptr(v) => self.resolve(v).map(|x| AstType::Ptr(x.into())),
-            AstType::Tuple(vs) => {
+            AstType::Struct(vs) => {
                 let size = vs.len();
                 let vs2 = vs
                     .into_iter()
-                    .filter_map(|v| self.resolve(v).map(|x| x.into()))
+                    .filter_map(|(_, v)| self.resolve(v).map(|x| (None, x.into())))
                     .collect::<Vec<_>>();
                 if vs2.len() == size {
-                    Some(AstType::Tuple(vs2))
+                    Some(AstType::Struct(vs2))
                 } else {
                     None
                 }
@@ -289,8 +289,12 @@ mod tests {
         let ut9 = u.fresh_unknown();
         let ut10 = u.fresh_unknown();
         u.unify(&ut9, &ut10).unwrap();
-        let ut11 = AstType::Tuple(vec![ut7.0, AstType::Int, ut8.0]);
-        let ut12 = AstType::Tuple(vec![AstType::Float, ut9.0.clone(), ut10.0.clone()]);
+        let ut11 = AstType::Struct(vec![(None, ut7.0), (None, AstType::Int), (None, ut8.0)]);
+        let ut12 = AstType::Struct(vec![
+            (None, AstType::Float),
+            (None, ut9.0.clone()),
+            (None, ut10.0.clone()),
+        ]);
         let ut13 = u.fresh_unknown();
         u.unify(&ut11, &ut12).unwrap();
         u.unify(&ut12, &ut13).unwrap();

@@ -38,7 +38,7 @@ pub enum Literal {
     Float(f64),
     String(String),
     Bool(bool),
-    Type(TypeId),
+    //Type(TypeId),
 }
 
 impl From<Literal> for AstType {
@@ -55,7 +55,7 @@ impl From<&Literal> for AstType {
             Literal::Bool(_) => AstType::Bool,
             Literal::Index(_) => AstType::Index,
             Literal::String(_) => AstType::String,
-            Literal::Type(_) => AstType::Type,
+            //Literal::Type(_) => AstType::Type,
         }
     }
 }

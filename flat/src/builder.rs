@@ -202,7 +202,10 @@ impl NodeBuilder {
         self.builtins.insert(b);
 
         let ty = AstType::Func(
-            vec![AstType::Sum(vec![AstType::Int, AstType::Float])],
+            vec![AstType::Struct(vec![
+                (None, AstType::Int),
+                (None, AstType::Float),
+            ])],
             AstType::Unit.into(),
         );
         let ty = self.types.s(&ty);

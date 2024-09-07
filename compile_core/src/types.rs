@@ -28,11 +28,16 @@ pub enum AstType {
     Unit,
     Never,
     Type,
+    JumpTarget,
     Array(Box<AstType>, Vec<u64>),
-    Sum(Vec<AstType>),
+
+    // T(a:int, b:float), T(int, float), defaults are handled as part of implementation
+    // Tuples and NamedTuples are just Stucts
+    Struct(Vec<(Option<StringKey>, AstType)>),
+    // Unions are similar to structs, but the values hold the same space
+    // Naked unions, and tagged unions are implemented as part of layout and implementation
+    Union(Vec<(Option<StringKey>, AstType)>),
     Ptr(Box<AstType>),
-    Tuple(Vec<AstType>),
-    NamedTuple(Vec<(StringKey, AstType)>),
     // Func(parameters, return type)
     Func(Vec<AstType>, Box<AstType>),
     Variable(u32),
@@ -59,14 +64,15 @@ impl AstType {
     pub fn is_unknown(&self) -> bool {
         match self {
             Self::Ptr(ty) => ty.is_unknown(),
-            Self::Tuple(values) => {
-                for a in values {
+            Self::Struct(fields) | Self::Union(fields) => {
+                for (_, a) in fields {
                     if a.is_unknown() {
                         return true;
                     }
                 }
                 false
             }
+            Self::Array(element, _) => element.is_unknown(),
             Self::Func(args, ret) => {
                 if ret.is_unknown() {
                     return true;
