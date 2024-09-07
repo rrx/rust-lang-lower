@@ -324,14 +324,30 @@ impl Parser {
                 body.extend(self.from_stmt(&def.body, env, b)?.to_vec());
 
                 env.exit_func();
+
                 let return_type = def
                     .return_type
                     .as_ref()
                     .map(|ty| from_type(&ty).unwrap_or(AstType::Unit))
                     .unwrap_or(AstType::Unit);
 
+                let body = NB::seq(body, span_id).into();
+
+                let arg_type = AstType::Struct(
+                    params
+                        .iter()
+                        .map(|p| {
+                            let ty = b.types.r(p.ty);
+                            (Some(p.name), ty.clone())
+                        })
+                        .collect::<Vec<_>>(),
+                );
+
+                let arg_type_id = b.types.s(&arg_type);
+
                 let def_ast = Ast::Lambda(ast::Lambda {
-                    body: Some(NB::seq(body, span_id).into()),
+                    arg_type: arg_type_id,
+                    body: Some(body),
                     return_type: b.types.s(&return_type),
                     params,
                 });

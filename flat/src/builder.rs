@@ -267,11 +267,11 @@ impl NodeBuilder {
     pub fn definition(
         &mut self,
         name: StringKey,
-        params: &[(StringKey, AstType)],
+        def_params: &[(StringKey, AstType)],
         return_type: AstType,
         body: Option<AstNode>,
     ) -> AstNode {
-        let params = params
+        let params = def_params
             .into_iter()
             .map(|(name, ty)| {
                 let ty = self.types.s(ty);
@@ -284,10 +284,19 @@ impl NodeBuilder {
             })
             .collect();
 
+        let arg_type = AstType::Struct(
+            def_params
+                .into_iter()
+                .map(|(key, ty)| (Some(*key), ty.clone()))
+                .collect::<Vec<_>>(),
+        );
+        let arg_type_id = self.types.s(&arg_type);
+
         let return_type = self.types.s(&return_type);
         Self::global(
             name,
             Ast::Lambda(Lambda {
+                arg_type: arg_type_id,
                 params,
                 return_type,
                 body: body.map(|b| b.into()),
