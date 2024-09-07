@@ -119,6 +119,18 @@ impl NodeBuilder {
                 out.push((depth, s.into(), node.span_id));
                 depth += 1;
 
+                let arg_type = self.types.r(def.arg_type);
+                for (i, (maybe_key, ty)) in arg_type.fields().iter().enumerate() {
+                    let name = if let Some(key) = maybe_key {
+                        self.labels.r(key.into())
+                    } else {
+                        format!("{}", i)
+                    };
+
+                    let s = format!("arg: {}: {:?}, {}", name, ty, span_id);
+                    out.push((depth, s, node.span_id));
+                }
+                /*
                 for a in &def.params {
                     let s = format!(
                         "arg: {}: {:?}, {}",
@@ -128,6 +140,7 @@ impl NodeBuilder {
                     );
                     out.push((depth, s, node.span_id));
                 }
+                */
                 if let Some(ref body) = def.body {
                     self.dump_strings(body, out, depth);
                 }

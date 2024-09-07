@@ -349,7 +349,7 @@ impl Parser {
                     arg_type: arg_type_id,
                     body: Some(body),
                     return_type: b.types.s(&return_type),
-                    params,
+                    //params,
                 });
 
                 env.define(name);

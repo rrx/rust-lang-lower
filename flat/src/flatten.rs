@@ -855,6 +855,7 @@ impl Flatten {
                             self.start_block(
                                 new_block_id,
                                 scope_id,
+                                &AstType::Unit,
                                 &[],
                                 &[],
                                 AstType::Unit,
@@ -974,6 +975,7 @@ impl Flatten {
         let v_args = self.start_block(
             ret_block_id,
             scope_id,
+            &AstType::Unit,
             &args,
             &[],
             AstType::Unit,
@@ -1026,13 +1028,11 @@ impl Flatten {
         b: &mut NB,
     ) -> Result<(BlockId, AstType, Vec<(LinkId, AstType)>)> {
         if let AstType::Func(func_arg_types, ret) = &fun_ty {
-            if func_arg_types.len() != args.len() {
+            let num_args = func_arg_types.fields().len();
+            if num_args != args.len() {
+                //if func_arg_types.len() != args.len() {
                 b.push_error(
-                    &format!(
-                        "Call arity mismatch: {}<=>{}",
-                        func_arg_types.len(),
-                        args.len()
-                    ),
+                    &format!("Call arity mismatch: {}<=>{}", num_args, args.len()),
                     span_id,
                 );
                 return Err(Error::new(BlockifyError::Invalid));
@@ -1041,7 +1041,7 @@ impl Flatten {
             let mut values = vec![];
             let mut current_block_id = block_id;
             let mut link_ids = vec![];
-            for (a, ty) in args.into_iter().zip(func_arg_types.iter()) {
+            for (a, (maybe_key, ty)) in args.into_iter().zip(func_arg_types.fields().iter()) {
                 match a {
                     Argument::Positional(expr) => {
                         let r = self.flatten(current_block_id, *expr, fenv, b)?;
@@ -1110,6 +1110,7 @@ impl Flatten {
         &mut self,
         block_id: BlockId,
         scope_id: ScopeId,
+        arg: &AstType,
         args: &[AstType],
         kwargs: &[ParameterNode],
         ty: AstType,
@@ -1148,6 +1149,29 @@ impl Flatten {
                 (self.push_entry_with_link(entry), arg_ty.clone())
             })
             .collect::<Vec<_>>();
+
+        for (i, (name, ty)) in arg.fields().iter().enumerate() {
+            //let ty = b.types.r(p.ty);
+            let code = LCode::Arg(i as u8);
+            let entry = CodeEntry::new(
+                block_id,
+                code,
+                ty.clone(),
+                *name,
+                span_id,
+                VarDefinitionSpace::Arg,
+            );
+            let link_id = self.push_entry_with_link(entry);
+            if let Some(name) = name {
+                fenv.scope_define(
+                    scope_id,
+                    *name,
+                    link_id.into(),
+                    ty.clone(),
+                    VarDefinitionSpace::Arg,
+                );
+            }
+        }
 
         // defined in the scope
         for (i, p) in kwargs.iter().enumerate() {
@@ -1234,12 +1258,13 @@ impl Flatten {
                                 Successor::FunctionDeclaration,
                             );
                             self.block_succ(fun_block_id, ret_block_id, Successor::BlockScope);
-
+                            let arg_type = b.types.r(def.arg_type).clone();
                             self.start_block(
                                 fun_block_id,
                                 fun_scope_id,
+                                &arg_type,
                                 &[],
-                                &def.params,
+                                &[],
                                 fun_ty.clone(),
                                 Some(name),
                                 span_id,
@@ -1676,6 +1701,7 @@ impl Flatten {
                                 let next_link_ids = self.start_block(
                                     next_block_id,
                                     scope_id,
+                                    &AstType::Unit,
                                     &next_args,
                                     &[],
                                     AstType::Unit,
@@ -1692,13 +1718,16 @@ impl Flatten {
                                 };
 
                                 // Start lambda block
+                                let arg_type = b.types.r(def.arg_type).clone();
+                                let lambda_name = b.labels.fresh_key("lambda");
                                 self.start_block(
                                     fun_block_id,
                                     fun_scope_id,
+                                    &arg_type,
                                     &[],
-                                    &def.params,
+                                    &[],
                                     AstType::Unit,
-                                    Some(b.labels.fresh_key("lambda")),
+                                    Some(lambda_name),
                                     span_id,
                                     VarDefinitionSpace::Reg,
                                     fenv,
@@ -1854,6 +1883,7 @@ impl Flatten {
                 self.start_block(
                     new_block_id,
                     new_scope_id,
+                    &AstType::Unit,
                     &[],
                     &args,
                     AstType::Unit,
@@ -2001,6 +2031,7 @@ impl Flatten {
                 self.start_block(
                     current_block_id,
                     current_scope_id,
+                    &AstType::Unit,
                     &[],
                     &[],
                     AstType::Unit,
@@ -2226,6 +2257,7 @@ pub fn save_graph(blockify: &dyn ICodeModule, filename: &str, b: &NB) {
 }
 
 fn def_to_type(def: &Lambda, b: &mut NB) -> AstType {
+    /*
     let params = def
         .params
         .iter()
@@ -2234,9 +2266,11 @@ fn def_to_type(def: &Lambda, b: &mut NB) -> AstType {
             ty.clone()
         })
         .collect();
+    */
 
+    let arg_type = b.types.r(def.arg_type).clone();
     let return_type = b.types.r(def.return_type).clone();
-    let fun_ty = AstType::Func(params, return_type.into());
+    let fun_ty = AstType::Func(arg_type.into(), return_type.into());
     fun_ty
 }
 

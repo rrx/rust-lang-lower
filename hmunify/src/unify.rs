@@ -78,19 +78,21 @@ fn ast_unify_values(value1: &AstType, value2: &AstType) -> Result<AstType, UErro
             }
             (AstType::Func(c1, r1), AstType::Func(c2, r2)) => {
                 let r = ast_unify_values(r1, r2)?;
-                if c1.len() != c2.len() {
+                let c1_fields = c1.fields();
+                let c2_fields = c2.fields();
+                if c1_fields.len() != c2_fields.len() {
                     Err(UError::Bad)
                 } else {
-                    let result = c1
+                    let result = c1_fields
                         .iter()
-                        .zip(c2.iter())
-                        .map_while(|(a, b)| match ast_unify_values(a, b) {
+                        .zip(c2_fields.iter())
+                        .map_while(|((_, a), (_, b))| match ast_unify_values(a, b) {
                             Ok(s) => Some(s),
                             Err(_) => None,
                         })
                         .collect::<Vec<_>>();
-                    if result.len() == c1.len() {
-                        Ok(AstType::Func(result, r.into()))
+                    if result.len() == c1_fields.len() {
+                        Ok(AstType::func(result, r.into()))
                     } else {
                         Err(UError::Bad)
                     }
@@ -198,7 +200,7 @@ impl TypeUnify {
                 if self.unify(ret1, ret2).is_err() {
                     return Err(UError::Bad);
                 }
-                for (x, y) in vs1.iter().zip(vs2.iter()) {
+                for ((_, x), (_, y)) in vs1.fields().iter().zip(vs2.fields().iter()) {
                     if self.unify(x, y).is_err() {
                         return Err(UError::Bad);
                     }
@@ -232,13 +234,14 @@ impl TypeUnify {
             }
             AstType::Func(args, ret) => {
                 if let Some(ret) = self.resolve(ret) {
-                    let size = args.len();
-                    let args2 = args
+                    let fields = args.fields();
+                    let size = fields.len();
+                    let args2 = fields
                         .into_iter()
-                        .filter_map(|v| self.resolve(v).map(|x| x.into()))
+                        .filter_map(|(_, v)| self.resolve(&v).map(|x| x.into()))
                         .collect::<Vec<_>>();
                     if args2.len() == size {
-                        Some(AstType::Func(args2, ret.into()))
+                        Some(AstType::func(args2, ret.into()))
                     } else {
                         None
                     }
@@ -318,12 +321,12 @@ mod tests {
 
         // resolve function parameter
         let ut15 = u.fresh_unknown();
-        let f0 = AstType::Func(vec![AstType::Int], AstType::Int.into());
-        let f1 = AstType::Func(vec![AstType::Float], AstType::Float.into());
-        let f2 = AstType::Func(vec![ut15.0.clone()], AstType::Int.into());
+        let f0 = AstType::func(vec![AstType::Int], AstType::Int.into());
+        let f1 = AstType::func(vec![AstType::Float], AstType::Float.into());
+        let f2 = AstType::func(vec![ut15.0.clone()], AstType::Int.into());
         let ut16 = u.fresh_unknown();
         let ut17 = u.fresh_unknown();
-        let f3 = AstType::Func(vec![ut16.0.clone()], Box::new(ut17.0.clone()));
+        let f3 = AstType::func(vec![ut16.0.clone()], ut17.0.clone());
         assert!(u.unify(&f0, &f2).is_ok());
         assert!(u.unify(&f1, &f2).is_err());
         assert!(u.unify(&f2, &f3).is_ok());

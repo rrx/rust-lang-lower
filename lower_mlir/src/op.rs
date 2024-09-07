@@ -84,8 +84,9 @@ impl<'c> Lower<'c> {
             }
             AstType::Func(args, ret) => {
                 let inputs = args
+                    .fields()
                     .iter()
-                    .map(|a| self.from_type(a, b).0)
+                    .map(|(_, a)| self.from_type(a, b).0)
                     .collect::<Vec<_>>();
                 let results = vec![self.from_type(ret, b).0];
                 (

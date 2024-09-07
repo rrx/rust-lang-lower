@@ -125,7 +125,7 @@ pub struct ParameterNode {
 #[derive(Debug, Clone)]
 pub struct Lambda {
     pub arg_type: TypeId,
-    pub params: Vec<ParameterNode>,
+    //pub params: Vec<ParameterNode>,
     pub return_type: TypeId,
     pub body: Option<Box<AstNode>>,
 }

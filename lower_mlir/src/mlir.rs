@@ -937,7 +937,8 @@ impl<'c> Lower<'c> {
                 StringAttribute::new(self.context, "private").into(),
             )];
 
-            for ty in params {
+            for (_, ty) in params.fields() {
+                //for ty in params {
                 let (p_ty, dims) = self.from_type(&ty, b);
                 assert_eq!(dims.len(), 0);
                 type_list.push(p_ty);

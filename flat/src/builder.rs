@@ -147,6 +147,7 @@ impl TypeBuilder {
     }
 
     pub fn get_type(&mut self, lambda: &Lambda) -> AstType {
+        /*
         let params = lambda
             .params
             .iter()
@@ -155,9 +156,11 @@ impl TypeBuilder {
                 ty.clone()
             })
             .collect();
+        */
         //let spans = def.params.iter().map(|p| p.span_id).collect::<Vec<_>>();
+        let arg_type = self.r(lambda.arg_type).clone();
         let return_type = self.r(lambda.return_type).clone();
-        let ty = AstType::Func(params, return_type.clone().into());
+        let ty = AstType::Func(arg_type.into(), return_type.clone().into());
         ty
     }
 }
@@ -191,17 +194,17 @@ impl NodeBuilder {
     }
 
     fn init(&mut self) {
-        let ty = AstType::Func(vec![AstType::Bool], AstType::Unit.into());
+        let ty = AstType::func(vec![AstType::Bool], AstType::Unit);
         let ty = self.types.s(&ty);
         let b = compile_core::Builtin::new("check".into(), ty);
         self.builtins.insert(b);
 
-        let ty = AstType::Func(vec![AstType::String], AstType::Unit.into());
+        let ty = AstType::func(vec![AstType::String], AstType::Unit.into());
         let ty = self.types.s(&ty);
         let b = compile_core::Builtin::new("use".into(), ty);
         self.builtins.insert(b);
 
-        let ty = AstType::Func(
+        let ty = AstType::func(
             vec![AstType::Struct(vec![
                 (None, AstType::Int),
                 (None, AstType::Float),
@@ -271,6 +274,7 @@ impl NodeBuilder {
         return_type: AstType,
         body: Option<AstNode>,
     ) -> AstNode {
+        /*
         let params = def_params
             .into_iter()
             .map(|(name, ty)| {
@@ -283,6 +287,7 @@ impl NodeBuilder {
                 }
             })
             .collect();
+        */
 
         let arg_type = AstType::Struct(
             def_params
@@ -297,7 +302,7 @@ impl NodeBuilder {
             name,
             Ast::Lambda(Lambda {
                 arg_type: arg_type_id,
-                params,
+                //params,
                 return_type,
                 body: body.map(|b| b.into()),
             })

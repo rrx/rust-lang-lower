@@ -39,7 +39,7 @@ pub enum AstType {
     Union(Vec<(Option<StringKey>, AstType)>),
     Ptr(Box<AstType>),
     // Func(parameters, return type)
-    Func(Vec<AstType>, Box<AstType>),
+    Func(Box<AstType>, Box<AstType>),
     Variable(u32),
 }
 
@@ -50,6 +50,15 @@ impl std::fmt::Display for AstType {
 }
 
 impl AstType {
+    pub fn tuple(fields: Vec<Self>) -> Self {
+        Self::Struct(fields.into_iter().map(|f| (None, f)).collect())
+    }
+
+    pub fn func(args: Vec<Self>, ret_type: Self) -> Self {
+        let t = Self::tuple(args);
+        AstType::Func(t.into(), ret_type.into())
+    }
+
     pub fn from_str(s: &str) -> Option<AstType> {
         match s {
             "int" => Some(AstType::Int),
@@ -59,6 +68,13 @@ impl AstType {
 
     pub fn unknown(id: u32) -> Self {
         Self::Variable(id)
+    }
+
+    pub fn fields(&self) -> Vec<(Option<StringKey>, AstType)> {
+        match self {
+            Self::Struct(fields) => fields.clone(),
+            _ => vec![],
+        }
     }
 
     pub fn is_unknown(&self) -> bool {
@@ -78,11 +94,16 @@ impl AstType {
                     return true;
                 }
 
+                if args.is_unknown() {
+                    return true;
+                }
+                /*
                 for a in args {
                     if a.is_unknown() {
                         return true;
                     }
                 }
+                */
                 false
             }
             Self::Variable(_) => true,
