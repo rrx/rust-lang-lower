@@ -1035,6 +1035,14 @@ impl Flatten {
         b: &mut NB,
     ) -> Result<(BlockId, AstType, Vec<(LinkId, AstType)>)> {
         if let AstType::Func(func_arg_types, _ret) = &fun_ty {
+
+            // 1. Create map, with capacity = to the number of fields
+            // 2. Copy defaults into the map
+            //
+            //
+            //
+
+
             // process arguments
             // block may have changed so we use the new block returned from the
             // args
@@ -1107,7 +1115,7 @@ impl Flatten {
                             // field has a name, check for default
                             if let Some(v) = def.defaults.get(key) {
                                 let arg =
-                                    Argument::Positional(v.clone().into());
+                                    Argument::Named(*key, v.clone().into());
                                 args.push(arg);
                             } else {
                                 b.push_error(

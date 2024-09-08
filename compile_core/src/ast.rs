@@ -106,8 +106,8 @@ impl BinOpNode {
 pub enum Argument {
     Positional(Box<AstNode>),
     Named(StringKey, Box<AstNode>),
-    Args(Vec<AstNode>),
-    KwArgs(HashMap<StringKey, AstNode>),
+    Args(StringKey, Vec<AstNode>),
+    KwArgs(StringKey, HashMap<StringKey, AstNode>),
 }
 
 impl From<AstNode> for Argument {
@@ -135,7 +135,8 @@ impl Argument {
         match &self {
             Argument::Positional(_) => None,
             Argument::Named(key, _) => Some(*key),
-            _ => unimplemented!()
+            Argument::Args(key, _) => Some(*key),
+            Argument::KwArgs(key, _) => Some(*key),
         }
     }
 
@@ -163,7 +164,7 @@ pub struct ParameterNode {
     pub ty: TypeId,
     pub node: Parameter,
     pub span_id: SpanId,
-    pub default: Option<AstNode>,
+    //pub default: Option<AstNode>,
 }
 
 #[derive(Debug, Clone)]

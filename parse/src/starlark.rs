@@ -244,7 +244,8 @@ impl Parser {
                 let ty = if let Some(ty) = maybe_type.as_ref().map(|ty| from_type(&ty)) {
                     ty
                 } else {
-                    Some(b.types.fresh_unknown())
+                    unimplemented!();
+                    //Some(b.types.fresh_unknown())
                     //Some(self.u.fresh_unknown())
                     //d.push_diagnostic(env.error(item.span, "Missing Type"));
                     //Some(AstType::Unit)
@@ -254,39 +255,41 @@ impl Parser {
                     ty: b.types.s(&ty.unwrap()),
                     node: ast::Parameter::Normal,
                     span_id,
-                    default: None,
+                    //default: None,
                 }
             }
 
             ParameterP::Args(ident, maybe_type) => {
                 println!("args: {:?}", (ident, maybe_type));
-                let ty = if let Some(ty) = maybe_type.as_ref().map(|ty| from_type(&ty)) {
-                    ty
+                let ty = if let Some(_ty) = maybe_type.as_ref().map(|ty| from_type(&ty)) {
+                    unimplemented!()
+                    //ty
                 } else {
-                    Some(AstType::Struct(vec![]))
+                    Some(AstType::Args)
                 };
                 ast::ParameterNode {
                     name: b.labels.s(&ident.node.ident),
                     ty: b.types.s(&ty.unwrap()),
                     node: ast::Parameter::Args,
                     span_id,
-                    default: None,
+                    //default: None,
                 }
             }
 
             ParameterP::KwArgs(ident, maybe_type) => {
                 println!("kwargs: {:?}", (ident, maybe_type));
-                let ty = if let Some(ty) = maybe_type.as_ref().map(|ty| from_type(&ty)) {
-                    ty
+                let ty = if let Some(_ty) = maybe_type.as_ref().map(|ty| from_type(&ty)) {
+                    unimplemented!()
+                    //ty
                 } else {
-                    Some(AstType::Struct(vec![]))
+                    Some(AstType::KwArgs)
                 };
                 ast::ParameterNode {
                     name: b.labels.s(&ident.node.ident),
                     ty: b.types.s(&ty.unwrap()),
                     node: ast::Parameter::KwArgs,
                     span_id,
-                    default: None,
+                    //default: None,
                 }
             }
 
@@ -294,7 +297,8 @@ impl Parser {
                 let ty = if let Some(ty) = maybe_type.as_ref().map(|ty| from_type(&ty)) {
                     ty
                 } else {
-                    Some(b.types.fresh_unknown())
+                    unimplemented!();
+                    //Some(b.types.fresh_unknown())
                     //d.push_diagnostic(env.error(item.span, "Missing Type"));
                     //Some(AstType::Unit)
                 };
@@ -304,7 +308,7 @@ impl Parser {
                     ty: b.types.s(&ty.unwrap()),
                     node: ast::Parameter::WithDefault(default.into()),
                     span_id,
-                    default: None,
+                    //default: None,
                     //default: Some(default),
                 }
             }
@@ -371,22 +375,29 @@ impl Parser {
                 let mut open_kwargs = None;
                 let arg_type = AstType::Struct(
                     params
-                        .iter()
-                        .map(|p| {
-
-                            match &p.node {
+                        .iter().enumerate()
+                        .map(|(index, p)| {
+                            let ty = match &p.node {
                                 Parameter::KwArgs => {
+                                    let is_last = index == params.len() - 1;
+                                    assert!(open_kwargs.is_none());
+                                    assert!(is_last);
                                     open_kwargs = Some(p.name);
+                                    AstType::KwArgs
                                 }
                                 Parameter::Args => {
+                                    assert!(open_args.is_none());
                                     open_args = Some(p.name);
+                                    AstType::Args
                                 }
                                 Parameter::WithDefault(d) => {
                                     defaults.insert(p.name, d.clone());
+                                    b.types.r(p.ty).clone()
                                 }
-                                _ => ()
-                            }
-                            let ty = b.types.r(p.ty);
+                                _ => {
+                                    b.types.r(p.ty).clone()
+                                }
+                            };
                             (Some(p.name), ty.clone())
                         })
                         .collect::<Vec<_>>(),
@@ -673,9 +684,16 @@ impl Parser {
         b: &mut NodeBuilder,
     ) -> Result<ast::Argument> {
         use syntax::ast::ArgumentP;
+        println!("from_arg: {:?}", item);
         match &item.node {
             ArgumentP::Positional(expr) => Ok(self.from_expr(expr, env, b)?.into()),
-            ArgumentP::Named(name, expr) => Ok(self.from_expr(expr, env, b)?.into()),
+            ArgumentP::Named(name, expr) => {
+                let node = self.from_expr(expr, env, b)?;
+                let key = b.labels.s(name);
+                Ok(ast::Argument::Named(key, node.into()))
+            }
+            ArgumentP::Args(expr) => Ok(self.from_expr(expr, env, b)?.into()),
+            ArgumentP::KwArgs(expr) => Ok(self.from_expr(expr, env, b)?.into()),
             _ => unimplemented!(),
         }
     }

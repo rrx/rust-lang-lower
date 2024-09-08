@@ -22,17 +22,21 @@ impl NodeBuilder {
         depth: usize,
     ) {
         let (s, expr) = match a {
-            Argument::Positional(expr) => (format!("arg({})", index), expr.clone()),
+            Argument::Positional(expr) => {
+                (format!("arg({})", index), expr.clone())
+            }
             Argument::Named(key, expr) => {
                 let name = self.labels.r((*key).into());
                 (format!("arg({},{})", index, name), expr.clone())
             }
-            Argument::Args(seq) => {
-                (format!("*args({})", index), Box::new(Ast::Sequence(seq.clone()).into()))
+            Argument::Args(key, seq) => {
+                let name = self.labels.r((*key).into());
+                (format!("*args({},{})", index, name), Box::new(Ast::Sequence(seq.clone()).into()))
             }
-            Argument::KwArgs(seq) => {
+            Argument::KwArgs(key, seq) => {
+                let name = self.labels.r((*key).into());
                 let seq = seq.values().cloned().collect();
-                (format!("*args({})", index), Box::new(Ast::Sequence(seq).into()))
+                (format!("**kwargs({},{})", index, name), Box::new(Ast::Sequence(seq).into()))
             }
         };
         out.push((depth, s, expr.span_id));
@@ -115,10 +119,9 @@ impl NodeBuilder {
                 out.push((depth, s, node.span_id));
                 for e in params {
                     let s = format!(
-                        "arg: {}, {:?}, {}",
+                        "arg: {}, {:?}",
                         self.labels.r(e.name.into()),
                         e.ty,
-                        e.span_id
                     );
                     out.push((depth, s, node.span_id));
                 }
@@ -136,7 +139,7 @@ impl NodeBuilder {
 
             Ast::Lambda(def) => {
                 //let s = format!("func({}):", b.r(def.name));
-                let s = format!("func({}):", node.span_id);
+                let s = format!("func:");
                 out.push((depth, s.into(), node.span_id));
 
                 let arg_type = self.types.r(def.arg_type);
@@ -147,20 +150,9 @@ impl NodeBuilder {
                         format!("{}", i)
                     };
 
-                    let s = format!("arg: {}: {:?}, {}", name, ty, span_id);
+                    let s = format!("arg: {}: {:?}", name, ty);
                     out.push((depth+2, s, node.span_id));
                 }
-                /*
-                for a in &def.params {
-                    let s = format!(
-                        "arg: {}: {:?}, {}",
-                        self.labels.r(a.name.into()),
-                        a.ty,
-                        a.span_id
-                    );
-                    out.push((depth, s, node.span_id));
-                }
-                */
                 if let Some(ref body) = def.body {
                     self.dump_strings(body, out, depth+1);
                 }
@@ -189,20 +181,20 @@ impl NodeBuilder {
             }
 
             Ast::BinaryOp(op, x, y) => {
-                let s = format!("binop: {:?}, {}", op, node.span_id);
+                let s = format!("binop: {:?}", op);
                 out.push((depth, s, node.span_id));
                 self.dump_strings(x, out, depth + 1);
                 self.dump_strings(y, out, depth + 1);
             }
 
             Ast::UnaryOp(op, expr) => {
-                let s = format!("unary: {:?}, {}", op, node.span_id);
+                let s = format!("unary: {:?}", op);
                 out.push((depth, s, node.span_id));
                 self.dump_strings(expr, out, depth + 1);
             }
 
             Ast::Identifier(key) => {
-                let s = format!("ident: {}, {}", self.labels.r(key.into()), node.span_id);
+                let s = format!("ident: {}", self.labels.r(key.into()));
                 out.push((depth, s, node.span_id));
             }
 
