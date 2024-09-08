@@ -472,7 +472,7 @@ impl<'c> Lower<'c> {
                 //}
             }
 
-            LCode::Call(v_f, args, _kwargs) => {
+            LCode::Call(v_f) => {
                 // TODO: ensure calling static
 
                 // function to call
@@ -487,7 +487,7 @@ impl<'c> Lower<'c> {
                     // handle call arguments
 
                     let values = blockify.get_previous_values(v);
-                    assert_eq!(values.len(), *args as usize);
+                    //assert_eq!(values.len(), *args as usize, "call arity mismatch");
                     let indicies = values
                         .iter()
                         .map(|value_id| self.resolve_value(blockify, *value_id).unwrap())
@@ -787,10 +787,10 @@ impl<'c> Lower<'c> {
             LCode::CallValue(_) => (),
             LCode::Noop => (),
 
-            LCode::Builtin(id, num_args, _num_kwargs) => {
+            LCode::Builtin(id) => {
                 let bi = b.builtins.get_enum(*id);
-                let arity = bi.arity();
-                assert_eq!(arity, *num_args as usize);
+                //let arity = bi.arity();
+                //assert_eq!(arity, *num_args as usize);
 
                 match bi {
                     Builtin::Import => {
@@ -798,7 +798,7 @@ impl<'c> Lower<'c> {
                     }
                     Builtin::Assert => {
                         let values = blockify.get_previous_values(v);
-                        assert_eq!(values.len(), *num_args as usize);
+                        //assert_eq!(values.len(), *num_args as usize);
                         let indicies = values
                             .iter()
                             .map(|value_id| self.resolve_value(blockify, *value_id).unwrap())
@@ -815,7 +815,7 @@ impl<'c> Lower<'c> {
                     }
                     Builtin::Print => {
                         let values = blockify.get_previous_values(v);
-                        assert_eq!(values.len(), *num_args as usize);
+                        //assert_eq!(values.len(), *num_args as usize);
                         let indicies = values
                             .iter()
                             .map(|value_id| self.resolve_value(blockify, *value_id).unwrap())

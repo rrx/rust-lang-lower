@@ -1027,13 +1027,109 @@ impl Flatten {
     pub fn add_function_args(
         &mut self,
         block_id: BlockId,
+        def: &Lambda,
         fun_ty: AstType,
-        args: Vec<Argument>,
+        mut args: Vec<Argument>,
         span_id: SpanId,
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
     ) -> Result<(BlockId, AstType, Vec<(LinkId, AstType)>)> {
-        if let AstType::Func(func_arg_types, ret) = &fun_ty {
+        if let AstType::Func(func_arg_types, _ret) = &fun_ty {
+            // process arguments
+            // block may have changed so we use the new block returned from the
+            // args
+            let (fun_arg, ret) = if let AstType::Func(arg, ret) = &fun_ty {
+                (arg, ret)
+            } else {
+                unreachable!()
+            };
+
+
+            let positional_args = args.iter().filter(|a| {
+                a.get_name().is_none()
+            }).collect::<Vec<_>>();
+
+            let kwargs = args.iter().filter(|a| {
+                a.get_name().is_some()
+            }).collect::<Vec<_>>();
+            
+            let fields = fun_arg.fields();
+
+            let field_keys = fields.iter().filter(|(key, _)| {
+                key.is_some()
+            }).map(|(key, _)| key.unwrap()).collect::<HashSet<_>>();
+
+            let field_args = fields.iter().filter(|(key, ty)| {
+                key.is_none()
+            }).collect::<Vec<_>>();
+            let field_kwargs = fields.iter().filter(|(key, ty)| {
+                key.is_some()
+            }).collect::<Vec<_>>();
+
+            let mut open_args = vec![];
+            if positional_args.len() < field_args.len() {
+                // missing positional args, error
+                b.push_error(
+                    &format!("Call missing positional args {}<=>{}", positional_args.len(), field_args.len()),
+                    span_id,
+                );
+            } else if positional_args.len() > field_args.len() {
+                // extra positional params
+                if let Some(args_key) = def.open_args {
+                    // allow extras
+                    open_args = positional_args[field_args.len()..].iter().collect();
+                    //let arg = Argument::Positional
+                } else {
+                    // extras not allowed
+                    b.push_error(
+                        &format!("Call too many positional args {}<=>{}", positional_args.len(), field_args.len()),
+                        span_id,
+                    );
+                }
+            }
+
+            for a in kwargs.iter() {
+                let is_in_fields = field_keys.contains(&a.get_name().unwrap());
+                if is_in_fields {
+                }
+                //if def.open_kwargs
+            }
+
+            if args.len() < fields.len() {
+                println!("missing: {:?}", (args.len(), fields.len()));
+                // missing fields
+                // search for defaults
+                for i in args.len()..fields.len() {
+                    println!("missing: {:?}", (i, fields.get(i)));
+                    match fields.get(i).unwrap() {
+                        (Some(key), _) => {
+                            let name = b.labels.r((*key).into());
+                            // field has a name, check for default
+                            if let Some(v) = def.defaults.get(key) {
+                                let arg =
+                                    Argument::Positional(v.clone().into());
+                                args.push(arg);
+                            } else {
+                                b.push_error(
+                                    &format!("Field name has no default: {}", name),
+                                    span_id,
+                                );
+                            }
+                        }
+                        _ => (),
+                    }
+                }
+            }
+
+            //let args_size = args.len();
+            println!(
+                "X: {}, {}, {:?}",
+                args.len(),
+                fields.len(),
+                (&fun_ty, fields)
+            );
+
+
             let fields = func_arg_types.fields();
             let num_args = fields.len();
             if num_args != args.len() {
@@ -1041,6 +1137,7 @@ impl Flatten {
                     &format!("xCall arity mismatch: {}<=>{}", num_args, args.len()),
                     span_id,
                 );
+                assert!(false);
                 return Err(Error::new(BlockifyError::Invalid));
             }
 
@@ -1073,6 +1170,7 @@ impl Flatten {
                         values.push((link_id, ty.clone()));
                         link_ids.push(link_id);
                     }
+                    _ => unimplemented!()
                 }
             }
             Ok((current_block_id, *ret.clone(), values))
@@ -1085,6 +1183,7 @@ impl Flatten {
     pub fn add_function_call(
         &mut self,
         block_id: BlockId,
+        def: &Lambda,
         fun_offset: CodeOffset,
         fun_ty: AstType,
         args: Vec<Argument>,
@@ -1092,10 +1191,10 @@ impl Flatten {
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
     ) -> Result<FlattenResult> {
-        let args_size = args.len();
+        //let args_size = args.len();
         println!("Y");
         let (current_block_id, ret_ty, values) =
-            self.add_function_args(block_id, fun_ty, args, span_id, fenv, b)?;
+            self.add_function_args(block_id, def, fun_ty, args, span_id, fenv, b)?;
 
         // Add links
         for (link_id, ty) in values {
@@ -1112,7 +1211,7 @@ impl Flatten {
         }
 
         // Make call
-        let code = LCode::Call(fun_offset, args_size as u8, 0);
+        let code = LCode::Call(fun_offset);
         let entry = CodeEntry::new(
             current_block_id,
             code,
@@ -1438,7 +1537,7 @@ impl Flatten {
                             self.push_entry_with_link(entry);
                         }
 
-                        let code = LCode::Builtin(id, args_size as u8, 0);
+                        let code = LCode::Builtin(id);
                         let entry = CodeEntry::new(
                             current_block_id,
                             code,
@@ -1650,26 +1749,38 @@ impl Flatten {
                 ))
             }
 
-            Ast::Call(expr, mut args, _ret_ty) => {
+            Ast::Call(expr, args, _ret_ty) => {
                 match &expr.node {
                     // call is an expression, it's non-terminal
                     // lambdas should also be non-terminal
                     Ast::Identifier(ident) => {
                         let name = b.labels.r(ident.into());
-                        if let Some(data) = self.resolve_name(block_id, *ident, fenv) {
-                            return self.add_function_call(
-                                block_id,
-                                data.offset,
-                                data.ty,
-                                args,
-                                node.span_id,
-                                fenv,
-                                b,
-                            );
-                        }
 
                         match self.resolve_lambda_scope(block_id, ident.into(), fenv) {
                             Some(scope_id) => {
+                                let scope = fenv.get_scope(scope_id);
+                                let label: StringLabel = (*ident).into();
+                                let template_id = scope.lambdas.get(&label).unwrap();
+                                let def = self.get_template(*template_id).clone();
+                                let fun_ty = def_to_type(&def, b);
+
+                                // if it's defined in statick scope, just call it
+                                if let Some(data) = self.resolve_name(block_id, *ident, fenv) {
+                                    return self.add_function_call(
+                                        block_id,
+                                        &def,
+                                        data.offset,
+                                        data.ty,
+                                        args,
+                                        node.span_id,
+                                        fenv,
+                                        b,
+                                    );
+                                }
+
+                                // BAKE LAMBDA
+                                // TODO: There's a better way to do this.  Use continuations
+                                // eventually.
                                 // create a new block for the lambda
                                 // we call the lambda by jumping to it
                                 // the new block points to a next block
@@ -1679,12 +1790,6 @@ impl Flatten {
                                 // want to pass the continuation into the block, so next is not
                                 // required.
 
-                                let scope = fenv.get_scope(scope_id);
-                                let label: StringLabel = (*ident).into();
-                                let template_id = scope.lambdas.get(&label).unwrap();
-                                let def = self.get_template(*template_id).clone();
-                                let fun_ty = def_to_type(&def, b);
-
                                 // New Lambda Scope
                                 let fun_scope_id = fenv.new_scope(ScopeType::Function);
                                 fenv.scope_succ(scope_id, fun_scope_id);
@@ -1693,50 +1798,8 @@ impl Flatten {
                                 let fun_block_id = self.new_block(None, fun_scope_id);
                                 self.block_succ(block_id, fun_block_id, Successor::BlockScope);
 
-                                // process arguments
-                                // block may have changed so we use the new block returned from the
-                                // args
-                                let (fun_arg, ret) = if let AstType::Func(arg, ret) = &fun_ty {
-                                    (arg, ret)
-                                } else {
-                                    unreachable!()
-                                };
-
-                                let fields = fun_arg.fields();
-                                if args.len() < fields.len() {
-                                    println!("missing: {:?}", (args.len(), fields.len()));
-                                    // missing fields
-                                    // search for defaults
-                                    for i in args.len()..fields.len() {
-                                        println!("missing: {:?}", (i, fields.get(i)));
-                                        match fields.get(i).unwrap() {
-                                            (Some(key), _) => {
-                                                // field has a name, check for default
-                                                if let Some(v) = def.defaults.get(key) {
-                                                    let arg =
-                                                        Argument::Positional(v.clone().into());
-                                                    args.push(arg);
-                                                } else {
-                                                    b.push_error(
-                                                        &format!("Call name not found: {}", name),
-                                                        node.span_id,
-                                                    );
-                                                }
-                                            }
-                                            _ => (),
-                                        }
-                                    }
-                                }
-
-                                //let args_size = args.len();
-                                println!(
-                                    "X: {}, {}, {:?}",
-                                    args.len(),
-                                    fields.len(),
-                                    (&fun_ty, fields)
-                                );
                                 let (current_block_id, ret_ty, call_values) = self
-                                    .add_function_args(block_id, fun_ty, args, span_id, fenv, b)?;
+                                    .add_function_args(block_id, &def, fun_ty, args, span_id, fenv, b)?;
                                 // now that we have the arguments calculated
                                 // jump to the function baked as a block
                                 // complete this block with a jump

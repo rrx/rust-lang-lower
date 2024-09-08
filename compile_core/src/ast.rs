@@ -106,6 +106,8 @@ impl BinOpNode {
 pub enum Argument {
     Positional(Box<AstNode>),
     Named(StringKey, Box<AstNode>),
+    Args(Vec<AstNode>),
+    KwArgs(HashMap<StringKey, AstNode>),
 }
 
 impl From<AstNode> for Argument {
@@ -124,6 +126,8 @@ impl Argument {
         match &self {
             Argument::Positional(expr) => expr,
             Argument::Named(_, expr) => expr,
+            //Argument::Args(seq) => &Ast::Sequence(seq.clone()).into(),
+            _ => unimplemented!()
         }
     }
 
@@ -131,6 +135,7 @@ impl Argument {
         match &self {
             Argument::Positional(_) => None,
             Argument::Named(key, _) => Some(*key),
+            _ => unimplemented!()
         }
     }
 
@@ -138,6 +143,7 @@ impl Argument {
         match self {
             Argument::Positional(expr) => *expr,
             Argument::Named(_, expr) => *expr,
+            _ => unimplemented!()
         }
     }
 }
@@ -146,6 +152,8 @@ impl Argument {
 pub enum Parameter {
     Normal,
     WithDefault(AstNode),
+    Args,
+    KwArgs,
     //Dummy<std::marker::PhantomData//(AstNode),
 }
 
@@ -165,6 +173,8 @@ pub struct Lambda {
     pub return_type: TypeId,
     pub body: Option<Box<AstNode>>,
     pub defaults: HashMap<StringKey, AstNode>,
+    pub open_kwargs: Option<StringKey>,
+    pub open_args: Option<StringKey>,
 }
 
 #[derive(Debug, Clone)]

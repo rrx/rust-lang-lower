@@ -275,21 +275,6 @@ impl NodeBuilder {
         return_type: AstType,
         body: Option<AstNode>,
     ) -> AstNode {
-        /*
-        let params = def_params
-            .into_iter()
-            .map(|(name, ty)| {
-                let ty = self.types.s(ty);
-                ParameterNode {
-                    name: *name,
-                    ty,
-                    node: Parameter::Normal,
-                    span_id: SpanId::unknown(),
-                }
-            })
-            .collect();
-        */
-
         let arg_type = AstType::Struct(
             def_params
                 .into_iter()
@@ -303,10 +288,11 @@ impl NodeBuilder {
             name,
             Ast::Lambda(Lambda {
                 arg_type: arg_type_id,
-                //params,
                 return_type,
                 body: body.map(|b| b.into()),
                 defaults: HashMap::new(),
+                open_args: None,
+                open_kwargs: None
             })
             .into(),
         )

@@ -22,10 +22,17 @@ impl NodeBuilder {
         depth: usize,
     ) {
         let (s, expr) = match a {
-            Argument::Positional(expr) => (format!("arg({})", index), expr),
+            Argument::Positional(expr) => (format!("arg({})", index), expr.clone()),
             Argument::Named(key, expr) => {
                 let name = self.labels.r((*key).into());
-                (format!("arg({},{})", index, name), expr)
+                (format!("arg({},{})", index, name), expr.clone())
+            }
+            Argument::Args(seq) => {
+                (format!("*args({})", index), Box::new(Ast::Sequence(seq.clone()).into()))
+            }
+            Argument::KwArgs(seq) => {
+                let seq = seq.values().cloned().collect();
+                (format!("*args({})", index), Box::new(Ast::Sequence(seq).into()))
             }
         };
         out.push((depth, s, expr.span_id));
@@ -36,29 +43,26 @@ impl NodeBuilder {
         &self,
         node: &AstNode,
         out: &mut Vec<(usize, String, SpanId)>,
-        mut depth: usize,
+        depth: usize,
     ) {
         let span_id = node.span_id;
         match &node.node {
             Ast::Module(name, body) => {
                 let s = format!("module({},{})", self.labels.r((*name).into()), span_id);
                 out.push((depth, s, node.span_id));
-                depth += 1;
-                self.dump_strings(body, out, depth);
+                self.dump_strings(body, out, depth+1);
             }
 
             Ast::Block(name, _args, body) => {
                 let s = format!("block({},{})", self.labels.r((*name).into()), span_id);
                 out.push((depth, s, node.span_id));
-                depth += 1;
-                self.dump_strings(body, out, depth);
+                self.dump_strings(body, out, depth+1);
             }
 
             Ast::Sequence(exprs) => {
                 let _s = format!("sequence({})", span_id);
-                depth += 1;
                 for expr in exprs {
-                    self.dump_strings(expr, out, depth);
+                    self.dump_strings(expr, out, depth+1);
                 }
             }
 
@@ -134,7 +138,6 @@ impl NodeBuilder {
                 //let s = format!("func({}):", b.r(def.name));
                 let s = format!("func({}):", node.span_id);
                 out.push((depth, s.into(), node.span_id));
-                depth += 1;
 
                 let arg_type = self.types.r(def.arg_type);
                 for (i, (maybe_key, ty)) in arg_type.fields().iter().enumerate() {
@@ -145,7 +148,7 @@ impl NodeBuilder {
                     };
 
                     let s = format!("arg: {}: {:?}, {}", name, ty, span_id);
-                    out.push((depth, s, node.span_id));
+                    out.push((depth+2, s, node.span_id));
                 }
                 /*
                 for a in &def.params {
@@ -159,7 +162,7 @@ impl NodeBuilder {
                 }
                 */
                 if let Some(ref body) = def.body {
-                    self.dump_strings(body, out, depth);
+                    self.dump_strings(body, out, depth+1);
                 }
             }
 
@@ -172,18 +175,17 @@ impl NodeBuilder {
             Ast::Assign(target, value) => {
                 let s = format!("assign:");
                 out.push((depth, s, node.span_id));
-                depth += 1;
                 match target {
                     AssignTarget::Identifier(key) => {
                         let s = format!("target identifier: {}", self.labels.r(key.into()),);
-                        out.push((depth, s, node.span_id));
+                        out.push((depth+1, s, node.span_id));
                     }
                     AssignTarget::Alloca(key) => {
                         let s = format!("target alloca: {}", self.labels.r(key.into()),);
-                        out.push((depth, s, node.span_id));
+                        out.push((depth+1, s, node.span_id));
                     }
                 }
-                self.dump_strings(value, out, depth);
+                self.dump_strings(value, out, depth+1);
             }
 
             Ast::BinaryOp(op, x, y) => {
@@ -207,29 +209,27 @@ impl NodeBuilder {
             Ast::Conditional(c, a, mb) => {
                 let s = format!("cond({}):", node.span_id);
                 out.push((depth, s, node.span_id));
-                depth += 1;
-                self.dump_strings(c, out, depth);
+                self.dump_strings(c, out, depth+1);
                 let s = format!("then:");
-                out.push((depth, s, node.span_id));
-                self.dump_strings(a, out, depth + 1);
+                out.push((depth+1, s, node.span_id));
+                self.dump_strings(a, out, depth + 2);
                 if let Some(else_expr) = mb {
                     let s = format!("else:");
                     out.push((depth, s, node.span_id));
-                    self.dump_strings(else_expr, out, depth + 1);
+                    self.dump_strings(else_expr, out, depth + 2);
                 }
             }
 
             Ast::Ternary(c, then_expr, else_expr) => {
                 let s = format!("ternary({}):", node.span_id);
                 out.push((depth, s, node.span_id));
-                depth += 1;
-                self.dump_strings(c, out, depth);
+                self.dump_strings(c, out, depth+1);
                 let s = format!("then:");
-                out.push((depth, s, node.span_id));
-                self.dump_strings(then_expr, out, depth + 1);
+                out.push((depth+1, s, node.span_id));
+                self.dump_strings(then_expr, out, depth + 2);
                 let s = format!("else:");
-                out.push((depth, s, node.span_id));
-                self.dump_strings(else_expr, out, depth + 1);
+                out.push((depth+1, s, node.span_id));
+                self.dump_strings(else_expr, out, depth + 2);
             }
 
             Ast::Branch(c, then_key, else_key) => {
@@ -321,9 +321,8 @@ impl NodeBuilder {
             Ast::Yield(body) => {
                 let s = format!("yield({})", node.span_id);
                 out.push((depth, s, node.span_id));
-                depth += 1;
                 if let Some(result) = body {
-                    self.dump_strings(result, out, depth);
+                    self.dump_strings(result, out, depth+1);
                 }
             }
 

@@ -257,20 +257,34 @@ impl Parser {
                     default: None,
                 }
             }
+
+            ParameterP::Args(ident, maybe_type) => {
+                println!("args: {:?}", (ident, maybe_type));
+                let ty = if let Some(ty) = maybe_type.as_ref().map(|ty| from_type(&ty)) {
+                    ty
+                } else {
+                    Some(AstType::Struct(vec![]))
+                };
+                ast::ParameterNode {
+                    name: b.labels.s(&ident.node.ident),
+                    ty: b.types.s(&ty.unwrap()),
+                    node: ast::Parameter::Args,
+                    span_id,
+                    default: None,
+                }
+            }
+
             ParameterP::KwArgs(ident, maybe_type) => {
                 println!("kwargs: {:?}", (ident, maybe_type));
                 let ty = if let Some(ty) = maybe_type.as_ref().map(|ty| from_type(&ty)) {
                     ty
                 } else {
-                    Some(b.types.fresh_unknown())
-                    //Some(self.u.fresh_unknown())
-                    //d.push_diagnostic(env.error(item.span, "Missing Type"));
-                    //Some(AstType::Unit)
+                    Some(AstType::Struct(vec![]))
                 };
                 ast::ParameterNode {
                     name: b.labels.s(&ident.node.ident),
                     ty: b.types.s(&ty.unwrap()),
-                    node: ast::Parameter::Normal,
+                    node: ast::Parameter::KwArgs,
                     span_id,
                     default: None,
                 }
@@ -353,12 +367,24 @@ impl Parser {
                 let body = NB::seq(body, span_id).into();
 
                 let mut defaults = HashMap::new();
+                let mut open_args = None;
+                let mut open_kwargs = None;
                 let arg_type = AstType::Struct(
                     params
                         .iter()
                         .map(|p| {
-                            if let Parameter::WithDefault(d) = &p.node {
-                                defaults.insert(p.name, d.clone());
+
+                            match &p.node {
+                                Parameter::KwArgs => {
+                                    open_kwargs = Some(p.name);
+                                }
+                                Parameter::Args => {
+                                    open_args = Some(p.name);
+                                }
+                                Parameter::WithDefault(d) => {
+                                    defaults.insert(p.name, d.clone());
+                                }
+                                _ => ()
                             }
                             let ty = b.types.r(p.ty);
                             (Some(p.name), ty.clone())
@@ -373,7 +399,8 @@ impl Parser {
                     body: Some(body),
                     return_type: b.types.s(&return_type),
                     defaults,
-                    //params,
+                    open_args,
+                    open_kwargs
                 });
 
                 env.define(name);

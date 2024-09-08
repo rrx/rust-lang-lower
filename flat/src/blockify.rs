@@ -45,8 +45,8 @@ pub enum LCode {
 
     Branch(CodeOffset, BlockId, BlockId),
     Ternary(CodeOffset, BlockId, BlockId), // condition, then_entry, else_entry
-    Builtin(BuiltinId, u8, u8),
-    Call(CodeOffset, u8, u8),
+    Builtin(BuiltinId),
+    Call(CodeOffset),
 }
 
 impl LCode {
