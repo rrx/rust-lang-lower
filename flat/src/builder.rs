@@ -292,7 +292,7 @@ impl NodeBuilder {
                 body: body.map(|b| b.into()),
                 defaults: HashMap::new(),
                 open_args: None,
-                open_kwargs: None
+                open_kwargs: None,
             })
             .into(),
         )

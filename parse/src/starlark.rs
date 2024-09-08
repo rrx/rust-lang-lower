@@ -375,7 +375,8 @@ impl Parser {
                 let mut open_kwargs = None;
                 let arg_type = AstType::Struct(
                     params
-                        .iter().enumerate()
+                        .iter()
+                        .enumerate()
                         .map(|(index, p)| {
                             let ty = match &p.node {
                                 Parameter::KwArgs => {
@@ -394,9 +395,7 @@ impl Parser {
                                     defaults.insert(p.name, d.clone());
                                     b.types.r(p.ty).clone()
                                 }
-                                _ => {
-                                    b.types.r(p.ty).clone()
-                                }
+                                _ => b.types.r(p.ty).clone(),
                             };
                             (Some(p.name), ty.clone())
                         })
@@ -411,7 +410,7 @@ impl Parser {
                     return_type: b.types.s(&return_type),
                     defaults,
                     open_args,
-                    open_kwargs
+                    open_kwargs,
                 });
 
                 env.define(name);
@@ -684,7 +683,6 @@ impl Parser {
         b: &mut NodeBuilder,
     ) -> Result<ast::Argument> {
         use syntax::ast::ArgumentP;
-        println!("from_arg: {:?}", item);
         match &item.node {
             ArgumentP::Positional(expr) => Ok(self.from_expr(expr, env, b)?.into()),
             ArgumentP::Named(name, expr) => {
@@ -694,7 +692,6 @@ impl Parser {
             }
             ArgumentP::Args(expr) => Ok(self.from_expr(expr, env, b)?.into()),
             ArgumentP::KwArgs(expr) => Ok(self.from_expr(expr, env, b)?.into()),
-            _ => unimplemented!(),
         }
     }
 }

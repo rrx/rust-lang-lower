@@ -106,7 +106,7 @@ impl BinOpNode {
 pub enum Argument {
     Positional(Box<AstNode>),
     Named(StringKey, Box<AstNode>),
-    Args(StringKey, Vec<AstNode>),
+    Args(StringKey, Box<AstNode>),
     KwArgs(StringKey, HashMap<StringKey, AstNode>),
 }
 
@@ -127,7 +127,7 @@ impl Argument {
             Argument::Positional(expr) => expr,
             Argument::Named(_, expr) => expr,
             //Argument::Args(seq) => &Ast::Sequence(seq.clone()).into(),
-            _ => unimplemented!()
+            _ => unimplemented!(),
         }
     }
 
@@ -144,7 +144,7 @@ impl Argument {
         match self {
             Argument::Positional(expr) => *expr,
             Argument::Named(_, expr) => *expr,
-            _ => unimplemented!()
+            _ => unimplemented!(),
         }
     }
 }

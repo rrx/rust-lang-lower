@@ -125,7 +125,7 @@ impl AstNode {
                     match a {
                         Argument::Positional(expr) => values.push(expr),
                         Argument::Named(_, expr) => values.push(expr),
-                        _ => unimplemented!()
+                        _ => unimplemented!(),
                     }
                 }
             }
@@ -152,7 +152,7 @@ impl AstNode {
                     match a {
                         Argument::Positional(expr) => values.push(expr),
                         Argument::Named(_, expr) => values.push(expr),
-                        _ => unimplemented!()
+                        _ => unimplemented!(),
                     }
                 }
             }

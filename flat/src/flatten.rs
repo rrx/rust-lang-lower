@@ -1029,29 +1029,205 @@ impl Flatten {
         block_id: BlockId,
         def: &Lambda,
         fun_ty: AstType,
-        mut args: Vec<Argument>,
+        args: Vec<Argument>,
         span_id: SpanId,
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
     ) -> Result<(BlockId, AstType, Vec<(LinkId, AstType)>)> {
-        if let AstType::Func(func_arg_types, _ret) = &fun_ty {
-
-            // 1. Create map, with capacity = to the number of fields
+        if let AstType::Func(func_arg, ret) = &fun_ty {
+            // 1. Create value map, with capacity = to the number of fields
             // 2. Copy defaults into the map
-            //
-            //
-            //
-
+            // 3. Keep a list of fields that have been populated_set
+            // 4. Iterate over the argument list
+            // 4a. For each positional, lookup the associated field in the definition
+            //    for normal types, add the value to the value map
+            //    add the field name to the populated_set
+            // 4b. For args type, we start an args sequence.  Any positionals after this get added
+            //    to the args sequence
+            // 4c. For named args, we add them to the value map
+            //    Check to make sure it hasn't already been added by checking the populated_set
+            // 4d. For kwargs type, this is the final one in the list
+            //    If the value is known, we can populate the value map
+            //    Remaining values go into the kwargs map
+            //    If the value is only known at runtime, then we iterate over the fields in kwargs
+            //    - add them to the value map, ensure we aren't double adding with the
+            //    populated_set
+            //    If the item isn't in the field list, then it gets added to the kwargs map
+            // 5. Add the args sequence, and the kwargs map to the values map
+            // 6. Iterate over the field list, and create an ordered arguments list
+            // 7. Pass that to the function
 
             // process arguments
             // block may have changed so we use the new block returned from the
             // args
-            let (fun_arg, ret) = if let AstType::Func(arg, ret) = &fun_ty {
-                (arg, ret)
-            } else {
-                unreachable!()
-            };
+            //let (fun_arg, ret) = if let AstType::Func(arg, ret) = &fun_ty {
+            //(arg, ret)
+            //} else {
+            //unreachable!()
+            //};
 
+            let fields_list = func_arg.fields();
+            let mut value_map = HashMap::with_capacity(fields_list.len());
+            let mut populated_set = HashSet::with_capacity(fields_list.len());
+            let mut args_seq = vec![];
+            let kwargs_map = HashMap::new();
+            //let def_has_args = def.open_args.is_some();
+            let mut args_seq_started = false;
+            //let def_has_kwargs = def.open_kwargs.is_some();
+
+            // copy defaults into value map
+            for (key, value) in def.defaults.iter() {
+                value_map.insert(*key, value.clone());
+            }
+
+            for (index, arg) in args.iter().enumerate() {
+                let is_last_arg = index == args.len() - 1;
+                match arg {
+                    // these are the first args, and they don't have associated names
+                    // so we look them up in the field list
+                    // We only need to look until we reach the args type
+                    // If we reach the kwargs type before we reach the args type,
+                    // then that means we don't have an open_args function
+                    // we just handle it by copying it to the kwargs_map
+                    Argument::Positional(expr) => {
+                        if args_seq_started {
+                            args_seq.push(*(*expr).clone());
+                        } else {
+                            if let Some((key, ty)) = fields_list.get(index) {
+                                let key = key.unwrap(); // field names should exist?
+                                                        // we have the field, it can either be a regular type, Args, or
+                                                        // Kwargs type
+                                match ty {
+                                    AstType::Args => {
+                                        args_seq_started = true;
+                                    }
+                                    AstType::KwArgs => {
+                                        // not sure how to copy this to the kwargs map, we are
+                                        // missing some types
+                                        unimplemented!()
+                                    }
+                                    _ => {
+                                        // just add to the value map
+                                        value_map.insert(key, *(*expr).clone());
+                                        populated_set.insert(key);
+                                    }
+                                }
+                            } else {
+                                b.push_error(
+                                    &format!("Extra positional field: {}", index),
+                                    span_id,
+                                );
+                            }
+                        }
+                    }
+
+                    // named arguments follow positional args
+                    Argument::Named(key, expr) => {
+                        // make sure we don't double add
+                        if populated_set.contains(key) {
+                            let name = b.labels.r(key.into());
+                            b.push_error(&format!("Keyword argument duplicate: {}", name), span_id);
+                        }
+                        //assert!(!populated_set.contains(key));
+                        value_map.insert(*key, *(*expr).clone());
+                        populated_set.insert(*key);
+                    }
+                    Argument::Args(_key, expr) => {
+                        // just extend the args sequence
+                        // this probably needs to be done at run time, not compile time
+                        //for ast in expr {
+                        //args_seq.push(ast.clone());
+                        //}
+                        args_seq.extend(
+                            expr.clone()
+                                .to_vec()
+                                .into_iter()
+                                .map(|x| x)
+                                .collect::<Vec<_>>(),
+                        );
+                    }
+                    Argument::KwArgs(_key, _expr) => {
+                        assert!(is_last_arg); //kwargs should be last in the args
+                                              // not quite sure how to proceed here.
+                        unimplemented!()
+                    }
+                }
+            }
+
+            //if let Some(key) = def.open_args {
+            //value_map.insert(key, Ast::Sequence(args_seq).into());
+            //}
+            // Do the same with kwargs eventually
+
+            let args: Vec<Argument> = fields_list
+                .iter()
+                .map(|(field_key, field_ty)| {
+                    let field_key = field_key.unwrap();
+                    match field_ty {
+                        AstType::Args => {
+                            let node: AstNode = Ast::Sequence(args_seq.clone()).into();
+                            Argument::Args(field_key, node.into()) //value_map.remove(&field_key).unwrap().into())
+                        }
+                        AstType::KwArgs => {
+                            Argument::KwArgs(field_key, kwargs_map.clone()) //NB::index())//value_map.remove(&field_key).unwrap().into())
+                        }
+                        _ => {
+                            Argument::Named(field_key, value_map.remove(&field_key).unwrap().into())
+                        }
+                    }
+                })
+                .collect();
+
+            if args_seq.len() > 0 && def.open_args.is_none() {
+                // extra fields
+                b.push_error(
+                    &format!("extra fields, no args field: {:?}", args_seq),
+                    span_id,
+                );
+            }
+
+            if fields_list.len() != args.len() {
+                b.push_error(
+                    &format!(
+                        "xCall arity mismatch: {}<=>{}",
+                        fields_list.len(),
+                        args.len()
+                    ),
+                    span_id,
+                );
+                assert!(false);
+                return Err(Error::new(BlockifyError::Invalid));
+            }
+
+            let mut values = vec![];
+            let mut current_block_id = block_id;
+            let mut link_ids = vec![];
+            //let mut has_kwargs = false;
+            //for (a, (maybe_key, ty)) in args.into_iter().zip(fields.iter()) {
+            for a in args.into_iter() {
+                match a {
+                    Argument::Positional(expr) => {
+                        let r = self.flatten(current_block_id, *expr, fenv, b)?;
+                        current_block_id = r.block_id;
+                        let link_id = r.link_id.unwrap();
+                        values.push((link_id, r.ty.clone()));
+                        link_ids.push(link_id);
+                    }
+                    Argument::Named(_key, expr) => {
+                        let r = self.flatten(current_block_id, *expr, fenv, b)?;
+                        current_block_id = r.block_id;
+                        let link_id = r.link_id.unwrap();
+                        values.push((link_id, r.ty.clone()));
+                        link_ids.push(link_id);
+                    }
+                    //Argument::Args(
+                    _ => unimplemented!("{:?}", a),
+                }
+            }
+
+            Ok((current_block_id, *ret.clone(), values))
+
+            /*
 
             let positional_args = args.iter().filter(|a| {
                 a.get_name().is_none()
@@ -1060,7 +1236,7 @@ impl Flatten {
             let kwargs = args.iter().filter(|a| {
                 a.get_name().is_some()
             }).collect::<Vec<_>>();
-            
+
             let fields = fun_arg.fields();
 
             let field_keys = fields.iter().filter(|(key, _)| {
@@ -1181,7 +1357,10 @@ impl Flatten {
                     _ => unimplemented!()
                 }
             }
+
+
             Ok((current_block_id, *ret.clone(), values))
+                */
         } else {
             b.push_error(&format!("Type not function: {:?}", fun_ty), span_id);
             return Err(Error::new(BlockifyError::Invalid));
@@ -1807,7 +1986,9 @@ impl Flatten {
                                 self.block_succ(block_id, fun_block_id, Successor::BlockScope);
 
                                 let (current_block_id, ret_ty, call_values) = self
-                                    .add_function_args(block_id, &def, fun_ty, args, span_id, fenv, b)?;
+                                    .add_function_args(
+                                        block_id, &def, fun_ty, args, span_id, fenv, b,
+                                    )?;
                                 // now that we have the arguments calculated
                                 // jump to the function baked as a block
                                 // complete this block with a jump
@@ -2315,7 +2496,7 @@ impl Flatten {
                 }
             }
 
-            Ast::Array(type_id, dims) => {
+            Ast::Array(_type_id, dims) => {
                 let mut link_ids = vec![];
                 let mut current_block_id = block_id;
                 for d in dims {
