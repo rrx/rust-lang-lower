@@ -903,23 +903,11 @@ impl Flatten {
                 }
 
                 // handle expr
-                //match &expr.node {
-                //_ => {
-                //b.dump_ast(&ast);
-                //if is_last {
-                //let block = self.get_block_mut(current_block_id);
-                //block.next = seq_next_block_id;
-                //}
                 let r = self.flatten(current_block_id, expr, fenv, b)?;
-                let block = self.get_block(r.block_id);
-                println!("b: {:?}", (&r, block.next, d.len(), is_last));
                 ty = r.ty;
                 current_block_id = r.block_id;
                 link_id = r.link_id;
                 is_term = r.is_term;
-                //assert!(!is_term);
-                //}
-                //};
             } else {
                 break;
             }
@@ -1416,7 +1404,6 @@ impl Flatten {
                     Builtin::Import => {
                         let arg = args.pop().unwrap();
                         if let Some(s) = arg.try_string() {
-                            //println!("adding: {}", s);
                             self.link.add_library(&s);
                         } else {
                             b.push_error("Expected string", span_id);
@@ -1431,7 +1418,6 @@ impl Flatten {
                         let mut values = vec![];
                         for a in args.into_iter() {
                             let expr = a.expr();
-                            //let Argument::Positional(expr) = a;
                             let r = self.flatten(current_block_id, expr, fenv, b)?;
                             current_block_id = r.block_id;
                             let link_id = r.link_id.unwrap();
