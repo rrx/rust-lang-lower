@@ -716,10 +716,11 @@ impl Flatten {
         }
     }
 
-    pub fn push(&mut self, mut entry: CodeEntry) -> LinkId {
+    fn _push(&mut self, mut entry: CodeEntry) -> LinkId {
         let index = self.entries.len();
         let link_id = LinkId(index as u32);
         entry.link = Some(link_id);
+        //let block_id = entry.block_id;
         self.entries.push(entry);
         link_id
     }
@@ -730,7 +731,15 @@ impl Flatten {
 
     pub fn push_entry_with_link(&mut self, entry: CodeEntry) -> LinkId {
         let block_id = entry.block_id;
-        let link_id = self.push(entry);
+        let link_id = self._push(entry);
+        let block = self.get_block(block_id);
+        if let Some(last_link_id) = block.links.last() {
+            let last_entry = self.get_entry(*last_link_id);
+            let is_term = last_entry.code.is_term();
+            if is_term {
+                assert!(false, "appending to term block");
+            }
+        }
         self.get_block_mut(block_id).push(link_id);
         link_id
     }
@@ -839,6 +848,8 @@ impl Flatten {
                 //"current: {:?}",
                 //(is_last, expr_is_term, current_block_id, &expr)
                 //);
+                //
+                //let r = self.flatten(current_block_id, expr, fenv, b)?;
 
                 if expr_is_term && !is_last {
                     let next_seq = d.collect::<Vec<_>>();
@@ -892,16 +903,23 @@ impl Flatten {
                 }
 
                 // handle expr
-                match &expr.node {
-                    _ => {
-                        //b.dump_ast(&ast);
-                        let r = self.flatten(current_block_id, expr, fenv, b)?;
-                        current_block_id = r.block_id;
-                        ty = r.ty;
-                        link_id = r.link_id;
-                        is_term = r.is_term;
-                    }
-                };
+                //match &expr.node {
+                //_ => {
+                //b.dump_ast(&ast);
+                //if is_last {
+                //let block = self.get_block_mut(current_block_id);
+                //block.next = seq_next_block_id;
+                //}
+                let r = self.flatten(current_block_id, expr, fenv, b)?;
+                let block = self.get_block(r.block_id);
+                println!("b: {:?}", (&r, block.next, d.len(), is_last));
+                ty = r.ty;
+                current_block_id = r.block_id;
+                link_id = r.link_id;
+                is_term = r.is_term;
+                //assert!(!is_term);
+                //}
+                //};
             } else {
                 break;
             }
@@ -1406,6 +1424,7 @@ impl Flatten {
                         Ok(FlattenResult::new(block_id, None, AstType::Unit, false))
                     }
                     _ => {
+                        let mut current_block_id = block_id;
                         let ty = bi.get_return_type();
                         let args_size = args.len();
                         assert_eq!(args_size, bi.arity());
@@ -1413,7 +1432,8 @@ impl Flatten {
                         for a in args.into_iter() {
                             let expr = a.expr();
                             //let Argument::Positional(expr) = a;
-                            let r = self.flatten(block_id, expr, fenv, b)?;
+                            let r = self.flatten(current_block_id, expr, fenv, b)?;
+                            current_block_id = r.block_id;
                             let link_id = r.link_id.unwrap();
                             let entry = self.get_entry(link_id);
                             values.push((link_id, entry.ty.clone()));
@@ -1422,7 +1442,7 @@ impl Flatten {
                         for (link_id, ty) in values {
                             let code = LCode::CallValue(link_id.into());
                             let entry = CodeEntry::new(
-                                block_id,
+                                current_block_id,
                                 code,
                                 ty,
                                 None,
@@ -1434,7 +1454,7 @@ impl Flatten {
 
                         let code = LCode::Builtin(id, args_size as u8, 0);
                         let entry = CodeEntry::new(
-                            block_id,
+                            current_block_id,
                             code,
                             ty.clone(),
                             None,
@@ -1442,7 +1462,12 @@ impl Flatten {
                             VarDefinitionSpace::Default,
                         );
                         let link_id = self.push_entry_with_link(entry);
-                        Ok(FlattenResult::new(block_id, Some(link_id), ty, false))
+                        Ok(FlattenResult::new(
+                            current_block_id,
+                            Some(link_id),
+                            ty,
+                            false,
+                        ))
                     }
                 }
             }
@@ -1811,7 +1836,7 @@ impl Flatten {
                                     next_block_id,
                                     next_link_id,
                                     ret_ty,
-                                    false,
+                                    true,
                                 ))
                             }
                             None => {
