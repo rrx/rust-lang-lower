@@ -14,6 +14,24 @@ impl NodeBuilder {
         }
     }
 
+    pub fn dump_argument(
+        &self,
+        index: usize,
+        a: &Argument,
+        out: &mut Vec<(usize, String, SpanId)>,
+        depth: usize,
+    ) {
+        let (s, expr) = match a {
+            Argument::Positional(expr) => (format!("arg({})", index), expr),
+            Argument::Named(key, expr) => {
+                let name = self.labels.r((*key).into());
+                (format!("arg({},{})", index, name), expr)
+            }
+        };
+        out.push((depth, s, expr.span_id));
+        self.dump_strings(&expr, out, depth + 1);
+    }
+
     fn dump_strings(
         &self,
         node: &AstNode,
@@ -56,9 +74,8 @@ impl NodeBuilder {
                 let bb = self.builtins.pool.resolve(bi);
                 let s = format!("builtin({})", bb.name);
                 out.push((depth, s, node.span_id));
-                for a in args {
-                    let Argument::Positional(expr) = a;
-                    self.dump_strings(expr, out, depth + 1);
+                for (index, a) in args.iter().enumerate() {
+                    self.dump_argument(index, a, out, depth + 1);
                 }
             }
 
@@ -231,9 +248,8 @@ impl NodeBuilder {
                 out.push((depth, s, node.span_id));
                 self.dump_strings(f, out, depth + 1);
                 if args.len() > 0 {
-                    for a in args {
-                        let Argument::Positional(expr) = a;
-                        self.dump_strings(expr, out, depth + 1);
+                    for (pos, a) in args.iter().enumerate() {
+                        self.dump_argument(pos, a, out, depth + 2);
                     }
                 }
             }

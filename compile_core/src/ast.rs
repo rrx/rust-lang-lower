@@ -1,4 +1,5 @@
 use crate::{AstNode, AstType, BuiltinId, SpanId, StringKey, TypeId};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum VarDefinitionSpace {
@@ -92,6 +93,7 @@ impl BinOpNode {
 #[derive(Debug, Clone)]
 pub enum Argument {
     Positional(Box<AstNode>),
+    Named(StringKey, Box<AstNode>),
 }
 
 impl From<AstNode> for Argument {
@@ -102,15 +104,36 @@ impl From<AstNode> for Argument {
 
 impl Argument {
     pub fn try_string(self) -> Option<String> {
-        let Self::Positional(node) = self;
-        (*node).try_string()
+        let node = self.expr();
+        node.try_string()
+    }
+
+    pub fn get_expr(&self) -> &AstNode {
+        match &self {
+            Argument::Positional(expr) => expr,
+            Argument::Named(_, expr) => expr,
+        }
+    }
+
+    pub fn get_name(&self) -> Option<StringKey> {
+        match &self {
+            Argument::Positional(_) => None,
+            Argument::Named(key, _) => Some(*key),
+        }
+    }
+
+    pub fn expr(self) -> AstNode {
+        match self {
+            Argument::Positional(expr) => *expr,
+            Argument::Named(_, expr) => *expr,
+        }
     }
 }
 
 #[derive(Debug, Clone)]
 pub enum Parameter {
     Normal,
-    //WithDefault(AstNode),
+    WithDefault(AstNode),
     //Dummy<std::marker::PhantomData//(AstNode),
 }
 
@@ -120,6 +143,7 @@ pub struct ParameterNode {
     pub ty: TypeId,
     pub node: Parameter,
     pub span_id: SpanId,
+    pub default: Option<AstNode>,
 }
 
 #[derive(Debug, Clone)]
@@ -128,6 +152,7 @@ pub struct Lambda {
     //pub params: Vec<ParameterNode>,
     pub return_type: TypeId,
     pub body: Option<Box<AstNode>>,
+    pub defaults: HashMap<StringKey, AstNode>,
 }
 
 #[derive(Debug, Clone)]

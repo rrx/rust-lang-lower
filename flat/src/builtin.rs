@@ -16,7 +16,7 @@ fn get_string_arg(args: &[Argument], b: &mut NodeBuilder) -> Option<StringKey> {
     if args.len() == 0 {
         None
     } else if args.len() == 1 {
-        let Argument::Positional(arg) = args.get(0).unwrap();
+        let arg = args.get(0).unwrap().get_expr();
         let s = arg.try_string().unwrap();
         let key = b.labels.s(&s);
         Some(key)
@@ -47,7 +47,7 @@ pub fn builtin_from_name(
         }
         "array" => {
             let mut args = args.iter().collect::<VecDeque<_>>();
-            let Argument::Positional(ty_node) = args.pop_front().unwrap();
+            let ty_node = args.pop_front().unwrap().get_expr();
             b.dump_ast(ty_node);
             let type_id = match &ty_node.node {
                 Ast::Type(type_id) => *type_id,
@@ -64,7 +64,7 @@ pub fn builtin_from_name(
             let dims = args
                 .into_iter()
                 .map(|arg| {
-                    let Argument::Positional(value) = arg;
+                    let value = arg.get_expr();
                     let i = match &value.node {
                         Ast::Literal(Literal::Int(x)) => *x as u64,
                         Ast::Literal(Literal::Index(x)) => *x as u64,
@@ -77,15 +77,15 @@ pub fn builtin_from_name(
         }
         "static" => {
             println!("args: {:?}", args);
-            let Argument::Positional(name_node) = args.get(0).unwrap();
-            let Argument::Positional(value) = args.get(1).unwrap().clone();
+            let name_node = args.get(0).unwrap().get_expr();
+            let value = args.get(1).unwrap().get_expr().clone();
             let name = b.labels.s(&name_node.try_string().unwrap());
-            Some(Ast::global(name, *value).node(span_id))
+            Some(Ast::global(name, value).node(span_id))
         }
         "ternary" => {
-            let Argument::Positional(condition) = args.get(0).unwrap();
-            let Argument::Positional(then_expr) = args.get(1).unwrap();
-            let Argument::Positional(else_expr) = args.get(2).unwrap();
+            let condition = args.get(0).unwrap().get_expr();
+            let then_expr = args.get(1).unwrap().get_expr();
+            let else_expr = args.get(2).unwrap().get_expr();
             Some(
                 Ast::Ternary(
                     condition.clone().into(),

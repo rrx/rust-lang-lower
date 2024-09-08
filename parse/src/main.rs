@@ -58,7 +58,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     for filename in config.inputs {
         let result = p.parse(&filename, &mut b, true);
-        b.spans.diagnostics_dump();
+        if result.is_err() {
+            b.spans.diagnostics_dump();
+        }
         let ast = result?;
 
         let mut fenv = FlattenEnvironment::new();
@@ -67,7 +69,6 @@ fn main() -> Result<(), Box<dyn Error>> {
             b.spans.diagnostics_dump();
         }
         let f = r?;
-        //let _ = r?;
         let m = f.module(&mut fenv, &mut b);
         m.dump(&b);
         m.block_graph("blocks.dot", &b);

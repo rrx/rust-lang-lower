@@ -3,6 +3,7 @@ use compile_core::{
     Argument, Ast, AstNode, AstType, Lambda, Literal, Parameter, ParameterNode, Span, SpanBuilder,
     SpanId, StringKey, StringPool, TypeId, TypePool,
 };
+use std::collections::HashMap;
 
 use crate::BuiltinBuilder;
 
@@ -305,6 +306,7 @@ impl NodeBuilder {
                 //params,
                 return_type,
                 body: body.map(|b| b.into()),
+                defaults: HashMap::new(),
             })
             .into(),
         )
@@ -444,6 +446,7 @@ impl NodeBuilder {
             ty: ty.clone(),
             node: Parameter::Normal,
             span_id: SpanId::unknown(),
+            default: None,
         }
     }
 

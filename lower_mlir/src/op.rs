@@ -105,9 +105,10 @@ impl<'c> Lower<'c> {
             AstType::Unit => (Type::none(self.context), vec![]),
 
             // Resolve Variable
-            AstType::Variable(_) => {
-                let ty = b.types.resolve_type(ty).unwrap();
-                self.from_type(&ty, b)
+            AstType::Variable(x) => {
+                unimplemented!("Missing type information: {:?}", x);
+                //let ty = b.types.resolve_type(ty).unwrap();
+                //self.from_type(&ty, b)
             }
             //AstType::String => Type::none(self.context),
             _ => unimplemented!("{:?}", ty),

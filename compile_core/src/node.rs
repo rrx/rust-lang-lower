@@ -122,8 +122,10 @@ impl AstNode {
             Ast::Call(f, args, _ty) => {
                 values.push(f);
                 for a in args {
-                    let Argument::Positional(expr) = a;
-                    values.push(expr);
+                    match a {
+                        Argument::Positional(expr) => values.push(expr),
+                        Argument::Named(_, expr) => values.push(expr),
+                    }
                 }
             }
             Ast::Global(_, body) => {
@@ -146,8 +148,10 @@ impl AstNode {
             }
             Ast::Builtin(_, args) => {
                 for a in args {
-                    let Argument::Positional(expr) = a;
-                    values.push(expr);
+                    match a {
+                        Argument::Positional(expr) => values.push(expr),
+                        Argument::Named(_, expr) => values.push(expr),
+                    }
                 }
             }
             _ => (),
@@ -169,9 +173,7 @@ impl<'a> Iterator for AstNodeIterator<'a> {
 
 impl From<Argument> for AstNode {
     fn from(item: Argument) -> Self {
-        match item {
-            Argument::Positional(x) => *x,
-        }
+        item.expr()
     }
 }
 

@@ -1028,11 +1028,11 @@ impl Flatten {
         b: &mut NB,
     ) -> Result<(BlockId, AstType, Vec<(LinkId, AstType)>)> {
         if let AstType::Func(func_arg_types, ret) = &fun_ty {
-            let num_args = func_arg_types.fields().len();
+            let fields = func_arg_types.fields();
+            let num_args = fields.len();
             if num_args != args.len() {
-                //if func_arg_types.len() != args.len() {
                 b.push_error(
-                    &format!("Call arity mismatch: {}<=>{}", num_args, args.len()),
+                    &format!("xCall arity mismatch: {}<=>{}", num_args, args.len()),
                     span_id,
                 );
                 return Err(Error::new(BlockifyError::Invalid));
@@ -1041,9 +1041,26 @@ impl Flatten {
             let mut values = vec![];
             let mut current_block_id = block_id;
             let mut link_ids = vec![];
-            for (a, (maybe_key, ty)) in args.into_iter().zip(func_arg_types.fields().iter()) {
+            //let mut has_kwargs = false;
+            for (a, (maybe_key, ty)) in args.into_iter().zip(fields.iter()) {
+                /*
+                if let Some(key) = maybe_key {
+                    if let Some(expr) =
+                    has_kwargs = true;
+                } else if has_kwargs {
+                    assert!(false, "positional field following named field");
+                }
+                */
+
                 match a {
                     Argument::Positional(expr) => {
+                        let r = self.flatten(current_block_id, *expr, fenv, b)?;
+                        current_block_id = r.block_id;
+                        let link_id = r.link_id.unwrap();
+                        values.push((link_id, ty.clone()));
+                        link_ids.push(link_id);
+                    }
+                    Argument::Named(key, expr) => {
                         let r = self.flatten(current_block_id, *expr, fenv, b)?;
                         current_block_id = r.block_id;
                         let link_id = r.link_id.unwrap();
@@ -1070,6 +1087,7 @@ impl Flatten {
         b: &mut NB,
     ) -> Result<FlattenResult> {
         let args_size = args.len();
+        println!("Y");
         let (current_block_id, ret_ty, values) =
             self.add_function_args(block_id, fun_ty, args, span_id, fenv, b)?;
 
@@ -1221,6 +1239,14 @@ impl Flatten {
                     Ast::Lambda(def) => {
                         let ret_ty = b.types.r(def.return_type).clone();
                         let fun_ty = def_to_type(&def, b);
+
+                        // save template for later use
+                        // needed for expressing defaults
+                        let template_id = self.push_template(def.clone());
+                        let block = self.get_block(block_id);
+                        let scope_id = block.scope_id;
+                        let scope = fenv.get_scope_mut(scope_id);
+                        scope.lambdas.insert(name.into(), template_id);
 
                         if let Some(body) = def.body {
                             let span_id = body.span_id;
@@ -1385,8 +1411,9 @@ impl Flatten {
                         assert_eq!(args_size, bi.arity());
                         let mut values = vec![];
                         for a in args.into_iter() {
-                            let Argument::Positional(expr) = a;
-                            let r = self.flatten(block_id, *expr, fenv, b)?;
+                            let expr = a.expr();
+                            //let Argument::Positional(expr) = a;
+                            let r = self.flatten(block_id, expr, fenv, b)?;
                             let link_id = r.link_id.unwrap();
                             let entry = self.get_entry(link_id);
                             values.push((link_id, entry.ty.clone()));
@@ -1606,7 +1633,7 @@ impl Flatten {
                 ))
             }
 
-            Ast::Call(expr, args, _ret_ty) => {
+            Ast::Call(expr, mut args, _ret_ty) => {
                 match &expr.node {
                     // call is an expression, it's non-terminal
                     // lambdas should also be non-terminal
@@ -1652,7 +1679,45 @@ impl Flatten {
                                 // process arguments
                                 // block may have changed so we use the new block returned from the
                                 // args
+                                let (fun_arg, ret) = if let AstType::Func(arg, ret) = &fun_ty {
+                                    (arg, ret)
+                                } else {
+                                    unreachable!()
+                                };
+
+                                let fields = fun_arg.fields();
+                                if args.len() < fields.len() {
+                                    println!("missing: {:?}", (args.len(), fields.len()));
+                                    // missing fields
+                                    // search for defaults
+                                    for i in args.len()..fields.len() {
+                                        println!("missing: {:?}", (i, fields.get(i)));
+                                        match fields.get(i).unwrap() {
+                                            (Some(key), _) => {
+                                                // field has a name, check for default
+                                                if let Some(v) = def.defaults.get(key) {
+                                                    let arg =
+                                                        Argument::Positional(v.clone().into());
+                                                    args.push(arg);
+                                                } else {
+                                                    b.push_error(
+                                                        &format!("Call name not found: {}", name),
+                                                        node.span_id,
+                                                    );
+                                                }
+                                            }
+                                            _ => (),
+                                        }
+                                    }
+                                }
+
                                 //let args_size = args.len();
+                                println!(
+                                    "X: {}, {}, {:?}",
+                                    args.len(),
+                                    fields.len(),
+                                    (&fun_ty, fields)
+                                );
                                 let (current_block_id, ret_ty, call_values) = self
                                     .add_function_args(block_id, fun_ty, args, span_id, fenv, b)?;
                                 // now that we have the arguments calculated

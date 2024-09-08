@@ -11,7 +11,7 @@ use starlark_syntax::syntax::module::AstModuleFields;
 
 use compile_core::{
     ast, AssignTarget, Ast, AstNode, AstType, BinOpNode, CodeLocation, Diagnostic, Label,
-    LinkOptions, SpanId, StringKey,
+    LinkOptions, Parameter, SpanId, StringKey,
 };
 
 use flat::{ICodeModule, NodeBuilder, NodeBuilder as NB, ValueId};
@@ -220,7 +220,7 @@ impl Parser {
             }
             None => syntax::AstModule::parse_file(&path, &dialect)?,
         };
-        println!("m: {:?}", m);
+        //println!("m: {:?}", m);
         let (codemap, stmt, _dialect, _typecheck) = m.into_parts();
         let mut env = Environment::new(&codemap, file_id);
         let mut seq = b.prelude();
@@ -254,27 +254,46 @@ impl Parser {
                     ty: b.types.s(&ty.unwrap()),
                     node: ast::Parameter::Normal,
                     span_id,
+                    default: None,
                 }
             }
-            /*
-
-            ParameterP::WithDefaultValue(ident, maybe_type, expr) => {
-                let ty = if let Some(ty) = maybe_type.map(|ty| from_type(&ty)) {
+            ParameterP::KwArgs(ident, maybe_type) => {
+                println!("kwargs: {:?}", (ident, maybe_type));
+                let ty = if let Some(ty) = maybe_type.as_ref().map(|ty| from_type(&ty)) {
                     ty
                 } else {
-                    Some(self.u.fresh_unknown())
+                    Some(b.types.fresh_unknown())
+                    //Some(self.u.fresh_unknown())
                     //d.push_diagnostic(env.error(item.span, "Missing Type"));
                     //Some(AstType::Unit)
                 };
-                let expr = self.from_expr(*expr, env, d, b).unwrap();
                 ast::ParameterNode {
-                    name: b.s(&ident.node.ident),
-                    ty: ty.unwrap(),
-                    node: ast::Parameter::WithDefault(expr.into()),
-                    extra,
+                    name: b.labels.s(&ident.node.ident),
+                    ty: b.types.s(&ty.unwrap()),
+                    node: ast::Parameter::Normal,
+                    span_id,
+                    default: None,
                 }
             }
-            */
+
+            ParameterP::WithDefaultValue(ident, maybe_type, expr) => {
+                let ty = if let Some(ty) = maybe_type.as_ref().map(|ty| from_type(&ty)) {
+                    ty
+                } else {
+                    Some(b.types.fresh_unknown())
+                    //d.push_diagnostic(env.error(item.span, "Missing Type"));
+                    //Some(AstType::Unit)
+                };
+                let default = self.from_expr(expr, env, b).unwrap();
+                ast::ParameterNode {
+                    name: b.labels.s(&ident.node.ident),
+                    ty: b.types.s(&ty.unwrap()),
+                    node: ast::Parameter::WithDefault(default.into()),
+                    span_id,
+                    default: None,
+                    //default: Some(default),
+                }
+            }
             _ => unimplemented!(),
         }
     }
@@ -333,10 +352,14 @@ impl Parser {
 
                 let body = NB::seq(body, span_id).into();
 
+                let mut defaults = HashMap::new();
                 let arg_type = AstType::Struct(
                     params
                         .iter()
                         .map(|p| {
+                            if let Parameter::WithDefault(d) = &p.node {
+                                defaults.insert(p.name, d.clone());
+                            }
                             let ty = b.types.r(p.ty);
                             (Some(p.name), ty.clone())
                         })
@@ -349,6 +372,7 @@ impl Parser {
                     arg_type: arg_type_id,
                     body: Some(body),
                     return_type: b.types.s(&return_type),
+                    defaults,
                     //params,
                 });
 
@@ -624,6 +648,7 @@ impl Parser {
         use syntax::ast::ArgumentP;
         match &item.node {
             ArgumentP::Positional(expr) => Ok(self.from_expr(expr, env, b)?.into()),
+            ArgumentP::Named(name, expr) => Ok(self.from_expr(expr, env, b)?.into()),
             _ => unimplemented!(),
         }
     }
