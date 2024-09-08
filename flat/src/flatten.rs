@@ -1501,21 +1501,21 @@ impl Flatten {
                 let vx = rx.link_id.unwrap();
                 let vy = ry.link_id.unwrap();
 
-                let x_ty = rx.ty;
-                let y_ty = ry.ty;
-                if x_ty != y_ty {
+                //let x_ty = rx.ty;
+                //let y_ty = ry.ty;
+                if &rx.ty != &ry.ty {
                     b.push_error(
-                        &format!("Binary op type mismatch: {}, {}", x_ty, y_ty),
+                        &format!("Binary op type mismatch: {}, {}", &rx.ty, &ry.ty),
                         x_span_id,
                     );
                 }
 
-                for (v, ty) in [(vx, x_ty), (vy, y_ty)] {
+                for (v, ty) in [(vx, &rx.ty), (vy, &ry.ty)] {
                     let code = LCode::Value(v.into());
                     let entry = CodeEntry::new(
                         current_block_id,
                         code,
-                        ty,
+                        ty.clone(),
                         None,
                         node.span_id,
                         VarDefinitionSpace::Reg,
@@ -1524,18 +1524,24 @@ impl Flatten {
                 }
 
                 let code = LCode::Op2(op.node);
-                let entry = self.get_entry(vx);
-                let ty = entry.ty.clone();
+                let ret_ty = op.node.get_type(&rx.ty, &ry.ty);
+                //let entry = self.get_entry(vx);
+                //let ty = entry.ty.clone();
                 let entry = CodeEntry::new(
                     ry.block_id,
                     code,
-                    ty.clone(),
+                    ret_ty.clone(),
                     None,
                     node.span_id,
                     VarDefinitionSpace::Default,
                 );
                 let link_id = self.push_entry_with_link(entry);
-                Ok(FlattenResult::new(ry.block_id, Some(link_id), ty, false))
+                Ok(FlattenResult::new(
+                    ry.block_id,
+                    Some(link_id),
+                    ret_ty,
+                    false,
+                ))
             }
 
             Ast::Identifier(key) => {

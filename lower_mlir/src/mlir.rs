@@ -512,10 +512,15 @@ impl<'c> Lower<'c> {
             }
 
             LCode::Declare => {
+                if let Some(name) = blockify.get_name(v.into()) {
+                    let s = b.labels.r(name);
+                    println!("declare: {:?}", (s));
+                }
                 let block_id = blockify.get_entry_id(v);
                 let ast_ty = blockify.get_type(v.into());
                 let (ty, dims) = self.from_type(&ast_ty, b);
                 let memref_ty = MemRefType::new(ty.into(), &dims, None, None);
+                println!("declare: {:?}", (ty, dims, memref_ty));
                 let op = memref::alloca(self.context, memref_ty, &[], &[], None, location);
                 let c = blocks.blocks.get_mut(&block_id).unwrap();
                 let index = c.push(op);
@@ -651,6 +656,7 @@ impl<'c> Lower<'c> {
                 let r_x = blocks.value0(x_index);
                 let y_index = self.resolve_value(blockify, vy.into()).unwrap();
                 let r_y = blocks.value0(y_index);
+
                 let (op, _ast_ty) = crate::op::build_binop(
                     self.context,
                     op.clone(),

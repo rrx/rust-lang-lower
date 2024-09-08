@@ -78,6 +78,18 @@ pub enum BinaryOperation {
     GTE,
 }
 
+impl BinaryOperation {
+    pub fn get_type(&self, x_ty: &AstType, y_ty: &AstType) -> AstType {
+        match self {
+            Self::Add => x_ty.clone(),
+            Self::Subtract => x_ty.clone(),
+            Self::Multiply => x_ty.clone(),
+            Self::Divide => x_ty.clone(),
+            Self::NE | Self::EQ | Self::GT | Self::GTE => AstType::Bool,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct BinOpNode {
     pub node: BinaryOperation,
