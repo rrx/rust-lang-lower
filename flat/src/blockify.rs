@@ -176,14 +176,16 @@ pub trait ICodeModule {
         let mut current = v;
         let mut out = vec![];
         loop {
-            current = self.get_next(current).unwrap();
-            let code = self.get_code(current);
-            if let LCode::Arg(_) = code {
-                let ty = self.get_type(current.into());
-                out.push(ty);
-            } else {
-                break;
+            if let Some(next) = self.get_next(current) {
+                current = next;
+                let code = self.get_code(current);
+                if let LCode::Arg(_) = code {
+                    let ty = self.get_type(current.into());
+                    out.push(ty);
+                    continue;
+                }
             }
+            break;
         }
         out
     }
