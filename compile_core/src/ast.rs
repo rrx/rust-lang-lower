@@ -79,7 +79,7 @@ pub enum BinaryOperation {
 }
 
 impl BinaryOperation {
-    pub fn get_type(&self, x_ty: &AstType, y_ty: &AstType) -> AstType {
+    pub fn get_type(&self, x_ty: &AstType, _y_ty: &AstType) -> AstType {
         match self {
             Self::Add => x_ty.clone(),
             Self::Subtract => x_ty.clone(),

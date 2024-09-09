@@ -559,6 +559,7 @@ pub struct Flatten {
     entries: Vec<CodeEntry>,
     gblocks: BlockGraph,
     templates: Vec<Lambda>,
+    messages: Vec<(String, SpanId)>,
 }
 
 impl Flatten {
@@ -569,6 +570,7 @@ impl Flatten {
             gblocks: BlockGraph::new(),
             link: LinkOptions::new(),
             templates: vec![],
+            messages: vec![],
         }
     }
 
@@ -710,6 +712,9 @@ impl Flatten {
             for ast in body.to_vec() {
                 let _ = f.flatten(block_id, ast, fenv, b)?;
             }
+            for (msg, span_id) in f.messages.drain(..) {
+                b.push_error(&msg, span_id);
+            }
             Ok(f)
         } else {
             unreachable!()
@@ -731,13 +736,19 @@ impl Flatten {
 
     pub fn push_entry_with_link(&mut self, entry: CodeEntry) -> LinkId {
         let block_id = entry.block_id;
+        let span_id = entry.span_id;
         let link_id = self._push(entry);
         let block = self.get_block(block_id);
         if let Some(last_link_id) = block.links.last() {
             let last_entry = self.get_entry(*last_link_id);
             let is_term = last_entry.code.is_term();
             if is_term {
-                assert!(false, "appending to term block");
+                let backtrace = std::backtrace::Backtrace::capture();
+                self.messages.push((
+                    format!("appending to term block={}\n{}", block_id, backtrace),
+                    span_id,
+                ));
+                //assert!(false, "appending to term block");
             }
         }
         self.get_block_mut(block_id).push(link_id);
@@ -1057,15 +1068,6 @@ impl Flatten {
             // 6. Iterate over the field list, and create an ordered arguments list
             // 7. Pass that to the function
 
-            // process arguments
-            // block may have changed so we use the new block returned from the
-            // args
-            //let (fun_arg, ret) = if let AstType::Func(arg, ret) = &fun_ty {
-            //(arg, ret)
-            //} else {
-            //unreachable!()
-            //};
-
             let fields_list = func_arg.fields();
             let mut value_map = HashMap::with_capacity(fields_list.len());
             let mut populated_set = HashSet::with_capacity(fields_list.len());
@@ -1165,7 +1167,8 @@ impl Flatten {
                     let field_key = field_key.unwrap();
                     match field_ty {
                         AstType::Args => {
-                            let node: AstNode = Ast::Sequence(args_seq.clone()).into();
+                            //let node: AstNode = Ast::Sequence(args_seq.clone()).into();
+                            let node: AstNode = 1.into();
                             Argument::Args(field_key, node.into()) //value_map.remove(&field_key).unwrap().into())
                         }
                         AstType::KwArgs => {
@@ -1189,7 +1192,7 @@ impl Flatten {
             if fields_list.len() != args.len() {
                 b.push_error(
                     &format!(
-                        "xCall arity mismatch: {}<=>{}",
+                        "Call arity mismatch: {}<=>{}",
                         fields_list.len(),
                         args.len()
                     ),
@@ -1203,7 +1206,9 @@ impl Flatten {
             let mut current_block_id = block_id;
             let mut link_ids = vec![];
             //let mut has_kwargs = false;
-            //for (a, (maybe_key, ty)) in args.into_iter().zip(fields.iter()) {
+            // block may have changed so we use the new block returned from the
+            // args
+            println!("start");
             for a in args.into_iter() {
                 match a {
                     Argument::Positional(expr) => {
@@ -1220,147 +1225,19 @@ impl Flatten {
                         values.push((link_id, r.ty.clone()));
                         link_ids.push(link_id);
                     }
-                    //Argument::Args(
+                    Argument::Args(_key, expr) => {
+                        let r = self.flatten(current_block_id, *expr, fenv, b)?;
+                        current_block_id = r.block_id;
+                        let link_id = r.link_id.unwrap();
+                        values.push((link_id, r.ty.clone()));
+                        link_ids.push(link_id);
+                    }
                     _ => unimplemented!("{:?}", a),
                 }
             }
 
+            println!("blocks: {:?}", (block_id, current_block_id));
             Ok((current_block_id, *ret.clone(), values))
-
-            /*
-
-            let positional_args = args.iter().filter(|a| {
-                a.get_name().is_none()
-            }).collect::<Vec<_>>();
-
-            let kwargs = args.iter().filter(|a| {
-                a.get_name().is_some()
-            }).collect::<Vec<_>>();
-
-            let fields = fun_arg.fields();
-
-            let field_keys = fields.iter().filter(|(key, _)| {
-                key.is_some()
-            }).map(|(key, _)| key.unwrap()).collect::<HashSet<_>>();
-
-            let field_args = fields.iter().filter(|(key, ty)| {
-                key.is_none()
-            }).collect::<Vec<_>>();
-            let field_kwargs = fields.iter().filter(|(key, ty)| {
-                key.is_some()
-            }).collect::<Vec<_>>();
-
-            let mut open_args = vec![];
-            if positional_args.len() < field_args.len() {
-                // missing positional args, error
-                b.push_error(
-                    &format!("Call missing positional args {}<=>{}", positional_args.len(), field_args.len()),
-                    span_id,
-                );
-            } else if positional_args.len() > field_args.len() {
-                // extra positional params
-                if let Some(args_key) = def.open_args {
-                    // allow extras
-                    open_args = positional_args[field_args.len()..].iter().collect();
-                    //let arg = Argument::Positional
-                } else {
-                    // extras not allowed
-                    b.push_error(
-                        &format!("Call too many positional args {}<=>{}", positional_args.len(), field_args.len()),
-                        span_id,
-                    );
-                }
-            }
-
-            for a in kwargs.iter() {
-                let is_in_fields = field_keys.contains(&a.get_name().unwrap());
-                if is_in_fields {
-                }
-                //if def.open_kwargs
-            }
-
-            if args.len() < fields.len() {
-                println!("missing: {:?}", (args.len(), fields.len()));
-                // missing fields
-                // search for defaults
-                for i in args.len()..fields.len() {
-                    println!("missing: {:?}", (i, fields.get(i)));
-                    match fields.get(i).unwrap() {
-                        (Some(key), _) => {
-                            let name = b.labels.r((*key).into());
-                            // field has a name, check for default
-                            if let Some(v) = def.defaults.get(key) {
-                                let arg =
-                                    Argument::Named(*key, v.clone().into());
-                                args.push(arg);
-                            } else {
-                                b.push_error(
-                                    &format!("Field name has no default: {}", name),
-                                    span_id,
-                                );
-                            }
-                        }
-                        _ => (),
-                    }
-                }
-            }
-
-            //let args_size = args.len();
-            println!(
-                "X: {}, {}, {:?}",
-                args.len(),
-                fields.len(),
-                (&fun_ty, fields)
-            );
-
-
-            let fields = func_arg_types.fields();
-            let num_args = fields.len();
-            if num_args != args.len() {
-                b.push_error(
-                    &format!("xCall arity mismatch: {}<=>{}", num_args, args.len()),
-                    span_id,
-                );
-                assert!(false);
-                return Err(Error::new(BlockifyError::Invalid));
-            }
-
-            let mut values = vec![];
-            let mut current_block_id = block_id;
-            let mut link_ids = vec![];
-            //let mut has_kwargs = false;
-            for (a, (maybe_key, ty)) in args.into_iter().zip(fields.iter()) {
-                /*
-                if let Some(key) = maybe_key {
-                    if let Some(expr) =
-                    has_kwargs = true;
-                } else if has_kwargs {
-                    assert!(false, "positional field following named field");
-                }
-                */
-
-                match a {
-                    Argument::Positional(expr) => {
-                        let r = self.flatten(current_block_id, *expr, fenv, b)?;
-                        current_block_id = r.block_id;
-                        let link_id = r.link_id.unwrap();
-                        values.push((link_id, ty.clone()));
-                        link_ids.push(link_id);
-                    }
-                    Argument::Named(key, expr) => {
-                        let r = self.flatten(current_block_id, *expr, fenv, b)?;
-                        current_block_id = r.block_id;
-                        let link_id = r.link_id.unwrap();
-                        values.push((link_id, ty.clone()));
-                        link_ids.push(link_id);
-                    }
-                    _ => unimplemented!()
-                }
-            }
-
-
-            Ok((current_block_id, *ret.clone(), values))
-                */
         } else {
             b.push_error(&format!("Type not function: {:?}", fun_ty), span_id);
             return Err(Error::new(BlockifyError::Invalid));
@@ -1379,9 +1256,9 @@ impl Flatten {
         b: &mut NB,
     ) -> Result<FlattenResult> {
         //let args_size = args.len();
-        println!("Y");
         let (current_block_id, ret_ty, values) =
             self.add_function_args(block_id, def, fun_ty, args, span_id, fenv, b)?;
+        println!("Y: {:?}", (block_id, current_block_id));
 
         // Add links
         for (link_id, ty) in values {
