@@ -104,6 +104,12 @@ impl<'c> Lower<'c> {
                 let ty = IntegerType::new(self.context, 64).into();
                 (ty, vec![])
             }
+            AstType::KwArgs => {
+                // TODO: hardwired for now
+                //let ty = Type::index(self.context);
+                let ty = IntegerType::new(self.context, 64).into();
+                (ty, vec![])
+            }
             AstType::Int => (IntegerType::new(self.context, 64).into(), vec![]),
             AstType::Index => (Type::index(self.context), vec![]),
             AstType::Float => (Type::float64(self.context), vec![]),

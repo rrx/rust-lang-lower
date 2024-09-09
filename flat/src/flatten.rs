@@ -1232,7 +1232,14 @@ impl Flatten {
                         values.push((link_id, r.ty.clone()));
                         link_ids.push(link_id);
                     }
-                    _ => unimplemented!("{:?}", a),
+                    Argument::KwArgs(_key, _expr) => {
+                        let node: AstNode = 1.into();
+                        let r = self.flatten(current_block_id, node, fenv, b)?;
+                        current_block_id = r.block_id;
+                        let link_id = r.link_id.unwrap();
+                        values.push((link_id, r.ty.clone()));
+                        link_ids.push(link_id);
+                    }
                 }
             }
 
