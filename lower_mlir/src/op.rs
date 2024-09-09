@@ -11,7 +11,7 @@ use melior::{
         arith,
         //cf,
         //func,
-        //llvm,
+        llvm,
         memref,
         //ods, scf,
     },
@@ -29,6 +29,7 @@ use melior::{
             IntegerType,
             MemRefType,
             RankedTensorType,
+            TupleType,
         },
         Attribute,
         //Block,
@@ -64,8 +65,11 @@ impl<'c> Lower<'c> {
                     .iter()
                     .map(|(_, a)| self.from_type(a, b).0)
                     .collect::<Vec<_>>();
+                let tuple_type = llvm::r#type::r#struct(self.context, &types, true);
+                let ptr_type = llvm::r#type::pointer(tuple_type, 0);
                 (
-                    melior::ir::r#type::TupleType::new(self.context, &types).into(),
+                    ptr_type,
+                    //melior::ir::r#type::TupleType::new(self.context, &types).into(),
                     vec![],
                 )
             }
@@ -101,8 +105,15 @@ impl<'c> Lower<'c> {
             AstType::Args => {
                 // TODO: hardwired for now
                 //let ty = Type::index(self.context);
-                let ty = IntegerType::new(self.context, 64).into();
-                (ty, vec![])
+                let dummy = vec![self.from_type(&AstType::Int, b).0];
+                let tuple_type = llvm::r#type::r#struct(self.context, &dummy, true);
+                let ptr_type = llvm::r#type::pointer(tuple_type, 0);
+                (ptr_type.into(), vec![])
+
+                //let ty = TupleType::new(self.context, &[self.from_type(&AstType::Int, b).0]);
+                //let mty = MemRefType::new(ty.into(), &[], None, None);
+                //let ty = IntegerType::new(self.context, 64).into();
+                //(mty.into(), vec![])
             }
             AstType::KwArgs => {
                 // TODO: hardwired for now

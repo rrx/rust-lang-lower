@@ -10,6 +10,7 @@ use compile_core::{
     //BinaryOperation, BuiltinId, ControlFlowMarker,
     Lambda,
     LinkOptions,
+    NaryOperation,
     //Literal,
     ParameterNode,
     Span,
@@ -1039,7 +1040,6 @@ impl Flatten {
         &mut self,
         block_id: BlockId,
         def: &Lambda,
-        //fun_ty: AstType,
         args: Vec<Argument>,
         span_id: SpanId,
         fenv: &mut FlattenEnvironment,
@@ -1104,6 +1104,8 @@ impl Flatten {
                             match ty {
                                 AstType::Args => {
                                     args_seq_started = true;
+                                    // push arg into sequence
+                                    args_seq.push(*(*expr).clone());
                                 }
                                 AstType::KwArgs => {
                                     // not sure how to copy this to the kwargs map, we are
@@ -1136,9 +1138,6 @@ impl Flatten {
                 Argument::Args(_key, expr) => {
                     // just extend the args sequence
                     // this probably needs to be done at run time, not compile time
-                    //for ast in expr {
-                    //args_seq.push(ast.clone());
-                    //}
                     args_seq.extend(
                         expr.clone()
                             .to_vec()
@@ -1167,8 +1166,8 @@ impl Flatten {
                 match field_ty {
                     AstType::Args => {
                         //let node: AstNode = Ast::Sequence(args_seq.clone()).into();
-                        let node: AstNode = 1.into();
-                        Argument::Args(field_key, node.into()) //value_map.remove(&field_key).unwrap().into())
+                        //let node: AstNode = 1.into();
+                        Argument::Args(field_key, args_seq.clone()) //value_map.remove(&field_key).unwrap().into())
                     }
                     AstType::KwArgs => {
                         Argument::KwArgs(field_key, kwargs_map.clone()) //NB::index())//value_map.remove(&field_key).unwrap().into())
@@ -1222,11 +1221,45 @@ impl Flatten {
                     values.push((link_id, r.ty.clone()));
                     link_ids.push(link_id);
                 }
-                Argument::Args(_key, expr) => {
-                    let r = self.flatten(current_block_id, *expr, fenv, b)?;
-                    current_block_id = r.block_id;
-                    let link_id = r.link_id.unwrap();
-                    values.push((link_id, r.ty.clone()));
+                Argument::Args(_key, exprs) => {
+                    let mut args_values = vec![];
+                    for expr in exprs {
+                        let r = self.flatten(current_block_id, expr, fenv, b)?;
+                        current_block_id = r.block_id;
+                        let link_id = r.link_id.unwrap();
+                        args_values.push((link_id, r.ty.clone()));
+                    }
+
+                    for (link_id, ty) in args_values.iter() {
+                        let code = LCode::CallValue(link_id.into());
+                        let entry = CodeEntry::new(
+                            current_block_id,
+                            code,
+                            ty.clone(),
+                            None,
+                            span_id,
+                            VarDefinitionSpace::Reg,
+                        );
+                        self.push_entry_with_link(entry);
+                    }
+
+                    let struct_ty = AstType::Struct(
+                        args_values
+                            .iter()
+                            .map(|v| (None, v.1.clone()))
+                            .collect::<Vec<_>>(),
+                    );
+                    let code = LCode::NaryOp(NaryOperation::Struct);
+                    let entry = CodeEntry::new(
+                        current_block_id,
+                        code,
+                        struct_ty.clone(),
+                        None,
+                        span_id,
+                        VarDefinitionSpace::Stack,
+                    );
+                    let link_id = self.push_entry_with_link(entry);
+                    values.push((link_id, struct_ty.clone()));
                     link_ids.push(link_id);
                 }
                 Argument::KwArgs(_key, _expr) => {
@@ -2463,17 +2496,6 @@ pub fn save_graph(blockify: &dyn ICodeModule, filename: &str, b: &NB) {
 }
 
 fn def_to_type(def: &Lambda, b: &mut NB) -> AstType {
-    /*
-    let params = def
-        .params
-        .iter()
-        .map(|p| {
-            let ty = b.types.r(p.ty);
-            ty.clone()
-        })
-        .collect();
-    */
-
     let arg_type = b.types.r(def.arg_type).clone();
     let return_type = b.types.r(def.return_type).clone();
     let fun_ty = AstType::Func(arg_type.into(), return_type.into());

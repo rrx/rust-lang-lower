@@ -2,7 +2,8 @@ use std::collections::VecDeque;
 use thiserror::Error;
 
 use compile_core::{
-    AstType, BinaryOperation, BuiltinId, Literal, SpanId, UnaryOperation, VarDefinitionSpace,
+    AstType, BinaryOperation, BuiltinId, Literal, NaryOperation, SpanId, UnaryOperation,
+    VarDefinitionSpace,
 };
 
 use crate::{
@@ -35,6 +36,7 @@ pub enum LCode {
     Const(Literal),
     Op1(UnaryOperation),
     Op2(BinaryOperation),
+    NaryOp(NaryOperation),
     Load(CodeOffset),              // memref
     Store(CodeOffset, CodeOffset), // memref, value to store
     Return,                        // return values

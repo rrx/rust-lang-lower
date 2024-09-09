@@ -766,6 +766,8 @@ impl StarlarkParser {
         pass_manager.run(module).unwrap();
         assert!(module.as_operation().verify());
 
+        module.as_operation().dump();
+
         if verbose {
             println!(
                 "after pass {}",

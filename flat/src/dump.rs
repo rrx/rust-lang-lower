@@ -21,27 +21,46 @@ impl NodeBuilder {
         out: &mut Vec<(usize, String, SpanId)>,
         depth: usize,
     ) {
-        let (s, expr) = match a {
-            Argument::Positional(expr) => (format!("arg({})", index), expr.clone()),
+        let (s, expr, span_id) = match a {
+            Argument::Positional(expr) => {
+                (format!("arg({})", index), vec![*expr.clone()], expr.span_id)
+            }
             Argument::Named(key, expr) => {
                 let name = self.labels.r((*key).into());
-                (format!("arg({},{})", index, name), expr.clone())
+                (
+                    format!("arg({},{})", index, name),
+                    vec![*expr.clone()],
+                    expr.span_id,
+                )
             }
             Argument::Args(key, seq) => {
                 let name = self.labels.r((*key).into());
-                (format!("*args({},{})", index, name), (*seq).clone()) //Box::new(Ast::Sequence(seq.clone()).into()))
+                let span_id = if seq.len() == 0 {
+                    SpanId::new(0)
+                } else {
+                    seq.first().unwrap().span_id
+                };
+                (
+                    format!("*args({},{})", index, name),
+                    (*seq).clone(),
+                    span_id,
+                ) //Box::new(Ast::Sequence(seq.clone()).into()))
             }
             Argument::KwArgs(key, seq) => {
                 let name = self.labels.r((*key).into());
-                let seq = seq.values().cloned().collect();
-                (
-                    format!("**kwargs({},{})", index, name),
-                    Box::new(Ast::Sequence(seq).into()),
-                )
+                let seq = seq.values().cloned().collect::<Vec<_>>();
+                let span_id = if seq.len() == 0 {
+                    SpanId::new(0)
+                } else {
+                    seq.first().unwrap().span_id
+                };
+                (format!("**kwargs({},{})", index, name), seq, span_id)
             }
         };
-        out.push((depth, s, expr.span_id));
-        self.dump_strings(&expr, out, depth + 1);
+        out.push((depth, s, span_id));
+        for x in expr {
+            self.dump_strings(&x, out, depth + 1);
+        }
     }
 
     fn dump_strings(&self, node: &AstNode, out: &mut Vec<(usize, String, SpanId)>, depth: usize) {

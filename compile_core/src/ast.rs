@@ -102,11 +102,24 @@ impl BinOpNode {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum NaryOperation {
+    Struct,
+}
+
+impl NaryOperation {
+    pub fn get_type(&self, types: &Vec<AstType>) -> AstType {
+        match self {
+            Self::Struct => AstType::Struct(types.iter().map(|ty| (None, ty.clone())).collect()),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Argument {
     Positional(Box<AstNode>),
     Named(StringKey, Box<AstNode>),
-    Args(StringKey, Box<AstNode>),
+    Args(StringKey, Vec<AstNode>),
     KwArgs(StringKey, HashMap<StringKey, AstNode>),
 }
 
@@ -223,6 +236,7 @@ impl ControlFlowMarker {
 pub enum Ast {
     BinaryOp(BinOpNode, Box<AstNode>, Box<AstNode>),
     UnaryOp(UnaryOperation, Box<AstNode>),
+    NaryOp(NaryOperation, Vec<AstNode>),
     // func, args, return type
     Call(Box<AstNode>, Vec<Argument>, TypeId),
     // array(element type, dimensions), empty dim is the same as scalar

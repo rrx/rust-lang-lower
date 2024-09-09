@@ -63,6 +63,17 @@ impl std::fmt::Display for CodeOffset {
     }
 }
 
+impl From<&CodeOffset> for CodeOffset {
+    fn from(item: &CodeOffset) -> Self {
+        *item
+    }
+}
+impl From<&LinkId> for CodeOffset {
+    fn from(item: &LinkId) -> Self {
+        Self::Link(*item)
+    }
+}
+
 impl From<LinkId> for CodeOffset {
     fn from(item: LinkId) -> Self {
         Self::Link(item)
