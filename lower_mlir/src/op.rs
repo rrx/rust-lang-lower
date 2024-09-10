@@ -215,8 +215,79 @@ impl<'c> MLIRGenerator<'c> {
             _ => unreachable!("{:?}", lit),
         }
     }
+
+    pub fn build_float_op(&self, value: f64, location: Location<'c>) -> Operation<'c> {
+        arith::constant(
+            self.context,
+            FloatAttribute::new(self.context, value, Type::float64(self.context)).into(),
+            location,
+        )
+    }
+
+    pub fn build_int_op(&self, value: i64, location: Location<'c>) -> Operation<'c> {
+        let ty = IntegerType::new(self.context, 64);
+        arith::constant(
+            self.context,
+            IntegerAttribute::new(value, ty.into()).into(),
+            location,
+        )
+    }
+
+    pub fn build_index_op(&self, value: i64, location: Location<'c>) -> Operation<'c> {
+        let ty = Type::index(self.context);
+        arith::constant(
+            self.context,
+            IntegerAttribute::new(value, ty.into()).into(),
+            location,
+        )
+    }
+
+    pub fn build_bool_op(&self, value: bool, location: Location<'c>) -> Operation<'c> {
+        let bool_type = IntegerType::new(self.context, 1);
+        arith::constant(
+            self.context,
+            IntegerAttribute::new(if value { 1 } else { 0 }, bool_type.into()).into(),
+            location,
+        )
+    }
+
+    pub fn emit_literal_const(
+        &self,
+        lit: &Literal,
+        location: Location<'c>,
+    ) -> (Operation<'c>, AstType) {
+        match lit {
+            Literal::Float(f) => (self.build_float_op(*f, location), AstType::Float),
+
+            Literal::Int(x) => (self.build_int_op(*x, location), AstType::Int),
+
+            Literal::Index(x) => (self.build_index_op(*x as i64, location), AstType::Index),
+
+            Literal::Bool(x) => (self.build_bool_op(*x, location), AstType::Bool),
+            _ => unimplemented!("{:?}", lit),
+        }
+    }
+
+    pub fn build_reserved(
+        &self,
+        name: &str,
+        location: Location<'c>,
+    ) -> Option<(Operation<'c>, AstType)> {
+        match name {
+            "True" => {
+                let op = self.build_bool_op(true, location);
+                Some((op, AstType::Bool))
+            }
+            "False" => {
+                let op = self.build_bool_op(false, location);
+                Some((op, AstType::Bool))
+            }
+            _ => None,
+        }
+    }
 }
 
+/*
 pub fn build_float_op<'c>(
     context: &'c Context,
     value: f64,
@@ -280,24 +351,7 @@ pub fn build_bool_op<'c>(
         location,
     )
 }
-
-pub fn build_reserved<'c>(
-    context: &'c Context,
-    name: &str,
-    location: Location<'c>,
-) -> Option<(Operation<'c>, AstType)> {
-    match name {
-        "True" => {
-            let op = build_bool_op(context, true, location);
-            Some((op, AstType::Bool))
-        }
-        "False" => {
-            let op = build_bool_op(context, false, location);
-            Some((op, AstType::Bool))
-        }
-        _ => None,
-    }
-}
+*/
 
 pub fn build_static<'c>(
     context: &'c Context,
