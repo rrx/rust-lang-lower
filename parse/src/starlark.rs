@@ -727,7 +727,7 @@ impl StarlarkParser {
         Ok(ast)
     }
 
-    pub fn lower<'c>(
+    pub fn codegen<'c>(
         &mut self,
         blockify: &dyn ICodeModule,
         module_block_id: ValueId,
@@ -738,8 +738,8 @@ impl StarlarkParser {
         for lib in blockify.shared_libraries() {
             self.link.add_library(&lib);
         }
-        let mut lower = lower_mlir::Lower::new(context, blockify, module_block_id, b);
-        lower.lower_module(module)?;
+        let mut gen = lower_mlir::MLIRGenerator::new(context, blockify, module_block_id, b);
+        gen.lower_module(module)?;
         Ok(())
     }
 
@@ -806,7 +806,7 @@ pub(crate) mod tests {
         let m = f.module(&mut fenv, &mut b);
         m.dump(&b);
 
-        let r = p.lower(&m, ValueId::new(0), &context, &mut module, &mut b);
+        let r = p.codegen(&m, ValueId::new(0), &context, &mut module, &mut b);
         b.spans.diagnostics_dump();
         r.unwrap();
 

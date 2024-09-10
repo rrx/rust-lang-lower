@@ -80,7 +80,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             return Err(anyhow::Error::new(BlockifyError::Invalid).into());
         }
 
-        let r = p.lower(&m, ValueId::new(0), &context, &mut module, &mut b);
+        let r = p.codegen(&m, ValueId::new(0), &context, &mut module, &mut b);
         m.block_graph2("cfg.mmd", &b)?;
         b.spans.diagnostics_dump();
         r?;

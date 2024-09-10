@@ -34,6 +34,10 @@ use compile_core::{AstType, Literal, NaryOperation, Span, UnaryOperation};
 
 use std::collections::HashMap;
 
+pub trait LowerIR<'c> {
+    fn lower_literal(&mut self, v: ValueId, lit: &compile_core::Literal);
+}
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum SymIndex {
     Op(ValueId, usize),
@@ -147,7 +151,7 @@ impl<'c> OpCollection<'c> {
     }
 }
 
-pub struct Lower<'c> {
+pub struct MLIRGenerator<'c> {
     pub(crate) context: &'c Context,
     blockify: &'c dyn ICodeModule,
     index: IndexMap<ValueId, SymIndex>,
@@ -156,7 +160,7 @@ pub struct Lower<'c> {
     b: &'c NodeBuilder,
 }
 
-impl<'c> Lower<'c> {
+impl<'c> MLIRGenerator<'c> {
     pub fn new(
         context: &'c Context,
         blockify: &'c dyn ICodeModule,
@@ -174,7 +178,7 @@ impl<'c> Lower<'c> {
     }
 }
 
-impl<'c> Lower<'c> {
+impl<'c> MLIRGenerator<'c> {
     pub fn take_block(&mut self, block_id: ValueId) -> Block<'c> {
         self.blocks.get_mut(&block_id).unwrap().take_block()
     }
@@ -213,14 +217,10 @@ impl<'c> Lower<'c> {
     }
 }
 
-trait LowerIR<'c> {
-    fn lower_literal(&mut self, v: ValueId, lit: &Literal);
-}
-
-impl<'c> LowerIR<'c> for Lower<'c> {
+impl<'c> LowerIR<'c> for MLIRGenerator<'c> {
     fn lower_literal(&mut self, v: ValueId, lit: &Literal) {
         let block_id = self.blockify.get_entry_id(v);
-        let location = self.get_location(v, self.context);
+        let location = self.get_location(v);
 
         if self.blockify.is_in_static_scope(v.into()) {
             let (value, ast_ty) = self.build_static_attribute(lit);
@@ -276,12 +276,21 @@ impl<'c> LowerIR<'c> for Lower<'c> {
     }
 }
 
-impl<'c> Lower<'c> {
-    pub fn get_location(&self, value_id: ValueId, context: &'c Context) -> Location<'c> {
+impl<'c> MLIRGenerator<'c> {
+    pub fn get_location(&self, value_id: ValueId) -> Location<'c> {
         let span_id = self.blockify.get_span_id(value_id);
         let span = self.b.spans.lookup(span_id);
-        let location = diagnostics_location(self.b, context, &span);
+        let location = self.diagnostics_location(&span);
         location
+    }
+
+    fn diagnostics_location(&self, span: &Span) -> ir::Location<'c> {
+        if let Ok(name) = self.b.spans.get_filename(span) {
+            let loc = self.b.spans.get_location(span).unwrap();
+            ir::Location::new(self.context, &name, loc.line_number, loc.column_number)
+        } else {
+            ir::Location::unknown(self.context)
+        }
     }
 
     pub fn resolve_value(&self, offset: CodeOffset) -> Option<SymIndex> {
@@ -303,18 +312,14 @@ impl<'c> Lower<'c> {
         }
     }
 
-    pub fn get_label_args(
-        &self,
-        context: &'c Context,
-        v: ValueId,
-    ) -> Vec<(Type<'c>, Location<'c>)> {
+    pub fn get_label_args(&self, v: ValueId) -> Vec<(Type<'c>, Location<'c>)> {
         let mut current = v;
         let mut out = vec![];
         loop {
             current = self.blockify.get_next(current).unwrap();
             let code = self.blockify.get_code(current);
             if let LCode::Arg(_) = code {
-                let location = self.get_location(current, context);
+                let location = self.get_location(current);
                 let (ty, dims) = self.from_type(&self.blockify.get_type(current.into()));
                 assert_eq!(dims.len(), 0);
                 out.push((ty, location));
@@ -328,7 +333,7 @@ impl<'c> Lower<'c> {
     pub fn create_block(&mut self, entry_id: ValueId) {
         let code = self.blockify.get_code(entry_id);
         if let LCode::Label = code {
-            let args = self.get_label_args(self.context, entry_id);
+            let args = self.get_label_args(entry_id);
             let block = Block::new(&args);
             let c = OpCollection::new(entry_id, block);
             self.blocks.insert(entry_id, c);
@@ -353,7 +358,7 @@ impl<'c> Lower<'c> {
         let arg_count = c.block.as_ref().unwrap().argument_count();
         assert_eq!(arg_count, values.len(), "mismatch arity on jump");
 
-        let location = self.get_location(v, self.context);
+        let location = self.get_location(v);
         let op = cf::br(&c.block.as_ref().unwrap(), &rs, location);
         let c = self.blocks.get_mut(&block_id).unwrap();
 
@@ -362,9 +367,9 @@ impl<'c> Lower<'c> {
         Ok(())
     }
 
-    pub fn lower_code(&mut self, v: ValueId, stack: &mut Vec<ValueId>) -> Result<()> {
+    pub fn lower_code(&mut self, v: ValueId) -> Result<()> {
         let code = self.blockify.get_code(v);
-        let location = self.get_location(v, self.context);
+        let location = self.get_location(v);
 
         match code {
             LCode::Label => {
@@ -405,7 +410,7 @@ impl<'c> Lower<'c> {
 
             LCode::DeclareFunction(maybe_block_id) => {
                 let static_block_id = self.module_block_id;
-                let _block_id = self.blockify.get_entry_id(v);
+                //let _block_id = self.blockify.get_entry_id(v);
                 let key = self.blockify.get_name(v.into()).unwrap();
                 let ty = self.blockify.get_type(v.into());
 
@@ -433,7 +438,7 @@ impl<'c> Lower<'c> {
                     // lower
                     for block_id in block_ids.iter() {
                         let entry_id = self.blockify.resolve_code_offset(*block_id);
-                        self.lower_block(entry_id, stack)?;
+                        self.lower_block(entry_id)?;
                     }
 
                     // append blocks to region
@@ -802,7 +807,7 @@ impl<'c> Lower<'c> {
                 }
                 for block_id in then_block_ids.iter() {
                     let entry_id = self.blockify.resolve_code_offset(*block_id);
-                    self.lower_block(entry_id, stack)?;
+                    self.lower_block(entry_id)?;
                 }
 
                 // yield the last value
@@ -823,7 +828,7 @@ impl<'c> Lower<'c> {
                 }
                 for block_id in else_block_ids.iter() {
                     let entry_id = self.blockify.resolve_code_offset(*block_id);
-                    self.lower_block(entry_id, stack)?;
+                    self.lower_block(entry_id)?;
                 }
 
                 // yield the last value
@@ -937,11 +942,10 @@ impl<'c> Lower<'c> {
         Ok(())
     }
 
-    pub fn lower_block(&mut self, block_id: ValueId, stack: &mut Vec<ValueId>) -> Result<()> {
+    pub fn lower_block(&mut self, block_id: ValueId) -> Result<()> {
         let mut current = block_id;
-        stack.push(block_id);
         loop {
-            self.lower_code(current, stack)?;
+            self.lower_code(current)?;
             if let Some(next) = self.blockify.get_next(current) {
                 current = next;
             } else {
@@ -949,18 +953,12 @@ impl<'c> Lower<'c> {
             }
         }
         self.blocks.get_mut(&block_id).unwrap().complete = true;
-        stack.pop();
         Ok(())
     }
 
-    pub fn lower_static_block(
-        &mut self,
-        module_block_id: ValueId,
-        stack: &mut Vec<ValueId>,
-    ) -> Result<()> {
+    pub fn lower_static_block(&mut self, module_block_id: ValueId) -> Result<()> {
         // reorder things, so we lower declarations last
         let mut current = module_block_id;
-        stack.push(module_block_id);
         let mut values = VecDeque::new();
 
         loop {
@@ -978,19 +976,17 @@ impl<'c> Lower<'c> {
         }
 
         for current in values {
-            self.lower_code(current, stack)?;
+            self.lower_code(current)?;
         }
 
         self.blocks.get_mut(&module_block_id).unwrap().complete = true;
-        stack.pop();
         Ok(())
     }
 
     pub fn lower_module(&mut self, module: &mut melior::ir::Module) -> Result<()> {
         let module_block_id = self.module_block_id;
-        let mut stack = vec![];
         self.create_block(module_block_id);
-        self.lower_static_block(module_block_id, &mut stack)?;
+        self.lower_static_block(module_block_id)?;
         let block = self.blocks.get_mut(&module_block_id).unwrap();
         for op in block.take_ops() {
             module.body().append_operation(op);
@@ -999,7 +995,7 @@ impl<'c> Lower<'c> {
     }
 }
 
-impl<'c> Lower<'c> {
+impl<'c> MLIRGenerator<'c> {
     pub fn build_declare_function(
         &self,
         key: StringLabel,
@@ -1049,18 +1045,5 @@ impl<'c> Lower<'c> {
         } else {
             unreachable!()
         }
-    }
-}
-
-pub fn diagnostics_location<'c>(
-    b: &NodeBuilder,
-    context: &'c Context,
-    span: &Span,
-) -> ir::Location<'c> {
-    if let Ok(name) = b.spans.get_filename(span) {
-        let loc = b.spans.get_location(span).unwrap();
-        ir::Location::new(context, &name, loc.line_number, loc.column_number)
-    } else {
-        ir::Location::unknown(context)
     }
 }

@@ -1,4 +1,4 @@
-use crate::Lower;
+use crate::MLIRGenerator;
 use anyhow::Error;
 use anyhow::Result;
 use compile_core::Diagnostic;
@@ -53,7 +53,7 @@ pub enum LowerError {
     Diagnostic(Diagnostic<usize>),
 }
 
-impl<'c> Lower<'c> {
+impl<'c> MLIRGenerator<'c> {
     pub fn from_type(&self, ty: &AstType) -> (Type<'c>, Vec<u64>) {
         match ty {
             AstType::Ptr(_) => (Type::index(self.context), vec![]),
