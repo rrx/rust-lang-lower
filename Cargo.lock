@@ -809,11 +809,14 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "compile_core",
+ "criterion",
+ "env_logger",
  "indexmap",
  "petgraph",
  "serde",
  "serde_json",
  "tabled",
+ "test-log",
  "thiserror",
 ]
 

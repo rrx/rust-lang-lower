@@ -1,6 +1,40 @@
 default: run
 
+seq:
+	RUST_BACKTRACE=1 RUST_LOG=debug cargo test -- --nocapture test_seq3
+	make graphs
+
+bare:
+	RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/bare.star
+
 run:
+	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/test_cond.star
+	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/static_var.star
+	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/nested_func.star
+	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/test_recursive.star
+	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/fix.star
+	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/test.star || true
+	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/goto.star || true
+	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/test_ternary.star || true
+	RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/test_array.star || true
+	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/dup_func.star || true
+	dot out.dot -Tpng -o out.png
+	dot blocks.dot -Tpng -o blocks.png
+	dot scopes.dot -Tpng -o scopes.png
+	mmdc -o test.png -i cfg.mmd
+
+	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/test_cond.star
+
+graphs:
+	dot out.dot -Tpng -o out.png
+	dot flat/blocks.dot -Tpng -o blocks.png
+	dot scopes.dot -Tpng -o scopes.png
+
+
+run0:
+	RUST_BACKTRACE=1 cargo run --bin parse -- -v tests/goto.star
+
+run_test:
 	RUST_BACKTRACE=1 cargo run --bin parse -- -l -v -x \
 		       -o target/debug/out.mlir \
 		       tests/test_global.star
@@ -23,7 +57,7 @@ run:
 	./target/debug/out ; echo $$?
 
 test: examples
-	cargo test -- --nocapture
+	cargo test -j1 -- --nocapture
 fmt:
 	cargo fmt
 

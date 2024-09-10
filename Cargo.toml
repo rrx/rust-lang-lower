@@ -9,3 +9,7 @@ members = [
   "hmunify",
   "compile_core"
 ]
+
+[profile.dev]
+#debug = 0
+#strip = "debuginfo"

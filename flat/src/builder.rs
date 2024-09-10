@@ -3,6 +3,7 @@ use compile_core::{
     Argument, Ast, AstNode, AstType, Lambda, Literal, Parameter, ParameterNode, Span, SpanBuilder,
     SpanId, StringKey, StringPool, TypeId, TypePool,
 };
+use std::collections::HashMap;
 
 use crate::BuiltinBuilder;
 
@@ -35,6 +36,12 @@ impl LabelBuilder {
             unique_count: 0,
             pool: StringPool::new(),
         }
+    }
+
+    pub fn fresh_key(&mut self, prefix: &str) -> StringKey {
+        let offset = self.unique_count;
+        self.unique_count += 1;
+        self.s(&format!(".{}{}", prefix, offset))
     }
 
     pub fn fresh_var_id(&mut self) -> StringLabel {
@@ -75,6 +82,18 @@ impl TypeBuilder {
         self.vars.push(None);
         let r = AstType::Variable(offset as u32);
         r
+    }
+
+    pub fn fresh_args(&mut self) -> AstType {
+        let offset = self.vars.len();
+        self.vars.push(None);
+        AstType::Args(offset as u32)
+    }
+
+    pub fn fresh_kwargs(&mut self) -> AstType {
+        let offset = self.vars.len();
+        self.vars.push(None);
+        AstType::KwArgs(offset as u32)
     }
 
     pub fn unify(&mut self, a: TypeId, b: TypeId) {
@@ -136,11 +155,12 @@ impl TypeBuilder {
         self.pool.intern(t.clone())
     }
 
-    pub fn r(&mut self, id: TypeId) -> &AstType {
+    pub fn r(&self, id: TypeId) -> &AstType {
         self.pool.resolve(&id)
     }
 
     pub fn get_type(&mut self, lambda: &Lambda) -> AstType {
+        /*
         let params = lambda
             .params
             .iter()
@@ -149,9 +169,11 @@ impl TypeBuilder {
                 ty.clone()
             })
             .collect();
+        */
         //let spans = def.params.iter().map(|p| p.span_id).collect::<Vec<_>>();
+        let arg_type = self.r(lambda.arg_type).clone();
         let return_type = self.r(lambda.return_type).clone();
-        let ty = AstType::Func(params, return_type.clone().into());
+        let ty = AstType::Func(arg_type.into(), return_type.clone().into());
         ty
     }
 }
@@ -185,23 +207,34 @@ impl NodeBuilder {
     }
 
     fn init(&mut self) {
-        let ty = AstType::Func(vec![AstType::Bool], AstType::Unit.into());
+        let ty = AstType::func(vec![AstType::Bool], AstType::Unit);
         let ty = self.types.s(&ty);
         let b = compile_core::Builtin::new("check".into(), ty);
         self.builtins.insert(b);
 
-        let ty = AstType::Func(vec![AstType::String], AstType::Unit.into());
+        let ty = AstType::func(vec![AstType::String], AstType::Unit.into());
         let ty = self.types.s(&ty);
         let b = compile_core::Builtin::new("use".into(), ty);
         self.builtins.insert(b);
 
-        let ty = AstType::Func(
-            vec![AstType::Sum(vec![AstType::Int, AstType::Float])],
+        let ty = AstType::func(
+            vec![AstType::Struct(vec![
+                (None, AstType::Int),
+                (None, AstType::Float),
+            ])],
             AstType::Unit.into(),
         );
         let ty = self.types.s(&ty);
         let b = compile_core::Builtin::new("print".into(), ty);
         self.builtins.insert(b);
+
+        // get unknown initially (so it's 0)
+        let _ = self.spans.get_span_unknown();
+    }
+
+    pub fn ensure_seq(ast: AstNode) -> AstNode {
+        let span_id = ast.span_id;
+        Self::seq(ast.to_vec(), span_id)
     }
 
     pub fn build_literal_from_identifier(&self, name: &str) -> Option<AstNode> {
@@ -218,12 +251,8 @@ impl NodeBuilder {
         args: Vec<Argument>,
         span_id: SpanId,
     ) -> Option<AstNode> {
-        if let Some(b) = crate::builtin_from_name(name) {
-            assert_eq!(b.arity(), args.len());
-            let id = self.builtins.get_id(b);
-            Some(Ast::Builtin(id, args).node(span_id))
-        } else if let Some(ast) = ast_from_name(name, args, self) {
-            Some(ast.node(span_id))
+        if let Some(node) = crate::builtin_from_name(name, &args, span_id, self) {
+            Some(node)
         } else {
             None
         }
@@ -254,30 +283,30 @@ impl NodeBuilder {
     pub fn definition(
         &mut self,
         name: StringKey,
-        params: &[(StringKey, AstType)],
+        def_params: &[(StringKey, AstType)],
         return_type: AstType,
         body: Option<AstNode>,
     ) -> AstNode {
-        let params = params
-            .into_iter()
-            .map(|(name, ty)| {
-                let ty = self.types.s(ty);
-                ParameterNode {
-                    name: *name,
-                    ty,
-                    node: Parameter::Normal,
-                    span_id: SpanId::unknown(),
-                }
-            })
-            .collect();
-
+        let arg_type = AstType::Struct(
+            def_params
+                .into_iter()
+                .map(|(key, ty)| (Some(*key), ty.clone()))
+                .collect::<Vec<_>>(),
+        );
+        let arg_type_id = self.types.s(&arg_type);
+        let fun_type = AstType::Func(arg_type.into(), return_type.clone().into());
         let return_type = self.types.s(&return_type);
+        let fun_type_id = self.types.s(&fun_type);
         Self::global(
             name,
             Ast::Lambda(Lambda {
-                params,
+                fun_type: fun_type_id,
+                arg_type: arg_type_id,
                 return_type,
                 body: body.map(|b| b.into()),
+                defaults: HashMap::new(),
+                //open_args: None,
+                //open_kwargs: None,
             })
             .into(),
         )
@@ -342,19 +371,20 @@ impl NodeBuilder {
     }
 
     pub fn global(name: StringKey, value: AstNode) -> AstNode {
-        Ast::Global(name, value.into()).into()
+        let span_id = value.span_id;
+        Ast::Global(name, value.into()).node(span_id)
     }
 
     pub fn while_loop(condition: AstNode, body: AstNode) -> AstNode {
         Ast::While(condition.into(), body.into()).into()
     }
 
-    pub fn loop_break(key: Option<StringKey>) -> AstNode {
-        Ast::Break(key, vec![]).into()
+    pub fn loop_break(key: Option<StringKey>) -> Ast {
+        Ast::Break(key, vec![])
     }
 
-    pub fn loop_continue(key: Option<StringKey>) -> AstNode {
-        Ast::Continue(key, vec![]).into()
+    pub fn loop_continue(key: Option<StringKey>) -> Ast {
+        Ast::Continue(key, vec![])
     }
 
     pub fn func(
@@ -398,14 +428,14 @@ impl NodeBuilder {
     }
 
     pub fn label(name: StringKey) -> AstNode {
-        ControlFlowMarker::BlockStart(name, vec![]).into()
+        ControlFlowMarker::BlockStart(Some(name), vec![]).into()
     }
 
     pub fn block_start(name: StringKey, params: Vec<ParameterNode>) -> AstNode {
-        ControlFlowMarker::BlockStart(name, params).into()
+        ControlFlowMarker::BlockStart(Some(name), params).into()
     }
 
-    pub fn goto(name: StringKey) -> AstNode {
+    pub fn goto(name: StringKey) -> Ast {
         ControlFlowMarker::Goto(name).into()
     }
 
@@ -416,6 +446,7 @@ impl NodeBuilder {
             ty: ty.clone(),
             node: Parameter::Normal,
             span_id: SpanId::unknown(),
+            //default: None,
         }
     }
 
@@ -459,11 +490,11 @@ pub(crate) mod tests {
                 NB::label(entry),
                 NB::assign(yy, 1.into()),
                 NB::alloca(y, 999.into()),
-                NB::goto(asdf.into()),
+                NB::goto(asdf.into()).into(),
                 // asdf
                 NB::label(asdf),
                 NB::assign(yy, 2.into()),
-                NB::goto(asdf2),
+                NB::goto(asdf2).into(),
                 // asdf2
                 NB::label(asdf2),
                 NB::assign(yy, 3.into()),
@@ -595,61 +626,5 @@ pub(crate) mod tests {
             span_id,
         )));
         NB::seq(seq, span_id)
-    }
-}
-
-pub fn ast_from_name(name: &str, mut args: Vec<Argument>, b: &mut NodeBuilder) -> Option<Ast> {
-    if name == "goto" {
-        let rest = args
-            .split_off(1)
-            .into_iter()
-            .map(|a| {
-                let Argument::Positional(expr) = a;
-                *expr
-            })
-            .collect::<Vec<_>>();
-        assert_eq!(rest.len(), 0);
-        let s = args.pop().unwrap().try_string().unwrap();
-        let key = b.labels.s(&s);
-        Some(Ast::ControlFlowMarker(ControlFlowMarker::Goto(key.into())))
-    } else if name == "static" {
-        println!("args: {:?}", args);
-        let Argument::Positional(value) = args.pop().unwrap();
-        let Argument::Positional(name_node) = args.pop().unwrap();
-        let name = b.labels.s(&name_node.try_string().unwrap());
-        Some(Ast::global(name, *value))
-    } else if name == "label" {
-        let rest = args.split_off(1);
-        let s = args.pop().unwrap().try_string().unwrap();
-        let key = b.labels.s(&s);
-
-        let mut params = vec![];
-        for arg in rest {
-            let Argument::Positional(node) = arg;
-            let name = node.try_string().unwrap();
-            let key = b.labels.s(&name);
-            let ty = b.types.s(&AstType::Unit);
-            params.push(ParameterNode {
-                name: key,
-                ty,
-                node: Parameter::Normal,
-                span_id: SpanId::unknown(),
-            });
-        }
-        Some(Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(
-            key.into(),
-            vec![],
-        )))
-    } else if name == "ternary" {
-        let Argument::Positional(else_expr) = args.pop().unwrap();
-        let Argument::Positional(then_expr) = args.pop().unwrap();
-        let Argument::Positional(condition) = args.pop().unwrap();
-        Some(Ast::Ternary(
-            condition.into(),
-            then_expr.into(),
-            else_expr.into(),
-        ))
-    } else {
-        None
     }
 }

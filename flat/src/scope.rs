@@ -1,19 +1,19 @@
 use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
 
-use crate::{BlockId, CodeOffset, StringLabel, ValueId};
+use crate::{BlockId, CodeOffset, NodeBuilder, StringLabel, ValueId};
 use compile_core::{AstType, StringKey, VarDefinitionSpace};
 
 #[derive(Debug, Clone)]
 pub struct Data {
     pub(crate) ty: AstType,
     pub(crate) mem: VarDefinitionSpace,
-    pub(crate) value_id: ValueId,
+    pub(crate) offset: CodeOffset,
 }
 
 impl Data {
-    pub fn new(value_id: ValueId, ty: AstType, mem: VarDefinitionSpace) -> Self {
-        Data { value_id, ty, mem }
+    pub fn new(offset: CodeOffset, ty: AstType, mem: VarDefinitionSpace) -> Self {
+        Data { offset, ty, mem }
     }
 }
 
@@ -22,6 +22,7 @@ pub enum ScopeType {
     Static,
     Function,
     Block,
+    Region,
     Loop,
 }
 
@@ -86,8 +87,16 @@ impl ScopeLayer {
         }
     }
 
-    pub fn lookup(&self, name: StringKey) -> Option<ValueId> {
-        self.names.get(&name).cloned().map(|data| data.value_id)
+    pub fn lookup(&self, name: StringKey) -> Option<CodeOffset> {
+        self.names.get(&name).cloned().map(|data| data.offset)
+    }
+
+    pub fn dump(&self, b: &NodeBuilder) {
+        println!("Scope: {:?}", self.scope_type);
+        for (k, v) in self.labels.iter() {
+            let s = b.labels.r(*k);
+            println!("Label: {}:{:?}", s, v);
+        }
     }
 }
 
@@ -95,6 +104,7 @@ impl ScopeLayer {
 pub enum Successor {
     BlockScope,
     Operation,
+    Jump,
     FunctionDeclaration,
 }
 
@@ -202,7 +212,7 @@ impl Environment {
         ty: AstType,
         mem: VarDefinitionSpace,
     ) {
-        let data = Data::new(value_id, ty, mem);
+        let data = Data::new(value_id.into(), ty, mem);
         self.scopes
             .get_mut(scope_id.0 as usize)
             .unwrap()
@@ -285,6 +295,16 @@ impl Environment {
         self.get_block_mut_by_block_id(*block_id)
     }
 
+    pub fn get_block_by_offset(&self, code_offset: CodeOffset) -> &Block {
+        let v = self.resolve_code_offset(code_offset);
+        self.get_block(v)
+    }
+
+    pub fn get_block_mut_by_offset(&mut self, code_offset: CodeOffset) -> &mut Block {
+        let v = self.resolve_code_offset(code_offset);
+        self.get_block_mut(v)
+    }
+
     pub fn resolve_code_offset(&self, code_offset: CodeOffset) -> ValueId {
         match code_offset {
             CodeOffset::Value(v) => v,
@@ -292,6 +312,7 @@ impl Environment {
                 let block = self.get_block_by_block_id(block_id);
                 block.entry_id.unwrap()
             }
+            _ => unimplemented!(),
         }
     }
 

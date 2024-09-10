@@ -28,12 +28,20 @@ pub enum AstType {
     Unit,
     Never,
     Type,
-    Sum(Vec<AstType>),
+    JumpTarget,
+    Args(u32),   // *args type
+    KwArgs(u32), // **kwargs type
+    Array(Box<AstType>, Vec<u64>),
+
+    // T(a:int, b:float), T(int, float), defaults are handled as part of implementation
+    // Tuples and NamedTuples are just Stucts
+    Struct(Vec<(Option<StringKey>, AstType)>),
+    // Unions are similar to structs, but the values hold the same space
+    // Naked unions, and tagged unions are implemented as part of layout and implementation
+    Union(Vec<(Option<StringKey>, AstType)>),
     Ptr(Box<AstType>),
-    Tuple(Vec<AstType>),
-    NamedTuple(Vec<(StringKey, AstType)>),
     // Func(parameters, return type)
-    Func(Vec<AstType>, Box<AstType>),
+    Func(Box<AstType>, Box<AstType>),
     Variable(u32),
 }
 
@@ -44,31 +52,60 @@ impl std::fmt::Display for AstType {
 }
 
 impl AstType {
+    pub fn tuple(fields: Vec<Self>) -> Self {
+        Self::Struct(fields.into_iter().map(|f| (None, f)).collect())
+    }
+
+    pub fn func(args: Vec<Self>, ret_type: Self) -> Self {
+        let t = Self::tuple(args);
+        AstType::Func(t.into(), ret_type.into())
+    }
+
+    pub fn from_str(s: &str) -> Option<AstType> {
+        match s {
+            "int" => Some(AstType::Int),
+            _ => None,
+        }
+    }
+
     pub fn unknown(id: u32) -> Self {
         Self::Variable(id)
+    }
+
+    pub fn fields(&self) -> Vec<(Option<StringKey>, AstType)> {
+        match self {
+            Self::Struct(fields) => fields.clone(),
+            _ => vec![],
+        }
     }
 
     pub fn is_unknown(&self) -> bool {
         match self {
             Self::Ptr(ty) => ty.is_unknown(),
-            Self::Tuple(values) => {
-                for a in values {
+            Self::Struct(fields) | Self::Union(fields) => {
+                for (_, a) in fields {
                     if a.is_unknown() {
                         return true;
                     }
                 }
                 false
             }
+            Self::Array(element, _) => element.is_unknown(),
             Self::Func(args, ret) => {
                 if ret.is_unknown() {
                     return true;
                 }
 
+                if args.is_unknown() {
+                    return true;
+                }
+                /*
                 for a in args {
                     if a.is_unknown() {
                         return true;
                     }
                 }
+                */
                 false
             }
             Self::Variable(_) => true,

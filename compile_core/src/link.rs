@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct LinkOptions {
     shared: HashSet<String>,
 }

@@ -1,4 +1,5 @@
 use crate::{AstNode, AstType, BuiltinId, SpanId, StringKey, TypeId};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum VarDefinitionSpace {
@@ -38,7 +39,7 @@ pub enum Literal {
     Float(f64),
     String(String),
     Bool(bool),
-    Type(TypeId),
+    //Type(TypeId),
 }
 
 impl From<Literal> for AstType {
@@ -55,7 +56,7 @@ impl From<&Literal> for AstType {
             Literal::Bool(_) => AstType::Bool,
             Literal::Index(_) => AstType::Index,
             Literal::String(_) => AstType::String,
-            Literal::Type(_) => AstType::Type,
+            //Literal::Type(_) => AstType::Type,
         }
     }
 }
@@ -77,6 +78,18 @@ pub enum BinaryOperation {
     GTE,
 }
 
+impl BinaryOperation {
+    pub fn get_type(&self, x_ty: &AstType, _y_ty: &AstType) -> AstType {
+        match self {
+            Self::Add => x_ty.clone(),
+            Self::Subtract => x_ty.clone(),
+            Self::Multiply => x_ty.clone(),
+            Self::Divide => x_ty.clone(),
+            Self::NE | Self::EQ | Self::GT | Self::GTE => AstType::Bool,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct BinOpNode {
     pub node: BinaryOperation,
@@ -89,9 +102,25 @@ impl BinOpNode {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum NaryOperation {
+    Struct,
+}
+
+impl NaryOperation {
+    pub fn get_type(&self, types: &Vec<AstType>) -> AstType {
+        match self {
+            Self::Struct => AstType::Struct(types.iter().map(|ty| (None, ty.clone())).collect()),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Argument {
     Positional(Box<AstNode>),
+    Named(StringKey, Box<AstNode>),
+    Args(StringKey, Vec<AstNode>),
+    KwArgs(StringKey, HashMap<StringKey, AstNode>),
 }
 
 impl From<AstNode> for Argument {
@@ -102,15 +131,43 @@ impl From<AstNode> for Argument {
 
 impl Argument {
     pub fn try_string(self) -> Option<String> {
-        let Self::Positional(node) = self;
-        (*node).try_string()
+        let node = self.expr();
+        node.try_string()
+    }
+
+    pub fn get_expr(&self) -> &AstNode {
+        match &self {
+            Argument::Positional(expr) => expr,
+            Argument::Named(_, expr) => expr,
+            //Argument::Args(seq) => &Ast::Sequence(seq.clone()).into(),
+            _ => unimplemented!(),
+        }
+    }
+
+    pub fn get_name(&self) -> Option<StringKey> {
+        match &self {
+            Argument::Positional(_) => None,
+            Argument::Named(key, _) => Some(*key),
+            Argument::Args(key, _) => Some(*key),
+            Argument::KwArgs(key, _) => Some(*key),
+        }
+    }
+
+    pub fn expr(self) -> AstNode {
+        match self {
+            Argument::Positional(expr) => *expr,
+            Argument::Named(_, expr) => *expr,
+            _ => unimplemented!(),
+        }
     }
 }
 
 #[derive(Debug, Clone)]
 pub enum Parameter {
     Normal,
-    //WithDefault(AstNode),
+    WithDefault(AstNode),
+    Args,
+    KwArgs,
     //Dummy<std::marker::PhantomData//(AstNode),
 }
 
@@ -120,13 +177,19 @@ pub struct ParameterNode {
     pub ty: TypeId,
     pub node: Parameter,
     pub span_id: SpanId,
+    //pub default: Option<AstNode>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Lambda {
-    pub params: Vec<ParameterNode>,
+    pub fun_type: TypeId,
+    pub arg_type: TypeId,
+    //pub params: Vec<ParameterNode>,
     pub return_type: TypeId,
     pub body: Option<Box<AstNode>>,
+    pub defaults: HashMap<StringKey, AstNode>,
+    //pub open_kwargs: Option<StringKey>,
+    //pub open_args: Option<StringKey>,
 }
 
 #[derive(Debug, Clone)]
@@ -143,10 +206,11 @@ pub enum AssignTarget {
 
 #[derive(Debug, Clone)]
 pub enum ControlFlowMarker {
-    Start(Option<StringKey>),
-    Break(Option<StringKey>),
-    Continue(Option<StringKey>),
-    BlockStart(StringKey, Vec<ParameterNode>),
+    LoopStart(Option<StringKey>),
+    LoopBreak(Option<StringKey>),
+    LoopContinue(Option<StringKey>),
+    BlockStart(Option<StringKey>, Vec<ParameterNode>),
+    BlockEnd,
     Goto(StringKey),
 }
 
@@ -156,12 +220,28 @@ impl From<ControlFlowMarker> for AstNode {
     }
 }
 
+impl From<ControlFlowMarker> for Ast {
+    fn from(c: ControlFlowMarker) -> Self {
+        Ast::ControlFlowMarker(c)
+    }
+}
+
+impl ControlFlowMarker {
+    pub fn node(self, span_id: SpanId) -> AstNode {
+        let ast: Ast = self.into();
+        ast.node(span_id)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Ast {
     BinaryOp(BinOpNode, Box<AstNode>, Box<AstNode>),
     UnaryOp(UnaryOperation, Box<AstNode>),
+    NaryOp(NaryOperation, Vec<AstNode>),
     // func, args, return type
     Call(Box<AstNode>, Vec<Argument>, TypeId),
+    // array(element type, dimensions), empty dim is the same as scalar
+    Array(TypeId, Vec<AstNode>),
     Identifier(StringKey),
     Literal(Literal),
     Sequence(Vec<AstNode>),
@@ -179,9 +259,13 @@ pub enum Ast {
     Module(StringKey, Box<AstNode>),
     ControlFlowMarker(ControlFlowMarker),
     Loop(StringKey, Box<AstNode>),
+
+    // break and continue, yielding a value
     Break(Option<StringKey>, Vec<AstNode>),
     Continue(Option<StringKey>, Vec<AstNode>),
+
     Block(StringKey, Vec<ParameterNode>, Box<AstNode>),
+    Type(TypeId),
     Noop,
     Error,
 }
@@ -216,7 +300,7 @@ impl Ast {
 
     pub fn get_label(&self) -> Option<StringKey> {
         match self {
-            Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(key, _)) => Some(*key),
+            Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(key, _)) => *key,
             Ast::Block(key, _, _) => Some(*key),
             _ => None,
         }
