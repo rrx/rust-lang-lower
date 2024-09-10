@@ -98,7 +98,7 @@ impl<'c> MLIRGenerator<'c> {
                 let ty = self.from_type(ast_ty).0;
                 (ty, dims.clone())
             }
-            AstType::Args => {
+            AstType::Args(_) => {
                 // TODO: hardwired for now
                 //let ty = Type::index(self.context);
                 let dummy = vec![self.from_type(&AstType::Int).0];
@@ -111,7 +111,7 @@ impl<'c> MLIRGenerator<'c> {
                 //let ty = IntegerType::new(self.context, 64).into();
                 //(mty.into(), vec![])
             }
-            AstType::KwArgs => {
+            AstType::KwArgs(_) => {
                 // TODO: hardwired for now
                 //let ty = Type::index(self.context);
                 let ty = IntegerType::new(self.context, 64).into();

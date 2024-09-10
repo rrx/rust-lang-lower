@@ -378,7 +378,6 @@ impl<'c> MLIRGenerator<'c> {
             }
 
             LCode::Arg(pos) => {
-                //| LCode::NamedParameter(pos) => {
                 let block_id = self.blockify.get_entry_id(v);
                 let index = SymIndex::Arg(block_id, *pos as usize);
                 self.index.insert(v, index);
@@ -394,7 +393,6 @@ impl<'c> MLIRGenerator<'c> {
             }
 
             LCode::Return => {
-                //let num = *num_args as usize;
                 let values = self.blockify.get_previous_values(v);
                 let indicies = values
                     .iter()
@@ -474,7 +472,6 @@ impl<'c> MLIRGenerator<'c> {
                     // handle call arguments
 
                     let values = self.blockify.get_previous_values(v);
-                    //assert_eq!(values.len(), *args as usize, "call arity mismatch");
                     let indicies = values
                         .iter()
                         .map(|value_id| self.resolve_value(*value_id).unwrap())
@@ -870,16 +867,12 @@ impl<'c> MLIRGenerator<'c> {
 
             LCode::Builtin(id) => {
                 let bi = self.b.builtins.get_enum(*id);
-                //let arity = bi.arity();
-                //assert_eq!(arity, *num_args as usize);
-
                 match bi {
                     Builtin::Import => {
                         unreachable!()
                     }
                     Builtin::Assert => {
                         let values = self.blockify.get_previous_values(v);
-                        //assert_eq!(values.len(), *num_args as usize);
                         let indicies = values
                             .iter()
                             .map(|value_id| self.resolve_value(*value_id).unwrap())
@@ -896,7 +889,6 @@ impl<'c> MLIRGenerator<'c> {
                     }
                     Builtin::Print => {
                         let values = self.blockify.get_previous_values(v);
-                        //assert_eq!(values.len(), *num_args as usize);
                         let indicies = values
                             .iter()
                             .map(|value_id| self.resolve_value(*value_id).unwrap())
@@ -999,7 +991,6 @@ impl<'c> MLIRGenerator<'c> {
             )];
 
             for (_, ty) in params.fields() {
-                //for ty in params {
                 let (p_ty, dims) = self.from_type(&ty);
                 assert_eq!(dims.len(), 0);
                 type_list.push(p_ty);

@@ -1075,9 +1075,9 @@ impl Flatten {
         let mut populated_set = HashSet::with_capacity(fields_list.len());
         let mut args_seq = vec![];
         let kwargs_map = HashMap::new();
-        //let def_has_args = def.open_args.is_some();
+        let mut def_has_args = false;
         let mut args_seq_started = false;
-        //let def_has_kwargs = def.open_kwargs.is_some();
+        //let mut def_has_kwargs = false;
 
         // copy defaults into value map
         for (key, value) in def.defaults.iter() {
@@ -1102,12 +1102,12 @@ impl Flatten {
                                                     // we have the field, it can either be a regular type, Args, or
                                                     // Kwargs type
                             match ty {
-                                AstType::Args => {
+                                AstType::Args(_) => {
                                     args_seq_started = true;
                                     // push arg into sequence
                                     args_seq.push(*(*expr).clone());
                                 }
-                                AstType::KwArgs => {
+                                AstType::KwArgs(_) => {
                                     // not sure how to copy this to the kwargs map, we are
                                     // missing some types
                                     unimplemented!()
@@ -1145,10 +1145,12 @@ impl Flatten {
                             .map(|x| x)
                             .collect::<Vec<_>>(),
                     );
+                    def_has_args = true;
                 }
                 Argument::KwArgs(_key, _expr) => {
                     assert!(is_last_arg); //kwargs should be last in the args
                                           // not quite sure how to proceed here.
+                                          //def_has_kwargs = true;
                     unimplemented!()
                 }
             }
@@ -1164,12 +1166,12 @@ impl Flatten {
             .map(|(field_key, field_ty)| {
                 let field_key = field_key.unwrap();
                 match field_ty {
-                    AstType::Args => {
+                    AstType::Args(_) => {
                         //let node: AstNode = Ast::Sequence(args_seq.clone()).into();
                         //let node: AstNode = 1.into();
                         Argument::Args(field_key, args_seq.clone()) //value_map.remove(&field_key).unwrap().into())
                     }
-                    AstType::KwArgs => {
+                    AstType::KwArgs(_) => {
                         Argument::KwArgs(field_key, kwargs_map.clone()) //NB::index())//value_map.remove(&field_key).unwrap().into())
                     }
                     _ => Argument::Named(field_key, value_map.remove(&field_key).unwrap().into()),
@@ -1177,7 +1179,7 @@ impl Flatten {
             })
             .collect();
 
-        if args_seq.len() > 0 && def.open_args.is_none() {
+        if args_seq.len() > 0 && def_has_args {
             // extra fields
             b.push_error(
                 &format!("extra fields, no args field: {:?}", args_seq),
@@ -1416,6 +1418,20 @@ impl Flatten {
         v_args
     }
 
+    pub fn save_template(
+        &mut self,
+        block_id: BlockId,
+        name: &StringKey,
+        def: &Lambda,
+        fenv: &mut FlattenEnvironment,
+    ) {
+        let template_id = self.push_template(def.clone());
+        let block = self.get_block(block_id);
+        let scope_id = block.scope_id;
+        let scope = fenv.get_scope_mut(scope_id);
+        scope.lambdas.insert(name.into(), template_id);
+    }
+
     pub fn flatten(
         &mut self,
         block_id: BlockId,
@@ -1442,11 +1458,14 @@ impl Flatten {
 
                         // save template for later use
                         // needed for expressing defaults
-                        let template_id = self.push_template(def.clone());
-                        let block = self.get_block(block_id);
-                        let scope_id = block.scope_id;
-                        let scope = fenv.get_scope_mut(scope_id);
-                        scope.lambdas.insert(name.into(), template_id);
+                        // We don't actually need to write out the function here
+                        // we only have to do it if it's called
+                        // And the function may be different depending on the caller
+                        // So this probably isn't the right place to do this.
+
+                        if def.body.is_some() {
+                            self.save_template(block_id, &name, &def, fenv);
+                        }
 
                         if let Some(body) = def.body {
                             let span_id = body.span_id;
@@ -1505,7 +1524,6 @@ impl Flatten {
                             let code = LCode::DeclareFunction(Some(fun_block_id));
                             let entry = CodeEntry::new(
                                 fenv.static_block_id(),
-                                //block_id,
                                 code,
                                 fun_ty.clone(),
                                 Some(name),
@@ -1779,11 +1797,7 @@ impl Flatten {
                 // push the definition into the lambda list
                 if let Ast::Lambda(def) = expr.node {
                     let ty = def_to_type(&def, b);
-                    let template_id = self.push_template(def);
-                    let block = self.get_block(block_id);
-                    let scope_id = block.scope_id;
-                    let scope = fenv.get_scope_mut(scope_id);
-                    scope.lambdas.insert(name.into(), template_id);
+                    self.save_template(block_id, &name, &def, fenv);
                     return Ok(FlattenResult::new(block_id, None, ty, false));
                 }
 

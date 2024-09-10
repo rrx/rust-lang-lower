@@ -265,7 +265,7 @@ impl Parser {
                     unimplemented!()
                     //ty
                 } else {
-                    Some(AstType::Args)
+                    Some(b.types.fresh_args())
                 };
                 ast::ParameterNode {
                     name: b.labels.s(&ident.node.ident),
@@ -282,14 +282,13 @@ impl Parser {
                     unimplemented!()
                     //ty
                 } else {
-                    Some(AstType::KwArgs)
+                    Some(b.types.fresh_kwargs())
                 };
                 ast::ParameterNode {
                     name: b.labels.s(&ident.node.ident),
                     ty: b.types.s(&ty.unwrap()),
                     node: ast::Parameter::KwArgs,
                     span_id,
-                    //default: None,
                 }
             }
 
@@ -308,8 +307,6 @@ impl Parser {
                     ty: b.types.s(&ty.unwrap()),
                     node: ast::Parameter::WithDefault(default.into()),
                     span_id,
-                    //default: None,
-                    //default: Some(default),
                 }
             }
             _ => unimplemented!(),
@@ -371,8 +368,8 @@ impl Parser {
                 let body = NB::seq(body, span_id).into();
 
                 let mut defaults = HashMap::new();
-                let mut open_args = None;
-                let mut open_kwargs = None;
+                //let mut open_args = None;
+                //let mut open_kwargs = None;
                 let arg_type = AstType::Struct(
                     params
                         .iter()
@@ -381,15 +378,15 @@ impl Parser {
                             let ty = match &p.node {
                                 Parameter::KwArgs => {
                                     let is_last = index == params.len() - 1;
-                                    assert!(open_kwargs.is_none());
+                                    //assert!(open_kwargs.is_none());
                                     assert!(is_last);
-                                    open_kwargs = Some(p.name);
-                                    AstType::KwArgs
+                                    //open_kwargs = Some(p.name);
+                                    b.types.fresh_kwargs()
                                 }
                                 Parameter::Args => {
-                                    assert!(open_args.is_none());
-                                    open_args = Some(p.name);
-                                    AstType::Args
+                                    //assert!(open_args.is_none());
+                                    //open_args = Some(p.name);
+                                    b.types.fresh_args()
                                 }
                                 Parameter::WithDefault(d) => {
                                     defaults.insert(p.name, d.clone());
@@ -403,14 +400,17 @@ impl Parser {
                 );
 
                 let arg_type_id = b.types.s(&arg_type);
+                let fun_type = AstType::Func(arg_type.into(), return_type.clone().into());
+                let fun_type_id = b.types.s(&fun_type);
 
                 let def_ast = Ast::Lambda(ast::Lambda {
+                    fun_type: fun_type_id,
                     arg_type: arg_type_id,
                     body: Some(body),
                     return_type: b.types.s(&return_type),
                     defaults,
-                    open_args,
-                    open_kwargs,
+                    //open_args,
+                    //open_kwargs,
                 });
 
                 env.define(name);

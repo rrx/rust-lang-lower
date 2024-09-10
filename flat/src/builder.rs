@@ -84,6 +84,18 @@ impl TypeBuilder {
         r
     }
 
+    pub fn fresh_args(&mut self) -> AstType {
+        let offset = self.vars.len();
+        self.vars.push(None);
+        AstType::Args(offset as u32)
+    }
+
+    pub fn fresh_kwargs(&mut self) -> AstType {
+        let offset = self.vars.len();
+        self.vars.push(None);
+        AstType::KwArgs(offset as u32)
+    }
+
     pub fn unify(&mut self, a: TypeId, b: TypeId) {
         let ty1 = self.pool.resolve(&a);
         let ty2 = self.pool.resolve(&b);
@@ -282,17 +294,19 @@ impl NodeBuilder {
                 .collect::<Vec<_>>(),
         );
         let arg_type_id = self.types.s(&arg_type);
-
+        let fun_type = AstType::Func(arg_type.into(), return_type.clone().into());
         let return_type = self.types.s(&return_type);
+        let fun_type_id = self.types.s(&fun_type);
         Self::global(
             name,
             Ast::Lambda(Lambda {
+                fun_type: fun_type_id,
                 arg_type: arg_type_id,
                 return_type,
                 body: body.map(|b| b.into()),
                 defaults: HashMap::new(),
-                open_args: None,
-                open_kwargs: None,
+                //open_args: None,
+                //open_kwargs: None,
             })
             .into(),
         )

@@ -182,13 +182,14 @@ pub struct ParameterNode {
 
 #[derive(Debug, Clone)]
 pub struct Lambda {
+    pub fun_type: TypeId,
     pub arg_type: TypeId,
     //pub params: Vec<ParameterNode>,
     pub return_type: TypeId,
     pub body: Option<Box<AstNode>>,
     pub defaults: HashMap<StringKey, AstNode>,
-    pub open_kwargs: Option<StringKey>,
-    pub open_args: Option<StringKey>,
+    //pub open_kwargs: Option<StringKey>,
+    //pub open_args: Option<StringKey>,
 }
 
 #[derive(Debug, Clone)]
