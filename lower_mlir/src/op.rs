@@ -39,7 +39,6 @@ use melior::{
         Value,
         ValueLike,
     },
-    Context,
 };
 use thiserror::Error;
 
@@ -148,7 +147,7 @@ impl<'c> MLIRGenerator<'c> {
                 let ty = self.from_type(&ast_ty).0;
                 let v = if x { 1 } else { 0 };
                 let value = IntegerAttribute::new(v, ty).into();
-                let op = build_static(self.context, &global_name, ty, value, false, location);
+                let op = self.build_static(&global_name, ty, value, false, location);
                 (ast_ty, op)
             }
 
@@ -156,7 +155,7 @@ impl<'c> MLIRGenerator<'c> {
                 let ast_ty = AstType::Int;
                 let ty = self.from_type(&ast_ty).0;
                 let value = IntegerAttribute::new(x, ty).into();
-                let op = build_static(self.context, &global_name, ty, value, false, location);
+                let op = self.build_static(&global_name, ty, value, false, location);
                 (ast_ty, op)
             }
 
@@ -164,7 +163,7 @@ impl<'c> MLIRGenerator<'c> {
                 let ast_ty = AstType::Int;
                 let ty = self.from_type(&ast_ty).0;
                 let value = IntegerAttribute::new(x as i64, ty).into();
-                let op = build_static(self.context, &global_name, ty, value, false, location);
+                let op = self.build_static(&global_name, ty, value, false, location);
                 (ast_ty, op)
             }
 
@@ -172,7 +171,7 @@ impl<'c> MLIRGenerator<'c> {
                 let ast_ty = AstType::Float;
                 let ty = self.from_type(&ast_ty).0;
                 let value = FloatAttribute::new(self.context, x, ty).into();
-                let op = build_static(self.context, &global_name, ty, value, false, location);
+                let op = self.build_static(&global_name, ty, value, false, location);
                 (ast_ty, op)
             }
 
@@ -251,19 +250,15 @@ impl<'c> MLIRGenerator<'c> {
         )
     }
 
-    pub fn emit_literal_const(
-        &self,
-        lit: &Literal,
-        location: Location<'c>,
-    ) -> (Operation<'c>, AstType) {
+    pub fn emit_literal_const(&self, lit: &Literal, location: Location<'c>) -> Operation<'c> {
         match lit {
-            Literal::Float(f) => (self.build_float_op(*f, location), AstType::Float),
+            Literal::Float(f) => self.build_float_op(*f, location),
 
-            Literal::Int(x) => (self.build_int_op(*x, location), AstType::Int),
+            Literal::Int(x) => self.build_int_op(*x, location),
 
-            Literal::Index(x) => (self.build_index_op(*x as i64, location), AstType::Index),
+            Literal::Index(x) => self.build_index_op(*x as i64, location),
 
-            Literal::Bool(x) => (self.build_bool_op(*x, location), AstType::Bool),
+            Literal::Bool(x) => self.build_bool_op(*x, location),
             _ => unimplemented!("{:?}", lit),
         }
     }
@@ -285,226 +280,161 @@ impl<'c> MLIRGenerator<'c> {
             _ => None,
         }
     }
-}
 
-/*
-pub fn build_float_op<'c>(
-    context: &'c Context,
-    value: f64,
-    location: Location<'c>,
-) -> Operation<'c> {
-    arith::constant(
-        context,
-        FloatAttribute::new(context, value, Type::float64(context)).into(),
-        location,
-    )
-}
+    pub fn build_static(
+        &self,
+        name: &str,
+        ty: Type<'c>,
+        value: Attribute<'c>,
+        constant: bool,
+        location: Location<'c>,
+    ) -> Operation<'c> {
+        let integer_type = IntegerType::new(self.context, 64).into();
+        let attribute =
+            DenseElementsAttribute::new(RankedTensorType::new(&[], ty, None).into(), &[value])
+                .unwrap();
+        let alignment = IntegerAttribute::new(8, integer_type);
+        let memspace = IntegerAttribute::new(0, integer_type).into();
 
-pub fn emit_literal_const<'c>(
-    context: &'c Context,
-    lit: &Literal,
-    location: Location<'c>,
-) -> (Operation<'c>, AstType) {
-    match lit {
-        Literal::Float(f) => (build_float_op(context, *f, location), AstType::Float),
-
-        Literal::Int(x) => (build_int_op(context, *x, location), AstType::Int),
-
-        Literal::Index(x) => (build_index_op(context, *x as i64, location), AstType::Index),
-
-        Literal::Bool(x) => (build_bool_op(context, *x, location), AstType::Bool),
-        _ => unimplemented!("{:?}", lit),
+        memref::global(
+            self.context,
+            name,
+            Some("private"),
+            MemRefType::new(ty, &[], None, Some(memspace)),
+            Some(attribute.into()),
+            constant,
+            Some(alignment),
+            location,
+        )
     }
-}
 
-pub fn build_int_op<'c>(context: &'c Context, value: i64, location: Location<'c>) -> Operation<'c> {
-    let ty = IntegerType::new(context, 64);
-    arith::constant(
-        context,
-        IntegerAttribute::new(value, ty.into()).into(),
-        location,
-    )
-}
+    pub fn build_binop(
+        &self,
+        op: BinaryOperation,
+        a: Value<'c, '_>,
+        a_span: &SpanId,
+        b: Value<'c, '_>,
+        _b_span: &SpanId,
+        location: Location<'c>,
+    ) -> Result<(Operation<'c>, AstType)> {
+        let ty = a.r#type();
+        assert_eq!(ty, b.r#type());
 
-pub fn build_index_op<'c>(
-    context: &'c Context,
-    value: i64,
-    location: Location<'c>,
-) -> Operation<'c> {
-    let ty = Type::index(context);
-    arith::constant(
-        context,
-        IntegerAttribute::new(value, ty.into()).into(),
-        location,
-    )
-}
+        let (op, ast_ty) = match op {
+            BinaryOperation::Divide => {
+                if ty.is_index() {
+                    // index type is unsigned
+                    (arith::divui(a, b, location), AstType::Index)
+                } else if ty.is_integer() {
+                    // we assume all integers are signed for now
+                    (arith::divsi(a, b, location), AstType::Int)
+                } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
+                    (arith::divf(a, b, location), AstType::Float)
+                } else {
+                    return Err(Error::new(LowerError::Op(format!("Invalid Type"), *a_span)));
+                }
+            }
+            BinaryOperation::Multiply => {
+                if ty.is_index() {
+                    (arith::muli(a, b, location), AstType::Index)
+                } else if ty.is_integer() {
+                    (arith::muli(a, b, location), AstType::Int)
+                } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
+                    (arith::mulf(a, b, location), AstType::Float)
+                } else {
+                    return Err(Error::new(LowerError::Op(format!("Invalid Type"), *a_span)));
+                }
+            }
+            BinaryOperation::Add => {
+                if ty.is_index() {
+                    (arith::addi(a, b, location), AstType::Index)
+                } else if ty.is_integer() {
+                    (arith::addi(a, b, location), AstType::Int)
+                } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
+                    (arith::addf(a, b, location), AstType::Float)
+                } else {
+                    return Err(Error::new(LowerError::Op(format!("Invalid Type"), *a_span)));
+                }
+            }
+            BinaryOperation::Subtract => {
+                if ty.is_index() {
+                    (arith::subi(a, b, location), AstType::Index)
+                } else if ty.is_integer() {
+                    (arith::subi(a, b, location), AstType::Int)
+                } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
+                    (arith::subf(a, b, location), AstType::Float)
+                } else {
+                    return Err(Error::new(LowerError::Op(format!("Invalid Type"), *a_span)));
+                }
+            }
+            BinaryOperation::GTE => {
+                if ty.is_index() {
+                    // unsigned
+                    (
+                        arith::cmpi(self.context, arith::CmpiPredicate::Uge, a, b, location),
+                        AstType::Bool,
+                    )
+                } else if ty.is_integer() {
+                    // signed
+                    (
+                        arith::cmpi(self.context, arith::CmpiPredicate::Sge, a, b, location),
+                        AstType::Bool,
+                    )
+                } else {
+                    return Err(Error::new(LowerError::Op(format!("Invalid Type"), *a_span)));
+                }
+            }
+            BinaryOperation::GT => {
+                if ty.is_index() {
+                    // unsigned
+                    (
+                        arith::cmpi(self.context, arith::CmpiPredicate::Ugt, a, b, location),
+                        AstType::Bool,
+                    )
+                } else if ty.is_integer() {
+                    // signed
+                    (
+                        arith::cmpi(self.context, arith::CmpiPredicate::Sgt, a, b, location),
+                        AstType::Bool,
+                    )
+                } else {
+                    return Err(Error::new(LowerError::Op(format!("Invalid Type"), *a_span)));
+                }
+            }
+            BinaryOperation::NE => {
+                if ty.is_index() || ty.is_integer() {
+                    (
+                        arith::cmpi(self.context, arith::CmpiPredicate::Ne, a, b, location),
+                        AstType::Bool,
+                    )
+                } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
+                    // ordered comparison
+                    (
+                        arith::cmpf(self.context, arith::CmpfPredicate::One, a, b, location),
+                        AstType::Bool,
+                    )
+                } else {
+                    return Err(Error::new(LowerError::Op(format!("Invalid Type"), *a_span)));
+                }
+            }
+            BinaryOperation::EQ => {
+                if ty.is_index() || ty.is_integer() {
+                    (
+                        arith::cmpi(self.context, arith::CmpiPredicate::Eq, a, b, location),
+                        AstType::Bool,
+                    )
+                } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
+                    // ordered comparison
+                    (
+                        arith::cmpf(self.context, arith::CmpfPredicate::Oeq, a, b, location),
+                        AstType::Bool,
+                    )
+                } else {
+                    return Err(Error::new(LowerError::Op(format!("Invalid Type"), *a_span)));
+                }
+            } //_ => unimplemented!("{:?}", op)
+        };
 
-pub fn build_bool_op<'c>(
-    context: &'c Context,
-    value: bool,
-    location: Location<'c>,
-) -> Operation<'c> {
-    let bool_type = IntegerType::new(context, 1);
-    arith::constant(
-        context,
-        IntegerAttribute::new(if value { 1 } else { 0 }, bool_type.into()).into(),
-        location,
-    )
-}
-*/
-
-pub fn build_static<'c>(
-    context: &'c Context,
-    name: &str,
-    ty: Type<'c>,
-    value: Attribute<'c>,
-    constant: bool,
-    location: Location<'c>,
-) -> Operation<'c> {
-    let integer_type = IntegerType::new(context, 64).into();
-    let attribute =
-        DenseElementsAttribute::new(RankedTensorType::new(&[], ty, None).into(), &[value]).unwrap();
-    let alignment = IntegerAttribute::new(8, integer_type);
-    let memspace = IntegerAttribute::new(0, integer_type).into();
-
-    memref::global(
-        context,
-        name,
-        Some("private"),
-        MemRefType::new(ty, &[], None, Some(memspace)),
-        Some(attribute.into()),
-        constant,
-        Some(alignment),
-        location,
-    )
-}
-
-pub fn build_binop<'c>(
-    context: &'c Context,
-    op: BinaryOperation,
-    a: Value<'c, '_>,
-    a_span: &SpanId,
-    b: Value<'c, '_>,
-    _b_span: &SpanId,
-    location: Location<'c>,
-) -> Result<(Operation<'c>, AstType)> {
-    let ty = a.r#type();
-    assert_eq!(ty, b.r#type());
-
-    let (op, ast_ty) = match op {
-        BinaryOperation::Divide => {
-            if ty.is_index() {
-                // index type is unsigned
-                (arith::divui(a, b, location), AstType::Index)
-            } else if ty.is_integer() {
-                // we assume all integers are signed for now
-                (arith::divsi(a, b, location), AstType::Int)
-            } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
-                (arith::divf(a, b, location), AstType::Float)
-            } else {
-                return Err(Error::new(LowerError::Op(format!("Invalid Type"), *a_span)));
-            }
-        }
-        BinaryOperation::Multiply => {
-            if ty.is_index() {
-                (arith::muli(a, b, location), AstType::Index)
-            } else if ty.is_integer() {
-                (arith::muli(a, b, location), AstType::Int)
-            } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
-                (arith::mulf(a, b, location), AstType::Float)
-            } else {
-                return Err(Error::new(LowerError::Op(format!("Invalid Type"), *a_span)));
-            }
-        }
-        BinaryOperation::Add => {
-            if ty.is_index() {
-                (arith::addi(a, b, location), AstType::Index)
-            } else if ty.is_integer() {
-                (arith::addi(a, b, location), AstType::Int)
-            } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
-                (arith::addf(a, b, location), AstType::Float)
-            } else {
-                return Err(Error::new(LowerError::Op(format!("Invalid Type"), *a_span)));
-            }
-        }
-        BinaryOperation::Subtract => {
-            if ty.is_index() {
-                (arith::subi(a, b, location), AstType::Index)
-            } else if ty.is_integer() {
-                (arith::subi(a, b, location), AstType::Int)
-            } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
-                (arith::subf(a, b, location), AstType::Float)
-            } else {
-                return Err(Error::new(LowerError::Op(format!("Invalid Type"), *a_span)));
-            }
-        }
-        BinaryOperation::GTE => {
-            if ty.is_index() {
-                // unsigned
-                (
-                    arith::cmpi(context, arith::CmpiPredicate::Uge, a, b, location),
-                    AstType::Bool,
-                )
-            } else if ty.is_integer() {
-                // signed
-                (
-                    arith::cmpi(context, arith::CmpiPredicate::Sge, a, b, location),
-                    AstType::Bool,
-                )
-            } else {
-                return Err(Error::new(LowerError::Op(format!("Invalid Type"), *a_span)));
-            }
-        }
-        BinaryOperation::GT => {
-            if ty.is_index() {
-                // unsigned
-                (
-                    arith::cmpi(context, arith::CmpiPredicate::Ugt, a, b, location),
-                    AstType::Bool,
-                )
-            } else if ty.is_integer() {
-                // signed
-                (
-                    arith::cmpi(context, arith::CmpiPredicate::Sgt, a, b, location),
-                    AstType::Bool,
-                )
-            } else {
-                return Err(Error::new(LowerError::Op(format!("Invalid Type"), *a_span)));
-            }
-        }
-        BinaryOperation::NE => {
-            if ty.is_index() || ty.is_integer() {
-                (
-                    arith::cmpi(context, arith::CmpiPredicate::Ne, a, b, location),
-                    AstType::Bool,
-                )
-            } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
-                // ordered comparison
-                (
-                    arith::cmpf(context, arith::CmpfPredicate::One, a, b, location),
-                    AstType::Bool,
-                )
-            } else {
-                return Err(Error::new(LowerError::Op(format!("Invalid Type"), *a_span)));
-            }
-        }
-        BinaryOperation::EQ => {
-            if ty.is_index() || ty.is_integer() {
-                (
-                    arith::cmpi(context, arith::CmpiPredicate::Eq, a, b, location),
-                    AstType::Bool,
-                )
-            } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
-                // ordered comparison
-                (
-                    arith::cmpf(context, arith::CmpfPredicate::Oeq, a, b, location),
-                    AstType::Bool,
-                )
-            } else {
-                return Err(Error::new(LowerError::Op(format!("Invalid Type"), *a_span)));
-            }
-        } //_ => unimplemented!("{:?}", op)
-    };
-
-    Ok((op, ast_ty))
+        Ok((op, ast_ty))
+    }
 }

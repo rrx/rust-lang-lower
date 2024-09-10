@@ -268,7 +268,7 @@ impl<'c> LowerIR<'c> for MLIRGenerator<'c> {
             //Ok(index)
             self.index.insert(v, index);
         } else {
-            let (op, _ast_ty) = self.emit_literal_const(lit, location);
+            let op = self.emit_literal_const(lit, location);
             let c = self.blocks.get_mut(&block_id).unwrap();
             let index = c.push(op);
             self.index.insert(v, index);
@@ -677,15 +677,8 @@ impl<'c> MLIRGenerator<'c> {
                 let y_index = self.resolve_value(vy.into()).unwrap();
                 let r_y = self.value0(y_index);
 
-                let (op, _ast_ty) = crate::op::build_binop(
-                    self.context,
-                    op.clone(),
-                    r_x,
-                    &x_span_id,
-                    r_y,
-                    &y_span_id,
-                    location,
-                )?;
+                let (op, _ast_ty) =
+                    self.build_binop(op.clone(), r_x, &x_span_id, r_y, &y_span_id, location)?;
                 let c = self.blocks.get_mut(&block_id).unwrap();
                 let index = c.push(op);
                 self.index.insert(v, index);
@@ -710,7 +703,8 @@ impl<'c> MLIRGenerator<'c> {
                         if true {
                             let tuple_type = llvm::r#type::r#struct(self.context, &types, true);
                             let ptr_type = llvm::r#type::pointer(tuple_type, 0);
-                            let (op, _ast_ty) = self.emit_literal_const(&Literal::Int(1), location);
+                            let op = self.build_int_op(1, location);
+                            //let (op, _ast_ty) = self.emit_literal_const(&Literal::Int(1), location);
                             let c = self.blocks.get_mut(&block_id).unwrap();
                             let size_sym = c.push(op);
                             let r_size = self.value0(size_sym);
@@ -730,7 +724,8 @@ impl<'c> MLIRGenerator<'c> {
                             let options = melior::dialect::llvm::AllocaOptions::new();
                             let ptr_type = memref_ty.into();
 
-                            let (op, _ast_ty) = self.emit_literal_const(&Literal::Int(1), location);
+                            let op = self.build_int_op(1, location);
+                            //let (op, _ast_ty) = self.emit_literal_const(&Literal::Int(1), location);
                             let c = self.blocks.get_mut(&block_id).unwrap();
                             let size_sym = c.push(op);
                             let r_size = self.value0(size_sym);
