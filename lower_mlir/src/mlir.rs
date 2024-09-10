@@ -200,15 +200,17 @@ pub struct Lower<'c> {
     index: IndexMap<ValueId, SymIndex>,
     module_block_id: ValueId,
     blocks: LowerBlocks<'c>,
+    b: &'c NodeBuilder,
 }
 
 impl<'c> Lower<'c> {
-    pub fn new(context: &'c Context, module_block_id: ValueId) -> Self {
+    pub fn new(context: &'c Context, module_block_id: ValueId, b: &'c NodeBuilder) -> Self {
         Self {
             context,
             index: IndexMap::new(),
             module_block_id,
             blocks: LowerBlocks::new(),
+            b,
         }
     }
 }
@@ -219,7 +221,6 @@ trait LowerIR<'c> {
         v: ValueId,
         lit: &Literal,
         blockify: &dyn ICodeModule,
-        //blocks: &mut LowerBlocks<'c>,
         b: &NodeBuilder,
     );
 }
@@ -230,7 +231,6 @@ impl<'c> LowerIR<'c> for Lower<'c> {
         v: ValueId,
         lit: &Literal,
         blockify: &dyn ICodeModule,
-        //blocks: &mut LowerBlocks<'c>,
         b: &NodeBuilder,
     ) {
         let block_id = blockify.get_entry_id(v);
@@ -407,7 +407,7 @@ impl<'c> Lower<'c> {
         //blocks: &mut LowerBlocks<'c>,
         v: ValueId,
         stack: &mut Vec<ValueId>,
-        b: &mut NodeBuilder,
+        b: &NodeBuilder,
     ) -> Result<()> {
         let code = blockify.get_code(v);
         let location = Lower::get_location(blockify, v, self.context, b);
@@ -987,7 +987,7 @@ impl<'c> Lower<'c> {
         block_id: ValueId,
         //blocks: &mut LowerBlocks<'c>,
         stack: &mut Vec<ValueId>,
-        b: &mut NodeBuilder,
+        b: &NodeBuilder,
     ) -> Result<()> {
         let mut current = block_id;
         stack.push(block_id);
@@ -1010,7 +1010,7 @@ impl<'c> Lower<'c> {
         module_block_id: ValueId,
         //blocks: &mut LowerBlocks<'c>,
         stack: &mut Vec<ValueId>,
-        b: &mut NodeBuilder,
+        b: &NodeBuilder,
     ) -> Result<()> {
         // reorder things, so we lower declarations last
         let mut current = module_block_id;
@@ -1049,12 +1049,12 @@ impl<'c> Lower<'c> {
         blockify: &dyn ICodeModule,
         //blocks: &mut LowerBlocks<'c>,
         module: &mut melior::ir::Module,
-        b: &mut NodeBuilder,
+        //b: &mut NodeBuilder,
     ) -> Result<()> {
         let module_block_id = self.module_block_id;
         let mut stack = vec![];
-        self.create_block(blockify, module_block_id, b);
-        self.lower_static_block(blockify, module_block_id, &mut stack, b)?;
+        self.create_block(blockify, module_block_id, self.b);
+        self.lower_static_block(blockify, module_block_id, &mut stack, self.b)?;
         let block = self.blocks.blocks.get_mut(&module_block_id).unwrap();
         for op in block.take_ops() {
             module.body().append_operation(op);

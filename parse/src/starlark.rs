@@ -738,9 +738,9 @@ impl StarlarkParser {
         for lib in blockify.shared_libraries() {
             self.link.add_library(&lib);
         }
-        let mut lower = lower_mlir::Lower::new(context, module_block_id);
+        let mut lower = lower_mlir::Lower::new(context, module_block_id, b);
         //let mut blocks = lower_mlir::LowerBlocks::new();
-        lower.lower_module(blockify, module, b)?;
+        lower.lower_module(blockify, module)?;
         Ok(())
     }
 
