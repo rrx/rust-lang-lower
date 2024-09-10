@@ -29,7 +29,6 @@ use melior::{
             IntegerType,
             MemRefType,
             RankedTensorType,
-            TupleType,
         },
         Attribute,
         //Block,
