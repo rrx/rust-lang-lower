@@ -1,10 +1,8 @@
+use crate::Lower;
 use anyhow::Error;
 use anyhow::Result;
 use compile_core::Diagnostic;
 use compile_core::{Ast, AstNode, AstType, BinaryOperation, Literal, SpanId};
-use flat::NodeBuilder;
-
-use crate::Lower;
 use melior::ir::Location;
 use melior::{
     dialect::{
@@ -56,13 +54,13 @@ pub enum LowerError {
 }
 
 impl<'c> Lower<'c> {
-    pub fn from_type(&self, ty: &AstType, b: &NodeBuilder) -> (Type<'c>, Vec<u64>) {
+    pub fn from_type(&self, ty: &AstType) -> (Type<'c>, Vec<u64>) {
         match ty {
             AstType::Ptr(_) => (Type::index(self.context), vec![]),
             AstType::Struct(args) => {
                 let types = args
                     .iter()
-                    .map(|(_, a)| self.from_type(a, b).0)
+                    .map(|(_, a)| self.from_type(a).0)
                     .collect::<Vec<_>>();
                 let tuple_type = llvm::r#type::r#struct(self.context, &types, true);
                 let ptr_type = llvm::r#type::pointer(tuple_type, 0);
@@ -78,7 +76,7 @@ impl<'c> Lower<'c> {
                 // get the sizes and just create a type that has the max size of all fields
                 let types = args
                     .iter()
-                    .map(|(_, a)| self.from_type(a, b).0)
+                    .map(|(_, a)| self.from_type(a).0)
                     .collect::<Vec<_>>();
                 (
                     melior::ir::r#type::TupleType::new(self.context, &types).into(),
@@ -89,22 +87,22 @@ impl<'c> Lower<'c> {
                 let inputs = args
                     .fields()
                     .iter()
-                    .map(|(_, a)| self.from_type(a, b).0)
+                    .map(|(_, a)| self.from_type(a).0)
                     .collect::<Vec<_>>();
-                let results = vec![self.from_type(ret, b).0];
+                let results = vec![self.from_type(ret).0];
                 (
                     melior::ir::r#type::FunctionType::new(self.context, &inputs, &results).into(),
                     vec![],
                 )
             }
             AstType::Array(ast_ty, dims) => {
-                let ty = self.from_type(ast_ty, b).0;
+                let ty = self.from_type(ast_ty).0;
                 (ty, dims.clone())
             }
             AstType::Args => {
                 // TODO: hardwired for now
                 //let ty = Type::index(self.context);
-                let dummy = vec![self.from_type(&AstType::Int, b).0];
+                let dummy = vec![self.from_type(&AstType::Int).0];
                 let tuple_type = llvm::r#type::r#struct(self.context, &dummy, true);
                 let ptr_type = llvm::r#type::pointer(tuple_type, 0);
                 (ptr_type.into(), vec![])
@@ -142,13 +140,12 @@ impl<'c> Lower<'c> {
         global_name: String,
         expr: AstNode,
         location: Location<'c>,
-        b: &NodeBuilder,
     ) -> (Operation<'c>, AstType) {
         // evaluate expr at compile time
         let (ast_ty, op) = match expr.node {
             Ast::Literal(Literal::Bool(x)) => {
                 let ast_ty = AstType::Bool;
-                let ty = self.from_type(&ast_ty, b).0;
+                let ty = self.from_type(&ast_ty).0;
                 let v = if x { 1 } else { 0 };
                 let value = IntegerAttribute::new(v, ty).into();
                 let op = build_static(self.context, &global_name, ty, value, false, location);
@@ -157,7 +154,7 @@ impl<'c> Lower<'c> {
 
             Ast::Literal(Literal::Int(x)) => {
                 let ast_ty = AstType::Int;
-                let ty = self.from_type(&ast_ty, b).0;
+                let ty = self.from_type(&ast_ty).0;
                 let value = IntegerAttribute::new(x, ty).into();
                 let op = build_static(self.context, &global_name, ty, value, false, location);
                 (ast_ty, op)
@@ -165,7 +162,7 @@ impl<'c> Lower<'c> {
 
             Ast::Literal(Literal::Index(x)) => {
                 let ast_ty = AstType::Int;
-                let ty = self.from_type(&ast_ty, b).0;
+                let ty = self.from_type(&ast_ty).0;
                 let value = IntegerAttribute::new(x as i64, ty).into();
                 let op = build_static(self.context, &global_name, ty, value, false, location);
                 (ast_ty, op)
@@ -173,7 +170,7 @@ impl<'c> Lower<'c> {
 
             Ast::Literal(Literal::Float(x)) => {
                 let ast_ty = AstType::Float;
-                let ty = self.from_type(&ast_ty, b).0;
+                let ty = self.from_type(&ast_ty).0;
                 let value = FloatAttribute::new(self.context, x, ty).into();
                 let op = build_static(self.context, &global_name, ty, value, false, location);
                 (ast_ty, op)
@@ -184,16 +181,12 @@ impl<'c> Lower<'c> {
         (op, ast_ty)
     }
 
-    pub fn build_static_attribute(
-        &self,
-        lit: &Literal,
-        b: &NodeBuilder,
-    ) -> (Attribute<'c>, AstType) {
+    pub fn build_static_attribute(&self, lit: &Literal) -> (Attribute<'c>, AstType) {
         // evaluate expr at compile time
         match lit {
             Literal::Bool(x) => {
                 let ast_ty = AstType::Bool;
-                let ty = self.from_type(&ast_ty, b).0;
+                let ty = self.from_type(&ast_ty).0;
                 let v = if *x { 1 } else { 0 };
                 let value = IntegerAttribute::new(v, ty).into();
                 (value, ast_ty)
@@ -201,21 +194,21 @@ impl<'c> Lower<'c> {
 
             Literal::Int(x) => {
                 let ast_ty = AstType::Int;
-                let ty = self.from_type(&ast_ty, b).0;
+                let ty = self.from_type(&ast_ty).0;
                 let value = IntegerAttribute::new(*x, ty).into();
                 (value, ast_ty)
             }
 
             Literal::Index(x) => {
                 let ast_ty = AstType::Int;
-                let ty = self.from_type(&ast_ty, b).0;
+                let ty = self.from_type(&ast_ty).0;
                 let value = IntegerAttribute::new(*x as i64, ty).into();
                 (value, ast_ty)
             }
 
             Literal::Float(x) => {
                 let ast_ty = AstType::Float;
-                let ty = self.from_type(&ast_ty, b).0;
+                let ty = self.from_type(&ast_ty).0;
                 let value = FloatAttribute::new(self.context, *x, ty).into();
                 (value, ast_ty)
             }
