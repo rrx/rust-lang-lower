@@ -186,7 +186,7 @@ impl SequenceReader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Flatten, FlattenEnvironment, ICodeModule, NodeBuilder as NB};
+    use crate::{Flatten, FlattenEnvironment, ICodeModule, NodeBuilder as NB, FlattenModule};
     use anyhow::Result;
     use compile_core::AstType;
     use test_log::test;
@@ -217,7 +217,7 @@ mod tests {
         b.spans.diagnostics_dump();
         let f = r?;
         b.spans.diagnostics_dump();
-        let m = f.module(&mut fenv, b);
+        let m = FlattenModule::from_builder(f, &mut fenv, b);
         m.dump(&b);
         m.block_graph("blocks.dot", &b);
 

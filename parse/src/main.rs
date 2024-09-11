@@ -6,7 +6,7 @@ use std::io::Write;
 
 use lower_mlir::default_context;
 
-use flat::{BlockifyError, Flatten, FlattenEnvironment, ICodeModule, NodeBuilder, ValueId};
+use flat::{BlockifyError, Flatten, FlattenEnvironment, FlattenModule, NodeBuilder, ValueId, ICodeModule};
 use parse::starlark::StarlarkParser;
 
 #[derive(FromArgs, Debug)]
@@ -69,7 +69,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             b.spans.diagnostics_dump();
         }
         let f = r?;
-        let m = f.module(&mut fenv, &mut b);
+        let m = FlattenModule::from_builder(f, &mut fenv, &mut b);
         m.dump(&b);
         m.block_graph("blocks.dot", &b);
 

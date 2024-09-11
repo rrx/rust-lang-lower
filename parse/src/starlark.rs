@@ -784,7 +784,7 @@ impl StarlarkParser {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::StarlarkParser;
-    use flat::{Flatten, FlattenEnvironment, ICodeModule, ValueId};
+    use flat::{Flatten, FlattenEnvironment, ICodeModule, ValueId, FlattenModule};
     use lower_mlir::Location;
     use test_log::test;
 
@@ -803,7 +803,7 @@ pub(crate) mod tests {
         b.spans.diagnostics_dump();
         let f = r.unwrap();
         b.spans.diagnostics_dump();
-        let m = f.module(&mut fenv, &mut b);
+        let m = FlattenModule::from_builder(f, &mut fenv, &mut b);
         m.dump(&b);
 
         let r = p.codegen(&m, ValueId::new(0), &context, &mut module, &mut b);
