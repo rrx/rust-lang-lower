@@ -98,11 +98,17 @@ impl<'c> MLIRGenerator<'c> {
                 let ty = self.from_type(ast_ty).0;
                 (ty, dims.clone())
             }
-            AstType::Args(_) => {
+            AstType::Args(ty) => {
                 // TODO: hardwired for now
                 //let ty = Type::index(self.context);
-                let dummy = vec![self.from_type(&AstType::Int).0];
-                let tuple_type = llvm::r#type::r#struct(self.context, &dummy, true);
+                //let dummy = vec![self.from_type(&AstType::Int).0];
+                println!("args_ty: {}", ty);
+                let fields = ty
+                    .fields()
+                    .iter()
+                    .map(|(_, f)| self.from_type(f).0)
+                    .collect::<Vec<_>>();
+                let tuple_type = llvm::r#type::r#struct(self.context, &fields, true);
                 let ptr_type = llvm::r#type::pointer(tuple_type, 0);
                 (ptr_type.into(), vec![])
 

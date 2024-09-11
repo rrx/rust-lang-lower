@@ -221,7 +221,13 @@ impl FlattenModule {
             let block_id = index.into();
             let block = flatten.get_block(block_id);
             for (index, link_id) in block.links.iter().enumerate() {
-                let entry = flatten.get_entry(*link_id).clone();
+                let mut entry = flatten.get_entry(*link_id).clone();
+                if let Some(ty) = b.types.u.resolve(&entry.ty) {
+                    entry.ty = ty;
+                } else {
+                    println!("Unresolved type: {}", entry.ty);
+                }
+
                 let v = ValueId(value_count);
                 let mut next = v;
                 let mut prev = v;
