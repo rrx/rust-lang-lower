@@ -487,16 +487,17 @@ impl Flatten {
         b: &mut NB,
     ) {
         let name = b.labels.fresh_key("ret");
-        let args = match &return_type {
+        let arg_ty = AstType::Struct(match &return_type {
             AstType::Unit => vec![],
-            _ => vec![return_type.clone()],
-        };
+            _ => vec![(None, return_type.clone())],
+        });
 
         let v_args = self.start_block(
             ret_block_id,
             scope_id,
-            &AstType::Unit,
-            &args,
+            &arg_ty,
+            //&AstType::Unit,
+            &[],
             AstType::Unit,
             Some(name),
             span_id,
@@ -832,7 +833,6 @@ impl Flatten {
         scope_id: ScopeId,
         arg: &AstType,
         args: &[AstType],
-        //kwargs: &[ParameterNode],
         ty: AstType,
         name: Option<StringKey>,
         span_id: SpanId,
@@ -841,6 +841,7 @@ impl Flatten {
         //b: &mut NB,
     ) -> Vec<(LinkId, AstType)> {
         let code = LCode::Label;
+        assert_eq!(args.len(), 0);
         let entry = CodeEntry::new(
             block_id,
             code,
@@ -877,6 +878,7 @@ impl Flatten {
         }
 
         // positional, unnamed, returned as links
+        /*
         let v_args = args
             .iter()
             .enumerate()
@@ -894,6 +896,7 @@ impl Flatten {
                 (self.push_entry_with_link(entry), arg_ty.clone())
             })
             .collect::<Vec<_>>();
+        */
         v_args
     }
 
@@ -1423,16 +1426,18 @@ impl Flatten {
 
                                 // setup arguments for continuation block with appropriate parameters
                                 // matching the return type of the lambda block
-                                let next_args = match &ret_ty {
+                                let next_arg_ty = AstType::Struct(match &ret_ty {
                                     AstType::Unit => vec![],
-                                    _ => vec![ret_ty.clone()],
-                                };
+                                    _ => vec![(None, ret_ty.clone())],
+                                });
                                 // start next block
                                 let next_link_ids = self.start_block(
                                     next_block_id,
                                     scope_id,
-                                    &AstType::Unit,
-                                    &next_args,
+                                    &next_arg_ty,
+                                    //&AstType::Unit,
+                                    &[],
+                                    //&next_args,
                                     AstType::Unit,
                                     Some(b.labels.fresh_key("cont")),
                                     span_id,
