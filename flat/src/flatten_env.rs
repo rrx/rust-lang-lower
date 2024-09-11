@@ -2,10 +2,10 @@ use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
 
 use crate::{
-    scope::{Data, LoopScope},
-    BlockId, CodeOffset, LinkId, NodeBuilder, ScopeId, ScopeLayer, ScopeType, StringLabel,
+    scope::LoopScope, BlockId, CodeOffset, LinkId, NodeBuilder, ScopeId, ScopeLayer, ScopeType,
+    StringLabel,
 };
-use compile_core::{AstType, StringKey, VarDefinitionSpace};
+use compile_core::StringKey;
 
 pub type ScopeGraph = DiGraph<ScopeLayer, ()>;
 
@@ -67,17 +67,9 @@ impl FlattenEnvironment {
             .add_edge(source_scope_id.into(), target_scope_id.into(), ());
     }
 
-    pub fn scope_define(
-        &mut self,
-        scope_id: ScopeId,
-        name: StringKey,
-        offset: LinkId,
-        ty: AstType,
-        mem: VarDefinitionSpace,
-    ) {
-        let data = Data::new(offset, ty, mem);
+    pub fn scope_define(&mut self, scope_id: ScopeId, name: StringKey, v: LinkId) {
         let scope = self.get_scope_mut(scope_id);
-        scope.names.insert(name, data);
+        scope.names.insert(name, v);
     }
 
     pub fn find_nearest_scope(&self, scope_id: ScopeId, scope_type: ScopeType) -> Option<ScopeId> {

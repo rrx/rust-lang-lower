@@ -26,7 +26,7 @@ use std::convert::From;
 use std::convert::Into;
 
 use crate::{
-    scope::Data, BlockId, BlockifyError, Builtin, CodeOffset, FlattenEnvironment, LCode, LinkId,
+    BlockId, BlockifyError, Builtin, CodeOffset, FlattenEnvironment, LCode, LinkId,
     NodeBuilder as NB, ScopeId, ScopeType, SequenceReader, StringLabel, Successor, TemplateId,
 };
 
@@ -168,7 +168,7 @@ impl Flatten {
         block_id: BlockId,
         name: StringKey,
         fenv: &FlattenEnvironment,
-    ) -> Option<Data> {
+    ) -> Option<LinkId> {
         // resolve scope through the tree, starting at the current scope
         let block = self.get_block(block_id);
         for scope_id in fenv.walk_scopes(block.scope_id) {
@@ -785,7 +785,7 @@ impl Flatten {
         &mut self,
         block_id: BlockId,
         def: &Lambda,
-        fun_offset: CodeOffset,
+        fun_offset: LinkId,
         args: Vec<Argument>,
         span_id: SpanId,
         fenv: &mut FlattenEnvironment,
@@ -810,7 +810,7 @@ impl Flatten {
         }
 
         // Make call
-        let code = LCode::Call(fun_offset);
+        let code = LCode::Call(fun_offset.into());
         let entry = CodeEntry::new(
             current_block_id,
             code,
@@ -864,13 +864,7 @@ impl Flatten {
             let link_id = self.push_entry_with_link(entry);
             v_args.push((link_id, ty.clone()));
             if let Some(name) = name {
-                fenv.scope_define(
-                    scope_id,
-                    *name,
-                    link_id.into(),
-                    ty.clone(),
-                    VarDefinitionSpace::Arg,
-                );
+                fenv.scope_define(scope_id, *name, link_id.into());
             }
         }
         (block_link_id, v_args)
@@ -964,13 +958,7 @@ impl Flatten {
                             );
                             // add the name to static scope
                             // do this early for recursive functions
-                            fenv.scope_define(
-                                fenv.static_scope_id(),
-                                name,
-                                v_block,
-                                fun_ty.clone(),
-                                VarDefinitionSpace::Static,
-                            );
+                            fenv.scope_define(fenv.static_scope_id(), name, v_block);
 
                             let body = jump_if_needed(*body, b);
                             let _ = self.flatten(fun_block_id, body, fenv, b)?;
@@ -1051,13 +1039,7 @@ impl Flatten {
                         );
                         let link_id = self.push_entry_with_link(entry);
 
-                        fenv.scope_define(
-                            scope_id,
-                            name,
-                            link_id.into(),
-                            ast_ty.clone(),
-                            VarDefinitionSpace::Static,
-                        );
+                        fenv.scope_define(scope_id, name, link_id.into());
 
                         Ok(FlattenResult::new(block_id, Some(link_id), ast_ty, false))
                     }
@@ -1225,15 +1207,16 @@ impl Flatten {
             Ast::Identifier(key) => {
                 // identifier is expression, non-terminal
                 //self.dump_scope(block_id, fenv, b);
-                if let Some(data) = self.resolve_name(block_id, key, fenv) {
+                if let Some(def_link_id) = self.resolve_name(block_id, key, fenv) {
                     //let ty = data.ty.clone();
-                    let entry = self.get_entry(data.offset).clone();
+                    let entry = self.get_entry(def_link_id).clone();
                     let ty = entry.ty.clone();
+                    let mem = entry.mem;
 
-                    let link_id = if let VarDefinitionSpace::Arg = entry.mem {
-                        data.offset
+                    let link_id = if let VarDefinitionSpace::Arg = mem {
+                        def_link_id
                     } else {
-                        let code = LCode::Load(data.offset);
+                        let code = LCode::Load(def_link_id);
                         let entry = CodeEntry::new(
                             block_id,
                             code,
@@ -1242,8 +1225,7 @@ impl Flatten {
                             node.span_id,
                             entry.mem,
                         );
-                        let link_id = self.push_entry_with_link(entry);
-                        link_id
+                        self.push_entry_with_link(entry)
                     };
                     Ok(FlattenResult::new(
                         block_id,
@@ -1277,8 +1259,8 @@ impl Flatten {
                 let expr_ty = self.get_entry(v_expr).ty.clone();
 
                 let offset_decl =
-                    if let Some(data) = self.resolve_name(current_block_id, name, fenv) {
-                        let ty = self.get_type(data.offset).clone();
+                    if let Some(v_decl) = self.resolve_name(current_block_id, name, fenv) {
+                        let ty = self.get_type(v_decl).clone();
                         if ty != expr_ty {
                             b.push_error(
                                 &format!("Type Mismatch: {:?}, {:?}", ty, expr_ty),
@@ -1286,7 +1268,7 @@ impl Flatten {
                             );
                         }
                         //assert_eq!(data.ty, expr_ty);
-                        data.offset
+                        v_decl
                     } else {
                         let block = self.get_block(current_block_id);
                         let scope_id = block.scope_id;
@@ -1301,13 +1283,7 @@ impl Flatten {
                             VarDefinitionSpace::Default,
                         );
                         let link_id = self.push_entry_with_link(entry);
-                        fenv.scope_define(
-                            scope_id,
-                            name,
-                            link_id.into(),
-                            expr_ty,
-                            VarDefinitionSpace::Stack,
-                        );
+                        fenv.scope_define(scope_id, name, link_id);
                         link_id.into()
                     };
 
@@ -1345,11 +1321,11 @@ impl Flatten {
                                 //let fun_ty = def_to_type(&def, b);
 
                                 // if it's defined in statick scope, just call it
-                                if let Some(data) = self.resolve_name(block_id, *ident, fenv) {
+                                if let Some(v_decl) = self.resolve_name(block_id, *ident, fenv) {
                                     return self.add_function_call(
                                         block_id,
                                         &def,
-                                        data.offset.into(),
+                                        v_decl,
                                         args,
                                         node.span_id,
                                         fenv,

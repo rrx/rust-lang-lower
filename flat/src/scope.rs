@@ -2,20 +2,7 @@ use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
 
 use crate::{BlockId, CodeOffset, LinkId, NodeBuilder, StringLabel, ValueId};
-use compile_core::{AstType, StringKey, VarDefinitionSpace};
-
-#[derive(Debug, Clone)]
-pub struct Data {
-    //pub(crate) ty: AstType,
-    //pub(crate) mem: VarDefinitionSpace,
-    pub(crate) offset: LinkId,
-}
-
-impl Data {
-    pub fn new(offset: LinkId, ty: AstType, mem: VarDefinitionSpace) -> Self {
-        Data { offset }
-    }
-}
+use compile_core::StringKey;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ScopeType {
@@ -57,7 +44,7 @@ impl TemplateId {
 
 #[derive(Debug)]
 pub struct ScopeLayer {
-    pub names: HashMap<StringKey, Data>,
+    pub names: HashMap<StringKey, LinkId>,
     pub labels: HashMap<StringLabel, ValueId>,
     pub(crate) block_labels: HashMap<StringLabel, BlockId>,
     pub blocks: Vec<ValueId>,
@@ -88,7 +75,7 @@ impl ScopeLayer {
     }
 
     pub fn lookup(&self, name: StringKey) -> Option<LinkId> {
-        self.names.get(&name).cloned().map(|data| data.offset)
+        self.names.get(&name).cloned()
     }
 
     pub fn dump(&self, b: &NodeBuilder) {
@@ -416,12 +403,12 @@ impl Environment {
         None
     }
 
-    pub fn resolve_name(&self, name: StringKey) -> Option<&Data> {
+    pub fn resolve_name(&self, name: StringKey) -> Option<LinkId> {
         // resolve scope through the tree, starting at the current scope
         for scope_id in self.stack.iter().rev() {
             let scope = self.get_scope(*scope_id);
-            if let Some(data) = scope.names.get(&name) {
-                return Some(data);
+            if let Some(link_id) = scope.names.get(&name) {
+                return Some(*link_id);
             }
         }
         None
