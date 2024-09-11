@@ -491,7 +491,7 @@ impl Flatten {
             _ => vec![(None, return_type.clone())],
         });
 
-        let (v_block, v_args) = self.start_block(
+        let (_v_block, v_args) = self.start_block(
             ret_block_id,
             scope_id,
             &arg_ty,
@@ -1226,7 +1226,7 @@ impl Flatten {
                     let code = if let VarDefinitionSpace::Arg = data.mem {
                         LCode::Value(data.offset.into())
                     } else {
-                        LCode::Load(data.offset.into())
+                        LCode::Load(data.offset)
                     };
                     let entry =
                         CodeEntry::new(block_id, code, ty.clone(), None, node.span_id, data.mem);
@@ -1291,7 +1291,7 @@ impl Flatten {
                         link_id.into()
                     };
 
-                let code = LCode::Store(offset_decl.into(), v_expr.into());
+                let code = LCode::Store(offset_decl, v_expr);
                 let entry = CodeEntry::new(
                     current_block_id,
                     code,
@@ -1402,7 +1402,7 @@ impl Flatten {
                                     _ => vec![(None, ret_ty.clone())],
                                 });
                                 // start next block
-                                let (v_block, next_link_ids) = self.start_block(
+                                let (_v_block, next_link_ids) = self.start_block(
                                     next_block_id,
                                     scope_id,
                                     &next_arg_ty,

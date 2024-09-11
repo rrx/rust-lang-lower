@@ -7,7 +7,7 @@ use compile_core::{
 };
 
 use crate::{
-    BlockId, CodeOffset, Environment, Node, NodeBuilder, StringLabel, Successor, ValueId, CFG,
+    BlockId, CodeOffset, Environment, Node, NodeBuilder, StringLabel, Successor, ValueId, CFG, LinkId
 };
 
 #[derive(Error, Debug)]
@@ -37,8 +37,8 @@ pub enum LCode {
     Op1(UnaryOperation),
     Op2(BinaryOperation),
     NaryOp(NaryOperation),
-    Load(CodeOffset),              // memref
-    Store(CodeOffset, CodeOffset), // memref, value to store
+    Load(LinkId),              // memref
+    Store(LinkId, LinkId), // memref, value to store
     Return,                        // return values
     Yield,                         // yield values
 

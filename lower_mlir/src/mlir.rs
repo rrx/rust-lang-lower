@@ -546,12 +546,12 @@ impl<'c> MLIRGenerator<'c> {
 
             LCode::Store(v_decl, v_value) => {
                 let block_id = self.blockify.get_entry_id(v);
-                let decl_is_static = self.blockify.is_in_static_scope(*v_decl);
+                let decl_is_static = self.blockify.is_in_static_scope(v_decl.into());
 
                 let addr_index = if decl_is_static {
-                    let name = self.blockify.get_name(*v_decl).unwrap();
-                    let lhs_ty = self.blockify.get_type((*v_decl).into());
-                    let rhs_ty = self.blockify.get_type(*v_value);
+                    let name = self.blockify.get_name(v_decl.into()).unwrap();
+                    let lhs_ty = self.blockify.get_type(v_decl.into());
+                    let rhs_ty = self.blockify.get_type(v_value.into());
                     assert_eq!(lhs_ty, rhs_ty);
 
                     let (lower_ty, dims) = self.from_type(&lhs_ty);
@@ -571,11 +571,11 @@ impl<'c> MLIRGenerator<'c> {
                     self.index.insert(v, index);
                     index
                 } else {
-                    let decl_index = self.resolve_value(*v_decl).unwrap();
+                    let decl_index = self.resolve_value(v_decl.into()).unwrap();
                     decl_index
                 };
 
-                let value_index = self.resolve_value(*v_value).unwrap();
+                let value_index = self.resolve_value(v_value.into()).unwrap();
                 let r_addr = self.value0(addr_index);
                 let r_value = self.value0(value_index);
 
@@ -590,7 +590,7 @@ impl<'c> MLIRGenerator<'c> {
 
             LCode::Load(v_decl) => {
                 let block_id = self.blockify.get_entry_id(v);
-                let v_decl = self.blockify.resolve_declaration(*v_decl).unwrap();
+                let v_decl = self.blockify.resolve_declaration(v_decl.into()).unwrap();
                 if self.blockify.is_in_static_scope(v_decl) {
                     let ast_ty = self.blockify.get_type(v.into());
                     let (lower_ty, dims) = self.from_type(&ast_ty);
