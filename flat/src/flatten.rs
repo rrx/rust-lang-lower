@@ -1223,14 +1223,22 @@ impl Flatten {
                 //self.dump_scope(block_id, fenv, b);
                 if let Some(data) = self.resolve_name(block_id, key, fenv) {
                     let ty = data.ty.clone();
-                    let code = if let VarDefinitionSpace::Arg = data.mem {
-                        LCode::Value(data.offset.into())
+                    let link_id = if let VarDefinitionSpace::Arg = data.mem {
+                        data.offset
+                        //LCode::Value(data.offset)
                     } else {
-                        LCode::Load(data.offset)
+                        let code = LCode::Load(data.offset);
+                        let entry = CodeEntry::new(
+                            block_id,
+                            code,
+                            ty.clone(),
+                            None,
+                            node.span_id,
+                            data.mem,
+                        );
+                        let link_id = self.push_entry_with_link(entry);
+                        link_id
                     };
-                    let entry =
-                        CodeEntry::new(block_id, code, ty.clone(), None, node.span_id, data.mem);
-                    let link_id = self.push_entry_with_link(entry);
                     Ok(FlattenResult::new(block_id, Some(link_id), ty, false))
                 } else {
                     b.push_error("Name not found", node.span_id);

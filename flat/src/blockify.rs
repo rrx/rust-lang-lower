@@ -7,7 +7,8 @@ use compile_core::{
 };
 
 use crate::{
-    BlockId, CodeOffset, Environment, Node, NodeBuilder, StringLabel, Successor, ValueId, CFG, LinkId
+    BlockId, CodeOffset, Environment, LinkId, Node, NodeBuilder, StringLabel, Successor, ValueId,
+    CFG,
 };
 
 #[derive(Error, Debug)]
@@ -30,17 +31,17 @@ pub enum LCode {
     Noop,
     Declare,
     DeclareFunction(Option<BlockId>), // optional entry block
-    Value(CodeOffset),
+    Value(LinkId),
     CallValue(CodeOffset),
     Arg(u8), // get the value of a positional arg
     Const(Literal),
     Op1(UnaryOperation),
     Op2(BinaryOperation),
     NaryOp(NaryOperation),
-    Load(LinkId),              // memref
+    Load(LinkId),          // memref
     Store(LinkId, LinkId), // memref, value to store
-    Return,                        // return values
-    Yield,                         // yield values
+    Return,                // return values
+    Yield,                 // yield values
 
     // jump to block, with num args
     Jump(CodeOffset),
@@ -130,7 +131,7 @@ pub trait ICodeModule {
             let value_id = self.resolve_code_offset(current);
             let code = self.get_code(value_id);
             if let LCode::Value(next_value_id) = code {
-                current = *next_value_id;
+                current = next_value_id.into();
                 continue;
             }
 
