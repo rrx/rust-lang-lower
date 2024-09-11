@@ -12,7 +12,7 @@ use compile_core::{
     LinkOptions,
     NaryOperation,
     //Literal,
-    ParameterNode,
+    //ParameterNode,
     SpanId,
     StringKey,
     //UnaryOperation,
@@ -384,13 +384,11 @@ impl Flatten {
                                 scope_id,
                                 &AstType::Unit,
                                 &[],
-                                &[],
                                 AstType::Unit,
                                 Some(b.labels.fresh_key("new")),
                                 next_node.span_id,
                                 VarDefinitionSpace::Default,
                                 fenv,
-                                b,
                             );
                             self.block_succ(current_block_id, new_block_id, Successor::BlockScope);
                             let new_block = self.get_block_mut(new_block_id);
@@ -499,13 +497,11 @@ impl Flatten {
             scope_id,
             &AstType::Unit,
             &args,
-            &[],
             AstType::Unit,
             Some(name),
             span_id,
             VarDefinitionSpace::Reg,
             fenv,
-            b,
         );
         self.add_return(ret_block_id, v_args, span_id);
     }
@@ -836,13 +832,13 @@ impl Flatten {
         scope_id: ScopeId,
         arg: &AstType,
         args: &[AstType],
-        kwargs: &[ParameterNode],
+        //kwargs: &[ParameterNode],
         ty: AstType,
         name: Option<StringKey>,
         span_id: SpanId,
         _mem: VarDefinitionSpace,
         fenv: &mut FlattenEnvironment,
-        b: &mut NB,
+        //b: &mut NB,
     ) -> Vec<(LinkId, AstType)> {
         let code = LCode::Label;
         let entry = CodeEntry::new(
@@ -898,31 +894,6 @@ impl Flatten {
                 (self.push_entry_with_link(entry), arg_ty.clone())
             })
             .collect::<Vec<_>>();
-
-        // defined in the scope
-        /*1
-        for (i, p) in kwargs.iter().enumerate() {
-            let ty = b.types.r(p.ty);
-            let code = LCode::Arg(i as u8);
-            let entry = CodeEntry::new(
-                block_id,
-                code,
-                ty.clone(),
-                Some(p.name),
-                p.span_id,
-                VarDefinitionSpace::Arg,
-            );
-            let link_id = self.push_entry_with_link(entry);
-            fenv.scope_define(
-                scope_id,
-                p.name,
-                link_id.into(),
-                ty.clone(),
-                VarDefinitionSpace::Arg,
-            );
-        }
-        */
-
         v_args
     }
 
@@ -1017,13 +988,11 @@ impl Flatten {
                                 fun_scope_id,
                                 &arg_type,
                                 &[],
-                                &[],
                                 fun_ty.clone(),
                                 Some(name),
                                 span_id,
                                 VarDefinitionSpace::Static,
                                 fenv,
-                                b,
                             );
                             let body = jump_if_needed(*body, b);
                             let _ = self.flatten(fun_block_id, body, fenv, b)?;
@@ -1464,13 +1433,11 @@ impl Flatten {
                                     scope_id,
                                     &AstType::Unit,
                                     &next_args,
-                                    &[],
                                     AstType::Unit,
                                     Some(b.labels.fresh_key("cont")),
                                     span_id,
                                     VarDefinitionSpace::Reg,
                                     fenv,
-                                    b,
                                 );
 
                                 let next_link_id = match &ret_ty {
@@ -1486,13 +1453,11 @@ impl Flatten {
                                     fun_scope_id,
                                     &arg_type,
                                     &[],
-                                    &[],
                                     AstType::Unit,
                                     Some(lambda_name),
                                     span_id,
                                     VarDefinitionSpace::Reg,
                                     fenv,
-                                    b,
                                 );
                                 // flatten lambda block
                                 let _ = self.flatten(fun_block_id, body, fenv, b)?;
@@ -1656,13 +1621,11 @@ impl Flatten {
                     new_scope_id,
                     &arg_ty, //AstType::Unit,
                     &[],
-                    &args,
                     AstType::Unit,
                     Some(name),
                     span_id,
                     VarDefinitionSpace::Default,
                     fenv,
-                    b,
                 );
                 let r = self.flatten(new_block_id, NB::ensure_seq(*body), fenv, b)?;
 
@@ -1804,13 +1767,11 @@ impl Flatten {
                     current_scope_id,
                     &AstType::Unit,
                     &[],
-                    &[],
                     AstType::Unit,
                     Some(name),
                     span_id,
                     VarDefinitionSpace::Reg,
                     fenv,
-                    b,
                 );
 
                 Ok(FlattenResult::new(
