@@ -298,6 +298,10 @@ impl Flatten {
         self.entries.get(link_id.index()).unwrap()
     }
 
+    pub fn get_type(&self, link_id: LinkId) -> &AstType {
+        &self.get_entry(link_id).ty
+    }
+
     pub fn get_entry_mut(&mut self, link_id: LinkId) -> &mut CodeEntry {
         self.entries.get_mut(link_id.index()).unwrap()
     }
@@ -1222,10 +1226,12 @@ impl Flatten {
                 // identifier is expression, non-terminal
                 //self.dump_scope(block_id, fenv, b);
                 if let Some(data) = self.resolve_name(block_id, key, fenv) {
-                    let ty = data.ty.clone();
-                    let link_id = if let VarDefinitionSpace::Arg = data.mem {
+                    //let ty = data.ty.clone();
+                    let entry = self.get_entry(data.offset).clone();
+                    let ty = entry.ty.clone();
+
+                    let link_id = if let VarDefinitionSpace::Arg = entry.mem {
                         data.offset
-                        //LCode::Value(data.offset)
                     } else {
                         let code = LCode::Load(data.offset);
                         let entry = CodeEntry::new(
@@ -1234,12 +1240,17 @@ impl Flatten {
                             ty.clone(),
                             None,
                             node.span_id,
-                            data.mem,
+                            entry.mem,
                         );
                         let link_id = self.push_entry_with_link(entry);
                         link_id
                     };
-                    Ok(FlattenResult::new(block_id, Some(link_id), ty, false))
+                    Ok(FlattenResult::new(
+                        block_id,
+                        Some(link_id),
+                        ty.clone(),
+                        false,
+                    ))
                 } else {
                     b.push_error("Name not found", node.span_id);
                     let s = b.labels.r(key.into());
@@ -1267,9 +1278,10 @@ impl Flatten {
 
                 let offset_decl =
                     if let Some(data) = self.resolve_name(current_block_id, name, fenv) {
-                        if data.ty != expr_ty {
+                        let ty = self.get_type(data.offset).clone();
+                        if ty != expr_ty {
                             b.push_error(
-                                &format!("Type Mismatch: {:?}, {:?}", data.ty, expr_ty),
+                                &format!("Type Mismatch: {:?}, {:?}", ty, expr_ty),
                                 node.span_id,
                             );
                         }

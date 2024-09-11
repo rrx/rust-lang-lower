@@ -6,14 +6,14 @@ use compile_core::{AstType, StringKey, VarDefinitionSpace};
 
 #[derive(Debug, Clone)]
 pub struct Data {
-    pub(crate) ty: AstType,
-    pub(crate) mem: VarDefinitionSpace,
+    //pub(crate) ty: AstType,
+    //pub(crate) mem: VarDefinitionSpace,
     pub(crate) offset: LinkId,
 }
 
 impl Data {
     pub fn new(offset: LinkId, ty: AstType, mem: VarDefinitionSpace) -> Self {
-        Data { offset, ty, mem }
+        Data { offset }
     }
 }
 
