@@ -72,7 +72,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         let f = r?;
         let m = FlattenModule::from_builder(f, &mut fenv, &mut b);
-        m.dump(&b);
+        m.dump(&mut b);
         m.block_graph("blocks.dot", &b);
 
         flat::flatten::scope_graph("scopes.dot", &fenv);
@@ -88,6 +88,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         r?;
     }
 
+    b.types.dump();
     if config.verbose {
         module.as_operation().dump();
     }

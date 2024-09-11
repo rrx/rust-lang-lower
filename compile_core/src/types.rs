@@ -81,7 +81,7 @@ impl AstType {
 
     pub fn is_unknown(&self) -> bool {
         match self {
-            Self::Ptr(ty) => ty.is_unknown(),
+            Self::Ptr(ty) | Self::Args(ty) | Self::KwArgs(ty) => ty.is_unknown(),
             Self::Struct(fields) | Self::Union(fields) => {
                 for (_, a) in fields {
                     if a.is_unknown() {
@@ -109,8 +109,6 @@ impl AstType {
                 false
             }
             Self::Variable(_) => true,
-            Self::Args(_) => true,
-            Self::KwArgs(_) => true,
             _ => false,
         }
     }

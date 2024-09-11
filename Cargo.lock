@@ -811,6 +811,7 @@ dependencies = [
  "compile_core",
  "criterion",
  "env_logger",
+ "hmunify",
  "indexmap",
  "petgraph",
  "serde",

@@ -794,7 +794,7 @@ pub(crate) mod tests {
         let f = r.unwrap();
         b.spans.diagnostics_dump();
         let m = FlattenModule::from_builder(f, &mut fenv, &mut b);
-        m.dump(&b);
+        m.dump(&mut b);
 
         let r = p.codegen(&m, ValueId::new(0), &context, &mut module, &mut b);
         b.spans.diagnostics_dump();

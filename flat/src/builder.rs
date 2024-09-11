@@ -3,6 +3,8 @@ use compile_core::{
     Argument, Ast, AstNode, AstType, Lambda, Literal, Parameter, ParameterNode, Span, SpanBuilder,
     SpanId, StringKey, StringPool, TypeId, TypePool,
 };
+use hmunify::TypeUnify;
+
 use std::collections::HashMap;
 
 use crate::BuiltinBuilder;
@@ -64,24 +66,28 @@ impl LabelBuilder {
 
 pub struct TypeBuilder {
     pool: TypePool,
-    unknown_count: u32,
+    //unknown_count: u32,
     vars: Vec<Option<TypeId>>,
+    pub u: TypeUnify,
 }
 
 impl TypeBuilder {
     pub fn new() -> Self {
         Self {
-            unknown_count: 0,
+            //unknown_count: 0,
             pool: TypePool::new(),
             vars: vec![],
+            u: TypeUnify::new(),
         }
     }
 
     pub fn fresh_unknown(&mut self) -> AstType {
-        let offset = self.vars.len();
-        self.vars.push(None);
-        let r = AstType::Variable(offset as u32);
-        r
+        self.u.fresh_unknown().into()
+
+        //let offset = self.vars.len();
+        //self.vars.push(None);
+        //let r = AstType::Variable(offset as u32);
+        //r
     }
 
     pub fn fresh_args(&mut self) -> AstType {
@@ -94,6 +100,10 @@ impl TypeBuilder {
         AstType::KwArgs(t.into())
     }
 
+    pub fn dump(&mut self) {
+        self.u.dump();
+    }
+    /*
     pub fn unify(&mut self, a: TypeId, b: TypeId) {
         let ty1 = self.pool.resolve(&a);
         let ty2 = self.pool.resolve(&b);
@@ -149,6 +159,7 @@ impl TypeBuilder {
             Some(ty.clone())
         }
     }
+    */
 
     pub fn s(&mut self, t: &AstType) -> TypeId {
         self.pool.intern(t.clone())

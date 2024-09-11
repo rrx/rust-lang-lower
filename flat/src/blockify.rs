@@ -173,7 +173,7 @@ pub trait ICodeModule {
     }
 
     fn get_entry_id_from_block_id(&self, block_id: BlockId) -> ValueId;
-    fn dump(&self, b: &NodeBuilder);
+    fn dump(&self, b: &mut NodeBuilder);
 
     fn get_label_args(&self, v: ValueId) -> Vec<AstType> {
         let mut current = v;

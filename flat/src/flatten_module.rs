@@ -162,7 +162,7 @@ impl ICodeModule for FlattenModule {
         self.entries.len()
     }
 
-    fn dump(&self, b: &NB) {
+    fn dump(&self, b: &mut NB) {
         let mut rows = vec![];
         for entry in self.entries.iter() {
             let row = self.get_code_row(entry.value_id, b);
@@ -330,10 +330,12 @@ impl FlattenModule {
         self.get_code(*value_id)
     }
 
-    pub fn get_code_row(&self, v: ValueId, b: &NB) -> CodeRow {
+    pub fn get_code_row(&self, v: ValueId, b: &mut NB) -> CodeRow {
         let entry = self.get_entry(v);
         let code = self.get_code(v);
         let ty = self.get_type(v.into());
+        let r_ty = b.types.u.resolve(&ty).unwrap();
+
         let mem = self.get_mem(v.into());
         //let next = self.get_next(v).unwrap_or(v).index();
         //let prev = self.get_prev(v).unwrap_or(v).index();
@@ -347,7 +349,8 @@ impl FlattenModule {
             //next: 0,
             //prev: 0,
             value: self.code_to_string(v, b),
-            ty,
+            ty: ty.clone(),
+            r_ty,
             mem: format!("{:?}", mem),
             name: self
                 .get_name(v.into())
@@ -360,6 +363,7 @@ impl FlattenModule {
             block_id: block_id.index(),
             term: code.is_term(),
             dead: block.dead,
+            unknown: ty.is_unknown(),
         }
     }
 }

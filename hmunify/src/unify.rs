@@ -143,7 +143,7 @@ pub type TypeUnifyTable = UnificationTable<InPlace<IntKey>>;
 
 pub struct TypeUnify {
     ut: TypeUnifyTable,
-    unknown_count: u32,
+    //unknown_count: u32,
     variables: Vec<IntKey>,
 }
 
@@ -151,7 +151,7 @@ impl TypeUnify {
     pub fn new() -> Self {
         Self {
             ut: TypeUnifyTable::new(),
-            unknown_count: 0,
+            //unknown_count: 0,
             variables: vec![],
         }
     }
@@ -170,8 +170,21 @@ impl TypeUnify {
         }
     }
 
+    pub fn dump(&mut self) {
+        println!("dump: {}", self.variables.len());
+        for i in 0..self.variables.len() {
+            let ty = AstType::Variable(i as u32);
+            let x = self.resolve(&ty);
+            println!("Type: {}: {:?}", i, x);
+        }
+    }
+
     pub fn unify(&mut self, a: &AstType, b: &AstType) -> Result<(), UError> {
+        println!("Unify: {:?}, {:?}", a, b);
         match (a, b) {
+            (AstType::Args(v1), AstType::Args(v2)) => self.unify(&*v1, &*v2),
+            (AstType::Args(v), _) => self.unify(v, b),
+            (_, AstType::Args(v)) => self.unify(a, v),
             (AstType::Variable(v1), AstType::Variable(v2)) => {
                 let k1 = self.variables[*v1 as usize];
                 let k2 = self.variables[*v2 as usize];
@@ -219,6 +232,7 @@ impl TypeUnify {
 
     pub fn resolve(&mut self, a: &AstType) -> Option<AstType> {
         match a {
+            AstType::Args(v) => self.resolve(v).map(|x| AstType::Args(x.into())),
             AstType::Ptr(v) => self.resolve(v).map(|x| AstType::Ptr(x.into())),
             AstType::Struct(vs) => {
                 let size = vs.len();

@@ -788,9 +788,10 @@ impl Flatten {
                 .map(|v| (v.0, v.2.clone()))
                 .collect::<Vec<_>>(),
         );
-        let call_type_id = b.types.s(&call_ty);
 
-        b.types.unify(def.arg_type, call_type_id);
+        b.types.u.unify(&func_arg, &call_ty)?;
+
+        let call_type_id = b.types.s(&call_ty);
 
         println!("blocks: {:?}", (block_id, current_block_id));
         Ok((current_block_id, ret.clone(), values, call_ty))
