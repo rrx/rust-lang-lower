@@ -103,7 +103,8 @@ impl TypeBuilder {
         let offset2 = ty2.try_unknown();
 
         if offset1.is_none() && offset2.is_none() {
-            unimplemented!();
+            return;
+            //unimplemented!();
         }
 
         if offset1.is_some() && offset2.is_some() {

@@ -512,12 +512,12 @@ impl Flatten {
         &mut self,
         block_id: BlockId,
         target_id: CodeOffset,
-        jump_args: Vec<(LinkId, AstType)>,
+        jump_args: Vec<(Option<StringKey>, LinkId, AstType)>,
         span_id: SpanId,
     ) -> LinkId {
-        for (link_id, ty) in jump_args.into_iter() {
+        for (key, link_id, ty) in jump_args.into_iter() {
             let code = LCode::CallValue(link_id.into());
-            let entry = CodeEntry::new(block_id, code, ty, None, span_id, VarDefinitionSpace::Reg);
+            let entry = CodeEntry::new(block_id, code, ty, key, span_id, VarDefinitionSpace::Reg);
             self.push_entry_with_link(entry);
         }
 
@@ -546,7 +546,12 @@ impl Flatten {
         span_id: SpanId,
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
-    ) -> Result<(BlockId, AstType, Vec<(LinkId, AstType)>)> {
+    ) -> Result<(
+        BlockId,
+        AstType,
+        Vec<(Option<StringKey>, LinkId, AstType)>,
+        AstType,
+    )> {
         let func_arg = b.types.r(def.arg_type).clone();
         let ret = b.types.r(def.return_type).clone();
 
@@ -715,17 +720,17 @@ impl Flatten {
                     let r = self.flatten(current_block_id, *expr, fenv, b)?;
                     current_block_id = r.block_id;
                     let link_id = r.link_id.unwrap();
-                    values.push((link_id, r.ty.clone()));
+                    values.push((None, link_id, r.ty.clone()));
                     link_ids.push(link_id);
                 }
-                Argument::Named(_key, expr) => {
+                Argument::Named(key, expr) => {
                     let r = self.flatten(current_block_id, *expr, fenv, b)?;
                     current_block_id = r.block_id;
                     let link_id = r.link_id.unwrap();
-                    values.push((link_id, r.ty.clone()));
+                    values.push((Some(key), link_id, r.ty.clone()));
                     link_ids.push(link_id);
                 }
-                Argument::Args(_key, exprs) => {
+                Argument::Args(key, exprs) => {
                     let mut args_values = vec![];
                     for expr in exprs {
                         let r = self.flatten(current_block_id, expr, fenv, b)?;
@@ -763,46 +768,55 @@ impl Flatten {
                         VarDefinitionSpace::Stack,
                     );
                     let link_id = self.push_entry_with_link(entry);
-                    values.push((link_id, struct_ty.clone()));
+                    values.push((Some(key), link_id, struct_ty.clone()));
                     link_ids.push(link_id);
                 }
-                Argument::KwArgs(_key, _expr) => {
+                Argument::KwArgs(key, _expr) => {
                     let node: AstNode = 1.into();
                     let r = self.flatten(current_block_id, node, fenv, b)?;
                     current_block_id = r.block_id;
                     let link_id = r.link_id.unwrap();
-                    values.push((link_id, r.ty.clone()));
+                    values.push((Some(key), link_id, r.ty.clone()));
                     link_ids.push(link_id);
                 }
             }
         }
 
+        let call_ty = AstType::Struct(
+            values
+                .iter()
+                .map(|v| (v.0, v.2.clone()))
+                .collect::<Vec<_>>(),
+        );
+        let call_type_id = b.types.s(&call_ty);
+
+        b.types.unify(def.arg_type, call_type_id);
+
         println!("blocks: {:?}", (block_id, current_block_id));
-        Ok((current_block_id, ret.clone(), values))
+        Ok((current_block_id, ret.clone(), values, call_ty))
     }
 
     pub fn add_function_call(
         &mut self,
         block_id: BlockId,
         def: &Lambda,
-        fun_offset: LinkId,
+        v_fun: LinkId,
         args: Vec<Argument>,
         span_id: SpanId,
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
     ) -> Result<FlattenResult> {
-        let (current_block_id, ret_ty, values) =
+        let (current_block_id, ret_ty, values, _call_ty) =
             self.add_function_args(block_id, def, args, span_id, fenv, b)?;
-        println!("Y: {:?}", (block_id, current_block_id));
 
         // Add links
-        for (link_id, ty) in values {
+        for (key, link_id, ty) in values {
             let code = LCode::CallValue(link_id.into());
             let entry = CodeEntry::new(
                 current_block_id,
                 code,
                 ty,
-                None,
+                key,
                 span_id,
                 VarDefinitionSpace::Reg,
             );
@@ -810,7 +824,7 @@ impl Flatten {
         }
 
         // Make call
-        let code = LCode::Call(fun_offset.into());
+        let code = LCode::Call(v_fun.into());
         let entry = CodeEntry::new(
             current_block_id,
             code,
@@ -1120,7 +1134,7 @@ impl Flatten {
                     block_id = r.block_id;
                     let link_id = r.link_id.unwrap();
                     let entry = self.get_entry(link_id);
-                    jump_args.push((link_id, entry.ty.clone()));
+                    jump_args.push((None, link_id, entry.ty.clone()));
                     expr_span_id
                 } else {
                     node.span_id
@@ -1320,8 +1334,9 @@ impl Flatten {
                                 let def = self.get_template(*template_id).clone();
                                 //let fun_ty = def_to_type(&def, b);
 
-                                // if it's defined in statick scope, just call it
+                                // if it's defined in static scope, just call it
                                 if let Some(v_decl) = self.resolve_name(block_id, *ident, fenv) {
+                                    // TODO: if it's not already baked, we need to do that here
                                     return self.add_function_call(
                                         block_id,
                                         &def,
@@ -1353,7 +1368,7 @@ impl Flatten {
                                 let fun_block_id = self.new_block(None, fun_scope_id);
                                 self.block_succ(block_id, fun_block_id, Successor::BlockScope);
 
-                                let (current_block_id, ret_ty, call_values) =
+                                let (current_block_id, ret_ty, call_values, _call_ty) =
                                     self.add_function_args(block_id, &def, args, span_id, fenv, b)?;
                                 // now that we have the arguments calculated
                                 // jump to the function baked as a block
