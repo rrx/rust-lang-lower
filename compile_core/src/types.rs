@@ -109,6 +109,8 @@ impl AstType {
                 false
             }
             Self::Variable(_) => true,
+            Self::Args(_) => true,
+            Self::KwArgs(_) => true,
             _ => false,
         }
     }

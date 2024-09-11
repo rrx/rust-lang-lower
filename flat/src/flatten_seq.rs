@@ -186,7 +186,7 @@ impl SequenceReader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Flatten, FlattenEnvironment, ICodeModule, NodeBuilder as NB, FlattenModule};
+    use crate::{Flatten, FlattenEnvironment, FlattenModule, ICodeModule, NodeBuilder as NB};
     use anyhow::Result;
     use compile_core::AstType;
     use test_log::test;

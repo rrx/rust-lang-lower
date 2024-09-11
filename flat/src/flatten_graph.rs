@@ -1,12 +1,8 @@
-use anyhow::Result;
 use super::FlattenModule;
-use crate::{
-    BlockId,
-    ICodeModule, NodeBuilder as NB,
-    Successor,
-};
-use std::collections::{HashMap, HashSet};
+use crate::{BlockId, ICodeModule, NodeBuilder as NB, Successor};
+use anyhow::Result;
 use petgraph::visit::EdgeRef;
+use std::collections::{HashMap, HashSet};
 
 impl FlattenModule {
     pub fn block_graph2(&self, filename: &str, b: &NB) -> Result<()> {

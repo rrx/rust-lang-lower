@@ -262,8 +262,8 @@ impl Parser {
             ParameterP::Args(ident, maybe_type) => {
                 println!("args: {:?}", (ident, maybe_type));
                 let ty = if let Some(_ty) = maybe_type.as_ref().map(|ty| from_type(&ty)) {
+                    // passing in types is a bit awkward, it's better to just do type inference
                     unimplemented!()
-                    //ty
                 } else {
                     Some(b.types.fresh_args())
                 };
@@ -368,8 +368,6 @@ impl Parser {
                 let body = NB::seq(body, span_id).into();
 
                 let mut defaults = HashMap::new();
-                //let mut open_args = None;
-                //let mut open_kwargs = None;
                 let arg_type = AstType::Struct(
                     params
                         .iter()
@@ -378,16 +376,10 @@ impl Parser {
                             let ty = match &p.node {
                                 Parameter::KwArgs => {
                                     let is_last = index == params.len() - 1;
-                                    //assert!(open_kwargs.is_none());
                                     assert!(is_last);
-                                    //open_kwargs = Some(p.name);
-                                    b.types.fresh_kwargs()
+                                    b.types.r(p.ty).clone()
                                 }
-                                Parameter::Args => {
-                                    //assert!(open_args.is_none());
-                                    //open_args = Some(p.name);
-                                    b.types.fresh_args()
-                                }
+                                Parameter::Args => b.types.r(p.ty).clone(),
                                 Parameter::WithDefault(d) => {
                                     defaults.insert(p.name, d.clone());
                                     b.types.r(p.ty).clone()
@@ -409,8 +401,6 @@ impl Parser {
                     body: Some(body),
                     return_type: b.types.s(&return_type),
                     defaults,
-                    //open_args,
-                    //open_kwargs,
                 });
 
                 env.define(name);
@@ -784,7 +774,7 @@ impl StarlarkParser {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::StarlarkParser;
-    use flat::{Flatten, FlattenEnvironment, ICodeModule, ValueId, FlattenModule};
+    use flat::{Flatten, FlattenEnvironment, FlattenModule, ICodeModule, ValueId};
     use lower_mlir::Location;
     use test_log::test;
 

@@ -6,7 +6,9 @@ use std::io::Write;
 
 use lower_mlir::default_context;
 
-use flat::{BlockifyError, Flatten, FlattenEnvironment, FlattenModule, NodeBuilder, ValueId, ICodeModule};
+use flat::{
+    BlockifyError, Flatten, FlattenEnvironment, FlattenModule, ICodeModule, NodeBuilder, ValueId,
+};
 use parse::starlark::StarlarkParser;
 
 #[derive(FromArgs, Debug)]

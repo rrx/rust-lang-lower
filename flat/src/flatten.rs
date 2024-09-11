@@ -26,9 +26,8 @@ use std::convert::From;
 use std::convert::Into;
 
 use crate::{
-    scope::Data, BlockId, BlockifyError, Builtin, CodeOffset, FlattenEnvironment,
-    LCode, LinkId, NodeBuilder as NB, ScopeId, ScopeType, SequenceReader, StringLabel,
-    Successor, TemplateId
+    scope::Data, BlockId, BlockifyError, Builtin, CodeOffset, FlattenEnvironment, LCode, LinkId,
+    NodeBuilder as NB, ScopeId, ScopeType, SequenceReader, StringLabel, Successor, TemplateId,
 };
 
 pub type BlockGraph = DiGraph<IRBlock, Successor>;
@@ -85,7 +84,7 @@ impl CodeEntry {
 #[derive(Debug, Clone)]
 pub struct IRBlock {
     pub(super) scope_id: ScopeId,
-    pub(super)  dead: bool,
+    pub(super) dead: bool,
     pub(super) ast: Option<AstNode>,
     pub(super) next: Option<BlockId>,
     pub(super) links: Vec<LinkId>,
@@ -236,7 +235,6 @@ impl Flatten {
         let index = self.entries.len();
         let link_id = LinkId(index as u32);
         entry.link = Some(link_id);
-        //let block_id = entry.block_id;
         self.entries.push(entry);
         link_id
     }
@@ -259,7 +257,6 @@ impl Flatten {
                     format!("appending to term block={}\n{}", block_id, backtrace),
                     span_id,
                 ));
-                //assert!(false, "appending to term block");
             }
         }
         self.get_block_mut(block_id).push(link_id);
@@ -319,6 +316,7 @@ impl Flatten {
         &mut self,
         block_id: BlockId,
         seq: Vec<AstNode>,
+        seq_span_id: SpanId,
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
     ) -> Result<FlattenResult> {
@@ -327,11 +325,7 @@ impl Flatten {
         let mut link_id = None;
         let mut is_term = false;
 
-        let mut current_span_id = if let Some(first) = seq.first() {
-            first.span_id
-        } else {
-            b.spans.get_span_unknown()
-        };
+        let mut current_span_id = seq_span_id;
 
         let block = self.get_block(block_id);
         let seq_next_block_id = block.next;
@@ -861,6 +855,31 @@ impl Flatten {
         );
         self.push_entry_with_link(entry);
 
+        let mut v_args = vec![];
+        for (i, (name, ty)) in arg.fields().iter().enumerate() {
+            //let ty = b.types.r(p.ty);
+            let code = LCode::Arg(i as u8);
+            let entry = CodeEntry::new(
+                block_id,
+                code,
+                ty.clone(),
+                *name,
+                span_id,
+                VarDefinitionSpace::Arg,
+            );
+            let link_id = self.push_entry_with_link(entry);
+            v_args.push((link_id, ty.clone()));
+            if let Some(name) = name {
+                fenv.scope_define(
+                    scope_id,
+                    *name,
+                    link_id.into(),
+                    ty.clone(),
+                    VarDefinitionSpace::Arg,
+                );
+            }
+        }
+
         // positional, unnamed, returned as links
         let v_args = args
             .iter()
@@ -880,30 +899,8 @@ impl Flatten {
             })
             .collect::<Vec<_>>();
 
-        for (i, (name, ty)) in arg.fields().iter().enumerate() {
-            //let ty = b.types.r(p.ty);
-            let code = LCode::Arg(i as u8);
-            let entry = CodeEntry::new(
-                block_id,
-                code,
-                ty.clone(),
-                *name,
-                span_id,
-                VarDefinitionSpace::Arg,
-            );
-            let link_id = self.push_entry_with_link(entry);
-            if let Some(name) = name {
-                fenv.scope_define(
-                    scope_id,
-                    *name,
-                    link_id.into(),
-                    ty.clone(),
-                    VarDefinitionSpace::Arg,
-                );
-            }
-        }
-
         // defined in the scope
+        /*1
         for (i, p) in kwargs.iter().enumerate() {
             let ty = b.types.r(p.ty);
             let code = LCode::Arg(i as u8);
@@ -924,6 +921,7 @@ impl Flatten {
                 VarDefinitionSpace::Arg,
             );
         }
+        */
 
         v_args
     }
@@ -958,7 +956,7 @@ impl Flatten {
                 unimplemented!("No nested modules yet")
             }
 
-            Ast::Sequence(exprs) => self.flatten_sequence(block_id, exprs, fenv, b),
+            Ast::Sequence(exprs) => self.flatten_sequence(block_id, exprs, span_id, fenv, b),
 
             Ast::Global(name, expr) => {
                 match expr.node {
@@ -1643,10 +1641,20 @@ impl Flatten {
                 let new_block = self.get_block(new_block_id);
                 let new_scope_id = new_block.scope_id;
                 self.block_succ(block_id, new_block_id, Successor::BlockScope);
+
+                let arg_ty = AstType::Struct(
+                    args.iter()
+                        .map(|p| {
+                            let ty = b.types.r(p.ty);
+                            (Some(p.name), ty.clone())
+                        })
+                        .collect::<Vec<_>>(),
+                );
+
                 self.start_block(
                     new_block_id,
                     new_scope_id,
-                    &AstType::Unit,
+                    &arg_ty, //AstType::Unit,
                     &[],
                     &args,
                     AstType::Unit,

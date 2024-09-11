@@ -1,11 +1,4 @@
-use compile_core::{
-    AstType,
-    LinkOptions,
-    Span,
-    SpanId,
-    StringKey,
-    VarDefinitionSpace,
-};
+use compile_core::{AstType, LinkOptions, Span, SpanId, StringKey, VarDefinitionSpace};
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
 use std::collections::{HashMap, HashSet};
@@ -13,12 +6,8 @@ use std::collections::{HashMap, HashSet};
 use std::convert::Into;
 
 use crate::{
-    BlockId, CodeOffset, CodeRow,
-    ICodeModule, LCode, LinkId, NodeBuilder as NB, ScopeId, ScopeType, StringLabel,
-    Successor, ValueId, BlockGraph,
-    CodeEntry,
-    Flatten,
-    FlattenEnvironment
+    BlockGraph, BlockId, CodeEntry, CodeOffset, CodeRow, Flatten, FlattenEnvironment, ICodeModule,
+    LCode, LinkId, NodeBuilder as NB, ScopeId, ScopeType, StringLabel, Successor, ValueId,
 };
 
 use tabled::{settings::Style, Table};
@@ -64,7 +53,6 @@ impl ModuleEntry {
         }
     }
 }
-
 
 pub struct FlattenModule {
     entries: Vec<ModuleEntry>,
@@ -263,7 +251,6 @@ impl FlattenModule {
         m.find_dead_blocks();
         m
     }
-
 
     pub fn find_dead_blocks(&mut self) {
         let mut dfs = petgraph::visit::Dfs::new(&self.gblocks, BlockId(0).into());
