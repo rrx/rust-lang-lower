@@ -3,7 +3,7 @@ use petgraph::graph::NodeIndex;
 
 use crate::{
     scope::{Data, LoopScope},
-    BlockId, CodeOffset, NodeBuilder, ScopeId, ScopeLayer, ScopeType, StringLabel,
+    BlockId, CodeOffset, LinkId, NodeBuilder, ScopeId, ScopeLayer, ScopeType, StringLabel,
 };
 use compile_core::{AstType, StringKey, VarDefinitionSpace};
 
@@ -71,7 +71,7 @@ impl FlattenEnvironment {
         &mut self,
         scope_id: ScopeId,
         name: StringKey,
-        offset: CodeOffset,
+        offset: LinkId,
         ty: AstType,
         mem: VarDefinitionSpace,
     ) {

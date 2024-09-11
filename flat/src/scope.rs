@@ -1,18 +1,18 @@
 use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
 
-use crate::{BlockId, CodeOffset, NodeBuilder, StringLabel, ValueId};
+use crate::{BlockId, CodeOffset, LinkId, NodeBuilder, StringLabel, ValueId};
 use compile_core::{AstType, StringKey, VarDefinitionSpace};
 
 #[derive(Debug, Clone)]
 pub struct Data {
     pub(crate) ty: AstType,
     pub(crate) mem: VarDefinitionSpace,
-    pub(crate) offset: CodeOffset,
+    pub(crate) offset: LinkId,
 }
 
 impl Data {
-    pub fn new(offset: CodeOffset, ty: AstType, mem: VarDefinitionSpace) -> Self {
+    pub fn new(offset: LinkId, ty: AstType, mem: VarDefinitionSpace) -> Self {
         Data { offset, ty, mem }
     }
 }
@@ -87,7 +87,7 @@ impl ScopeLayer {
         }
     }
 
-    pub fn lookup(&self, name: StringKey) -> Option<CodeOffset> {
+    pub fn lookup(&self, name: StringKey) -> Option<LinkId> {
         self.names.get(&name).cloned().map(|data| data.offset)
     }
 
@@ -204,6 +204,7 @@ impl Environment {
         self.current_block
     }
 
+    /*
     pub fn scope_define(
         &mut self,
         scope_id: ScopeId,
@@ -231,6 +232,7 @@ impl Environment {
         self.scope_define(scope_id, name, value_id, ty, mem);
     }
 
+    */
     pub fn static_scope_id(&self) -> ScopeId {
         self.stack.get(0).unwrap().clone()
     }

@@ -383,7 +383,6 @@ impl Flatten {
                                 new_block_id,
                                 scope_id,
                                 &AstType::Unit,
-                                &[],
                                 AstType::Unit,
                                 Some(b.labels.fresh_key("new")),
                                 next_node.span_id,
@@ -492,12 +491,10 @@ impl Flatten {
             _ => vec![(None, return_type.clone())],
         });
 
-        let v_args = self.start_block(
+        let (v_block, v_args) = self.start_block(
             ret_block_id,
             scope_id,
             &arg_ty,
-            //&AstType::Unit,
-            &[],
             AstType::Unit,
             Some(name),
             span_id,
@@ -832,16 +829,13 @@ impl Flatten {
         block_id: BlockId,
         scope_id: ScopeId,
         arg: &AstType,
-        args: &[AstType],
         ty: AstType,
         name: Option<StringKey>,
         span_id: SpanId,
         _mem: VarDefinitionSpace,
         fenv: &mut FlattenEnvironment,
-        //b: &mut NB,
-    ) -> Vec<(LinkId, AstType)> {
+    ) -> (LinkId, Vec<(LinkId, AstType)>) {
         let code = LCode::Label;
-        assert_eq!(args.len(), 0);
         let entry = CodeEntry::new(
             block_id,
             code,
@@ -850,11 +844,10 @@ impl Flatten {
             span_id,
             VarDefinitionSpace::Default,
         );
-        self.push_entry_with_link(entry);
+        let block_link_id = self.push_entry_with_link(entry);
 
         let mut v_args = vec![];
         for (i, (name, ty)) in arg.fields().iter().enumerate() {
-            //let ty = b.types.r(p.ty);
             let code = LCode::Arg(i as u8);
             let entry = CodeEntry::new(
                 block_id,
@@ -876,28 +869,7 @@ impl Flatten {
                 );
             }
         }
-
-        // positional, unnamed, returned as links
-        /*
-        let v_args = args
-            .iter()
-            .enumerate()
-            .map(|(i, arg_ty)| {
-                let code = LCode::Arg(i as u8);
-                //let name = b.labels.s(&format!(".arg{}", i));
-                let entry = CodeEntry::new(
-                    block_id,
-                    code,
-                    arg_ty.clone(),
-                    None, //Some(name),
-                    span_id,
-                    VarDefinitionSpace::Arg,
-                );
-                (self.push_entry_with_link(entry), arg_ty.clone())
-            })
-            .collect::<Vec<_>>();
-        */
-        v_args
+        (block_link_id, v_args)
     }
 
     pub fn save_template(
@@ -960,16 +932,6 @@ impl Flatten {
                             let fun_block_id = self.new_block(None, fun_scope_id);
                             let ret_block_id = self.new_block(None, fun_scope_id);
 
-                            // add the name to static scope
-                            // do this early for recursive functions
-                            fenv.scope_define(
-                                fenv.static_scope_id(),
-                                name,
-                                fun_block_id.into(),
-                                fun_ty.clone(),
-                                VarDefinitionSpace::Static,
-                            );
-
                             // return in scope
                             let fun_scope = fenv.get_scope_mut(fun_scope_id);
                             fun_scope.return_block = Some(ret_block_id);
@@ -986,17 +948,26 @@ impl Flatten {
                             );
                             self.block_succ(fun_block_id, ret_block_id, Successor::BlockScope);
                             let arg_type = b.types.r(def.arg_type).clone();
-                            self.start_block(
+                            let (v_block, _) = self.start_block(
                                 fun_block_id,
                                 fun_scope_id,
                                 &arg_type,
-                                &[],
                                 fun_ty.clone(),
                                 Some(name),
                                 span_id,
                                 VarDefinitionSpace::Static,
                                 fenv,
                             );
+                            // add the name to static scope
+                            // do this early for recursive functions
+                            fenv.scope_define(
+                                fenv.static_scope_id(),
+                                name,
+                                v_block,
+                                fun_ty.clone(),
+                                VarDefinitionSpace::Static,
+                            );
+
                             let body = jump_if_needed(*body, b);
                             let _ = self.flatten(fun_block_id, body, fenv, b)?;
 
@@ -1249,13 +1220,13 @@ impl Flatten {
 
             Ast::Identifier(key) => {
                 // identifier is expression, non-terminal
-                self.dump_scope(block_id, fenv, b);
+                //self.dump_scope(block_id, fenv, b);
                 if let Some(data) = self.resolve_name(block_id, key, fenv) {
                     let ty = data.ty.clone();
                     let code = if let VarDefinitionSpace::Arg = data.mem {
-                        LCode::Value(data.offset)
+                        LCode::Value(data.offset.into())
                     } else {
-                        LCode::Load(data.offset)
+                        LCode::Load(data.offset.into())
                     };
                     let entry =
                         CodeEntry::new(block_id, code, ty.clone(), None, node.span_id, data.mem);
@@ -1320,7 +1291,7 @@ impl Flatten {
                         link_id.into()
                     };
 
-                let code = LCode::Store(offset_decl, v_expr.into());
+                let code = LCode::Store(offset_decl.into(), v_expr.into());
                 let entry = CodeEntry::new(
                     current_block_id,
                     code,
@@ -1358,7 +1329,7 @@ impl Flatten {
                                     return self.add_function_call(
                                         block_id,
                                         &def,
-                                        data.offset,
+                                        data.offset.into(),
                                         args,
                                         node.span_id,
                                         fenv,
@@ -1431,13 +1402,10 @@ impl Flatten {
                                     _ => vec![(None, ret_ty.clone())],
                                 });
                                 // start next block
-                                let next_link_ids = self.start_block(
+                                let (v_block, next_link_ids) = self.start_block(
                                     next_block_id,
                                     scope_id,
                                     &next_arg_ty,
-                                    //&AstType::Unit,
-                                    &[],
-                                    //&next_args,
                                     AstType::Unit,
                                     Some(b.labels.fresh_key("cont")),
                                     span_id,
@@ -1457,7 +1425,6 @@ impl Flatten {
                                     fun_block_id,
                                     fun_scope_id,
                                     &arg_type,
-                                    &[],
                                     AstType::Unit,
                                     Some(lambda_name),
                                     span_id,
@@ -1624,8 +1591,7 @@ impl Flatten {
                 self.start_block(
                     new_block_id,
                     new_scope_id,
-                    &arg_ty, //AstType::Unit,
-                    &[],
+                    &arg_ty,
                     AstType::Unit,
                     Some(name),
                     span_id,
@@ -1771,7 +1737,6 @@ impl Flatten {
                     current_block_id,
                     current_scope_id,
                     &AstType::Unit,
-                    &[],
                     AstType::Unit,
                     Some(name),
                     span_id,
