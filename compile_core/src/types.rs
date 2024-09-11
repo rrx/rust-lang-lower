@@ -29,8 +29,8 @@ pub enum AstType {
     Never,
     Type,
     JumpTarget,
-    Args(u32),   // *args type
-    KwArgs(u32), // **kwargs type
+    Args(Box<AstType>),   // *args type
+    KwArgs(Box<AstType>), // **kwargs type
     Array(Box<AstType>, Vec<u64>),
 
     // T(a:int, b:float), T(int, float), defaults are handled as part of implementation

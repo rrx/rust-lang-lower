@@ -85,15 +85,13 @@ impl TypeBuilder {
     }
 
     pub fn fresh_args(&mut self) -> AstType {
-        let offset = self.vars.len();
-        self.vars.push(None);
-        AstType::Args(offset as u32)
+        let t = self.fresh_unknown();
+        AstType::Args(t.into())
     }
 
     pub fn fresh_kwargs(&mut self) -> AstType {
-        let offset = self.vars.len();
-        self.vars.push(None);
-        AstType::KwArgs(offset as u32)
+        let t = self.fresh_unknown();
+        AstType::KwArgs(t.into())
     }
 
     pub fn unify(&mut self, a: TypeId, b: TypeId) {
@@ -161,16 +159,6 @@ impl TypeBuilder {
     }
 
     pub fn get_type(&mut self, lambda: &Lambda) -> AstType {
-        /*
-        let params = lambda
-            .params
-            .iter()
-            .map(|p| {
-                let ty = self.r(p.ty);
-                ty.clone()
-            })
-            .collect();
-        */
         //let spans = def.params.iter().map(|p| p.span_id).collect::<Vec<_>>();
         let arg_type = self.r(lambda.arg_type).clone();
         let return_type = self.r(lambda.return_type).clone();
