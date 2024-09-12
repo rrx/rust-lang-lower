@@ -119,7 +119,7 @@ impl AstNode {
             Ast::UnaryOp(_, a) | Ast::Assign(_, a) | Ast::Loop(_, a) => {
                 values.push(a);
             }
-            Ast::Call(f, args, _ty) => {
+            Ast::Call(f, args) => {
                 values.push(f);
                 for a in args {
                     match a {

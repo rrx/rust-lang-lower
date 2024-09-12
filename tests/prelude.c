@@ -10,3 +10,7 @@ void print_index(long x) {
 	return;
 }
 
+void print_bool(int x) {
+	printf("long: %ld\n", x);
+	return;
+}

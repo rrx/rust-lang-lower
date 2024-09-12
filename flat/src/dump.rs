@@ -246,8 +246,8 @@ impl NodeBuilder {
                 self.dump_strings(c, out, depth + 1);
             }
 
-            Ast::Call(f, args, ret_ty) => {
-                let s = format!("call: {:?}, {}", ret_ty, node.span_id);
+            Ast::Call(f, args) => {
+                let s = format!("call:");
                 out.push((depth, s, node.span_id));
                 self.dump_strings(f, out, depth + 1);
                 if args.len() > 0 {

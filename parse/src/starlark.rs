@@ -244,7 +244,8 @@ impl Parser {
                 let ty = if let Some(ty) = maybe_type.as_ref().map(|ty| from_type(&ty)) {
                     ty
                 } else {
-                    unimplemented!();
+                    Some(b.types.fresh_unknown())
+                    //unimplemented!();
                     //Some(b.types.fresh_unknown())
                     //Some(self.u.fresh_unknown())
                     //d.push_diagnostic(env.error(item.span, "Missing Type"));
@@ -296,7 +297,8 @@ impl Parser {
                 let ty = if let Some(ty) = maybe_type.as_ref().map(|ty| from_type(&ty)) {
                     ty
                 } else {
-                    unimplemented!();
+                    Some(b.types.fresh_unknown())
+                    //unimplemented!();
                     //Some(b.types.fresh_unknown())
                     //d.push_diagnostic(env.error(item.span, "Missing Type"));
                     //Some(AstType::Unit)
@@ -359,11 +361,23 @@ impl Parser {
 
                 env.exit_func();
 
-                let return_type = def
-                    .return_type
-                    .as_ref()
-                    .map(|ty| from_type(&ty).unwrap_or(AstType::Unit))
-                    .unwrap_or(AstType::Unit);
+                let return_type = if let Some(return_type) = &def.return_type {
+                    if let Some(ty) = from_type(&return_type) {
+                        ty
+                    } else {
+                        b.spans
+                            .push_diagnostic(env.error(item.span, &format!("Type not recognized: {:?}", return_type)));
+                        AstType::Unit
+                    }
+                } else {
+                    b.types.fresh_unknown()
+                };
+                //let return_type = def
+                    //.return_type
+                    //.as_ref()
+                    //.map(|ty| from_type(&ty));
+                    //.unwrap_or(AstType::Unit))
+                    //.unwrap_or(AstType::Unit);
 
                 let body = NB::seq(body, span_id).into();
 
@@ -583,7 +597,7 @@ impl Parser {
                 for arg in expr_args {
                     args.push(self.from_argument(&arg, env, b)?.into());
                 }
-                let t_int = b.types.s(&AstType::Int);
+                //let t_int = b.types.s(&AstType::Int);
 
                 match &expr.node {
                     ExprP::Identifier(ident) => {
@@ -591,7 +605,7 @@ impl Parser {
                         if let Some(_data) = env.resolve(name) {
                             let ident_span_id = env.span_id(ident.span, b);
                             let ident = Ast::Identifier(name).node(ident_span_id);
-                            let ast = Ast::Call(ident.into(), args, t_int).node(span_id.clone());
+                            let ast = Ast::Call(ident.into(), args).node(span_id.clone());
                             Ok(ast)
                         } else {
                             b.spans.push_diagnostic(env.error(ident.span, "Not found"));
@@ -606,7 +620,7 @@ impl Parser {
                                 let ident_span_id = env.span_id(ident.span, b);
                                 let ident = Ast::Identifier(key).node(ident_span_id);
                                 let ast =
-                                    Ast::Call(ident.into(), args, t_int).node(span_id.clone());
+                                    Ast::Call(ident.into(), args).node(span_id.clone());
                                 Ok(ast)
                             } else if &ident.node.ident == "q" {
                                 // builtin namespace

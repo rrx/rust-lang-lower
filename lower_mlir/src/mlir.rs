@@ -901,7 +901,12 @@ impl<'c> MLIRGenerator<'c> {
                         // TODO: A more dynamic way of doing this
                         // TODO: We only want to import these if they are referenced
                         let ident = if ty.is_index() || ty.is_integer() {
-                            "print_index"
+                            let it = IntegerType::try_from(ty)?;
+                            if it.width() == 1 {
+                                "print_bool"
+                            } else {
+                                "print_index"
+                            }
                         } else if ty.is_f64() {
                             "print_float"
                         } else {

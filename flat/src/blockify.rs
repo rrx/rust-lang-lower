@@ -221,7 +221,7 @@ pub trait ICodeModule {
 
             LCode::Jump(value_id) => {
                 let values = self.get_previous_values(v);
-                format!("jump({:?}, {})", value_id, values.len())
+                format!("jump({:?}, num_args: {})", value_id, values.len())
             }
 
             LCode::Const(Literal::String(s)) => {

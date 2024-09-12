@@ -500,6 +500,7 @@ impl Flatten {
             scope_id,
             &arg_ty,
             AstType::Unit,
+            //arg_ty.clone(),
             Some(name),
             span_id,
             VarDefinitionSpace::Reg,
@@ -515,20 +516,24 @@ impl Flatten {
         jump_args: Vec<(Option<StringKey>, LinkId, AstType)>,
         span_id: SpanId,
     ) -> LinkId {
-        for (key, link_id, ty) in jump_args.into_iter() {
+        for (key, link_id, ty) in jump_args.iter() {
             let code = LCode::CallValue(link_id.into());
-            let entry = CodeEntry::new(block_id, code, ty, key, span_id, VarDefinitionSpace::Reg);
+            let entry = CodeEntry::new(block_id, code, ty.clone(), key.clone(), span_id, VarDefinitionSpace::Reg);
             self.push_entry_with_link(entry);
         }
 
         if let CodeOffset::Block(target_block_id) = target_id {
             self.block_succ(block_id, target_block_id, Successor::Jump);
+        } else {
+            unimplemented!()
         }
+
 
         let code = LCode::Jump(target_id.into());
         let entry = CodeEntry::new(
             block_id,
             code,
+            //AstType::Struct(jump_args.iter().map(|j| (j.0, j.2.clone())).collect::<Vec<_>>()),
             AstType::Unit,
             None,
             span_id,
@@ -789,7 +794,9 @@ impl Flatten {
                 .collect::<Vec<_>>(),
         );
 
-        b.types.u.unify(&func_arg, &call_ty)?;
+        if b.types.u.unify(&func_arg, &call_ty).is_err() {
+            b.push_error(&format!("Type Mismatch: func: {}, call: {}", &func_arg, &call_ty), span_id);
+        }
 
         let call_type_id = b.types.s(&call_ty);
 
@@ -847,8 +854,8 @@ impl Flatten {
         &mut self,
         block_id: BlockId,
         scope_id: ScopeId,
-        arg: &AstType,
-        ty: AstType,
+        arg_ty: &AstType,
+        block_ty: AstType,
         name: Option<StringKey>,
         span_id: SpanId,
         _mem: VarDefinitionSpace,
@@ -858,7 +865,7 @@ impl Flatten {
         let entry = CodeEntry::new(
             block_id,
             code,
-            ty,
+            block_ty,
             name,
             span_id,
             VarDefinitionSpace::Default,
@@ -866,7 +873,7 @@ impl Flatten {
         let block_link_id = self.push_entry_with_link(entry);
 
         let mut v_args = vec![];
-        for (i, (name, ty)) in arg.fields().iter().enumerate() {
+        for (i, (name, ty)) in arg_ty.fields().iter().enumerate() {
             let code = LCode::Arg(i as u8);
             let entry = CodeEntry::new(
                 block_id,
@@ -1320,7 +1327,7 @@ impl Flatten {
                 ))
             }
 
-            Ast::Call(expr, args, _ret_ty) => {
+            Ast::Call(expr, args) => {
                 match &expr.node {
                     // call is an expression, it's non-terminal
                     // lambdas should also be non-terminal
@@ -1938,7 +1945,8 @@ fn jump_if_needed(ast: AstNode, b: &mut NB) -> AstNode {
     let mut reader = SequenceReader::new();
     let mut seq = reader.build(ast.to_vec(), b);
     if let Some(first) = seq.first() {
-        if let Ast::Block(key, _args, _body) = &first.node {
+        if let Ast::Block(key, args, _body) = &first.node {
+            assert_eq!(args.len(), 0);
             let jump = NB::goto(*key).node(span_id);
             seq.insert(0, jump);
         }

@@ -321,9 +321,11 @@ impl NodeBuilder {
         let a = self.labels.s("a".into());
         let print_index = self.labels.s("print_index".into());
         let print_float = self.labels.s("print_float".into());
+        let print_bool = self.labels.s("print_bool".into());
         vec![
             self.definition(print_index, &[(a, AstType::Int)], AstType::Unit, None),
             self.definition(print_float, &[(a, AstType::Float)], AstType::Unit, None),
+            self.definition(print_bool, &[(a, AstType::Bool)], AstType::Unit, None),
         ]
     }
 
@@ -401,13 +403,13 @@ impl NodeBuilder {
         Ast::Return(node.map(|n| n.into())).into()
     }
 
-    pub fn apply(name: StringKey, args: Vec<Argument>, ty: TypeId) -> AstNode {
+    pub fn apply(name: StringKey, args: Vec<Argument>) -> AstNode {
         let ident = Self::ident(name);
-        Ast::Call(ident.into(), args, ty).into()
+        Ast::Call(ident.into(), args).into()
     }
 
-    pub fn call(f: AstNode, args: Vec<Argument>, ty: TypeId) -> AstNode {
-        Ast::Call(f.into(), args, ty).into()
+    pub fn call(f: AstNode, args: Vec<Argument>) -> AstNode {
+        Ast::Call(f.into(), args).into()
     }
 
     pub fn main(&mut self, body: AstNode) -> AstNode {
@@ -561,7 +563,7 @@ pub(crate) mod tests {
         let z = b.labels.s("z").into();
         let y = b.labels.s("y").into();
         let arg0 = b.labels.s("arg0").into();
-        let t_int = b.types.s(&AstType::Int);
+        //let t_int = b.types.s(&AstType::Int);
         let span_id = b.spans.get_span_unknown();
 
         let mut seq = vec![b.import_prelude()];
@@ -582,7 +584,7 @@ pub(crate) mod tests {
                                 NB::assign(y, NB::subtract(NB::ident(y.into()), 1.into())),
                                 NB::assign(
                                     y,
-                                    NB::apply(x1.into(), vec![NB::ident(y.into()).into()], t_int),
+                                    NB::apply(x1.into(), vec![NB::ident(y.into()).into()]),
                                 ),
                             ],
                             span_id,
@@ -598,7 +600,6 @@ pub(crate) mod tests {
                                 NB::apply(
                                     x1.into(),
                                     vec![NB::subtract(NB::ident(arg0.into()), 1.into()).into()],
-                                    t_int,
                                 ),
                             )],
                             span_id,
@@ -615,11 +616,11 @@ pub(crate) mod tests {
             vec![
                 NB::assign(
                     x,
-                    NB::apply(x1.into(), vec![AstNode::from(10).into()], t_int),
+                    NB::apply(x1.into(), vec![AstNode::from(10).into()]),
                 ),
                 NB::assign(
                     x,
-                    NB::apply(x1.into(), vec![AstNode::from(0).into()], t_int),
+                    NB::apply(x1.into(), vec![AstNode::from(0).into()]),
                 ),
                 NB::ret(Some(NB::ident(x.into()))),
             ],

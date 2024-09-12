@@ -27,6 +27,7 @@ pub enum AstType {
     Bool,
     Unit,
     Never,
+    Error,
     Type,
     JumpTarget,
     Args(Box<AstType>),   // *args type
@@ -47,7 +48,13 @@ pub enum AstType {
 
 impl std::fmt::Display for AstType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        match self {
+            Self::Func(arg_ty, ret_ty) => {
+                write!(f, "Func({}, {})", arg_ty, ret_ty)
+            }
+            Self::Struct(fields) => write!(f, "Struct({:?})", fields.iter().map(|f| format!("{}", &f.1)).collect::<Vec<_>>()),
+            _ => write!(f, "{:?}", self)
+        }
     }
 }
 

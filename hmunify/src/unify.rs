@@ -220,6 +220,14 @@ impl TypeUnify {
                 }
                 Ok(())
             }
+            (AstType::Struct(fields), AstType::Unit) |
+            (AstType::Unit, AstType::Struct(fields)) => {
+                if fields.len() == 0 {
+                    Ok(())
+                } else {
+                    Err(UError::Bad)
+                }
+            }
             _ => {
                 if a == b {
                     Ok(())

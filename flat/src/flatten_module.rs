@@ -1,3 +1,4 @@
+use anyhow::Result;
 use compile_core::{AstType, LinkOptions, Span, SpanId, StringKey, VarDefinitionSpace};
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
@@ -222,11 +223,6 @@ impl FlattenModule {
             let block = flatten.get_block(block_id);
             for (index, link_id) in block.links.iter().enumerate() {
                 let mut entry = flatten.get_entry(*link_id).clone();
-                if let Some(ty) = b.types.u.resolve(&entry.ty) {
-                    entry.ty = ty;
-                } else {
-                    println!("Unresolved type: {}", entry.ty);
-                }
 
                 let v = ValueId(value_count);
                 let mut next = v;
@@ -255,7 +251,29 @@ impl FlattenModule {
         }
         m.gblocks = flatten.gblocks;
         m.find_dead_blocks();
+        m.type_inference(b);
         m
+    }
+
+    pub fn type_inference(&mut self, b: &mut NB) {
+        for (index, entry) in self.entries.iter().enumerate() {
+            let _v = ValueId::new(index as u32);
+            if let LCode::Jump(target) = entry.code {
+                let v_target = self.resolve_code_offset(target);
+                let t = self.get_entry(v_target);
+                if b.types.u.unify(&entry.ty, &t.ty).is_err() {
+                    b.push_error(&format!("Type Mismatch: {}, {}", &entry.ty, &t.ty), entry.span_id);
+                }
+            }
+        }
+
+        for entry in self.entries.iter_mut() {
+            if let Some(ty) = b.types.u.resolve(&entry.ty) {
+                entry.ty = ty;
+            } else {
+                b.push_error(&format!("Unresolved Type: {}", &entry.ty), entry.span_id);
+            }
+        }
     }
 
     pub fn find_dead_blocks(&mut self) {
@@ -340,7 +358,7 @@ impl FlattenModule {
         let entry = self.get_entry(v);
         let code = self.get_code(v);
         let ty = self.get_type(v.into());
-        let r_ty = b.types.u.resolve(&ty).unwrap();
+        let r_ty = b.types.u.resolve(&ty);
 
         let mem = self.get_mem(v.into());
         //let next = self.get_next(v).unwrap_or(v).index();
@@ -349,14 +367,19 @@ impl FlattenModule {
         let block_id = entry.block_id;
         let block = self.gblocks.node_weight(block_id.into()).unwrap();
 
+        let is_unknown = r_ty.as_ref().map(|ty| ty.is_unknown()).unwrap_or(true);
+
+        //let s_ty = format!("{}\n{}", &ty, &r_ty.unwrap_or(AstType::Error));
+        let s_ty = format!("{}", &r_ty.unwrap_or(ty));//AstType::Error));
         CodeRow {
             pos: v.index(),
             link: entry.link.unwrap().index(),
             //next: 0,
             //prev: 0,
             value: self.code_to_string(v, b),
-            ty: ty.clone(),
-            r_ty,
+            //ty: ty.clone(),
+            ty: s_ty,
+            //r_ty: r_ty.unwrap_or(AstType::Error),
             mem: format!("{:?}", mem),
             name: self
                 .get_name(v.into())
@@ -369,7 +392,7 @@ impl FlattenModule {
             block_id: block_id.index(),
             term: code.is_term(),
             dead: block.dead,
-            unknown: ty.is_unknown(),
+            unknown: is_unknown,
         }
     }
 }

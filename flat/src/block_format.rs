@@ -1,4 +1,4 @@
-use compile_core::AstType;
+//use compile_core::AstType;
 use serde::Serialize;
 use tabled::Tabled;
 
@@ -9,8 +9,7 @@ pub struct CodeRow {
     //pub next: usize,
     //pub prev: usize,
     pub value: String,
-    pub ty: AstType,
-    pub r_ty: AstType,
+    pub ty: String,
     pub mem: String,
     pub name: String,
     pub span_id: usize,
@@ -25,7 +24,7 @@ pub struct CodeRow {
 impl CodeRow {
     pub fn header() -> Vec<&'static str> {
         vec![
-            "pos", "link", "next", "prev", "value", "ty", "r_ty", "mem", "name", "span_id",
+            "pos", "link", "next", "prev", "value", "ty", "mem", "name", "span_id",
             "scope_id", "block_id", "term", "dead", "unknown",
         ]
     }
