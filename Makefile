@@ -6,6 +6,7 @@ ninja:
 	ninja
 
 clean:
+	cargo clean
 	rm -rf build
 
 bare:
