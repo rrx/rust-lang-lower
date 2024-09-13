@@ -32,7 +32,7 @@ pub enum AstType {
     JumpTarget,
     Args(Box<AstType>),   // *args type
     KwArgs(Box<AstType>), // **kwargs type
-    Array(Box<AstType>, Vec<u64>),
+    Array(Box<AstType>, Vec<i64>),
 
     // T(a:int, b:float), T(int, float), defaults are handled as part of implementation
     // Tuples and NamedTuples are just Stucts

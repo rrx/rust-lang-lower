@@ -53,16 +53,16 @@ pub enum LowerError {
 }
 
 impl<'c> MLIRGenerator<'c> {
-    pub fn from_type(&self, ty: &AstType) -> (Type<'c>, Vec<u64>) {
+    pub fn from_type(&self, ty: &AstType) -> (Type<'c>, Vec<i64>) {
         match ty {
             AstType::Ptr(_) => (Type::index(self.context), vec![]),
-            AstType::Struct(args) => {
-                let types = args
-                    .iter()
-                    .map(|(_, a)| self.from_type(a).0)
-                    .collect::<Vec<_>>();
-                let tuple_type = llvm::r#type::r#struct(self.context, &types, true);
-                let ptr_type = llvm::r#type::pointer(tuple_type, 0);
+            AstType::Struct(_args) => {
+                //let types = args
+                    //.iter()
+                    //.map(|(_, a)| self.from_type(a).0)
+                    //.collect::<Vec<_>>();
+                //let tuple_type = llvm::r#type::r#struct(self.context, &types, true);
+                let ptr_type = llvm::r#type::pointer(self.context, 0);
                 (
                     ptr_type,
                     //melior::ir::r#type::TupleType::new(self.context, &types).into(),
@@ -103,13 +103,13 @@ impl<'c> MLIRGenerator<'c> {
                 //let ty = Type::index(self.context);
                 //let dummy = vec![self.from_type(&AstType::Int).0];
                 println!("args_ty: {}", ty);
-                let fields = ty
-                    .fields()
-                    .iter()
-                    .map(|(_, f)| self.from_type(f).0)
-                    .collect::<Vec<_>>();
-                let tuple_type = llvm::r#type::r#struct(self.context, &fields, true);
-                let ptr_type = llvm::r#type::pointer(tuple_type, 0);
+                //let fields = ty
+                    //.fields()
+                    //.iter()
+                    //.map(|(_, f)| self.from_type(f).0)
+                    //.collect::<Vec<_>>();
+                //let tuple_type = llvm::r#type::r#struct(self.context, &fields, true);
+                let ptr_type = llvm::r#type::pointer(self.context, 0);
                 (ptr_type.into(), vec![])
 
                 //let ty = TupleType::new(self.context, &[self.from_type(&AstType::Int, b).0]);
@@ -152,7 +152,7 @@ impl<'c> MLIRGenerator<'c> {
                 let ast_ty = AstType::Bool;
                 let ty = self.from_type(&ast_ty).0;
                 let v = if x { 1 } else { 0 };
-                let value = IntegerAttribute::new(v, ty).into();
+                let value = IntegerAttribute::new(ty, v).into();
                 let op = self.build_static(&global_name, ty, value, false, location);
                 (ast_ty, op)
             }
@@ -160,7 +160,7 @@ impl<'c> MLIRGenerator<'c> {
             Ast::Literal(Literal::Int(x)) => {
                 let ast_ty = AstType::Int;
                 let ty = self.from_type(&ast_ty).0;
-                let value = IntegerAttribute::new(x, ty).into();
+                let value = IntegerAttribute::new(ty, x).into();
                 let op = self.build_static(&global_name, ty, value, false, location);
                 (ast_ty, op)
             }
@@ -168,7 +168,7 @@ impl<'c> MLIRGenerator<'c> {
             Ast::Literal(Literal::Index(x)) => {
                 let ast_ty = AstType::Int;
                 let ty = self.from_type(&ast_ty).0;
-                let value = IntegerAttribute::new(x as i64, ty).into();
+                let value = IntegerAttribute::new(ty, x as i64).into();
                 let op = self.build_static(&global_name, ty, value, false, location);
                 (ast_ty, op)
             }
@@ -176,7 +176,7 @@ impl<'c> MLIRGenerator<'c> {
             Ast::Literal(Literal::Float(x)) => {
                 let ast_ty = AstType::Float;
                 let ty = self.from_type(&ast_ty).0;
-                let value = FloatAttribute::new(self.context, x, ty).into();
+                let value = FloatAttribute::new(self.context, ty, x).into();
                 let op = self.build_static(&global_name, ty, value, false, location);
                 (ast_ty, op)
             }
@@ -193,28 +193,28 @@ impl<'c> MLIRGenerator<'c> {
                 let ast_ty = AstType::Bool;
                 let ty = self.from_type(&ast_ty).0;
                 let v = if *x { 1 } else { 0 };
-                let value = IntegerAttribute::new(v, ty).into();
+                let value = IntegerAttribute::new(ty, v).into();
                 (value, ast_ty)
             }
 
             Literal::Int(x) => {
                 let ast_ty = AstType::Int;
                 let ty = self.from_type(&ast_ty).0;
-                let value = IntegerAttribute::new(*x, ty).into();
+                let value = IntegerAttribute::new(ty, *x).into();
                 (value, ast_ty)
             }
 
             Literal::Index(x) => {
                 let ast_ty = AstType::Int;
                 let ty = self.from_type(&ast_ty).0;
-                let value = IntegerAttribute::new(*x as i64, ty).into();
+                let value = IntegerAttribute::new(ty, *x as i64).into();
                 (value, ast_ty)
             }
 
             Literal::Float(x) => {
                 let ast_ty = AstType::Float;
                 let ty = self.from_type(&ast_ty).0;
-                let value = FloatAttribute::new(self.context, *x, ty).into();
+                let value = FloatAttribute::new(self.context, ty, *x).into();
                 (value, ast_ty)
             }
             _ => unreachable!("{:?}", lit),
@@ -224,7 +224,7 @@ impl<'c> MLIRGenerator<'c> {
     pub fn build_float_op(&self, value: f64, location: Location<'c>) -> Operation<'c> {
         arith::constant(
             self.context,
-            FloatAttribute::new(self.context, value, Type::float64(self.context)).into(),
+            FloatAttribute::new(self.context, Type::float64(self.context), value).into(),
             location,
         )
     }
@@ -233,7 +233,7 @@ impl<'c> MLIRGenerator<'c> {
         let ty = IntegerType::new(self.context, 64);
         arith::constant(
             self.context,
-            IntegerAttribute::new(value, ty.into()).into(),
+            IntegerAttribute::new(ty.into(), value).into(),
             location,
         )
     }
@@ -242,7 +242,7 @@ impl<'c> MLIRGenerator<'c> {
         let ty = Type::index(self.context);
         arith::constant(
             self.context,
-            IntegerAttribute::new(value, ty.into()).into(),
+            IntegerAttribute::new(ty.into(), value).into(),
             location,
         )
     }
@@ -251,7 +251,7 @@ impl<'c> MLIRGenerator<'c> {
         let bool_type = IntegerType::new(self.context, 1);
         arith::constant(
             self.context,
-            IntegerAttribute::new(if value { 1 } else { 0 }, bool_type.into()).into(),
+            IntegerAttribute::new(bool_type.into(), if value { 1 } else { 0 }).into(),
             location,
         )
     }
@@ -299,8 +299,8 @@ impl<'c> MLIRGenerator<'c> {
         let attribute =
             DenseElementsAttribute::new(RankedTensorType::new(&[], ty, None).into(), &[value])
                 .unwrap();
-        let alignment = IntegerAttribute::new(8, integer_type);
-        let memspace = IntegerAttribute::new(0, integer_type).into();
+        let alignment = IntegerAttribute::new(integer_type, 8);
+        let memspace = IntegerAttribute::new(integer_type, 0).into();
 
         memref::global(
             self.context,

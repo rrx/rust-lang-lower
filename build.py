@@ -45,7 +45,7 @@ def generate_inputs(fp):
             fp.write(f"build {top}: phony {run_filename} {cfg_output_filename} {blocks_output_filename} {scopes_output_filename}\n")
             outputs.append(top)
 
-        fp.write(f"build testbins-{kind}: phony {' '.join(outputs)}\n")
+        fp.write(f"build testbins-{kind}: phony | {compiler} {' '.join(outputs)}\n")
 
     gen_with_rule("debug", "mlir-debug", compiler_debug)
     gen_with_rule("release", "mlir-release", compiler_release)
@@ -111,8 +111,8 @@ rule mermaid-png
 rule run
     command = $in > $out
 
-build {compiler_release}: compiler-release prelude-debug
-build {compiler_debug}: compiler-debug prelude-release
+build {compiler_release}: compiler-release prelude-release
+build {compiler_debug}: compiler-debug prelude-debug
 
 build target/debug/prelude.o: clang-compile-debug tests/prelude.c
 build target/debug/prelude.so: clang-shared-debug tests/prelude.c
@@ -120,7 +120,6 @@ build target/release/prelude.o: clang-compile-release tests/prelude.c
 build target/release/prelude.so: clang-shared-release tests/prelude.c
 build prelude-debug: phony target/debug/prelude.o target/debug/prelude.so
 build prelude-release: phony target/release/prelude.o target/release/prelude.so
-
 """
         )
         generate_inputs(fp)

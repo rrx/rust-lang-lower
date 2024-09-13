@@ -231,8 +231,8 @@ impl<'c> LowerIR<'c> for MLIRGenerator<'c> {
             let integer_type = IntegerType::new(self.context, 64).into();
             let (ty, dims) = self.from_type(&ast_ty);
             assert_eq!(dims.len(), 0);
-            let alignment = IntegerAttribute::new(8, integer_type);
-            let memspace = IntegerAttribute::new(0, integer_type).into();
+            let alignment = IntegerAttribute::new(integer_type, 8);
+            let memspace = IntegerAttribute::new(integer_type, 0).into();
             let constant = false;
 
             let mut op = memref::global(
@@ -257,7 +257,7 @@ impl<'c> LowerIR<'c> for MLIRGenerator<'c> {
             //let op = c.op_ref(index);
             //let current = blocks.blocks.get_mut(&block_index).unwrap();
             //let op = current.op_ref(sym_index);
-            op.set_attribute("initial_value", &attribute.into());
+            op.set_attribute("initial_value", attribute.into());
             let index = c.push(op);
             //if !is_current_static {
             // STATIC VARIABLE IN FUNCTION CONTEXT
@@ -428,7 +428,7 @@ impl<'c> MLIRGenerator<'c> {
                 if let Some(block_id) = maybe_block_id.clone() {
                     let attribute = Attribute::unit(self.context);
                     let op = self.op_ref(index);
-                    op.set_attribute("llvm.emit_c_interface", &attribute);
+                    op.set_attribute("llvm.emit_c_interface", attribute);
                     let offset = block_id.clone().into();
                     let entry_id = self.blockify.resolve_code_offset(offset);
                     let block_ids = self.blockify.blocks(block_id, entry_id, self.b);
@@ -704,8 +704,8 @@ impl<'c> MLIRGenerator<'c> {
 
                         //let op = memref::alloca(self.context, memref_ty, &[], &[], None, location);
                         if true {
-                            let tuple_type = llvm::r#type::r#struct(self.context, &types, true);
-                            let ptr_type = llvm::r#type::pointer(tuple_type, 0);
+                            //let tuple_type = llvm::r#type::r#struct(self.context, &types, true);
+                            let ptr_type = llvm::r#type::pointer(self.context, 0);
                             let op = self.build_int_op(1, location);
                             //let (op, _ast_ty) = self.emit_literal_const(&Literal::Int(1), location);
                             let c = self.blocks.get_mut(&block_id).unwrap();
