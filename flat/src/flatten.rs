@@ -518,7 +518,14 @@ impl Flatten {
     ) -> LinkId {
         for (key, link_id, ty) in jump_args.iter() {
             let code = LCode::CallValue(link_id.into());
-            let entry = CodeEntry::new(block_id, code, ty.clone(), key.clone(), span_id, VarDefinitionSpace::Reg);
+            let entry = CodeEntry::new(
+                block_id,
+                code,
+                ty.clone(),
+                key.clone(),
+                span_id,
+                VarDefinitionSpace::Reg,
+            );
             self.push_entry_with_link(entry);
         }
 
@@ -527,7 +534,6 @@ impl Flatten {
         } else {
             unimplemented!()
         }
-
 
         let code = LCode::Jump(target_id.into());
         let entry = CodeEntry::new(
@@ -795,7 +801,10 @@ impl Flatten {
         );
 
         if b.types.u.unify(&func_arg, &call_ty).is_err() {
-            b.push_error(&format!("Type Mismatch: func: {}, call: {}", &func_arg, &call_ty), span_id);
+            b.push_error(
+                &format!("Type Mismatch: func: {}, call: {}", &func_arg, &call_ty),
+                span_id,
+            );
         }
 
         let call_type_id = b.types.s(&call_ty);
@@ -1185,12 +1194,20 @@ impl Flatten {
 
                 //let x_ty = rx.ty;
                 //let y_ty = ry.ty;
+                if b.types.u.unify(&rx.ty, &ry.ty).is_err() {
+                    b.push_error(
+                        &format!("Type Mismatch: LHS: {}, RHS: {}", &rx.ty, &ry.ty),
+                        x_span_id,
+                    );
+                }
+                /*
                 if &rx.ty != &ry.ty {
                     b.push_error(
                         &format!("Binary op type mismatch: {}, {}", &rx.ty, &ry.ty),
                         x_span_id,
                     );
                 }
+                */
 
                 for (v, ty) in [(vx, &rx.ty), (vy, &ry.ty)] {
                     let code = LCode::Value(v.into());

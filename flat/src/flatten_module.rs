@@ -222,7 +222,7 @@ impl FlattenModule {
             let block_id = index.into();
             let block = flatten.get_block(block_id);
             for (index, link_id) in block.links.iter().enumerate() {
-                let mut entry = flatten.get_entry(*link_id).clone();
+                let entry = flatten.get_entry(*link_id).clone();
 
                 let v = ValueId(value_count);
                 let mut next = v;
@@ -262,7 +262,10 @@ impl FlattenModule {
                 let v_target = self.resolve_code_offset(target);
                 let t = self.get_entry(v_target);
                 if b.types.u.unify(&entry.ty, &t.ty).is_err() {
-                    b.push_error(&format!("Type Mismatch: {}, {}", &entry.ty, &t.ty), entry.span_id);
+                    b.push_error(
+                        &format!("Type Mismatch: {}, {}", &entry.ty, &t.ty),
+                        entry.span_id,
+                    );
                 }
             }
         }
@@ -370,7 +373,7 @@ impl FlattenModule {
         let is_unknown = r_ty.as_ref().map(|ty| ty.is_unknown()).unwrap_or(true);
 
         //let s_ty = format!("{}\n{}", &ty, &r_ty.unwrap_or(AstType::Error));
-        let s_ty = format!("{}", &r_ty.unwrap_or(ty));//AstType::Error));
+        let s_ty = format!("{}", &r_ty.unwrap_or(ty)); //AstType::Error));
         CodeRow {
             pos: v.index(),
             link: entry.link.unwrap().index(),

@@ -1,29 +1,40 @@
-default: run
+default: ninja
+
+ninja:
+	cargo build
+	python3 build.py
+	cat build.ninja
+	ninja
+
+dump2:
+	RUST_BACKTRACE=1 cargo run -- -x -v -o test.mlir tests/args3.star
 
 seq:
 	RUST_BACKTRACE=1 RUST_LOG=debug cargo test -- --nocapture test_seq3
 	make graphs
 
 bare:
-	RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/bare.star
+	RUST_BACKTRACE=1 cargo run -- -x -v tests/bare.star
 
 run:
-	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/test_cond.star
-	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/static_var.star
-	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/nested_func.star
-	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/test_recursive.star
-	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/fix.star
-	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/test.star || true
-	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/goto.star || true
-	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/test_ternary.star || true
-	RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/test_array.star || true
-	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/dup_func.star || true
+	#RUST_BACKTRACE=1 cargo run -- -x -v tests/test_cond.star
+	#RUST_BACKTRACE=1 cargo run -- -x -v tests/static_var.star
+	#RUST_BACKTRACE=1 cargo run -- -x -v tests/nested_func.star
+	#RUST_BACKTRACE=1 cargo run -- -x -v tests/args2.star || true
+	#RUST_BACKTRACE=1 cargo run -- -x -v tests/args3.star || true
+	#RUST_BACKTRACE=1 cargo run -- -x -v tests/test_recursive2.star
+	#RUST_BACKTRACE=1 cargo run -- -x -v tests/fix.star
+	#RUST_BACKTRACE=1 cargo run -- -x -v tests/test.star || true
+	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/goto.star || true
+	#RUST_BACKTRACE=1 cargo run -- -x -v tests/test_ternary.star || true
+	#RUST_BACKTRACE=1 cargo run -- -x -v tests/test_array.star || true
+	#RUST_BACKTRACE=1 cargo run -- -x -v tests/dup_func.star || true
 	dot out.dot -Tpng -o out.png
 	dot blocks.dot -Tpng -o blocks.png
 	dot scopes.dot -Tpng -o scopes.png
 	mmdc -o test.png -i cfg.mmd
 
-	#RUST_BACKTRACE=1 cargo run --example flatten -- -x -v tests/test_cond.star
+	#RUST_BACKTRACE=1 cargo run -- -x -v tests/test_cond.star
 
 graphs:
 	dot out.dot -Tpng -o out.png

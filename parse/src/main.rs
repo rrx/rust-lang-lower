@@ -30,13 +30,25 @@ struct Config {
     #[argh(switch, short = 'v')]
     verbose: bool,
 
+    /// verbose flag
+    #[argh(switch, short = 'O')]
+    optimize: bool,
+
+    /// pass flag
+    #[argh(switch, short = 'p', long = "enabled-passes")]
+    enablepasses: bool,
+
     /// output file
     #[argh(option, short = 'o')]
     output: Option<String>,
 
+    /// output file
+    #[argh(option, long = "mlir-output")]
+    mliroutput: Option<String>,
+
     /// compile file
-    #[argh(positional)]
-    inputs: Vec<String>,
+    #[argh(option, short = 'i')]
+    input: String,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -58,52 +70,68 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut p: StarlarkParser = StarlarkParser::new();
     let mut b: NodeBuilder = NodeBuilder::new();
 
-    for filename in config.inputs {
-        let result = p.parse(&filename, &mut b, true);
-        if result.is_err() {
-            b.spans.diagnostics_dump();
-        }
-        let ast = result?;
-
-        let mut fenv = FlattenEnvironment::new();
-        let r = Flatten::flatten_module(ast, &mut fenv, &mut b);
-        if r.is_err() {
-            b.spans.diagnostics_dump();
-        }
-        let f = r?;
-        let m = FlattenModule::from_builder(f, &mut fenv, &mut b);
-        m.dump(&mut b);
-        m.block_graph("blocks.dot", &b);
-
-        flat::flatten::scope_graph("scopes.dot", &fenv);
-
+    let result = p.parse(&config.input, &mut b, config.verbose);
+    if result.is_err() {
         b.spans.diagnostics_dump();
-        if b.spans.has_errors {
-            return Err(anyhow::Error::new(BlockifyError::Invalid).into());
-        }
-
-        let r = p.codegen(&m, ValueId::new(0), &context, &mut module, &mut b);
-        m.block_graph2("cfg.mmd", &b)?;
-        b.spans.diagnostics_dump();
-        r?;
     }
+    let ast = result?;
+
+    let mut fenv = FlattenEnvironment::new();
+    let r = Flatten::flatten_module(ast, &mut fenv, &mut b);
+    if r.is_err() {
+        b.spans.diagnostics_dump();
+    }
+    let f = r?;
+    let m = FlattenModule::from_builder(f, &mut fenv, &mut b);
+    m.dump(&mut b);
+    m.block_graph("blocks.dot", &b);
+
+    flat::flatten::scope_graph("scopes.dot", &fenv);
+
+    b.spans.diagnostics_dump();
+    if b.spans.has_errors {
+        return Err(anyhow::Error::new(BlockifyError::Invalid).into());
+    }
+
+    let r = p.codegen(&m, ValueId::new(0), &context, &mut module, &mut b);
+    m.block_graph2("cfg.mmd", &b)?;
+    b.spans.diagnostics_dump();
+    r?;
 
     b.types.dump();
     if config.verbose {
         module.as_operation().dump();
     }
-
     assert!(module.as_operation().verify());
 
-    if let Some(out_filename) = config.output {
-        let mut output = File::create(out_filename)?;
-        let s = module.as_operation().to_string();
-        write!(output, "{}", s)?;
+    // run passes
+    let pass_manager = lower_mlir::default_pass_manager(&context, config.optimize);
+    pass_manager.run(&mut module).unwrap();
+    if config.verbose {
+        module.as_operation().dump();
     }
+    assert!(module.as_operation().verify());
 
-    if config.exec {
-        let exit_code = p.exec_main(&context, &mut module, "target/debug", config.verbose);
+    let path = if let Some(out_filename) = config.output {
+        out_filename
+    } else {
+        config.input
+    };
+
+    let mut path = std::path::PathBuf::from(path);
+    if config.compile {
+        path.set_extension("o");
+        lower_mlir::save_object_file(&module, &path.to_str().unwrap());
+        println!("Wrote: {:?}", &path.as_os_str());
+    } else if config.exec {
+        let exit_code = p.exec_main(&mut module, "target/debug");
         std::process::exit(exit_code);
+    } else {
+        path.set_extension("mlir");
+        let s = module.as_operation().to_string();
+        let mut output = File::create(path.clone())?;
+        write!(output, "{}", s)?;
+        println!("Wrote: {:?}", &path.as_os_str());
     }
 
     Ok(())

@@ -52,8 +52,15 @@ impl std::fmt::Display for AstType {
             Self::Func(arg_ty, ret_ty) => {
                 write!(f, "Func({}, {})", arg_ty, ret_ty)
             }
-            Self::Struct(fields) => write!(f, "Struct({:?})", fields.iter().map(|f| format!("{}", &f.1)).collect::<Vec<_>>()),
-            _ => write!(f, "{:?}", self)
+            Self::Struct(fields) => write!(
+                f,
+                "Struct({:?})",
+                fields
+                    .iter()
+                    .map(|f| format!("{}", &f.1))
+                    .collect::<Vec<_>>()
+            ),
+            _ => write!(f, "{:?}", self),
         }
     }
 }

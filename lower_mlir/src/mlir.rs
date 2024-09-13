@@ -414,7 +414,13 @@ impl<'c> MLIRGenerator<'c> {
 
                 //if static_block_id == block_id {
                 // global context
-                let op = self.build_declare_function(key, ty, location)?;
+                let visibility = if maybe_block_id.is_some() {
+                    "private"
+                } else {
+                    "private"
+                };
+
+                let op = self.build_declare_function(key, ty, location, visibility)?;
                 let c = self.blocks.get_mut(&static_block_id).unwrap();
                 let index = c.push(op);
                 self.index.insert(v, index);
@@ -985,6 +991,7 @@ impl<'c> MLIRGenerator<'c> {
         key: StringLabel,
         ast_ty: AstType,
         location: Location<'c>,
+        visibility: &str,
     ) -> Result<Operation<'c>> {
         if let AstType::Func(params, ast_ret_type) = ast_ty.clone() {
             let mut type_list = vec![];
@@ -992,7 +999,7 @@ impl<'c> MLIRGenerator<'c> {
 
             let attributes = vec![(
                 Identifier::new(self.context, "sym_visibility"),
-                StringAttribute::new(self.context, "private").into(),
+                StringAttribute::new(self.context, visibility).into(),
             )];
 
             for (_, ty) in params.fields() {

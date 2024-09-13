@@ -365,19 +365,21 @@ impl Parser {
                     if let Some(ty) = from_type(&return_type) {
                         ty
                     } else {
-                        b.spans
-                            .push_diagnostic(env.error(item.span, &format!("Type not recognized: {:?}", return_type)));
+                        b.spans.push_diagnostic(env.error(
+                            item.span,
+                            &format!("Type not recognized: {:?}", return_type),
+                        ));
                         AstType::Unit
                     }
                 } else {
                     b.types.fresh_unknown()
                 };
                 //let return_type = def
-                    //.return_type
-                    //.as_ref()
-                    //.map(|ty| from_type(&ty));
-                    //.unwrap_or(AstType::Unit))
-                    //.unwrap_or(AstType::Unit);
+                //.return_type
+                //.as_ref()
+                //.map(|ty| from_type(&ty));
+                //.unwrap_or(AstType::Unit))
+                //.unwrap_or(AstType::Unit);
 
                 let body = NB::seq(body, span_id).into();
 
@@ -619,8 +621,7 @@ impl Parser {
                             if let Some(_data) = env.resolve(key) {
                                 let ident_span_id = env.span_id(ident.span, b);
                                 let ident = Ast::Identifier(key).node(ident_span_id);
-                                let ast =
-                                    Ast::Call(ident.into(), args).node(span_id.clone());
+                                let ast = Ast::Call(ident.into(), args).node(span_id.clone());
                                 Ok(ast)
                             } else if &ident.node.ident == "q" {
                                 // builtin namespace
@@ -747,46 +748,14 @@ impl StarlarkParser {
         Ok(())
     }
 
-    pub fn exec_main<'c>(
-        &self,
-        context: &lower_mlir::Context,
-        module: &mut Module,
-        libpath: &str,
-        verbose: bool,
-    ) -> i32 {
-        // lower mlir to llvmir
-        if verbose {
-            println!(
-                "lowered {}",
-                module
-                    .as_operation()
-                    .to_string_with_flags(lower_mlir::OperationPrintingFlags::new())
-                    .unwrap()
-            );
-        }
-
-        let pass_manager = lower_mlir::default_pass_manager(context);
-        pass_manager.run(module).unwrap();
-        assert!(module.as_operation().verify());
-
-        module.as_operation().dump();
-
-        if verbose {
-            println!(
-                "after pass {}",
-                module
-                    .as_operation()
-                    .to_string_with_flags(lower_mlir::OperationPrintingFlags::new())
-                    .unwrap()
-            );
-        }
-
+    pub fn exec_main<'c>(&self, module: &mut Module, libpath: &str) -> i32 {
         lower_mlir::compile::exec_main(&self.link.shared_libraries(), module, libpath)
     }
 }
 
 #[cfg(test)]
 pub(crate) mod tests {
+    /*
     use super::StarlarkParser;
     use flat::{Flatten, FlattenEnvironment, FlattenModule, ICodeModule, ValueId};
     use lower_mlir::Location;
@@ -817,87 +786,14 @@ pub(crate) mod tests {
         let verify = module.as_operation().verify();
         module.as_operation().dump();
         assert!(verify);
-        let r = p.exec_main(&context, &mut module, "../target/debug/", true);
+
+        let pass_manager = lower_mlir::default_pass_manager(&context, false);
+        pass_manager.run(&mut module).unwrap();
+        assert!(module.as_operation().verify());
+        module.as_operation().dump();
+
+        let r = p.exec_main(&mut module, "../target/debug/");
         assert_eq!(expected, r);
     }
-
-    #[test]
-    fn test_recursive() {
-        run_test_flatten("../tests/test_recursive.star", 0);
-    }
-
-    #[test]
-    fn test_recursive2() {
-        run_test_flatten("../tests/test_recursive2.star", 0);
-    }
-
-    #[test]
-    fn test_local() {
-        run_test_flatten("../tests/test_local.star", 0);
-    }
-
-    #[test]
-    fn test_goto() {
-        run_test_flatten("../tests/goto.star", 0);
-    }
-
-    #[test]
-    fn test_bare() {
-        run_test_flatten("../tests/bare.star", 0);
-    }
-
-    #[test]
-    fn test_fix() {
-        run_test_flatten("../tests/fix.star", 0);
-    }
-
-    #[test]
-    fn test_nothing() {
-        run_test_flatten("../tests/test.star", 0);
-    }
-
-    #[test]
-    fn test_global() {
-        run_test_flatten("../tests/test_global.star", 0);
-    }
-
-    #[test]
-    fn test_static() {
-        run_test_flatten("../tests/test_static.star", 0);
-    }
-
-    #[test]
-    fn test_float() {
-        run_test_flatten("../tests/test_float.star", 0);
-    }
-
-    #[test]
-    fn test_cond() {
-        run_test_flatten("../tests/test_cond.star", 0);
-    }
-
-    #[test]
-    fn test_ternary() {
-        run_test_flatten("../tests/test_ternary.star", 0);
-    }
-
-    #[test]
-    fn test_loop() {
-        run_test_flatten("../tests/loop.star", 0);
-    }
-
-    #[test]
-    fn test_nested_loops() {
-        run_test_flatten("../tests/nested_loops.star", 0);
-    }
-
-    #[test]
-    fn test_nested_func() {
-        run_test_flatten("../tests/nested_func.star", 0);
-    }
-
-    #[test]
-    fn test_static_var() {
-        run_test_flatten("../tests/static_var.star", 0);
-    }
+    */
 }

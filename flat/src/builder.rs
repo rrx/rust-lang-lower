@@ -614,14 +614,8 @@ pub(crate) mod tests {
 
         seq.push(b.main(NB::seq(
             vec![
-                NB::assign(
-                    x,
-                    NB::apply(x1.into(), vec![AstNode::from(10).into()]),
-                ),
-                NB::assign(
-                    x,
-                    NB::apply(x1.into(), vec![AstNode::from(0).into()]),
-                ),
+                NB::assign(x, NB::apply(x1.into(), vec![AstNode::from(10).into()])),
+                NB::assign(x, NB::apply(x1.into(), vec![AstNode::from(0).into()])),
                 NB::ret(Some(NB::ident(x.into()))),
             ],
             span_id,

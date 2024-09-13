@@ -6,6 +6,11 @@ use melior::{
     Context,
 };
 
+pub fn save_object_file<'c>(module: &ir::Module<'c>, filename: &str) {
+    let engine = ExecutionEngine::new(module, 0, &[], true);
+    engine.dump_to_object_file(filename);
+}
+
 pub fn exec_main<'c>(shared: &[String], module: &ir::Module<'c>, libpath: &str) -> i32 {
     let paths = shared
         .iter()
@@ -17,7 +22,7 @@ pub fn exec_main<'c>(shared: &[String], module: &ir::Module<'c>, libpath: &str) 
         .collect::<Vec<_>>();
     let shared = paths.iter().map(|p| p.as_str()).collect::<Vec<_>>();
 
-    let engine = ExecutionEngine::new(&module, 0, &shared, true);
+    let engine = ExecutionEngine::new(&module, 0, &shared, false);
     let mut result: i32 = -1;
     unsafe {
         engine
@@ -48,7 +53,7 @@ pub fn default_context() -> Context {
     context
 }
 
-pub fn default_pass_manager<'c>(context: &Context) -> pass::PassManager<'c> {
+pub fn default_pass_manager<'c>(context: &Context, optimize: bool) -> pass::PassManager<'c> {
     let pass_manager = pass::PassManager::new(&context);
     pass_manager.enable_verifier(true);
     //pass_manager.enable_ir_printing();
@@ -66,12 +71,15 @@ pub fn default_pass_manager<'c>(context: &Context) -> pass::PassManager<'c> {
     pass_manager.add_pass(pass::conversion::create_finalize_mem_ref_to_llvm());
     pass_manager.add_pass(pass::conversion::create_reconcile_unrealized_casts());
 
-    // some optimization passes
-    //pass_manager.add_pass(pass::transform::create_inliner());
-    pass_manager.add_pass(pass::transform::create_canonicalizer());
-    pass_manager.add_pass(pass::transform::create_cse());
-    pass_manager.add_pass(pass::transform::create_sccp());
-    pass_manager.add_pass(pass::transform::create_control_flow_sink());
-    pass_manager.add_pass(pass::transform::create_symbol_privatize());
+    if optimize {
+        // some optimization passes
+        //pass_manager.add_pass(pass::transform::create_inliner());
+        pass_manager.add_pass(pass::transform::create_canonicalizer());
+        pass_manager.add_pass(pass::transform::create_cse());
+        pass_manager.add_pass(pass::transform::create_sccp());
+        pass_manager.add_pass(pass::transform::create_control_flow_sink());
+        pass_manager.add_pass(pass::transform::create_symbol_privatize());
+    }
+
     pass_manager
 }

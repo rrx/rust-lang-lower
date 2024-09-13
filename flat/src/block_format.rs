@@ -24,8 +24,8 @@ pub struct CodeRow {
 impl CodeRow {
     pub fn header() -> Vec<&'static str> {
         vec![
-            "pos", "link", "next", "prev", "value", "ty", "mem", "name", "span_id",
-            "scope_id", "block_id", "term", "dead", "unknown",
+            "pos", "link", "next", "prev", "value", "ty", "mem", "name", "span_id", "scope_id",
+            "block_id", "term", "dead", "unknown",
         ]
     }
 }
