@@ -6,6 +6,9 @@ ninja:
 	cat build.ninja
 	ninja
 
+clean:
+	rm -rf build
+
 dump2:
 	RUST_BACKTRACE=1 cargo run -- -x -v -o test.mlir tests/args3.star
 

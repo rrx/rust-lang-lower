@@ -62,6 +62,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         log::set_max_level(log::LevelFilter::Warn);
     }
 
+    let path = if let Some(out_filename) = &config.output {
+        &out_filename
+    } else {
+        &config.input
+    };
+
+    let mut path = std::path::PathBuf::from(path);
+
     log::debug!("config: {:?}", config);
     let context = default_context();
 
@@ -84,9 +92,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     let f = r?;
     let m = FlattenModule::from_builder(f, &mut fenv, &mut b);
     m.dump(&mut b);
-    m.block_graph("blocks.dot", &b);
 
-    flat::flatten::scope_graph("scopes.dot", &fenv);
+    let mut blocks_path = path.clone();
+    blocks_path.set_extension("blocks.dot");
+    m.block_graph(blocks_path.clone().to_str().unwrap(), &b);
+
+    let mut scopes_path = path.clone();
+    scopes_path.set_extension("scopes.dot");
+    flat::flatten::scope_graph(scopes_path.clone().to_str().unwrap(), &fenv);
 
     b.spans.diagnostics_dump();
     if b.spans.has_errors {
@@ -94,7 +107,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     let r = p.codegen(&m, ValueId::new(0), &context, &mut module, &mut b);
-    m.block_graph2("cfg.mmd", &b)?;
+    let mut cfg_path = path.clone();
+    cfg_path.set_extension("cfg.mmd");
+    m.block_graph2(cfg_path.clone().to_str().unwrap(), &b)?;
+    flat::flatten::scope_graph(path.clone().to_str().unwrap(), &fenv);
     b.spans.diagnostics_dump();
     r?;
 
@@ -112,13 +128,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     assert!(module.as_operation().verify());
 
-    let path = if let Some(out_filename) = config.output {
-        out_filename
-    } else {
-        config.input
-    };
-
-    let mut path = std::path::PathBuf::from(path);
     if config.compile {
         path.set_extension("o");
         lower_mlir::save_object_file(&module, &path.to_str().unwrap());
