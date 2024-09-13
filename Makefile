@@ -3,18 +3,10 @@ default: ninja
 ninja:
 	cargo build
 	python3 build.py
-	cat build.ninja
 	ninja
 
 clean:
 	rm -rf build
-
-dump2:
-	RUST_BACKTRACE=1 cargo run -- -x -v -o test.mlir tests/args3.star
-
-seq:
-	RUST_BACKTRACE=1 RUST_LOG=debug cargo test -- --nocapture test_seq3
-	make graphs
 
 bare:
 	RUST_BACKTRACE=1 cargo run -- -x -v tests/bare.star
@@ -36,17 +28,7 @@ run:
 	dot blocks.dot -Tpng -o blocks.png
 	dot scopes.dot -Tpng -o scopes.png
 	mmdc -o test.png -i cfg.mmd
-
 	#RUST_BACKTRACE=1 cargo run -- -x -v tests/test_cond.star
-
-graphs:
-	dot out.dot -Tpng -o out.png
-	dot flat/blocks.dot -Tpng -o blocks.png
-	dot scopes.dot -Tpng -o scopes.png
-
-
-run0:
-	RUST_BACKTRACE=1 cargo run --bin parse -- -v tests/goto.star
 
 run_test:
 	RUST_BACKTRACE=1 cargo run --bin parse -- -l -v -x \
@@ -70,8 +52,6 @@ run_test:
 		#out.ll
 	./target/debug/out ; echo $$?
 
-test: examples
-	cargo test -j1 -- --nocapture
 fmt:
 	cargo fmt
 
