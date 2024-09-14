@@ -346,7 +346,6 @@ impl Flatten {
 
     pub fn flatten_sequence(
         &mut self,
-        block_id: BlockId,
         seq: Vec<AstNode>,
         seq_span_id: SpanId,
         fenv: &mut FlattenEnvironment,
@@ -361,7 +360,7 @@ impl Flatten {
 
         let mut current_span_id = seq_span_id;
 
-        let block = self.get_block(block_id);
+        let block = self.get_block(self.block_id);
         let seq_next_block_id = block.next;
         let scope_id = block.scope_id;
 
@@ -994,7 +993,7 @@ impl Flatten {
 
             Ast::Sequence(exprs) => {
                 self.block_id = block_id;
-                self.flatten_sequence(block_id, exprs, span_id, fenv, b)
+                self.flatten_sequence(exprs, span_id, fenv, b)
             }
 
             Ast::Global(name, expr) => {
