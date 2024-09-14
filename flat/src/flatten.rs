@@ -134,6 +134,7 @@ impl FlattenResult {
 }
 
 pub struct Flatten {
+    block_id: BlockId,
     module_key: Option<StringKey>,
     pub(super) link: LinkOptions,
     entries: Vec<CodeEntry>,
@@ -143,11 +144,18 @@ pub struct Flatten {
 }
 
 impl Flatten {
-    pub fn new() -> Self {
+    pub fn new(fenv: &mut FlattenEnvironment) -> Self {
+        let scope_id = Self::new_scope(ScopeType::Static, fenv);
+        let ir_block = IRBlock::new(scope_id);
+        let mut gblocks = BlockGraph::new();
+        let index = gblocks.add_node(ir_block);
+        let block_id = BlockId(index.index() as u32);
+
         Self {
+            block_id,
             module_key: None,
             entries: vec![],
-            gblocks: BlockGraph::new(),
+            gblocks,
             link: LinkOptions::new(),
             templates: vec![],
             messages: vec![],
@@ -206,15 +214,14 @@ impl Flatten {
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
     ) -> Result<Self> {
-        let mut f = Self::new();
+        let mut f = Self::new(fenv);
         if let Ast::Module(key, body) = node.node {
             f.module_key = Some(key);
-            let (block_id, static_scope) = f.new_scope_and_block(ScopeType::Static, fenv);
-            //let static_scope = fenv.new_scope(ScopeType::Static);
-            //let block_id = f.new_block(static_scope);
+            let block = f.get_block(f.block_id);
+            let static_scope_id = block.scope_id;
             let code = LCode::Label;
             let entry = CodeEntry::new(
-                block_id,
+                f.block_id,
                 code,
                 AstType::Unit,
                 Some(key),
@@ -222,17 +229,19 @@ impl Flatten {
                 VarDefinitionSpace::Static,
             );
             f.push_entry_with_link(entry);
-            fenv.static_block = Some(block_id);
-            fenv.static_scope = Some(static_scope);
+            fenv.static_block = Some(f.block_id);
+            fenv.static_scope = Some(static_scope_id);
             for ast in body.to_vec() {
-                let _ = f.flatten(block_id, ast, fenv, b)?;
+                let r = f.flatten(f.block_id, ast, fenv, b)?;
+                f.block_id = r.block_id;
             }
             for (msg, span_id) in f.messages.drain(..) {
                 b.push_error(&msg, span_id);
             }
             Ok(f)
         } else {
-            unreachable!()
+            b.push_error("Not a module", node.span_id);
+            Err(Error::new(BlockifyError::Invalid))
         }
     }
 
@@ -273,14 +282,14 @@ impl Flatten {
         scope_type: ScopeType,
         fenv: &mut FlattenEnvironment,
     ) -> (BlockId, ScopeId) {
-        let scope_id = self.new_scope(scope_type, fenv);
+        let scope_id = Self::new_scope(scope_type, fenv);
         let scope = fenv.get_scope_mut(scope_id);
         let block_id = self.new_block(scope_id);
         scope.entry_block = Some(block_id);
         (block_id, scope_id)
     }
 
-    fn new_scope(&mut self, scope_type: ScopeType, fenv: &mut FlattenEnvironment) -> ScopeId {
+    fn new_scope(scope_type: ScopeType, fenv: &mut FlattenEnvironment) -> ScopeId {
         let scope = ScopeLayer::new(scope_type);
         let index = fenv.scopes.add_node(scope);
         ScopeId(index.index() as u32)
@@ -342,6 +351,7 @@ impl Flatten {
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
     ) -> Result<FlattenResult> {
+        //self.block_id = block_id;
         let mut current_block_id = block_id;
         let mut ty = AstType::Unit;
         let mut link_id = None;

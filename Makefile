@@ -1,9 +1,11 @@
 default: ninja
 
 ninja:
+	cargo check
 	cargo build
 	python3 build.py
 	ninja
+	@echo COMPLETE
 
 clean:
 	cargo clean
@@ -13,6 +15,7 @@ bare:
 	RUST_BACKTRACE=1 cargo run -- -x -v tests/bare.star
 
 run:
+	cargo check
 	#RUST_BACKTRACE=1 cargo run -- -x -v tests/test_cond.star
 	#RUST_BACKTRACE=1 cargo run -- -x -v tests/static_var.star
 	#RUST_BACKTRACE=1 cargo run -- -x -v tests/nested_func.star
@@ -21,7 +24,7 @@ run:
 	#RUST_BACKTRACE=1 cargo run -- -x -v tests/test_recursive2.star
 	#RUST_BACKTRACE=1 cargo run -- -x -v tests/fix.star
 	#RUST_BACKTRACE=1 cargo run -- -x -v tests/test.star || true
-	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/goto.star || true
+	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/test_recursive2.star || true
 	#RUST_BACKTRACE=1 cargo run -- -x -v tests/test_ternary.star || true
 	#RUST_BACKTRACE=1 cargo run -- -x -v tests/test_array.star || true
 	#RUST_BACKTRACE=1 cargo run -- -x -v tests/dup_func.star || true
