@@ -3,7 +3,7 @@ use ena::unify::*;
 use std::convert::Into;
 use thiserror::Error;
 
-use compile_core::AstType;
+use compile_core::{AstType, ReturnType};
 
 #[derive(Debug, Error)]
 pub enum UError {
@@ -76,28 +76,33 @@ fn ast_unify_values(value1: &AstType, value2: &AstType) -> Result<AstType, UErro
                 let ty = ast_unify_values(v1, v2)?;
                 Ok(AstType::Ptr(ty.into()))
             }
-            (AstType::Func(c1, r1), AstType::Func(c2, r2)) => {
-                let r = ast_unify_values(r1, r2)?;
-                let c1_fields = c1.fields();
-                let c2_fields = c2.fields();
-                if c1_fields.len() != c2_fields.len() {
-                    Err(UError::Bad)
-                } else {
-                    let result = c1_fields
-                        .iter()
-                        .zip(c2_fields.iter())
-                        .map_while(|((_, a), (_, b))| match ast_unify_values(a, b) {
-                            Ok(s) => Some(s),
-                            Err(_) => None,
-                        })
-                        .collect::<Vec<_>>();
-                    if result.len() == c1_fields.len() {
-                        Ok(AstType::func(result, r.into()))
-                    } else {
+
+            (AstType::Func(c1, r1), AstType::Func(c2, r2)) => match (r1.as_ref(), r2.as_ref()) {
+                (ReturnType::Single(ret1), ReturnType::Single(ret2)) => {
+                    let r = ast_unify_values(ret1, ret2)?;
+                    let c1_fields = c1.fields();
+                    let c2_fields = c2.fields();
+                    if c1_fields.len() != c2_fields.len() {
                         Err(UError::Bad)
+                    } else {
+                        let result = c1_fields
+                            .iter()
+                            .zip(c2_fields.iter())
+                            .map_while(|((_, a), (_, b))| match ast_unify_values(a, b) {
+                                Ok(s) => Some(s),
+                                Err(_) => None,
+                            })
+                            .collect::<Vec<_>>();
+                        if result.len() == c1_fields.len() {
+                            Ok(AstType::func(result, r.into()))
+                        } else {
+                            Err(UError::Bad)
+                        }
                     }
                 }
-            }
+                _ => unimplemented!(),
+            },
+
             (AstType::Struct(c1), AstType::Struct(c2)) => {
                 if c1.len() != c2.len() {
                     Err(UError::Bad)
@@ -209,17 +214,24 @@ impl TypeUnify {
                 }
                 Ok(())
             }
-            (AstType::Func(vs1, ret1), AstType::Func(vs2, ret2)) => {
-                if self.unify(ret1, ret2).is_err() {
-                    return Err(UError::Bad);
-                }
-                for ((_, x), (_, y)) in vs1.fields().iter().zip(vs2.fields().iter()) {
-                    if self.unify(x, y).is_err() {
+            (AstType::Func(vs1, r1), AstType::Func(vs2, r2)) => match (r1.as_ref(), r2.as_ref()) {
+                (ReturnType::Single(ret1), ReturnType::Single(ret2)) => {
+                    if self.unify(&ret1, &ret2).is_err() {
                         return Err(UError::Bad);
                     }
+                    for ((_, x), (_, y)) in vs1.fields().iter().zip(vs2.fields().iter()) {
+                        if self.unify(x, y).is_err() {
+                            return Err(UError::Bad);
+                        }
+                    }
+                    Ok(())
                 }
-                Ok(())
-            }
+                _ => unimplemented!(),
+            },
+
+            //(AstType::Func(vs1, ReturnType::Single(ret1)), AstType::Func(vs2, ReturnType::Single(ret2))) => {
+            //(AstType::Func(vs1, ret1), AstType::Func(vs2, ret2)) => {
+            //}
             (AstType::Struct(fields), AstType::Unit) | (AstType::Unit, AstType::Struct(fields)) => {
                 if fields.len() == 0 {
                     Ok(())
@@ -253,23 +265,26 @@ impl TypeUnify {
                     None
                 }
             }
-            AstType::Func(args, ret) => {
-                if let Some(ret) = self.resolve(ret) {
-                    let fields = args.fields();
-                    let size = fields.len();
-                    let args2 = fields
-                        .into_iter()
-                        .filter_map(|(_, v)| self.resolve(&v).map(|x| x.into()))
-                        .collect::<Vec<_>>();
-                    if args2.len() == size {
-                        Some(AstType::func(args2, ret.into()))
+            AstType::Func(args, ret) => match ret.as_ref() {
+                ReturnType::Multi(_) => unimplemented!(),
+                ReturnType::Single(ret) => {
+                    if let Some(ret) = self.resolve(ret) {
+                        let fields = args.fields();
+                        let size = fields.len();
+                        let args2 = fields
+                            .into_iter()
+                            .filter_map(|(_, v)| self.resolve(&v).map(|x| x.into()))
+                            .collect::<Vec<_>>();
+                        if args2.len() == size {
+                            Some(AstType::func(args2, ret.into()))
+                        } else {
+                            None
+                        }
                     } else {
                         None
                     }
-                } else {
-                    None
                 }
-            }
+            },
             AstType::Variable(offset) => {
                 let k = self.variables[*offset as usize];
                 let v = self.ut.probe_value(k);

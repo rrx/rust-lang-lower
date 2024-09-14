@@ -52,6 +52,10 @@ impl FlattenEnvironment {
         ScopeId(index.index() as u32)
     }
 
+    pub fn get_entry_block(&self, scope_id: ScopeId) -> BlockId {
+        self.get_scope(scope_id).entry_block.unwrap()
+    }
+
     pub fn get_scope(&self, scope_id: ScopeId) -> &ScopeLayer {
         let index = NodeIndex::new(scope_id.index());
         self.scopes.node_weight(index).unwrap()

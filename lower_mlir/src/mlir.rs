@@ -30,7 +30,7 @@ use melior::{
 };
 use std::collections::VecDeque;
 
-use compile_core::{AstType, Literal, NaryOperation, Span, UnaryOperation};
+use compile_core::{AstType, Literal, NaryOperation, ReturnType, Span, UnaryOperation};
 
 use std::collections::HashMap;
 
@@ -491,7 +491,23 @@ impl<'c> MLIRGenerator<'c> {
                 let f = FlatSymbolRefAttribute::new(self.context, &name);
 
                 if let AstType::Func(_func_arg_types, ret) = &ty {
-                    let (ret_type, dims) = self.from_type(&ret);
+                    let ret_ty = match ret.as_ref() {
+                        ReturnType::Single(ty) => ty,
+                        ReturnType::Multi(_) => {
+                            /*
+                            let fields = ret.fields();
+                            let ret_types = fields.into_iter().map(|(_, ty)| ty.clone()).collect::<Vec<_>>();
+                            let ret_ty = if ret_types.is_empty() {
+                                AstType::Unit
+                            } else {
+                                ret_types.get(0).unwrap().clone()
+                            };
+                            */
+                            unimplemented!()
+                        }
+                    };
+
+                    let (ret_type, dims) = self.from_type(&ret_ty);
                     assert_eq!(dims.len(), 0);
                     // handle call arguments
 
@@ -1030,12 +1046,34 @@ impl<'c> MLIRGenerator<'c> {
 
             let region = Region::new();
 
-            let ret_type = if let AstType::Unit = *ast_ret_type {
-                vec![]
-            } else {
-                let (ty, dims) = self.from_type(&ast_ret_type);
-                assert_eq!(dims.len(), 0);
-                vec![ty]
+            let ret_type = match ast_ret_type.as_ref() {
+                ReturnType::Single(ty) => {
+                    let ret_type = if let AstType::Unit = ty {
+                        vec![]
+                        /*
+                        } else if ty.is_composite() {
+                            let fields = ty.fields().into_iter().map(|(_, ty)| {
+                                let (ty, _dims) = self.from_type(&ty);
+                                ty
+                            }).collect::<Vec<_>>();
+                            assert!(fields.len() <= 1);
+                            if fields.len() == 0 {
+                                vec![]
+                            } else {
+                                //let (ty, _) = kself.from_type(&fields.get(1).unwrap());
+                                vec![*fields.get(0).unwrap()]
+                            }
+                            */
+                    } else {
+                        let (ty, dims) = self.from_type(&ty);
+                        assert_eq!(dims.len(), 0);
+                        vec![ty]
+                    };
+                    ret_type
+                }
+                ReturnType::Multi(_) => {
+                    unimplemented!()
+                }
             };
 
             let func_type = FunctionType::new(self.context, &type_list, &ret_type);

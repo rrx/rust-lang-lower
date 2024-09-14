@@ -2,7 +2,7 @@ use crate::MLIRGenerator;
 use anyhow::Error;
 use anyhow::Result;
 use compile_core::Diagnostic;
-use compile_core::{Ast, AstNode, AstType, BinaryOperation, Literal, SpanId};
+use compile_core::{Ast, AstNode, AstType, BinaryOperation, Literal, ReturnType, SpanId};
 use melior::ir::Location;
 use melior::{
     dialect::{
@@ -88,7 +88,15 @@ impl<'c> MLIRGenerator<'c> {
                     .iter()
                     .map(|(_, a)| self.from_type(a).0)
                     .collect::<Vec<_>>();
-                let results = vec![self.from_type(ret).0];
+
+                let results = match ret.as_ref() {
+                    ReturnType::Single(ret) => {
+                        vec![self.from_type(ret).0]
+                    }
+                    ReturnType::Multi(_ret) => {
+                        unimplemented!()
+                    }
+                };
                 (
                     melior::ir::r#type::FunctionType::new(self.context, &inputs, &results).into(),
                     vec![],

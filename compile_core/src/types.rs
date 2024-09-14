@@ -18,6 +18,49 @@ impl InternKey for TypeId {
 pub type TypePool = InternPool<TypeId, AstType>;
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+pub enum ReturnType {
+    Single(AstType),
+    Multi(Vec<AstType>),
+}
+
+impl std::fmt::Display for ReturnType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Single(ty) => {
+                write!(f, "S({})", ty)
+            }
+            Self::Multi(fields) => {
+                let mut t = f.debug_tuple("M");
+                for ty in fields.iter() {
+                    t.field(&format!("{}", ty));
+                }
+                t.finish()
+            }
+        }
+    }
+}
+
+impl ReturnType {
+    pub fn is_unknown(&self) -> bool {
+        match self {
+            ReturnType::Single(ty) => {
+                if ty.is_unknown() {
+                    return true;
+                }
+            }
+            ReturnType::Multi(types) => {
+                for ty in types {
+                    if ty.is_unknown() {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+}
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub enum AstType {
     //Number,
     Int,
@@ -42,7 +85,7 @@ pub enum AstType {
     Union(Vec<(Option<StringKey>, AstType)>),
     Ptr(Box<AstType>),
     // Func(parameters, return type)
-    Func(Box<AstType>, Box<AstType>),
+    Func(Box<AstType>, Box<ReturnType>),
     Variable(u32),
 }
 
@@ -71,7 +114,7 @@ impl AstType {
 
     pub fn func(args: Vec<Self>, ret_type: Self) -> Self {
         let t = Self::tuple(args);
-        AstType::Func(t.into(), ret_type.into())
+        AstType::Func(t.into(), ReturnType::Single(ret_type).into())
     }
 
     pub fn from_str(s: &str) -> Option<AstType> {
@@ -89,6 +132,14 @@ impl AstType {
         match self {
             Self::Struct(fields) => fields.clone(),
             _ => vec![],
+        }
+    }
+
+    pub fn is_composite(&self) -> bool {
+        match self {
+            Self::Union(_) => true,
+            Self::Struct(_) => true,
+            _ => false,
         }
     }
 

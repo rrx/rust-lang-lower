@@ -11,7 +11,7 @@ use starlark_syntax::syntax::module::AstModuleFields;
 
 use compile_core::{
     ast, AssignTarget, Ast, AstNode, AstType, BinOpNode, CodeLocation, Diagnostic, Label,
-    LinkOptions, Parameter, SpanId, StringKey,
+    LinkOptions, Parameter, ReturnType, SpanId, StringKey,
 };
 
 use flat::{ICodeModule, NodeBuilder, NodeBuilder as NB, ValueId};
@@ -339,16 +339,21 @@ impl Parser {
                 let return_type = if let Some(return_type) = &def.return_type {
                     if let Some(ty) = from_type(&return_type) {
                         ty
+                        //ReturnType::Single(ty)
+                        //AstType::Struct(vec![(None, ty)])
                     } else {
                         b.spans.push_diagnostic(env.error(
                             item.span,
                             &format!("Type not recognized: {:?}", return_type),
                         ));
+                        //ReturnType::Single(AstType::Unit)
                         AstType::Unit
                     }
                 } else {
+                    //ReturnType::Single(b.types.fresh_unknown())
                     b.types.fresh_unknown()
                 };
+
                 //let return_type = def
                 //.return_type
                 //.as_ref()
@@ -383,7 +388,10 @@ impl Parser {
                 );
 
                 let arg_type_id = b.types.s(&arg_type);
-                let fun_type = AstType::Func(arg_type.into(), return_type.clone().into());
+                let fun_type = AstType::Func(
+                    arg_type.into(),
+                    ReturnType::Single(return_type.clone()).into(),
+                );
                 let fun_type_id = b.types.s(&fun_type);
 
                 let def_ast = Ast::Lambda(ast::Lambda {
@@ -465,55 +473,6 @@ impl Parser {
             _ => unimplemented!("{:?}", item),
         }
     }
-
-    /*
-    fn read_extra<P: syntax::ast::AstPayload>(
-        &mut self,
-        item: &syntax::ast::AstStmtP<P>,
-        env: &mut Environment,
-        b: &mut NodeBuilder,
-    ) -> Result<Option<AstNode>> {
-        use syntax::ast::ExprP;
-        use syntax::ast::StmtP;
-
-        if let StmtP::Expression(expr) = &item.node {
-            match &expr.node {
-                ExprP::Dot(expr, name) => {
-                    if let ExprP::Identifier(ident) = &expr.node {
-                        if &ident.node.ident == "q" {
-                            let span_id = env.span_id(item.span, b);
-                            if let Some(extra) = b.build_builtin_from_name(&name, vec![], span_id) {
-                                return Ok(Some(extra));
-                            }
-                        }
-                    } else {
-                        unimplemented!("{:?}", (expr, name))
-                    }
-                }
-                ExprP::Call(expr, expr_args) => match &expr.node {
-                    ExprP::Dot(expr, name) => {
-                        if let ExprP::Identifier(ident) = &expr.node {
-                            if &ident.node.ident == "q" {
-                                let mut args = vec![];
-                                for arg in expr_args {
-                                    args.push(self.from_argument(arg, env, b)?.into());
-                                }
-                                let span_id = env.span_id(item.span, b);
-                                if let Some(extra) = b.build_builtin_from_name(&name, args, span_id)
-                                {
-                                    return Ok(Some(extra));
-                                }
-                            }
-                        }
-                    }
-                    _ => (),
-                },
-                _ => (),
-            }
-        }
-        Ok(None)
-    }
-    */
 
     fn from_expr<P: syntax::ast::AstPayload>(
         &mut self,

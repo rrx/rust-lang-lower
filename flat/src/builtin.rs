@@ -127,6 +127,7 @@ impl Builtin {
 
     pub fn get_return_type(&self) -> AstType {
         AstType::Unit
+        //AstType::Struct(vec![])
     }
 }
 

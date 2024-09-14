@@ -11,6 +11,7 @@ use compile_core::{
     Lambda,
     LinkOptions,
     NaryOperation,
+    ReturnType,
     //Literal,
     //ParameterNode,
     SpanId,
@@ -86,6 +87,7 @@ impl CodeEntry {
 pub struct IRBlock {
     pub(super) scope_id: ScopeId,
     pub(super) dead: bool,
+    num_ret_args: HashSet<usize>,
     //pub(super) ast: Option<AstNode>,
     pub(super) next: Option<BlockId>,
     pub(super) links: Vec<LinkId>,
@@ -99,6 +101,7 @@ impl IRBlock {
             //ast,
             links: vec![],
             next: None,
+            num_ret_args: HashSet::new(),
         }
     }
 
@@ -499,16 +502,25 @@ impl Flatten {
         &mut self,
         ret_block_id: BlockId,
         scope_id: ScopeId,
-        return_type: AstType,
+        return_type: ReturnType,
         span_id: SpanId,
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
     ) {
         let name = b.labels.fresh_key("ret");
-        let arg_ty = AstType::Struct(match &return_type {
-            AstType::Unit => vec![],
-            _ => vec![(None, return_type.clone())],
-        });
+        let arg_ty = match &return_type {
+            ReturnType::Single(ty) => match ty {
+                AstType::Unit => vec![],
+                _ => vec![(None, ty.clone())],
+            },
+            _ => unimplemented!(),
+        };
+
+        let arg_ty = AstType::Struct(arg_ty);
+        //let arg_ty = AstType::Struct(match &return_type {
+        //AstType::Unit => vec![],
+        //_ => vec![(None, return_type.clone())],
+        //});
 
         let (_v_block, v_args) = self.start_block(
             ret_block_id,
@@ -580,6 +592,8 @@ impl Flatten {
     )> {
         let func_arg = b.types.r(def.arg_type).clone();
         let ret = b.types.r(def.return_type).clone();
+        println!("ret: {:?}", ret);
+        //assert!(ret.is_composite());
 
         // 1. Create value map, with capacity = to the number of fields
         // 2. Copy defaults into the map
@@ -857,10 +871,13 @@ impl Flatten {
 
         // Make call
         let code = LCode::Call(v_fun.into());
+        let ty = ret_ty;
+        //let (_, ty) = ret_ty.fields().get(0).unwrap().clone();
         let entry = CodeEntry::new(
             current_block_id,
             code,
-            ret_ty.clone(),
+            //ret_ty.clone(),
+            ty.clone(),
             None,
             span_id,
             VarDefinitionSpace::Default,
@@ -869,7 +886,8 @@ impl Flatten {
         Ok(FlattenResult::new(
             current_block_id,
             Some(link_id),
-            ret_ty.clone(),
+            ty,
+            //ret_ty.fields().get(0).unwrap(),//clone(),
             false,
         ))
     }
@@ -1024,10 +1042,28 @@ impl Flatten {
                             let link_id = self.push_entry_with_link(entry);
 
                             // write out return block
+                            let fun_block = self.get_block(fun_block_id);
+                            if fun_block.num_ret_args.len() > 1 {
+                                b.push_error(
+                                    &format!("Return type mismatch: {:?}", &fun_block.num_ret_args),
+                                    span_id,
+                                );
+                            }
+
+                            assert!(fun_block.num_ret_args.len() != 0);
+
+                            //let num_ret_args = fun_block.num_ret_args.iter().next().unwrap().clone();
+
+                            //let ret_fields = ret_ty.fields();
+                            //println!("{:?}", (&ret_ty, &ret_fields, num_ret_args));
+                            //assert!(ret_fields.len() == num_ret_args);
+
+                            //let (_, ty) = ret_fields.get(0).unwrap();
                             self.add_return_block(
                                 ret_block_id,
                                 fun_scope_id,
-                                ret_ty.clone(),
+                                ReturnType::Single(ret_ty.clone()),
+                                //ret_ty.clone(),
                                 span_id,
                                 fenv,
                                 b,
@@ -1160,9 +1196,7 @@ impl Flatten {
                     .find_nearest_scope(block.scope_id, ScopeType::Function)
                     .unwrap();
 
-                //let block = self.get_block(block_id);
-                //self.gblocks.
-                //block.
+                let fun_block_id = fenv.get_entry_block(fun_scope_id);
 
                 let mut jump_args = vec![];
                 let mut block_id = block_id;
@@ -1177,6 +1211,9 @@ impl Flatten {
                 } else {
                     node.span_id
                 };
+
+                let fun_block = self.get_block_mut(fun_block_id);
+                fun_block.num_ret_args.insert(jump_args.len());
 
                 let scope = fenv.get_scope(fun_scope_id);
                 self.add_jump(
@@ -1995,7 +2032,16 @@ pub fn scope_graph(filename: &str, fenv: &FlattenEnvironment) {
 fn def_to_type(def: &Lambda, b: &mut NB) -> AstType {
     let arg_type = b.types.r(def.arg_type).clone();
     let return_type = b.types.r(def.return_type).clone();
-    let fun_ty = AstType::Func(arg_type.into(), return_type.into());
+
+    //let return_type = if return_type.is_unknown() {
+    //return_type
+    //} else if return_type == AstType::Unit {
+    //AstType::Struct(vec![])
+    //} else {
+    //return_type
+    //};
+
+    let fun_ty = AstType::Func(arg_type.into(), ReturnType::Single(return_type).into());
     fun_ty
 }
 

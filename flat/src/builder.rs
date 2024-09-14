@@ -1,7 +1,7 @@
 use compile_core::ast::*;
 use compile_core::{
-    Argument, Ast, AstNode, AstType, Lambda, Literal, Parameter, ParameterNode, Span, SpanBuilder,
-    SpanId, StringKey, StringPool, TypeId, TypePool,
+    Argument, Ast, AstNode, AstType, Lambda, Literal, Parameter, ParameterNode, ReturnType, Span,
+    SpanBuilder, SpanId, StringKey, StringPool, TypeId, TypePool,
 };
 use hmunify::TypeUnify;
 
@@ -109,7 +109,10 @@ impl TypeBuilder {
         //let spans = def.params.iter().map(|p| p.span_id).collect::<Vec<_>>();
         let arg_type = self.r(lambda.arg_type).clone();
         let return_type = self.r(lambda.return_type).clone();
-        let ty = AstType::Func(arg_type.into(), return_type.clone().into());
+        let ty = AstType::Func(
+            arg_type.into(),
+            ReturnType::Single(return_type.clone()).into(),
+        );
         ty
     }
 }
@@ -230,7 +233,10 @@ impl NodeBuilder {
                 .collect::<Vec<_>>(),
         );
         let arg_type_id = self.types.s(&arg_type);
-        let fun_type = AstType::Func(arg_type.into(), return_type.clone().into());
+        let fun_type = AstType::Func(
+            arg_type.into(),
+            ReturnType::Single(return_type.clone()).into(),
+        );
         let return_type = self.types.s(&return_type);
         let fun_type_id = self.types.s(&fun_type);
         Self::global(
