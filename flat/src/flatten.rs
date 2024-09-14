@@ -88,6 +88,7 @@ pub struct IRBlock {
     pub(super) scope_id: ScopeId,
     pub(super) dead: bool,
     num_ret_args: HashSet<usize>,
+    ret_types: HashSet<AstType>,
     //pub(super) ast: Option<AstNode>,
     pub(super) next: Option<BlockId>,
     pub(super) links: Vec<LinkId>,
@@ -102,6 +103,7 @@ impl IRBlock {
             links: vec![],
             next: None,
             num_ret_args: HashSet::new(),
+            ret_types: HashSet::new(),
         }
     }
 
@@ -1084,6 +1086,15 @@ impl Flatten {
 
                             assert!(fun_block.num_ret_args.len() != 0);
 
+                            for ty in fun_block.ret_types.iter() {
+                                if b.types.u.unify(ty, &ret_ty).is_err() {
+                                    b.push_error(
+                                        &format!("Type Mismatch: LHS: {}, RHS: {}", ty, &ret_ty),
+                                        span_id,
+                                    );
+                                }
+                            }
+
                             //let num_ret_args = fun_block.num_ret_args.iter().next().unwrap().clone();
 
                             //let ret_fields = ret_ty.fields();
@@ -1255,6 +1266,9 @@ impl Flatten {
 
                 let fun_block = self.get_block_mut(fun_block_id);
                 fun_block.num_ret_args.insert(jump_args.len());
+                for (_, _, ty) in jump_args.iter() {
+                    fun_block.ret_types.insert(ty.clone());
+                }
 
                 let scope = fenv.get_scope(fun_scope_id);
                 self.add_jump(
@@ -2115,7 +2129,7 @@ pub fn scope_graph(filename: &str, fenv: &FlattenEnvironment) {
         )
     );
     println!("saved graph {:?}", filename);
-    println!("{}", s);
+    //println!("{}", s);
     std::fs::write(filename, s).unwrap();
 }
 

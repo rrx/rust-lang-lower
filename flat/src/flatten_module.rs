@@ -161,7 +161,7 @@ impl ICodeModule for FlattenModule {
         self.entries.len()
     }
 
-    fn dump(&self, b: &mut NB) {
+    fn dump_code_table(&self, filename: &str, b: &mut NB) {
         let mut rows = vec![];
         for entry in self.entries.iter() {
             let row = self.get_code_row(entry.value_id, b);
@@ -169,8 +169,13 @@ impl ICodeModule for FlattenModule {
         }
         let s = Table::new(rows).with(Style::sharp()).to_string();
         println!("{}", s);
-        save_graph(self, "out.dot", b);
+        std::fs::write(filename, s).unwrap();
     }
+
+    fn dump_graph(&self, filename: &str, b: &NB) {
+        save_graph(self, filename, b);
+    }
+
 }
 
 impl FlattenModule {

@@ -12,7 +12,7 @@ clean:
 	rm -rf build
 
 bare:
-	RUST_BACKTRACE=1 cargo run -- -x -v tests/bare.star
+	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/bare.star
 
 run:
 	cargo check

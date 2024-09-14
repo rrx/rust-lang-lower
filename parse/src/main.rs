@@ -10,6 +10,7 @@ use flat::{
     BlockifyError, Flatten, FlattenEnvironment, FlattenModule, ICodeModule, NodeBuilder, ValueId,
 };
 use parse::starlark::StarlarkParser;
+use std::path::{Path, PathBuf};
 
 #[derive(FromArgs, Debug)]
 /// Compile Stuff
@@ -39,6 +40,12 @@ struct Config {
     input: String,
 }
 
+fn make_path<'a>(path: &'a str, extension: &str) -> String {
+    let mut path = PathBuf::from(&path);
+    path.set_extension(extension);
+    path.to_str().unwrap().to_string()
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     set_up_color_terminal();
     SimpleLogger::new().init().unwrap();
@@ -50,9 +57,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         log::set_max_level(log::LevelFilter::Warn);
     }
 
+    let output_filename;
     let path = if let Some(out_filename) = &config.output {
+        output_filename = out_filename;
         std::path::PathBuf::from(out_filename)
     } else {
+        output_filename = &config.input;
         let mut path = std::path::PathBuf::from(&config.input);
         path.set_extension("");
         path
@@ -79,7 +89,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let f = r?;
     let m = FlattenModule::from_builder(f, &mut fenv, &mut b);
-    m.dump(&mut b);
+
+    let table_path = make_path(&output_filename, "table.txt");
+    m.dump_code_table(&table_path, &mut b);
+    let out_graph_path = make_path(&output_filename, "out.dot");
+    m.dump_graph(&out_graph_path, &mut b);
 
     let mut blocks_path = path.clone();
     blocks_path.set_extension("blocks.dot");
