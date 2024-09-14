@@ -52,14 +52,13 @@ impl std::fmt::Display for AstType {
             Self::Func(arg_ty, ret_ty) => {
                 write!(f, "Func({}, {})", arg_ty, ret_ty)
             }
-            Self::Struct(fields) => write!(
-                f,
-                "Struct({:?})",
-                fields
-                    .iter()
-                    .map(|f| format!("{}", &f.1))
-                    .collect::<Vec<_>>()
-            ),
+            Self::Struct(fields) => {
+                let mut t = f.debug_struct("Struct");
+                for (index, ty) in fields.iter().enumerate() {
+                    t.field(&format!("{}", index), ty);
+                }
+                t.finish()
+            }
             _ => write!(f, "{:?}", self),
         }
     }

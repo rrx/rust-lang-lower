@@ -33,6 +33,6 @@ pub fn save_graph(blockify: &dyn ICodeModule, filename: &str, b: &NodeBuilder) {
         )
     );
     println!("saved graph {:?}", filename);
-    println!("{}", s);
+    //println!("{}", s);
     std::fs::write(filename, s).unwrap();
 }

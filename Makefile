@@ -21,7 +21,7 @@ run:
 	#RUST_BACKTRACE=1 cargo run -- -x -v tests/test_recursive2.star
 	#RUST_BACKTRACE=1 cargo run -- -x -v tests/fix.star
 	#RUST_BACKTRACE=1 cargo run -- -x -v tests/test.star || true
-	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/goto.star || true
+	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/goto.star || true
 	#RUST_BACKTRACE=1 cargo run -- -x -v tests/test_ternary.star || true
 	#RUST_BACKTRACE=1 cargo run -- -x -v tests/test_array.star || true
 	#RUST_BACKTRACE=1 cargo run -- -x -v tests/dup_func.star || true

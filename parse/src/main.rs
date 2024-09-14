@@ -51,12 +51,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     let path = if let Some(out_filename) = &config.output {
-        &out_filename
+        std::path::PathBuf::from(out_filename)
     } else {
-        &config.input
+        let mut path = std::path::PathBuf::from(&config.input);
+        path.set_extension("");
+        path
     };
-
-    let mut path = std::path::PathBuf::from(path);
 
     log::debug!("config: {:?}", config);
     let context = default_context();
@@ -117,6 +117,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     assert!(module.as_operation().verify());
 
     if config.compile {
+        let mut path = path.clone();
         path.set_extension("o");
         lower_mlir::save_object_file(&module, &path.to_str().unwrap());
         println!("Wrote: {:?}", &path.as_os_str());
@@ -124,6 +125,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let exit_code = p.exec_main(&mut module, "target/debug");
         std::process::exit(exit_code);
     } else {
+        let mut path = path.clone();
         path.set_extension("mlir");
         let s = module.as_operation().to_string();
         let mut output = File::create(path.clone())?;
