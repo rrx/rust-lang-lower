@@ -46,7 +46,7 @@ impl FlattenEnvironment {
         self.static_block.unwrap()
     }
 
-    pub fn new_scope(&mut self, scope_type: ScopeType) -> ScopeId {
+    fn _new_scope(&mut self, scope_type: ScopeType) -> ScopeId {
         let scope = ScopeLayer::new(scope_type);
         let index = self.scopes.add_node(scope);
         ScopeId(index.index() as u32)

@@ -303,6 +303,24 @@ impl<'c> MLIRGenerator<'c> {
                     current = (*next_value_id).into();
                     continue;
                 }
+
+                if let LCode::ValueIndex(link_id, index) = code {
+                    let v = self.blockify.resolve_code_offset(link_id.into());
+                    let index = (*index) as usize;
+                    /*
+                    let c = self
+                        .blocks
+                        .get(&v)
+                        .expect(&format!("missing block at {}", v));
+
+                    let block = c.block.as_ref().unwrap();
+                    let arg_count = block.argument_count();
+                    assert!(index < arg_count, "mismatch arity on index");
+                    block.argument(index).unwrap();
+                    */
+
+                    return Some(SymIndex::Arg(v, index));
+                }
                 break;
             }
             let v = self.blockify.resolve_code_offset(current);
@@ -868,6 +886,7 @@ impl<'c> MLIRGenerator<'c> {
             }
 
             LCode::Value(_) => (),
+            LCode::ValueIndex(_, _) => (),
             LCode::CallValue(_) => (),
             LCode::Noop => (),
 

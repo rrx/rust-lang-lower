@@ -26,6 +26,7 @@ pub enum LCode {
     Declare,
     DeclareFunction(Option<BlockId>), // optional entry block
     Value(LinkId),
+    ValueIndex(LinkId, u8), // index into a struct
     CallValue(CodeOffset),
     Arg(u8), // get the value of a positional arg
     Const(Literal),
