@@ -71,10 +71,10 @@ rule compiler-debug
     command = cargo build
 
 rule mlir-debug
-    command = {compiler_debug} -v -o $out -i $in
+    command = cargo run -- -v -o $out -i $in
 
 rule mlir-release
-    command = {compiler_release} -v -o $out -i $in
+    command = cargo run --release -- -v -o $out -i $in
 
 rule mlir-opt
     command = mlir-opt \

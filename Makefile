@@ -16,23 +16,9 @@ bare:
 
 run:
 	cargo check
-	#RUST_BACKTRACE=1 cargo run -- -x -v tests/test_cond.star
-	#RUST_BACKTRACE=1 cargo run -- -x -v tests/static_var.star
-	#RUST_BACKTRACE=1 cargo run -- -x -v tests/nested_func.star
-	#RUST_BACKTRACE=1 cargo run -- -x -v tests/args2.star || true
-	#RUST_BACKTRACE=1 cargo run -- -x -v tests/args3.star || true
-	#RUST_BACKTRACE=1 cargo run -- -x -v tests/test_recursive2.star
-	#RUST_BACKTRACE=1 cargo run -- -x -v tests/fix.star
-	#RUST_BACKTRACE=1 cargo run -- -x -v tests/test.star || true
-	RUST_BACKTRACE=1 cargo run -- -x -v -o build/tmp/out -i tests/bin/test_recursive.star || true
-	#RUST_BACKTRACE=1 cargo run -- -x -v tests/test_ternary.star || true
-	#RUST_BACKTRACE=1 cargo run -- -x -v tests/test_array.star || true
-	#RUST_BACKTRACE=1 cargo run -- -x -v tests/dup_func.star || true
-	dot out.dot -Tpng -o out.png
-	dot blocks.dot -Tpng -o blocks.png
-	dot scopes.dot -Tpng -o scopes.png
-	mmdc -o test.png -i cfg.mmd
-	#RUST_BACKTRACE=1 cargo run -- -x -v tests/test_cond.star
+	python3 build.py
+	touch target/x86_64-unknown-linux-gnu/debug/parse
+	ninja bare
 
 run_test:
 	RUST_BACKTRACE=1 cargo run --bin parse -- -l -v -x \
