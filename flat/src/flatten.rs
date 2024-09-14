@@ -233,7 +233,8 @@ impl Flatten {
             fenv.static_scope = Some(static_scope_id);
             for ast in body.to_vec() {
                 let r = f.flatten(f.block_id, ast, fenv, b)?;
-                f.block_id = r.block_id;
+                assert_eq!(f.block_id, r.block_id);
+                //f.block_id = r.block_id;
             }
             for (msg, span_id) in f.messages.drain(..) {
                 b.push_error(&msg, span_id);
@@ -351,8 +352,9 @@ impl Flatten {
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
     ) -> Result<FlattenResult> {
+        //assert_eq!(block_id, self.block_id);
         //self.block_id = block_id;
-        let mut current_block_id = block_id;
+        //let mut current_block_id = self.block_id;
         let mut ty = AstType::Unit;
         let mut link_id = None;
         let mut is_term = false;
@@ -374,7 +376,7 @@ impl Flatten {
                         let new_block_id = self.new_block(scope_id);
                         let new_block = self.get_block_mut(new_block_id);
                         new_block.next = seq_next_block_id;
-                        self.block_succ(current_block_id, new_block_id, Successor::BlockScope);
+                        self.block_succ(self.block_id, new_block_id, Successor::BlockScope);
                         let scope = fenv.get_scope_mut(scope_id);
                         scope.block_labels.insert(key.into(), new_block_id);
                     }
@@ -383,7 +385,7 @@ impl Flatten {
             }
         }
 
-        current_block_id = block_id;
+        //current_block_id = block_id;
         let mut d = seq.drain(..);
         loop {
             if let Some(expr) = d.next() {
@@ -398,6 +400,7 @@ impl Flatten {
                 //);
                 //
                 //let r = self.flatten(current_block_id, expr, fenv, b)?;
+                //assert_eq!(self.block_id, r.block_id);
 
                 if expr_is_term && !is_last {
                     let next_seq = d.collect::<Vec<_>>();
@@ -421,7 +424,7 @@ impl Flatten {
                                 VarDefinitionSpace::Default,
                                 fenv,
                             );
-                            self.block_succ(current_block_id, new_block_id, Successor::BlockScope);
+                            self.block_succ(self.block_id, new_block_id, Successor::BlockScope);
                             let new_block = self.get_block_mut(new_block_id);
                             new_block.next = seq_next_block_id;
                             new_block_id
@@ -429,12 +432,13 @@ impl Flatten {
                     };
 
                     // set next on current
-                    let block = self.get_block_mut(current_block_id);
+                    let block = self.get_block_mut(self.block_id);
                     block.next(new_block_id);
 
                     // flatten expr
                     //println!("expr: {:?}", (&expr));
-                    let _ = self.flatten(current_block_id, expr, fenv, b)?;
+                    let r = self.flatten(self.block_id, expr, fenv, b)?;
+                    assert_eq!(self.block_id, r.block_id);
 
                     // flatten next
                     let next_node = AstNode {
@@ -443,14 +447,16 @@ impl Flatten {
                     };
                     //println!("next: {:?}", (&next_node));
                     let r = self.flatten(new_block_id, next_node, fenv, b)?;
+                    assert_eq!(self.block_id, r.block_id);
                     //println!("next2: {:?}", (&r));
                     return Ok(r);
                 }
 
                 // handle expr
-                let r = self.flatten(current_block_id, expr, fenv, b)?;
+                let r = self.flatten(self.block_id, expr, fenv, b)?;
+                assert_eq!(self.block_id, r.block_id);
                 ty = r.ty;
-                current_block_id = r.block_id;
+                //current_block_id = r.block_id;
                 link_id = r.link_id;
                 is_term = r.is_term;
             } else {
@@ -459,22 +465,22 @@ impl Flatten {
         }
 
         if !is_term {
-            let block = self.get_block(current_block_id);
+            let block = self.get_block(self.block_id);
             if let Some(next) = block.next {
-                println!("adding term on block: {}, jump: {}", current_block_id, next);
+                println!("adding term on block: {}, jump: {}", self.block_id, next);
                 let jump_link_id =
-                    self.add_jump(current_block_id, next.into(), vec![], current_span_id);
+                    self.add_jump(self.block_id, next.into(), vec![], current_span_id);
                 link_id = Some(jump_link_id);
             } else {
-                println!("missing term on block: {}", current_block_id);
+                println!("missing term on block: {}", self.block_id);
                 b.push_error(
-                    &format!("Missing next block on block_id={}", current_block_id),
+                    &format!("Missing next block on block_id={}", self.block_id),
                     current_span_id,
                 );
             }
         }
 
-        Ok(FlattenResult::new(current_block_id, link_id, ty, is_term))
+        Ok(FlattenResult::new(self.block_id, link_id, ty, is_term))
     }
 
     pub fn add_return(
@@ -768,6 +774,7 @@ impl Flatten {
             match a {
                 Argument::Positional(expr) => {
                     let r = self.flatten(current_block_id, *expr, fenv, b)?;
+                    assert_eq!(self.block_id, r.block_id);
                     current_block_id = r.block_id;
                     let link_id = r.link_id.unwrap();
                     values.push((None, link_id, r.ty.clone()));
@@ -775,6 +782,7 @@ impl Flatten {
                 }
                 Argument::Named(key, expr) => {
                     let r = self.flatten(current_block_id, *expr, fenv, b)?;
+                    assert_eq!(self.block_id, r.block_id);
                     current_block_id = r.block_id;
                     let link_id = r.link_id.unwrap();
                     values.push((Some(key), link_id, r.ty.clone()));
@@ -784,6 +792,7 @@ impl Flatten {
                     let mut args_values = vec![];
                     for expr in exprs {
                         let r = self.flatten(current_block_id, expr, fenv, b)?;
+                        assert_eq!(self.block_id, r.block_id);
                         current_block_id = r.block_id;
                         let link_id = r.link_id.unwrap();
                         args_values.push((link_id, r.ty.clone()));
@@ -824,6 +833,7 @@ impl Flatten {
                 Argument::KwArgs(key, _expr) => {
                     let node: AstNode = 1.into();
                     let r = self.flatten(current_block_id, node, fenv, b)?;
+                    assert_eq!(self.block_id, r.block_id);
                     current_block_id = r.block_id;
                     let link_id = r.link_id.unwrap();
                     values.push((Some(key), link_id, r.ty.clone()));
@@ -965,6 +975,8 @@ impl Flatten {
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
     ) -> Result<FlattenResult> {
+        self.block_id = block_id;
+        assert_eq!(self.block_id, block_id);
         let block = self.get_block_mut(block_id);
         let span_id = node.span_id;
         let ast = node.node;
@@ -1037,7 +1049,8 @@ impl Flatten {
                             fenv.scope_define(fenv.static_scope_id(), name, v_block);
 
                             let body = jump_if_needed(*body, b);
-                            let _ = self.flatten(fun_block_id, body, fenv, b)?;
+                            let r = self.flatten(fun_block_id, body, fenv, b)?;
+                            assert_eq!(self.block_id, r.block_id);
 
                             // push declaration into static block
                             let code = LCode::DeclareFunction(Some(fun_block_id));
@@ -1079,6 +1092,7 @@ impl Flatten {
                                 b,
                             );
 
+                            self.block_id = block_id;
                             Ok(FlattenResult::new(block_id, Some(link_id), fun_ty, false))
                         } else {
                             let code = LCode::DeclareFunction(None);
@@ -1091,6 +1105,7 @@ impl Flatten {
                                 VarDefinitionSpace::Static,
                             );
                             let link_id = self.push_entry_with_link(entry);
+                            self.block_id = block_id;
                             Ok(FlattenResult::new(block_id, Some(link_id), fun_ty, false))
                         }
                     }
@@ -1135,6 +1150,7 @@ impl Flatten {
 
                         fenv.scope_define(scope_id, name, link_id.into());
 
+                        self.block_id = block_id;
                         Ok(FlattenResult::new(block_id, Some(link_id), ast_ty, false))
                     }
                     _ => unreachable!(),
@@ -1151,6 +1167,7 @@ impl Flatten {
                         } else {
                             b.push_error("Expected string", span_id);
                         }
+                        self.block_id = block_id;
                         Ok(FlattenResult::new(block_id, None, AstType::Unit, false))
                     }
                     _ => {
@@ -1162,6 +1179,7 @@ impl Flatten {
                         for a in args.into_iter() {
                             let expr = a.expr();
                             let r = self.flatten(current_block_id, expr, fenv, b)?;
+                            assert_eq!(self.block_id, r.block_id);
                             current_block_id = r.block_id;
                             let link_id = r.link_id.unwrap();
                             let entry = self.get_entry(link_id);
@@ -1191,6 +1209,7 @@ impl Flatten {
                             VarDefinitionSpace::Default,
                         );
                         let link_id = self.push_entry_with_link(entry);
+                        self.block_id = current_block_id;
                         Ok(FlattenResult::new(
                             current_block_id,
                             Some(link_id),
@@ -1213,6 +1232,7 @@ impl Flatten {
                 let span_id = if let Some(expr) = maybe_expr {
                     let expr_span_id = expr.span_id;
                     let r = self.flatten(block_id, *expr, fenv, b)?;
+                    assert_eq!(self.block_id, r.block_id);
                     block_id = r.block_id;
                     let link_id = r.link_id.unwrap();
                     let entry = self.get_entry(link_id);
@@ -1232,6 +1252,7 @@ impl Flatten {
                     jump_args,
                     span_id,
                 );
+                self.block_id = block_id;
                 Ok(FlattenResult::new(block_id, None, AstType::Unit, true))
             }
 
@@ -1248,6 +1269,7 @@ impl Flatten {
                     VarDefinitionSpace::Default,
                 );
                 let link_id = self.push_entry_with_link(entry);
+                self.block_id = block_id;
                 Ok(FlattenResult::new(block_id, Some(link_id), ty, false))
             }
 
@@ -1255,7 +1277,9 @@ impl Flatten {
                 // expression, non-terminal
                 let x_span_id = x.span_id;
                 let rx = self.flatten(block_id, *x, fenv, b)?;
+                assert_eq!(self.block_id, rx.block_id);
                 let ry = self.flatten(rx.block_id, *y, fenv, b)?;
+                assert_eq!(self.block_id, ry.block_id);
                 let current_block_id = ry.block_id;
                 let vx = rx.link_id.unwrap();
                 let vy = ry.link_id.unwrap();
@@ -1303,6 +1327,7 @@ impl Flatten {
                     VarDefinitionSpace::Default,
                 );
                 let link_id = self.push_entry_with_link(entry);
+                self.block_id = ry.block_id;
                 Ok(FlattenResult::new(
                     ry.block_id,
                     Some(link_id),
@@ -1334,6 +1359,7 @@ impl Flatten {
                         );
                         self.push_entry_with_link(entry)
                     };
+                    self.block_id = block_id;
                     Ok(FlattenResult::new(
                         block_id,
                         Some(link_id),
@@ -1357,10 +1383,12 @@ impl Flatten {
                 if let Ast::Lambda(def) = expr.node {
                     let ty = def_to_type(&def, b);
                     self.save_template(block_id, &name, &def, fenv);
+                    self.block_id = block_id;
                     return Ok(FlattenResult::new(block_id, None, ty, false));
                 }
 
                 let r = self.flatten(block_id, *expr, fenv, b)?;
+                assert_eq!(self.block_id, r.block_id);
                 let current_block_id = r.block_id;
                 let v_expr = r.link_id.unwrap();
                 let expr_ty = self.get_entry(v_expr).ty.clone();
@@ -1404,6 +1432,7 @@ impl Flatten {
                     VarDefinitionSpace::Default,
                 );
                 let link_id = self.push_entry_with_link(entry);
+                self.block_id = current_block_id;
                 Ok(FlattenResult::new(
                     current_block_id,
                     Some(link_id),
@@ -1538,8 +1567,10 @@ impl Flatten {
                                     fenv,
                                 );
                                 // flatten lambda block
-                                let _ = self.flatten(fun_block_id, body, fenv, b)?;
+                                let r = self.flatten(fun_block_id, body, fenv, b)?;
+                                assert_eq!(self.block_id, r.block_id);
 
+                                self.block_id = next_block_id;
                                 Ok(FlattenResult::new(
                                     next_block_id,
                                     next_link_id,
@@ -1563,6 +1594,7 @@ impl Flatten {
             Ast::UnaryOp(op, x) => {
                 // op1 is expression, non-terminal
                 let r = self.flatten(block_id, *x, fenv, b)?;
+                assert_eq!(self.block_id, r.block_id);
                 let current_block_id = r.block_id;
 
                 let code = LCode::Value(r.link_id.unwrap().into());
@@ -1586,6 +1618,7 @@ impl Flatten {
                     VarDefinitionSpace::Reg,
                 );
                 let link_id = self.push_entry_with_link(entry);
+                self.block_id = current_block_id;
                 Ok(FlattenResult::new(
                     current_block_id,
                     Some(link_id),
@@ -1622,7 +1655,8 @@ impl Flatten {
                     VarDefinitionSpace::Reg,
                 );
                 self.push_entry_with_link(entry);
-                self.flatten(then_block_id, NB::ensure_seq(*then_expr), fenv, b)?;
+                let r = self.flatten(then_block_id, NB::ensure_seq(*then_expr), fenv, b)?;
+                assert_eq!(self.block_id, r.block_id);
 
                 // ELSE
                 let else_block_id = if let Some(else_expr) = maybe_else_expr {
@@ -1649,7 +1683,8 @@ impl Flatten {
                         VarDefinitionSpace::Reg,
                     );
                     self.push_entry_with_link(entry);
-                    self.flatten(else_block_id, NB::ensure_seq(*else_expr), fenv, b)?;
+                    let r = self.flatten(else_block_id, NB::ensure_seq(*else_expr), fenv, b)?;
+                    assert_eq!(self.block_id, r.block_id);
                     else_block_id
                 } else {
                     self.block_succ(block_id, v_next, Successor::Jump);
@@ -1659,6 +1694,7 @@ impl Flatten {
                 // condition
                 let span_id = condition.span_id;
                 let r = self.flatten(block_id, *condition, fenv, b)?;
+                assert_eq!(self.block_id, r.block_id);
                 let code = LCode::Branch(
                     r.link_id.unwrap().into(),
                     then_block_id.into(),
@@ -1673,6 +1709,7 @@ impl Flatten {
                     VarDefinitionSpace::Reg,
                 );
                 let v = self.push_entry_with_link(entry);
+                self.block_id = r.block_id;
                 Ok(FlattenResult::new(r.block_id, Some(v), AstType::Unit, true))
             }
 
@@ -1716,7 +1753,9 @@ impl Flatten {
                     fenv,
                 );
                 let r = self.flatten(new_block_id, NB::ensure_seq(*body), fenv, b)?;
+                assert_eq!(self.block_id, r.block_id);
 
+                self.block_id = new_block_id;
                 Ok(FlattenResult::new(
                     new_block_id,
                     r.link_id,
@@ -1732,6 +1771,7 @@ impl Flatten {
 
                 // Condition
                 let rc = self.flatten(block_id, *c, fenv, b)?;
+                assert_eq!(self.block_id, rc.block_id);
 
                 // THEN
                 let (then_block_id, then_scope_id) =
@@ -1757,6 +1797,7 @@ impl Flatten {
                 );
                 let _then_link_id = self.push_entry_with_link(entry);
                 let r = self.flatten(then_block_id, then_ast, fenv, b)?;
+                assert_eq!(self.block_id, r.block_id);
                 let then_ty = r.ty;
 
                 // ELSE
@@ -1781,6 +1822,7 @@ impl Flatten {
                 );
                 let _else_link_id = self.push_entry_with_link(entry);
                 let r = self.flatten(else_block_id, else_ast, fenv, b)?;
+                assert_eq!(self.block_id, r.block_id);
                 let else_ty = r.ty;
                 if else_ty != then_ty {
                     b.push_error(
@@ -1804,6 +1846,7 @@ impl Flatten {
                     VarDefinitionSpace::Reg,
                 );
                 let v = self.push_entry_with_link(entry);
+                self.block_id = rc.block_id;
                 Ok(FlattenResult::new(rc.block_id, Some(v), then_ty, false))
             }
 
@@ -1813,6 +1856,7 @@ impl Flatten {
                 let mut ty = AstType::Unit;
                 if let Some(expr) = maybe_expr {
                     let r = self.flatten(block_id, *expr, fenv, b)?;
+                    assert_eq!(self.block_id, r.block_id);
                     if let Some(v) = r.link_id {
                         v_block = r.block_id;
                         ty = r.ty.clone();
@@ -1840,6 +1884,7 @@ impl Flatten {
                     VarDefinitionSpace::Reg,
                 );
                 let v = self.push_entry_with_link(entry);
+                self.block_id = v_block;
                 Ok(FlattenResult::new(v_block, Some(v), ty, true))
             }
 
@@ -1865,6 +1910,7 @@ impl Flatten {
                     fenv,
                 );
 
+                self.block_id = current_block_id;
                 Ok(FlattenResult::new(
                     current_block_id,
                     None,
@@ -1878,6 +1924,7 @@ impl Flatten {
                 if let Some(target_block_id) = fenv.resolve_block_id(block.scope_id, label.into()) {
                     let link_id =
                         self.add_jump(block_id, target_block_id.into(), vec![], node.span_id);
+                    self.block_id = block_id;
                     Ok(FlattenResult::new(
                         block_id,
                         Some(link_id),
@@ -1923,8 +1970,10 @@ impl Flatten {
 
                 self.add_jump(block_id, loop_block_id.into(), vec![], node.span_id);
 
-                self.flatten(loop_block_id, *body, fenv, b)?;
+                let r = self.flatten(loop_block_id, *body, fenv, b)?;
+                assert_eq!(self.block_id, r.block_id);
 
+                self.block_id = block_id;
                 Ok(FlattenResult::new(block_id, None, AstType::Unit, true))
             }
 
@@ -1938,6 +1987,7 @@ impl Flatten {
                 if let Some(loop_scope) = fenv.get_loop_scope(scope_id, maybe_name) {
                     let link_id =
                         self.add_jump(block_id, loop_scope.start_block, vec![], node.span_id);
+                    self.block_id = block_id;
                     Ok(FlattenResult::new(
                         block_id,
                         Some(link_id),
@@ -1961,6 +2011,7 @@ impl Flatten {
                 if let Some(loop_scope) = fenv.get_loop_scope(scope_id, maybe_name) {
                     let link_id =
                         self.add_jump(block_id, loop_scope.next_block, vec![], node.span_id);
+                    self.block_id = block_id;
                     Ok(FlattenResult::new(
                         block_id,
                         Some(link_id),
@@ -1978,6 +2029,7 @@ impl Flatten {
                 let block = self.get_block(block_id);
                 if let Some(next) = block.next {
                     let link_id = self.add_jump(block_id, next.into(), vec![], node.span_id);
+                    self.block_id = block_id;
                     Ok(FlattenResult::new(
                         block_id,
                         Some(link_id),
@@ -1985,6 +2037,7 @@ impl Flatten {
                         true,
                     ))
                 } else {
+                    self.block_id = block_id;
                     Ok(FlattenResult::new(block_id, None, AstType::Unit, true))
                 }
             }
@@ -1994,6 +2047,7 @@ impl Flatten {
                 let mut current_block_id = block_id;
                 for d in dims {
                     let r = self.flatten(current_block_id, d, fenv, b)?;
+                    assert_eq!(self.block_id, r.block_id);
                     current_block_id = r.block_id;
                     link_ids.push(r.link_id.unwrap());
                 }
