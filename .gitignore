@@ -2,3 +2,5 @@ target
 old
 *.dot
 build
+.ninja_log
+build.ninja
