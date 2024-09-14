@@ -245,8 +245,8 @@ impl SpannedError {
     */
 }
 impl fmt::Display for SpannedError {
-    fn fmt(&self, _: &mut fmt::Formatter) -> fmt::Result {
-        Ok(())
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Error({:?})", self.pairs)
     }
 }
 impl error::Error for SpannedError {}

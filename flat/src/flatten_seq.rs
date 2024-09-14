@@ -70,7 +70,7 @@ impl SequenceReader {
         self.is_type(StackType::Block)
     }
 
-    fn is_loop(&self) -> bool {
+    fn _is_loop(&self) -> bool {
         self.is_type(StackType::Loop)
     }
 

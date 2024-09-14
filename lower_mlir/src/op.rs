@@ -58,9 +58,9 @@ impl<'c> MLIRGenerator<'c> {
             AstType::Ptr(_) => (Type::index(self.context), vec![]),
             AstType::Struct(_args) => {
                 //let types = args
-                    //.iter()
-                    //.map(|(_, a)| self.from_type(a).0)
-                    //.collect::<Vec<_>>();
+                //.iter()
+                //.map(|(_, a)| self.from_type(a).0)
+                //.collect::<Vec<_>>();
                 //let tuple_type = llvm::r#type::r#struct(self.context, &types, true);
                 let ptr_type = llvm::r#type::pointer(self.context, 0);
                 (
@@ -104,10 +104,10 @@ impl<'c> MLIRGenerator<'c> {
                 //let dummy = vec![self.from_type(&AstType::Int).0];
                 println!("args_ty: {}", ty);
                 //let fields = ty
-                    //.fields()
-                    //.iter()
-                    //.map(|(_, f)| self.from_type(f).0)
-                    //.collect::<Vec<_>>();
+                //.fields()
+                //.iter()
+                //.map(|(_, f)| self.from_type(f).0)
+                //.collect::<Vec<_>>();
                 //let tuple_type = llvm::r#type::r#struct(self.context, &fields, true);
                 let ptr_type = llvm::r#type::pointer(self.context, 0);
                 (ptr_type.into(), vec![])

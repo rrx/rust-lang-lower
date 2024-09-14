@@ -50,9 +50,9 @@ pub struct ScopeLayer {
     pub blocks: Vec<ValueId>,
     pub return_block: Option<BlockId>,
     pub next_block: Vec<ValueId>,
-    pub(crate) entry_block: Option<BlockId>,
+    //pub(crate) entry_block: Option<BlockId>,
     pub(crate) loop_block: Option<LoopScope>,
-    pub(crate) current_block: Option<BlockId>,
+    //pub(crate) current_block: Option<BlockId>,
     pub scope_type: ScopeType,
     pub lambdas: HashMap<StringLabel, TemplateId>,
 }
@@ -66,11 +66,11 @@ impl ScopeLayer {
             names: HashMap::new(),
             return_block: None,
             next_block: vec![],
-            entry_block: None,
+            //entry_block: None,
             loop_block: None,
             scope_type,
             lambdas: HashMap::new(),
-            current_block: None,
+            //current_block: None,
         }
     }
 
@@ -97,9 +97,9 @@ pub enum Successor {
 
 #[derive(Debug)]
 pub struct Block {
-    pub(crate) count: usize,
+    //pub(crate) count: usize,
     pub entry_id: Option<ValueId>,
-    pub(crate) last_value: Option<ValueId>,
+    //pub(crate) last_value: Option<ValueId>,
     pub(crate) terminator: Option<ValueId>,
     pub succ: HashSet<(Successor, CodeOffset)>,
     pub pred: HashSet<ValueId>,
@@ -108,9 +108,9 @@ pub struct Block {
 impl Block {
     pub fn new() -> Self {
         Self {
-            count: 0,
+            //count: 0,
             entry_id: None,
-            last_value: None,
+            //last_value: None,
             terminator: None,
             pred: HashSet::new(),
             succ: HashSet::new(),

@@ -83,7 +83,7 @@ impl SymIndex {
 pub struct OpCollection<'c> {
     block_id: ValueId,
     op_count: usize,
-    arg_count: usize,
+    //arg_count: usize,
     block: Option<Block<'c>>,
     ops: Vec<Operation<'c>>,
     complete: bool,
@@ -94,7 +94,7 @@ impl<'c> OpCollection<'c> {
         Self {
             block_id,
             op_count: 0,
-            arg_count: 0,
+            //arg_count: 0,
             block: Some(block),
             ops: vec![],
             complete: false,

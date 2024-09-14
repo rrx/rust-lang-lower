@@ -1,4 +1,3 @@
-use anyhow::Result;
 use compile_core::{AstType, LinkOptions, Span, SpanId, StringKey, VarDefinitionSpace};
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
@@ -59,7 +58,6 @@ pub struct FlattenModule {
     entries: Vec<ModuleEntry>,
     link_map: HashMap<LinkId, ValueId>,
     block_map: HashMap<BlockId, ValueId>,
-    function_entries: HashSet<BlockId>,
     pub(super) link: LinkOptions,
     pub(super) gblocks: BlockGraph,
 }
@@ -182,7 +180,6 @@ impl FlattenModule {
             link: LinkOptions::new(),
             link_map: HashMap::new(),
             block_map: HashMap::new(),
-            function_entries: HashSet::new(),
             gblocks: BlockGraph::new(),
         }
     }

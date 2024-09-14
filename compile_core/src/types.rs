@@ -147,10 +147,12 @@ impl AstType {
         }
     }
 
+    /*
     fn children(&self) -> Vec<&AstType> {
         match self {
             Self::Ptr(v) => vec![v],
             _ => unimplemented!(),
         }
     }
+    */
 }

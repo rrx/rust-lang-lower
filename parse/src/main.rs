@@ -18,10 +18,6 @@ struct Config {
     #[argh(switch, short = 'c')]
     compile: bool,
 
-    /// lower flag
-    #[argh(switch, short = 'l')]
-    lower: bool,
-
     /// exec flag
     #[argh(switch, short = 'x')]
     exec: bool,
@@ -34,17 +30,9 @@ struct Config {
     #[argh(switch, short = 'O')]
     optimize: bool,
 
-    /// pass flag
-    #[argh(switch, short = 'p', long = "enabled-passes")]
-    enablepasses: bool,
-
     /// output file
     #[argh(option, short = 'o')]
     output: Option<String>,
-
-    /// output file
-    #[argh(option, long = "mlir-output")]
-    mliroutput: Option<String>,
 
     /// compile file
     #[argh(option, short = 'i')]

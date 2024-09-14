@@ -26,11 +26,13 @@ impl VarDefinitionSpace {
     }
 }
 
+/*
 #[derive(Debug, Clone)]
 pub struct VarDefinition {
     ty: TypeId,
     space: VarDefinitionSpace,
 }
+*/
 
 #[derive(Debug, Clone)]
 pub enum Literal {
@@ -93,7 +95,7 @@ impl BinaryOperation {
 #[derive(Debug, Clone)]
 pub struct BinOpNode {
     pub node: BinaryOperation,
-    span_id: SpanId,
+    pub span_id: SpanId,
 }
 
 impl BinOpNode {

@@ -19,12 +19,6 @@ pub enum BlockifyError {
     NotFound(String),
 }
 
-#[derive(Debug)]
-pub struct LoopLayer {
-    next: ValueId,
-    restart: ValueId,
-}
-
 #[derive(Debug, Clone)]
 pub enum LCode {
     Label, // number of positional arguments, number of named arguments

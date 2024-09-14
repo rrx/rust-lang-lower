@@ -4,7 +4,7 @@ use std::path::Path;
 use anyhow::Result;
 
 use starlark_syntax::codemap;
-use starlark_syntax::codemap::CodeMap;
+//use starlark_syntax::codemap::CodeMap;
 use starlark_syntax::lexer;
 use starlark_syntax::syntax;
 use starlark_syntax::syntax::module::AstModuleFields;
@@ -26,17 +26,17 @@ pub enum DataType {
 
 #[derive(Debug, Clone)]
 pub struct Data {
-    ty: DataType,
+    _ty: DataType,
 }
 impl Data {
     pub fn new_global() -> Self {
         Data {
-            ty: DataType::Global,
+            _ty: DataType::Global,
         }
     }
     pub fn new_local() -> Self {
         Data {
-            ty: DataType::Local,
+            _ty: DataType::Local,
         }
     }
 }
@@ -44,35 +44,29 @@ impl Data {
 #[derive(Debug)]
 pub struct Layer {
     names: HashMap<StringKey, Data>,
-    loops: Vec<StringKey>,
 }
 impl Default for Layer {
     fn default() -> Self {
         Self {
             names: HashMap::new(),
-            loops: vec![],
         }
     }
 }
 
 #[derive(Debug)]
-pub struct Environment<'a> {
-    codemap: &'a CodeMap,
+pub struct Environment {
     in_func: Vec<bool>,
     layers: Vec<Layer>,
     file_id: usize,
-    unique: usize,
 }
 
-impl<'a> Environment<'a> {
-    pub fn new(codemap: &'a CodeMap, file_id: usize) -> Self {
+impl Environment {
+    pub fn new(file_id: usize) -> Self {
         let start = Layer::default();
         Self {
-            codemap,
             in_func: vec![],
             layers: vec![start],
             file_id,
-            unique: 0,
         }
     }
 
@@ -185,19 +179,6 @@ fn from_type<P: syntax::ast::AstPayload>(item: &syntax::ast::TypeExprP<P>) -> Op
     }
 }
 
-fn from_assign_target<P: syntax::ast::AstPayload>(
-    item: syntax::ast::AssignTargetP<P>,
-    b: &mut NodeBuilder,
-) -> ast::AssignTarget {
-    use syntax::ast::AssignTargetP;
-    match item {
-        AssignTargetP::Identifier(ident) => {
-            ast::AssignTarget::Identifier(b.labels.s(&ident.node.ident).into())
-        }
-        _ => unimplemented!(),
-    }
-}
-
 pub struct Parser {}
 
 impl Parser {
@@ -222,7 +203,7 @@ impl Parser {
         };
         //println!("m: {:?}", m);
         let (codemap, stmt, _dialect, _typecheck) = m.into_parts();
-        let mut env = Environment::new(&codemap, file_id);
+        let mut env = Environment::new(file_id);
         let mut seq = b.prelude();
         let span_id = env.span_id(codemap.full_span(), b);
         let ast: compile_core::AstNode = self.from_stmt(&stmt, &mut env, b)?;
@@ -233,7 +214,7 @@ impl Parser {
     fn from_parameter<'a, P: syntax::ast::AstPayload>(
         &mut self,
         item: &syntax::ast::AstParameterP<P>,
-        env: &mut Environment<'a>,
+        env: &mut Environment,
         b: &mut NodeBuilder,
     ) -> ast::ParameterNode {
         use syntax::ast::ParameterP;
@@ -245,18 +226,12 @@ impl Parser {
                     ty
                 } else {
                     Some(b.types.fresh_unknown())
-                    //unimplemented!();
-                    //Some(b.types.fresh_unknown())
-                    //Some(self.u.fresh_unknown())
-                    //d.push_diagnostic(env.error(item.span, "Missing Type"));
-                    //Some(AstType::Unit)
                 };
                 ast::ParameterNode {
                     name: b.labels.s(&ident.node.ident),
                     ty: b.types.s(&ty.unwrap()),
                     node: ast::Parameter::Normal,
                     span_id,
-                    //default: None,
                 }
             }
 
@@ -318,7 +293,7 @@ impl Parser {
     pub fn from_stmt<'a, P: syntax::ast::AstPayload>(
         &mut self,
         item: &syntax::ast::AstStmtP<P>,
-        env: &mut Environment<'a>,
+        env: &mut Environment,
         b: &mut NodeBuilder,
     ) -> Result<compile_core::AstNode> {
         use syntax::ast::StmtP;
@@ -491,6 +466,7 @@ impl Parser {
         }
     }
 
+    /*
     fn read_extra<P: syntax::ast::AstPayload>(
         &mut self,
         item: &syntax::ast::AstStmtP<P>,
@@ -537,6 +513,7 @@ impl Parser {
         }
         Ok(None)
     }
+    */
 
     fn from_expr<P: syntax::ast::AstPayload>(
         &mut self,
@@ -754,46 +731,4 @@ impl StarlarkParser {
 }
 
 #[cfg(test)]
-pub(crate) mod tests {
-    /*
-    use super::StarlarkParser;
-    use flat::{Flatten, FlattenEnvironment, FlattenModule, ICodeModule, ValueId};
-    use lower_mlir::Location;
-    use test_log::test;
-
-    fn run_test_flatten(filename: &str, expected: i32) {
-        let mut p: StarlarkParser = StarlarkParser::new();
-        let mut b = flat::NodeBuilder::new();
-        let result = p.parse(filename, &mut b, true);
-        b.spans.diagnostics_dump();
-        let ast = result.unwrap();
-
-        let context = lower_mlir::default_context();
-        let mut module = lower_mlir::Module::new(Location::unknown(&context));
-
-        let mut fenv = FlattenEnvironment::new();
-        let r = Flatten::flatten_module(ast, &mut fenv, &mut b);
-        b.spans.diagnostics_dump();
-        let f = r.unwrap();
-        b.spans.diagnostics_dump();
-        let m = FlattenModule::from_builder(f, &mut fenv, &mut b);
-        m.dump(&mut b);
-
-        let r = p.codegen(&m, ValueId::new(0), &context, &mut module, &mut b);
-        b.spans.diagnostics_dump();
-        r.unwrap();
-
-        let verify = module.as_operation().verify();
-        module.as_operation().dump();
-        assert!(verify);
-
-        let pass_manager = lower_mlir::default_pass_manager(&context, false);
-        pass_manager.run(&mut module).unwrap();
-        assert!(module.as_operation().verify());
-        module.as_operation().dump();
-
-        let r = p.exec_main(&mut module, "../target/debug/");
-        assert_eq!(expected, r);
-    }
-    */
-}
+pub(crate) mod tests {}

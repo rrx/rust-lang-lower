@@ -22,7 +22,7 @@ impl From<NodeIndex> for ScopeId {
 }
 
 pub struct FlattenEnvironment {
-    pub(crate) current_block: Option<BlockId>,
+    //pub(crate) current_block: Option<BlockId>,
     pub(crate) static_block: Option<BlockId>,
     pub(crate) static_scope: Option<ScopeId>,
     pub(crate) scopes: ScopeGraph,
@@ -31,7 +31,7 @@ pub struct FlattenEnvironment {
 impl FlattenEnvironment {
     pub fn new() -> Self {
         Self {
-            current_block: None,
+            //current_block: None,
             static_block: None,
             static_scope: None,
             scopes: ScopeGraph::new(),

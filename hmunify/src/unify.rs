@@ -163,7 +163,7 @@ impl TypeUnify {
         r
     }
 
-    fn add_var(&mut self, a: UType) -> IntKey {
+    fn _add_var(&mut self, a: UType) -> IntKey {
         match a.0 {
             AstType::Variable(v) => self.variables[v as usize],
             _ => self.ut.new_key(a),
