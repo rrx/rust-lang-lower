@@ -10,7 +10,7 @@ use flat::{
     BlockifyError, Flatten, FlattenEnvironment, FlattenModule, ICodeModule, NodeBuilder, ValueId,
 };
 use parse::starlark::StarlarkParser;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 #[derive(FromArgs, Debug)]
 /// Compile Stuff
@@ -63,7 +63,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         std::path::PathBuf::from(out_filename)
     } else {
         output_filename = &config.input;
-        let mut path = std::path::PathBuf::from(&config.input);
+        let mut path = PathBuf::from(&config.input);
         path.set_extension("");
         path
     };

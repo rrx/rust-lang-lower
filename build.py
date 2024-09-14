@@ -8,7 +8,7 @@ compiler_release = "target/x86_64-unknown-linux-gnu/release/parse"
 def generate_inputs(fp):
     input_directory = "tests/bin"
 
-    def gen_with_rule(kind, rule, compiler):
+    def gen_with_rule(kind, rule, compiler, defaults=False):
         outputs = []
         images = []
         for f in glob.glob(os.path.join(input_directory, "*.star")):
@@ -45,9 +45,13 @@ def generate_inputs(fp):
             fp.write(f"build {top}: phony {run_filename} {cfg_output_filename} {blocks_output_filename} {scopes_output_filename}\n")
             outputs.append(top)
 
+            if defaults:
+                fp.write(f"build {base}: phony {base}-{kind} | {compiler}\n")
+
         fp.write(f"build testbins-{kind}: phony | {compiler} {' '.join(outputs)}\n")
 
-    gen_with_rule("debug", "mlir-debug", compiler_debug)
+
+    gen_with_rule("debug", "mlir-debug", compiler_debug, defaults=True)
     gen_with_rule("release", "mlir-release", compiler_release)
 
     fp.write("default testbins-debug\n")

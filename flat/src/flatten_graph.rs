@@ -92,7 +92,7 @@ graph TD\n\
                 s.push_str(&format!("{}\n", line));
             }
         }
-        println!("{}", s);
+        //println!("{}", s);
         let mut f = File::create(filename)?;
         f.write(s.as_bytes())?;
         Ok(())
@@ -133,7 +133,7 @@ graph TD\n\
             )
         );
         println!("saved graph {:?}", filename);
-        println!("{}", s);
+        //println!("{}", s);
         std::fs::write(filename, s).unwrap();
     }
 }
