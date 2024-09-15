@@ -408,7 +408,7 @@ impl Flatten {
         TemplateId(offset as u32)
     }
 
-    pub fn get_template(&mut self, template_id: TemplateId) -> &Lambda {
+    pub fn get_template(&self, template_id: TemplateId) -> &Lambda {
         self.templates.get(template_id.index()).unwrap()
     }
 
@@ -1268,6 +1268,26 @@ impl Flatten {
         Ok(FlattenResult::new(block_id, Some(v_block), fun_ty, false))
     }
 
+    pub fn find_lambda(
+        &self,
+        block_id: BlockId,
+        name: StringKey,
+        fenv: &mut FlattenEnvironment,
+    ) -> Option<Lambda> {
+        match self.resolve_lambda_scope(block_id, name.into(), fenv) {
+            Some(scope_id) => {
+                let scope = fenv.get_scope(scope_id);
+                if let Some(template_id) = scope.lambdas.get(&name.into()).cloned() {
+                    let def = self.get_template(template_id).clone();
+                    Some(def)
+                } else {
+                    None
+                }
+            }
+            None => None,
+        }
+    }
+
     pub fn bake(
         &mut self,
         scope_id: ScopeId,
@@ -1278,6 +1298,25 @@ impl Flatten {
         b: &mut NB,
     ) -> Result<LinkId> {
         println!("bake: {:?}", (scope_id, block_id, b.labels.r(name.into())));
+        if let Some(def) = self.find_lambda(block_id, name, fenv) {
+            if let Some(ty) = maybe_ty {
+                let fun_ty = b.types.r(def.fun_type).clone();
+                if b.types.u.unify(&ty, &fun_ty).is_err() {
+                    let span_id = b.spans.get_span_unknown();
+
+                    b.push_error(
+                        &format!("Func Mismatch: caller: {}, def: {}", &ty, fun_ty),
+                        span_id,
+                    );
+                }
+            }
+            let r = self.bake_function(block_id, def, name, fenv, b)?;
+            Ok(r.link_id.unwrap())
+        } else {
+            let s = b.labels.r(name.into());
+            Err(Error::new(BlockifyError::NotFound(s)))
+        }
+        /*
         let scope = fenv.get_scope(scope_id);
         let label: StringLabel = name.into();
         if let Some(template_id) = scope.lambdas.get(&label).cloned() {
@@ -1299,6 +1338,7 @@ impl Flatten {
             let s = b.labels.r(label);
             Err(Error::new(BlockifyError::NotFound(s)))
         }
+        */
     }
 
     pub fn flatten(
@@ -1685,39 +1725,6 @@ impl Flatten {
                                 let def = self.get_template(*template_id).clone();
 
                                 if is_static {
-                                    /*
-                                    // if it's defined in static scope, just call it
-                                    let current_block_id = self.block_id;
-                                    let v_decl = if let Some(v_decl) =
-                                        self.resolve_name(block_id, *ident, fenv)
-                                    {
-                                        v_decl
-                                    } else {
-                                        // if it's not already baked, we need to do that here
-                                        self.block_id = fenv.static_block_id();
-
-                                        let v_decl = self.bake(
-                                            fenv.static_scope_id(),
-                                            fenv.static_block_id(),
-                                            *ident,
-                                            None,
-                                            fenv,
-                                            b,
-                                        )?;
-                                        v_decl
-                                    };
-
-                                    self.block_id = current_block_id;
-                                    return self.add_function_call(
-                                        block_id,
-                                        &def,
-                                        v_decl,
-                                        args,
-                                        node.span_id,
-                                        fenv,
-                                        b,
-                                    );
-                                    */
                                     return self.add_static_function_call_by_name(
                                         *ident,
                                         args,
