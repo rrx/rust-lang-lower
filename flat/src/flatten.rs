@@ -18,6 +18,7 @@ use compile_core::{
     StringKey,
     //UnaryOperation,
     VarDefinitionSpace,
+    BuiltinId
 };
 use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
@@ -921,13 +922,11 @@ impl Flatten {
 
         // Make call
         let code = LCode::Call(v_fun.into());
-        let ty = ret_ty;
-        //let (_, ty) = ret_ty.fields().get(0).unwrap().clone();
+        //let ty = ret_ty;
         let entry = CodeEntry::new(
             current_block_id,
             code,
-            //ret_ty.clone(),
-            ty.clone(),
+            ret_ty.clone(),
             None,
             span_id,
             VarDefinitionSpace::Default,
@@ -936,11 +935,58 @@ impl Flatten {
         Ok(FlattenResult::new(
             current_block_id,
             Some(link_id),
-            ty,
-            //ret_ty.fields().get(0).unwrap(),//clone(),
+            ret_ty,
             false,
         ))
     }
+
+    pub fn add_builtin_call(
+        &mut self,
+        block_id: BlockId,
+        def: &Lambda,
+        id: BuiltinId,
+        args: Vec<Argument>,
+        span_id: SpanId,
+        fenv: &mut FlattenEnvironment,
+        b: &mut NB,
+    ) -> Result<FlattenResult> {
+        let (current_block_id, ret_ty, values, _call_ty) =
+            self.add_function_args(block_id, &def, args, span_id, fenv, b)?;
+
+        // Add links
+        for (key, link_id, ty) in values {
+            let code = LCode::CallValue(link_id.into());
+            let entry = CodeEntry::new(
+                current_block_id,
+                code,
+                ty,
+                key,
+                span_id,
+                VarDefinitionSpace::Reg,
+            );
+            self.push_entry_with_link(entry);
+        }
+
+        let code = LCode::Builtin(id);
+        let entry = CodeEntry::new(
+            current_block_id,
+            code,
+            ret_ty.clone(),
+            None,
+            span_id,
+            VarDefinitionSpace::Default,
+        );
+        let link_id = self.push_entry_with_link(entry);
+        self.block_id = current_block_id;
+        Ok(FlattenResult::new(
+                current_block_id,
+                Some(link_id),
+                ret_ty,
+                false,
+        ))
+
+    }
+
 
     fn start_block(
         &mut self,
@@ -1274,34 +1320,6 @@ impl Flatten {
                             );
                             self.push_entry_with_link(entry);
                         }
-
-                        /*
-                        let mut values = vec![];
-                        for a in args.into_iter() {
-                            let expr = a.expr();
-                            self.block_id = current_block_id;
-                            let r = self.flatten(current_block_id, expr, fenv, b)?;
-                            assert_eq!(self.block_id, r.block_id);
-                            current_block_id = r.block_id;
-                            let link_id = r.link_id.unwrap();
-                            let entry = self.get_entry(link_id);
-                            values.push((link_id, entry.ty.clone()));
-                        }
-
-                        _args
-                        for (link_id, ty) in values {
-                            let code = LCode::CallValue(link_id.into());
-                            let entry = CodeEntry::new(
-                                current_block_id,
-                                code,
-                                ty,
-                                None,
-                                node.span_id,
-                                VarDefinitionSpace::Reg,
-                            );
-                            self.push_entry_with_link(entry);
-                        }
-                        */
 
                         let code = LCode::Builtin(id);
                         let entry = CodeEntry::new(
