@@ -264,19 +264,27 @@ impl Flatten {
             }
 
             let scope = fenv.get_scope(static_scope_id);
-            let keys = scope
-                .declarations
-                .iter()
-                .map(|s| s.0.clone())
-                .collect::<Vec<_>>();
-            for key in keys.iter() {
-                //let name = b.labels.s("main");
 
+            if true {
+                let name = b.labels.s("main");
                 // reset the block position before each function
                 f.block_id = top_block_id;
-                let _ = f.bake(static_scope_id, f.block_id, *key, fenv, b)?;
+                let _ = f.bake(static_scope_id, f.block_id, name, None, fenv, b)?;
+            } else {
+                let keys = scope
+                    .declarations
+                    .iter()
+                    .map(|s| s.0.clone())
+                    .collect::<Vec<_>>();
 
-                //assert_eq!(f.block_id, r.block_id);
+
+                for key in keys.iter() {
+                    // reset the block position before each function
+                    f.block_id = top_block_id;
+                    let _ = f.bake(static_scope_id, f.block_id, *key, None, fenv, b)?;
+
+                    //assert_eq!(f.block_id, r.block_id);
+                }
             }
 
             for (msg, span_id) in f.messages.drain(..) {
@@ -1213,6 +1221,7 @@ impl Flatten {
         scope_id: ScopeId,
         block_id: BlockId,
         name: StringKey,
+        ty: Option<AstType>,
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
     ) -> Result<()> {
@@ -1632,6 +1641,7 @@ impl Flatten {
                                             fenv.static_scope_id(),
                                             fenv.static_block_id(),
                                             *ident,
+                                            None,
                                             fenv,
                                             b,
                                         )?;
