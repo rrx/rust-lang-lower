@@ -262,9 +262,19 @@ impl Flatten {
                 //f.block_id = r.block_id;
             }
 
-            //let name = b.labels.s("main");
-            //let r = f.bake(static_scope_id, f.block_id, name, fenv, b)?;
-            //assert_eq!(f.block_id, r.block_id);
+            if false {
+                let scope = fenv.get_scope(static_scope_id);
+                let keys = scope
+                    .declarations
+                    .iter()
+                    .map(|s| s.0.clone())
+                    .collect::<Vec<_>>();
+                for key in keys.iter() {
+                    //let name = b.labels.s("main");
+                    let r = f.bake(static_scope_id, f.block_id, *key, fenv, b)?;
+                    //assert_eq!(f.block_id, r.block_id);
+                }
+            }
 
             for (msg, span_id) in f.messages.drain(..) {
                 b.push_error(&msg, span_id);
@@ -410,6 +420,7 @@ impl Flatten {
                         self.block_succ(self.block_id, new_block_id, Successor::BlockScope);
                         let scope = fenv.get_scope_mut(scope_id);
                         scope.block_labels.insert(key.into(), new_block_id);
+                        println!("creating block: {}", b.labels.r(key.into()));
                     }
                 }
                 _ => (),
@@ -995,7 +1006,6 @@ impl Flatten {
         &mut self,
         block_id: BlockId,
         scope_id: ScopeId,
-        //arg_ty: &AstType,
         block_ty: AstType,
         name: Option<StringKey>,
         span_id: SpanId,
@@ -1075,6 +1085,7 @@ impl Flatten {
         let (fun_block_id, fun_scope_id) =
             self.new_scope_and_block(ScopeType::Function, fenv.static_scope_id(), fenv);
         // create function block and return block
+        self.block_id = fun_block_id;
         let ret_block_id = self.new_block(fun_scope_id);
 
         // return in scope
@@ -1111,10 +1122,8 @@ impl Flatten {
         let r = self.flatten(fun_block_id, body, fenv, b)?;
         assert_eq!(self.block_id, r.block_id);
 
-        // push declaration into static block
-        //if let Some(decl_link_id) = self.resolve_name(self.block_id, name, fenv) {
+        // update declaration
         let entry = self.get_entry_mut(decl_link_id);
-        println!("E: {:?}", entry);
         if let LCode::DeclareFunction(_) = entry.code {
         } else {
             assert!(false);
@@ -1192,13 +1201,15 @@ impl Flatten {
         name: StringKey,
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
-    ) -> Result<FlattenResult> {
-        println!("bake: {:?}", (scope_id, block_id));
+    ) -> Result<()> {
+        println!("bake: {:?}", (scope_id, block_id, b.labels.r(name.into())));
         let scope = fenv.get_scope(scope_id);
         let label: StringLabel = name.into();
-        let template_id = scope.lambdas.get(&label).unwrap();
-        let def = self.get_template(*template_id).clone();
-        self.bake_function(block_id, def, name, fenv, b)
+        if let Some(template_id) = scope.lambdas.get(&label) {
+            let def = self.get_template(*template_id).clone();
+            self.bake_function(block_id, def, name, fenv, b)?;
+        }
+        Ok(())
     }
 
     pub fn flatten(
@@ -1221,6 +1232,8 @@ impl Flatten {
 
             Ast::Sequence(exprs) => {
                 self.block_id = block_id;
+                let block = self.get_block(block_id);
+                println!("sequence: {:?}", (block_id, block.scope_id));
                 self.flatten_sequence(exprs, span_id, fenv, b)
             }
 
@@ -1258,21 +1271,7 @@ impl Flatten {
                             self.bake_function(block_id, def, name, fenv, b)
                             //Ok(FlattenResult::new(block_id, None, fun_ty, false))
                         } else {
-                            /*
-                            let code = LCode::DeclareFunction(None);
-                            let entry = CodeEntry::new(
-                                block_id,
-                                code,
-                                fun_ty.clone(),
-                                Some(name),
-                                span_id,
-                                VarDefinitionSpace::Static,
-                            );
-                            let link_id = self.push_entry_with_link(entry);
-                            self.block_id = block_id;
-                            fenv.scope_define_declaration(fenv.static_scope_id(), name, link_id);
-                            */
-                            Ok(FlattenResult::new(block_id, Some(link_id), fun_ty, false))
+                            Ok(FlattenResult::new(block_id, None, fun_ty, false))
                         }
                     }
 
@@ -2079,6 +2078,11 @@ impl Flatten {
 
             Ast::ControlFlowMarker(ControlFlowMarker::Goto(label)) => {
                 // Goto is terminal
+                println!(
+                    "Searching for {} in scope {}",
+                    b.labels.r(label.into()),
+                    block.scope_id
+                );
                 if let Some(target_block_id) = fenv.resolve_block_id(block.scope_id, label.into()) {
                     let link_id =
                         self.add_jump(block_id, target_block_id.into(), vec![], node.span_id);
