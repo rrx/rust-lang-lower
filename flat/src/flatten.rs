@@ -277,7 +277,6 @@ impl Flatten {
                     .map(|s| s.0.clone())
                     .collect::<Vec<_>>();
 
-
                 for key in keys.iter() {
                     // reset the block position before each function
                     f.block_id = top_block_id;
@@ -1204,7 +1203,8 @@ impl Flatten {
         let ret_ty = if let Some(ty) = b.types.u.resolve(&ret_arg_type) {
             ty
         } else {
-            b.push_error(&format!("Return Type Must Resolve: {}", &ret_ty), span_id);
+            let s = b.labels.r(name.into());
+            b.push_error(&format!("[{}] Return Type Must Resolve: {}", &s, &ret_ty), span_id);
             //unreachable!()
             //assert!(false);
             ret_arg_type
@@ -1213,7 +1213,7 @@ impl Flatten {
         self.add_return_block(ret_block_id, fun_scope_id, ret_ty.clone(), span_id, fenv, b);
 
         self.block_id = block_id;
-        Ok(FlattenResult::new(block_id, None, fun_ty, false))
+        Ok(FlattenResult::new(block_id, Some(v_block), fun_ty, false))
     }
 
     pub fn bake(
@@ -1237,7 +1237,7 @@ impl Flatten {
 
                     b.push_error(
                         &format!("Func Mismatch: caller: {}, def: {}", &ty, fun_ty),
-                        span_id
+                        span_id,
                     );
                 }
             }
@@ -1634,7 +1634,6 @@ impl Flatten {
                                     // if it's defined in static scope, just call it
                                     if let Some(v_decl) = self.resolve_name(block_id, *ident, fenv)
                                     {
-                                        // TODO: if it's not already baked, we need to do that here
                                         return self.add_function_call(
                                             block_id,
                                             &def,
@@ -1645,6 +1644,7 @@ impl Flatten {
                                             b,
                                         );
                                     } else {
+                                        // if it's not already baked, we need to do that here
                                         let current_block_id = self.block_id;
                                         self.block_id = fenv.static_block_id();
 
