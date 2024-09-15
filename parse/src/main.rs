@@ -89,7 +89,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let mut f = r?;
 
-    f.bake_main(&mut fenv, &mut b)?;
+    let r = f.bake_main(&mut fenv, &mut b);
+    if r.is_err() {
+        b.spans.diagnostics_dump();
+    }
+    r?;
 
     //f.dump_blocks();
 

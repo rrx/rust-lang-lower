@@ -13,9 +13,9 @@ use crate::{
 
 #[derive(Error, Debug)]
 pub enum BlockifyError {
-    #[error("BlockifyError")]
+    #[error("BlockifyError: Invalid")]
     Invalid,
-    #[error("NotFound")]
+    #[error("BlockifyError: NotFound")]
     NotFound(String),
 }
 

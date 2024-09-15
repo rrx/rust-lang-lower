@@ -96,15 +96,24 @@ impl std::fmt::Display for AstType {
                 assert!(arg_ty.is_composite());
                 write!(
                     f,
-                    "fn({:?})->{}",
-                    arg_ty.fields().iter().map(|(_, ty)| ty).collect::<Vec<_>>(),
+                    "fn({})->{}",
+                    arg_ty, //.fields().iter().map(|(_, ty)| ty).collect::<Vec<_>>(),
                     ret_ty
                 )
             }
             Self::Struct(fields) => {
-                let mut t = f.debug_struct("Struct");
-                for (index, ty) in fields.iter().enumerate() {
-                    t.field(&format!("{}", index), ty);
+                //let mut t = f.debug_struct("Struct");
+                let mut t = f.debug_tuple("Struct");
+                for (_index, (_, ty)) in fields.iter().enumerate() {
+                    t.field(&format!("{}", ty));
+                    //t.field(&format!("{}", index), ty);
+                }
+                t.finish()
+            }
+            Self::Args(ty) => {
+                let mut t = f.debug_tuple("Args");
+                for (_, ty) in ty.fields().iter() {
+                    t.field(ty);
                 }
                 t.finish()
             }

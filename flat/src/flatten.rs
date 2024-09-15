@@ -1301,6 +1301,7 @@ impl Flatten {
                 }
             }
             let r = self.bake_function(block_id, def, name, fenv, b)?;
+            self.drain_diagnostics(b);
             Ok(r.link_id.unwrap())
         } else {
             let s = b.labels.r(name.into());
