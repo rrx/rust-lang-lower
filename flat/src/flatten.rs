@@ -1792,21 +1792,6 @@ impl Flatten {
                     fenv
                 );
 
-                /*
-                let code = LCode::Label;
-                let entry = CodeEntry::new(
-                    then_block_id,
-                    code,
-                    AstType::Func(
-                        AstType::Struct(vec![]).into(),
-                        ReturnType::Single(AstType::Unit).into(),
-                    ),
-                    Some(name),
-                    then_span_id,
-                    VarDefinitionSpace::Reg,
-                );
-                self.push_entry_with_link(entry);
-                */
                 self.block_id = then_block_id;
                 let r = self.flatten(then_block_id, NB::ensure_seq(*then_expr), fenv, b)?;
                 assert_eq!(self.block_id, r.block_id);
@@ -1826,11 +1811,11 @@ impl Flatten {
                     block.next = Some(v_next);
 
                     let name = b.labels.fresh_key("else");
-                    let code = LCode::Label;
-                    let entry = CodeEntry::new(
+
+                    self.start_block(
                         else_block_id,
-                        code,
-                        //AstType::Unit,
+                        else_scope_id,
+                        &AstType::Struct(vec![]),
                         AstType::Func(
                             AstType::Struct(vec![]).into(),
                             ReturnType::Single(AstType::Unit).into(),
@@ -1838,8 +1823,9 @@ impl Flatten {
                         Some(name),
                         else_span_id,
                         VarDefinitionSpace::Reg,
+                        fenv
                     );
-                    self.push_entry_with_link(entry);
+
                     self.block_id = else_block_id;
                     let r = self.flatten(else_block_id, NB::ensure_seq(*else_expr), fenv, b)?;
                     assert_eq!(self.block_id, r.block_id);
