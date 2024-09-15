@@ -1778,6 +1778,21 @@ impl Flatten {
                 block.next(v_next);
 
                 let name = b.labels.fresh_key("then");
+                self.start_block(
+                    then_block_id,
+                    then_scope_id,
+                    &AstType::Struct(vec![]),
+                    AstType::Func(
+                        AstType::Struct(vec![]).into(),
+                        ReturnType::Single(AstType::Unit).into(),
+                    ),
+                    Some(name),
+                    then_span_id,
+                    VarDefinitionSpace::Reg,
+                    fenv
+                );
+
+                /*
                 let code = LCode::Label;
                 let entry = CodeEntry::new(
                     then_block_id,
@@ -1791,6 +1806,7 @@ impl Flatten {
                     VarDefinitionSpace::Reg,
                 );
                 self.push_entry_with_link(entry);
+                */
                 self.block_id = then_block_id;
                 let r = self.flatten(then_block_id, NB::ensure_seq(*then_expr), fenv, b)?;
                 assert_eq!(self.block_id, r.block_id);
