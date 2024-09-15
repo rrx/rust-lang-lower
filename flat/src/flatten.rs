@@ -960,6 +960,15 @@ impl Flatten {
         let template_id = scope.lambdas.get(&name.into()).unwrap().clone();
         let def = self.get_template(template_id).clone();
 
+        let (current_block_id, ret_ty, values, call_ty) =
+            self.add_function_args(current_block_id, &def, args, span_id, fenv, b)?;
+
+        let func_ty = AstType::func(
+            call_ty.fields().iter().map(|(_, ty)| ty.clone()).collect(),
+            ret_ty.clone(),
+        );
+        println!("call ty: {}, {}", call_ty, func_ty);
+
         // if it's defined in static scope, just call it
         let v_decl = if let Some(v_decl) = self.resolve_name(current_block_id, name, fenv) {
             v_decl
@@ -971,46 +980,28 @@ impl Flatten {
         };
 
         self.block_id = current_block_id;
-        return self.add_function_call(current_block_id, &def, v_decl, args, span_id, fenv, b);
+        return self.add_function_call(current_block_id, v_decl, values, ret_ty, span_id);
     }
 
     pub fn add_function_call(
         &mut self,
         block_id: BlockId,
-        def: &Lambda,
         v_fun: LinkId,
-        args: Vec<Argument>,
+        values: Vec<(Option<StringKey>, LinkId, AstType)>,
+        ret_ty: AstType,
         span_id: SpanId,
-        fenv: &mut FlattenEnvironment,
-        b: &mut NB,
     ) -> Result<FlattenResult> {
-        let (current_block_id, ret_ty, values, call_ty) =
-            self.add_function_args(block_id, def, args, span_id, fenv, b)?;
-
-        let func_ty = AstType::func(
-            call_ty.fields().iter().map(|(_, ty)| ty.clone()).collect(),
-            ret_ty.clone(),
-        );
-        println!("call ty: {}, {}", call_ty, func_ty);
-
         // Add links
         for (key, link_id, ty) in values {
             let code = LCode::CallValue(link_id.into());
-            let entry = CodeEntry::new(
-                current_block_id,
-                code,
-                ty,
-                key,
-                span_id,
-                VarDefinitionSpace::Reg,
-            );
+            let entry = CodeEntry::new(block_id, code, ty, key, span_id, VarDefinitionSpace::Reg);
             self.push_entry_with_link(entry);
         }
 
         // Make call
         let code = LCode::Call(v_fun.into());
         let entry = CodeEntry::new(
-            current_block_id,
+            block_id,
             code,
             ret_ty.clone(),
             None,
@@ -1018,12 +1009,7 @@ impl Flatten {
             VarDefinitionSpace::Default,
         );
         let link_id = self.push_entry_with_link(entry);
-        Ok(FlattenResult::new(
-            current_block_id,
-            Some(link_id),
-            ret_ty,
-            false,
-        ))
+        Ok(FlattenResult::new(block_id, Some(link_id), ret_ty, false))
     }
 
     pub fn add_builtin_call(
