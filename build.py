@@ -22,11 +22,14 @@ def generate_inputs(fp):
             blocks_output_filename = os.path.join(target, f"{base}.blocks.png")
             scopes_input_filename = os.path.join(target, f"{base}.scopes.dot")
             scopes_output_filename = os.path.join(target, f"{base}.scopes.png")
+            out_input_filename = os.path.join(target, f"{base}.out.dot")
+            out_output_filename = os.path.join(target, f"{base}.out.png")
             cfg_input_filename = os.path.join(target, f"{base}.cfg.mmd")
             cfg_output_filename = os.path.join(target, f"{base}.cfg.png")
             fp.write(f"build {mlir_filename} | {blocks_input_filename} {scopes_input_filename} {cfg_input_filename}: {rule} {input_filename} | {compiler}\n")
 
-            if graphs:
+            if True or graphs:
+                fp.write(f"build {out_output_filename}: dot-png {out_input_filename}\n")
                 fp.write(f"build {blocks_output_filename}: dot-png {blocks_input_filename}\n")
                 fp.write(f"build {scopes_output_filename}: dot-png {scopes_input_filename}\n")
                 fp.write(f"build {cfg_output_filename}: mermaid-png {cfg_input_filename}\n")
