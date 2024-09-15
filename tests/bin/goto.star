@@ -3,26 +3,26 @@ def test1():
   q.goto("a")
   q.label("a")
   1
-  return 0
 
 # jump to empty label
-def test2() -> int:
+def test2():
   q.goto("a")
   q.label("a")
-  return 0
 
 # empty label
-def test3() -> int:
+def test3():
   q.label("a")
-  return 0
 
 # non-empty label
-def test4() -> int:
+def test4():
   q.label("a")
   1
-  return 0
 
-def main() -> int:
+# function with no return type
+def f():
+  1
+
+def main():
   q.goto("a")
   q.label("a")
   x = 0 if True else (0 if True else 1+1)

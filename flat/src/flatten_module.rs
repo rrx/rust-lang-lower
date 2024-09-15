@@ -257,14 +257,51 @@ impl FlattenModule {
     }
 
     pub fn type_inference(&mut self, b: &mut NB) {
+        for entry in self.entries.iter_mut() {
+            if let Some(ty) = b.types.u.resolve(&entry.ty) {
+                entry.ty = ty;
+            }
+        }
+
         for (index, entry) in self.entries.iter().enumerate() {
             let _v = ValueId::new(index as u32);
+            /*
+            if let LCode::Label = entry.code {
+                //let v_target = self.resolve_code_offset(v);
+                //let t = self.get_entry(v_target);
+                if let ty = b.types.u.resolve(&entry.ty) {
+                    if let AstType::Func(arg_ty, ret_ty) = entry.ty {
+                        let fields
+                        if arg_ty.fields() == vec![
+                        if *arg_ty == AstType::Struct(vec![(AstType::Unit]) {
+                        }
+                    }
+
+                    entry.ty = ty;
+                } else {
+                    b.push_error(&format!("Unresolved Type: {}", &entry.ty), entry.span_id);
+                }
+
+            } else
+                */
             if let LCode::Jump(target) = entry.code {
                 let v_target = self.resolve_code_offset(target);
                 let t = self.get_entry(v_target);
-                if b.types.u.unify(&entry.ty, &t.ty).is_err() {
+
+                let entry_ty = if let AstType::Func(arg, _ret) = &entry.ty {
+                    arg
+                } else {
+                    unreachable!()
+                };
+
+                let t_ty = if let AstType::Func(arg, _ret) = &t.ty {
+                    arg
+                } else {
+                    &t.ty
+                };
+                if b.types.u.unify(entry_ty, t_ty).is_err() {
                     b.push_error(
-                        &format!("Type Mismatch: {}, {}", &entry.ty, &t.ty),
+                        &format!("Jump Type Mismatch: from: {}, target: {}", entry_ty, t_ty),
                         entry.span_id,
                     );
                 }

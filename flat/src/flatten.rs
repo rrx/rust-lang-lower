@@ -419,8 +419,12 @@ impl Flatten {
                             self.start_block(
                                 new_block_id,
                                 scope_id,
-                                &AstType::Unit,
-                                AstType::Unit,
+                                //&AstType::Unit,
+                                &AstType::Struct(vec![]),
+                                AstType::Func(
+                                    AstType::Struct(vec![]).into(),
+                                    ReturnType::Single(AstType::Unit).into(),
+                                ),
                                 Some(b.labels.fresh_key("new")),
                                 next_node.span_id,
                                 VarDefinitionSpace::Default,
@@ -473,6 +477,7 @@ impl Flatten {
                 println!("adding term on block: {}, jump: {}", self.block_id, next);
                 let jump_link_id =
                     self.add_jump(self.block_id, next.into(), vec![], current_span_id);
+                //Return
                 link_id = Some(jump_link_id);
             } else {
                 println!("missing term on block: {}", self.block_id);
@@ -521,31 +526,34 @@ impl Flatten {
         &mut self,
         ret_block_id: BlockId,
         scope_id: ScopeId,
-        return_type: ReturnType,
+        //return_type: ReturnType,
+        return_type: AstType,
         span_id: SpanId,
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
-    ) {
+    ) -> AstType {
         let name = b.labels.fresh_key("ret");
-        let arg_types = match &return_type {
-            ReturnType::Single(ty) => match ty {
-                AstType::Unit => vec![],
-                _ => vec![(None, ty.clone())],
-            },
-            _ => unimplemented!(),
-        };
+        //let arg_ty = AstType::Struct(arg_types);
 
-        let arg_ty = AstType::Struct(arg_types);
         //let arg_ty = AstType::Struct(match &return_type {
         //AstType::Unit => vec![],
         //_ => vec![(None, return_type.clone())],
         //});
+        //
+        let arg_ty = if let AstType::Unit = return_type {
+            AstType::Struct(vec![])
+        } else {
+            AstType::Struct(vec![(None, return_type.clone())])
+        };
 
         let (_v_block, v_args) = self.start_block(
             ret_block_id,
             scope_id,
             &arg_ty,
-            AstType::Unit,
+            AstType::Func(
+                arg_ty.clone().into(),
+                ReturnType::Single(AstType::Unit).into(),
+            ),
             //arg_ty.clone(),
             Some(name),
             span_id,
@@ -553,6 +561,8 @@ impl Flatten {
             fenv,
         );
         self.add_return(ret_block_id, v_args, span_id);
+        return_type
+        //arg_ty
     }
 
     pub fn add_jump(
@@ -575,18 +585,29 @@ impl Flatten {
             self.push_entry_with_link(entry);
         }
 
+        //let target_block = self.get_block(target_block_id);
+        //target_block.
+
         if let CodeOffset::Block(target_block_id) = target_id {
             self.block_succ(block_id, target_block_id, Successor::Jump);
         } else {
             unimplemented!()
         }
 
+        let ty = AstType::Struct(
+            jump_args
+                .iter()
+                .map(|j| (j.0, j.2.clone()))
+                .collect::<Vec<_>>(),
+        );
+
         let code = LCode::Jump(target_id.into());
         let entry = CodeEntry::new(
             block_id,
             code,
+            AstType::Func(ty.into(), ReturnType::Single(AstType::Unit).into()),
             //AstType::Struct(jump_args.iter().map(|j| (j.0, j.2.clone())).collect::<Vec<_>>()),
-            AstType::Unit,
+            //AstType::Unit,
             None,
             span_id,
             VarDefinitionSpace::Reg,
@@ -858,7 +879,7 @@ impl Flatten {
 
         if b.types.u.unify(&func_arg, &call_ty).is_err() {
             b.push_error(
-                &format!("Type Mismatch: func: {}, call: {}", &func_arg, &call_ty),
+                &format!("5-Type Mismatch: func: {}, call: {}", &func_arg, &call_ty),
                 span_id,
             );
         }
@@ -930,6 +951,7 @@ impl Flatten {
         _mem: VarDefinitionSpace,
         fenv: &mut FlattenEnvironment,
     ) -> (LinkId, Vec<(LinkId, AstType)>) {
+        println!("start block: {:?}", (&arg_ty, &block_ty));
         let code = LCode::Label;
         let entry = CodeEntry::new(
             block_id,
@@ -940,6 +962,7 @@ impl Flatten {
             VarDefinitionSpace::Default,
         );
         let block_link_id = self.push_entry_with_link(entry);
+        assert!(arg_ty.is_composite());
 
         let mut v_args = vec![];
         for (i, (name, ty)) in arg_ty.fields().iter().enumerate() {
@@ -1077,6 +1100,7 @@ impl Flatten {
 
                             // write out return block
                             let fun_block = self.get_block(fun_block_id);
+
                             if fun_block.num_ret_args.len() > 1 {
                                 b.push_error(
                                     &format!("Return type mismatch: {:?}", &fun_block.num_ret_args),
@@ -1088,43 +1112,103 @@ impl Flatten {
                             //if fun_block.num_ret_args
 
                             if fun_block.num_ret_args.is_empty() {
+                                println!("match1: unit == {}", &ret_ty);
                                 if b.types.u.unify(&AstType::Unit, &ret_ty).is_err() {
                                     b.push_error(
                                         &format!(
-                                            "Type Mismatch: LHS: {}, RHS: {}",
+                                            "6-Type Mismatch: LHS: {}, RHS: {}",
                                             AstType::Unit,
                                             &ret_ty
                                         ),
                                         span_id,
                                     );
                                 }
+                            } else {
+                                let num_ret_args =
+                                    fun_block.num_ret_args.iter().next().unwrap().clone();
+                                if num_ret_args == 0 {
+                                    println!("match3: unit == {}", &ret_ty);
+                                    if b.types.u.unify(&AstType::Unit, &ret_ty).is_err() {
+                                        b.push_error(
+                                            &format!(
+                                                "1-Type Mismatch: LHS: {}, RHS: {}",
+                                                &ret_ty,
+                                                &AstType::Unit
+                                            ),
+                                            span_id,
+                                        );
+                                    }
+                                }
                             }
 
                             for ty in fun_block.ret_types.iter() {
+                                println!("match2: {} == {}", &ty, &ret_ty);
                                 if b.types.u.unify(ty, &ret_ty).is_err() {
                                     b.push_error(
-                                        &format!("Type Mismatch: LHS: {}, RHS: {}", ty, &ret_ty),
+                                        &format!("7-Type Mismatch: LHS: {}, RHS: {}", ty, &ret_ty),
                                         span_id,
                                     );
                                 }
                             }
 
-                            //let num_ret_args = fun_block.num_ret_args.iter().next().unwrap().clone();
-
                             //let ret_fields = ret_ty.fields();
-                            //println!("{:?}", (&ret_ty, &ret_fields, num_ret_args));
                             //assert!(ret_fields.len() == num_ret_args);
+                            println!("X: {:?}", (&b.labels.r(name.into()), &ret_ty,));
+                            let ret_ty = b.types.u.resolve(&ret_ty).unwrap();
+                            println!("X: {:?}", (&b.labels.r(name.into()), &ret_ty,));
+
+                            /*
+                            let ret_ty = match &return_type {
+                                ReturnType::Single(ty) => match ty {
+                                    //AstType::Variable(_) => {
+                                    //ty.clone()
+                                    //}
+                                    AstType::Unit => {
+                                        let arg_ty = AstType::Struct(vec![]);
+                                        arg_ty
+                                    }
+                                    _ => {
+                                        let arg_types = vec![(None, ty.clone())];
+                                        let arg_ty = AstType::Struct(arg_types);
+                                        arg_ty
+                                    }
+                                },
+                                _ => unimplemented!(),
+                            };
+                            */
 
                             //let (_, ty) = ret_fields.get(0).unwrap();
-                            self.add_return_block(
+                            let ret_arg_type = self.add_return_block(
                                 ret_block_id,
                                 fun_scope_id,
-                                ReturnType::Single(ret_ty.clone()),
+                                ret_ty.clone(),
+                                //ReturnType::Single(ret_ty.clone()),
+                                //ret_ty,
                                 //ret_ty.clone(),
                                 span_id,
                                 fenv,
                                 b,
                             );
+
+                            println!(
+                                "T: {:?}",
+                                (
+                                    &b.labels.r(name.into()),
+                                    &ret_arg_type,
+                                    &ret_ty,
+                                    //num_ret_args
+                                )
+                            );
+                            //let (_, single_ty) = ret_arg_type.fields().get(0).unwrap().clone();
+                            if b.types.u.unify(&ret_arg_type, &ret_ty).is_err() {
+                                b.push_error(
+                                    &format!(
+                                        "2-Type Mismatch: LHS: {}, RHS: {}",
+                                        &ret_arg_type, &ret_ty
+                                    ),
+                                    span_id,
+                                );
+                            }
 
                             self.block_id = block_id;
                             Ok(FlattenResult::new(block_id, Some(link_id), fun_ty, false))
@@ -1329,7 +1413,7 @@ impl Flatten {
                 //let y_ty = ry.ty;
                 if b.types.u.unify(&rx.ty, &ry.ty).is_err() {
                     b.push_error(
-                        &format!("Type Mismatch: LHS: {}, RHS: {}", &rx.ty, &ry.ty),
+                        &format!("3-Type Mismatch: LHS: {}, RHS: {}", &rx.ty, &ry.ty),
                         x_span_id,
                     );
                 }
@@ -1440,7 +1524,7 @@ impl Flatten {
                         let ty = self.get_type(v_decl).clone();
                         if ty != expr_ty {
                             b.push_error(
-                                &format!("Type Mismatch: {:?}, {:?}", ty, expr_ty),
+                                &format!("4-Type Mismatch: {:?}, {:?}", ty, expr_ty),
                                 node.span_id,
                             );
                         }
@@ -1583,7 +1667,10 @@ impl Flatten {
                                     next_block_id,
                                     scope_id,
                                     &next_arg_ty,
-                                    AstType::Unit,
+                                    AstType::Func(
+                                        next_arg_ty.clone().into(),
+                                        ReturnType::Single(AstType::Unit).into(),
+                                    ),
                                     Some(b.labels.fresh_key("cont")),
                                     span_id,
                                     VarDefinitionSpace::Reg,
@@ -1598,11 +1685,13 @@ impl Flatten {
                                 // Start lambda block
                                 let arg_type = b.types.r(def.arg_type).clone();
                                 let lambda_name = b.labels.fresh_key("lambda");
+                                let fun_ty = b.types.r(def.fun_type);
                                 self.start_block(
                                     fun_block_id,
                                     fun_scope_id,
                                     &arg_type,
-                                    AstType::Unit,
+                                    fun_ty.clone(),
+                                    //AstType::Unit,
                                     Some(lambda_name),
                                     span_id,
                                     VarDefinitionSpace::Reg,
@@ -1693,7 +1782,10 @@ impl Flatten {
                 let entry = CodeEntry::new(
                     then_block_id,
                     code,
-                    AstType::Unit,
+                    AstType::Func(
+                        AstType::Struct(vec![]).into(),
+                        ReturnType::Single(AstType::Unit).into(),
+                    ),
                     Some(name),
                     then_span_id,
                     VarDefinitionSpace::Reg,
@@ -1722,7 +1814,11 @@ impl Flatten {
                     let entry = CodeEntry::new(
                         else_block_id,
                         code,
-                        AstType::Unit,
+                        //AstType::Unit,
+                        AstType::Func(
+                            AstType::Struct(vec![]).into(),
+                            ReturnType::Single(AstType::Unit).into(),
+                        ),
                         Some(name),
                         else_span_id,
                         VarDefinitionSpace::Reg,
@@ -2013,7 +2109,10 @@ impl Flatten {
                 let entry = CodeEntry::new(
                     loop_block_id,
                     code,
-                    AstType::Unit,
+                    AstType::Func(
+                        AstType::Struct(vec![]).into(),
+                        ReturnType::Single(AstType::Unit).into(),
+                    ),
                     Some(name),
                     body.span_id,
                     VarDefinitionSpace::Reg,

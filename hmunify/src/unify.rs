@@ -255,11 +255,14 @@ impl TypeUnify {
             AstType::Ptr(v) => self.resolve(v).map(|x| AstType::Ptr(x.into())),
             AstType::Struct(vs) => {
                 let size = vs.len();
-                let vs2 = vs
+                let mut vs2 = vs
                     .into_iter()
                     .filter_map(|(_, v)| self.resolve(v).map(|x| (None, x.into())))
                     .collect::<Vec<_>>();
                 if vs2.len() == size {
+                    if vs2 == vec![(None, AstType::Unit)] {
+                        vs2 = vec![];
+                    }
                     Some(AstType::Struct(vs2))
                 } else {
                     None
@@ -271,11 +274,14 @@ impl TypeUnify {
                     if let Some(ret) = self.resolve(ret) {
                         let fields = args.fields();
                         let size = fields.len();
-                        let args2 = fields
+                        let mut args2 = fields
                             .into_iter()
                             .filter_map(|(_, v)| self.resolve(&v).map(|x| x.into()))
                             .collect::<Vec<_>>();
                         if args2.len() == size {
+                            if args2 == vec![AstType::Unit] {
+                                args2 = vec![];
+                            }
                             Some(AstType::func(args2, ret.into()))
                         } else {
                             None

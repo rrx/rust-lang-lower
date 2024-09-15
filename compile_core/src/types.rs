@@ -93,7 +93,13 @@ impl std::fmt::Display for AstType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Func(arg_ty, ret_ty) => {
-                write!(f, "Func({}, {})", arg_ty, ret_ty)
+                assert!(arg_ty.is_composite());
+                write!(
+                    f,
+                    "fn({:?})->{}",
+                    arg_ty.fields().iter().map(|(_, ty)| ty).collect::<Vec<_>>(),
+                    ret_ty
+                )
             }
             Self::Struct(fields) => {
                 let mut t = f.debug_struct("Struct");
