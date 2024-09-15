@@ -100,6 +100,22 @@ impl ICodeModule for FlattenModule {
     }
 
     fn get_block_successors(&self, entry_id: ValueId) -> Vec<(Successor, CodeOffset)> {
+        for (index, entry) in self.entries.iter().enumerate() {
+            println!(
+                "entry: {}: {:?}",
+                index,
+                (entry.block_id, &entry.code, &entry.name)
+            );
+        }
+        for index in self.gblocks.node_indices() {
+            let n = self.gblocks.node_weight(index).unwrap();
+            let block_id: BlockId = index.into();
+            println!("block: {}: {:?}", block_id, n.links.len());
+        }
+        for (k, v) in self.block_map.iter() {
+            println!("block_map: {}: {}", k, v);
+        }
+        println!("g: {:?}", self.gblocks);
         let entry = self.get_entry(entry_id);
         let block_id = entry.block_id;
         let index = NodeIndex::new(block_id.index());
@@ -128,7 +144,10 @@ impl ICodeModule for FlattenModule {
 
     fn get_entry_id(&self, value_id: ValueId) -> ValueId {
         let block_id = self.get_entry(value_id).block_id;
-        *self.block_map.get(&block_id).unwrap()
+        *self
+            .block_map
+            .get(&block_id)
+            .expect(&format!("Unable to find block {}", block_id))
     }
 
     fn is_in_static_scope(&self, offset: CodeOffset) -> bool {
@@ -186,6 +205,10 @@ impl FlattenModule {
             block_map: HashMap::new(),
             gblocks: BlockGraph::new(),
         }
+    }
+
+    pub fn dump(&self, fenv: &FlattenEnvironment, b: &NB) {
+        petgraph::dot::Dot::with_config(&fenv.scopes, &[petgraph::dot::Config::EdgeNoLabel]);
     }
 
     pub fn from_builder(flatten: Flatten, fenv: &FlattenEnvironment, b: &mut NB) -> Self {
@@ -405,6 +428,7 @@ impl FlattenModule {
         let mem = self.get_mem(v.into());
         //let next = self.get_next(v).unwrap_or(v).index();
         //let prev = self.get_prev(v).unwrap_or(v).index();
+        println!("row: {}, {:?}", v, (self.entries.len()));
         let entry_id = self.get_entry_id(v);
         let block_id = entry.block_id;
         let block = self.gblocks.node_weight(block_id.into()).unwrap();

@@ -29,7 +29,7 @@ impl From<&StringKey> for StringLabel {
 
 pub struct LabelBuilder {
     unique_count: usize,
-    pool: StringPool,
+    pub pool: StringPool,
 }
 
 impl LabelBuilder {

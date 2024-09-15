@@ -89,6 +89,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let f = r?;
     let m = FlattenModule::from_builder(f, &mut fenv, &mut b);
+    b.labels.pool.dump();
+    m.dump(&fenv, &b);
 
     let table_path = make_path(&output_filename, "table.txt");
     m.dump_code_table(&table_path, &mut b);
@@ -104,6 +106,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     flat::flatten::scope_graph(scopes_path.clone().to_str().unwrap(), &fenv);
 
     b.spans.diagnostics_dump();
+
+    let table_path = make_path(&output_filename, "table.txt");
+    m.dump_code_table(&table_path, &mut b);
+
     if b.spans.has_errors {
         return Err(anyhow::Error::new(BlockifyError::Invalid).into());
     }

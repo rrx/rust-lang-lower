@@ -45,6 +45,7 @@ impl TemplateId {
 #[derive(Debug)]
 pub struct ScopeLayer {
     pub names: HashMap<StringKey, LinkId>,
+    pub declarations: HashMap<StringKey, LinkId>,
     pub labels: HashMap<StringLabel, ValueId>,
     pub(crate) block_labels: HashMap<StringLabel, BlockId>,
     pub blocks: Vec<ValueId>,
@@ -65,6 +66,7 @@ impl ScopeLayer {
             block_labels: HashMap::new(),
             blocks: vec![],
             names: HashMap::new(),
+            declarations: HashMap::new(),
             entry_block: None,
             return_block: None,
             next_block: vec![],

@@ -195,6 +195,23 @@ impl Flatten {
         None
     }
 
+    pub fn resolve_declaration(
+        &self,
+        block_id: BlockId,
+        name: StringKey,
+        fenv: &FlattenEnvironment,
+    ) -> Option<LinkId> {
+        // resolve scope through the tree, starting at the current scope
+        let block = self.get_block(block_id);
+        for scope_id in fenv.walk_scopes(block.scope_id) {
+            let scope = fenv.get_scope(scope_id);
+            if let Some(data) = scope.declarations.get(&name) {
+                return Some(data.clone());
+            }
+        }
+        None
+    }
+
     pub fn resolve_lambda_scope(
         &self,
         block_id: BlockId,
@@ -244,6 +261,11 @@ impl Flatten {
                 assert_eq!(f.block_id, r.block_id);
                 //f.block_id = r.block_id;
             }
+
+            //let name = b.labels.s("main");
+            //let r = f.bake(static_scope_id, f.block_id, name, fenv, b)?;
+            //assert_eq!(f.block_id, r.block_id);
+
             for (msg, span_id) in f.messages.drain(..) {
                 b.push_error(&msg, span_id);
             }
@@ -1024,6 +1046,172 @@ impl Flatten {
         scope.lambdas.insert(name.into(), template_id);
     }
 
+    fn bake_function(
+        &mut self,
+        block_id: BlockId,
+        def: Lambda,
+        name: StringKey,
+        fenv: &mut FlattenEnvironment,
+        b: &mut NB,
+    ) -> Result<FlattenResult> {
+        //let static_scope = fenv.get_scope(fenv.static_scope_id());
+        //static_scope.
+
+        let decl_link_id =
+            if let Some(decl_link_id) = self.resolve_declaration(self.block_id, name, fenv) {
+                decl_link_id
+            } else {
+                unreachable!()
+            };
+
+        let ret_ty = b.types.r(def.return_type).clone();
+        let fun_ty = def_to_type(&def, b);
+        let body = def.body.unwrap();
+        let span_id = body.span_id;
+        // create function scope
+        let (fun_block_id, fun_scope_id) =
+            self.new_scope_and_block(ScopeType::Function, fenv.static_scope_id(), fenv);
+        // create function block and return block
+        let ret_block_id = self.new_block(fun_scope_id);
+
+        // return in scope
+        let fun_scope = fenv.get_scope_mut(fun_scope_id);
+        fun_scope.return_block = Some(ret_block_id);
+
+        // next in scope
+        let fun_block = self.get_block_mut(fun_block_id);
+        fun_block.next = Some(ret_block_id);
+
+        // block graph
+        self.block_succ(
+            fenv.static_block_id(),
+            fun_block_id,
+            Successor::FunctionDeclaration,
+        );
+        self.block_succ(fun_block_id, ret_block_id, Successor::BlockScope);
+        //let arg_type = b.types.r(def.arg_type).clone();
+        let (v_block, _) = self.start_block(
+            fun_block_id,
+            fun_scope_id,
+            //&arg_type,
+            fun_ty.clone(),
+            Some(name),
+            span_id,
+            VarDefinitionSpace::Static,
+            fenv,
+        );
+        // add the name to static scope
+        // do this early for recursive functions
+        fenv.scope_define(fenv.static_scope_id(), name, v_block);
+
+        let body = jump_if_needed(*body, b);
+        self.block_id = fun_block_id;
+        let r = self.flatten(fun_block_id, body, fenv, b)?;
+        assert_eq!(self.block_id, r.block_id);
+
+        // push declaration into static block
+        //if let Some(decl_link_id) = self.resolve_name(self.block_id, name, fenv) {
+        let entry = self.get_entry_mut(decl_link_id);
+        println!("E: {:?}", entry);
+        if let LCode::DeclareFunction(_) = entry.code {
+        } else {
+            assert!(false);
+        }
+        let code = LCode::DeclareFunction(Some(fun_block_id));
+        entry.code = code;
+
+        /*
+        let code = LCode::DeclareFunction(Some(fun_block_id));
+        let entry = CodeEntry::new(
+            fenv.static_block_id(),
+            code,
+            fun_ty.clone(),
+            Some(name),
+            span_id,
+            VarDefinitionSpace::Static,
+        );
+        let link_id = self.push_entry_with_link(entry);
+        */
+
+        // write out return block
+        let fun_block = self.get_block(fun_block_id);
+
+        if fun_block.num_ret_args.len() > 1 {
+            b.push_error(
+                &format!("Return type mismatch: {:?}", &fun_block.num_ret_args),
+                span_id,
+            );
+        }
+
+        if fun_block.num_ret_args.is_empty() {
+            println!("match1: unit == {}", &ret_ty);
+            if b.types.u.unify(&AstType::Unit, &ret_ty).is_err() {
+                b.push_error(
+                    &format!("6-Type Mismatch: LHS: {}, RHS: {}", AstType::Unit, &ret_ty),
+                    span_id,
+                );
+            }
+        } else {
+            let num_ret_args = fun_block.num_ret_args.iter().next().unwrap().clone();
+            if num_ret_args == 0 {
+                println!("match3: unit == {}", &ret_ty);
+                if b.types.u.unify(&AstType::Unit, &ret_ty).is_err() {
+                    b.push_error(
+                        &format!("1-Type Mismatch: LHS: {}, RHS: {}", &ret_ty, &AstType::Unit),
+                        span_id,
+                    );
+                }
+            }
+        }
+
+        for ty in fun_block.ret_types.iter() {
+            println!("match2: {} == {}", &ty, &ret_ty);
+            if b.types.u.unify(ty, &ret_ty).is_err() {
+                b.push_error(
+                    &format!("7-Type Mismatch: LHS: {}, RHS: {}", ty, &ret_ty),
+                    span_id,
+                );
+            }
+        }
+
+        let ret_arg_type = if let AstType::Unit = &ret_ty {
+            AstType::Struct(vec![])
+        } else {
+            AstType::Struct(vec![(None, ret_ty.clone())])
+        };
+
+        println!("R: {:?}", (&ret_ty, &fun_block));
+        let ret_ty = if let Some(ty) = b.types.u.resolve(&ret_arg_type) {
+            ty
+        } else {
+            b.push_error(&format!("Return Type Must Resolve: {}", &ret_ty), span_id);
+            //unreachable!()
+            //assert!(false);
+            ret_arg_type
+        };
+
+        self.add_return_block(ret_block_id, fun_scope_id, ret_ty.clone(), span_id, fenv, b);
+
+        self.block_id = block_id;
+        Ok(FlattenResult::new(block_id, None, fun_ty, false))
+    }
+
+    pub fn bake(
+        &mut self,
+        scope_id: ScopeId,
+        block_id: BlockId,
+        name: StringKey,
+        fenv: &mut FlattenEnvironment,
+        b: &mut NB,
+    ) -> Result<FlattenResult> {
+        println!("bake: {:?}", (scope_id, block_id));
+        let scope = fenv.get_scope(scope_id);
+        let label: StringLabel = name.into();
+        let template_id = scope.lambdas.get(&label).unwrap();
+        let def = self.get_template(*template_id).clone();
+        self.bake_function(block_id, def, name, fenv, b)
+    }
+
     pub fn flatten(
         &mut self,
         block_id: BlockId,
@@ -1050,7 +1238,7 @@ impl Flatten {
             Ast::Global(name, expr) => {
                 match expr.node {
                     Ast::Lambda(def) => {
-                        let ret_ty = b.types.r(def.return_type).clone();
+                        //let ret_ty = b.types.r(def.return_type).clone();
                         let fun_ty = def_to_type(&def, b);
 
                         // save template for later use
@@ -1064,145 +1252,24 @@ impl Flatten {
                             self.save_template(block_id, &name, &def, fenv);
                         }
 
-                        if let Some(body) = def.body {
-                            let span_id = body.span_id;
+                        let code = LCode::DeclareFunction(None);
+                        let entry = CodeEntry::new(
+                            block_id,
+                            code,
+                            fun_ty.clone(),
+                            Some(name),
+                            span_id,
+                            VarDefinitionSpace::Static,
+                        );
+                        let link_id = self.push_entry_with_link(entry);
+                        self.block_id = block_id;
+                        fenv.scope_define_declaration(fenv.static_scope_id(), name, link_id);
 
-                            // create function scope
-                            let (fun_block_id, fun_scope_id) = self.new_scope_and_block(
-                                ScopeType::Function,
-                                fenv.static_scope_id(),
-                                fenv,
-                            );
-                            // create function block and return block
-                            let ret_block_id = self.new_block(fun_scope_id);
-
-                            // return in scope
-                            let fun_scope = fenv.get_scope_mut(fun_scope_id);
-                            fun_scope.return_block = Some(ret_block_id);
-
-                            // next in scope
-                            let fun_block = self.get_block_mut(fun_block_id);
-                            fun_block.next = Some(ret_block_id);
-
-                            // block graph
-                            self.block_succ(
-                                fenv.static_block_id(),
-                                fun_block_id,
-                                Successor::FunctionDeclaration,
-                            );
-                            self.block_succ(fun_block_id, ret_block_id, Successor::BlockScope);
-                            //let arg_type = b.types.r(def.arg_type).clone();
-                            let (v_block, _) = self.start_block(
-                                fun_block_id,
-                                fun_scope_id,
-                                //&arg_type,
-                                fun_ty.clone(),
-                                Some(name),
-                                span_id,
-                                VarDefinitionSpace::Static,
-                                fenv,
-                            );
-                            // add the name to static scope
-                            // do this early for recursive functions
-                            fenv.scope_define(fenv.static_scope_id(), name, v_block);
-
-                            let body = jump_if_needed(*body, b);
-                            self.block_id = fun_block_id;
-                            let r = self.flatten(fun_block_id, body, fenv, b)?;
-                            assert_eq!(self.block_id, r.block_id);
-
-                            // push declaration into static block
-                            let code = LCode::DeclareFunction(Some(fun_block_id));
-                            let entry = CodeEntry::new(
-                                fenv.static_block_id(),
-                                code,
-                                fun_ty.clone(),
-                                Some(name),
-                                span_id,
-                                VarDefinitionSpace::Static,
-                            );
-                            let link_id = self.push_entry_with_link(entry);
-
-                            // write out return block
-                            let fun_block = self.get_block(fun_block_id);
-
-                            if fun_block.num_ret_args.len() > 1 {
-                                b.push_error(
-                                    &format!("Return type mismatch: {:?}", &fun_block.num_ret_args),
-                                    span_id,
-                                );
-                            }
-
-                            if fun_block.num_ret_args.is_empty() {
-                                println!("match1: unit == {}", &ret_ty);
-                                if b.types.u.unify(&AstType::Unit, &ret_ty).is_err() {
-                                    b.push_error(
-                                        &format!(
-                                            "6-Type Mismatch: LHS: {}, RHS: {}",
-                                            AstType::Unit,
-                                            &ret_ty
-                                        ),
-                                        span_id,
-                                    );
-                                }
-                            } else {
-                                let num_ret_args =
-                                    fun_block.num_ret_args.iter().next().unwrap().clone();
-                                if num_ret_args == 0 {
-                                    println!("match3: unit == {}", &ret_ty);
-                                    if b.types.u.unify(&AstType::Unit, &ret_ty).is_err() {
-                                        b.push_error(
-                                            &format!(
-                                                "1-Type Mismatch: LHS: {}, RHS: {}",
-                                                &ret_ty,
-                                                &AstType::Unit
-                                            ),
-                                            span_id,
-                                        );
-                                    }
-                                }
-                            }
-
-                            for ty in fun_block.ret_types.iter() {
-                                println!("match2: {} == {}", &ty, &ret_ty);
-                                if b.types.u.unify(ty, &ret_ty).is_err() {
-                                    b.push_error(
-                                        &format!("7-Type Mismatch: LHS: {}, RHS: {}", ty, &ret_ty),
-                                        span_id,
-                                    );
-                                }
-                            }
-
-                            let ret_arg_type = if let AstType::Unit = &ret_ty {
-                                AstType::Struct(vec![])
-                            } else {
-                                AstType::Struct(vec![(None, ret_ty.clone())])
-                            };
-
-                            println!("R: {:?}", (&ret_ty, &fun_block));
-                            let ret_ty = if let Some(ty) = b.types.u.resolve(&ret_arg_type) {
-                                ty
-                            } else {
-                                b.push_error(
-                                    &format!("Return Type Must Resolve: {}", &ret_ty),
-                                    span_id,
-                                );
-                                unreachable!()
-                                //assert!(false);
-                            };
-
-                            self.add_return_block(
-                                ret_block_id,
-                                fun_scope_id,
-                                ret_ty.clone(),
-                                span_id,
-                                fenv,
-                                b,
-                            );
-
-                            self.block_id = block_id;
-                            Ok(FlattenResult::new(block_id, Some(link_id), fun_ty, false))
+                        if let Some(_body) = &def.body {
+                            self.bake_function(block_id, def, name, fenv, b)
+                            //Ok(FlattenResult::new(block_id, None, fun_ty, false))
                         } else {
+                            /*
                             let code = LCode::DeclareFunction(None);
                             let entry = CodeEntry::new(
                                 block_id,
@@ -1214,6 +1281,8 @@ impl Flatten {
                             );
                             let link_id = self.push_entry_with_link(entry);
                             self.block_id = block_id;
+                            fenv.scope_define_declaration(fenv.static_scope_id(), name, link_id);
+                            */
                             Ok(FlattenResult::new(block_id, Some(link_id), fun_ty, false))
                         }
                     }
@@ -1294,6 +1363,16 @@ impl Flatten {
             }
 
             Ast::Return(maybe_expr) => {
+                self.dump_scope(block_id, fenv, b);
+                println!(
+                    "{:?}",
+                    petgraph::dot::Dot::with_config(
+                        &fenv.scopes,
+                        &[petgraph::dot::Config::EdgeNoLabel]
+                    )
+                );
+
+                let block = self.get_block(block_id);
                 let fun_scope_id = fenv
                     .find_nearest_scope(block.scope_id, ScopeType::Function)
                     .unwrap();

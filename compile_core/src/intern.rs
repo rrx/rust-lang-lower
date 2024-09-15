@@ -7,7 +7,7 @@ pub trait InternKey {
     fn new(index: usize) -> Self;
 }
 
-pub trait InternValue: Eq + PartialEq + Hash {}
+pub trait InternValue: Eq + PartialEq + Hash + Debug {}
 
 #[derive(Debug)]
 pub struct InternPool<K, V> {
@@ -35,6 +35,12 @@ impl<K: InternKey, V: InternValue> InternPool<K, V> {
 
     pub fn resolve(&self, k: &K) -> &V {
         self.h.get_index(k.index()).unwrap()
+    }
+
+    pub fn dump(&self) {
+        for v in self.h.iter() {
+            println!("v: {:?}", v);
+        }
     }
 }
 

@@ -27,6 +27,11 @@ def main():
   q.label("a")
   x = 0 if True else (0 if True else 1+1)
   x = 0
+  test1()
+  test2()
+  test3()
+  test4()
+  f()
   q.goto("ret2")
   q.label("ret2")
   return 0

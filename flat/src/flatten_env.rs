@@ -76,6 +76,11 @@ impl FlattenEnvironment {
         scope.names.insert(name, v);
     }
 
+    pub fn scope_define_declaration(&mut self, scope_id: ScopeId, name: StringKey, v: LinkId) {
+        let scope = self.get_scope_mut(scope_id);
+        scope.declarations.insert(name, v);
+    }
+
     pub fn find_nearest_scope(&self, scope_id: ScopeId, scope_type: ScopeType) -> Option<ScopeId> {
         for scope_id in self.walk_scopes(scope_id) {
             let scope = self.get_scope(scope_id);
