@@ -296,6 +296,35 @@ impl Flatten {
         }
     }
 
+    pub fn bake_main(&mut self, fenv: &mut FlattenEnvironment, b: &mut NB) -> Result<LinkId> {
+        let name = b.labels.s("main");
+        let scope_id = fenv.static_scope_id();
+        let block_id = fenv.static_block_id();
+        // reset the block position before each function
+        self.block_id = block_id;
+        self.bake(scope_id, block_id, name, None, fenv, b)
+    }
+
+    pub fn bake_all(&mut self, fenv: &mut FlattenEnvironment, b: &mut NB) -> Result<Vec<LinkId>> {
+        let block_id = fenv.static_block_id();
+        let scope_id = fenv.static_scope_id();
+        let scope = fenv.get_scope(scope_id);
+        let keys = scope
+            .declarations
+            .iter()
+            .map(|s| s.0.clone())
+            .collect::<Vec<_>>();
+
+        let mut links = vec![];
+        for key in keys.iter() {
+            // reset the block position before each function
+            self.block_id = block_id;
+            let link_id = self.bake(scope_id, block_id, *key, None, fenv, b)?;
+            links.push(link_id);
+        }
+        Ok(links)
+    }
+
     fn _push(&mut self, mut entry: CodeEntry) -> LinkId {
         let index = self.entries.len();
         let link_id = LinkId(index as u32);
@@ -1637,20 +1666,13 @@ impl Flatten {
 
                                 if is_static {
                                     // if it's defined in static scope, just call it
-                                    if let Some(v_decl) = self.resolve_name(block_id, *ident, fenv)
+                                    let current_block_id = self.block_id;
+                                    let v_decl = if let Some(v_decl) =
+                                        self.resolve_name(block_id, *ident, fenv)
                                     {
-                                        return self.add_function_call(
-                                            block_id,
-                                            &def,
-                                            v_decl,
-                                            args,
-                                            node.span_id,
-                                            fenv,
-                                            b,
-                                        );
+                                        v_decl
                                     } else {
                                         // if it's not already baked, we need to do that here
-                                        let current_block_id = self.block_id;
                                         self.block_id = fenv.static_block_id();
 
                                         let v_decl = self.bake(
@@ -1661,23 +1683,19 @@ impl Flatten {
                                             fenv,
                                             b,
                                         )?;
+                                        v_decl
+                                    };
 
-                                        // reset the current_block, so we can continue.
-                                        //
-                                        self.block_id = current_block_id;
-                                        //let v_decl =
-                                        //self.resolve_name(block_id, *ident, fenv).unwrap();
-                                        return self.add_function_call(
-                                            block_id,
-                                            &def,
-                                            v_decl,
-                                            args,
-                                            node.span_id,
-                                            fenv,
-                                            b,
-                                        );
-                                        //assert!(false);
-                                    }
+                                    self.block_id = current_block_id;
+                                    return self.add_function_call(
+                                        block_id,
+                                        &def,
+                                        v_decl,
+                                        args,
+                                        node.span_id,
+                                        fenv,
+                                        b,
+                                    );
                                 }
 
                                 // BAKE LAMBDA

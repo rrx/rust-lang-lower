@@ -220,7 +220,6 @@ impl SequenceReader {
     }
 
     pub fn build(&mut self, exprs: Vec<AstNode>, b: &mut NB) -> Vec<AstNode> {
-        //println!("build");
         for expr in exprs.into_iter() {
             //println!("push1: {:?}", (self.stack.len(), self.seq.len()));
             //b.dump_ast(&expr);
@@ -250,7 +249,7 @@ mod tests {
     }
 
     fn build_module(seq: Vec<AstNode>, b: &mut NB) -> AstNode {
-        let name = b.labels.s("func");
+        let name = b.labels.s("main");
         let module_name = b.labels.s("module");
         let span_id = if let Some(first) = seq.first() {
             first.span_id
