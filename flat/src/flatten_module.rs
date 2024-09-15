@@ -308,6 +308,7 @@ impl FlattenModule {
 
             } else
                 */
+            /*
             if let LCode::Jump(target) = entry.code {
                 let v_target = self.resolve_code_offset(target);
                 let t = self.get_entry(v_target);
@@ -331,6 +332,7 @@ impl FlattenModule {
                     );
                 }
             }
+            */
         }
 
         for entry in self.entries.iter_mut() {
