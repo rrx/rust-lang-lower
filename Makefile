@@ -15,6 +15,9 @@ clean:
 bare:
 	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/bare.star
 
+t:
+	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/args3.star -o build/
+
 run:
 	cargo check
 	python3 build.py

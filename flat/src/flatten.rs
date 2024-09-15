@@ -1189,7 +1189,17 @@ impl Flatten {
                                 }
                             }
 
-                            let ret_ty = b.types.u.resolve(&ret_ty).unwrap();
+                            println!("R: {:?}", &ret_ty);
+                            let ret_ty = if let Some(ty) = b.types.u.resolve(&ret_ty) {
+                                ty
+                            } else {
+                                b.push_error(
+                                    &format!("Return Type Must Resolve: {}", &ret_ty),
+                                    span_id,
+                                );
+                                unreachable!()
+                                //assert!(false);
+                            };
 
                             let ret_arg_type = self.add_return_block(
                                 ret_block_id,

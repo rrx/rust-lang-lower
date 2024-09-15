@@ -297,7 +297,8 @@ impl FlattenModule {
                 let t_ty = if let AstType::Func(arg, _ret) = &t.ty {
                     arg
                 } else {
-                    &t.ty
+                    unreachable!()
+                    //&t.ty
                 };
                 if b.types.u.unify(entry_ty, t_ty).is_err() {
                     b.push_error(
