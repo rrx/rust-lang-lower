@@ -145,6 +145,7 @@ impl AstType {
 
     pub fn fields(&self) -> Vec<(Option<StringKey>, AstType)> {
         match self {
+            Self::Args(ty) => ty.fields(),
             Self::Struct(fields) => fields.clone(),
             _ => vec![],
         }

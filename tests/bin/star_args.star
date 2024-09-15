@@ -14,4 +14,15 @@ def main():
   # the second type signature does not unify
   #q.check(keyword_arg(10, asdf=11) == 11)
   q.check(keyword_arg(10, 11, 12, True, False, asdf=11) == 11)
+
+  # nested function should work too
+  def f2(x, *args, asdf=1):
+    return asdf
+  q.check(f2(2, 1) == 1)
+  q.check(f2(2, 1, asdf=0) == 0)
+  q.check(f2(2, 1, asdf=1) == 1)
+
+  # this doesn't type check yet
+  #q.check(f2(2, 1, True, asdf=1) == 1)
+
   return 0
