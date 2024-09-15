@@ -941,6 +941,39 @@ impl Flatten {
         Ok((current_block_id, ret.clone(), values, call_ty))
     }
 
+    fn add_static_function_call_by_name(
+        &mut self,
+        //block_id: BlockId,
+        name: StringKey,
+        args: Vec<Argument>,
+        span_id: SpanId,
+        fenv: &mut FlattenEnvironment,
+        b: &mut NB,
+    ) -> Result<FlattenResult> {
+        // save current block, so we can come back to it later
+        let current_block_id = self.block_id;
+
+        let scope_id = fenv.static_scope_id();
+        let block_id = fenv.static_block_id();
+        let scope = fenv.get_scope(scope_id);
+
+        let template_id = scope.lambdas.get(&name.into()).unwrap().clone();
+        let def = self.get_template(template_id).clone();
+
+        // if it's defined in static scope, just call it
+        let v_decl = if let Some(v_decl) = self.resolve_name(current_block_id, name, fenv) {
+            v_decl
+        } else {
+            // if it's not already baked, we need to do that here
+            self.block_id = block_id;
+            let v_decl = self.bake(scope_id, block_id, name, None, fenv, b)?;
+            v_decl
+        };
+
+        self.block_id = current_block_id;
+        return self.add_function_call(current_block_id, &def, v_decl, args, span_id, fenv, b);
+    }
+
     pub fn add_function_call(
         &mut self,
         block_id: BlockId,
@@ -951,8 +984,14 @@ impl Flatten {
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
     ) -> Result<FlattenResult> {
-        let (current_block_id, ret_ty, values, _call_ty) =
+        let (current_block_id, ret_ty, values, call_ty) =
             self.add_function_args(block_id, def, args, span_id, fenv, b)?;
+
+        let func_ty = AstType::func(
+            call_ty.fields().iter().map(|(_, ty)| ty.clone()).collect(),
+            ret_ty.clone(),
+        );
+        println!("call ty: {}, {}", call_ty, func_ty);
 
         // Add links
         for (key, link_id, ty) in values {
@@ -1646,6 +1685,7 @@ impl Flatten {
                                 let def = self.get_template(*template_id).clone();
 
                                 if is_static {
+                                    /*
                                     // if it's defined in static scope, just call it
                                     let current_block_id = self.block_id;
                                     let v_decl = if let Some(v_decl) =
@@ -1672,6 +1712,14 @@ impl Flatten {
                                         block_id,
                                         &def,
                                         v_decl,
+                                        args,
+                                        node.span_id,
+                                        fenv,
+                                        b,
+                                    );
+                                    */
+                                    return self.add_static_function_call_by_name(
+                                        *ident,
                                         args,
                                         node.span_id,
                                         fenv,
