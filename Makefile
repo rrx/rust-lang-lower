@@ -5,6 +5,7 @@ ninja:
 	cargo check
 	cargo build
 	python3 build.py
+	touch target/x86_64-unknown-linux-gnu/debug/parse
 	ninja
 	@echo COMPLETE
 
@@ -16,13 +17,13 @@ bare:
 	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/bare.star
 
 t:
-	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/args3.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/goto.star -o build/args3
 
 run:
 	cargo check
 	python3 build.py
 	touch target/x86_64-unknown-linux-gnu/debug/parse
-	ninja -v test_cond
+	ninja -v goto
 
 run_test:
 	RUST_BACKTRACE=1 cargo run --bin parse -- -l -v -x \

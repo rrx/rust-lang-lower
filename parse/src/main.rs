@@ -89,11 +89,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let f = r?;
     let m = FlattenModule::from_builder(f, &mut fenv, &mut b);
-    b.labels.pool.dump();
+    //b.labels.pool.dump();
     m.dump(&fenv, &b);
 
-    let table_path = make_path(&output_filename, "table.txt");
-    m.dump_code_table(&table_path, &mut b);
     let out_graph_path = make_path(&output_filename, "graph.dot");
     m.dump_graph(&out_graph_path, &mut b);
 

@@ -119,15 +119,16 @@ graph TD\n\
                 &g,
                 &[Config::NodeNoLabel],
                 &|_, _er| String::new(),
-                &|_, (index, block)| {
+                &|_, (index, _block)| {
                     let block_id: BlockId = index.into();
                     let key = self.get_name(block_id.into()).unwrap();
                     let name = b.labels.r(key);
                     format!(
-                        "label = \"B{:?}:{}\" shape=\"{:?}\"",
+                        //"label = \"B{:?}:{}\" shape=\"{:?}\"",
+                        "label = \"B{:?}:{}\"",
                         index.index(),
                         name,
-                        &block.scope_id,
+                        //&block.scope_id,
                     )
                 }
             )

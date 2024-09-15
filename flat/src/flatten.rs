@@ -272,8 +272,11 @@ impl Flatten {
                     .collect::<Vec<_>>();
                 for key in keys.iter() {
                     //let name = b.labels.s("main");
+
+                    // reset the block position before each function
                     f.block_id = top_block_id;
-                    let r = f.bake(static_scope_id, f.block_id, *key, fenv, b)?;
+                    let _ = f.bake(static_scope_id, f.block_id, *key, fenv, b)?;
+
                     //assert_eq!(f.block_id, r.block_id);
                 }
             }
@@ -1610,6 +1613,9 @@ impl Flatten {
                                             b,
                                         );
                                     } else {
+                                        let current_block_id = self.block_id;
+                                        self.block_id = fenv.static_block_id();
+
                                         self.bake(
                                             fenv.static_scope_id(),
                                             fenv.static_block_id(),
@@ -1617,6 +1623,10 @@ impl Flatten {
                                             fenv,
                                             b,
                                         )?;
+
+                                        // reset the current_block, so we can continue.
+                                        //
+                                        self.block_id = current_block_id;
                                         let v_decl =
                                             self.resolve_name(block_id, *ident, fenv).unwrap();
                                         return self.add_function_call(
@@ -2270,10 +2280,11 @@ pub fn scope_graph(filename: &str, fenv: &FlattenEnvironment) {
             &|_, _er| String::new(),
             &|_, (index, scope)| {
                 format!(
-                    "label = \"S{}:{:?}\" shape=\"{:?}\"",
+                    //"label = \"S{}:{:?}\" shape=\"{:?}\"",
+                    "label = \"S{}:{:?}\"",
                     index.index(),
                     &scope.scope_type,
-                    &scope.scope_type
+                    //&scope.scope_type
                 )
             }
         )

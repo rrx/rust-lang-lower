@@ -6,16 +6,16 @@ def test1():
 
 # jump to empty label
 def test2():
-  q.goto("a")
-  q.label("a")
+  q.goto("b")
+  q.label("b")
 
 # empty label
 def test3():
-  q.label("a")
+  q.label("c")
 
 # non-empty label
 def test4():
-  q.label("a")
+  q.label("d")
   1
 
 # function with no return type
@@ -23,8 +23,8 @@ def f():
   1
 
 def main():
-  q.goto("a")
-  q.label("a")
+  q.goto("e")
+  q.label("e")
   x = 0 if True else (0 if True else 1+1)
   x = 0
   test1()

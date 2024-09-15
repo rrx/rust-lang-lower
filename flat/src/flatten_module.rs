@@ -100,6 +100,7 @@ impl ICodeModule for FlattenModule {
     }
 
     fn get_block_successors(&self, entry_id: ValueId) -> Vec<(Successor, CodeOffset)> {
+        /*
         for (index, entry) in self.entries.iter().enumerate() {
             println!(
                 "entry: {}: {:?}",
@@ -116,6 +117,7 @@ impl ICodeModule for FlattenModule {
             println!("block_map: {}: {}", k, v);
         }
         println!("g: {:?}", self.gblocks);
+        */
         let entry = self.get_entry(entry_id);
         let block_id = entry.block_id;
         let index = NodeIndex::new(block_id.index());
@@ -207,7 +209,7 @@ impl FlattenModule {
         }
     }
 
-    pub fn dump(&self, fenv: &FlattenEnvironment, b: &NB) {
+    pub fn dump(&self, fenv: &FlattenEnvironment, _b: &NB) {
         petgraph::dot::Dot::with_config(&fenv.scopes, &[petgraph::dot::Config::EdgeNoLabel]);
     }
 
@@ -476,26 +478,29 @@ fn save_graph(blockify: &dyn ICodeModule, filename: &str, b: &NB) {
                 match data.code_offset {
                     CodeOffset::Link(link_id) => {
                         format!(
-                            "label = \"L{}:{}\" shape=\"{:?}\"",
+                            //"label = \"L{}:{}\" shape=\"{:?}\"",
+                            "label = \"L{}:{}\"",
                             link_id.index(),
                             &data.name,
-                            &data.ty.to_string()
+                            //&data.ty.to_string()
                         )
                     }
                     CodeOffset::Value(value_id) => {
                         format!(
-                            "label = \"V{}:{}\" shape={:?}",
+                            //"label = \"V{}:{}\" shape={:?}",
+                            "label = \"V{}:{}\"",
                             value_id.index(),
                             &data.name,
-                            &data.ty.to_string()
+                            //&data.ty.to_string()
                         )
                     }
                     CodeOffset::Block(block_id) => {
                         format!(
-                            "label = \"B{}:{}\" shape={:?}",
+                            //"label = \"B{}:{}\" shape={:?}",
+                            "label = \"B{}:{}\"",
                             block_id.index(),
                             &data.name,
-                            &data.ty.to_string()
+                            //&data.ty.to_string()
                         )
                     }
                 }
