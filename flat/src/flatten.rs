@@ -263,8 +263,9 @@ impl Flatten {
                 //f.block_id = r.block_id;
             }
 
-            let scope = fenv.get_scope(static_scope_id);
+            //let scope = fenv.get_scope(static_scope_id);
 
+            /*
             if true {
                 let name = b.labels.s("main");
                 // reset the block position before each function
@@ -289,6 +290,7 @@ impl Flatten {
             for (msg, span_id) in f.messages.drain(..) {
                 b.push_error(&msg, span_id);
             }
+            */
             Ok(f)
         } else {
             b.push_error("Not a module", node.span_id);

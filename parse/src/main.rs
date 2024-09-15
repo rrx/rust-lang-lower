@@ -87,7 +87,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     if r.is_err() {
         b.spans.diagnostics_dump();
     }
-    let f = r?;
+    let mut f = r?;
+
+    f.bake_main(&mut fenv, &mut b)?;
 
     //f.dump_blocks();
 
@@ -124,7 +126,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     //b.types.dump();
     if config.verbose {
-        module.as_operation().dump();
+        //module.as_operation().dump();
     }
     assert!(module.as_operation().verify());
 
@@ -132,7 +134,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let pass_manager = lower_mlir::default_pass_manager(&context, config.optimize);
     pass_manager.run(&mut module).unwrap();
     if config.verbose {
-        module.as_operation().dump();
+        //module.as_operation().dump();
     }
     assert!(module.as_operation().verify());
 
