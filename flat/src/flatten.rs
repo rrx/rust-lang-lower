@@ -1056,6 +1056,9 @@ impl Flatten {
     ) -> Result<FlattenResult> {
         //let static_scope = fenv.get_scope(fenv.static_scope_id());
         //static_scope.
+        let block = self.get_block(block_id);
+        //let scope = fenv.get_scope(block.scope_id);
+        println!("bake_function: {:?}", (block.scope_id, block_id));
 
         let decl_link_id =
             if let Some(decl_link_id) = self.resolve_declaration(self.block_id, name, fenv) {
@@ -1093,7 +1096,6 @@ impl Flatten {
         let (v_block, _) = self.start_block(
             fun_block_id,
             fun_scope_id,
-            //&arg_type,
             fun_ty.clone(),
             Some(name),
             span_id,
@@ -1119,19 +1121,6 @@ impl Flatten {
         }
         let code = LCode::DeclareFunction(Some(fun_block_id));
         entry.code = code;
-
-        /*
-        let code = LCode::DeclareFunction(Some(fun_block_id));
-        let entry = CodeEntry::new(
-            fenv.static_block_id(),
-            code,
-            fun_ty.clone(),
-            Some(name),
-            span_id,
-            VarDefinitionSpace::Static,
-        );
-        let link_id = self.push_entry_with_link(entry);
-        */
 
         // write out return block
         let fun_block = self.get_block(fun_block_id);
