@@ -185,7 +185,7 @@ impl TypeUnify {
     }
 
     pub fn unify(&mut self, a: &AstType, b: &AstType) -> Result<(), UError> {
-        println!("Unify: {:?}, {:?}", a, b);
+        //println!("Unify: {:?}, {:?}", a, b);
         match (a, b) {
             (AstType::Args(v1), AstType::Args(v2)) => self.unify(&*v1, &*v2),
             (AstType::Args(v), _) => self.unify(v, b),

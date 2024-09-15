@@ -428,7 +428,7 @@ impl FlattenModule {
         let mem = self.get_mem(v.into());
         //let next = self.get_next(v).unwrap_or(v).index();
         //let prev = self.get_prev(v).unwrap_or(v).index();
-        println!("row: {}, {:?}", v, (self.entries.len()));
+        //println!("row: {}, {:?}", v, (self.entries.len()));
         let entry_id = self.get_entry_id(v);
         let block_id = entry.block_id;
         let block = self.gblocks.node_weight(block_id.into()).unwrap();

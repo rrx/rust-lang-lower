@@ -240,6 +240,7 @@ impl Flatten {
             let block = f.get_block(f.block_id);
             let static_scope_id = block.scope_id;
 
+            let top_block_id = f.block_id;
             f.start_block(
                 f.block_id,
                 static_scope_id,
@@ -262,7 +263,7 @@ impl Flatten {
                 //f.block_id = r.block_id;
             }
 
-            if false {
+            if true {
                 let scope = fenv.get_scope(static_scope_id);
                 let keys = scope
                     .declarations
@@ -271,6 +272,7 @@ impl Flatten {
                     .collect::<Vec<_>>();
                 for key in keys.iter() {
                     //let name = b.labels.s("main");
+                    f.block_id = top_block_id;
                     let r = f.bake(static_scope_id, f.block_id, *key, fenv, b)?;
                     //assert_eq!(f.block_id, r.block_id);
                 }
@@ -329,6 +331,7 @@ impl Flatten {
         let block_id = self.new_block(scope_id);
         scope.entry_block = Some(block_id);
         fenv.scope_succ(parent_scope_id, scope_id);
+        println!("new block and scope: {:?}", (block_id, scope_id));
         (block_id, scope_id)
     }
 
@@ -341,6 +344,11 @@ impl Flatten {
     pub fn new_block(&mut self, scope_id: ScopeId) -> BlockId {
         let ir_block = IRBlock::new(scope_id);
         let index = self.gblocks.add_node(ir_block);
+        let block_id = BlockId(index.index() as u32);
+        println!("new block: {:?}", (block_id, scope_id));
+        if index.index() > 0 && scope_id.index() == 0 {
+            assert!(false);
+        }
         BlockId(index.index() as u32)
     }
 
@@ -420,7 +428,7 @@ impl Flatten {
                         self.block_succ(self.block_id, new_block_id, Successor::BlockScope);
                         let scope = fenv.get_scope_mut(scope_id);
                         scope.block_labels.insert(key.into(), new_block_id);
-                        println!("creating block: {}", b.labels.r(key.into()));
+                        println!("creating block: {} in {}", b.labels.r(key.into()), scope_id);
                     }
                 }
                 _ => (),
@@ -435,15 +443,6 @@ impl Flatten {
                 current_span_id = span_id;
                 let expr_is_term = expr.node.is_term();
                 let is_last = d.len() == 0;
-
-                //println!(
-                //"current: {:?}",
-                //(is_last, expr_is_term, current_block_id, &expr)
-                //);
-                //
-                //self.block_id = current_block_id;
-                //let r = self.flatten(current_block_id, expr, fenv, b)?;
-                //assert_eq!(self.block_id, r.block_id);
 
                 if expr_is_term && !is_last {
                     let next_seq = d.collect::<Vec<_>>();
@@ -654,7 +653,7 @@ impl Flatten {
     )> {
         let func_arg = b.types.r(def.arg_type).clone();
         let ret = b.types.r(def.return_type).clone();
-        println!("ret: {:?}", ret);
+        //println!("ret: {:?}", ret);
         //assert!(ret.is_composite());
 
         // 1. Create value map, with capacity = to the number of fields
@@ -813,7 +812,7 @@ impl Flatten {
         //let mut has_kwargs = false;
         // block may have changed so we use the new block returned from the
         // args
-        println!("start");
+        //println!("start");
         for a in args.into_iter() {
             match a {
                 Argument::Positional(expr) => {
@@ -906,7 +905,7 @@ impl Flatten {
 
         let _call_type_id = b.types.s(&call_ty);
 
-        println!("blocks: {:?}", (block_id, current_block_id));
+        //println!("blocks: {:?}", (block_id, current_block_id));
         Ok((current_block_id, ret.clone(), values, call_ty))
     }
 
@@ -1012,7 +1011,7 @@ impl Flatten {
         mem: VarDefinitionSpace,
         fenv: &mut FlattenEnvironment,
     ) -> (LinkId, Vec<(LinkId, AstType)>) {
-        println!("start block: {:?}", (&block_ty));
+        //println!("start block: {:?}", (&block_ty));
         let code = LCode::Label;
         let entry = CodeEntry::new(block_id, code, block_ty.clone(), name, span_id, mem);
         let block_link_id = self.push_entry_with_link(entry);
@@ -1268,8 +1267,8 @@ impl Flatten {
                         fenv.scope_define_declaration(fenv.static_scope_id(), name, link_id);
 
                         if let Some(_body) = &def.body {
-                            self.bake_function(block_id, def, name, fenv, b)
-                            //Ok(FlattenResult::new(block_id, None, fun_ty, false))
+                            //self.bake_function(block_id, def, name, fenv, b)
+                            Ok(FlattenResult::new(block_id, None, fun_ty, false))
                         } else {
                             Ok(FlattenResult::new(block_id, None, fun_ty, false))
                         }
@@ -1351,19 +1350,23 @@ impl Flatten {
             }
 
             Ast::Return(maybe_expr) => {
-                self.dump_scope(block_id, fenv, b);
-                println!(
-                    "{:?}",
-                    petgraph::dot::Dot::with_config(
-                        &fenv.scopes,
-                        &[petgraph::dot::Config::EdgeNoLabel]
-                    )
-                );
+                //self.dump_scope(block_id, fenv, b);
+                //println!(
+                //"{:?}",
+                //petgraph::dot::Dot::with_config(
+                //&fenv.scopes,
+                //&[petgraph::dot::Config::EdgeNoLabel]
+                //)
+                //);
 
                 let block = self.get_block(block_id);
+                println!("return: {:?}", (block_id, block.scope_id));
                 let fun_scope_id = fenv
                     .find_nearest_scope(block.scope_id, ScopeType::Function)
-                    .unwrap();
+                    .expect(&format!(
+                        "Not in function context, scope_id:{}",
+                        block.scope_id
+                    ));
 
                 let fun_block_id = fenv.get_entry_block(fun_scope_id);
 
@@ -1585,24 +1588,48 @@ impl Flatten {
 
                         match self.resolve_lambda_scope(block_id, ident.into(), fenv) {
                             Some(scope_id) => {
+                                let is_static = fenv.static_scope_id() == scope_id;
                                 let scope = fenv.get_scope(scope_id);
+
                                 let label: StringLabel = (*ident).into();
                                 let template_id = scope.lambdas.get(&label).unwrap();
                                 let def = self.get_template(*template_id).clone();
-                                //let fun_ty = def_to_type(&def, b);
 
-                                // if it's defined in static scope, just call it
-                                if let Some(v_decl) = self.resolve_name(block_id, *ident, fenv) {
-                                    // TODO: if it's not already baked, we need to do that here
-                                    return self.add_function_call(
-                                        block_id,
-                                        &def,
-                                        v_decl,
-                                        args,
-                                        node.span_id,
-                                        fenv,
-                                        b,
-                                    );
+                                if is_static {
+                                    // if it's defined in static scope, just call it
+                                    if let Some(v_decl) = self.resolve_name(block_id, *ident, fenv)
+                                    {
+                                        // TODO: if it's not already baked, we need to do that here
+                                        return self.add_function_call(
+                                            block_id,
+                                            &def,
+                                            v_decl,
+                                            args,
+                                            node.span_id,
+                                            fenv,
+                                            b,
+                                        );
+                                    } else {
+                                        self.bake(
+                                            fenv.static_scope_id(),
+                                            fenv.static_block_id(),
+                                            *ident,
+                                            fenv,
+                                            b,
+                                        )?;
+                                        let v_decl =
+                                            self.resolve_name(block_id, *ident, fenv).unwrap();
+                                        return self.add_function_call(
+                                            block_id,
+                                            &def,
+                                            v_decl,
+                                            args,
+                                            node.span_id,
+                                            fenv,
+                                            b,
+                                        );
+                                        //assert!(false);
+                                    }
                                 }
 
                                 // BAKE LAMBDA
