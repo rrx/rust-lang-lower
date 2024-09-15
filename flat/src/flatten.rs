@@ -236,18 +236,6 @@ impl Flatten {
                 fenv,
             );
 
-            /*
-            let code = LCode::Label;
-            let entry = CodeEntry::new(
-                f.block_id,
-                code,
-                AstType::Unit,
-                Some(key),
-                node.span_id,
-                VarDefinitionSpace::Static,
-            );
-            f.push_entry_with_link(entry);
-            */
             fenv.static_block = Some(f.block_id);
             fenv.static_scope = Some(static_scope_id);
             for ast in body.to_vec() {
@@ -965,7 +953,7 @@ impl Flatten {
         block_ty: AstType,
         name: Option<StringKey>,
         span_id: SpanId,
-        _mem: VarDefinitionSpace,
+        mem: VarDefinitionSpace,
         fenv: &mut FlattenEnvironment,
     ) -> (LinkId, Vec<(LinkId, AstType)>) {
         println!("start block: {:?}", (&arg_ty, &block_ty));
@@ -976,7 +964,7 @@ impl Flatten {
             block_ty,
             name,
             span_id,
-            VarDefinitionSpace::Default,
+            mem,
         );
         let block_link_id = self.push_entry_with_link(entry);
         assert!(arg_ty.is_composite());
@@ -1965,19 +1953,6 @@ impl Flatten {
                     fenv,
                 );
 
-                /*
-                let code = LCode::Label;
-                let entry = CodeEntry::new(
-                    then_block_id,
-                    code,
-                    AstType::Unit,
-                    Some(name),
-                    then_span_id,
-                    VarDefinitionSpace::Reg,
-                );
-                let _then_link_id = self.push_entry_with_link(entry);
-                */
-
                 self.block_id = then_block_id;
                 let r = self.flatten(then_block_id, then_ast, fenv, b)?;
                 assert_eq!(self.block_id, r.block_id);
@@ -2008,19 +1983,6 @@ impl Flatten {
                     fenv,
                 );
 
-                /*
-                let code = LCode::Label;
-                let name = b.labels.fresh_key("t_else");
-                let entry = CodeEntry::new(
-                    else_block_id,
-                    code,
-                    AstType::Unit,
-                    Some(name),
-                    else_span_id,
-                    VarDefinitionSpace::Reg,
-                );
-                let _else_link_id = self.push_entry_with_link(entry);
-                */
                 self.block_id = else_block_id;
                 let r = self.flatten(else_block_id, else_ast, fenv, b)?;
                 assert_eq!(self.block_id, r.block_id);
@@ -2172,22 +2134,6 @@ impl Flatten {
                     VarDefinitionSpace::Reg,
                     fenv,
                 );
-
-                /*
-                let code = LCode::Label;
-                let entry = CodeEntry::new(
-                    loop_block_id,
-                    code,
-                    AstType::Func(
-                        AstType::Struct(vec![]).into(),
-                        ReturnType::Single(AstType::Unit).into(),
-                    ),
-                    Some(name),
-                    body.span_id,
-                    VarDefinitionSpace::Reg,
-                );
-                let _loop_link_id = self.push_entry_with_link(entry);
-                */
 
                 self.add_jump(block_id, loop_block_id.into(), vec![], node.span_id);
 
