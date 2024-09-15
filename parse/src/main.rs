@@ -106,12 +106,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     scopes_path.set_extension("scopes.dot");
     flat::flatten::scope_graph(scopes_path.clone().to_str().unwrap(), &fenv);
 
-    b.spans.diagnostics_dump();
-
     let table_path = make_path(&output_filename, "table.txt");
     m.dump_code_table(&table_path, &mut b);
 
     if b.spans.has_errors {
+        b.spans.diagnostics_dump();
         return Err(anyhow::Error::new(BlockifyError::Invalid).into());
     }
 

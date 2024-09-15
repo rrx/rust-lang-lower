@@ -263,22 +263,20 @@ impl Flatten {
                 //f.block_id = r.block_id;
             }
 
-            if true {
-                let scope = fenv.get_scope(static_scope_id);
-                let keys = scope
-                    .declarations
-                    .iter()
-                    .map(|s| s.0.clone())
-                    .collect::<Vec<_>>();
-                for key in keys.iter() {
-                    //let name = b.labels.s("main");
+            let scope = fenv.get_scope(static_scope_id);
+            let keys = scope
+                .declarations
+                .iter()
+                .map(|s| s.0.clone())
+                .collect::<Vec<_>>();
+            for key in keys.iter() {
+                //let name = b.labels.s("main");
 
-                    // reset the block position before each function
-                    f.block_id = top_block_id;
-                    let _ = f.bake(static_scope_id, f.block_id, *key, fenv, b)?;
+                // reset the block position before each function
+                f.block_id = top_block_id;
+                let _ = f.bake(static_scope_id, f.block_id, *key, fenv, b)?;
 
-                    //assert_eq!(f.block_id, r.block_id);
-                }
+                //assert_eq!(f.block_id, r.block_id);
             }
 
             for (msg, span_id) in f.messages.drain(..) {

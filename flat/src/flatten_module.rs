@@ -281,11 +281,13 @@ impl FlattenModule {
     }
 
     pub fn type_inference(&mut self, b: &mut NB) {
+        /*
         for entry in self.entries.iter_mut() {
             if let Some(ty) = b.types.u.resolve(&entry.ty) {
                 entry.ty = ty;
             }
         }
+
 
         for (index, entry) in self.entries.iter().enumerate() {
             let _v = ValueId::new(index as u32);
@@ -334,9 +336,14 @@ impl FlattenModule {
             }
             */
         }
+        */
 
         for entry in self.entries.iter_mut() {
             if let Some(ty) = b.types.u.resolve(&entry.ty) {
+                b.push_warning(
+                    &format!("Late Unresolved Type: {}=>{}", &entry.ty, &ty),
+                    entry.span_id,
+                );
                 entry.ty = ty;
             } else {
                 b.push_error(&format!("Unresolved Type: {}", &entry.ty), entry.span_id);
