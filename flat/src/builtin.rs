@@ -1,7 +1,7 @@
 use crate::NodeBuilder;
 use compile_core::{
-    Argument, Ast, AstNode, AstType, BuiltinId, BuiltinPool, ControlFlowMarker, Literal, SpanId,
-    StringKey,
+    Argument, Ast, AstNode, AstType, BuiltinId, BuiltinPool, ControlFlowMarker, Lambda, Literal,
+    ReturnType, SpanId, StringKey,
 };
 use std::collections::{HashMap, VecDeque};
 
@@ -128,6 +128,25 @@ impl Builtin {
     pub fn get_return_type(&self) -> AstType {
         AstType::Unit
         //AstType::Struct(vec![])
+    }
+
+    pub fn get_lambda(&self, b: &mut NodeBuilder) -> Lambda {
+        let ret_type_id = b.types.s(&self.get_return_type());
+        let key = b.labels.s("a");
+        let unknown = b.types.fresh_unknown();
+        let arg_type = AstType::Struct(vec![(Some(key), unknown)]);
+        let func_ty = AstType::Func(
+            arg_type.clone().into(),
+            ReturnType::Single(self.get_return_type()).into(),
+        );
+        let def = Lambda {
+            fun_type: b.types.s(&func_ty),
+            arg_type: b.types.s(&arg_type),
+            return_type: ret_type_id,
+            body: None,
+            defaults: HashMap::new(),
+        };
+        def
     }
 }
 
