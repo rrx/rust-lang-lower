@@ -118,8 +118,6 @@ impl TypeBuilder {
 }
 
 pub struct NodeBuilder {
-    //filename: String,
-    //current_node_id: u32,
     static_count: usize,
     loop_count: usize,
     pub labels: LabelBuilder,
@@ -130,47 +128,14 @@ pub struct NodeBuilder {
 
 impl NodeBuilder {
     pub fn new() -> Self {
-        //let filename = "";
-        let mut s = Self {
-            //filename: filename.to_string(),
-            //current_node_id: 0,
+        Self {
             static_count: 0,
             loop_count: 0,
             labels: LabelBuilder::new(),
             types: TypeBuilder::new(),
             builtins: BuiltinBuilder::new(),
             spans: SpanBuilder::new(),
-        };
-        s.init();
-        s
-    }
-
-    fn init(&mut self) {
-        let ty = AstType::Unit;
-        //let ty = AstType::func(vec![AstType::Bool], AstType::Unit);
-        let ty = self.types.s(&ty);
-        let b = compile_core::Builtin::new("check".into(), ty);
-        self.builtins.insert(b);
-
-        //let ty = AstType::func(vec![AstType::String], AstType::Unit.into());
-        //let ty = self.types.s(&ty);
-        let b = compile_core::Builtin::new("use".into(), ty);
-        self.builtins.insert(b);
-
-        //let ty = AstType::func(
-        //vec![AstType::Struct(vec![
-        //(None, AstType::Int),
-        //(None, AstType::Float),
-        //])],
-        //AstType::Unit.into(),
-        //);
-        //let ty = AstType::Unit;
-        //let ty = self.types.s(&ty);
-        let b = compile_core::Builtin::new("print".into(), ty);
-        self.builtins.insert(b);
-
-        // get unknown initially (so it's 0)
-        let _ = self.spans.get_span_unknown();
+        }
     }
 
     pub fn ensure_seq(ast: AstNode) -> AstNode {

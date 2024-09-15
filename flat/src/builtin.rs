@@ -157,10 +157,16 @@ pub struct BuiltinBuilder {
 
 impl BuiltinBuilder {
     pub fn new() -> Self {
-        let s = Self {
+        let mut s = Self {
             pool: BuiltinPool::new(),
             lookup: HashMap::new(),
         };
+        let b = compile_core::Builtin::new("check".into());
+        s.insert(b);
+        let b = compile_core::Builtin::new("use".into());
+        s.insert(b);
+        let b = compile_core::Builtin::new("print".into());
+        s.insert(b);
         s
     }
 
