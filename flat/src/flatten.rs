@@ -954,21 +954,24 @@ impl Flatten {
         // save current block, so we can come back to it later
         let current_block_id = self.block_id;
 
-        //let scope_id = fenv.static_scope_id();
         let block_id = fenv.static_block_id();
-        //let scope = fenv.get_scope(scope_id);
-
-        //let template_id = scope.lambdas.get(&name.into()).unwrap().clone();
-        //let def = self.get_template(template_id).clone();
-
         let (current_block_id, ret_ty, values, call_ty) =
             self.add_function_args(current_block_id, &def, args, span_id, fenv, b)?;
 
+        // function type, based on the caller
         let func_ty = AstType::func(
             call_ty.fields().iter().map(|(_, ty)| ty.clone()).collect(),
             ret_ty.clone(),
         );
         println!("call ty: {}, {}", call_ty, func_ty);
+
+        let def_func_ty = def_to_type(&def, b);
+        if b.types.u.unify(&func_ty, &def_func_ty).is_err() {
+            b.push_error(
+                &format!("Type Mismatch: caller: {}, def: {}", &call_ty, &def_func_ty),
+                span_id,
+            );
+        }
 
         // if it's defined in static scope, just call it
         let v_decl = if let Some(v_decl) = self.resolve_name(current_block_id, name, fenv) {
