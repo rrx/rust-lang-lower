@@ -534,43 +534,27 @@ impl Flatten {
         &mut self,
         ret_block_id: BlockId,
         scope_id: ScopeId,
-        //return_type: ReturnType,
         return_type: AstType,
         span_id: SpanId,
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
-    ) -> AstType {
+    ) {
+        assert!(return_type.is_composite());
         let name = b.labels.fresh_key("ret");
-        //let arg_ty = AstType::Struct(arg_types);
-
-        //let arg_ty = AstType::Struct(match &return_type {
-        //AstType::Unit => vec![],
-        //_ => vec![(None, return_type.clone())],
-        //});
-        //
-        let arg_ty = if let AstType::Unit = return_type {
-            AstType::Struct(vec![])
-        } else {
-            AstType::Struct(vec![(None, return_type.clone())])
-        };
 
         let (_v_block, v_args) = self.start_block(
             ret_block_id,
             scope_id,
-            //&arg_ty,
             AstType::Func(
-                arg_ty.clone().into(),
+                return_type.clone().into(),
                 ReturnType::Single(AstType::Unit).into(),
             ),
-            //arg_ty.clone(),
             Some(name),
             span_id,
             VarDefinitionSpace::Reg,
             fenv,
         );
         self.add_return(ret_block_id, v_args, span_id);
-        return_type
-        //arg_ty
     }
 
     pub fn add_jump(
@@ -1189,8 +1173,14 @@ impl Flatten {
                                 }
                             }
 
-                            println!("R: {:?}", &ret_ty);
-                            let ret_ty = if let Some(ty) = b.types.u.resolve(&ret_ty) {
+                            let ret_arg_type = if let AstType::Unit = &ret_ty {
+                                AstType::Struct(vec![])
+                            } else {
+                                AstType::Struct(vec![(None, ret_ty.clone())])
+                            };
+
+                            println!("R: {:?}", (&ret_ty, &fun_block));
+                            let ret_ty = if let Some(ty) = b.types.u.resolve(&ret_arg_type) {
                                 ty
                             } else {
                                 b.push_error(
@@ -1201,7 +1191,7 @@ impl Flatten {
                                 //assert!(false);
                             };
 
-                            let ret_arg_type = self.add_return_block(
+                            self.add_return_block(
                                 ret_block_id,
                                 fun_scope_id,
                                 ret_ty.clone(),
@@ -1209,16 +1199,6 @@ impl Flatten {
                                 fenv,
                                 b,
                             );
-
-                            if b.types.u.unify(&ret_arg_type, &ret_ty).is_err() {
-                                b.push_error(
-                                    &format!(
-                                        "2-Type Mismatch: LHS: {}, RHS: {}",
-                                        &ret_arg_type, &ret_ty
-                                    ),
-                                    span_id,
-                                );
-                            }
 
                             self.block_id = block_id;
                             Ok(FlattenResult::new(block_id, Some(link_id), fun_ty, false))
