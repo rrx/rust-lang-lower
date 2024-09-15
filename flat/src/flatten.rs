@@ -225,7 +225,7 @@ impl Flatten {
             f.start_block(
                 f.block_id,
                 static_scope_id,
-                &AstType::Struct(vec![]),
+                //&AstType::Struct(vec![]),
                 AstType::Func(
                     AstType::Struct(vec![]).into(),
                     ReturnType::Single(AstType::Unit).into(),
@@ -425,7 +425,7 @@ impl Flatten {
                                 new_block_id,
                                 scope_id,
                                 //&AstType::Unit,
-                                &AstType::Struct(vec![]),
+                                //&AstType::Struct(vec![]),
                                 AstType::Func(
                                     AstType::Struct(vec![]).into(),
                                     ReturnType::Single(AstType::Unit).into(),
@@ -554,7 +554,7 @@ impl Flatten {
         let (_v_block, v_args) = self.start_block(
             ret_block_id,
             scope_id,
-            &arg_ty,
+            //&arg_ty,
             AstType::Func(
                 arg_ty.clone().into(),
                 ReturnType::Single(AstType::Unit).into(),
@@ -949,44 +949,41 @@ impl Flatten {
         &mut self,
         block_id: BlockId,
         scope_id: ScopeId,
-        arg_ty: &AstType,
+        //arg_ty: &AstType,
         block_ty: AstType,
         name: Option<StringKey>,
         span_id: SpanId,
         mem: VarDefinitionSpace,
         fenv: &mut FlattenEnvironment,
     ) -> (LinkId, Vec<(LinkId, AstType)>) {
-        println!("start block: {:?}", (&arg_ty, &block_ty));
+        println!("start block: {:?}", (&block_ty));
         let code = LCode::Label;
-        let entry = CodeEntry::new(
-            block_id,
-            code,
-            block_ty,
-            name,
-            span_id,
-            mem,
-        );
+        let entry = CodeEntry::new(block_id, code, block_ty.clone(), name, span_id, mem);
         let block_link_id = self.push_entry_with_link(entry);
-        assert!(arg_ty.is_composite());
+        if let AstType::Func(arg_ty, _ret_ty) = &block_ty {
+            assert!(arg_ty.is_composite());
 
-        let mut v_args = vec![];
-        for (i, (name, ty)) in arg_ty.fields().iter().enumerate() {
-            let code = LCode::Arg(i as u8);
-            let entry = CodeEntry::new(
-                block_id,
-                code,
-                ty.clone(),
-                *name,
-                span_id,
-                VarDefinitionSpace::Arg,
-            );
-            let link_id = self.push_entry_with_link(entry);
-            v_args.push((link_id, ty.clone()));
-            if let Some(name) = name {
-                fenv.scope_define(scope_id, *name, link_id.into());
+            let mut v_args = vec![];
+            for (i, (name, ty)) in arg_ty.fields().iter().enumerate() {
+                let code = LCode::Arg(i as u8);
+                let entry = CodeEntry::new(
+                    block_id,
+                    code,
+                    ty.clone(),
+                    *name,
+                    span_id,
+                    VarDefinitionSpace::Arg,
+                );
+                let link_id = self.push_entry_with_link(entry);
+                v_args.push((link_id, ty.clone()));
+                if let Some(name) = name {
+                    fenv.scope_define(scope_id, *name, link_id.into());
+                }
             }
+            (block_link_id, v_args)
+        } else {
+            unreachable!()
         }
-        (block_link_id, v_args)
     }
 
     pub fn save_template(
@@ -1071,11 +1068,11 @@ impl Flatten {
                                 Successor::FunctionDeclaration,
                             );
                             self.block_succ(fun_block_id, ret_block_id, Successor::BlockScope);
-                            let arg_type = b.types.r(def.arg_type).clone();
+                            //let arg_type = b.types.r(def.arg_type).clone();
                             let (v_block, _) = self.start_block(
                                 fun_block_id,
                                 fun_scope_id,
-                                &arg_type,
+                                //&arg_type,
                                 fun_ty.clone(),
                                 Some(name),
                                 span_id,
@@ -1671,7 +1668,7 @@ impl Flatten {
                                 let (_v_block, next_link_ids) = self.start_block(
                                     next_block_id,
                                     scope_id,
-                                    &next_arg_ty,
+                                    //&next_arg_ty,
                                     AstType::Func(
                                         next_arg_ty.clone().into(),
                                         ReturnType::Single(AstType::Unit).into(),
@@ -1688,13 +1685,13 @@ impl Flatten {
                                 };
 
                                 // Start lambda block
-                                let arg_type = b.types.r(def.arg_type).clone();
+                                //let arg_type = b.types.r(def.arg_type).clone();
                                 let lambda_name = b.labels.fresh_key("lambda");
                                 let fun_ty = b.types.r(def.fun_type);
                                 self.start_block(
                                     fun_block_id,
                                     fun_scope_id,
-                                    &arg_type,
+                                    //&arg_type,
                                     fun_ty.clone(),
                                     //AstType::Unit,
                                     Some(lambda_name),
@@ -1786,7 +1783,7 @@ impl Flatten {
                 self.start_block(
                     then_block_id,
                     then_scope_id,
-                    &AstType::Struct(vec![]),
+                    //&AstType::Struct(vec![]),
                     AstType::Func(
                         AstType::Struct(vec![]).into(),
                         ReturnType::Single(AstType::Unit).into(),
@@ -1820,7 +1817,7 @@ impl Flatten {
                     self.start_block(
                         else_block_id,
                         else_scope_id,
-                        &AstType::Struct(vec![]),
+                        //&AstType::Struct(vec![]),
                         AstType::Func(
                             AstType::Struct(vec![]).into(),
                             ReturnType::Single(AstType::Unit).into(),
@@ -1895,8 +1892,11 @@ impl Flatten {
                 self.start_block(
                     new_block_id,
                     new_scope_id,
-                    &arg_ty,
-                    AstType::Func(arg_ty.clone().into(), ReturnType::Single(AstType::Unit).into()),
+                    //&arg_ty,
+                    AstType::Func(
+                        arg_ty.clone().into(),
+                        ReturnType::Single(AstType::Unit).into(),
+                    ),
                     //AstType::Unit,
                     Some(name),
                     span_id,
@@ -1943,7 +1943,7 @@ impl Flatten {
                 self.start_block(
                     then_block_id,
                     then_scope_id,
-                    &AstType::Struct(vec![]),
+                    //&AstType::Struct(vec![]),
                     AstType::Func(
                         AstType::Struct(vec![]).into(),
                         ReturnType::Single(AstType::Unit).into(),
@@ -1973,7 +1973,7 @@ impl Flatten {
                 self.start_block(
                     else_block_id,
                     else_scope_id,
-                    &AstType::Struct(vec![]),
+                    //&AstType::Struct(vec![]),
                     AstType::Func(
                         AstType::Struct(vec![]).into(),
                         ReturnType::Single(AstType::Unit).into(),
@@ -2065,11 +2065,14 @@ impl Flatten {
                 self.block_succ(block_id, current_block_id, Successor::BlockScope);
 
                 let arg_ty = AstType::Struct(vec![]);
-                let block_ty = AstType::Func(arg_ty.clone().into(), ReturnType::Single(AstType::Unit).into());
+                let block_ty = AstType::Func(
+                    arg_ty.clone().into(),
+                    ReturnType::Single(AstType::Unit).into(),
+                );
                 self.start_block(
                     current_block_id,
                     current_scope_id,
-                    &arg_ty,
+                    //&arg_ty,
                     block_ty,
                     Some(name),
                     span_id,
@@ -2127,7 +2130,7 @@ impl Flatten {
                 self.start_block(
                     loop_block_id,
                     loop_scope_id,
-                    &AstType::Struct(vec![]),
+                    //&AstType::Struct(vec![]),
                     AstType::Func(
                         AstType::Struct(vec![]).into(),
                         ReturnType::Single(AstType::Unit).into(),
