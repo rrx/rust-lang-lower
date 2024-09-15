@@ -339,6 +339,10 @@ impl FlattenModule {
         */
 
         for entry in self.entries.iter_mut() {
+            if !entry.ty.is_unknown() {
+                continue;
+            }
+
             if let Some(ty) = b.types.u.resolve(&entry.ty) {
                 b.push_warning(
                     &format!("Late Unresolved Type: {}=>{}", &entry.ty, &ty),
@@ -437,7 +441,6 @@ impl FlattenModule {
         let entry = self.get_entry(v);
         let code = self.get_code(v);
         let ty = self.get_type(v.into());
-        let r_ty = b.types.u.resolve(&ty);
 
         let mem = self.get_mem(v.into());
         //let next = self.get_next(v).unwrap_or(v).index();
@@ -447,10 +450,12 @@ impl FlattenModule {
         let block_id = entry.block_id;
         let block = self.gblocks.node_weight(block_id.into()).unwrap();
 
-        let is_unknown = r_ty.as_ref().map(|ty| ty.is_unknown()).unwrap_or(true);
+        //let r_ty = b.types.u.resolve(&ty);
+        //let is_unknown = r_ty.as_ref().map(|ty| ty.is_unknown()).unwrap_or(true);
+        //let s_ty = format!("{}", &r_ty.unwrap_or(ty)); //AstType::Error));
+        let is_unknown = ty.is_unknown();
+        let s_ty = format!("{}", &ty);
 
-        //let s_ty = format!("{}\n{}", &ty, &r_ty.unwrap_or(AstType::Error));
-        let s_ty = format!("{}", &r_ty.unwrap_or(ty)); //AstType::Error));
         CodeRow {
             pos: v.index(),
             link: entry.link.unwrap().index(),

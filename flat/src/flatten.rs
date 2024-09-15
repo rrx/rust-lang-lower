@@ -1221,15 +1221,26 @@ impl Flatten {
         scope_id: ScopeId,
         block_id: BlockId,
         name: StringKey,
-        ty: Option<AstType>,
+        maybe_ty: Option<AstType>,
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
     ) -> Result<()> {
         println!("bake: {:?}", (scope_id, block_id, b.labels.r(name.into())));
         let scope = fenv.get_scope(scope_id);
         let label: StringLabel = name.into();
-        if let Some(template_id) = scope.lambdas.get(&label) {
-            let def = self.get_template(*template_id).clone();
+        if let Some(template_id) = scope.lambdas.get(&label).cloned() {
+            let def = self.get_template(template_id).clone();
+            if let Some(ty) = maybe_ty {
+                let fun_ty = b.types.r(def.fun_type).clone();
+                if b.types.u.unify(&ty, &fun_ty).is_err() {
+                    let span_id = b.spans.get_span_unknown();
+
+                    b.push_error(
+                        &format!("Func Mismatch: caller: {}, def: {}", &ty, fun_ty),
+                        span_id
+                    );
+                }
+            }
             self.bake_function(block_id, def, name, fenv, b)?;
         }
         Ok(())

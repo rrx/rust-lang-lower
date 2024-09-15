@@ -1,4 +1,4 @@
-def ident(x:int):
+def ident(x) -> int:
   return x
 
 def main():
