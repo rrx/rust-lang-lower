@@ -92,7 +92,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let table_path = make_path(&output_filename, "table.txt");
     m.dump_code_table(&table_path, &mut b);
-    let out_graph_path = make_path(&output_filename, "out.dot");
+    let out_graph_path = make_path(&output_filename, "graph.dot");
     m.dump_graph(&out_graph_path, &mut b);
 
     let mut blocks_path = path.clone();
