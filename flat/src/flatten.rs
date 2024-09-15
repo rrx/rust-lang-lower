@@ -1896,7 +1896,8 @@ impl Flatten {
                     new_block_id,
                     new_scope_id,
                     &arg_ty,
-                    AstType::Unit,
+                    AstType::Func(arg_ty.clone().into(), ReturnType::Single(AstType::Unit).into()),
+                    //AstType::Unit,
                     Some(name),
                     span_id,
                     VarDefinitionSpace::Default,
@@ -2063,11 +2064,13 @@ impl Flatten {
                 let current_scope_id = current_block.scope_id;
                 self.block_succ(block_id, current_block_id, Successor::BlockScope);
 
+                let arg_ty = AstType::Struct(vec![]);
+                let block_ty = AstType::Func(arg_ty.clone().into(), ReturnType::Single(AstType::Unit).into());
                 self.start_block(
                     current_block_id,
                     current_scope_id,
-                    &AstType::Unit,
-                    AstType::Unit,
+                    &arg_ty,
+                    block_ty,
                     Some(name),
                     span_id,
                     VarDefinitionSpace::Reg,
