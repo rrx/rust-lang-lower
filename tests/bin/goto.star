@@ -15,22 +15,33 @@ def test3():
 
 # non-empty label
 def test4():
+  1
   q.label("d")
   1
+
+# non-empty label
+def test5():
+  1
+  1
+  q.label("e")
 
 # function with no return type
 def f():
   1
+  1
+
+def ident(x) -> int:
+  return x
 
 def main():
-  q.goto("e")
-  q.label("e")
-  x = 0 if True else (0 if True else 1+1)
-  x = 0
+  q.goto("f")
+  q.label("f")
+  x = ident(0)
   test1()
   test2()
   test3()
   test4()
+  test5()
   f()
   q.goto("ret2")
   q.label("ret2")

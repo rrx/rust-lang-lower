@@ -129,7 +129,7 @@ impl SequenceReader {
             }
             Ast::Block(key, params, body) => {
                 let span_id = node.span_id;
-                println!("block: {}, {}", self.stack.len(), self.seq.len());
+                //println!("block: {}, {}", self.stack.len(), self.seq.len());
                 self.close_if_open();
                 let mut seq = body.clone().to_vec();
                 if let Some(last_node) = seq.last() {
@@ -161,7 +161,7 @@ impl SequenceReader {
             let node = self.seq.last().unwrap();
             let is_term = node.node.is_term();
             if !is_term {
-                println!("closing non terminating initial");
+                //println!("closing non terminating initial");
                 self.seq.push(Ast::CloseBlock.node(node.span_id));
                 //self.close();
             }
@@ -220,17 +220,17 @@ impl SequenceReader {
     }
 
     pub fn build(&mut self, exprs: Vec<AstNode>, b: &mut NB) -> Vec<AstNode> {
-        println!("build");
+        //println!("build");
         for expr in exprs.into_iter() {
-            println!("push1: {:?}", (self.stack.len(), self.seq.len()));
-            b.dump_ast(&expr);
+            //println!("push1: {:?}", (self.stack.len(), self.seq.len()));
+            //b.dump_ast(&expr);
             self.push_node(expr, b);
-            println!("push2: {:?}", (self.stack.len(), self.seq.len()));
+            //println!("push2: {:?}", (self.stack.len(), self.seq.len()));
         }
 
         self.close();
         assert_eq!(self.stack.len(), 0);
-        println!("build-close");
+        //println!("build-close");
         self.seq.drain(..).collect()
     }
 }

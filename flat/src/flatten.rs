@@ -347,7 +347,7 @@ impl Flatten {
     pub fn new_block(&mut self, scope_id: ScopeId) -> BlockId {
         let ir_block = IRBlock::new(scope_id);
         let index = self.gblocks.add_node(ir_block);
-        let block_id = BlockId(index.index() as u32);
+        //let block_id = BlockId(index.index() as u32);
         //println!("new block: {:?}", (block_id, scope_id));
         if index.index() > 0 && scope_id.index() == 0 {
             assert!(false);
@@ -454,7 +454,7 @@ impl Flatten {
             if let Some(expr) = d.next() {
                 //let current_block = self.get_block(self.block_id);
                 //println!("next: {:?}", (expr.node.is_label(), expr.node.is_term(), current_block.links.len()));
-                b.dump_ast(&expr);
+                //b.dump_ast(&expr);
 
                 let span_id = expr.span_id;
                 current_span_id = span_id;
@@ -2026,12 +2026,24 @@ impl Flatten {
                 let r = self.flatten(else_block_id, else_ast, fenv, b)?;
                 assert_eq!(self.block_id, r.block_id);
                 let else_ty = r.ty;
+
+                if b.types.u.unify(&then_ty, &else_ty).is_err() {
+                    b.push_error(
+                        &format!(
+                            "Ternary Type Mismatch: then: {}, else: {}",
+                            &then_ty, &else_ty
+                        ),
+                        span_id,
+                    );
+                }
+                /*
                 if else_ty != then_ty {
                     b.push_error(
                         &format!("Ternary branches type mismatch: {}, {}", then_ty, else_ty),
                         then_span_id,
                     );
                 }
+                */
                 //assert_eq!(else_ty, then_ty);
 
                 let code = LCode::Ternary(
