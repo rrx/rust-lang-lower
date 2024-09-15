@@ -344,10 +344,12 @@ impl FlattenModule {
             }
 
             if let Some(ty) = b.types.u.resolve(&entry.ty) {
+                /*
                 b.push_warning(
                     &format!("Late Unresolved Type: {}=>{}", &entry.ty, &ty),
                     entry.span_id,
                 );
+                */
                 entry.ty = ty;
             } else {
                 b.push_error(&format!("Unresolved Type: {}", &entry.ty), entry.span_id);
