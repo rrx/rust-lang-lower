@@ -114,6 +114,17 @@ pub fn diagnostic_error(msg: &str, span: Span) -> Diagnostic<usize> {
     error
 }
 
+pub fn diagnostic_warning(msg: &str, span: Span) -> Diagnostic<usize> {
+    let mut labels = vec![];
+    if let Span::Loc(span) = span {
+        let r = span.begin.pos as usize..span.end.pos as usize;
+        labels = vec![Label::primary(span.file_id, r).with_message(msg)];
+    }
+
+    let error = Diagnostic::warning().with_labels(labels).with_message(msg);
+    error
+}
+
 impl SpanBuilder {
     pub fn new() -> Self {
         let s = Self {

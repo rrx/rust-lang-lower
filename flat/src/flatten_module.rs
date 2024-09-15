@@ -218,7 +218,6 @@ impl FlattenModule {
         // we use DFS post order search on each function, to ensure that the leaf
         // nodes show up last, such as the return block
         // This seems to create a nice ordering.
-        flatten.dump_blocks();
         let mut m = FlattenModule::new();
         m.link = flatten.link.clone();
 
@@ -276,7 +275,7 @@ impl FlattenModule {
             }
         }
         m.gblocks = flatten.gblocks;
-        m.find_dead_blocks();
+        m.find_dead_blocks(b);
         m.type_inference(b);
         m
     }
@@ -343,7 +342,7 @@ impl FlattenModule {
         }
     }
 
-    pub fn find_dead_blocks(&mut self) {
+    pub fn find_dead_blocks(&mut self, b: &mut NB) {
         let mut dfs = petgraph::visit::Dfs::new(&self.gblocks, BlockId(0).into());
         let mut entries = HashSet::new();
         while let Some(visited) = dfs.next(&self.gblocks) {
@@ -389,12 +388,16 @@ impl FlattenModule {
                 }
             }
             let dead = all.difference(&reachable);
-            println!("[{:?}] Dead: {:?}", entry, &dead);
-            println!("[{:?}] All: {:?}", entry, &all);
-            println!("[{:?}] Reachable: {:?}", entry, &reachable);
-            for index in dead {
-                let block = self.gblocks.node_weight_mut((*index).into()).unwrap();
+            //println!("[{:?}] Dead: {:?}", entry, &dead);
+            //println!("[{:?}] All: {:?}", entry, &all);
+            //println!("[{:?}] Reachable: {:?}", entry, &reachable);
+            for block_id in dead {
+                let index = (*block_id).into();
+                let block = self.gblocks.node_weight_mut(index).unwrap();
                 block.dead = true;
+                let v = self.get_entry_id_from_block_id(*block_id);
+                let span_id = self.get_span_id(v);
+                b.push_warning(&format!("Dead Block: {}", block_id), span_id);
             }
         }
     }

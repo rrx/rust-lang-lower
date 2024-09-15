@@ -334,7 +334,7 @@ impl Flatten {
         let block_id = self.new_block(scope_id);
         scope.entry_block = Some(block_id);
         fenv.scope_succ(parent_scope_id, scope_id);
-        println!("new block and scope: {:?}", (block_id, scope_id));
+        //println!("new block and scope: {:?}", (block_id, scope_id));
         (block_id, scope_id)
     }
 
@@ -348,7 +348,7 @@ impl Flatten {
         let ir_block = IRBlock::new(scope_id);
         let index = self.gblocks.add_node(ir_block);
         let block_id = BlockId(index.index() as u32);
-        println!("new block: {:?}", (block_id, scope_id));
+        //println!("new block: {:?}", (block_id, scope_id));
         if index.index() > 0 && scope_id.index() == 0 {
             assert!(false);
         }
@@ -414,11 +414,21 @@ impl Flatten {
         let mut current_span_id = seq_span_id;
 
         let block = self.get_block(self.block_id);
+        //let is_block_open = block.links.len() > 0;
         let seq_next_block_id = block.next;
         let scope_id = block.scope_id;
 
+        //let span_id = b.spans.get_span_unknown();
+        //println!("seq before: {:?}", is_block_open);
         let mut r = SequenceReader::new();
+        //if is_block_open {
+        //r.open_block(current_span_id);
+        //}
+        //b.dump_ast(&NB::seq(seq.clone(), span_id));
         let mut seq = r.build(seq.clone(), b);
+        //println!("seq after");
+        //b.dump_ast(&NB::seq(seq.clone(), span_id));
+        //println!("seq end");
 
         for expr in seq.iter() {
             match &expr.node {
@@ -431,7 +441,7 @@ impl Flatten {
                         self.block_succ(self.block_id, new_block_id, Successor::BlockScope);
                         let scope = fenv.get_scope_mut(scope_id);
                         scope.block_labels.insert(key.into(), new_block_id);
-                        println!("creating block: {} in {}", b.labels.r(key.into()), scope_id);
+                        //println!("creating block: {} in {}", b.labels.r(key.into()), scope_id);
                     }
                 }
                 _ => (),
@@ -442,6 +452,10 @@ impl Flatten {
         let mut d = seq.drain(..);
         loop {
             if let Some(expr) = d.next() {
+                //let current_block = self.get_block(self.block_id);
+                //println!("next: {:?}", (expr.node.is_label(), expr.node.is_term(), current_block.links.len()));
+                b.dump_ast(&expr);
+
                 let span_id = expr.span_id;
                 current_span_id = span_id;
                 let expr_is_term = expr.node.is_term();
@@ -458,7 +472,7 @@ impl Flatten {
                         }
                         _ => {
                             let new_block_id = self.new_block(scope_id);
-                            println!("term new: {:?}", (new_block_id, &next_node));
+                            //println!("term new: {:?}", (new_block_id, &next_node));
                             self.start_block(
                                 new_block_id,
                                 scope_id,
@@ -1144,7 +1158,7 @@ impl Flatten {
         }
 
         if fun_block.num_ret_args.is_empty() {
-            println!("match1: unit == {}", &ret_ty);
+            //println!("match1: unit == {}", &ret_ty);
             if b.types.u.unify(&AstType::Unit, &ret_ty).is_err() {
                 b.push_error(
                     &format!("6-Type Mismatch: LHS: {}, RHS: {}", AstType::Unit, &ret_ty),
@@ -1154,7 +1168,7 @@ impl Flatten {
         } else {
             let num_ret_args = fun_block.num_ret_args.iter().next().unwrap().clone();
             if num_ret_args == 0 {
-                println!("match3: unit == {}", &ret_ty);
+                //println!("match3: unit == {}", &ret_ty);
                 if b.types.u.unify(&AstType::Unit, &ret_ty).is_err() {
                     b.push_error(
                         &format!("1-Type Mismatch: LHS: {}, RHS: {}", &ret_ty, &AstType::Unit),
@@ -1165,7 +1179,7 @@ impl Flatten {
         }
 
         for ty in fun_block.ret_types.iter() {
-            println!("match2: {} == {}", &ty, &ret_ty);
+            //println!("match2: {} == {}", &ty, &ret_ty);
             if b.types.u.unify(ty, &ret_ty).is_err() {
                 b.push_error(
                     &format!("7-Type Mismatch: LHS: {}, RHS: {}", ty, &ret_ty),
@@ -1180,7 +1194,7 @@ impl Flatten {
             AstType::Struct(vec![(None, ret_ty.clone())])
         };
 
-        println!("R: {:?}", (&ret_ty, &fun_block));
+        //println!("R: {:?}", (&ret_ty, &fun_block));
         let ret_ty = if let Some(ty) = b.types.u.resolve(&ret_arg_type) {
             ty
         } else {
@@ -1234,8 +1248,8 @@ impl Flatten {
 
             Ast::Sequence(exprs) => {
                 self.block_id = block_id;
-                let block = self.get_block(block_id);
-                println!("sequence: {:?}", (block_id, block.scope_id));
+                //let block = self.get_block(block_id);
+                //println!("sequence: {:?}", (block_id, block.scope_id, block.links.len()));
                 self.flatten_sequence(exprs, span_id, fenv, b)
             }
 
@@ -1363,7 +1377,7 @@ impl Flatten {
                 //);
 
                 let block = self.get_block(block_id);
-                println!("return: {:?}", (block_id, block.scope_id));
+                //println!("return: {:?}", (block_id, block.scope_id));
                 let fun_scope_id = fenv
                     .find_nearest_scope(block.scope_id, ScopeType::Function)
                     .expect(&format!(
@@ -2115,11 +2129,11 @@ impl Flatten {
 
             Ast::ControlFlowMarker(ControlFlowMarker::Goto(label)) => {
                 // Goto is terminal
-                println!(
-                    "Searching for {} in scope {}",
-                    b.labels.r(label.into()),
-                    block.scope_id
-                );
+                //println!(
+                //"Searching for {} in scope {}",
+                //b.labels.r(label.into()),
+                //block.scope_id
+                //);
                 if let Some(target_block_id) = fenv.resolve_block_id(block.scope_id, label.into()) {
                     let link_id =
                         self.add_jump(block_id, target_block_id.into(), vec![], node.span_id);
@@ -2226,6 +2240,27 @@ impl Flatten {
 
             Ast::CloseBlock => {
                 let block = self.get_block(block_id);
+                let v_last = block.links.last().unwrap().clone();
+                let entry_last = self.get_entry(v_last);
+                let is_term = entry_last.code.is_term();
+                if is_term {
+                    // XXX: We are closing an already closed block
+                    // Possible malformed AST
+                    //for link_id in &block.links {
+                    //let entry = self.get_entry(*link_id);
+                    //println!("{}, E: {:?}", block_id, entry.code)
+                    //}
+                    b.push_warning(
+                        &format!(
+                            "Closing already closed block: block={}, link={}",
+                            block_id, v_last
+                        ),
+                        node.span_id,
+                    );
+                    self.block_id = block_id;
+                    return Ok(FlattenResult::new(block_id, None, AstType::Unit, true));
+                }
+
                 if let Some(next) = block.next {
                     let link_id = self.add_jump(block_id, next.into(), vec![], node.span_id);
                     self.block_id = block_id;

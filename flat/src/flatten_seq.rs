@@ -15,6 +15,7 @@ pub struct SequenceReader {
 pub enum StackType {
     Loop,
     Block,
+    Open,
 }
 
 impl SequenceReader {
@@ -26,6 +27,11 @@ impl SequenceReader {
             spans: vec![],
             seq: vec![],
         }
+    }
+
+    pub fn open_block(&mut self, span_id: SpanId) {
+        self.stack.push((StackType::Open, vec![]));
+        self.spans.push(span_id)
     }
 
     fn start_loop(&mut self, key: StringKey, span_id: SpanId) {
@@ -43,6 +49,9 @@ impl SequenceReader {
     }
 
     fn start_block(&mut self, maybe_key: Option<StringKey>, span_id: SpanId) {
+        if self.stack.len() > 0 {
+            self.close_block();
+        }
         if let Some(key) = maybe_key {
             self.block_names.push(key);
         }
@@ -120,9 +129,8 @@ impl SequenceReader {
             }
             Ast::Block(key, params, body) => {
                 let span_id = node.span_id;
-                if self.stack.len() > 0 {
-                    self.close_block();
-                }
+                println!("block: {}, {}", self.stack.len(), self.seq.len());
+                self.close_if_open();
                 let mut seq = body.clone().to_vec();
                 if let Some(last_node) = seq.last() {
                     if !last_node.node.is_term() {
@@ -142,6 +150,24 @@ impl SequenceReader {
         }
     }
 
+    pub fn close_if_open(&mut self) {
+        if self.stack.len() > 0 {
+            println!("closing open stack");
+            self.close();
+            return;
+        }
+
+        if self.seq.len() > 0 {
+            let node = self.seq.last().unwrap();
+            let is_term = node.node.is_term();
+            if !is_term {
+                println!("closing non terminating initial");
+                self.seq.push(Ast::CloseBlock.node(node.span_id));
+                //self.close();
+            }
+        }
+    }
+
     pub fn close_block(&mut self) {
         assert!(self.stack.len() > 0);
         let (stack_type, _) = self.stack.last().unwrap();
@@ -157,10 +183,31 @@ impl SequenceReader {
         self.push_stack(ast);
     }
 
+    pub fn close_open(&mut self) {
+        assert!(self.stack.len() > 0);
+        let (stack_type, _) = self.stack.last().unwrap();
+        assert_eq!(stack_type, &StackType::Open);
+        let seq = &self.stack.last().as_ref().unwrap().1;
+        if let Some(last) = seq.last() {
+            if !last.node.is_term() {
+                self.push_stack(Ast::CloseBlock.node(last.span_id));
+            }
+        }
+
+        let (stack_type, seq) = self.stack.pop().unwrap();
+        assert_eq!(stack_type, StackType::Open);
+        let span_id = self.spans.pop().unwrap();
+        let node = Ast::Sequence(seq).node(span_id);
+        self.push_stack(node);
+    }
+
     pub fn close(&mut self) {
         if self.stack.len() > 0 {
             let (stack_type, _) = self.stack.last().unwrap();
             match stack_type {
+                StackType::Open => {
+                    self.close_open();
+                }
                 StackType::Block => {
                     self.close_block();
                 }
@@ -173,12 +220,17 @@ impl SequenceReader {
     }
 
     pub fn build(&mut self, exprs: Vec<AstNode>, b: &mut NB) -> Vec<AstNode> {
+        println!("build");
         for expr in exprs.into_iter() {
+            println!("push1: {:?}", (self.stack.len(), self.seq.len()));
+            b.dump_ast(&expr);
             self.push_node(expr, b);
+            println!("push2: {:?}", (self.stack.len(), self.seq.len()));
         }
 
         self.close();
         assert_eq!(self.stack.len(), 0);
+        println!("build-close");
         self.seq.drain(..).collect()
     }
 }
@@ -218,7 +270,7 @@ mod tests {
         let f = r?;
         b.spans.diagnostics_dump();
         let m = FlattenModule::from_builder(f, &mut fenv, b);
-        m.dump(b);
+        m.dump(&mut fenv, b);
         m.block_graph("blocks.dot", &b);
 
         Ok(())
@@ -252,6 +304,21 @@ mod tests {
         for ast in seq.iter() {
             b.dump_ast(ast);
         }
+        b.spans.diagnostics_dump();
+    }
+
+    #[test]
+    fn test_seq4() {
+        let mut b = builder();
+        let a = b.labels.s("a");
+        let block = Ast::Block(a, vec![], NB::index(1).into()).into();
+        let seq = vec![NB::index(1), NB::index(1), block];
+        let mut r = SequenceReader::new();
+        //r.open_block(b.spans.get_span_unknown());
+        let seq = r.build(seq, &mut b);
+
+        let node = Ast::Sequence(seq).into();
+        b.dump_ast(&node);
         b.spans.diagnostics_dump();
     }
 }

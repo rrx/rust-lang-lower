@@ -379,6 +379,12 @@ impl NodeBuilder {
         self.spans
             .push_diagnostic(compile_core::diagnostic_error(msg, span));
     }
+
+    pub fn push_warning(&mut self, msg: &str, span_id: SpanId) {
+        let span = self.spans.lookup(span_id);
+        self.spans
+            .push_diagnostic(compile_core::diagnostic_warning(msg, span));
+    }
 }
 
 #[cfg(test)]

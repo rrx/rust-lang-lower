@@ -88,6 +88,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         b.spans.diagnostics_dump();
     }
     let f = r?;
+
+    //f.dump_blocks();
+
     let m = FlattenModule::from_builder(f, &mut fenv, &mut b);
     //b.labels.pool.dump();
     m.dump(&fenv, &b);
@@ -120,7 +123,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     b.spans.diagnostics_dump();
     r?;
 
-    b.types.dump();
+    //b.types.dump();
     if config.verbose {
         module.as_operation().dump();
     }
