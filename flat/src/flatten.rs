@@ -240,7 +240,7 @@ impl Flatten {
             let block = f.get_block(f.block_id);
             let static_scope_id = block.scope_id;
 
-            let top_block_id = f.block_id;
+            //let top_block_id = f.block_id;
             f.start_block(
                 f.block_id,
                 static_scope_id,
@@ -262,39 +262,18 @@ impl Flatten {
                 assert_eq!(f.block_id, r.block_id);
                 //f.block_id = r.block_id;
             }
-
-            //let scope = fenv.get_scope(static_scope_id);
-
-            /*
-            if true {
-                let name = b.labels.s("main");
-                // reset the block position before each function
-                f.block_id = top_block_id;
-                let _ = f.bake(static_scope_id, f.block_id, name, None, fenv, b)?;
-            } else {
-                let keys = scope
-                    .declarations
-                    .iter()
-                    .map(|s| s.0.clone())
-                    .collect::<Vec<_>>();
-
-                for key in keys.iter() {
-                    // reset the block position before each function
-                    f.block_id = top_block_id;
-                    let _ = f.bake(static_scope_id, f.block_id, *key, None, fenv, b)?;
-
-                    //assert_eq!(f.block_id, r.block_id);
-                }
-            }
-
-            for (msg, span_id) in f.messages.drain(..) {
-                b.push_error(&msg, span_id);
-            }
-            */
+            f.drain_diagnostics(b);
             Ok(f)
         } else {
             b.push_error("Not a module", node.span_id);
             Err(Error::new(BlockifyError::Invalid))
+        }
+    }
+
+    fn drain_diagnostics(&mut self, b: &mut NB) {
+        // XXX: This needs to be run before any errors kick in, there must be a better way.
+        for (msg, span_id) in self.messages.drain(..) {
+            b.push_error(&msg, span_id);
         }
     }
 
