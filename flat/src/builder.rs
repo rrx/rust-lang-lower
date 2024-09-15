@@ -146,24 +146,26 @@ impl NodeBuilder {
     }
 
     fn init(&mut self) {
-        let ty = AstType::func(vec![AstType::Bool], AstType::Unit);
+        let ty = AstType::Unit;
+        //let ty = AstType::func(vec![AstType::Bool], AstType::Unit);
         let ty = self.types.s(&ty);
         let b = compile_core::Builtin::new("check".into(), ty);
         self.builtins.insert(b);
 
-        let ty = AstType::func(vec![AstType::String], AstType::Unit.into());
-        let ty = self.types.s(&ty);
+        //let ty = AstType::func(vec![AstType::String], AstType::Unit.into());
+        //let ty = self.types.s(&ty);
         let b = compile_core::Builtin::new("use".into(), ty);
         self.builtins.insert(b);
 
-        let ty = AstType::func(
-            vec![AstType::Struct(vec![
-                (None, AstType::Int),
-                (None, AstType::Float),
-            ])],
-            AstType::Unit.into(),
-        );
-        let ty = self.types.s(&ty);
+        //let ty = AstType::func(
+        //vec![AstType::Struct(vec![
+        //(None, AstType::Int),
+        //(None, AstType::Float),
+        //])],
+        //AstType::Unit.into(),
+        //);
+        //let ty = AstType::Unit;
+        //let ty = self.types.s(&ty);
         let b = compile_core::Builtin::new("print".into(), ty);
         self.builtins.insert(b);
 

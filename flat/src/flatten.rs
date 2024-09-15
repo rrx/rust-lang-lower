@@ -1373,22 +1373,12 @@ impl Flatten {
                 let vx = rx.link_id.unwrap();
                 let vy = ry.link_id.unwrap();
 
-                //let x_ty = rx.ty;
-                //let y_ty = ry.ty;
                 if b.types.u.unify(&rx.ty, &ry.ty).is_err() {
                     b.push_error(
                         &format!("3-Type Mismatch: LHS: {}, RHS: {}", &rx.ty, &ry.ty),
                         x_span_id,
                     );
                 }
-                /*
-                if &rx.ty != &ry.ty {
-                    b.push_error(
-                        &format!("Binary op type mismatch: {}, {}", &rx.ty, &ry.ty),
-                        x_span_id,
-                    );
-                }
-                */
 
                 for (v, ty) in [(vx, &rx.ty), (vy, &ry.ty)] {
                     let code = LCode::Value(v.into());
@@ -1405,8 +1395,6 @@ impl Flatten {
 
                 let code = LCode::Op2(op.node);
                 let ret_ty = op.node.get_type(&rx.ty, &ry.ty);
-                //let entry = self.get_entry(vx);
-                //let ty = entry.ty.clone();
                 let entry = CodeEntry::new(
                     ry.block_id,
                     code,

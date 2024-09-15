@@ -8,7 +8,7 @@ compiler_release = "target/x86_64-unknown-linux-gnu/release/parse"
 def generate_inputs(fp):
     input_directory = "tests/bin"
 
-    def gen_with_rule(kind, rule, compiler, defaults=False):
+    def gen_with_rule(kind, rule, compiler, defaults=False, graphs=False):
         outputs = []
         images = []
         for f in glob.glob(os.path.join(input_directory, "*.star")):
@@ -25,9 +25,11 @@ def generate_inputs(fp):
             cfg_input_filename = os.path.join(target, f"{base}.cfg.mmd")
             cfg_output_filename = os.path.join(target, f"{base}.cfg.png")
             fp.write(f"build {mlir_filename} | {blocks_input_filename} {scopes_input_filename} {cfg_input_filename}: {rule} {input_filename} | {compiler}\n")
-            fp.write(f"build {blocks_output_filename}: dot-png {blocks_input_filename}\n")
-            fp.write(f"build {scopes_output_filename}: dot-png {scopes_input_filename}\n")
-            fp.write(f"build {cfg_output_filename}: mermaid-png {cfg_input_filename}\n")
+
+            if graphs:
+                fp.write(f"build {blocks_output_filename}: dot-png {blocks_input_filename}\n")
+                fp.write(f"build {scopes_output_filename}: dot-png {scopes_input_filename}\n")
+                fp.write(f"build {cfg_output_filename}: mermaid-png {cfg_input_filename}\n")
 
             llvm_filename = os.path.join(target, f"{base}.llvm")
             fp.write(f"build {llvm_filename}: mlir-opt {mlir_filename}\n")
