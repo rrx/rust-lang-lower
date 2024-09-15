@@ -945,6 +945,7 @@ impl Flatten {
         &mut self,
         //block_id: BlockId,
         name: StringKey,
+        def: Lambda,
         args: Vec<Argument>,
         span_id: SpanId,
         fenv: &mut FlattenEnvironment,
@@ -953,12 +954,12 @@ impl Flatten {
         // save current block, so we can come back to it later
         let current_block_id = self.block_id;
 
-        let scope_id = fenv.static_scope_id();
+        //let scope_id = fenv.static_scope_id();
         let block_id = fenv.static_block_id();
-        let scope = fenv.get_scope(scope_id);
+        //let scope = fenv.get_scope(scope_id);
 
-        let template_id = scope.lambdas.get(&name.into()).unwrap().clone();
-        let def = self.get_template(template_id).clone();
+        //let template_id = scope.lambdas.get(&name.into()).unwrap().clone();
+        //let def = self.get_template(template_id).clone();
 
         let (current_block_id, ret_ty, values, call_ty) =
             self.add_function_args(current_block_id, &def, args, span_id, fenv, b)?;
@@ -1670,6 +1671,7 @@ impl Flatten {
                             if is_static {
                                 return self.add_static_function_call_by_name(
                                     *ident,
+                                    def,
                                     args,
                                     node.span_id,
                                     fenv,
