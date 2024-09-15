@@ -1,5 +1,5 @@
 # jump to non empty label
-def test1() -> int:
+def test1():
   q.goto("a")
   q.label("a")
   1

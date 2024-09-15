@@ -331,14 +331,33 @@ impl<'c> MLIRGenerator<'c> {
     }
 
     pub fn get_label_args(&self, v: ValueId) -> Vec<(Type<'c>, Location<'c>)> {
-        let mut current = v;
+        let types = self.blockify.get_label_args(v);
+        if types == vec![AstType::Unit] {
+            vec![]
+        } else {
+            let location = self.get_location(v);
+            types
+                .into_iter()
+                .map(|ty| {
+                    let (ty, dims) = self.from_type(&ty);
+                    assert_eq!(dims.len(), 0);
+                    (ty, location)
+                })
+                .collect()
+        }
+        /*
         let mut out = vec![];
+        let mut current = v;
         loop {
             current = self.blockify.get_next(current).unwrap();
             let code = self.blockify.get_code(current);
             if let LCode::Arg(_) = code {
                 let location = self.get_location(current);
-                let (ty, dims) = self.from_type(&self.blockify.get_type(current.into()));
+                let ty = self.blockify.get_type(current.into());
+                //assert!(ty != AstType::Unit);
+                //if ty == AstType::Unit {
+                //}
+                let (ty, dims) = self.from_type(&ty);
                 assert_eq!(dims.len(), 0);
                 out.push((ty, location));
             } else {
@@ -346,6 +365,7 @@ impl<'c> MLIRGenerator<'c> {
             }
         }
         out
+        */
     }
 
     pub fn create_block(&mut self, entry_id: ValueId) {

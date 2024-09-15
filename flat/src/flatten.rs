@@ -527,7 +527,7 @@ impl Flatten {
         b: &mut NB,
     ) {
         let name = b.labels.fresh_key("ret");
-        let arg_ty = match &return_type {
+        let arg_types = match &return_type {
             ReturnType::Single(ty) => match ty {
                 AstType::Unit => vec![],
                 _ => vec![(None, ty.clone())],
@@ -535,7 +535,7 @@ impl Flatten {
             _ => unimplemented!(),
         };
 
-        let arg_ty = AstType::Struct(arg_ty);
+        let arg_ty = AstType::Struct(arg_types);
         //let arg_ty = AstType::Struct(match &return_type {
         //AstType::Unit => vec![],
         //_ => vec![(None, return_type.clone())],
@@ -1084,7 +1084,21 @@ impl Flatten {
                                 );
                             }
 
-                            assert!(fun_block.num_ret_args.len() != 0);
+                            //assert!(fun_block.num_ret_args.len() != 0);
+                            //if fun_block.num_ret_args
+
+                            if fun_block.num_ret_args.is_empty() {
+                                if b.types.u.unify(&AstType::Unit, &ret_ty).is_err() {
+                                    b.push_error(
+                                        &format!(
+                                            "Type Mismatch: LHS: {}, RHS: {}",
+                                            AstType::Unit,
+                                            &ret_ty
+                                        ),
+                                        span_id,
+                                    );
+                                }
+                            }
 
                             for ty in fun_block.ret_types.iter() {
                                 if b.types.u.unify(ty, &ret_ty).is_err() {

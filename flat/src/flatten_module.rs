@@ -175,7 +175,6 @@ impl ICodeModule for FlattenModule {
     fn dump_graph(&self, filename: &str, b: &NB) {
         save_graph(self, filename, b);
     }
-
 }
 
 impl FlattenModule {

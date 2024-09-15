@@ -1,3 +1,4 @@
+export RUST_BACKTRACE=1
 default: ninja
 
 ninja:
@@ -18,7 +19,7 @@ run:
 	cargo check
 	python3 build.py
 	touch target/x86_64-unknown-linux-gnu/debug/parse
-	ninja bare
+	ninja -v goto
 
 run_test:
 	RUST_BACKTRACE=1 cargo run --bin parse -- -l -v -x \
