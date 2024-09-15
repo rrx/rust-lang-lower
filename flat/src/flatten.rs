@@ -1204,7 +1204,10 @@ impl Flatten {
             ty
         } else {
             let s = b.labels.r(name.into());
-            b.push_error(&format!("[{}] Return Type Must Resolve: {}", &s, &ret_ty), span_id);
+            b.push_error(
+                &format!("[{}] Return Type Must Resolve: {}", &s, &ret_ty),
+                span_id,
+            );
             //unreachable!()
             //assert!(false);
             ret_arg_type
@@ -1224,7 +1227,7 @@ impl Flatten {
         maybe_ty: Option<AstType>,
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
-    ) -> Result<()> {
+    ) -> Result<LinkId> {
         println!("bake: {:?}", (scope_id, block_id, b.labels.r(name.into())));
         let scope = fenv.get_scope(scope_id);
         let label: StringLabel = name.into();
@@ -1241,9 +1244,12 @@ impl Flatten {
                     );
                 }
             }
-            self.bake_function(block_id, def, name, fenv, b)?;
+            let r = self.bake_function(block_id, def, name, fenv, b)?;
+            Ok(r.link_id.unwrap())
+        } else {
+            let s = b.labels.r(label);
+            Err(Error::new(BlockifyError::NotFound(s)))
         }
-        Ok(())
     }
 
     pub fn flatten(
@@ -1302,7 +1308,6 @@ impl Flatten {
                         fenv.scope_define_declaration(fenv.static_scope_id(), name, link_id);
 
                         if let Some(_body) = &def.body {
-                            //self.bake_function(block_id, def, name, fenv, b)
                             Ok(FlattenResult::new(block_id, None, fun_ty, false))
                         } else {
                             Ok(FlattenResult::new(block_id, None, fun_ty, false))
@@ -1648,7 +1653,7 @@ impl Flatten {
                                         let current_block_id = self.block_id;
                                         self.block_id = fenv.static_block_id();
 
-                                        self.bake(
+                                        let v_decl = self.bake(
                                             fenv.static_scope_id(),
                                             fenv.static_block_id(),
                                             *ident,
@@ -1660,8 +1665,8 @@ impl Flatten {
                                         // reset the current_block, so we can continue.
                                         //
                                         self.block_id = current_block_id;
-                                        let v_decl =
-                                            self.resolve_name(block_id, *ident, fenv).unwrap();
+                                        //let v_decl =
+                                        //self.resolve_name(block_id, *ident, fenv).unwrap();
                                         return self.add_function_call(
                                             block_id,
                                             &def,
