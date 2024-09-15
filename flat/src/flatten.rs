@@ -6,6 +6,7 @@ use compile_core::{
     Ast,
     AstNode,
     AstType,
+    BuiltinId,
     ControlFlowMarker,
     //BinaryOperation, BuiltinId, ControlFlowMarker,
     Lambda,
@@ -18,7 +19,6 @@ use compile_core::{
     StringKey,
     //UnaryOperation,
     VarDefinitionSpace,
-    BuiltinId
 };
 use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
@@ -922,7 +922,6 @@ impl Flatten {
 
         // Make call
         let code = LCode::Call(v_fun.into());
-        //let ty = ret_ty;
         let entry = CodeEntry::new(
             current_block_id,
             code,
@@ -979,14 +978,12 @@ impl Flatten {
         let link_id = self.push_entry_with_link(entry);
         self.block_id = current_block_id;
         Ok(FlattenResult::new(
-                current_block_id,
-                Some(link_id),
-                ret_ty,
-                false,
+            current_block_id,
+            Some(link_id),
+            ret_ty,
+            false,
         ))
-
     }
-
 
     fn start_block(
         &mut self,
@@ -1296,48 +1293,12 @@ impl Flatten {
                         Ok(FlattenResult::new(block_id, None, AstType::Unit, false))
                     }
                     _ => {
-                        let mut current_block_id = block_id;
-                        let ty = bi.get_return_type();
                         let args_size = args.len();
                         assert_eq!(args_size, bi.arity());
 
-                        let ret_type_id = b.types.s(&ty);
+                        //let ret_type_id = b.types.s(&ty);
                         let def = bi.get_lambda(b);
-
-                        let (current_block_id, ret_ty, values, _call_ty) =
-                            self.add_function_args(block_id, &def, args, span_id, fenv, b)?;
-
-                        // Add links
-                        for (key, link_id, ty) in values {
-                            let code = LCode::CallValue(link_id.into());
-                            let entry = CodeEntry::new(
-                                current_block_id,
-                                code,
-                                ty,
-                                key,
-                                span_id,
-                                VarDefinitionSpace::Reg,
-                            );
-                            self.push_entry_with_link(entry);
-                        }
-
-                        let code = LCode::Builtin(id);
-                        let entry = CodeEntry::new(
-                            current_block_id,
-                            code,
-                            ty.clone(),
-                            None,
-                            node.span_id,
-                            VarDefinitionSpace::Default,
-                        );
-                        let link_id = self.push_entry_with_link(entry);
-                        self.block_id = current_block_id;
-                        Ok(FlattenResult::new(
-                            current_block_id,
-                            Some(link_id),
-                            ty,
-                            false,
-                        ))
+                        self.add_builtin_call(block_id, &def, id, args, span_id, fenv, b)
                     }
                 }
             }
