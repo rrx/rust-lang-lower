@@ -282,7 +282,7 @@ impl Flatten {
         }
     }
 
-    pub fn bake_main(&mut self, fenv: &mut FlattenEnvironment, b: &mut NB) -> Result<LinkId> {
+    pub fn push_bake_main(&mut self, fenv: &mut FlattenEnvironment, b: &mut NB) -> Result<LinkId> {
         let current_block_id = self.block_id;
         let name = b.labels.s("main");
         //let scope_id = fenv.static_scope_id();
@@ -297,7 +297,11 @@ impl Flatten {
         r
     }
 
-    pub fn bake_all(&mut self, fenv: &mut FlattenEnvironment, b: &mut NB) -> Result<Vec<LinkId>> {
+    pub fn push_bake_all(
+        &mut self,
+        fenv: &mut FlattenEnvironment,
+        b: &mut NB,
+    ) -> Result<Vec<LinkId>> {
         let static_block_id = fenv.static_block_id();
         let scope_id = fenv.static_scope_id();
         let scope = fenv.get_scope(scope_id);
@@ -317,7 +321,7 @@ impl Flatten {
         Ok(links)
     }
 
-    fn _push(&mut self, mut entry: CodeEntry) -> LinkId {
+    fn _insert_entry(&mut self, mut entry: CodeEntry) -> LinkId {
         let index = self.entries.len();
         let link_id = LinkId(index as u32);
         entry.link = Some(link_id);
@@ -325,14 +329,16 @@ impl Flatten {
         link_id
     }
 
-    pub fn push_link(&mut self, block_id: BlockId, link_id: LinkId) {
+    /*
+    pub fn insert_block_link(&mut self, block_id: BlockId, link_id: LinkId) {
         self.get_block_mut(block_id).push(link_id);
     }
+    */
 
     pub fn push_entry_with_link(&mut self, entry: CodeEntry) -> LinkId {
         let block_id = entry.block_id;
         let span_id = entry.span_id;
-        let link_id = self._push(entry);
+        let link_id = self._insert_entry(entry);
         let block = self.get_block(block_id);
         if let Some(last_link_id) = block.links.last() {
             let last_entry = self.get_entry(*last_link_id);
@@ -413,7 +419,7 @@ impl Flatten {
         self.entries.get_mut(link_id.index()).unwrap()
     }
 
-    pub fn push_template(&mut self, def: Lambda) -> TemplateId {
+    pub fn insert_template(&mut self, def: Lambda) -> TemplateId {
         let offset = self.templates.len();
         self.templates.push(def);
         TemplateId(offset as u32)
@@ -423,16 +429,13 @@ impl Flatten {
         self.templates.get(template_id.index()).unwrap()
     }
 
-    pub fn flatten_sequence(
+    pub fn push_sequence(
         &mut self,
         seq: Vec<AstNode>,
         seq_span_id: SpanId,
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
     ) -> Result<FlattenResult> {
-        //assert_eq!(block_id, self.block_id);
-        //self.block_id = block_id;
-        //let mut current_block_id = self.block_id;
         let mut ty = AstType::Unit;
         let mut link_id = None;
         let mut is_term = false;
@@ -440,21 +443,11 @@ impl Flatten {
         let mut current_span_id = seq_span_id;
 
         let block = self.get_block(self.block_id);
-        //let is_block_open = block.links.len() > 0;
         let seq_next_block_id = block.next;
         let scope_id = block.scope_id;
 
-        //let span_id = b.spans.get_span_unknown();
-        //println!("seq before: {:?}", is_block_open);
         let mut r = SequenceReader::new();
-        //if is_block_open {
-        //r.open_block(current_span_id);
-        //}
-        //b.dump_ast(&NB::seq(seq.clone(), span_id));
         let mut seq = r.build(seq.clone(), b);
-        //println!("seq after");
-        //b.dump_ast(&NB::seq(seq.clone(), span_id));
-        //println!("seq end");
 
         for expr in seq.iter() {
             match &expr.node {
@@ -474,14 +467,9 @@ impl Flatten {
             }
         }
 
-        //current_block_id = block_id;
         let mut d = seq.drain(..);
         loop {
             if let Some(expr) = d.next() {
-                //let current_block = self.get_block(self.block_id);
-                //println!("next: {:?}", (expr.node.is_label(), expr.node.is_term(), current_block.links.len()));
-                //b.dump_ast(&expr);
-
                 let span_id = expr.span_id;
                 current_span_id = span_id;
                 let expr_is_term = expr.node.is_term();
@@ -558,9 +546,7 @@ impl Flatten {
             let block = self.get_block(self.block_id);
             if let Some(next) = block.next {
                 println!("adding term on block: {}, jump: {}", self.block_id, next);
-                //self.switch_blocks(self.block_id);
                 let jump_link_id = self.push_jump(next.into(), vec![], current_span_id);
-                //Return
                 link_id = Some(jump_link_id);
             } else {
                 println!("missing term on block: {}", self.block_id);
@@ -662,8 +648,6 @@ impl Flatten {
             self.block_id,
             code,
             AstType::Func(ty.into(), ReturnType::Single(AstType::Unit).into()),
-            //AstType::Struct(jump_args.iter().map(|j| (j.0, j.2.clone())).collect::<Vec<_>>()),
-            //AstType::Unit,
             None,
             span_id,
             VarDefinitionSpace::Reg,
@@ -672,9 +656,8 @@ impl Flatten {
         self.push_entry_with_link(entry)
     }
 
-    pub fn add_function_args(
+    pub fn push_function_args(
         &mut self,
-        //block_id: BlockId,
         def: &Lambda,
         args: Vec<Argument>,
         span_id: SpanId,
@@ -688,9 +671,16 @@ impl Flatten {
     )> {
         let func_arg = b.types.r(def.arg_type).clone();
         let ret = b.types.r(def.return_type).clone();
-        //println!("ret: {:?}", ret);
-        //assert!(ret.is_composite());
 
+        // A rough outline of this large function
+        // - We need to take in a list of calling args, and the function definition,
+        //   and merge them together to create the actual args that will call the function
+        // - There are a number of transformations that need to happen here.
+        // - We populate defaults before calling the function.  Removing defaults is an
+        //   optimization that can happen elsewhere.
+        // - We handle *args, and **kwargs here, to make sure those variables are typed
+        //   correctly.
+        //
         // 1. Create value map, with capacity = to the number of fields
         // 2. Copy defaults into the map
         // 3. Keep a list of fields that have been populated_set
@@ -959,7 +949,7 @@ impl Flatten {
         if let Some((scope_id, def)) = self.find_lambda(current_block_id, name, fenv) {
             //let current_block_id = self.block_id;
             let (current_block_id, ret_ty, call_values, call_ty) =
-                self.add_function_args(&def, args, span_id, fenv, b)?;
+                self.push_function_args(&def, args, span_id, fenv, b)?;
 
             // function type, based on the caller
             let func_ty = AstType::func(
@@ -1034,6 +1024,18 @@ impl Flatten {
         }
     }
 
+    pub fn push_code(
+        &mut self,
+        code: LCode,
+        ty: AstType,
+        name: Option<StringKey>,
+        span_id: SpanId,
+        mem: VarDefinitionSpace,
+    ) -> LinkId {
+        let entry = CodeEntry::new(self.block_id, code, ty, name, span_id, mem);
+        self.push_entry_with_link(entry)
+    }
+
     pub fn push_function_call(
         &mut self,
         v_fun: LinkId,
@@ -1041,33 +1043,29 @@ impl Flatten {
         ret_ty: AstType,
         span_id: SpanId,
     ) -> Result<FlattenResult> {
+        let current_block_id = self.block_id;
         // Add links
         for (key, link_id, ty) in values {
-            let code = LCode::CallValue(link_id.into());
-            let entry = CodeEntry::new(
-                self.block_id,
-                code,
+            self.push_code(
+                LCode::CallValue(link_id.into()),
                 ty,
                 key,
                 span_id,
                 VarDefinitionSpace::Reg,
             );
-            self.push_entry_with_link(entry);
         }
 
         // Make call
-        let code = LCode::Call(v_fun.into());
-        let entry = CodeEntry::new(
-            self.block_id,
-            code,
+        let link_id = self.push_code(
+            LCode::Call(v_fun.into()),
             ret_ty.clone(),
             None,
             span_id,
             VarDefinitionSpace::Default,
         );
-        let link_id = self.push_entry_with_link(entry);
+
         Ok(FlattenResult::new(
-            self.block_id,
+            current_block_id,
             Some(link_id),
             ret_ty,
             false,
@@ -1084,32 +1082,26 @@ impl Flatten {
         b: &mut NB,
     ) -> Result<FlattenResult> {
         let (current_block_id, ret_ty, values, _call_ty) =
-            self.add_function_args(&def, args, span_id, fenv, b)?;
+            self.push_function_args(&def, args, span_id, fenv, b)?;
 
         // Add links
         for (key, link_id, ty) in values {
-            let code = LCode::CallValue(link_id.into());
-            let entry = CodeEntry::new(
-                current_block_id,
-                code,
+            self.push_code(
+                LCode::CallValue(link_id.into()),
                 ty,
                 key,
                 span_id,
                 VarDefinitionSpace::Reg,
             );
-            self.push_entry_with_link(entry);
         }
 
-        let code = LCode::Builtin(id);
-        let entry = CodeEntry::new(
-            current_block_id,
-            code,
+        let link_id = self.push_code(
+            LCode::Builtin(id),
             ret_ty.clone(),
             None,
             span_id,
             VarDefinitionSpace::Default,
         );
-        let link_id = self.push_entry_with_link(entry);
         self.switch_blocks(current_block_id);
         Ok(FlattenResult::new(
             current_block_id,
@@ -1165,7 +1157,7 @@ impl Flatten {
         def: &Lambda,
         fenv: &mut FlattenEnvironment,
     ) {
-        let template_id = self.push_template(def.clone());
+        let template_id = self.insert_template(def.clone());
         let block = self.get_block(block_id);
         let scope_id = block.scope_id;
         let scope = fenv.get_scope_mut(scope_id);
@@ -1516,10 +1508,7 @@ impl Flatten {
 
             Ast::Sequence(exprs) => {
                 self.switch_blocks(current_block_id);
-                //self.block_id = block_id;
-                //let block = self.get_block(block_id);
-                //println!("sequence: {:?}", (block_id, block.scope_id, block.links.len()));
-                self.flatten_sequence(exprs, span_id, fenv, b)
+                self.push_sequence(exprs, span_id, fenv, b)
             }
 
             Ast::Global(name, expr) => {
