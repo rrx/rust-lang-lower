@@ -567,16 +567,11 @@ impl Flatten {
         Ok(FlattenResult::new(self.block_id, link_id, ty, is_term))
     }
 
-    pub fn add_return(
-        &mut self,
-        block_id: BlockId,
-        link_ids: Vec<(LinkId, AstType)>,
-        span_id: SpanId,
-    ) -> LinkId {
+    pub fn push_return(&mut self, link_ids: Vec<(LinkId, AstType)>, span_id: SpanId) -> LinkId {
         for (link_id, ty) in link_ids.iter() {
             let code = LCode::CallValue((*link_id).into());
             let entry = CodeEntry::new(
-                block_id,
+                self.block_id,
                 code,
                 ty.clone(),
                 None,
@@ -588,7 +583,7 @@ impl Flatten {
 
         let code = LCode::Return;
         let entry = CodeEntry::new(
-            block_id,
+            self.block_id,
             code,
             AstType::Unit,
             None,
@@ -598,9 +593,8 @@ impl Flatten {
         self.push_entry_with_link(entry)
     }
 
-    pub fn add_return_block(
+    pub fn push_return_block(
         &mut self,
-        ret_block_id: BlockId,
         scope_id: ScopeId,
         return_type: AstType,
         span_id: SpanId,
@@ -611,7 +605,7 @@ impl Flatten {
         let name = b.labels.fresh_key("ret");
 
         let (_v_block, v_args) = self.start_block(
-            ret_block_id,
+            self.block_id,
             scope_id,
             AstType::Func(
                 return_type.clone().into(),
@@ -622,7 +616,7 @@ impl Flatten {
             VarDefinitionSpace::Reg,
             fenv,
         );
-        self.add_return(ret_block_id, v_args, span_id);
+        self.push_return(v_args, span_id);
     }
 
     pub fn push_jump(
@@ -1312,9 +1306,9 @@ impl Flatten {
             ret_arg_type
         };
 
-        self.add_return_block(ret_block_id, fun_scope_id, ret_ty.clone(), span_id, fenv, b);
-
-        self.block_id = block_id;
+        self.switch_blocks(ret_block_id);
+        self.push_return_block(fun_scope_id, ret_ty.clone(), span_id, fenv, b);
+        self.switch_blocks(block_id);
         Ok(FlattenResult::new(block_id, Some(v_block), fun_ty, false))
     }
 
