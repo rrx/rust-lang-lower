@@ -1751,13 +1751,12 @@ impl Flatten {
                 let offset_decl =
                     if let Some(v_decl) = self.resolve_name(current_block_id, name, fenv) {
                         let ty = self.get_type(v_decl).clone();
-                        if ty != expr_ty {
+                        if b.types.u.unify(&ty, &expr_ty).is_err() {
                             b.push_error(
                                 &format!("4-Type Mismatch: {:?}, {:?}", ty, expr_ty),
                                 node.span_id,
                             );
                         }
-                        //assert_eq!(data.ty, expr_ty);
                         v_decl
                     } else {
                         let block = self.get_block(current_block_id);
@@ -2050,20 +2049,17 @@ impl Flatten {
                 }
 
                 self.switch_blocks(rc.block_id);
-                let code = LCode::Ternary(
-                    rc.link_id.unwrap().into(),
-                    then_block_id.into(),
-                    else_block_id.into(),
-                );
-                let entry = CodeEntry::new(
-                    rc.block_id,
-                    code,
+                let v = self.push_code(
+                    LCode::Ternary(
+                        rc.link_id.unwrap().into(),
+                        then_block_id.into(),
+                        else_block_id.into(),
+                    ),
                     then_ty.clone(),
                     None,
                     span_id,
                     VarDefinitionSpace::Reg,
                 );
-                let v = self.push_entry_with_link(entry);
                 self.switch_blocks(rc.block_id);
                 Ok(FlattenResult::new(rc.block_id, Some(v), then_ty, false))
             }
