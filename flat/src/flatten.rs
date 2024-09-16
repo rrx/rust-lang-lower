@@ -1640,7 +1640,7 @@ impl Flatten {
                 let mut block_id = block_id;
                 let span_id = if let Some(expr) = maybe_expr {
                     let expr_span_id = expr.span_id;
-                    self.block_id = block_id;
+                    self.switch_blocks(block_id);
                     let r = self.push_node(block_id, *expr, fenv, b)?;
                     assert_eq!(self.block_id, r.block_id);
                     block_id = r.block_id;
@@ -1685,10 +1685,10 @@ impl Flatten {
             Ast::BinaryOp(op, x, y) => {
                 // expression, non-terminal
                 let x_span_id = x.span_id;
-                self.block_id = block_id;
+                self.switch_blocks(block_id);
                 let rx = self.push_node(block_id, *x, fenv, b)?;
                 assert_eq!(self.block_id, rx.block_id);
-                self.block_id = rx.block_id;
+                self.switch_blocks(rx.block_id);
                 let ry = self.push_node(rx.block_id, *y, fenv, b)?;
                 assert_eq!(self.block_id, ry.block_id);
                 let current_block_id = ry.block_id;
@@ -1786,7 +1786,7 @@ impl Flatten {
                     return Ok(FlattenResult::new(block_id, None, ty, false));
                 }
 
-                self.block_id = block_id;
+                self.switch_blocks(block_id);
                 let r = self.push_node(block_id, *expr, fenv, b)?;
                 assert_eq!(self.block_id, r.block_id);
                 let current_block_id = r.block_id;
@@ -1854,7 +1854,7 @@ impl Flatten {
 
             Ast::UnaryOp(op, x) => {
                 // op1 is expression, non-terminal
-                self.block_id = block_id;
+                self.switch_blocks(block_id);
                 let r = self.push_node(block_id, *x, fenv, b)?;
                 assert_eq!(self.block_id, r.block_id);
                 let current_block_id = r.block_id;
@@ -2040,7 +2040,7 @@ impl Flatten {
                 let scope_id = block.scope_id;
 
                 // Condition
-                self.block_id = block_id;
+                self.switch_blocks(block_id);
                 let rc = self.push_node(block_id, *c, fenv, b)?;
                 assert_eq!(self.block_id, rc.block_id);
 
@@ -2133,7 +2133,7 @@ impl Flatten {
                 let mut v_block = block_id;
                 let mut ty = AstType::Unit;
                 if let Some(expr) = maybe_expr {
-                    self.block_id = block_id;
+                    self.switch_blocks(block_id);
                     let r = self.push_node(block_id, *expr, fenv, b)?;
                     assert_eq!(self.block_id, r.block_id);
                     if let Some(v) = r.link_id {
@@ -2356,7 +2356,7 @@ impl Flatten {
                 let mut link_ids = vec![];
                 let mut current_block_id = block_id;
                 for d in dims {
-                    self.block_id = current_block_id;
+                    self.switch_blocks(current_block_id);
                     let r = self.push_node(current_block_id, d, fenv, b)?;
                     assert_eq!(self.block_id, r.block_id);
                     current_block_id = r.block_id;
