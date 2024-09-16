@@ -1127,16 +1127,13 @@ impl Flatten {
 
             let mut v_args = vec![];
             for (i, (name, ty)) in arg_ty.fields().iter().enumerate() {
-                let code = LCode::Arg(i as u8);
-                let entry = CodeEntry::new(
-                    self.block_id,
-                    code,
+                let link_id = self.push_code(
+                    LCode::Arg(i as u8),
                     ty.clone(),
                     *name,
                     span_id,
                     VarDefinitionSpace::Arg,
                 );
-                let link_id = self.push_entry_with_link(entry);
                 v_args.push((link_id, ty.clone()));
                 if let Some(name) = name {
                     fenv.scope_define(scope_id, *name, link_id.into());
@@ -2150,30 +2147,25 @@ impl Flatten {
                         v_block = r.block_id;
                         ty = r.ty.clone();
                         // push single arg
-                        let code = LCode::CallValue(v.into());
-                        let entry = CodeEntry::new(
-                            v_block,
-                            code,
+                        self.push_code(
+                            LCode::CallValue(v.into()),
                             r.ty,
                             None,
                             node.span_id,
                             VarDefinitionSpace::Reg,
                         );
-                        let _ = self.push_entry_with_link(entry);
                     }
                 }
 
-                let code = LCode::Yield;
-                let entry = CodeEntry::new(
-                    v_block,
-                    code,
+                self.switch_blocks(v_block);
+                let v = self.push_code(
+                LCode::Yield,
                     ty.clone(),
                     None,
                     node.span_id,
                     VarDefinitionSpace::Reg,
                 );
-                let v = self.push_entry_with_link(entry);
-                self.block_id = v_block;
+                self.switch_blocks(v_block);
                 Ok(FlattenResult::new(v_block, Some(v), ty, true))
             }
 

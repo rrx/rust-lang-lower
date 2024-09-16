@@ -268,7 +268,7 @@ mod tests {
         b.spans.diagnostics_dump();
         let mut f = r?;
         b.spans.diagnostics_dump();
-        f.bake_all(&mut fenv, b)?;
+        f.push_bake_all(&mut fenv, b)?;
         let m = FlattenModule::from_builder(f, &mut fenv, b);
         m.dump(&mut fenv, b);
         m.block_graph("blocks.dot", &b);
