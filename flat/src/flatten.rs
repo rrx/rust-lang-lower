@@ -939,18 +939,19 @@ impl Flatten {
 
     fn push_call_by_name(
         &mut self,
-        block_id: BlockId,
+        //block_id: BlockId,
         name: StringKey,
         args: Vec<Argument>,
         span_id: SpanId,
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
     ) -> Result<FlattenResult> {
+        let current_block_id = self.block_id;
         // look up the lambda
         // If the lambda is in the static scope, we do a normal call
         // If it's in a non-static scope, then we bake a lambda and jump to it
         // If we wanted to so some inlining, we just have to switch to doing lambdas instead
-        if let Some((scope_id, def)) = self.find_lambda(block_id, name, fenv) {
+        if let Some((scope_id, def)) = self.find_lambda(current_block_id, name, fenv) {
             //let current_block_id = self.block_id;
             let (current_block_id, ret_ty, call_values, call_ty) =
                 self.add_function_args(&def, args, span_id, fenv, b)?;
@@ -1830,7 +1831,7 @@ impl Flatten {
                     // call is an expression, it's non-terminal
                     // lambdas should also be non-terminal
                     Ast::Identifier(ident) => {
-                        self.push_call_by_name(block_id, *ident, args, node.span_id, fenv, b)
+                        self.push_call_by_name(*ident, args, node.span_id, fenv, b)
                     }
                     _ => unimplemented!("{:?}", expr.node),
                 }
