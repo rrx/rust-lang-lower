@@ -1121,9 +1121,7 @@ impl Flatten {
         fenv: &mut FlattenEnvironment,
     ) -> (LinkId, Vec<(LinkId, AstType)>) {
         //println!("start block: {:?}", (&block_ty));
-        let code = LCode::Label;
-        let entry = CodeEntry::new(self.block_id, code, block_ty.clone(), name, span_id, mem);
-        let block_link_id = self.push_entry_with_link(entry);
+        let block_link_id = self.push_code(LCode::Label, block_ty.clone(), name, span_id, mem);
         if let AstType::Func(arg_ty, _ret_ty) = &block_ty {
             assert!(arg_ty.is_composite());
 
