@@ -506,8 +506,7 @@ impl Flatten {
                                 VarDefinitionSpace::Default,
                                 fenv,
                             );
-                            self.switch_blocks(current_block_id);
-                            self.block_succ(self.block_id, new_block_id, Successor::BlockScope);
+                            self.block_succ(current_block_id, new_block_id, Successor::BlockScope);
                             let new_block = self.get_block_mut(new_block_id);
                             new_block.next = seq_next_block_id;
                             new_block_id
@@ -669,7 +668,7 @@ impl Flatten {
 
     pub fn add_function_args(
         &mut self,
-        block_id: BlockId,
+        //block_id: BlockId,
         def: &Lambda,
         args: Vec<Argument>,
         span_id: SpanId,
@@ -837,7 +836,7 @@ impl Flatten {
         }
 
         let mut values = vec![];
-        let mut current_block_id = block_id;
+        let mut current_block_id = self.block_id;
         let mut link_ids = vec![];
         //let mut has_kwargs = false;
         // block may have changed so we use the new block returned from the
@@ -846,7 +845,7 @@ impl Flatten {
         for a in args.into_iter() {
             match a {
                 Argument::Positional(expr) => {
-                    self.block_id = current_block_id;
+                    self.switch_blocks(current_block_id);
                     let r = self.flatten(current_block_id, *expr, fenv, b)?;
                     assert_eq!(self.block_id, r.block_id);
                     current_block_id = r.block_id;
@@ -855,7 +854,7 @@ impl Flatten {
                     link_ids.push(link_id);
                 }
                 Argument::Named(key, expr) => {
-                    self.block_id = current_block_id;
+                    self.switch_blocks(current_block_id);
                     let r = self.flatten(current_block_id, *expr, fenv, b)?;
                     assert_eq!(self.block_id, r.block_id);
                     current_block_id = r.block_id;
@@ -866,7 +865,7 @@ impl Flatten {
                 Argument::Args(key, exprs) => {
                     let mut args_values = vec![];
                     for expr in exprs {
-                        self.block_id = current_block_id;
+                        self.switch_blocks(current_block_id);
                         let r = self.flatten(current_block_id, expr, fenv, b)?;
                         assert_eq!(self.block_id, r.block_id);
                         current_block_id = r.block_id;
@@ -908,7 +907,7 @@ impl Flatten {
                 }
                 Argument::KwArgs(key, _expr) => {
                     let node: AstNode = 1.into();
-                    self.block_id = current_block_id;
+                    self.switch_blocks(current_block_id);
                     let r = self.flatten(current_block_id, node, fenv, b)?;
                     assert_eq!(self.block_id, r.block_id);
                     current_block_id = r.block_id;
@@ -933,13 +932,12 @@ impl Flatten {
             );
         }
 
-        let _call_type_id = b.types.s(&call_ty);
-
+        //let _call_type_id = b.types.s(&call_ty);
         //println!("blocks: {:?}", (block_id, current_block_id));
         Ok((current_block_id, ret.clone(), values, call_ty))
     }
 
-    fn call_by_name(
+    fn push_call_by_name(
         &mut self,
         block_id: BlockId,
         name: StringKey,
@@ -953,10 +951,9 @@ impl Flatten {
         // If it's in a non-static scope, then we bake a lambda and jump to it
         // If we wanted to so some inlining, we just have to switch to doing lambdas instead
         if let Some((scope_id, def)) = self.find_lambda(block_id, name, fenv) {
-            let current_block_id = self.block_id;
-
+            //let current_block_id = self.block_id;
             let (current_block_id, ret_ty, call_values, call_ty) =
-                self.add_function_args(current_block_id, &def, args, span_id, fenv, b)?;
+                self.add_function_args(&def, args, span_id, fenv, b)?;
 
             // function type, based on the caller
             let func_ty = AstType::func(
@@ -1082,7 +1079,7 @@ impl Flatten {
         b: &mut NB,
     ) -> Result<FlattenResult> {
         let (current_block_id, ret_ty, values, _call_ty) =
-            self.add_function_args(self.block_id, &def, args, span_id, fenv, b)?;
+            self.add_function_args(&def, args, span_id, fenv, b)?;
 
         // Add links
         for (key, link_id, ty) in values {
@@ -1833,7 +1830,7 @@ impl Flatten {
                     // call is an expression, it's non-terminal
                     // lambdas should also be non-terminal
                     Ast::Identifier(ident) => {
-                        self.call_by_name(block_id, *ident, args, node.span_id, fenv, b)
+                        self.push_call_by_name(block_id, *ident, args, node.span_id, fenv, b)
                     }
                     _ => unimplemented!("{:?}", expr.node),
                 }
