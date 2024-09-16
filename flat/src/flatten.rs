@@ -1698,9 +1698,7 @@ impl Flatten {
 
             Ast::Identifier(key) => {
                 // identifier is expression, non-terminal
-                //self.dump_scope(block_id, fenv, b);
                 if let Some(def_link_id) = self.resolve_name(current_block_id, key, fenv) {
-                    //let ty = data.ty.clone();
                     let entry = self.get_entry(def_link_id).clone();
                     let ty = entry.ty.clone();
                     let mem = entry.mem;
@@ -1708,18 +1706,14 @@ impl Flatten {
                     let link_id = if let VarDefinitionSpace::Arg = mem {
                         def_link_id
                     } else {
-                        let code = LCode::Load(def_link_id);
-                        let entry = CodeEntry::new(
-                            current_block_id,
-                            code,
+                        self.push_code(
+                            LCode::Load(def_link_id),
                             ty.clone(),
                             None,
                             node.span_id,
                             entry.mem,
-                        );
-                        self.push_entry_with_link(entry)
+                        )
                     };
-                    self.switch_blocks(current_block_id);
                     Ok(FlattenResult::new(
                         current_block_id,
                         Some(link_id),
@@ -1768,32 +1762,26 @@ impl Flatten {
                     } else {
                         let block = self.get_block(current_block_id);
                         let scope_id = block.scope_id;
-                        let code = LCode::Declare;
                         let expr_ty = self.get_entry(v_expr).ty.clone();
-                        let entry = CodeEntry::new(
-                            current_block_id,
-                            code,
+                        let link_id = self.push_code(
+                            LCode::Declare,
                             expr_ty.clone(),
                             Some(name),
                             node.span_id,
                             VarDefinitionSpace::Default,
                         );
-                        let link_id = self.push_entry_with_link(entry);
                         fenv.scope_define(scope_id, name, link_id);
                         link_id.into()
                     };
 
-                let code = LCode::Store(offset_decl, v_expr);
-                let entry = CodeEntry::new(
-                    current_block_id,
-                    code,
+                let link_id = self.push_code(
+                    LCode::Store(offset_decl, v_expr),
                     AstType::Unit,
                     Some(name),
                     node.span_id,
                     VarDefinitionSpace::Default,
                 );
-                let link_id = self.push_entry_with_link(entry);
-                self.block_id = current_block_id;
+                self.switch_blocks(current_block_id);
                 Ok(FlattenResult::new(
                     current_block_id,
                     Some(link_id),
@@ -1820,28 +1808,22 @@ impl Flatten {
                 assert_eq!(self.block_id, r.block_id);
                 let current_block_id = r.block_id;
 
-                let code = LCode::Value(r.link_id.unwrap().into());
-                let entry = CodeEntry::new(
-                    current_block_id,
-                    code,
+                self.push_code(
+                    LCode::Value(r.link_id.unwrap().into()),
                     r.ty.clone(),
                     None,
                     node.span_id,
                     VarDefinitionSpace::Reg,
                 );
-                let _ = self.push_entry_with_link(entry);
 
-                let code = LCode::Op1(op);
-                let entry = CodeEntry::new(
-                    current_block_id,
-                    code,
+                let link_id = self.push_code(
+                    LCode::Op1(op),
                     r.ty.clone(),
                     None,
                     node.span_id,
                     VarDefinitionSpace::Reg,
                 );
-                let link_id = self.push_entry_with_link(entry);
-                self.block_id = current_block_id;
+                self.switch_blocks(current_block_id);
                 Ok(FlattenResult::new(
                     current_block_id,
                     Some(link_id),
@@ -1921,20 +1903,17 @@ impl Flatten {
                 self.switch_blocks(current_block_id);
                 let r = self.push_node(*condition, fenv, b)?;
                 assert_eq!(self.block_id, r.block_id);
-                let code = LCode::Branch(
-                    r.link_id.unwrap().into(),
-                    then_block_id.into(),
-                    else_block_id.into(),
-                );
-                let entry = CodeEntry::new(
-                    current_block_id,
-                    code,
+                let v = self.push_code(
+                    LCode::Branch(
+                        r.link_id.unwrap().into(),
+                        then_block_id.into(),
+                        else_block_id.into(),
+                    ),
                     AstType::Unit,
                     None,
                     span_id,
                     VarDefinitionSpace::Reg,
                 );
-                let v = self.push_entry_with_link(entry);
                 self.switch_blocks(r.block_id);
                 Ok(FlattenResult::new(r.block_id, Some(v), AstType::Unit, true))
             }
