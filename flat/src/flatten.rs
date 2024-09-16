@@ -977,6 +977,20 @@ impl Flatten {
 
             let is_static = fenv.static_scope_id() == scope_id;
             if is_static {
+                // if it's defined in static scope, just call it
+                let v_decl = if let Some(v_decl) = self.resolve_name(current_block_id, name, fenv) {
+                    v_decl
+                } else {
+                    // if it's not already baked, we need to do that here
+                    self.block_id = fenv.static_block_id(); //block_id;
+                    let v_decl = self.bake(self.block_id, name, None, fenv, b)?;
+                    v_decl
+                };
+
+                self.block_id = current_block_id;
+                self.add_function_call(current_block_id, v_decl, call_values, ret_ty, span_id)
+
+                /*
                 return self.add_static_function_call_by_name(
                     current_block_id,
                     call_values,
@@ -986,7 +1000,43 @@ impl Flatten {
                     fenv,
                     b,
                 );
+                */
             } else {
+                // BAKE LAMBDA
+                // TODO: There's a better way to do this.  Use continuations
+                // eventually.
+                // create a new block for the lambda
+                // we call the lambda by jumping to it
+                // the new block points to a next block
+                // which we create here, and we return next block to the sequence
+                // This involves creating a new lambda block for each call site.  This
+                // is not efficient, if we call more than once.  In this other case, we
+                // want to pass the continuation into the block, so next is not
+                // required.
+                //
+                // Bake the lambda, this involes writing out the blocks, and passing the next block
+                // as a continuation.  This currently requires one lambda for each call.
+                // Eventually switch to CPS
+                self.block_id = current_block_id;
+                let (fun_block_id, next_block_id, next_link_id) =
+                    self.bake_lambda(current_block_id, name, None, span_id, fenv, b)?;
+                self.block_id = next_block_id;
+
+                // Lambda Block
+                self.block_succ(current_block_id, fun_block_id, Successor::BlockScope);
+
+                // now that we have the arguments calculated, and the lambda baked, jump!
+                self.add_jump(current_block_id, fun_block_id.into(), call_values, span_id);
+
+                // block termination
+                Ok(FlattenResult::new(
+                    next_block_id,
+                    Some(next_link_id),
+                    ret_ty,
+                    true,
+                ))
+
+                /*
                 return self.add_lambda_call_by_name(
                     current_block_id,
                     call_values,
@@ -996,107 +1046,13 @@ impl Flatten {
                     fenv,
                     b,
                 );
+                    */
             }
         } else {
             let name = b.labels.r(name.into());
             b.push_error(&format!("Call name not found: {}", name), span_id);
             Err(Error::new(BlockifyError::Invalid))
         }
-    }
-
-    fn add_lambda_call_by_name(
-        &mut self,
-        current_block_id: BlockId,
-        call_values: Vec<(Option<StringKey>, LinkId, AstType)>,
-        ret_ty: AstType,
-        name: StringKey,
-        span_id: SpanId,
-        fenv: &mut FlattenEnvironment,
-        b: &mut NB,
-    ) -> Result<FlattenResult> {
-        // BAKE LAMBDA
-        // TODO: There's a better way to do this.  Use continuations
-        // eventually.
-        // create a new block for the lambda
-        // we call the lambda by jumping to it
-        // the new block points to a next block
-        // which we create here, and we return next block to the sequence
-        // This involves creating a new lambda block for each call site.  This
-        // is not efficient, if we call more than once.  In this other case, we
-        // want to pass the continuation into the block, so next is not
-        // required.
-        //
-        // Bake the lambda, this involes writing out the blocks, and passing the next block
-        // as a continuation.  This currently requires one lambda for each call.
-        // Eventually switch to CPS
-        self.block_id = current_block_id;
-        let (fun_block_id, next_block_id, next_link_id) =
-            self.bake_lambda(current_block_id, name, None, span_id, fenv, b)?;
-        self.block_id = next_block_id;
-
-        // Lambda Block
-        self.block_succ(current_block_id, fun_block_id, Successor::BlockScope);
-
-        // now that we have the arguments calculated, and the lambda baked, jump!
-        self.add_jump(current_block_id, fun_block_id.into(), call_values, span_id);
-
-        // block termination
-        Ok(FlattenResult::new(
-            next_block_id,
-            Some(next_link_id),
-            ret_ty,
-            true,
-        ))
-    }
-
-    fn add_static_function_call_by_name(
-        &mut self,
-        current_block_id: BlockId,
-        call_values: Vec<(Option<StringKey>, LinkId, AstType)>,
-        ret_ty: AstType,
-        name: StringKey,
-        //def: Lambda,
-        //args: Vec<Argument>,
-        span_id: SpanId,
-        fenv: &mut FlattenEnvironment,
-        b: &mut NB,
-    ) -> Result<FlattenResult> {
-        /*
-        // save current block, so we can come back to it later
-        let current_block_id = self.block_id;
-
-        let block_id = fenv.static_block_id();
-        let (current_block_id, ret_ty, values, call_ty) =
-            self.add_function_args(current_block_id, &def, args, span_id, fenv, b)?;
-
-        // function type, based on the caller
-        let func_ty = AstType::func(
-            call_ty.fields().iter().map(|(_, ty)| ty.clone()).collect(),
-            ret_ty.clone(),
-        );
-        println!("call ty: {}, {}", call_ty, func_ty);
-
-        let def_func_ty = def_to_type(&def, b);
-        if b.types.u.unify(&func_ty, &def_func_ty).is_err() {
-            b.push_error(
-                &format!("Type Mismatch: caller: {}, def: {}", &call_ty, &def_func_ty),
-                span_id,
-            );
-        }
-        */
-
-        // if it's defined in static scope, just call it
-        let v_decl = if let Some(v_decl) = self.resolve_name(current_block_id, name, fenv) {
-            v_decl
-        } else {
-            // if it's not already baked, we need to do that here
-            self.block_id = fenv.static_block_id(); //block_id;
-            let v_decl = self.bake(self.block_id, name, None, fenv, b)?;
-            v_decl
-        };
-
-        self.block_id = current_block_id;
-        return self.add_function_call(current_block_id, v_decl, call_values, ret_ty, span_id);
     }
 
     pub fn add_function_call(
