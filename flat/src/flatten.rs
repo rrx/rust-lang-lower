@@ -283,12 +283,18 @@ impl Flatten {
     }
 
     pub fn bake_main(&mut self, fenv: &mut FlattenEnvironment, b: &mut NB) -> Result<LinkId> {
+        let current_block_id = self.block_id;
         let name = b.labels.s("main");
         //let scope_id = fenv.static_scope_id();
         let block_id = fenv.static_block_id();
         // reset the block position before each function
+        // main is always static context
+        self.switch_blocks(fenv.static_block_id());
         self.block_id = block_id;
-        self.bake(block_id, name, None, fenv, b)
+        let r = self.push_bake(block_id, name, None, fenv, b);
+        // switch back after bake
+        self.switch_blocks(current_block_id);
+        r
     }
 
     pub fn bake_all(&mut self, fenv: &mut FlattenEnvironment, b: &mut NB) -> Result<Vec<LinkId>> {
@@ -305,7 +311,7 @@ impl Flatten {
         for key in keys.iter() {
             // reset the block position before each function
             self.block_id = block_id;
-            let link_id = self.bake(block_id, *key, None, fenv, b)?;
+            let link_id = self.push_bake(block_id, *key, None, fenv, b)?;
             links.push(link_id);
         }
         Ok(links)
@@ -978,7 +984,7 @@ impl Flatten {
                 } else {
                     // if it's not already baked, we need to do that here
                     self.block_id = fenv.static_block_id(); //block_id;
-                    let v_decl = self.bake(self.block_id, name, None, fenv, b)?;
+                    let v_decl = self.push_bake(self.block_id, name, None, fenv, b)?;
                     v_decl
                 };
 
@@ -1309,7 +1315,12 @@ impl Flatten {
 
         // restore position back to where we started
         self.switch_blocks(current_block_id);
-        Ok(FlattenResult::new(current_block_id, Some(v_block), fun_ty, false))
+        Ok(FlattenResult::new(
+            current_block_id,
+            Some(v_block),
+            fun_ty,
+            false,
+        ))
     }
 
     pub fn find_lambda(
@@ -1452,7 +1463,7 @@ impl Flatten {
         }
     }
 
-    pub fn bake(
+    pub fn push_bake(
         &mut self,
         block_id: BlockId,
         name: StringKey,
