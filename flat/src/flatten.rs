@@ -988,19 +988,7 @@ impl Flatten {
                 };
 
                 self.block_id = current_block_id;
-                self.add_function_call(current_block_id, v_decl, call_values, ret_ty, span_id)
-
-                /*
-                return self.add_static_function_call_by_name(
-                    current_block_id,
-                    call_values,
-                    ret_ty,
-                    name,
-                    span_id,
-                    fenv,
-                    b,
-                );
-                */
+                self.push_function_call(v_decl, call_values, ret_ty, span_id)
             } else {
                 // BAKE LAMBDA
                 // TODO: There's a better way to do this.  Use continuations
@@ -1035,18 +1023,6 @@ impl Flatten {
                     ret_ty,
                     true,
                 ))
-
-                /*
-                return self.add_lambda_call_by_name(
-                    current_block_id,
-                    call_values,
-                    ret_ty,
-                    name,
-                    span_id,
-                    fenv,
-                    b,
-                );
-                    */
             }
         } else {
             let name = b.labels.r(name.into());
@@ -1055,9 +1031,8 @@ impl Flatten {
         }
     }
 
-    pub fn add_function_call(
+    pub fn push_function_call(
         &mut self,
-        block_id: BlockId,
         v_fun: LinkId,
         values: Vec<(Option<StringKey>, LinkId, AstType)>,
         ret_ty: AstType,
@@ -1066,14 +1041,21 @@ impl Flatten {
         // Add links
         for (key, link_id, ty) in values {
             let code = LCode::CallValue(link_id.into());
-            let entry = CodeEntry::new(block_id, code, ty, key, span_id, VarDefinitionSpace::Reg);
+            let entry = CodeEntry::new(
+                self.block_id,
+                code,
+                ty,
+                key,
+                span_id,
+                VarDefinitionSpace::Reg,
+            );
             self.push_entry_with_link(entry);
         }
 
         // Make call
         let code = LCode::Call(v_fun.into());
         let entry = CodeEntry::new(
-            block_id,
+            self.block_id,
             code,
             ret_ty.clone(),
             None,
@@ -1081,7 +1063,12 @@ impl Flatten {
             VarDefinitionSpace::Default,
         );
         let link_id = self.push_entry_with_link(entry);
-        Ok(FlattenResult::new(block_id, Some(link_id), ret_ty, false))
+        Ok(FlattenResult::new(
+            self.block_id,
+            Some(link_id),
+            ret_ty,
+            false,
+        ))
     }
 
     pub fn add_builtin_call(
