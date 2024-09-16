@@ -941,6 +941,24 @@ impl Flatten {
         Ok((current_block_id, ret.clone(), values, call_ty))
     }
 
+    fn call_by_name(
+        &mut self,
+        scope_id: ScopeId,
+        name: StringKey,
+        def: Lambda,
+        args: Vec<Argument>,
+        span_id: SpanId,
+        fenv: &mut FlattenEnvironment,
+        b: &mut NB,
+    ) -> Result<FlattenResult> {
+        let is_static = fenv.static_scope_id() == scope_id;
+        if is_static {
+            return self.add_static_function_call_by_name(name, def, args, span_id, fenv, b);
+        } else {
+            return self.add_lambda_call_by_name(name, def, args, span_id, fenv, b);
+        }
+    }
+
     fn add_lambda_call_by_name(
         &mut self,
         name: StringKey,
@@ -982,7 +1000,9 @@ impl Flatten {
         // want to pass the continuation into the block, so next is not
         // required.
         //
-        // if it's not already baked, we need to do that here
+        // Bake the lambda, this involes writing out the blocks, and passing the next block
+        // as a continuation.  This currently requires one lambda for each call.
+        // Eventually switch to CPS
         self.block_id = current_block_id;
         let (fun_block_id, next_block_id, next_link_id) =
             self.bake_lambda(current_block_id, name, None, span_id, fenv, b)?;
@@ -991,20 +1011,16 @@ impl Flatten {
         // Lambda Block
         self.block_succ(current_block_id, fun_block_id, Successor::BlockScope);
 
-        // now that we have the arguments calculated
-        // jump to the function baked as a block
-        // complete this block with a jump
+        // now that we have the arguments calculated, and the lambda baked, jump!
         self.add_jump(current_block_id, fun_block_id.into(), call_values, span_id);
 
+        // block termination
         Ok(FlattenResult::new(
             next_block_id,
             Some(next_link_id),
             ret_ty,
             true,
         ))
-        //return self.add_function_call(current_block_id, v_decl, values, ret_ty, span_id);
-
-        // ================
     }
 
     fn add_static_function_call_by_name(
@@ -1865,6 +1881,16 @@ impl Flatten {
                         let name = b.labels.r(ident.into());
 
                         if let Some((scope_id, def)) = self.find_lambda(block_id, *ident, fenv) {
+                            return self.call_by_name(
+                                scope_id,
+                                *ident,
+                                def,
+                                args,
+                                node.span_id,
+                                fenv,
+                                b,
+                            );
+
                             let is_static = fenv.static_scope_id() == scope_id;
                             if is_static {
                                 return self.add_static_function_call_by_name(
