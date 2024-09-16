@@ -1633,17 +1633,13 @@ impl Flatten {
             Ast::Literal(lit) => {
                 // literal is expression, non-terminal
                 let ty: AstType = lit.clone().into();
-                let code = LCode::Const(lit);
-                let entry = CodeEntry::new(
-                    current_block_id,
-                    code,
+                let link_id = self.push_code(
+                    LCode::Const(lit),
                     ty.clone(),
                     None,
                     node.span_id,
                     VarDefinitionSpace::Default,
                 );
-                let link_id = self.push_entry_with_link(entry);
-                self.switch_blocks(current_block_id);
                 Ok(FlattenResult::new(
                     current_block_id,
                     Some(link_id),
@@ -1673,29 +1669,24 @@ impl Flatten {
                 }
 
                 for (v, ty) in [(vx, &rx.ty), (vy, &ry.ty)] {
-                    let code = LCode::Value(v.into());
-                    let entry = CodeEntry::new(
-                        current_block_id,
-                        code,
+                    self.push_code(
+                        LCode::Value(v.into()),
                         ty.clone(),
                         None,
                         node.span_id,
                         VarDefinitionSpace::Reg,
                     );
-                    let _ = self.push_entry_with_link(entry);
                 }
 
-                let code = LCode::Op2(op.node);
                 let ret_ty = op.node.get_type(&rx.ty, &ry.ty);
-                let entry = CodeEntry::new(
-                    ry.block_id,
-                    code,
+                let link_id = self.push_code(
+                    LCode::Op2(op.node),
                     ret_ty.clone(),
                     None,
                     op.span_id,
                     VarDefinitionSpace::Default,
                 );
-                let link_id = self.push_entry_with_link(entry);
+
                 self.switch_blocks(current_block_id);
                 Ok(FlattenResult::new(
                     current_block_id,
