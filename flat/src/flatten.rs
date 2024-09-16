@@ -943,19 +943,24 @@ impl Flatten {
 
     fn call_by_name(
         &mut self,
-        scope_id: ScopeId,
+        block_id: BlockId,
         name: StringKey,
-        def: Lambda,
         args: Vec<Argument>,
         span_id: SpanId,
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
     ) -> Result<FlattenResult> {
-        let is_static = fenv.static_scope_id() == scope_id;
-        if is_static {
-            return self.add_static_function_call_by_name(name, def, args, span_id, fenv, b);
+        if let Some((scope_id, def)) = self.find_lambda(block_id, name, fenv) {
+            let is_static = fenv.static_scope_id() == scope_id;
+            if is_static {
+                return self.add_static_function_call_by_name(name, def, args, span_id, fenv, b);
+            } else {
+                return self.add_lambda_call_by_name(name, def, args, span_id, fenv, b);
+            }
         } else {
-            return self.add_lambda_call_by_name(name, def, args, span_id, fenv, b);
+            let name = b.labels.r(name.into());
+            b.push_error(&format!("Call name not found: {}", name), span_id);
+            Err(Error::new(BlockifyError::Invalid))
         }
     }
 
@@ -1878,43 +1883,7 @@ impl Flatten {
                     // call is an expression, it's non-terminal
                     // lambdas should also be non-terminal
                     Ast::Identifier(ident) => {
-                        let name = b.labels.r(ident.into());
-
-                        if let Some((scope_id, def)) = self.find_lambda(block_id, *ident, fenv) {
-                            return self.call_by_name(
-                                scope_id,
-                                *ident,
-                                def,
-                                args,
-                                node.span_id,
-                                fenv,
-                                b,
-                            );
-
-                            let is_static = fenv.static_scope_id() == scope_id;
-                            if is_static {
-                                return self.add_static_function_call_by_name(
-                                    *ident,
-                                    def,
-                                    args,
-                                    node.span_id,
-                                    fenv,
-                                    b,
-                                );
-                            } else {
-                                return self.add_lambda_call_by_name(
-                                    *ident,
-                                    def,
-                                    args,
-                                    node.span_id,
-                                    fenv,
-                                    b,
-                                );
-                            }
-                        } else {
-                            b.push_error(&format!("Call name not found: {}", name), node.span_id);
-                            Err(Error::new(BlockifyError::Invalid))
-                        }
+                        self.call_by_name(block_id, *ident, args, node.span_id, fenv, b)
                     }
                     _ => unimplemented!("{:?}", expr.node),
                 }
