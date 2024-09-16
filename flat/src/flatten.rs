@@ -286,19 +286,19 @@ impl Flatten {
         let current_block_id = self.block_id;
         let name = b.labels.s("main");
         //let scope_id = fenv.static_scope_id();
-        let block_id = fenv.static_block_id();
+        //let block_id = fenv.static_block_id();
         // reset the block position before each function
         // main is always static context
         self.switch_blocks(fenv.static_block_id());
-        self.block_id = block_id;
-        let r = self.push_bake(block_id, name, None, fenv, b);
+        //self.block_id = block_id;
+        let r = self.push_bake(name, None, fenv, b);
         // switch back after bake
         self.switch_blocks(current_block_id);
         r
     }
 
     pub fn bake_all(&mut self, fenv: &mut FlattenEnvironment, b: &mut NB) -> Result<Vec<LinkId>> {
-        let block_id = fenv.static_block_id();
+        let static_block_id = fenv.static_block_id();
         let scope_id = fenv.static_scope_id();
         let scope = fenv.get_scope(scope_id);
         let keys = scope
@@ -310,8 +310,8 @@ impl Flatten {
         let mut links = vec![];
         for key in keys.iter() {
             // reset the block position before each function
-            self.block_id = block_id;
-            let link_id = self.push_bake(block_id, *key, None, fenv, b)?;
+            self.switch_blocks(static_block_id);
+            let link_id = self.push_bake(*key, None, fenv, b)?;
             links.push(link_id);
         }
         Ok(links)
@@ -984,7 +984,7 @@ impl Flatten {
                 } else {
                     // if it's not already baked, we need to do that here
                     self.block_id = fenv.static_block_id(); //block_id;
-                    let v_decl = self.push_bake(self.block_id, name, None, fenv, b)?;
+                    let v_decl = self.push_bake(name, None, fenv, b)?;
                     v_decl
                 };
 
@@ -1174,7 +1174,6 @@ impl Flatten {
 
     fn push_bake_function(
         &mut self,
-        //block_id: BlockId,
         def: Lambda,
         name: StringKey,
         fenv: &mut FlattenEnvironment,
@@ -1465,14 +1464,18 @@ impl Flatten {
 
     pub fn push_bake(
         &mut self,
-        block_id: BlockId,
+        //block_id: BlockId,
         name: StringKey,
         maybe_ty: Option<AstType>,
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
     ) -> Result<LinkId> {
-        if let Some((scope_id, def)) = self.find_lambda(block_id, name, fenv) {
-            println!("bake: {:?}", (scope_id, block_id, b.labels.r(name.into())));
+        let current_block_id = self.block_id;
+        if let Some((scope_id, def)) = self.find_lambda(current_block_id, name, fenv) {
+            println!(
+                "bake: {:?}",
+                (scope_id, current_block_id, b.labels.r(name.into()))
+            );
             if let Some(ty) = maybe_ty {
                 let fun_ty = b.types.r(def.fun_type).clone();
                 if b.types.u.unify(&ty, &fun_ty).is_err() {
@@ -1486,6 +1489,7 @@ impl Flatten {
             }
             let r = self.push_bake_function(def, name, fenv, b)?;
             self.drain_diagnostics(b);
+            self.switch_blocks(current_block_id);
             Ok(r.link_id.unwrap())
         } else {
             let s = b.labels.r(name.into());
