@@ -950,12 +950,52 @@ impl Flatten {
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
     ) -> Result<FlattenResult> {
+        // look up the lambda
+        // If the lambda is in the static scope, we do a normal call
+        // If it's in a non-static scope, then we bake a lambda and jump to it
+        // If we wanted to so some inlining, we just have to switch to doing lambdas instead
         if let Some((scope_id, def)) = self.find_lambda(block_id, name, fenv) {
+            let current_block_id = self.block_id;
+
+            let (current_block_id, ret_ty, call_values, call_ty) =
+                self.add_function_args(current_block_id, &def, args, span_id, fenv, b)?;
+
+            // function type, based on the caller
+            let func_ty = AstType::func(
+                call_ty.fields().iter().map(|(_, ty)| ty.clone()).collect(),
+                ret_ty.clone(),
+            );
+            println!("call ty: {}, {}", call_ty, func_ty);
+
+            let def_func_ty = def_to_type(&def, b);
+            if b.types.u.unify(&func_ty, &def_func_ty).is_err() {
+                b.push_error(
+                    &format!("Type Mismatch: caller: {}, def: {}", &call_ty, &def_func_ty),
+                    span_id,
+                );
+            }
+
             let is_static = fenv.static_scope_id() == scope_id;
             if is_static {
-                return self.add_static_function_call_by_name(name, def, args, span_id, fenv, b);
+                return self.add_static_function_call_by_name(
+                    current_block_id,
+                    call_values,
+                    ret_ty,
+                    name,
+                    span_id,
+                    fenv,
+                    b,
+                );
             } else {
-                return self.add_lambda_call_by_name(name, def, args, span_id, fenv, b);
+                return self.add_lambda_call_by_name(
+                    current_block_id,
+                    call_values,
+                    ret_ty,
+                    name,
+                    span_id,
+                    fenv,
+                    b,
+                );
             }
         } else {
             let name = b.labels.r(name.into());
@@ -966,33 +1006,14 @@ impl Flatten {
 
     fn add_lambda_call_by_name(
         &mut self,
+        current_block_id: BlockId,
+        call_values: Vec<(Option<StringKey>, LinkId, AstType)>,
+        ret_ty: AstType,
         name: StringKey,
-        def: Lambda,
-        args: Vec<Argument>,
         span_id: SpanId,
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
     ) -> Result<FlattenResult> {
-        let current_block_id = self.block_id;
-
-        let (current_block_id, ret_ty, call_values, call_ty) =
-            self.add_function_args(current_block_id, &def, args, span_id, fenv, b)?;
-
-        // function type, based on the caller
-        let func_ty = AstType::func(
-            call_ty.fields().iter().map(|(_, ty)| ty.clone()).collect(),
-            ret_ty.clone(),
-        );
-        println!("call ty: {}, {}", call_ty, func_ty);
-
-        let def_func_ty = def_to_type(&def, b);
-        if b.types.u.unify(&func_ty, &def_func_ty).is_err() {
-            b.push_error(
-                &format!("Type Mismatch: caller: {}, def: {}", &call_ty, &def_func_ty),
-                span_id,
-            );
-        }
-
         // BAKE LAMBDA
         // TODO: There's a better way to do this.  Use continuations
         // eventually.
@@ -1030,14 +1051,17 @@ impl Flatten {
 
     fn add_static_function_call_by_name(
         &mut self,
-        //block_id: BlockId,
+        current_block_id: BlockId,
+        call_values: Vec<(Option<StringKey>, LinkId, AstType)>,
+        ret_ty: AstType,
         name: StringKey,
-        def: Lambda,
-        args: Vec<Argument>,
+        //def: Lambda,
+        //args: Vec<Argument>,
         span_id: SpanId,
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
     ) -> Result<FlattenResult> {
+        /*
         // save current block, so we can come back to it later
         let current_block_id = self.block_id;
 
@@ -1059,19 +1083,20 @@ impl Flatten {
                 span_id,
             );
         }
+        */
 
         // if it's defined in static scope, just call it
         let v_decl = if let Some(v_decl) = self.resolve_name(current_block_id, name, fenv) {
             v_decl
         } else {
             // if it's not already baked, we need to do that here
-            self.block_id = block_id;
-            let v_decl = self.bake(block_id, name, None, fenv, b)?;
+            self.block_id = fenv.static_block_id(); //block_id;
+            let v_decl = self.bake(self.block_id, name, None, fenv, b)?;
             v_decl
         };
 
         self.block_id = current_block_id;
-        return self.add_function_call(current_block_id, v_decl, values, ret_ty, span_id);
+        return self.add_function_call(current_block_id, v_decl, call_values, ret_ty, span_id);
     }
 
     pub fn add_function_call(
