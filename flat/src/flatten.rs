@@ -939,7 +939,6 @@ impl Flatten {
 
     fn push_call_by_name(
         &mut self,
-        //block_id: BlockId,
         name: StringKey,
         args: Vec<Argument>,
         span_id: SpanId,
@@ -1001,7 +1000,6 @@ impl Flatten {
                 // Bake the lambda, this involes writing out the blocks, and passing the next block
                 // as a continuation.  This currently requires one lambda for each call.
                 // Eventually switch to CPS
-                self.block_id = current_block_id;
                 self.switch_blocks(current_block_id);
                 let (fun_block_id, next_block_id, next_link_id) =
                     self.push_bake_lambda(name, None, span_id, fenv, b)?;
@@ -1168,22 +1166,23 @@ impl Flatten {
         scope.lambdas.insert(name.into(), template_id);
     }
 
-    fn bake_function(
+    fn push_bake_function(
         &mut self,
-        block_id: BlockId,
+        //block_id: BlockId,
         def: Lambda,
         name: StringKey,
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
     ) -> Result<FlattenResult> {
+        let current_block_id = self.block_id;
         //let static_scope = fenv.get_scope(fenv.static_scope_id());
         //static_scope.
-        let block = self.get_block(block_id);
+        let block = self.get_block(current_block_id);
         //let scope = fenv.get_scope(block.scope_id);
-        println!("bake_function: {:?}", (block.scope_id, block_id));
+        println!("bake_function: {:?}", (block.scope_id, current_block_id));
 
         let decl_link_id =
-            if let Some(decl_link_id) = self.resolve_declaration(self.block_id, name, fenv) {
+            if let Some(decl_link_id) = self.resolve_declaration(current_block_id, name, fenv) {
                 decl_link_id
             } else {
                 unreachable!()
@@ -1197,7 +1196,7 @@ impl Flatten {
         let (fun_block_id, fun_scope_id) =
             self.new_scope_and_block(ScopeType::Function, fenv.static_scope_id(), fenv);
         // create function block and return block
-        self.block_id = fun_block_id;
+        //self.switch_blocks(fun_block_id);
         let ret_block_id = self.new_block(fun_scope_id);
 
         // return in scope
@@ -1307,8 +1306,10 @@ impl Flatten {
 
         self.switch_blocks(ret_block_id);
         self.push_return_block(fun_scope_id, ret_ty.clone(), span_id, fenv, b);
-        self.switch_blocks(block_id);
-        Ok(FlattenResult::new(block_id, Some(v_block), fun_ty, false))
+
+        // restore position back to where we started
+        self.switch_blocks(current_block_id);
+        Ok(FlattenResult::new(current_block_id, Some(v_block), fun_ty, false))
     }
 
     pub fn find_lambda(
@@ -1472,7 +1473,7 @@ impl Flatten {
                     );
                 }
             }
-            let r = self.bake_function(block_id, def, name, fenv, b)?;
+            let r = self.push_bake_function(def, name, fenv, b)?;
             self.drain_diagnostics(b);
             Ok(r.link_id.unwrap())
         } else {
