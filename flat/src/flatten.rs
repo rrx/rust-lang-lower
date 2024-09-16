@@ -1332,14 +1332,14 @@ impl Flatten {
         }
     }
 
-    fn bake_lambda_inner(
+    fn push_bake_lambda_inner(
         &mut self,
-        current_block_id: BlockId,
         def: Lambda,
         span_id: SpanId,
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
     ) -> Result<(BlockId, BlockId, LinkId)> {
+        let current_block_id = self.block_id;
         let block = self.get_block(current_block_id);
         let scope_id = block.scope_id;
         let ret_ty = b.types.r(def.return_type).clone();
@@ -1407,30 +1407,18 @@ impl Flatten {
         self.start_block(
             fun_block_id,
             fun_scope_id,
-            //&arg_type,
             fun_ty.clone(),
-            //AstType::Unit,
             Some(lambda_name),
             span_id,
             VarDefinitionSpace::Reg,
             fenv,
         );
         // flatten lambda block
-        self.block_id = fun_block_id;
+        self.switch_blocks(fun_block_id);
         let r = self.flatten(fun_block_id, body, fenv, b)?;
         assert_eq!(self.block_id, r.block_id);
-
-        self.block_id = next_block_id;
+        self.switch_blocks(next_block_id);
         Ok((fun_block_id, next_block_id, next_link_id.unwrap()))
-
-        /*
-        Ok(FlattenResult::new(
-            next_block_id,
-            next_link_id,
-            ret_ty,
-            true,
-        ))
-            */
     }
 
     fn bake_lambda(
@@ -1458,7 +1446,8 @@ impl Flatten {
                     );
                 }
             }
-            let r = self.bake_lambda_inner(block_id, def, span_id, fenv, b)?;
+            self.switch_blocks(block_id);
+            let r = self.push_bake_lambda_inner(def, span_id, fenv, b)?;
             self.drain_diagnostics(b);
             Ok(r)
         } else {
