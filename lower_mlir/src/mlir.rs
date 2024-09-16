@@ -369,6 +369,7 @@ impl<'c> MLIRGenerator<'c> {
     }
 
     pub fn create_block(&mut self, entry_id: ValueId) {
+        //println!("create block: {}", entry_id);
         let code = self.blockify.get_code(entry_id);
         if let LCode::Label = code {
             let args = self.get_label_args(entry_id);
@@ -556,15 +557,15 @@ impl<'c> MLIRGenerator<'c> {
             }
 
             LCode::Declare => {
-                if let Some(name) = self.blockify.get_name(v.into()) {
-                    let s = self.b.labels.r(name);
-                    println!("declare: {:?}", (s));
-                }
+                //if let Some(name) = self.blockify.get_name(v.into()) {
+                //let s = self.b.labels.r(name);
+                //println!("declare: {:?}", (s));
+                //}
                 let block_id = self.blockify.get_entry_id(v);
                 let ast_ty = self.blockify.get_type(v.into());
                 let (ty, dims) = self.from_type(&ast_ty);
                 let memref_ty = MemRefType::new(ty.into(), &dims, None, None);
-                println!("declare: {:?}", (ty, dims, memref_ty));
+                //println!("declare: {:?}", (ty, dims, memref_ty));
                 let op = memref::alloca(self.context, memref_ty, &[], &[], None, location);
 
                 /*
@@ -798,7 +799,7 @@ impl<'c> MLIRGenerator<'c> {
                             let ty = TupleType::new(self.context, &types);
                             //let ty = IntegerType::new(self.context, 8);
                             let memref_ty = MemRefType::new(ty.into(), &[], None, None);
-                            println!("struct: {:?}", (block_id, ty, memref_ty));
+                            //println!("struct: {:?}", (block_id, ty, memref_ty));
                             let options = melior::dialect::llvm::AllocaOptions::new();
                             let ptr_type = memref_ty.into();
 
@@ -818,7 +819,7 @@ impl<'c> MLIRGenerator<'c> {
                             let ty = TupleType::new(self.context, &types);
                             //let ty = IntegerType::new(self.context, 8);
                             let memref_ty = MemRefType::new(ty.into(), &[], None, None);
-                            println!("struct: {:?}", (block_id, ty, memref_ty));
+                            //println!("struct: {:?}", (block_id, ty, memref_ty));
 
                             let op =
                                 memref::alloca(self.context, memref_ty, &[], &[], None, location);
@@ -840,7 +841,10 @@ impl<'c> MLIRGenerator<'c> {
                 let c = self.blocks.get(&v_then).unwrap();
                 let then_block = c.block.as_ref().unwrap();
 
-                let c = self.blocks.get(&v_else).unwrap();
+                let c = self
+                    .blocks
+                    .get(&v_else)
+                    .expect(&format!("missing else block in branch: {}", v_else));
                 let else_block = c.block.as_ref().unwrap();
 
                 let op = cf::cond_br(
@@ -1008,8 +1012,9 @@ impl<'c> MLIRGenerator<'c> {
         Ok(())
     }
 
-    pub fn lower_block(&mut self, block_id: ValueId) -> Result<()> {
-        let mut current = block_id;
+    pub fn lower_block(&mut self, entry_id: ValueId) -> Result<()> {
+        //println!("lower block: {}", entry_id);
+        let mut current = entry_id;
         loop {
             self.lower_code(current)?;
             if let Some(next) = self.blockify.get_next(current) {
@@ -1018,7 +1023,7 @@ impl<'c> MLIRGenerator<'c> {
                 break;
             }
         }
-        self.blocks.get_mut(&block_id).unwrap().complete = true;
+        self.blocks.get_mut(&entry_id).unwrap().complete = true;
         Ok(())
     }
 
