@@ -552,8 +552,7 @@ impl Flatten {
             if let Some(next) = block.next {
                 println!("adding term on block: {}, jump: {}", self.block_id, next);
                 //self.switch_blocks(self.block_id);
-                let jump_link_id =
-                    self.push_jump(self.block_id, next.into(), vec![], current_span_id);
+                let jump_link_id = self.push_jump(next.into(), vec![], current_span_id);
                 //Return
                 link_id = Some(jump_link_id);
             } else {
@@ -628,16 +627,14 @@ impl Flatten {
 
     pub fn push_jump(
         &mut self,
-        block_id: BlockId,
         target_id: CodeOffset,
         jump_args: Vec<(Option<StringKey>, LinkId, AstType)>,
         span_id: SpanId,
     ) -> LinkId {
-        assert_eq!(block_id, self.block_id);
         for (key, link_id, ty) in jump_args.iter() {
             let code = LCode::CallValue(link_id.into());
             let entry = CodeEntry::new(
-                block_id,
+                self.block_id,
                 code,
                 ty.clone(),
                 key.clone(),
@@ -648,7 +645,7 @@ impl Flatten {
         }
 
         if let CodeOffset::Block(target_block_id) = target_id {
-            self.block_succ(block_id, target_block_id, Successor::Jump);
+            self.block_succ(self.block_id, target_block_id, Successor::Jump);
         } else {
             unimplemented!()
         }
@@ -662,7 +659,7 @@ impl Flatten {
 
         let code = LCode::Jump(target_id.into());
         let entry = CodeEntry::new(
-            block_id,
+            self.block_id,
             code,
             AstType::Func(ty.into(), ReturnType::Single(AstType::Unit).into()),
             //AstType::Struct(jump_args.iter().map(|j| (j.0, j.2.clone())).collect::<Vec<_>>()),
@@ -1021,7 +1018,7 @@ impl Flatten {
 
                 // now that we have the arguments calculated, and the lambda baked, jump!
                 self.switch_blocks(current_block_id);
-                self.push_jump(current_block_id, fun_block_id.into(), call_values, span_id);
+                self.push_jump(fun_block_id.into(), call_values, span_id);
                 self.switch_blocks(next_block_id);
 
                 // block termination
@@ -1669,12 +1666,7 @@ impl Flatten {
 
                 let scope = fenv.get_scope(fun_scope_id);
                 self.switch_blocks(block_id);
-                self.push_jump(
-                    block_id,
-                    scope.return_block.unwrap().into(),
-                    jump_args,
-                    span_id,
-                );
+                self.push_jump(scope.return_block.unwrap().into(), jump_args, span_id);
                 self.switch_blocks(block_id);
                 Ok(FlattenResult::new(block_id, None, AstType::Unit, true))
             }
@@ -2234,8 +2226,7 @@ impl Flatten {
                 //);
                 if let Some(target_block_id) = fenv.resolve_block_id(block.scope_id, label.into()) {
                     self.switch_blocks(block_id);
-                    let link_id =
-                        self.push_jump(block_id, target_block_id.into(), vec![], node.span_id);
+                    let link_id = self.push_jump(target_block_id.into(), vec![], node.span_id);
                     self.switch_blocks(block_id);
                     Ok(FlattenResult::new(
                         block_id,
@@ -2280,7 +2271,7 @@ impl Flatten {
                 );
 
                 self.switch_blocks(block_id);
-                self.push_jump(block_id, loop_block_id.into(), vec![], node.span_id);
+                self.push_jump(loop_block_id.into(), vec![], node.span_id);
                 self.switch_blocks(loop_block_id);
 
                 self.block_id = loop_block_id;
@@ -2300,8 +2291,7 @@ impl Flatten {
                 // loop up loop blocks by name
                 if let Some(loop_scope) = fenv.get_loop_scope(scope_id, maybe_name) {
                     self.switch_blocks(block_id);
-                    let link_id =
-                        self.push_jump(block_id, loop_scope.start_block, vec![], node.span_id);
+                    let link_id = self.push_jump(loop_scope.start_block, vec![], node.span_id);
                     self.switch_blocks(block_id);
                     Ok(FlattenResult::new(
                         block_id,
@@ -2325,8 +2315,7 @@ impl Flatten {
                 // loop up loop blocks by name
                 if let Some(loop_scope) = fenv.get_loop_scope(scope_id, maybe_name) {
                     self.switch_blocks(block_id);
-                    let link_id =
-                        self.push_jump(block_id, loop_scope.next_block, vec![], node.span_id);
+                    let link_id = self.push_jump(loop_scope.next_block, vec![], node.span_id);
                     self.switch_blocks(block_id);
                     Ok(FlattenResult::new(
                         block_id,
@@ -2366,7 +2355,7 @@ impl Flatten {
 
                 if let Some(next) = block.next {
                     self.switch_blocks(block_id);
-                    let link_id = self.push_jump(block_id, next.into(), vec![], node.span_id);
+                    let link_id = self.push_jump(next.into(), vec![], node.span_id);
                     self.switch_blocks(block_id);
                     Ok(FlattenResult::new(
                         block_id,
