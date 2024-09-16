@@ -1753,7 +1753,7 @@ impl Flatten {
                         let ty = self.get_type(v_decl).clone();
                         if b.types.u.unify(&ty, &expr_ty).is_err() {
                             b.push_error(
-                                &format!("4-Type Mismatch: {:?}, {:?}", ty, expr_ty),
+                                &format!("Assisgn Type Mismatch: {:?}, {:?}", ty, expr_ty),
                                 node.span_id,
                             );
                         }
@@ -1845,14 +1845,16 @@ impl Flatten {
                 let block = self.get_block_mut(then_block_id);
                 block.next(v_next);
 
+                let branch_block_type = AstType::Func(
+                    AstType::Struct(vec![]).into(),
+                    ReturnType::Single(AstType::Unit).into(),
+                );
+
                 let name = b.labels.fresh_key("then");
                 self.switch_blocks(then_block_id);
                 self.push_start_block(
                     then_scope_id,
-                    AstType::Func(
-                        AstType::Struct(vec![]).into(),
-                        ReturnType::Single(AstType::Unit).into(),
-                    ),
+                    branch_block_type.clone(),
                     Some(name),
                     then_span_id,
                     VarDefinitionSpace::Reg,
@@ -1877,10 +1879,7 @@ impl Flatten {
                     self.switch_blocks(else_block_id);
                     self.push_start_block(
                         else_scope_id,
-                        AstType::Func(
-                            AstType::Struct(vec![]).into(),
-                            ReturnType::Single(AstType::Unit).into(),
-                        ),
+                        branch_block_type,
                         Some(name),
                         else_span_id,
                         VarDefinitionSpace::Reg,
@@ -1983,6 +1982,11 @@ impl Flatten {
                 let rc = self.push_node(*c, fenv, b)?;
                 assert_eq!(self.block_id, rc.block_id);
 
+                let branch_block_type = AstType::Func(
+                    AstType::Struct(vec![]).into(),
+                    ReturnType::Single(AstType::Unit).into(),
+                );
+
                 // THEN
                 let (then_block_id, then_scope_id) =
                     self.new_scope_and_block(ScopeType::Region, scope_id, fenv);
@@ -1996,11 +2000,7 @@ impl Flatten {
                 self.switch_blocks(then_block_id);
                 self.push_start_block(
                     then_scope_id,
-                    //&AstType::Struct(vec![]),
-                    AstType::Func(
-                        AstType::Struct(vec![]).into(),
-                        ReturnType::Single(AstType::Unit).into(),
-                    ),
+                    branch_block_type.clone(),
                     Some(name),
                     then_span_id,
                     VarDefinitionSpace::Reg,
@@ -2023,10 +2023,7 @@ impl Flatten {
                 self.switch_blocks(else_block_id);
                 self.push_start_block(
                     else_scope_id,
-                    AstType::Func(
-                        AstType::Struct(vec![]).into(),
-                        ReturnType::Single(AstType::Unit).into(),
-                    ),
+                    branch_block_type,
                     Some(name),
                     else_span_id,
                     VarDefinitionSpace::Reg,
@@ -2257,10 +2254,6 @@ impl Flatten {
                 if is_term {
                     // XXX: We are closing an already closed block
                     // Possible malformed AST
-                    //for link_id in &block.links {
-                    //let entry = self.get_entry(*link_id);
-                    //println!("{}, E: {:?}", block_id, entry.code)
-                    //}
                     b.push_warning(
                         &format!(
                             "Closing already closed block: block={}, link={}",
