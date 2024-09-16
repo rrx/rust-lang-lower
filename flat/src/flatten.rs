@@ -941,6 +941,164 @@ impl Flatten {
         Ok((current_block_id, ret.clone(), values, call_ty))
     }
 
+    fn add_lambda_call_by_name(
+        &mut self,
+        //block_id: BlockId,
+        //name: StringKey,
+        def: Lambda,
+        args: Vec<Argument>,
+        span_id: SpanId,
+        fenv: &mut FlattenEnvironment,
+        b: &mut NB,
+    ) -> Result<FlattenResult> {
+        /*
+        // save current block, so we can come back to it later
+        let current_block_id = self.block_id;
+
+        let block_id = fenv.static_block_id();
+        let (current_block_id, ret_ty, values, call_ty) =
+            self.add_function_args(current_block_id, &def, args, span_id, fenv, b)?;
+
+        // function type, based on the caller
+        let func_ty = AstType::func(
+            call_ty.fields().iter().map(|(_, ty)| ty.clone()).collect(),
+            ret_ty.clone(),
+        );
+        println!("call ty: {}, {}", call_ty, func_ty);
+
+        let def_func_ty = def_to_type(&def, b);
+        if b.types.u.unify(&func_ty, &def_func_ty).is_err() {
+            b.push_error(
+                &format!("Type Mismatch: caller: {}, def: {}", &call_ty, &def_func_ty),
+                span_id,
+            );
+        }
+
+        // if it's defined in static scope, just call it
+        let v_decl = if let Some(v_decl) = self.resolve_name(current_block_id, name, fenv) {
+            v_decl
+        } else {
+            // if it's not already baked, we need to do that here
+            self.block_id = block_id;
+            let v_decl = self.bake(block_id, name, None, fenv, b)?;
+            v_decl
+        };
+
+        self.block_id = current_block_id;
+        return self.add_function_call(current_block_id, v_decl, values, ret_ty, span_id);
+        */
+
+        // BAKE LAMBDA
+        // TODO: There's a better way to do this.  Use continuations
+        // eventually.
+        // create a new block for the lambda
+        // we call the lambda by jumping to it
+        // the new block points to a next block
+        // which we create here, and we return next block to the sequence
+        // This involves creating a new lambda block for each call site.  This
+        // is not efficient, if we call more than once.  In this other case, we
+        // want to pass the continuation into the block, so next is not
+        // required.
+
+        let current_block_id = self.block_id;
+        let block = self.get_block(current_block_id);
+        let scope_id = block.scope_id;
+
+        // New Lambda Scope
+        let (fun_block_id, fun_scope_id) =
+            self.new_scope_and_block(ScopeType::Function, scope_id, fenv);
+
+        // Lambda Block
+        self.block_succ(current_block_id, fun_block_id, Successor::BlockScope);
+
+        let (current_block_id, ret_ty, call_values, _call_ty) =
+            self.add_function_args(current_block_id, &def, args, span_id, fenv, b)?;
+        // now that we have the arguments calculated
+        // jump to the function baked as a block
+        // complete this block with a jump
+        self.add_jump(current_block_id, fun_block_id.into(), call_values, span_id);
+
+        // NEXT BLOCK(ret_ty)
+        // We create a new block for the lambda to return to
+        // this is the continuation
+        let next_block_id = self.new_block(scope_id);
+        self.block_succ(current_block_id, next_block_id, Successor::BlockScope);
+
+        // Lambda Body
+        let body = jump_if_needed(*def.body.unwrap(), b);
+
+        // get the next block
+        let block = self.get_block(current_block_id);
+        let next = block.next;
+
+        // set next for lambda block, which is the new continuation we just
+        // created
+        let next_block = self.get_block_mut(fun_block_id);
+        next_block.next(next_block_id);
+
+        let fun_scope = fenv.get_scope_mut(fun_scope_id);
+        fun_scope.return_block = Some(next_block_id);
+
+        // set next for the continuation block, which should be next of the
+        // containing block
+        let next_block = self.get_block_mut(next_block_id);
+        next_block.next = next;
+
+        // setup arguments for continuation block with appropriate parameters
+        // matching the return type of the lambda block
+        let next_arg_ty = AstType::Struct(match &ret_ty {
+            AstType::Unit => vec![],
+            _ => vec![(None, ret_ty.clone())],
+        });
+        // start next block
+        let (_v_block, next_link_ids) = self.start_block(
+            next_block_id,
+            scope_id,
+            //&next_arg_ty,
+            AstType::Func(
+                next_arg_ty.clone().into(),
+                ReturnType::Single(AstType::Unit).into(),
+            ),
+            Some(b.labels.fresh_key("cont")),
+            span_id,
+            VarDefinitionSpace::Reg,
+            fenv,
+        );
+
+        let next_link_id = match &ret_ty {
+            AstType::Unit => None,
+            _ => Some(next_link_ids.first().unwrap().0),
+        };
+
+        // Start lambda block
+        //let arg_type = b.types.r(def.arg_type).clone();
+        let lambda_name = b.labels.fresh_key("lambda");
+        let fun_ty = b.types.r(def.fun_type);
+        self.start_block(
+            fun_block_id,
+            fun_scope_id,
+            //&arg_type,
+            fun_ty.clone(),
+            //AstType::Unit,
+            Some(lambda_name),
+            span_id,
+            VarDefinitionSpace::Reg,
+            fenv,
+        );
+        // flatten lambda block
+        self.block_id = fun_block_id;
+        let r = self.flatten(fun_block_id, body, fenv, b)?;
+        assert_eq!(self.block_id, r.block_id);
+
+        self.block_id = next_block_id;
+        Ok(FlattenResult::new(
+            next_block_id,
+            next_link_id,
+            ret_ty,
+            true,
+        ))
+    }
+
     fn add_static_function_call_by_name(
         &mut self,
         //block_id: BlockId,
@@ -1341,12 +1499,6 @@ impl Flatten {
                         let fun_ty = def_to_type(&def, b);
 
                         // save template for later use
-                        // needed for expressing defaults
-                        // We don't actually need to write out the function here
-                        // we only have to do it if it's called
-                        // And the function may be different depending on the caller
-                        // So this probably isn't the right place to do this.
-
                         if def.body.is_some() {
                             self.save_template(block_id, &name, &def, fenv);
                         }
@@ -1681,118 +1833,16 @@ impl Flatten {
                                     fenv,
                                     b,
                                 );
+                            } else {
+                                return self.add_lambda_call_by_name(
+                                    //*ident,
+                                    def,
+                                    args,
+                                    node.span_id,
+                                    fenv,
+                                    b,
+                                );
                             }
-
-                            // BAKE LAMBDA
-                            // TODO: There's a better way to do this.  Use continuations
-                            // eventually.
-                            // create a new block for the lambda
-                            // we call the lambda by jumping to it
-                            // the new block points to a next block
-                            // which we create here, and we return next block to the sequence
-                            // This involves creating a new lambda block for each call site.  This
-                            // is not efficient, if we call more than once.  In this other case, we
-                            // want to pass the continuation into the block, so next is not
-                            // required.
-
-                            // New Lambda Scope
-                            let (fun_block_id, fun_scope_id) =
-                                self.new_scope_and_block(ScopeType::Function, scope_id, fenv);
-
-                            // Lambda Block
-                            self.block_succ(block_id, fun_block_id, Successor::BlockScope);
-
-                            let (current_block_id, ret_ty, call_values, _call_ty) =
-                                self.add_function_args(block_id, &def, args, span_id, fenv, b)?;
-                            // now that we have the arguments calculated
-                            // jump to the function baked as a block
-                            // complete this block with a jump
-                            self.add_jump(
-                                current_block_id,
-                                fun_block_id.into(),
-                                call_values,
-                                node.span_id,
-                            );
-
-                            // NEXT BLOCK(ret_ty)
-                            // We create a new block for the lambda to return to
-                            // this is the continuation
-                            let next_block_id = self.new_block(scope_id);
-                            self.block_succ(block_id, next_block_id, Successor::BlockScope);
-
-                            // Lambda Body
-                            let body = jump_if_needed(*def.body.unwrap(), b);
-
-                            // get the next block
-                            let block = self.get_block(current_block_id);
-                            let next = block.next;
-
-                            // set next for lambda block, which is the new continuation we just
-                            // created
-                            let next_block = self.get_block_mut(fun_block_id);
-                            next_block.next(next_block_id);
-
-                            let fun_scope = fenv.get_scope_mut(fun_scope_id);
-                            fun_scope.return_block = Some(next_block_id);
-
-                            // set next for the continuation block, which should be next of the
-                            // containing block
-                            let next_block = self.get_block_mut(next_block_id);
-                            next_block.next = next;
-
-                            // setup arguments for continuation block with appropriate parameters
-                            // matching the return type of the lambda block
-                            let next_arg_ty = AstType::Struct(match &ret_ty {
-                                AstType::Unit => vec![],
-                                _ => vec![(None, ret_ty.clone())],
-                            });
-                            // start next block
-                            let (_v_block, next_link_ids) = self.start_block(
-                                next_block_id,
-                                scope_id,
-                                //&next_arg_ty,
-                                AstType::Func(
-                                    next_arg_ty.clone().into(),
-                                    ReturnType::Single(AstType::Unit).into(),
-                                ),
-                                Some(b.labels.fresh_key("cont")),
-                                span_id,
-                                VarDefinitionSpace::Reg,
-                                fenv,
-                            );
-
-                            let next_link_id = match &ret_ty {
-                                AstType::Unit => None,
-                                _ => Some(next_link_ids.first().unwrap().0),
-                            };
-
-                            // Start lambda block
-                            //let arg_type = b.types.r(def.arg_type).clone();
-                            let lambda_name = b.labels.fresh_key("lambda");
-                            let fun_ty = b.types.r(def.fun_type);
-                            self.start_block(
-                                fun_block_id,
-                                fun_scope_id,
-                                //&arg_type,
-                                fun_ty.clone(),
-                                //AstType::Unit,
-                                Some(lambda_name),
-                                span_id,
-                                VarDefinitionSpace::Reg,
-                                fenv,
-                            );
-                            // flatten lambda block
-                            self.block_id = fun_block_id;
-                            let r = self.flatten(fun_block_id, body, fenv, b)?;
-                            assert_eq!(self.block_id, r.block_id);
-
-                            self.block_id = next_block_id;
-                            Ok(FlattenResult::new(
-                                next_block_id,
-                                next_link_id,
-                                ret_ty,
-                                true,
-                            ))
                         } else {
                             b.push_error(&format!("Call name not found: {}", name), node.span_id);
                             Err(Error::new(BlockifyError::Invalid))
