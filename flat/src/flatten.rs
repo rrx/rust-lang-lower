@@ -1003,9 +1003,10 @@ impl Flatten {
                 // as a continuation.  This currently requires one lambda for each call.
                 // Eventually switch to CPS
                 self.block_id = current_block_id;
+                self.switch_blocks(current_block_id);
                 let (fun_block_id, next_block_id, next_link_id) =
-                    self.bake_lambda(current_block_id, name, None, span_id, fenv, b)?;
-                self.block_id = next_block_id;
+                    self.push_bake_lambda(name, None, span_id, fenv, b)?;
+                self.switch_blocks(next_block_id);
 
                 // Lambda Block
                 self.block_succ(current_block_id, fun_block_id, Successor::BlockScope);
@@ -1070,9 +1071,8 @@ impl Flatten {
         ))
     }
 
-    pub fn add_builtin_call(
+    pub fn push_builtin_call(
         &mut self,
-        block_id: BlockId,
         def: &Lambda,
         id: BuiltinId,
         args: Vec<Argument>,
@@ -1081,7 +1081,7 @@ impl Flatten {
         b: &mut NB,
     ) -> Result<FlattenResult> {
         let (current_block_id, ret_ty, values, _call_ty) =
-            self.add_function_args(block_id, &def, args, span_id, fenv, b)?;
+            self.add_function_args(self.block_id, &def, args, span_id, fenv, b)?;
 
         // Add links
         for (key, link_id, ty) in values {
@@ -1107,7 +1107,7 @@ impl Flatten {
             VarDefinitionSpace::Default,
         );
         let link_id = self.push_entry_with_link(entry);
-        self.block_id = current_block_id;
+        self.switch_blocks(current_block_id);
         Ok(FlattenResult::new(
             current_block_id,
             Some(link_id),
@@ -1421,19 +1421,18 @@ impl Flatten {
         Ok((fun_block_id, next_block_id, next_link_id.unwrap()))
     }
 
-    fn bake_lambda(
+    fn push_bake_lambda(
         &mut self,
-        block_id: BlockId,
         name: StringKey,
         maybe_ty: Option<AstType>,
         span_id: SpanId,
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
     ) -> Result<(BlockId, BlockId, LinkId)> {
-        if let Some((scope_id, def)) = self.find_lambda(block_id, name, fenv) {
+        if let Some((scope_id, def)) = self.find_lambda(self.block_id, name, fenv) {
             println!(
                 "bake lambda: {:?}",
-                (scope_id, block_id, b.labels.r(name.into()))
+                (scope_id, self.block_id, b.labels.r(name.into()))
             );
             if let Some(ty) = maybe_ty {
                 let fun_ty = b.types.r(def.fun_type).clone();
@@ -1446,7 +1445,6 @@ impl Flatten {
                     );
                 }
             }
-            self.switch_blocks(block_id);
             let r = self.push_bake_lambda_inner(def, span_id, fenv, b)?;
             self.drain_diagnostics(b);
             Ok(r)
@@ -1599,7 +1597,8 @@ impl Flatten {
 
                         //let ret_type_id = b.types.s(&ty);
                         let def = bi.get_lambda(b);
-                        self.add_builtin_call(block_id, &def, id, args, span_id, fenv, b)
+                        self.switch_blocks(block_id);
+                        self.push_builtin_call(&def, id, args, span_id, fenv, b)
                     }
                 }
             }
