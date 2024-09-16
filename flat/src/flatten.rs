@@ -263,7 +263,7 @@ impl Flatten {
             fenv.static_scope = Some(static_scope_id);
             for ast in body.to_vec() {
                 f.switch_blocks(top_block_id);
-                let r = f.flatten(f.block_id, ast, fenv, b)?;
+                let r = f.push_node(f.block_id, ast, fenv, b)?;
                 assert_eq!(f.block_id, r.block_id);
                 //f.block_id = r.block_id;
             }
@@ -526,7 +526,7 @@ impl Flatten {
                     // flatten expr
                     //println!("expr: {:?}", (&expr));
                     self.switch_blocks(current_block_id);
-                    let r = self.flatten(self.block_id, expr, fenv, b)?;
+                    let r = self.push_node(self.block_id, expr, fenv, b)?;
                     assert_eq!(self.block_id, r.block_id);
 
                     // flatten next
@@ -536,14 +536,14 @@ impl Flatten {
                     };
                     //println!("next: {:?}", (&next_node));
                     self.switch_blocks(new_block_id);
-                    let r = self.flatten(new_block_id, next_node, fenv, b)?;
+                    let r = self.push_node(new_block_id, next_node, fenv, b)?;
                     assert_eq!(self.block_id, r.block_id);
                     //println!("next2: {:?}", (&r));
                     return Ok(r);
                 }
 
                 // handle expr
-                let r = self.flatten(self.block_id, expr, fenv, b)?;
+                let r = self.push_node(self.block_id, expr, fenv, b)?;
                 assert_eq!(self.block_id, r.block_id);
                 ty = r.ty;
                 //current_block_id = r.block_id;
@@ -852,7 +852,7 @@ impl Flatten {
             match a {
                 Argument::Positional(expr) => {
                     self.switch_blocks(current_block_id);
-                    let r = self.flatten(current_block_id, *expr, fenv, b)?;
+                    let r = self.push_node(current_block_id, *expr, fenv, b)?;
                     assert_eq!(self.block_id, r.block_id);
                     current_block_id = r.block_id;
                     let link_id = r.link_id.unwrap();
@@ -861,7 +861,7 @@ impl Flatten {
                 }
                 Argument::Named(key, expr) => {
                     self.switch_blocks(current_block_id);
-                    let r = self.flatten(current_block_id, *expr, fenv, b)?;
+                    let r = self.push_node(current_block_id, *expr, fenv, b)?;
                     assert_eq!(self.block_id, r.block_id);
                     current_block_id = r.block_id;
                     let link_id = r.link_id.unwrap();
@@ -872,7 +872,7 @@ impl Flatten {
                     let mut args_values = vec![];
                     for expr in exprs {
                         self.switch_blocks(current_block_id);
-                        let r = self.flatten(current_block_id, expr, fenv, b)?;
+                        let r = self.push_node(current_block_id, expr, fenv, b)?;
                         assert_eq!(self.block_id, r.block_id);
                         current_block_id = r.block_id;
                         let link_id = r.link_id.unwrap();
@@ -914,7 +914,7 @@ impl Flatten {
                 Argument::KwArgs(key, _expr) => {
                     let node: AstNode = 1.into();
                     self.switch_blocks(current_block_id);
-                    let r = self.flatten(current_block_id, node, fenv, b)?;
+                    let r = self.push_node(current_block_id, node, fenv, b)?;
                     assert_eq!(self.block_id, r.block_id);
                     current_block_id = r.block_id;
                     let link_id = r.link_id.unwrap();
@@ -1236,7 +1236,7 @@ impl Flatten {
         let body = jump_if_needed(*body, b);
 
         self.switch_blocks(fun_block_id);
-        let r = self.flatten(fun_block_id, body, fenv, b)?;
+        let r = self.push_node(fun_block_id, body, fenv, b)?;
         assert_eq!(self.block_id, r.block_id);
 
         // update declaration
@@ -1423,7 +1423,7 @@ impl Flatten {
         );
         // flatten lambda block
         self.switch_blocks(fun_block_id);
-        let r = self.flatten(fun_block_id, body, fenv, b)?;
+        let r = self.push_node(fun_block_id, body, fenv, b)?;
         assert_eq!(self.block_id, r.block_id);
         self.switch_blocks(next_block_id);
         Ok((fun_block_id, next_block_id, next_link_id.unwrap()))
@@ -1464,7 +1464,6 @@ impl Flatten {
 
     pub fn push_bake(
         &mut self,
-        //block_id: BlockId,
         name: StringKey,
         maybe_ty: Option<AstType>,
         fenv: &mut FlattenEnvironment,
@@ -1497,7 +1496,7 @@ impl Flatten {
         }
     }
 
-    pub fn flatten(
+    pub fn push_node(
         &mut self,
         block_id: BlockId,
         node: AstNode,
@@ -1642,7 +1641,7 @@ impl Flatten {
                 let span_id = if let Some(expr) = maybe_expr {
                     let expr_span_id = expr.span_id;
                     self.block_id = block_id;
-                    let r = self.flatten(block_id, *expr, fenv, b)?;
+                    let r = self.push_node(block_id, *expr, fenv, b)?;
                     assert_eq!(self.block_id, r.block_id);
                     block_id = r.block_id;
                     let link_id = r.link_id.unwrap();
@@ -1687,10 +1686,10 @@ impl Flatten {
                 // expression, non-terminal
                 let x_span_id = x.span_id;
                 self.block_id = block_id;
-                let rx = self.flatten(block_id, *x, fenv, b)?;
+                let rx = self.push_node(block_id, *x, fenv, b)?;
                 assert_eq!(self.block_id, rx.block_id);
                 self.block_id = rx.block_id;
-                let ry = self.flatten(rx.block_id, *y, fenv, b)?;
+                let ry = self.push_node(rx.block_id, *y, fenv, b)?;
                 assert_eq!(self.block_id, ry.block_id);
                 let current_block_id = ry.block_id;
                 let vx = rx.link_id.unwrap();
@@ -1788,7 +1787,7 @@ impl Flatten {
                 }
 
                 self.block_id = block_id;
-                let r = self.flatten(block_id, *expr, fenv, b)?;
+                let r = self.push_node(block_id, *expr, fenv, b)?;
                 assert_eq!(self.block_id, r.block_id);
                 let current_block_id = r.block_id;
                 let v_expr = r.link_id.unwrap();
@@ -1856,7 +1855,7 @@ impl Flatten {
             Ast::UnaryOp(op, x) => {
                 // op1 is expression, non-terminal
                 self.block_id = block_id;
-                let r = self.flatten(block_id, *x, fenv, b)?;
+                let r = self.push_node(block_id, *x, fenv, b)?;
                 assert_eq!(self.block_id, r.block_id);
                 let current_block_id = r.block_id;
 
@@ -1918,7 +1917,7 @@ impl Flatten {
                     fenv,
                 );
                 self.switch_blocks(then_block_id);
-                let r = self.flatten(then_block_id, NB::ensure_seq(*then_expr), fenv, b)?;
+                let r = self.push_node(then_block_id, NB::ensure_seq(*then_expr), fenv, b)?;
                 assert_eq!(self.block_id, r.block_id);
 
                 // ELSE
@@ -1947,7 +1946,7 @@ impl Flatten {
                     );
 
                     self.switch_blocks(else_block_id);
-                    let r = self.flatten(else_block_id, NB::ensure_seq(*else_expr), fenv, b)?;
+                    let r = self.push_node(else_block_id, NB::ensure_seq(*else_expr), fenv, b)?;
                     assert_eq!(self.block_id, r.block_id);
                     else_block_id
                 } else {
@@ -1959,7 +1958,7 @@ impl Flatten {
                 // condition
                 let span_id = condition.span_id;
                 self.switch_blocks(block_id);
-                let r = self.flatten(block_id, *condition, fenv, b)?;
+                let r = self.push_node(block_id, *condition, fenv, b)?;
                 assert_eq!(self.block_id, r.block_id);
                 let code = LCode::Branch(
                     r.link_id.unwrap().into(),
@@ -2023,7 +2022,7 @@ impl Flatten {
                     fenv,
                 );
                 self.switch_blocks(new_block_id);
-                let r = self.flatten(new_block_id, NB::ensure_seq(*body), fenv, b)?;
+                let r = self.push_node(new_block_id, NB::ensure_seq(*body), fenv, b)?;
                 assert_eq!(self.block_id, r.block_id);
 
                 self.switch_blocks(r.block_id);
@@ -2042,7 +2041,7 @@ impl Flatten {
 
                 // Condition
                 self.block_id = block_id;
-                let rc = self.flatten(block_id, *c, fenv, b)?;
+                let rc = self.push_node(block_id, *c, fenv, b)?;
                 assert_eq!(self.block_id, rc.block_id);
 
                 // THEN
@@ -2070,7 +2069,7 @@ impl Flatten {
                 );
 
                 self.switch_blocks(then_block_id);
-                let r = self.flatten(then_block_id, then_ast, fenv, b)?;
+                let r = self.push_node(then_block_id, then_ast, fenv, b)?;
                 assert_eq!(self.block_id, r.block_id);
                 let then_ty = r.ty;
 
@@ -2096,7 +2095,7 @@ impl Flatten {
                 );
 
                 self.switch_blocks(else_block_id);
-                let r = self.flatten(else_block_id, else_ast, fenv, b)?;
+                let r = self.push_node(else_block_id, else_ast, fenv, b)?;
                 assert_eq!(self.block_id, r.block_id);
                 let else_ty = r.ty;
 
@@ -2135,7 +2134,7 @@ impl Flatten {
                 let mut ty = AstType::Unit;
                 if let Some(expr) = maybe_expr {
                     self.block_id = block_id;
-                    let r = self.flatten(block_id, *expr, fenv, b)?;
+                    let r = self.push_node(block_id, *expr, fenv, b)?;
                     assert_eq!(self.block_id, r.block_id);
                     if let Some(v) = r.link_id {
                         v_block = r.block_id;
@@ -2259,7 +2258,7 @@ impl Flatten {
                 self.switch_blocks(loop_block_id);
 
                 self.switch_blocks(loop_block_id);
-                let r = self.flatten(loop_block_id, *body, fenv, b)?;
+                let r = self.push_node(loop_block_id, *body, fenv, b)?;
                 assert_eq!(self.block_id, r.block_id);
 
                 self.switch_blocks(block_id);
@@ -2358,7 +2357,7 @@ impl Flatten {
                 let mut current_block_id = block_id;
                 for d in dims {
                     self.block_id = current_block_id;
-                    let r = self.flatten(current_block_id, d, fenv, b)?;
+                    let r = self.push_node(current_block_id, d, fenv, b)?;
                     assert_eq!(self.block_id, r.block_id);
                     current_block_id = r.block_id;
                     link_ids.push(r.link_id.unwrap());
