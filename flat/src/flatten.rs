@@ -90,7 +90,6 @@ pub struct IRBlock {
     pub(super) dead: bool,
     num_ret_args: HashSet<usize>,
     ret_types: HashSet<AstType>,
-    //pub(super) ast: Option<AstNode>,
     pub(super) next: Option<BlockId>,
     pub(super) links: Vec<LinkId>,
 }
@@ -248,7 +247,6 @@ impl Flatten {
             f.switch_blocks(f.block_id);
             f.push_start_block(
                 static_scope_id,
-                //&AstType::Struct(vec![]),
                 AstType::Func(
                     AstType::Struct(vec![]).into(),
                     ReturnType::Single(AstType::Unit).into(),
@@ -285,8 +283,6 @@ impl Flatten {
     pub fn push_bake_main(&mut self, fenv: &mut FlattenEnvironment, b: &mut NB) -> Result<LinkId> {
         let current_block_id = self.block_id;
         let name = b.labels.s("main");
-        //let scope_id = fenv.static_scope_id();
-        //let block_id = fenv.static_block_id();
         // reset the block position before each function
         // main is always static context
         self.switch_blocks(fenv.static_block_id());
@@ -328,12 +324,6 @@ impl Flatten {
         self.entries.push(entry);
         link_id
     }
-
-    /*
-    pub fn insert_block_link(&mut self, block_id: BlockId, link_id: LinkId) {
-        self.get_block_mut(block_id).push(link_id);
-    }
-    */
 
     pub fn push_entry_with_link(&mut self, entry: CodeEntry) -> LinkId {
         let block_id = entry.block_id;
@@ -379,7 +369,6 @@ impl Flatten {
     pub fn new_block(&mut self, scope_id: ScopeId) -> BlockId {
         let ir_block = IRBlock::new(scope_id);
         let index = self.gblocks.add_node(ir_block);
-        //let block_id = BlockId(index.index() as u32);
         //println!("new block: {:?}", (block_id, scope_id));
         if index.index() > 0 && scope_id.index() == 0 {
             assert!(false);
@@ -534,7 +523,6 @@ impl Flatten {
                 let r = self.push_node(expr, fenv, b)?;
                 assert_eq!(self.block_id, r.block_id);
                 ty = r.ty;
-                //current_block_id = r.block_id;
                 link_id = r.link_id;
                 is_term = r.is_term;
             } else {
@@ -562,28 +550,22 @@ impl Flatten {
 
     pub fn push_return(&mut self, link_ids: Vec<(LinkId, AstType)>, span_id: SpanId) -> LinkId {
         for (link_id, ty) in link_ids.iter() {
-            let code = LCode::CallValue((*link_id).into());
-            let entry = CodeEntry::new(
-                self.block_id,
-                code,
+            self.push_code(
+                LCode::CallValue((*link_id).into()),
                 ty.clone(),
                 None,
                 span_id,
                 VarDefinitionSpace::Reg,
             );
-            self.push_entry_with_link(entry);
         }
 
-        let code = LCode::Return;
-        let entry = CodeEntry::new(
-            self.block_id,
-            code,
+        self.push_code(
+            LCode::Return,
             AstType::Unit,
             None,
             span_id,
             VarDefinitionSpace::Reg,
-        );
-        self.push_entry_with_link(entry)
+        )
     }
 
     pub fn push_return_block(
@@ -618,16 +600,13 @@ impl Flatten {
         span_id: SpanId,
     ) -> LinkId {
         for (key, link_id, ty) in jump_args.iter() {
-            let code = LCode::CallValue(link_id.into());
-            let entry = CodeEntry::new(
-                self.block_id,
-                code,
+            self.push_code(
+                LCode::CallValue(link_id.into()),
                 ty.clone(),
                 key.clone(),
                 span_id,
                 VarDefinitionSpace::Reg,
             );
-            self.push_entry_with_link(entry);
         }
 
         if let CodeOffset::Block(target_block_id) = target_id {
@@ -643,17 +622,13 @@ impl Flatten {
                 .collect::<Vec<_>>(),
         );
 
-        let code = LCode::Jump(target_id.into());
-        let entry = CodeEntry::new(
-            self.block_id,
-            code,
+        self.push_code(
+            LCode::Jump(target_id.into()),
             AstType::Func(ty.into(), ReturnType::Single(AstType::Unit).into()),
             None,
             span_id,
             VarDefinitionSpace::Reg,
-        );
-
-        self.push_entry_with_link(entry)
+        )
     }
 
     pub fn push_function_args(
@@ -870,16 +845,13 @@ impl Flatten {
                     }
 
                     for (link_id, ty) in args_values.iter() {
-                        let code = LCode::CallValue(link_id.into());
-                        let entry = CodeEntry::new(
-                            current_block_id,
-                            code,
+                        self.push_code(
+                            LCode::CallValue(link_id.into()),
                             ty.clone(),
                             None,
                             span_id,
                             VarDefinitionSpace::Reg,
                         );
-                        self.push_entry_with_link(entry);
                     }
 
                     let struct_ty = AstType::Struct(
@@ -888,16 +860,13 @@ impl Flatten {
                             .map(|v| (None, v.1.clone()))
                             .collect::<Vec<_>>(),
                     );
-                    let code = LCode::NaryOp(NaryOperation::Struct);
-                    let entry = CodeEntry::new(
-                        current_block_id,
-                        code,
+                    let link_id = self.push_code(
+                        LCode::NaryOp(NaryOperation::Struct),
                         struct_ty.clone(),
                         None,
                         span_id,
                         VarDefinitionSpace::Stack,
                     );
-                    let link_id = self.push_entry_with_link(entry);
                     values.push((Some(key), link_id, struct_ty.clone()));
                     link_ids.push(link_id);
                 }
@@ -1490,8 +1459,6 @@ impl Flatten {
         b: &mut NB,
     ) -> Result<FlattenResult> {
         let current_block_id = self.block_id;
-        //assert_eq!(self.block_id, block_id);
-        //self.block_id = block_id;
         let block = self.get_block_mut(current_block_id);
         let span_id = node.span_id;
         let ast = node.node;
@@ -1517,16 +1484,14 @@ impl Flatten {
                             self.save_template(current_block_id, &name, &def, fenv);
                         }
 
-                        let code = LCode::DeclareFunction(None);
-                        let entry = CodeEntry::new(
-                            current_block_id,
-                            code,
+                        let link_id = self.push_code(
+                            LCode::DeclareFunction(None),
                             fun_ty.clone(),
                             Some(name),
                             span_id,
                             VarDefinitionSpace::Static,
                         );
-                        let link_id = self.push_entry_with_link(entry);
+
                         self.switch_blocks(current_block_id);
                         fenv.scope_define_declaration(fenv.static_scope_id(), name, link_id);
 
@@ -1555,16 +1520,14 @@ impl Flatten {
                         let global_name_key = b.labels.s(&global_name);
 
                         let ast_ty: AstType = lit.clone().into();
-                        let code = LCode::Const(lit);
-                        let entry = CodeEntry::new(
-                            static_block_id,
-                            code,
+                        self.switch_blocks(static_block_id);
+                        let link_id = self.push_code(
+                            LCode::Const(lit),
                             ast_ty.clone(),
                             Some(global_name_key),
                             node.span_id,
                             VarDefinitionSpace::Static,
                         );
-                        let link_id = self.push_entry_with_link(entry);
 
                         fenv.scope_define(scope_id, name, link_id.into());
 
@@ -2159,7 +2122,7 @@ impl Flatten {
 
                 self.switch_blocks(v_block);
                 let v = self.push_code(
-                LCode::Yield,
+                    LCode::Yield,
                     ty.clone(),
                     None,
                     node.span_id,
@@ -2209,11 +2172,6 @@ impl Flatten {
 
             Ast::ControlFlowMarker(ControlFlowMarker::Goto(label)) => {
                 // Goto is terminal
-                //println!(
-                //"Searching for {} in scope {}",
-                //b.labels.r(label.into()),
-                //block.scope_id
-                //);
                 if let Some(target_block_id) = fenv.resolve_block_id(block.scope_id, label.into()) {
                     self.switch_blocks(current_block_id);
                     let link_id = self.push_jump(target_block_id.into(), vec![], node.span_id);
@@ -2430,15 +2388,6 @@ pub fn scope_graph(filename: &str, fenv: &FlattenEnvironment) {
 fn def_to_type(def: &Lambda, b: &mut NB) -> AstType {
     let arg_type = b.types.r(def.arg_type).clone();
     let return_type = b.types.r(def.return_type).clone();
-
-    //let return_type = if return_type.is_unknown() {
-    //return_type
-    //} else if return_type == AstType::Unit {
-    //AstType::Struct(vec![])
-    //} else {
-    //return_type
-    //};
-
     let fun_ty = AstType::Func(arg_type.into(), ReturnType::Single(return_type).into());
     fun_ty
 }
