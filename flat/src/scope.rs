@@ -8,6 +8,7 @@ use compile_core::StringKey;
 pub enum ScopeType {
     Static,
     Function,
+    Template,
     Block,
     Region,
     Loop,
@@ -99,6 +100,7 @@ pub enum Successor {
     Operation,
     Jump,
     FunctionDeclaration,
+    TemplateDeclaration,
 }
 
 #[derive(Debug)]

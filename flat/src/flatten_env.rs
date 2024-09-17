@@ -81,10 +81,14 @@ impl FlattenEnvironment {
         scope.declarations.insert(name, v);
     }
 
-    pub fn find_nearest_scope(&self, scope_id: ScopeId, scope_type: ScopeType) -> Option<ScopeId> {
+    pub fn find_nearest_scope(
+        &self,
+        scope_id: ScopeId,
+        scope_types: &[ScopeType],
+    ) -> Option<ScopeId> {
         for scope_id in self.walk_scopes(scope_id) {
             let scope = self.get_scope(scope_id);
-            if scope.scope_type == scope_type {
+            if scope_types.contains(&scope.scope_type) {
                 return Some(scope_id);
             }
         }

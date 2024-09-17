@@ -1141,28 +1141,20 @@ impl Flatten {
         let scope_id = block.scope_id;
         let scope = fenv.get_scope_mut(scope_id);
         scope.lambdas.insert(name.into(), template_id);
-
-        println!("scope: {:?}", (scope_id, &scope));
-        let top_block_id = scope.entry_block.unwrap();
-        self.switch_blocks(top_block_id);
-        //self.push_bake_function(def.clone(), *name, fenv, b)?;
-        self.switch_blocks(block_id);
         Ok(())
     }
 
     fn push_bake_function(
         &mut self,
-        decl_link_id: LinkId,
         def: Lambda,
         name: StringKey,
+        scope_type: ScopeType,
+        succ_type: Successor,
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
     ) -> Result<FlattenResult> {
         let current_block_id = self.block_id;
-        //let static_scope = fenv.get_scope(fenv.static_scope_id());
-        //static_scope.
         let block = self.get_block(current_block_id);
-        //let scope = fenv.get_scope(block.scope_id);
         println!("bake_function: {:?}", (block.scope_id, current_block_id));
 
         let ret_ty = b.types.r(def.return_type).clone();
@@ -1171,7 +1163,7 @@ impl Flatten {
         let span_id = body.span_id;
         // create function scope
         let (fun_block_id, fun_scope_id) =
-            self.new_scope_and_block(ScopeType::Function, fenv.static_scope_id(), fenv);
+            self.new_scope_and_block(scope_type, fenv.static_scope_id(), fenv);
         // create function block and return block
         //self.switch_blocks(fun_block_id);
         let ret_block_id = self.new_block(fun_scope_id);
@@ -1185,13 +1177,8 @@ impl Flatten {
         fun_block.next = Some(ret_block_id);
 
         // block graph
-        self.block_succ(
-            fenv.static_block_id(),
-            fun_block_id,
-            Successor::FunctionDeclaration,
-        );
+        self.block_succ(fenv.static_block_id(), fun_block_id, succ_type);
         self.block_succ(fun_block_id, ret_block_id, Successor::BlockScope);
-        //let arg_type = b.types.r(def.arg_type).clone();
         self.switch_blocks(fun_block_id);
         let (entry_link_id, _) = self.push_start_block(
             fun_scope_id,
@@ -1222,7 +1209,6 @@ impl Flatten {
         }
 
         if fun_block.num_ret_args.is_empty() {
-            //println!("match1: unit == {}", &ret_ty);
             if b.types.u.unify(&AstType::Unit, &ret_ty).is_err() {
                 b.push_error(
                     &format!("6-Type Mismatch: LHS: {}, RHS: {}", AstType::Unit, &ret_ty),
@@ -1232,7 +1218,6 @@ impl Flatten {
         } else {
             let num_ret_args = fun_block.num_ret_args.iter().next().unwrap().clone();
             if num_ret_args == 0 {
-                //println!("match3: unit == {}", &ret_ty);
                 if b.types.u.unify(&AstType::Unit, &ret_ty).is_err() {
                     b.push_error(
                         &format!("1-Type Mismatch: LHS: {}, RHS: {}", &ret_ty, &AstType::Unit),
@@ -1243,7 +1228,6 @@ impl Flatten {
         }
 
         for ty in fun_block.ret_types.iter() {
-            //println!("match2: {} == {}", &ty, &ret_ty);
             if b.types.u.unify(ty, &ret_ty).is_err() {
                 b.push_error(
                     &format!("7-Type Mismatch: LHS: {}, RHS: {}", ty, &ret_ty),
@@ -1258,7 +1242,6 @@ impl Flatten {
             AstType::Struct(vec![(None, ret_ty.clone())])
         };
 
-        //println!("R: {:?}", (&ret_ty, &fun_block));
         let ret_ty = if let Some(ty) = b.types.u.resolve(&ret_arg_type) {
             ty
         } else {
@@ -1267,8 +1250,6 @@ impl Flatten {
                 &format!("[{}] Return Type Must Resolve: {}", &s, &ret_ty),
                 span_id,
             );
-            //unreachable!()
-            //assert!(false);
             ret_arg_type
         };
 
@@ -1466,7 +1447,7 @@ impl Flatten {
                     );
                 }
             }
-
+            // update declaration
             let decl_link_id = if let Some(decl_link_id) =
                 self.resolve_declaration(current_block_id, name, fenv)
             {
@@ -1475,13 +1456,19 @@ impl Flatten {
                 unreachable!()
             };
 
-            let result = self.push_bake_function(decl_link_id, def, name, fenv, b);
+            let result = self.push_bake_function(
+                def,
+                name,
+                ScopeType::Function,
+                Successor::FunctionDeclaration,
+                fenv,
+                b,
+            );
             if result.is_err() {
                 self.drain_diagnostics(b);
             }
             let r = result?;
 
-            // update declaration
             let entry_block_id = self.get_entry(r.link_id.unwrap()).block_id;
             let entry = self.get_entry_mut(decl_link_id);
             if let LCode::DeclareFunction(_) = entry.code {
@@ -1489,6 +1476,80 @@ impl Flatten {
                 assert!(false);
             }
             entry.code = LCode::DeclareFunction(Some(entry_block_id));
+
+            self.drain_diagnostics(b);
+            self.switch_blocks(current_block_id);
+            Ok(r.link_id.unwrap())
+        } else {
+            let s = b.labels.r(name.into());
+            Err(Error::new(BlockifyError::NotFound(s)))
+        }
+    }
+
+    pub fn push_bake_template(
+        &mut self,
+        name: StringKey,
+        maybe_ty: Option<AstType>,
+        fenv: &mut FlattenEnvironment,
+        b: &mut NB,
+    ) -> Result<LinkId> {
+        let current_block_id = self.block_id;
+        if let Some((scope_id, def)) = self.find_lambda(current_block_id, name, fenv) {
+            println!(
+                "bake: {:?}",
+                (scope_id, current_block_id, b.labels.r(name.into()))
+            );
+            if let Some(ty) = maybe_ty {
+                let fun_ty = b.types.r(def.fun_type).clone();
+                if b.types.u.unify(&ty, &fun_ty).is_err() {
+                    let span_id = b.spans.get_span_unknown();
+
+                    b.push_error(
+                        &format!("Func Mismatch: caller: {}, def: {}", &ty, fun_ty),
+                        span_id,
+                    );
+                }
+            }
+
+            //println!("scope: {:?}", (scope_id, &scope));
+            //let top_block_id = scope.entry_block.unwrap();
+            //self.switch_blocks(top_block_id);
+            let result = self.push_bake_function(
+                def.clone(),
+                name,
+                ScopeType::Template,
+                Successor::TemplateDeclaration,
+                fenv,
+                b,
+            );
+            //self.switch_blocks(block_id);
+
+            /*
+            // update declaration
+            let decl_link_id = if let Some(decl_link_id) =
+                self.resolve_declaration(current_block_id, name, fenv)
+            {
+                decl_link_id
+            } else {
+                unreachable!()
+            };
+
+            let result = self.push_bake_function(def, name, ScopeType::Function, Successor::FunctionDeclaration, fenv, b);
+            */
+            if result.is_err() {
+                self.drain_diagnostics(b);
+            }
+            let r = result?;
+
+            /*
+            let entry_block_id = self.get_entry(r.link_id.unwrap()).block_id;
+            let entry = self.get_entry_mut(decl_link_id);
+            if let LCode::DeclareFunction(_) = entry.code {
+            } else {
+                assert!(false);
+            }
+            entry.code = LCode::DeclareFunction(Some(entry_block_id));
+            */
 
             self.drain_diagnostics(b);
             self.switch_blocks(current_block_id);
@@ -1633,7 +1694,7 @@ impl Flatten {
                 let block = self.get_block(current_block_id);
                 //println!("return: {:?}", (block_id, block.scope_id));
                 let fun_scope_id = fenv
-                    .find_nearest_scope(block.scope_id, ScopeType::Function)
+                    .find_nearest_scope(block.scope_id, &[ScopeType::Template, ScopeType::Function])
                     .expect(&format!(
                         "Not in function context, scope_id:{}",
                         block.scope_id
