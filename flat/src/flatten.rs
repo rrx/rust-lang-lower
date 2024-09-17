@@ -135,6 +135,11 @@ impl FlattenResult {
     }
 }
 
+pub enum FlattenMode {
+    Function,
+    Template
+}
+
 pub struct Flatten {
     block_id: BlockId,
     module_key: Option<StringKey>,
@@ -143,6 +148,7 @@ pub struct Flatten {
     pub(super) gblocks: BlockGraph,
     ast_templates: Vec<Lambda>,
     messages: Vec<(String, SpanId)>,
+    mode: FlattenMode,
 }
 
 impl Flatten {
@@ -161,6 +167,7 @@ impl Flatten {
             link: LinkOptions::new(),
             ast_templates: vec![],
             messages: vec![],
+            mode: FlattenMode::Function,
         }
     }
 
@@ -306,6 +313,7 @@ impl Flatten {
                 //f.block_id = r.block_id;
             }
             //let result = f.push_bake_templates(static_block_id, fenv, b);
+            //let result = f.push_bake_main_template(fenv, b);
             f.drain_diagnostics(b);
             //result?;
             Ok(f)
@@ -322,13 +330,27 @@ impl Flatten {
         }
     }
 
-    pub fn push_bake_main(&mut self, fenv: &mut FlattenEnvironment, b: &mut NB) -> Result<LinkId> {
+    pub fn push_bake_main_template(&mut self, fenv: &mut FlattenEnvironment, b: &mut NB) -> Result<LinkId> {
+        //self.mode = FlattenMode::Template;
         let current_block_id = self.block_id;
         let name = b.labels.s("main");
         // reset the block position before each function
         // main is always static context
         self.switch_blocks(fenv.static_block_id());
-        self.push_bake_template(name, None, fenv, b)?;
+        let r = self.push_bake_template(name, None, fenv, b);
+        // switch back after bake
+        self.switch_blocks(current_block_id);
+        r
+    }
+
+    pub fn push_bake_main(&mut self, fenv: &mut FlattenEnvironment, b: &mut NB) -> Result<LinkId> {
+        //self.mode = FlattenMode::Function;
+        let current_block_id = self.block_id;
+        let name = b.labels.s("main");
+        // reset the block position before each function
+        // main is always static context
+        //self.switch_blocks(fenv.static_block_id());
+        //self.push_bake_template(name, None, fenv, b)?;
         //self.block_id = block_id;
         self.switch_blocks(fenv.static_block_id());
         let r = self.push_bake(name, None, fenv, b);
@@ -355,6 +377,8 @@ impl Flatten {
         let mut links = vec![];
         for key in keys.iter() {
             // reset the block position before each function
+            let name = b.labels.r(key.into());
+            println!("bake {}", name);
             self.switch_blocks(block_id);
             let link_id = self.push_bake(*key, None, fenv, b)?;
             links.push(link_id);
@@ -1437,11 +1461,26 @@ impl Flatten {
             Ok(r)
         } else {
             let s = b.labels.r(name.into());
+            let u = b.spans.get_span_unknown();
+            b.push_error(&format!("bake_lambda: not found: {}", s), u);
             Err(Error::new(BlockifyError::NotFound(s)))
         }
     }
 
     pub fn push_bake(
+        &mut self,
+        name: StringKey,
+        maybe_ty: Option<AstType>,
+        fenv: &mut FlattenEnvironment,
+        b: &mut NB,
+    ) -> Result<LinkId> {
+        match self.mode {
+            FlattenMode::Function => self.push_bake_func(name, maybe_ty, fenv, b),
+            FlattenMode::Template => self.push_bake_template(name, maybe_ty, fenv, b),
+        }
+    }
+
+    pub fn push_bake_func(
         &mut self,
         name: StringKey,
         maybe_ty: Option<AstType>,
@@ -1500,6 +1539,8 @@ impl Flatten {
             Ok(r.link_id.unwrap())
         } else {
             let s = b.labels.r(name.into());
+            let u = b.spans.get_span_unknown();
+            b.push_error(&format!("push_bake: not found: {}", s), u);
             Err(Error::new(BlockifyError::NotFound(s)))
         }
     }
@@ -1572,6 +1613,8 @@ impl Flatten {
             Ok(r.link_id.unwrap())
         } else {
             let s = b.labels.r(name.into());
+            let u = b.spans.get_span_unknown();
+            b.push_error(&format!("push_bake_template: not found: {}", s), u);
             Err(Error::new(BlockifyError::NotFound(s)))
         }
     }
@@ -1610,16 +1653,19 @@ impl Flatten {
                             span_id,
                             VarDefinitionSpace::Static,
                         );
-                        let template_link_id = self.push_code(
-                            LCode::DeclareTemplate(None),
-                            fun_ty.clone(),
-                            Some(name),
-                            span_id,
-                            VarDefinitionSpace::Static,
-                        );
+                        if let Some(_body) = &def.body {
+                            let template_link_id = self.push_code(
+                                LCode::DeclareTemplate(None),
+                                fun_ty.clone(),
+                                Some(name),
+                                span_id,
+                                VarDefinitionSpace::Static,
+                            );
+                            self.switch_blocks(current_block_id);
+                            fenv.scope_define_template(fenv.static_scope_id(), name, template_link_id);
+                        }
                         self.switch_blocks(current_block_id);
                         fenv.scope_define_declaration(fenv.static_scope_id(), name, func_link_id);
-                        fenv.scope_define_template(fenv.static_scope_id(), name, template_link_id);
 
                         // save template for later use
                         if def.body.is_some() {
@@ -1852,8 +1898,9 @@ impl Flatten {
                         false,
                     ))
                 } else {
-                    b.push_error("Name not found", node.span_id);
                     let s = b.labels.r(key.into());
+                    let u = b.spans.get_span_unknown();
+                    b.push_error(&format!("ident: not found: {}", s), u);
                     Err(Error::new(BlockifyError::NotFound(s)))
                 }
             }

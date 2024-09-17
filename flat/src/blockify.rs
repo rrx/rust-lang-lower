@@ -17,6 +17,8 @@ pub enum BlockifyError {
     Invalid,
     #[error("BlockifyError: NotFound")]
     NotFound(String),
+    #[error("BlockifyError: Template Not Found")]
+    TemplateNotFound(String),
 }
 
 #[derive(Debug, Clone)]
