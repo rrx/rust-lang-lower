@@ -268,29 +268,40 @@ impl TypeUnify {
                     None
                 }
             }
-            AstType::Func(args, ret) => match ret.as_ref() {
-                ReturnType::Multi(_) => unimplemented!(),
-                ReturnType::Single(ret) => {
-                    if let Some(ret) = self.resolve(ret) {
-                        let fields = args.fields();
-                        let size = fields.len();
-                        let mut args2 = fields
-                            .into_iter()
-                            .filter_map(|(_, v)| self.resolve(&v).map(|x| x.into()))
-                            .collect::<Vec<_>>();
-                        if args2.len() == size {
-                            if args2 == vec![AstType::Unit] {
-                                args2 = vec![];
-                            }
-                            Some(AstType::func(args2, ret.into()))
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
+            AstType::Func(args, ret) => {
+                assert!(args.is_composite());
+
+                let fields = args.fields();
+                let size = fields.len();
+
+                let mut resolved_args = fields
+                    .into_iter()
+                    .filter_map(|(_, v)| self.resolve(&v).map(|x| x.into()))
+                    .collect::<Vec<_>>();
+
+                if resolved_args.len() != size {
+                    return None;
+                } else {
+                    // this should never happen
+                    if resolved_args == vec![AstType::Unit] {
+                        assert!(false);
+                        resolved_args = vec![];
                     }
                 }
-            },
+
+                let resolved_ret = match ret.as_ref() {
+                    ReturnType::Multi(_) => unimplemented!(),
+                    ReturnType::Single(ret) => {
+                        if let Some(ret) = self.resolve(ret) {
+                            ret
+                        } else {
+                            return None;
+                        }
+                    }
+                };
+
+                Some(AstType::func(resolved_args, resolved_ret.into()))
+            }
             AstType::Variable(offset) => {
                 let k = self.variables[*offset as usize];
                 let v = self.ut.probe_value(k);

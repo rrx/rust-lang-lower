@@ -120,8 +120,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut m = FlattenModule::from_builder(f, &mut fenv, &mut b);
 
     if config.template {
-    } else {
         m.type_inference(&mut b);
+    } else {
+        m.type_inference_enforce(&mut b);
     }
 
     //b.labels.pool.dump();

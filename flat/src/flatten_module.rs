@@ -254,7 +254,10 @@ impl FlattenModule {
             let block_id = index.into();
             let block = flatten.get_block(block_id);
             for (index, link_id) in block.links.iter().enumerate() {
-                let entry = flatten.get_entry(*link_id).clone();
+                let mut entry = flatten.get_entry(*link_id).clone();
+                if let Some(ty) = b.types.u.resolve(&entry.ty) {
+                    entry.ty = ty;
+                }
 
                 let v = ValueId(value_count);
                 let mut next = v;
@@ -287,13 +290,17 @@ impl FlattenModule {
     }
 
     pub fn type_inference(&mut self, b: &mut NB) {
-        /*
+        b.types.dump();
         for entry in self.entries.iter_mut() {
+            if !entry.ty.is_unknown() {
+                continue;
+            }
             if let Some(ty) = b.types.u.resolve(&entry.ty) {
                 entry.ty = ty;
             }
         }
 
+        /*
 
         for (index, entry) in self.entries.iter().enumerate() {
             let _v = ValueId::new(index as u32);
@@ -343,7 +350,8 @@ impl FlattenModule {
             */
         }
         */
-
+    }
+    pub fn type_inference_enforce(&mut self, b: &mut NB) {
         for entry in self.entries.iter_mut() {
             if !entry.ty.is_unknown() {
                 continue;
@@ -448,7 +456,7 @@ impl FlattenModule {
     pub fn get_code_row(&self, v: ValueId, b: &mut NB) -> CodeRow {
         let entry = self.get_entry(v);
         let code = self.get_code(v);
-        let ty = self.get_type(v.into());
+        //let ty = self.get_type(v.into());
 
         let mem = self.get_mem(v.into());
         //let next = self.get_next(v).unwrap_or(v).index();
@@ -458,11 +466,17 @@ impl FlattenModule {
         let block_id = entry.block_id;
         let block = self.gblocks.node_weight(block_id.into()).unwrap();
 
-        //let r_ty = b.types.u.resolve(&ty);
+        let r_ty = if let Some(r_ty) = b.types.u.resolve(&entry.ty) {
+            r_ty
+        } else {
+            entry.ty.clone()
+        };
+        println!("X: {} => {}", &entry.ty, &r_ty);
+
         //let is_unknown = r_ty.as_ref().map(|ty| ty.is_unknown()).unwrap_or(true);
         //let s_ty = format!("{}", &r_ty.unwrap_or(ty)); //AstType::Error));
-        let is_unknown = ty.is_unknown();
-        let s_ty = format!("{}", &ty);
+        let is_unknown = r_ty.is_unknown();
+        let s_ty = format!("{}", &r_ty);
 
         CodeRow {
             pos: v.index(),

@@ -1324,17 +1324,18 @@ impl Flatten {
             }
         }
 
-        let ret_arg_type = if arity == 0 {
-            //if let AstType::Unit = &ret_ty {
+        let single_ty = fun_block
+            .ret_types
+            .iter()
+            .next()
+            .unwrap_or(&AstType::Unit)
+            .clone();
+
+        let ret_arg_type = if arity == 0 || AstType::Unit == single_ty {
             AstType::Struct(vec![])
         } else {
             assert!(fun_block.ret_types.len() == 1);
-            let ty = fun_block.ret_types.iter().next().unwrap().clone();
-            if let AstType::Unit = &ty {
-                AstType::Struct(vec![])
-            } else {
-                AstType::Struct(vec![(None, ty)]) //;//ret_ty.clone())])
-            }
+            AstType::Struct(vec![(None, single_ty.clone())]) //;//ret_ty.clone())])
         };
 
         let resolved_ret_ty = if let Some(ty) = b.types.u.resolve(&ret_arg_type) {
@@ -1348,10 +1349,23 @@ impl Flatten {
                 ),
                 span_id,
             );
-            ret_arg_type
+            ret_arg_type.clone()
         };
 
-        println!("R: {}", resolved_ret_ty);
+        if b.types.u.unify(&func_ret_ty, &single_ty).is_err() {
+            b.push_error(
+                &format!(
+                    "8-Type Mismatch: LHS: {}, RHS: {}",
+                    &resolved_ret_ty, &func_ret_ty
+                ),
+                span_id,
+            );
+        }
+
+        println!(
+            "R: {:?}",
+            (&resolved_ret_ty, &ret_arg_type, &func_ret_ty, &single_ty)
+        );
         self.switch_blocks(ret_block_id);
         self.push_return_block(fun_scope_id, resolved_ret_ty.clone(), span_id, fenv, b);
 
