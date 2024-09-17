@@ -289,7 +289,9 @@ impl Flatten {
         // reset the block position before each function
         // main is always static context
         self.switch_blocks(fenv.static_block_id());
+        self.push_bake_template(name, None, fenv, b)?;
         //self.block_id = block_id;
+        self.switch_blocks(fenv.static_block_id());
         let r = self.push_bake(name, None, fenv, b);
         // switch back after bake
         self.switch_blocks(current_block_id);

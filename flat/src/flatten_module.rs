@@ -227,8 +227,11 @@ impl FlattenModule {
         let mut entries = vec![];
         while let Some(visited) = dfs.next(&flatten.gblocks) {
             for edge in flatten.gblocks.edges(visited) {
-                if Successor::FunctionDeclaration == *edge.weight() {
-                    entries.push(edge.target());
+                match *edge.weight() {
+                    Successor::FunctionDeclaration | Successor::TemplateDeclaration => {
+                        entries.push(edge.target());
+                    }
+                    _ => (), //_ => unreachable!("{:?}", edge.weight())
                 }
             }
         }
