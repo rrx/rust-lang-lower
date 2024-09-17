@@ -148,7 +148,7 @@ pub type TypeUnifyTable = UnificationTable<InPlace<IntKey>>;
 
 pub struct TypeUnify {
     ut: TypeUnifyTable,
-    //unknown_count: u32,
+    args_count: u32,
     variables: Vec<IntKey>,
 }
 
@@ -156,7 +156,7 @@ impl TypeUnify {
     pub fn new() -> Self {
         Self {
             ut: TypeUnifyTable::new(),
-            //unknown_count: 0,
+            args_count: 0,
             variables: vec![],
         }
     }
@@ -165,6 +165,13 @@ impl TypeUnify {
         let offset = self.variables.len();
         let r = UType(AstType::Variable(offset as u32));
         self.variables.push(self.ut.new_key(r.clone()));
+        r
+    }
+
+    pub fn fresh_type_arg(&mut self) -> UType {
+        let offset = self.args_count;
+        self.args_count += 1;
+        let r = UType(AstType::TypeArg(offset as u32));
         r
     }
 
@@ -394,5 +401,21 @@ mod tests {
         assert_eq!(u.resolve(&ut15), Some(AstType::Int));
         assert_eq!(u.resolve(&ut16), Some(AstType::Int));
         assert_eq!(u.resolve(&ut17), Some(AstType::Int));
+    }
+
+    #[test]
+    fn test_stuff2() {
+        let mut u = TypeUnify::new();
+        // just unify
+        let ut0 = u.fresh_unknown();
+        let ut1 = u.fresh_unknown();
+        u.unify(&ut0, &ut1).unwrap();
+        println!("{:?}", (u.resolve(&ut0), u.resolve(&ut1)));
+
+        let arg = u.fresh_type_arg();
+        u.unify(&ut0, &arg).unwrap();
+        println!("{:?}", (u.resolve(&ut0), u.resolve(&ut1)));
+        //assert_eq!(AstType::Int, u.resolve(&ut0).unwrap());
+        //assert_eq!(AstType::Int, u.resolve(&ut1).unwrap());
     }
 }

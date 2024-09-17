@@ -73,7 +73,6 @@ pub struct TypeBuilder {
 impl TypeBuilder {
     pub fn new() -> Self {
         Self {
-            //unknown_count: 0,
             pool: TypePool::new(),
             u: TypeUnify::new(),
         }
@@ -81,6 +80,10 @@ impl TypeBuilder {
 
     pub fn fresh_unknown(&mut self) -> AstType {
         self.u.fresh_unknown().into()
+    }
+
+    pub fn fresh_type_arg(&mut self) -> AstType {
+        self.u.fresh_type_arg().into()
     }
 
     pub fn fresh_args(&mut self) -> AstType {

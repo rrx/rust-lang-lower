@@ -86,6 +86,7 @@ pub enum AstType {
     Ptr(Box<AstType>),
     // Func(parameters, return type)
     Func(Box<AstType>, Box<ReturnType>),
+    TypeArg(u32),
     Variable(u32),
 }
 
