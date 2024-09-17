@@ -1242,7 +1242,7 @@ impl Flatten {
         let block = self.get_block(current_block_id);
         println!("bake_function: {:?}", (block.scope_id, current_block_id));
 
-        let ret_ty = b.types.r(def.return_type).clone();
+        let func_ret_ty = b.types.r(def.return_type).clone();
         let fun_ty = def_to_type(&def, b);
         let body = def.body.unwrap();
         let span_id = body.span_id;
@@ -1293,53 +1293,67 @@ impl Flatten {
             );
         }
 
-        if fun_block.num_ret_args.is_empty() {
-            if b.types.u.unify(&AstType::Unit, &ret_ty).is_err() {
+        let num_ret_args = fun_block.num_ret_args.iter().next().unwrap_or(&0).clone();
+
+        // we need to know at least the arity of the return value
+        // is it something or nothing
+        let arity = if num_ret_args == 0 {
+            if b.types.u.unify(&AstType::Unit, &func_ret_ty).is_err() {
                 b.push_error(
-                    &format!("6-Type Mismatch: LHS: {}, RHS: {}", AstType::Unit, &ret_ty),
+                    &format!(
+                        "1-Type Mismatch: LHS: {}, RHS: {}",
+                        &func_ret_ty,
+                        &AstType::Unit
+                    ),
                     span_id,
                 );
             }
+            0
         } else {
-            let num_ret_args = fun_block.num_ret_args.iter().next().unwrap().clone();
-            if num_ret_args == 0 {
-                if b.types.u.unify(&AstType::Unit, &ret_ty).is_err() {
-                    b.push_error(
-                        &format!("1-Type Mismatch: LHS: {}, RHS: {}", &ret_ty, &AstType::Unit),
-                        span_id,
-                    );
-                }
-            }
-        }
+            num_ret_args
+        };
+        assert!(num_ret_args <= 1);
 
+        // all the possible return types, unify them
         for ty in fun_block.ret_types.iter() {
-            if b.types.u.unify(ty, &ret_ty).is_err() {
+            if b.types.u.unify(ty, &func_ret_ty).is_err() {
                 b.push_error(
-                    &format!("7-Type Mismatch: LHS: {}, RHS: {}", ty, &ret_ty),
+                    &format!("7-Type Mismatch: LHS: {}, RHS: {}", ty, &func_ret_ty),
                     span_id,
                 );
             }
         }
 
-        let ret_arg_type = if let AstType::Unit = &ret_ty {
+        let ret_arg_type = if arity == 0 {
+            //if let AstType::Unit = &ret_ty {
             AstType::Struct(vec![])
         } else {
-            AstType::Struct(vec![(None, ret_ty.clone())])
+            assert!(fun_block.ret_types.len() == 1);
+            let ty = fun_block.ret_types.iter().next().unwrap().clone();
+            if let AstType::Unit = &ty {
+                AstType::Struct(vec![])
+            } else {
+                AstType::Struct(vec![(None, ty)]) //;//ret_ty.clone())])
+            }
         };
 
-        let ret_ty = if let Some(ty) = b.types.u.resolve(&ret_arg_type) {
+        let resolved_ret_ty = if let Some(ty) = b.types.u.resolve(&ret_arg_type) {
             ty
         } else {
             let s = b.labels.r(name.into());
             b.push_error(
-                &format!("[{}] Return Type Must Resolve: {}", &s, &ret_ty),
+                &format!(
+                    "[{}] Return Type Must Resolve: {}, arity: {}",
+                    &s, &func_ret_ty, arity
+                ),
                 span_id,
             );
             ret_arg_type
         };
 
+        println!("R: {}", resolved_ret_ty);
         self.switch_blocks(ret_block_id);
-        self.push_return_block(fun_scope_id, ret_ty.clone(), span_id, fenv, b);
+        self.push_return_block(fun_scope_id, resolved_ret_ty.clone(), span_id, fenv, b);
 
         // restore position back to where we started
         self.switch_blocks(current_block_id);
