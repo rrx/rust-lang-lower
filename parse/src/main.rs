@@ -7,7 +7,8 @@ use std::io::Write;
 use lower_mlir::default_context;
 
 use flat::{
-    BlockifyError, Flatten, FlattenEnvironment, FlattenModule, ICodeModule, NodeBuilder, ValueId,
+    BlockifyError, Flatten, FlattenEnvironment, FlattenMode, FlattenModule, ICodeModule,
+    NodeBuilder, ValueId,
 };
 use parse::starlark::StarlarkParser;
 use std::path::PathBuf;
@@ -87,13 +88,25 @@ fn main() -> Result<(), Box<dyn Error>> {
     let ast = result?;
 
     let mut fenv = FlattenEnvironment::new();
-    let r = Flatten::flatten_module(ast, &mut fenv, &mut b);
+
+    let mode = if config.template {
+        FlattenMode::Template
+    } else {
+        FlattenMode::Function
+    };
+
+    let r = Flatten::flatten_module(ast, mode, &mut fenv, &mut b);
     if r.is_err() {
         b.spans.diagnostics_dump();
     }
     let mut f = r?;
 
     if config.template {
+        let r = f.push_bake_templates(&mut fenv, &mut b);
+        if r.is_err() {
+            b.spans.diagnostics_dump();
+        }
+        r?;
     } else {
         let r = f.push_bake_main(&mut fenv, &mut b);
         if r.is_err() {
@@ -104,7 +117,13 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     //f.dump_blocks();
 
-    let m = FlattenModule::from_builder(f, &mut fenv, &mut b);
+    let mut m = FlattenModule::from_builder(f, &mut fenv, &mut b);
+
+    if config.template {
+    } else {
+        m.type_inference(&mut b);
+    }
+
     //b.labels.pool.dump();
     m.dump(&fenv, &b);
 

@@ -283,7 +283,6 @@ impl FlattenModule {
         }
         m.gblocks = flatten.gblocks;
         m.find_dead_blocks(b);
-        m.type_inference(b);
         m
     }
 

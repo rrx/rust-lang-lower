@@ -17,7 +17,7 @@ bare:
 	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/bare.star
 
 template:
-	RUST_BACKTRACE=1 cargo run -- -t -v -i tests/bin/bare.star
+	RUST_BACKTRACE=1 cargo run -- -t -v -i tests/template.star
 
 t:
 	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/star_args.star -o build/args3

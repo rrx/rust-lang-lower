@@ -148,7 +148,7 @@ pub struct Flatten {
     pub(super) gblocks: BlockGraph,
     ast_templates: Vec<Lambda>,
     messages: Vec<(String, SpanId)>,
-    mode: FlattenMode,
+    pub mode: FlattenMode,
 }
 
 impl Flatten {
@@ -278,11 +278,13 @@ impl Flatten {
 
     pub fn flatten_module(
         node: AstNode,
+        mode: FlattenMode,
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
     ) -> Result<Self> {
         let mut f = Self::new(fenv);
         if let Ast::Module(key, body) = node.node {
+            f.mode = mode;
             let static_block_id = f.block_id;
             f.module_key = Some(key);
 
@@ -348,7 +350,6 @@ impl Flatten {
     }
 
     pub fn push_bake_main(&mut self, fenv: &mut FlattenEnvironment, b: &mut NB) -> Result<LinkId> {
-        //self.mode = FlattenMode::Function;
         let current_block_id = self.block_id;
         let name = b.labels.s("main");
         // reset the block position before each function
@@ -365,10 +366,11 @@ impl Flatten {
 
     pub fn push_bake_templates(
         &mut self,
-        block_id: BlockId,
+        //block_id: BlockId,
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
     ) -> Result<Vec<LinkId>> {
+        let block_id = fenv.static_block_id();
         let block = self.get_block(block_id);
         let scope_id = block.scope_id;
         let scope = fenv.get_scope(scope_id);
@@ -1650,30 +1652,40 @@ impl Flatten {
                         //let ret_ty = b.types.r(def.return_type).clone();
                         let fun_ty = def_to_type(&def, b);
 
-                        let func_link_id = self.push_code(
-                            LCode::DeclareFunction(None),
-                            fun_ty.clone(),
-                            Some(name),
-                            span_id,
-                            VarDefinitionSpace::Static,
-                        );
-                        if let Some(_body) = &def.body {
-                            let template_link_id = self.push_code(
-                                LCode::DeclareTemplate(None),
-                                fun_ty.clone(),
-                                Some(name),
-                                span_id,
-                                VarDefinitionSpace::Static,
-                            );
-                            self.switch_blocks(current_block_id);
-                            fenv.scope_define_template(
-                                fenv.static_scope_id(),
-                                name,
-                                template_link_id,
-                            );
+                        match self.mode {
+                            FlattenMode::Function => {
+                                let func_link_id = self.push_code(
+                                    LCode::DeclareFunction(None),
+                                    fun_ty.clone(),
+                                    Some(name),
+                                    span_id,
+                                    VarDefinitionSpace::Static,
+                                );
+                                self.switch_blocks(current_block_id);
+                                fenv.scope_define_declaration(
+                                    fenv.static_scope_id(),
+                                    name,
+                                    func_link_id,
+                                );
+                            }
+                            FlattenMode::Template => {
+                                if let Some(_) = &def.body {
+                                    let template_link_id = self.push_code(
+                                        LCode::DeclareTemplate(None),
+                                        fun_ty.clone(),
+                                        Some(name),
+                                        span_id,
+                                        VarDefinitionSpace::Static,
+                                    );
+                                    self.switch_blocks(current_block_id);
+                                    fenv.scope_define_template(
+                                        fenv.static_scope_id(),
+                                        name,
+                                        template_link_id,
+                                    );
+                                }
+                            }
                         }
-                        self.switch_blocks(current_block_id);
-                        fenv.scope_define_declaration(fenv.static_scope_id(), name, func_link_id);
 
                         // save template for later use
                         if def.body.is_some() {
