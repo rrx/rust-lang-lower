@@ -1526,11 +1526,6 @@ impl Flatten {
                         //let ret_ty = b.types.r(def.return_type).clone();
                         let fun_ty = def_to_type(&def, b);
 
-                        // save template for later use
-                        if def.body.is_some() {
-                            self.save_ast_template(current_block_id, &name, &def, fenv, b)?;
-                        }
-
                         let link_id = self.push_code(
                             LCode::DeclareFunction(None),
                             fun_ty.clone(),
@@ -1541,6 +1536,11 @@ impl Flatten {
 
                         self.switch_blocks(current_block_id);
                         fenv.scope_define_declaration(fenv.static_scope_id(), name, link_id);
+
+                        // save template for later use
+                        if def.body.is_some() {
+                            self.save_ast_template(current_block_id, &name, &def, fenv, b)?;
+                        }
 
                         if let Some(_body) = &def.body {
                             Ok(FlattenResult::new(current_block_id, None, fun_ty, false))
