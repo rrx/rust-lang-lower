@@ -19,6 +19,10 @@ struct Config {
     #[argh(switch, short = 'c')]
     compile: bool,
 
+    /// template
+    #[argh(switch, short = 't')]
+    template: bool,
+
     /// exec flag
     #[argh(switch, short = 'x')]
     exec: bool,
@@ -89,11 +93,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let mut f = r?;
 
-    let r = f.push_bake_main(&mut fenv, &mut b);
-    if r.is_err() {
-        b.spans.diagnostics_dump();
+    if config.template {
+    } else {
+        let r = f.push_bake_main(&mut fenv, &mut b);
+        if r.is_err() {
+            b.spans.diagnostics_dump();
+        }
+        r?;
     }
-    r?;
 
     //f.dump_blocks();
 
@@ -115,32 +122,36 @@ fn main() -> Result<(), Box<dyn Error>> {
     let table_path = make_path(&output_filename, "table.txt");
     m.dump_code_table(&table_path, &mut b);
 
+    let mut cfg_path = path.clone();
+    cfg_path.set_extension("cfg.mmd");
+    m.block_graph2(cfg_path.clone().to_str().unwrap(), &b)?;
+    flat::flatten::scope_graph(path.clone().to_str().unwrap(), &fenv);
+
     if b.spans.has_errors {
         b.spans.diagnostics_dump();
         return Err(anyhow::Error::new(BlockifyError::Invalid).into());
     }
 
-    let r = p.codegen(&m, ValueId::new(0), &context, &mut module, &mut b);
-    let mut cfg_path = path.clone();
-    cfg_path.set_extension("cfg.mmd");
-    m.block_graph2(cfg_path.clone().to_str().unwrap(), &b)?;
-    flat::flatten::scope_graph(path.clone().to_str().unwrap(), &fenv);
-    b.spans.diagnostics_dump();
-    r?;
+    if config.template {
+    } else {
+        let r = p.codegen(&m, ValueId::new(0), &context, &mut module, &mut b);
+        b.spans.diagnostics_dump();
+        r?;
 
-    //b.types.dump();
-    if config.verbose {
-        //module.as_operation().dump();
-    }
-    assert!(module.as_operation().verify());
+        //b.types.dump();
+        if config.verbose {
+            //module.as_operation().dump();
+        }
+        assert!(module.as_operation().verify());
 
-    // run passes
-    let pass_manager = lower_mlir::default_pass_manager(&context, config.optimize);
-    pass_manager.run(&mut module).unwrap();
-    if config.verbose {
-        //module.as_operation().dump();
+        // run passes
+        let pass_manager = lower_mlir::default_pass_manager(&context, config.optimize);
+        pass_manager.run(&mut module).unwrap();
+        if config.verbose {
+            //module.as_operation().dump();
+        }
+        assert!(module.as_operation().verify());
     }
-    assert!(module.as_operation().verify());
 
     if config.compile {
         let mut path = path.clone();

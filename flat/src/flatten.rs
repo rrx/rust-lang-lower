@@ -137,7 +137,7 @@ impl FlattenResult {
 
 pub enum FlattenMode {
     Function,
-    Template
+    Template,
 }
 
 pub struct Flatten {
@@ -330,7 +330,11 @@ impl Flatten {
         }
     }
 
-    pub fn push_bake_main_template(&mut self, fenv: &mut FlattenEnvironment, b: &mut NB) -> Result<LinkId> {
+    pub fn push_bake_main_template(
+        &mut self,
+        fenv: &mut FlattenEnvironment,
+        b: &mut NB,
+    ) -> Result<LinkId> {
         //self.mode = FlattenMode::Template;
         let current_block_id = self.block_id;
         let name = b.labels.s("main");
@@ -1662,7 +1666,11 @@ impl Flatten {
                                 VarDefinitionSpace::Static,
                             );
                             self.switch_blocks(current_block_id);
-                            fenv.scope_define_template(fenv.static_scope_id(), name, template_link_id);
+                            fenv.scope_define_template(
+                                fenv.static_scope_id(),
+                                name,
+                                template_link_id,
+                            );
                         }
                         self.switch_blocks(current_block_id);
                         fenv.scope_define_declaration(fenv.static_scope_id(), name, func_link_id);
