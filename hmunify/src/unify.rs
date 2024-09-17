@@ -271,23 +271,31 @@ impl TypeUnify {
             AstType::Func(args, ret) => {
                 assert!(args.is_composite());
 
-                let fields = args.fields();
-                let size = fields.len();
-
-                let mut resolved_args = fields
+                let fields = args
+                    .fields()
                     .into_iter()
-                    .filter_map(|(_, v)| self.resolve(&v).map(|x| x.into()))
+                    .map(|(_, ty)| ty)
+                    .collect::<Vec<_>>();
+                //let size = fields.len();
+
+                let resolved_args = fields
+                    .clone()
+                    .into_iter()
+                    .map(|v| self.resolve(&v).map(|x| x).unwrap_or(v))
                     .collect::<Vec<_>>();
 
-                if resolved_args.len() != size {
-                    return None;
-                } else {
-                    // this should never happen
-                    if resolved_args == vec![AstType::Unit] {
-                        assert!(false);
-                        resolved_args = vec![];
-                    }
+                //if resolved_args.len() != size {
+                // return original value
+                //fields
+                //return None;
+                //} else {
+                // this should never happen
+                if resolved_args.clone() == vec![AstType::Unit] {
+                    assert!(false);
+                    //resolved_args = vec![];
                 }
+                //resolved_args.clone()
+                //};
 
                 let resolved_ret = match ret.as_ref() {
                     ReturnType::Multi(_) => unimplemented!(),
