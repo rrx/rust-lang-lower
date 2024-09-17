@@ -141,7 +141,7 @@ pub struct Flatten {
     pub(super) link: LinkOptions,
     entries: Vec<CodeEntry>,
     pub(super) gblocks: BlockGraph,
-    templates: Vec<Lambda>,
+    ast_templates: Vec<Lambda>,
     messages: Vec<(String, SpanId)>,
 }
 
@@ -159,7 +159,7 @@ impl Flatten {
             entries: vec![],
             gblocks,
             link: LinkOptions::new(),
-            templates: vec![],
+            ast_templates: vec![],
             messages: vec![],
         }
     }
@@ -240,8 +240,11 @@ impl Flatten {
         let mut f = Self::new(fenv);
         if let Ast::Module(key, body) = node.node {
             f.module_key = Some(key);
+
             let block = f.get_block(f.block_id);
             let static_scope_id = block.scope_id;
+            let static_scope = fenv.get_scope_mut(static_scope_id);
+            static_scope.entry_block = Some(f.block_id);
 
             let top_block_id = f.block_id;
             f.switch_blocks(f.block_id);
@@ -408,14 +411,14 @@ impl Flatten {
         self.entries.get_mut(link_id.index()).unwrap()
     }
 
-    pub fn insert_template(&mut self, def: Lambda) -> TemplateId {
-        let offset = self.templates.len();
-        self.templates.push(def);
+    pub fn insert_ast_template(&mut self, def: Lambda) -> TemplateId {
+        let offset = self.ast_templates.len();
+        self.ast_templates.push(def);
         TemplateId(offset as u32)
     }
 
-    pub fn get_template(&self, template_id: TemplateId) -> &Lambda {
-        self.templates.get(template_id.index()).unwrap()
+    pub fn get_ast_template(&self, template_id: TemplateId) -> &Lambda {
+        self.ast_templates.get(template_id.index()).unwrap()
     }
 
     pub fn push_sequence(
@@ -1114,22 +1117,42 @@ impl Flatten {
         }
     }
 
-    pub fn save_template(
+    pub fn insert_code_template(
+        &mut self,
+        scope_id: ScopeId,
+        key: StringKey,
+        link_id: LinkId,
+        fenv: &mut FlattenEnvironment,
+    ) {
+        let scope = fenv.get_scope_mut(scope_id);
+        scope.templates.insert(key.into(), link_id);
+    }
+
+    pub fn save_ast_template(
         &mut self,
         block_id: BlockId,
         name: &StringKey,
         def: &Lambda,
         fenv: &mut FlattenEnvironment,
-    ) {
-        let template_id = self.insert_template(def.clone());
+        b: &mut NB,
+    ) -> Result<()> {
+        let template_id = self.insert_ast_template(def.clone());
         let block = self.get_block(block_id);
         let scope_id = block.scope_id;
         let scope = fenv.get_scope_mut(scope_id);
         scope.lambdas.insert(name.into(), template_id);
+
+        println!("scope: {:?}", (scope_id, &scope));
+        let top_block_id = scope.entry_block.unwrap();
+        self.switch_blocks(top_block_id);
+        //self.push_bake_function(def.clone(), *name, fenv, b)?;
+        self.switch_blocks(block_id);
+        Ok(())
     }
 
     fn push_bake_function(
         &mut self,
+        decl_link_id: LinkId,
         def: Lambda,
         name: StringKey,
         fenv: &mut FlattenEnvironment,
@@ -1141,13 +1164,6 @@ impl Flatten {
         let block = self.get_block(current_block_id);
         //let scope = fenv.get_scope(block.scope_id);
         println!("bake_function: {:?}", (block.scope_id, current_block_id));
-
-        let decl_link_id =
-            if let Some(decl_link_id) = self.resolve_declaration(current_block_id, name, fenv) {
-                decl_link_id
-            } else {
-                unreachable!()
-            };
 
         let ret_ty = b.types.r(def.return_type).clone();
         let fun_ty = def_to_type(&def, b);
@@ -1177,7 +1193,7 @@ impl Flatten {
         self.block_succ(fun_block_id, ret_block_id, Successor::BlockScope);
         //let arg_type = b.types.r(def.arg_type).clone();
         self.switch_blocks(fun_block_id);
-        let (v_block, _) = self.push_start_block(
+        let (entry_link_id, _) = self.push_start_block(
             fun_scope_id,
             fun_ty.clone(),
             Some(name),
@@ -1187,22 +1203,13 @@ impl Flatten {
         );
         // add the name to static scope
         // do this early for recursive functions
-        fenv.scope_define(fenv.static_scope_id(), name, v_block);
+        fenv.scope_define(fenv.static_scope_id(), name, entry_link_id);
 
         let body = jump_if_needed(*body, b);
 
         self.switch_blocks(fun_block_id);
         let r = self.push_node(body, fenv, b)?;
         assert_eq!(self.block_id, r.block_id);
-
-        // update declaration
-        let entry = self.get_entry_mut(decl_link_id);
-        if let LCode::DeclareFunction(_) = entry.code {
-        } else {
-            assert!(false);
-        }
-        let code = LCode::DeclareFunction(Some(fun_block_id));
-        entry.code = code;
 
         // write out return block
         let fun_block = self.get_block(fun_block_id);
@@ -1272,10 +1279,27 @@ impl Flatten {
         self.switch_blocks(current_block_id);
         Ok(FlattenResult::new(
             current_block_id,
-            Some(v_block),
+            Some(entry_link_id),
             fun_ty,
             false,
         ))
+    }
+
+    pub fn find_template(
+        &self,
+        block_id: BlockId,
+        name: StringLabel,
+        fenv: &FlattenEnvironment,
+    ) -> Option<LinkId> {
+        // resolve scope through the tree, starting at the current scope
+        let block = self.get_block(block_id);
+        for scope_id in fenv.walk_scopes(block.scope_id) {
+            let scope = fenv.get_scope(scope_id);
+            if let Some(link_id) = scope.templates.get(&name) {
+                return Some(*link_id);
+            }
+        }
+        None
     }
 
     pub fn find_lambda(
@@ -1288,7 +1312,7 @@ impl Flatten {
             Some(scope_id) => {
                 let scope = fenv.get_scope(scope_id);
                 if let Some(template_id) = scope.lambdas.get(&name.into()).cloned() {
-                    let def = self.get_template(template_id).clone();
+                    let def = self.get_ast_template(template_id).clone();
                     Some((scope_id, def))
                 } else {
                     None
@@ -1442,7 +1466,30 @@ impl Flatten {
                     );
                 }
             }
-            let r = self.push_bake_function(def, name, fenv, b)?;
+
+            let decl_link_id = if let Some(decl_link_id) =
+                self.resolve_declaration(current_block_id, name, fenv)
+            {
+                decl_link_id
+            } else {
+                unreachable!()
+            };
+
+            let result = self.push_bake_function(decl_link_id, def, name, fenv, b);
+            if result.is_err() {
+                self.drain_diagnostics(b);
+            }
+            let r = result?;
+
+            // update declaration
+            let entry_block_id = self.get_entry(r.link_id.unwrap()).block_id;
+            let entry = self.get_entry_mut(decl_link_id);
+            if let LCode::DeclareFunction(_) = entry.code {
+            } else {
+                assert!(false);
+            }
+            entry.code = LCode::DeclareFunction(Some(entry_block_id));
+
             self.drain_diagnostics(b);
             self.switch_blocks(current_block_id);
             Ok(r.link_id.unwrap())
@@ -1481,7 +1528,7 @@ impl Flatten {
 
                         // save template for later use
                         if def.body.is_some() {
-                            self.save_template(current_block_id, &name, &def, fenv);
+                            self.save_ast_template(current_block_id, &name, &def, fenv, b)?;
                         }
 
                         let link_id = self.push_code(
@@ -1736,7 +1783,7 @@ impl Flatten {
                 // push the definition into the lambda list
                 if let Ast::Lambda(def) = expr.node {
                     let ty = def_to_type(&def, b);
-                    self.save_template(current_block_id, &name, &def, fenv);
+                    self.save_ast_template(current_block_id, &name, &def, fenv, b)?;
                     self.switch_blocks(current_block_id);
                     return Ok(FlattenResult::new(current_block_id, None, ty, false));
                 }
