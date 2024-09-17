@@ -235,7 +235,7 @@ impl Flatten {
     pub fn resolve_template(
         &self,
         block_id: BlockId,
-        name: StringLabel,
+        name: StringKey,
         fenv: &FlattenEnvironment,
     ) -> Option<LinkId> {
         // resolve scope through the tree, starting at the current scope
@@ -276,15 +276,15 @@ impl Flatten {
     ) -> Result<Self> {
         let mut f = Self::new(fenv);
         if let Ast::Module(key, body) = node.node {
+            let static_block_id = f.block_id;
             f.module_key = Some(key);
 
-            let block = f.get_block(f.block_id);
+            let block = f.get_block(static_block_id);
             let static_scope_id = block.scope_id;
             let static_scope = fenv.get_scope_mut(static_scope_id);
-            static_scope.entry_block = Some(f.block_id);
+            static_scope.entry_block = Some(static_block_id);
 
-            let top_block_id = f.block_id;
-            f.switch_blocks(f.block_id);
+            f.switch_blocks(static_block_id);
             f.push_start_block(
                 static_scope_id,
                 AstType::Func(
@@ -297,15 +297,17 @@ impl Flatten {
                 fenv,
             );
 
-            fenv.static_block = Some(f.block_id);
+            fenv.static_block = Some(static_block_id);
             fenv.static_scope = Some(static_scope_id);
             for ast in body.to_vec() {
-                f.switch_blocks(top_block_id);
+                f.switch_blocks(static_block_id);
                 let r = f.push_node(ast, fenv, b)?;
                 assert_eq!(f.block_id, r.block_id);
                 //f.block_id = r.block_id;
             }
+            //let result = f.push_bake_templates(static_block_id, fenv, b);
             f.drain_diagnostics(b);
+            //result?;
             Ok(f)
         } else {
             b.push_error("Not a module", node.span_id);
@@ -333,6 +335,31 @@ impl Flatten {
         // switch back after bake
         self.switch_blocks(current_block_id);
         r
+    }
+
+    pub fn push_bake_templates(
+        &mut self,
+        block_id: BlockId,
+        fenv: &mut FlattenEnvironment,
+        b: &mut NB,
+    ) -> Result<Vec<LinkId>> {
+        let block = self.get_block(block_id);
+        let scope_id = block.scope_id;
+        let scope = fenv.get_scope(scope_id);
+        let keys = scope
+            .templates
+            .iter()
+            .map(|s| s.0.clone())
+            .collect::<Vec<_>>();
+
+        let mut links = vec![];
+        for key in keys.iter() {
+            // reset the block position before each function
+            self.switch_blocks(block_id);
+            let link_id = self.push_bake(*key, None, fenv, b)?;
+            links.push(link_id);
+        }
+        Ok(links)
     }
 
     pub fn push_bake_all(

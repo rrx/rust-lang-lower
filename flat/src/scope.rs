@@ -58,7 +58,7 @@ pub struct ScopeLayer {
     //pub(crate) current_block: Option<BlockId>,
     pub scope_type: ScopeType,
     pub lambdas: HashMap<StringLabel, TemplateId>,
-    pub templates: HashMap<StringLabel, LinkId>,
+    pub templates: HashMap<StringKey, LinkId>,
 }
 
 impl ScopeLayer {

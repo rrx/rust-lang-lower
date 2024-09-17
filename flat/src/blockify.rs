@@ -207,6 +207,15 @@ pub trait ICodeModule {
                 }
             }
 
+            LCode::DeclareTemplate(maybe_entry) => {
+                let code_str = b.labels.r(self.get_name(v.into()).unwrap());
+                if let Some(entry_id) = maybe_entry {
+                    format!("declare_template({},{:?})", code_str, entry_id)
+                } else {
+                    format!("declare_template({})", code_str)
+                }
+            }
+
             LCode::Label => {
                 let args = self.get_label_args(v);
                 if let Some(key) = self.get_name(v.into()) {

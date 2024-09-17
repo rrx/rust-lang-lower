@@ -224,12 +224,16 @@ impl FlattenModule {
         let mut dfs = petgraph::visit::Dfs::new(&flatten.gblocks, BlockId(0).into());
         let mut blocks = vec![BlockId(0).into()];
 
-        let mut entries = vec![];
+        let mut function_entries = vec![];
+        let mut template_entries = vec![];
         while let Some(visited) = dfs.next(&flatten.gblocks) {
             for edge in flatten.gblocks.edges(visited) {
                 match *edge.weight() {
-                    Successor::FunctionDeclaration | Successor::TemplateDeclaration => {
-                        entries.push(edge.target());
+                    Successor::FunctionDeclaration => {
+                        function_entries.push(edge.target());
+                    }
+                    Successor::TemplateDeclaration => {
+                        template_entries.push(edge.target());
                     }
                     _ => (), //_ => unreachable!("{:?}", edge.weight())
                 }
@@ -237,9 +241,9 @@ impl FlattenModule {
         }
 
         let mut value_count = 0;
-        for index in entries {
+        for index in function_entries.iter().chain(template_entries.iter()) {
             let mut seq = vec![];
-            let mut dfs = petgraph::visit::DfsPostOrder::new(&flatten.gblocks, index);
+            let mut dfs = petgraph::visit::DfsPostOrder::new(&flatten.gblocks, *index);
             while let Some(index) = dfs.next(&flatten.gblocks) {
                 seq.push(index);
             }
