@@ -1008,6 +1008,7 @@ impl<'c> MLIRGenerator<'c> {
                     } //_ => unreachable!("{:?}", bi),
                 }
             } //_ => unimplemented!("{:?}", (v, code)),
+            LCode::DeclareTemplate(_) => (),
         }
         Ok(())
     }

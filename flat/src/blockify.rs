@@ -25,6 +25,7 @@ pub enum LCode {
     Noop,
     Declare,
     DeclareFunction(Option<BlockId>), // optional entry block
+    DeclareTemplate(Option<BlockId>), // optional entry block
     Value(LinkId),
     ValueIndex(LinkId, u8), // index into a struct
     CallValue(CodeOffset),

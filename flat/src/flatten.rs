@@ -232,6 +232,43 @@ impl Flatten {
         None
     }
 
+    pub fn resolve_template(
+        &self,
+        block_id: BlockId,
+        name: StringLabel,
+        fenv: &FlattenEnvironment,
+    ) -> Option<LinkId> {
+        // resolve scope through the tree, starting at the current scope
+        let block = self.get_block(block_id);
+        for scope_id in fenv.walk_scopes(block.scope_id) {
+            let scope = fenv.get_scope(scope_id);
+            if let Some(link_id) = scope.templates.get(&name) {
+                return Some(*link_id);
+            }
+        }
+        None
+    }
+
+    pub fn resolve_lambda(
+        &self,
+        block_id: BlockId,
+        name: StringKey,
+        fenv: &mut FlattenEnvironment,
+    ) -> Option<(ScopeId, Lambda)> {
+        match self.resolve_lambda_scope(block_id, name.into(), fenv) {
+            Some(scope_id) => {
+                let scope = fenv.get_scope(scope_id);
+                if let Some(template_id) = scope.lambdas.get(&name.into()).cloned() {
+                    let def = self.get_ast_template(template_id).clone();
+                    Some((scope_id, def))
+                } else {
+                    None
+                }
+            }
+            None => None,
+        }
+    }
+
     pub fn flatten_module(
         node: AstNode,
         fenv: &mut FlattenEnvironment,
@@ -920,7 +957,7 @@ impl Flatten {
         // If the lambda is in the static scope, we do a normal call
         // If it's in a non-static scope, then we bake a lambda and jump to it
         // If we wanted to so some inlining, we just have to switch to doing lambdas instead
-        if let Some((scope_id, def)) = self.find_lambda(current_block_id, name, fenv) {
+        if let Some((scope_id, def)) = self.resolve_lambda(current_block_id, name, fenv) {
             //let current_block_id = self.block_id;
             let (current_block_id, ret_ty, call_values, call_ty) =
                 self.push_function_args(&def, args, span_id, fenv, b)?;
@@ -1119,17 +1156,6 @@ impl Flatten {
         }
     }
 
-    pub fn insert_code_template(
-        &mut self,
-        scope_id: ScopeId,
-        key: StringKey,
-        link_id: LinkId,
-        fenv: &mut FlattenEnvironment,
-    ) {
-        let scope = fenv.get_scope_mut(scope_id);
-        scope.templates.insert(key.into(), link_id);
-    }
-
     pub fn save_ast_template(
         &mut self,
         block_id: BlockId,
@@ -1268,43 +1294,6 @@ impl Flatten {
         ))
     }
 
-    pub fn find_template(
-        &self,
-        block_id: BlockId,
-        name: StringLabel,
-        fenv: &FlattenEnvironment,
-    ) -> Option<LinkId> {
-        // resolve scope through the tree, starting at the current scope
-        let block = self.get_block(block_id);
-        for scope_id in fenv.walk_scopes(block.scope_id) {
-            let scope = fenv.get_scope(scope_id);
-            if let Some(link_id) = scope.templates.get(&name) {
-                return Some(*link_id);
-            }
-        }
-        None
-    }
-
-    pub fn find_lambda(
-        &self,
-        block_id: BlockId,
-        name: StringKey,
-        fenv: &mut FlattenEnvironment,
-    ) -> Option<(ScopeId, Lambda)> {
-        match self.resolve_lambda_scope(block_id, name.into(), fenv) {
-            Some(scope_id) => {
-                let scope = fenv.get_scope(scope_id);
-                if let Some(template_id) = scope.lambdas.get(&name.into()).cloned() {
-                    let def = self.get_ast_template(template_id).clone();
-                    Some((scope_id, def))
-                } else {
-                    None
-                }
-            }
-            None => None,
-        }
-    }
-
     fn push_bake_lambda_inner(
         &mut self,
         def: Lambda,
@@ -1400,7 +1389,7 @@ impl Flatten {
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
     ) -> Result<(BlockId, BlockId, LinkId)> {
-        if let Some((scope_id, def)) = self.find_lambda(self.block_id, name, fenv) {
+        if let Some((scope_id, def)) = self.resolve_lambda(self.block_id, name, fenv) {
             println!(
                 "bake lambda: {:?}",
                 (scope_id, self.block_id, b.labels.r(name.into()))
@@ -1433,7 +1422,7 @@ impl Flatten {
         b: &mut NB,
     ) -> Result<LinkId> {
         let current_block_id = self.block_id;
-        if let Some((scope_id, def)) = self.find_lambda(current_block_id, name, fenv) {
+        if let Some((scope_id, def)) = self.resolve_lambda(current_block_id, name, fenv) {
             println!(
                 "bake: {:?}",
                 (scope_id, current_block_id, b.labels.r(name.into()))
@@ -1496,7 +1485,7 @@ impl Flatten {
         b: &mut NB,
     ) -> Result<LinkId> {
         let current_block_id = self.block_id;
-        if let Some((scope_id, def)) = self.find_lambda(current_block_id, name, fenv) {
+        if let Some((scope_id, def)) = self.resolve_lambda(current_block_id, name, fenv) {
             println!(
                 "bake: {:?}",
                 (scope_id, current_block_id, b.labels.r(name.into()))
@@ -1516,6 +1505,17 @@ impl Flatten {
             //println!("scope: {:?}", (scope_id, &scope));
             //let top_block_id = scope.entry_block.unwrap();
             //self.switch_blocks(top_block_id);
+            //self.switch_blocks(block_id);
+
+            // update declaration
+            let decl_link_id = if let Some(decl_link_id) =
+                self.resolve_template(current_block_id, name.into(), fenv)
+            {
+                decl_link_id
+            } else {
+                unreachable!()
+            };
+
             let result = self.push_bake_function(
                 def.clone(),
                 name,
@@ -1524,34 +1524,21 @@ impl Flatten {
                 fenv,
                 b,
             );
-            //self.switch_blocks(block_id);
 
-            /*
-            // update declaration
-            let decl_link_id = if let Some(decl_link_id) =
-                self.resolve_declaration(current_block_id, name, fenv)
-            {
-                decl_link_id
-            } else {
-                unreachable!()
-            };
+            //let result = self.push_bake_function(def, name, ScopeType::Function, Successor::FunctionDeclaration, fenv, b);
 
-            let result = self.push_bake_function(def, name, ScopeType::Function, Successor::FunctionDeclaration, fenv, b);
-            */
             if result.is_err() {
                 self.drain_diagnostics(b);
             }
             let r = result?;
 
-            /*
             let entry_block_id = self.get_entry(r.link_id.unwrap()).block_id;
             let entry = self.get_entry_mut(decl_link_id);
-            if let LCode::DeclareFunction(_) = entry.code {
+            if let LCode::DeclareTemplate(_) = entry.code {
             } else {
                 assert!(false);
             }
-            entry.code = LCode::DeclareFunction(Some(entry_block_id));
-            */
+            entry.code = LCode::DeclareTemplate(Some(entry_block_id));
 
             self.drain_diagnostics(b);
             self.switch_blocks(current_block_id);
@@ -1589,16 +1576,23 @@ impl Flatten {
                         //let ret_ty = b.types.r(def.return_type).clone();
                         let fun_ty = def_to_type(&def, b);
 
-                        let link_id = self.push_code(
+                        let func_link_id = self.push_code(
                             LCode::DeclareFunction(None),
                             fun_ty.clone(),
                             Some(name),
                             span_id,
                             VarDefinitionSpace::Static,
                         );
-
+                        let template_link_id = self.push_code(
+                            LCode::DeclareTemplate(None),
+                            fun_ty.clone(),
+                            Some(name),
+                            span_id,
+                            VarDefinitionSpace::Static,
+                        );
                         self.switch_blocks(current_block_id);
-                        fenv.scope_define_declaration(fenv.static_scope_id(), name, link_id);
+                        fenv.scope_define_declaration(fenv.static_scope_id(), name, func_link_id);
+                        fenv.scope_define_template(fenv.static_scope_id(), name, template_link_id);
 
                         // save template for later use
                         if def.body.is_some() {

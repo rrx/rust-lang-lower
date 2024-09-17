@@ -81,6 +81,11 @@ impl FlattenEnvironment {
         scope.declarations.insert(name, v);
     }
 
+    pub fn scope_define_template(&mut self, scope_id: ScopeId, key: StringKey, link_id: LinkId) {
+        let scope = self.get_scope_mut(scope_id);
+        scope.templates.insert(key.into(), link_id);
+    }
+
     pub fn find_nearest_scope(
         &self,
         scope_id: ScopeId,
