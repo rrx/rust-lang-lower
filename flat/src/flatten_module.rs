@@ -291,6 +291,7 @@ impl FlattenModule {
 
     pub fn type_inference(&mut self, b: &mut NB) {
         b.types.dump();
+        let mut unresolved = vec![];
         for entry in self.entries.iter_mut() {
             if !entry.ty.is_unknown() {
                 continue;
@@ -298,6 +299,29 @@ impl FlattenModule {
             if let Some(ty) = b.types.u.resolve(&entry.ty) {
                 entry.ty = ty;
             }
+
+            if let AstType::Variable(_) = &entry.ty {
+                unresolved.push(&entry.ty);
+            }
+        }
+
+        let mut args = vec![];
+        while unresolved.len() > 0 {
+            let ty = unresolved.pop().unwrap();
+
+            // if it resolves, then skip to the next
+            if let Some(_) = b.types.u.resolve(&ty) {
+                continue;
+            }
+
+            // unify with an arg
+            let arg = b.types.fresh_type_arg();
+            b.types.u.unify(&ty, &arg).unwrap();
+            args.push(arg);
+        }
+
+        if args.len() > 0 {
+            println!("Module unified with {} args", args.len());
         }
 
         /*
