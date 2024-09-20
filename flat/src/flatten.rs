@@ -1603,11 +1603,7 @@ impl Flatten {
             VarDefinitionSpace::Default,
         );
 
-        fenv.scope_define_template(
-            scope_id,
-            name,
-            decl_link_id,
-        );
+        fenv.scope_define_template(scope_id, name, decl_link_id);
 
         println!(
             "bake: {:?}",
@@ -1730,8 +1726,8 @@ impl Flatten {
                 self.push_sequence(exprs, span_id, fenv, b)
             }
 
-            Ast::Global(name, expr) => {
-                match expr.node {
+            Ast::Global(name, ref expr) => {
+                match &expr.node {
                     Ast::Lambda(def) => {
                         //let ret_ty = b.types.r(def.return_type).clone();
                         let fun_ty = def_to_type(&def, b);
@@ -1803,7 +1799,7 @@ impl Flatten {
                         let ast_ty: AstType = lit.clone().into();
                         self.switch_blocks(static_block_id);
                         let link_id = self.push_code(
-                            LCode::Const(lit),
+                            LCode::Const(lit.clone()),
                             ast_ty.clone(),
                             Some(global_name_key),
                             node.span_id,
@@ -1820,7 +1816,9 @@ impl Flatten {
                             false,
                         ))
                     }
-                    _ => unreachable!(),
+                    _ => {
+                        unreachable!("{:?}", ast)
+                    }
                 }
             }
 
@@ -2030,7 +2028,7 @@ impl Flatten {
                     // variables in this scope.  We can accomplish this by inserting the entry
                     // here.  The lambda is subordinate to the variables in scope, so it should
                     // just work.
-                    // The other method is to use the scope at the point of the call.  This is 
+                    // The other method is to use the scope at the point of the call.  This is
                     // less intuitive, but also possible.
                     // The third method is to be able to provide arbitrary scope.
                     // We can only do the first method if we have CPS, which isn't yet implemented.
