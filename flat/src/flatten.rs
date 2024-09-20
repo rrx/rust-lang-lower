@@ -354,9 +354,6 @@ impl Flatten {
         let name = b.labels.s("main");
         // reset the block position before each function
         // main is always static context
-        //self.switch_blocks(fenv.static_block_id());
-        //self.push_bake_template(name, None, fenv, b)?;
-        //self.block_id = block_id;
         self.switch_blocks(fenv.static_block_id());
         let r = self.push_bake(name, None, fenv, b);
         // switch back after bake
@@ -1065,6 +1062,55 @@ impl Flatten {
                 // as a continuation.  This currently requires one lambda for each call.
                 // Eventually switch to CPS
                 self.switch_blocks(current_block_id);
+
+                let maybe_ty = None;
+                if let Some((scope_id, def)) = self.resolve_lambda(current_block_id, name, fenv) {
+                    println!(
+                        "bake lambda: {:?}",
+                        (scope_id, current_block_id, b.labels.r(name.into()))
+                    );
+                    if let Some(ty) = maybe_ty {
+                        let fun_ty = b.types.r(def.fun_type).clone();
+                        if b.types.u.unify(&ty, &fun_ty).is_err() {
+                            let span_id = b.spans.get_span_unknown();
+
+                            b.push_error(
+                                &format!("Func Mismatch: caller: {}, def: {}", &ty, fun_ty),
+                                span_id,
+                            );
+                        }
+                    }
+                    let r = self.push_bake_lambda_inner(def, span_id, fenv, b)?;
+                    self.drain_diagnostics(b);
+                    let (fun_block_id, next_block_id, next_link_id) = r;
+
+                    self.switch_blocks(next_block_id);
+
+                    // Lambda Block
+                    self.block_succ(current_block_id, fun_block_id, Successor::BlockScope);
+
+                    // now that we have the arguments calculated, and the lambda baked, jump!
+                    self.switch_blocks(current_block_id);
+                    self.push_jump(fun_block_id.into(), call_values, span_id);
+                    self.switch_blocks(next_block_id);
+
+                    // block termination
+                    return Ok(FlattenResult::new(
+                        next_block_id,
+                        Some(next_link_id),
+                        ret_ty,
+                        true,
+                    ));
+
+                    //Ok(r)
+                } else {
+                    let s = b.labels.r(name.into());
+                    let u = b.spans.get_span_unknown();
+                    b.push_error(&format!("bake_lambda: not found: {}", s), u);
+                    return Err(Error::new(BlockifyError::NotFound(s)));
+                }
+
+                /*
                 let (fun_block_id, next_block_id, next_link_id) =
                     self.push_bake_lambda(name, None, span_id, fenv, b)?;
                 self.switch_blocks(next_block_id);
@@ -1084,6 +1130,7 @@ impl Flatten {
                     ret_ty,
                     true,
                 ))
+                */
             }
         } else {
             let name = b.labels.r(name.into());
@@ -1219,7 +1266,7 @@ impl Flatten {
         name: &StringKey,
         def: &Lambda,
         fenv: &mut FlattenEnvironment,
-        b: &mut NB,
+        //b: &mut NB,
     ) -> Result<()> {
         let template_id = self.insert_ast_template(def.clone());
         let block = self.get_block(block_id);
@@ -1466,6 +1513,7 @@ impl Flatten {
         Ok((fun_block_id, next_block_id, next_link_id.unwrap()))
     }
 
+    /*
     fn push_bake_lambda(
         &mut self,
         name: StringKey,
@@ -1500,6 +1548,7 @@ impl Flatten {
             Err(Error::new(BlockifyError::NotFound(s)))
         }
     }
+    */
 
     pub fn push_bake(
         &mut self,
@@ -1717,7 +1766,7 @@ impl Flatten {
 
                         // save template for later use
                         if def.body.is_some() {
-                            self.save_ast_template(current_block_id, &name, &def, fenv, b)?;
+                            self.save_ast_template(current_block_id, &name, &def, fenv)?;
                         }
 
                         if let Some(_body) = &def.body {
@@ -1962,7 +2011,7 @@ impl Flatten {
                 // push the definition into the lambda list
                 if let Ast::Lambda(def) = expr.node {
                     let ty = def_to_type(&def, b);
-                    self.save_ast_template(current_block_id, &name, &def, fenv, b)?;
+                    self.save_ast_template(current_block_id, &name, &def, fenv)?;
                     self.switch_blocks(current_block_id);
                     return Ok(FlattenResult::new(current_block_id, None, ty, false));
                 }
