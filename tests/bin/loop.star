@@ -1,6 +1,6 @@
 q.use("prelude")
 
-def main() -> int:
+def main():
   z = 10
   q.loop("loop1")
   if z == 0:

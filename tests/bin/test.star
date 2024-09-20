@@ -3,7 +3,7 @@ z = 1
 
 q.use("prelude")
 
-def main() -> int:
+def main():
   out = z
   out2 = z
 

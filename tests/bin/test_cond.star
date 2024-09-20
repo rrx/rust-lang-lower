@@ -1,6 +1,6 @@
 q.use("prelude")
 
-def cond(n: int) -> int:
+def cond(n: int):
   out = 0
   out = out - 1
   if n == 0:
@@ -11,7 +11,7 @@ def cond(n: int) -> int:
     out = 3
   return out
 
-def main() -> int:
+def main():
   q.check(1 == cond(0))
   q.check(2 == cond(1))
   q.check(3 == cond(2))
