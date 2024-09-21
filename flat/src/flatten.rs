@@ -1085,7 +1085,7 @@ impl Flatten {
                 }
                 let r = self.push_bake_lambda(Some(name), def, span_id, fenv, b)?;
                 self.drain_diagnostics(b);
-                let (fun_block_id, _, fun_ty, next_block_id, next_link_id, next_fun_ty) = r;
+                let (fun_block_id, _, _, next_block_id, next_link_id, _) = r;
 
                 self.switch_blocks(next_block_id);
 
@@ -1520,7 +1520,7 @@ impl Flatten {
         if b.types.u.unify(&next_arg_ty, &def_fun_args_ty).is_err() {
             b.push_error(
                 &format!(
-                    "Func Mismatch Next: caller: {}, def: {}",
+                    "Type Mismatch Lambda Next: caller: {}, def: {}",
                     &fun_ty, &next_fun_ty
                 ),
                 span_id,
