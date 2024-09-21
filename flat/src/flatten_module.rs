@@ -376,6 +376,7 @@ impl FlattenModule {
         */
     }
     pub fn type_inference_enforce(&mut self, b: &mut NB) {
+        b.types.dump();
         for entry in self.entries.iter_mut() {
             if !entry.ty.is_unknown() {
                 continue;

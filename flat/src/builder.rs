@@ -96,6 +96,35 @@ impl TypeBuilder {
         AstType::KwArgs(t.into())
     }
 
+    pub fn refresh(&mut self, ty: AstType) -> AstType {
+        match ty {
+            AstType::Variable(_) => self.fresh_unknown(),
+            AstType::Func(arg, ret) => {
+                let arg = self.refresh(*arg);
+                let ret = match *ret {
+                    ReturnType::Single(ret) => ReturnType::Single(self.refresh(ret)),
+                    _ => unimplemented!(),
+                };
+                AstType::Func(arg.into(), ret.into())
+            }
+            AstType::Struct(fields) => {
+                let fields = fields
+                    .into_iter()
+                    .map(|(key, f)| (key, self.refresh(f)))
+                    .collect();
+                AstType::Struct(fields)
+            }
+            AstType::Args(ty) => AstType::Args(self.refresh(*ty).into()),
+            _ => {
+                if ty.is_unknown() {
+                    unreachable!("{}", ty)
+                } else {
+                    ty
+                }
+            }
+        }
+    }
+
     pub fn dump(&mut self) {
         self.u.dump();
     }
@@ -381,6 +410,21 @@ impl NodeBuilder {
         let span = self.spans.lookup(span_id);
         self.spans
             .push_diagnostic(compile_core::diagnostic_error(msg, span));
+    }
+
+    pub fn primary_label(&self, msg: &str, span_id: SpanId) -> compile_core::Label<usize> {
+        let span = self.spans.lookup(span_id);
+        compile_core::primary_label(msg, &span)
+    }
+
+    pub fn secondary_label(&self, msg: &str, span_id: SpanId) -> compile_core::Label<usize> {
+        let span = self.spans.lookup(span_id);
+        compile_core::secondary_label(msg, &span)
+    }
+
+    pub fn push_error_labels(&mut self, labels: Vec<compile_core::Label<usize>>) {
+        self.spans
+            .push_diagnostic(compile_core::diagnostic_error_labels(labels));
     }
 
     pub fn push_warning(&mut self, msg: &str, span_id: SpanId) {

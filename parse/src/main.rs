@@ -57,9 +57,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let config: Config = argh::from_env();
 
     if config.verbose {
-        log::set_max_level(log::LevelFilter::Trace);
-    } else {
         log::set_max_level(log::LevelFilter::Warn);
+    } else {
+        log::set_max_level(log::LevelFilter::Info);
     }
 
     let output_filename;

@@ -147,7 +147,7 @@ pub struct Flatten {
     pub(super) link: LinkOptions,
     entries: Vec<CodeEntry>,
     pub(super) gblocks: BlockGraph,
-    ast_templates: Vec<Lambda>,
+    ast_templates: Vec<(Lambda, SpanId)>,
     messages: Vec<(String, SpanId)>,
     pub mode: FlattenMode,
 }
@@ -262,13 +262,13 @@ impl Flatten {
         block_id: BlockId,
         name: StringKey,
         fenv: &mut FlattenEnvironment,
-    ) -> Option<(ScopeId, Lambda)> {
+    ) -> Option<(ScopeId, Lambda, SpanId)> {
         match self.resolve_lambda_scope(block_id, name.into(), fenv) {
             Some(scope_id) => {
                 let scope = fenv.get_scope(scope_id);
                 if let Some(template_id) = scope.lambdas.get(&name.into()).cloned() {
-                    let def = self.get_ast_template(template_id).clone();
-                    Some((scope_id, def))
+                    let (def, span_id) = self.get_ast_template(template_id).clone();
+                    Some((scope_id, def, span_id))
                 } else {
                     None
                 }
@@ -507,13 +507,13 @@ impl Flatten {
         self.entries.get_mut(link_id.index()).unwrap()
     }
 
-    pub fn insert_ast_template(&mut self, def: Lambda) -> TemplateId {
+    pub fn insert_ast_template(&mut self, def: Lambda, span_id: SpanId) -> TemplateId {
         let offset = self.ast_templates.len();
-        self.ast_templates.push(def);
+        self.ast_templates.push((def, span_id));
         TemplateId(offset as u32)
     }
 
-    pub fn get_ast_template(&self, template_id: TemplateId) -> &Lambda {
+    pub fn get_ast_template(&self, template_id: TemplateId) -> &(Lambda, SpanId) {
         self.ast_templates.get(template_id.index()).unwrap()
     }
 
@@ -1017,29 +1017,46 @@ impl Flatten {
         // If the lambda is in the static scope, we do a normal call
         // If it's in a non-static scope, then we bake a lambda and jump to it
         // If we wanted to so some inlining, we just have to switch to doing lambdas instead
-        if let Some((scope_id, def)) = self.resolve_lambda(current_block_id, name, fenv) {
+
+        // 1. look up the def
+        // 2. find an already baked function if it exists
+        // 3. if no function exists, bake it
+        // - for static, we just write the function to the static scope
+        // - for lambdas and inline, it's easier, because we just write out the entire function
+        // anyways
+        if let Some((scope_id, def, def_span_id)) =
+            self.resolve_lambda(current_block_id, name, fenv)
+        {
             //let current_block_id = self.block_id;
             let (current_block_id, ret_ty, call_values, call_ty) =
                 self.push_function_args(&def, args, span_id, fenv, b)?;
 
-            // function type, based on the caller
-            let func_ty = AstType::func(
-                call_ty.fields().iter().map(|(_, ty)| ty.clone()).collect(),
-                ret_ty.clone(),
-            );
-
-            let def_func_ty = def_to_type(&def, b);
-            println!("call_func: {}, def_func: {}", func_ty, def_func_ty);
-
-            if b.types.u.unify(&func_ty, &def_func_ty).is_err() {
-                b.push_error(
-                    &format!("Type Mismatch: caller: {}, def: {}", &func_ty, &def_func_ty),
-                    span_id,
-                );
-            }
-
             let is_static = fenv.static_scope_id() == scope_id;
             if is_static {
+                // function type, based on the caller
+                let func_ty = AstType::func(
+                    call_ty.fields().iter().map(|(_, ty)| ty.clone()).collect(),
+                    ret_ty.clone(),
+                );
+
+                let def_func_ty = def_to_type(&def, b);
+                println!("call_func: {}, def_func: {}", func_ty, def_func_ty);
+                if b.types.u.unify(&func_ty, &def_func_ty).is_err() {
+                    let span = b.spans.lookup(span_id);
+                    let def_span = b.spans.lookup(def_span_id);
+
+                    b.push_error_labels(vec![
+                        compile_core::primary_label(
+                            &format!("Type Mismatch: caller: {}", &func_ty),
+                            &span,
+                        ),
+                        compile_core::secondary_label(
+                            &format!("source type: {}", &def_func_ty),
+                            &def_span,
+                        ),
+                    ]);
+                }
+
                 // if it's defined in static scope, just call it
                 let v_decl = if let Some(v_decl) = self.resolve_name(current_block_id, name, fenv) {
                     v_decl
@@ -1070,22 +1087,13 @@ impl Flatten {
                 // Eventually switch to CPS
                 self.switch_blocks(current_block_id);
 
-                let maybe_ty = None;
-                //if let Some((scope_id, def)) = self.resolve_lambda(current_block_id, name, fenv) {
                 println!(
                     "bake lambda: {:?}",
                     (scope_id, current_block_id, b.labels.r(name.into()))
                 );
-                if let Some(ty) = maybe_ty {
-                    let fun_ty = b.types.r(def.fun_type).clone();
-                    if b.types.u.unify(&ty, &fun_ty).is_err() {
-                        b.push_error(
-                            &format!("Func Mismatch: caller: {}, def: {}", &ty, fun_ty),
-                            span_id,
-                        );
-                    }
-                }
-                let r = self.push_bake_lambda(Some(name), def, span_id, fenv, b)?;
+
+                let r =
+                    self.push_bake_lambda(Some(name), def, def_span_id, call_ty, span_id, fenv, b)?;
                 self.drain_diagnostics(b);
                 let (fun_block_id, _, _, next_block_id, next_link_id, _) = r;
 
@@ -1106,16 +1114,6 @@ impl Flatten {
                     ret_ty,
                     true,
                 ));
-
-                //Ok(r)
-                /*
-                } else {
-                    let s = b.labels.r(name.into());
-                    let u = b.spans.get_span_unknown();
-                    b.push_error(&format!("bake_lambda: not found: {}", s), u);
-                    return Err(Error::new(BlockifyError::NotFound(s)));
-                }
-                    */
             }
         } else {
             let name = b.labels.r(name.into());
@@ -1250,10 +1248,11 @@ impl Flatten {
         block_id: BlockId,
         name: &StringKey,
         def: &Lambda,
+        span_id: SpanId,
         fenv: &mut FlattenEnvironment,
         //b: &mut NB,
     ) -> Result<()> {
-        let template_id = self.insert_ast_template(def.clone());
+        let template_id = self.insert_ast_template(def.clone(), span_id);
         let block = self.get_block(block_id);
         let scope_id = block.scope_id;
         let scope = fenv.get_scope_mut(scope_id);
@@ -1422,14 +1421,51 @@ impl Flatten {
         &mut self,
         name: Option<StringKey>,
         def: Lambda,
-        span_id: SpanId,
+        def_span_id: SpanId,
+        call_ty: AstType,
+        call_span_id: SpanId,
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
     ) -> Result<(BlockId, LinkId, AstType, BlockId, LinkId, AstType)> {
+        let def_func_type = b.types.r(def.fun_type).clone();
+
+        // refresh variables
+        let (def_arg_ty, ret_ty) = if let AstType::Func(arg, ret) = def_func_type {
+            if let ReturnType::Single(ret_ty) = *ret {
+                (b.types.refresh(*arg.clone()), b.types.refresh(ret_ty))
+            } else {
+                unreachable!()
+            }
+        } else {
+            unreachable!()
+        };
+        let def_func_type = AstType::Func(
+            def_arg_ty.clone().into(),
+            ReturnType::Single(ret_ty.clone()).into(),
+        );
+
+        // construct call function type
+        let call_func_type = AstType::func(
+            call_ty.fields().iter().map(|(_, ty)| ty.clone()).collect(),
+            ret_ty.clone(),
+        );
+
+        // match call type with function type
+        println!("push_bake_lambda: {}<=>{}", &call_func_type, &def_func_type);
+        if b.types.u.unify(&call_func_type, &def_func_type).is_err() {
+            b.push_error_labels(vec![
+                b.primary_label(
+                    &format!("Type Mismatch: caller: {}", &call_func_type),
+                    def_span_id,
+                ),
+                b.secondary_label(&format!("source type: {}", &def_func_type), def_span_id),
+            ]);
+        }
+
         let current_block_id = self.block_id;
         let block = self.get_block(current_block_id);
         let scope_id = block.scope_id;
-        let ret_ty = b.types.r(def.return_type).clone();
+        //let ret_ty = b.types.r(def.return_type).clone();
 
         // New Lambda Scope
         let (fun_block_id, fun_scope_id) =
@@ -1484,7 +1520,7 @@ impl Flatten {
             scope_id,
             next_fun_ty.clone(),
             Some(b.labels.fresh_key(&prefix)),
-            span_id,
+            call_span_id,
             VarDefinitionSpace::Reg,
             fenv,
         );
@@ -1502,13 +1538,12 @@ impl Flatten {
         };
 
         let lambda_name = b.labels.fresh_key(&s_name);
-        let fun_ty = b.types.r(def.fun_type).clone();
         self.switch_blocks(fun_block_id);
         let (fun_link_id, _) = self.push_start_block(
             fun_scope_id,
-            fun_ty.clone(),
+            def_func_type.clone(),
             Some(lambda_name),
-            span_id,
+            def_span_id,
             VarDefinitionSpace::Reg,
             fenv,
         );
@@ -1518,21 +1553,24 @@ impl Flatten {
         assert_eq!(self.block_id, r.block_id);
         self.switch_blocks(next_block_id);
 
-        let def_fun_args_ty = b.types.r(def.arg_type).clone();
-        if b.types.u.unify(&next_arg_ty, &def_fun_args_ty).is_err() {
-            b.push_error(
-                &format!(
-                    "Type Mismatch Lambda Next: caller: {}, def: {}",
-                    &fun_ty, &next_fun_ty
+        // match return type with the jump target
+        println!("push_bake_lambda_next: {}<=>{}", &next_arg_ty, &def_arg_ty);
+        if b.types.u.unify(&next_arg_ty, &def_arg_ty).is_err() {
+            let ty1 = b.types.u.resolve(&next_arg_ty).unwrap();
+            let ty2 = b.types.u.resolve(&def_arg_ty).unwrap();
+            b.push_error_labels(vec![
+                b.primary_label(
+                    &format!("Type Mismatch Lambda Next: caller: {}", &ty1),
+                    call_span_id,
                 ),
-                span_id,
-            );
+                b.secondary_label(&format!("source type: {}", &ty2), def_span_id),
+            ]);
         }
 
         Ok((
             fun_block_id,
             fun_link_id,
-            fun_ty.clone(),
+            def_func_type.clone(),
             next_block_id,
             next_link_id.unwrap(),
             next_fun_ty,
@@ -1560,7 +1598,9 @@ impl Flatten {
         b: &mut NB,
     ) -> Result<LinkId> {
         let current_block_id = self.block_id;
-        if let Some((scope_id, def)) = self.resolve_lambda(current_block_id, name, fenv) {
+        if let Some((scope_id, def, _def_span_id)) =
+            self.resolve_lambda(current_block_id, name, fenv)
+        {
             println!(
                 "bake: {:?}",
                 (scope_id, current_block_id, b.labels.r(name.into()))
@@ -1680,7 +1720,9 @@ impl Flatten {
         b: &mut NB,
     ) -> Result<LinkId> {
         let current_block_id = self.block_id;
-        if let Some((scope_id, def)) = self.resolve_lambda(current_block_id, name, fenv) {
+        if let Some((scope_id, def, _def_span_id)) =
+            self.resolve_lambda(current_block_id, name, fenv)
+        {
             println!(
                 "bake: {:?}",
                 (scope_id, current_block_id, b.labels.r(name.into()))
@@ -1805,7 +1847,7 @@ impl Flatten {
 
                         // save template for later use
                         if def.body.is_some() {
-                            self.save_ast_template(current_block_id, &name, &def, fenv)?;
+                            self.save_ast_template(current_block_id, &name, &def, span_id, fenv)?;
                         }
 
                         if let Some(_body) = &def.body {
@@ -2090,7 +2132,7 @@ impl Flatten {
                         self.push_bake_template2(name, &def, span_id, fenv, b)?;
                     }
 
-                    self.save_ast_template(current_block_id, &name, &def, fenv)?;
+                    self.save_ast_template(current_block_id, &name, &def, expr.span_id, fenv)?;
                     self.switch_blocks(current_block_id);
                     return Ok(FlattenResult::new(current_block_id, None, fun_ty, false));
                 }

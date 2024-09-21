@@ -283,7 +283,6 @@ impl TypeUnify {
                     .into_iter()
                     .map(|(_, ty)| ty)
                     .collect::<Vec<_>>();
-                //let size = fields.len();
 
                 let resolved_args = fields
                     .clone()
@@ -291,20 +290,10 @@ impl TypeUnify {
                     .map(|v| self.resolve(&v).map(|x| x).unwrap_or(v))
                     .collect::<Vec<_>>();
 
-                //if resolved_args.len() != size {
-                // return original value
-                //fields
-                //return None;
-                //} else {
-                // this should never happen
                 if resolved_args.clone() == vec![AstType::Unit] {
                     println!("vec of unit should not be possible: {:?}", &resolved_args);
                     return None;
-
-                    //resolved_args = vec![];
                 }
-                //resolved_args.clone()
-                //};
 
                 let resolved_ret = match ret.as_ref() {
                     ReturnType::Multi(_) => unimplemented!(),
@@ -312,7 +301,8 @@ impl TypeUnify {
                         if let Some(ret) = self.resolve(ret) {
                             ret
                         } else {
-                            return None;
+                            ret.clone()
+                            //return None;
                         }
                     }
                 };
