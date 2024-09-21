@@ -2,7 +2,7 @@ zf = 1.2
 
 q.use("prelude")
 
-def xf(x: float):
+def xf(x):
   return 2.2 + x + zf
 
 def main():

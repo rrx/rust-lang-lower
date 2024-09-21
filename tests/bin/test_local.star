@@ -1,6 +1,6 @@
 q.use("prelude")
 
-def x1(x: int):
+def x1(x):
   z = x
   return z
 
