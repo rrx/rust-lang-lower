@@ -1077,8 +1077,6 @@ impl Flatten {
                 if let Some(ty) = maybe_ty {
                     let fun_ty = b.types.r(def.fun_type).clone();
                     if b.types.u.unify(&ty, &fun_ty).is_err() {
-                        let span_id = b.spans.get_span_unknown();
-
                         b.push_error(
                             &format!("Func Mismatch: caller: {}, def: {}", &ty, fun_ty),
                             span_id,
@@ -1087,9 +1085,7 @@ impl Flatten {
                 }
                 let r = self.push_bake_lambda(Some(name), def, span_id, fenv, b)?;
                 self.drain_diagnostics(b);
-                let (fun_block_id, _, _, next_block_id, next_link_id, _) = r;
-
-                let next_entry = self.get_entry(next_link_id);
+                let (fun_block_id, _, fun_ty, next_block_id, next_link_id, next_fun_ty) = r;
 
                 self.switch_blocks(next_block_id);
 
@@ -1475,11 +1471,13 @@ impl Flatten {
         let s_name = name.map(|key| b.labels.r(key.into()));
 
         let next_fun_ty = AstType::Func(
-                next_arg_ty.clone().into(),
-                ReturnType::Single(AstType::Unit).into(),
-            );
+            next_arg_ty.clone().into(),
+            ReturnType::Single(AstType::Unit).into(),
+        );
 
-        let prefix = s_name.map(|s| format!("{}.cont", s)).unwrap_or("cont".to_string());
+        let prefix = s_name
+            .map(|s| format!("{}.cont", s))
+            .unwrap_or("cont".to_string());
         let (_v_block, next_link_ids) = self.push_start_block(
             scope_id,
             next_fun_ty.clone(),
@@ -1517,7 +1515,26 @@ impl Flatten {
         let r = self.push_node(body, fenv, b)?;
         assert_eq!(self.block_id, r.block_id);
         self.switch_blocks(next_block_id);
-        Ok((fun_block_id, fun_link_id, fun_ty.clone(), next_block_id, next_link_id.unwrap(), next_fun_ty))
+
+        let def_fun_args_ty = b.types.r(def.arg_type).clone();
+        if b.types.u.unify(&next_arg_ty, &def_fun_args_ty).is_err() {
+            b.push_error(
+                &format!(
+                    "Func Mismatch Next: caller: {}, def: {}",
+                    &fun_ty, &next_fun_ty
+                ),
+                span_id,
+            );
+        }
+
+        Ok((
+            fun_block_id,
+            fun_link_id,
+            fun_ty.clone(),
+            next_block_id,
+            next_link_id.unwrap(),
+            next_fun_ty,
+        ))
     }
 
     pub fn push_bake(

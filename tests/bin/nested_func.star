@@ -5,8 +5,7 @@ def x1():
     t = 0
   return 0
 
-# unable to remove types here
-def main() -> int:
+def main():
   r = 0
   zero = 0
 

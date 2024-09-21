@@ -298,7 +298,9 @@ impl TypeUnify {
                 //} else {
                 // this should never happen
                 if resolved_args.clone() == vec![AstType::Unit] {
-                    assert!(false);
+                    println!("vec of unit should not be possible: {:?}", &resolved_args);
+                    return None;
+
                     //resolved_args = vec![];
                 }
                 //resolved_args.clone()
