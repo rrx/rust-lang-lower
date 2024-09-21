@@ -1351,18 +1351,20 @@ impl Flatten {
                 );
             }
         }
-
-        let single_ty = fun_block
+        // resolve the return types
+        let ret_types = fun_block
             .ret_types
             .iter()
-            .next()
-            .unwrap_or(&AstType::Unit)
-            .clone();
+            .map(|t| b.types.u.resolve(&t).unwrap_or(t.clone()))
+            .collect::<HashSet<_>>();
+
+        let single_ty = ret_types.iter().next().unwrap_or(&AstType::Unit).clone();
 
         let ret_arg_type = if arity == 0 || AstType::Unit == single_ty {
             AstType::Struct(vec![])
         } else {
-            assert!(fun_block.ret_types.len() == 1);
+            println!("ret_types: {:?}", &ret_types);
+            assert!(ret_types.len() == 1);
             AstType::Struct(vec![(None, single_ty.clone())])
         };
 

@@ -1,7 +1,6 @@
 q.use("prelude")
 
-# unable to remove types on recursive function
-def fibonacci_recursive(n: int, a:int, c:int) -> int:
+def fibonacci_recursive(n, a, c) -> int:
   out = 0
   if n == 0:
     return a
@@ -11,8 +10,7 @@ def fibonacci_recursive(n: int, a:int, c:int) -> int:
     return fibonacci_recursive(n - 1, c, a + c)
 
 def fib(n):
-  x = fibonacci_recursive(n, 0, 1)
-  return x
+  return fibonacci_recursive(n, 0, 1)
 
 def main():
   r1 = fib(10)

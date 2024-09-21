@@ -2,7 +2,7 @@ z = 6
 
 q.use("prelude")
 
-def x1(x: int):
+def x1(x):
   return 2 + x
 
 def main():
