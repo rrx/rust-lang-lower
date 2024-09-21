@@ -1,6 +1,6 @@
 q.use("prelude")
 
-def cond(n: int):
+def cond(n):
   out = 0
   out = out - 1
   if n == 0:

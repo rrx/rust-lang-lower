@@ -1,7 +1,10 @@
-def test2(n: int):
+q.use("prelude")
+
+def test2(n):
   out = 0
   if True:
     out = n
+    q.check(out == n)
     x = n
   return 0
 
