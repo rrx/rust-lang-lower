@@ -989,6 +989,7 @@ impl Flatten {
                 .collect::<Vec<_>>(),
         );
 
+        println!("unify: {} <=> {}", &func_arg, &call_ty);
         if b.types.u.unify(&func_arg, &call_ty).is_err() {
             b.push_error(
                 &format!("5-Type Mismatch: func: {}, call: {}", &func_arg, &call_ty),
@@ -1024,9 +1025,10 @@ impl Flatten {
                 call_ty.fields().iter().map(|(_, ty)| ty.clone()).collect(),
                 ret_ty.clone(),
             );
-            println!("call ty: {}, {}", call_ty, func_ty);
 
             let def_func_ty = def_to_type(&def, b);
+            println!("call_func: {}, def_func: {}", func_ty, def_func_ty);
+
             if b.types.u.unify(&func_ty, &def_func_ty).is_err() {
                 b.push_error(
                     &format!("Type Mismatch: caller: {}, def: {}", &call_ty, &def_func_ty),
@@ -1085,7 +1087,9 @@ impl Flatten {
                 }
                 let r = self.push_bake_lambda(Some(name), def, span_id, fenv, b)?;
                 self.drain_diagnostics(b);
-                let (fun_block_id, next_block_id, next_link_id) = r;
+                let (fun_block_id, _, _, next_block_id, next_link_id, _) = r;
+
+                let next_entry = self.get_entry(next_link_id);
 
                 self.switch_blocks(next_block_id);
 
@@ -1370,12 +1374,15 @@ impl Flatten {
             AstType::Struct(vec![(None, single_ty.clone())])
         };
 
+        println!("resolving: {}", &ret_arg_type);
         let resolved_ret_ty = if self.mode == FlattenMode::Template {
             ret_arg_type.clone()
         } else if let Some(ty) = b.types.u.resolve(&ret_arg_type) {
             ty
         } else {
             let s = b.labels.r(name.into());
+            println!("unable to resolve: {}", &s);
+            b.types.dump();
             b.push_error(
                 &format!(
                     "[{}] Return Type Must Resolve: {}, arity: {}",
@@ -1420,7 +1427,7 @@ impl Flatten {
         span_id: SpanId,
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
-    ) -> Result<(BlockId, BlockId, LinkId)> {
+    ) -> Result<(BlockId, LinkId, AstType, BlockId, LinkId, AstType)> {
         let current_block_id = self.block_id;
         let block = self.get_block(current_block_id);
         let scope_id = block.scope_id;
@@ -1464,13 +1471,19 @@ impl Flatten {
         });
         // start next block
         self.switch_blocks(next_block_id);
-        let (_v_block, next_link_ids) = self.push_start_block(
-            scope_id,
-            AstType::Func(
+
+        let s_name = name.map(|key| b.labels.r(key.into()));
+
+        let next_fun_ty = AstType::Func(
                 next_arg_ty.clone().into(),
                 ReturnType::Single(AstType::Unit).into(),
-            ),
-            Some(b.labels.fresh_key("cont")),
+            );
+
+        let prefix = s_name.map(|s| format!("{}.cont", s)).unwrap_or("cont".to_string());
+        let (_v_block, next_link_ids) = self.push_start_block(
+            scope_id,
+            next_fun_ty.clone(),
+            Some(b.labels.fresh_key(&prefix)),
             span_id,
             VarDefinitionSpace::Reg,
             fenv,
@@ -1489,9 +1502,9 @@ impl Flatten {
         };
 
         let lambda_name = b.labels.fresh_key(&s_name);
-        let fun_ty = b.types.r(def.fun_type);
+        let fun_ty = b.types.r(def.fun_type).clone();
         self.switch_blocks(fun_block_id);
-        self.push_start_block(
+        let (fun_link_id, _) = self.push_start_block(
             fun_scope_id,
             fun_ty.clone(),
             Some(lambda_name),
@@ -1504,7 +1517,7 @@ impl Flatten {
         let r = self.push_node(body, fenv, b)?;
         assert_eq!(self.block_id, r.block_id);
         self.switch_blocks(next_block_id);
-        Ok((fun_block_id, next_block_id, next_link_id.unwrap()))
+        Ok((fun_block_id, fun_link_id, fun_ty.clone(), next_block_id, next_link_id.unwrap(), next_fun_ty))
     }
 
     pub fn push_bake(
