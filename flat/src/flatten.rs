@@ -989,6 +989,7 @@ impl Flatten {
                 .collect::<Vec<_>>(),
         );
 
+        /*
         println!("unify: {} <=> {}", &func_arg, &call_ty);
         if b.types.u.unify(&func_arg, &call_ty).is_err() {
             b.push_error(
@@ -996,6 +997,7 @@ impl Flatten {
                 span_id,
             );
         }
+        */
 
         //let _call_type_id = b.types.s(&call_ty);
         //println!("blocks: {:?}", (block_id, current_block_id));
@@ -1031,7 +1033,7 @@ impl Flatten {
 
             if b.types.u.unify(&func_ty, &def_func_ty).is_err() {
                 b.push_error(
-                    &format!("Type Mismatch: caller: {}, def: {}", &call_ty, &def_func_ty),
+                    &format!("Type Mismatch: caller: {}, def: {}", &func_ty, &def_func_ty),
                     span_id,
                 );
             }
