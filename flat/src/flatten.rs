@@ -1067,51 +1067,53 @@ impl Flatten {
                 self.switch_blocks(current_block_id);
 
                 let maybe_ty = None;
-                if let Some((scope_id, def)) = self.resolve_lambda(current_block_id, name, fenv) {
-                    println!(
-                        "bake lambda: {:?}",
-                        (scope_id, current_block_id, b.labels.r(name.into()))
-                    );
-                    if let Some(ty) = maybe_ty {
-                        let fun_ty = b.types.r(def.fun_type).clone();
-                        if b.types.u.unify(&ty, &fun_ty).is_err() {
-                            let span_id = b.spans.get_span_unknown();
+                //if let Some((scope_id, def)) = self.resolve_lambda(current_block_id, name, fenv) {
+                println!(
+                    "bake lambda: {:?}",
+                    (scope_id, current_block_id, b.labels.r(name.into()))
+                );
+                if let Some(ty) = maybe_ty {
+                    let fun_ty = b.types.r(def.fun_type).clone();
+                    if b.types.u.unify(&ty, &fun_ty).is_err() {
+                        let span_id = b.spans.get_span_unknown();
 
-                            b.push_error(
-                                &format!("Func Mismatch: caller: {}, def: {}", &ty, fun_ty),
-                                span_id,
-                            );
-                        }
+                        b.push_error(
+                            &format!("Func Mismatch: caller: {}, def: {}", &ty, fun_ty),
+                            span_id,
+                        );
                     }
-                    let r = self.push_bake_lambda(Some(name), def, span_id, fenv, b)?;
-                    self.drain_diagnostics(b);
-                    let (fun_block_id, next_block_id, next_link_id) = r;
+                }
+                let r = self.push_bake_lambda(Some(name), def, span_id, fenv, b)?;
+                self.drain_diagnostics(b);
+                let (fun_block_id, next_block_id, next_link_id) = r;
 
-                    self.switch_blocks(next_block_id);
+                self.switch_blocks(next_block_id);
 
-                    // Lambda Block
-                    self.block_succ(current_block_id, fun_block_id, Successor::BlockScope);
+                // Lambda Block
+                self.block_succ(current_block_id, fun_block_id, Successor::BlockScope);
 
-                    // now that we have the arguments calculated, and the lambda baked, jump!
-                    self.switch_blocks(current_block_id);
-                    self.push_jump(fun_block_id.into(), call_values, span_id);
-                    self.switch_blocks(next_block_id);
+                // now that we have the arguments calculated, and the lambda baked, jump!
+                self.switch_blocks(current_block_id);
+                self.push_jump(fun_block_id.into(), call_values, span_id);
+                self.switch_blocks(next_block_id);
 
-                    // block termination
-                    return Ok(FlattenResult::new(
-                        next_block_id,
-                        Some(next_link_id),
-                        ret_ty,
-                        true,
-                    ));
+                // block termination
+                return Ok(FlattenResult::new(
+                    next_block_id,
+                    Some(next_link_id),
+                    ret_ty,
+                    true,
+                ));
 
-                    //Ok(r)
+                //Ok(r)
+                /*
                 } else {
                     let s = b.labels.r(name.into());
                     let u = b.spans.get_span_unknown();
                     b.push_error(&format!("bake_lambda: not found: {}", s), u);
                     return Err(Error::new(BlockifyError::NotFound(s)));
                 }
+                    */
             }
         } else {
             let name = b.labels.r(name.into());
