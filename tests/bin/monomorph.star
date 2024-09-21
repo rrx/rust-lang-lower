@@ -1,7 +1,5 @@
-
 def main():
   def f(x, *args):
     return x
-  z = f(1, False)
-  y = f(1.1, 1, True)
-  return 0
+  y = f(2.1, 1, True)
+  return f(0, False)

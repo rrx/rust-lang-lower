@@ -1042,18 +1042,11 @@ impl Flatten {
                 let def_func_ty = def_to_type(&def, b);
                 println!("call_func: {}, def_func: {}", func_ty, def_func_ty);
                 if b.types.u.unify(&func_ty, &def_func_ty).is_err() {
-                    let span = b.spans.lookup(span_id);
-                    let def_span = b.spans.lookup(def_span_id);
-
+                    let ty1 = b.types.u.resolve(&func_ty).unwrap();
+                    let ty2 = b.types.u.resolve(&def_func_ty).unwrap();
                     b.push_error_labels(vec![
-                        compile_core::primary_label(
-                            &format!("Type Mismatch: caller: {}", &func_ty),
-                            &span,
-                        ),
-                        compile_core::secondary_label(
-                            &format!("source type: {}", &def_func_ty),
-                            &def_span,
-                        ),
+                        b.primary_label(&format!("Type Mismatch Func: caller: {}", &ty1), span_id),
+                        b.secondary_label(&format!("source type: {}", &ty2), def_span_id),
                     ]);
                 }
 
@@ -1807,12 +1800,11 @@ impl Flatten {
             Ast::Global(name, ref expr) => {
                 match &expr.node {
                     Ast::Lambda(def) => {
-                        //let ret_ty = b.types.r(def.return_type).clone();
                         let fun_ty = def_to_type(&def, b);
 
                         match self.mode {
                             FlattenMode::Function => {
-                                let func_link_id = self.push_code(
+                                let decl_link_id = self.push_code(
                                     LCode::DeclareFunction(None),
                                     fun_ty.clone(),
                                     Some(name),
@@ -1823,7 +1815,7 @@ impl Flatten {
                                 fenv.scope_define_declaration(
                                     fenv.static_scope_id(),
                                     name,
-                                    func_link_id,
+                                    decl_link_id,
                                 );
                             }
                             FlattenMode::Template => {
