@@ -48,7 +48,7 @@ impl Scope {
 
 pub struct Interp<'a> {
     m: &'a dyn ICodeModule,
-    b: &'a NodeBuilder,
+    b: &'a mut NodeBuilder,
     pos: ValueId,
     stack: Vec<Scope>,
     call_args: VecDeque<Value>,
@@ -57,7 +57,7 @@ pub struct Interp<'a> {
 }
 
 impl<'a> Interp<'a> {
-    pub fn new(m: &'a dyn ICodeModule, b: &'a NodeBuilder, name: StringKey) -> Self {
+    pub fn new(m: &'a dyn ICodeModule, b: &'a mut NodeBuilder, name: StringKey) -> Self {
         let link_id = m.lookup_name(&name).unwrap();
         let pos = m.resolve_code_offset(link_id.into());
         Self {
@@ -127,6 +127,22 @@ impl<'a> Interp<'a> {
         unreachable!()
     }
 
+    pub fn resolve_declaration(&mut self, v: ValueId) -> Value {
+        println!("resolve decl: {}", v);
+        let code = self.m.get_code(v);
+        for scope in self.stack.iter().rev() {
+            match code {
+                LCode::Declare => {
+                    if let Some(value) = scope.values.get(&v) {
+                        return value.clone();
+                    }
+                }
+                _ => unimplemented!("{:?}", code),
+            }
+        }
+        unreachable!()
+    }
+
     pub fn unwind(&mut self) -> Scope {
         loop {
             let scope = self.stack.pop().unwrap();
@@ -177,6 +193,8 @@ impl<'a> Interp<'a> {
 
             LCode::Load(decl) => {
                 let v_decl = self.m.resolve_code_offset(decl.into());
+                let value = self.resolve_declaration(v_decl);
+                /*
                 let value = self
                     .stack
                     .last()
@@ -185,6 +203,7 @@ impl<'a> Interp<'a> {
                     .get(&v_decl)
                     .unwrap()
                     .clone();
+                */
                 self.stack
                     .last_mut()
                     .unwrap()
@@ -281,7 +300,15 @@ impl<'a> Interp<'a> {
                         assert_eq!(self.call_args.len(), bi.arity());
                         let value = self.call_args.pop_front().unwrap();
                         match value {
-                            Value::Bool(condition) => assert!(condition),
+                            Value::Bool(condition) => {
+                                if !condition {
+                                    let span_id = self.m.get_span_id(pos);
+                                    self.b.push_error_labels(vec![self
+                                        .b
+                                        .primary_label(&format!("Check Failed"), span_id)]);
+                                    return false;
+                                }
+                            }
                             _ => unreachable!(),
                         }
                     }

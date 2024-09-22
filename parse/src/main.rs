@@ -193,6 +193,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     if config.interp {
         let exit_code = p.interp(&m, "target/debug", &mut b);
+        b.spans.diagnostics_dump();
         std::process::exit(exit_code);
     } else if config.exec {
         let exit_code = p.exec_main(&mut module, "target/debug");
