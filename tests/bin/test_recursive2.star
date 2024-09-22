@@ -13,8 +13,14 @@ def fib(n):
   return fibonacci_recursive(n, 0, 1)
 
 def main():
+  r1 = fib(0)
+  q.check(r1 == 0)
   r1 = fib(1)
   q.check(r1 == 1)
+  r1 = fib(2)
+  q.check(r1 == 1)
+  r1 = fib(3)
+  q.check(r1 == 2)
   r1 = fib(10)
   q.check(r1 == 55)
   r1 = fib(19)
