@@ -1,7 +1,11 @@
-use crate::{Builtin, ICodeModule, LCode, NodeBuilder, ValueId};
+use crate::{BlockifyError, Builtin, ICodeModule, LCode, NodeBuilder, ValueId};
+use anyhow::Error;
+use anyhow::Result;
 use std::collections::{HashMap, VecDeque};
 
-use compile_core::{BinaryOperation, Literal, NaryOperation, StringKey, UnaryOperation};
+use compile_core::{
+    BinaryOperation, Literal, NaryOperation, StringKey, UnaryOperation, VarDefinitionSpace,
+};
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -25,6 +29,7 @@ impl Value {
 
 #[derive(Debug, Copy, Clone)]
 pub enum ScopeType {
+    Static,
     Function,
     Block,
 }
@@ -53,6 +58,7 @@ pub struct Interp<'a> {
     b: &'a mut NodeBuilder,
     pos: ValueId,
     stack: Vec<Scope>,
+    //statics: HashMap<ValueId, Value>,
     call_args: VecDeque<Value>,
     return_link_id: Option<ValueId>,
     jump_type: ScopeType,
@@ -62,16 +68,60 @@ impl<'a> Interp<'a> {
     pub fn new(m: &'a dyn ICodeModule, b: &'a mut NodeBuilder, name: StringKey) -> Self {
         let link_id = m.lookup_name(&name).unwrap();
         let pos = m.resolve_code_offset(link_id.into());
+        let mut scope = Scope::new(ScopeType::Static, None);
+
+        let mut current = ValueId::new(0);
+        loop {
+            let code = m.get_code(current);
+            match code {
+                LCode::Const(lit) => {
+                    let value = Value::from_lit(lit);
+                    scope.values.insert(current, value);
+                }
+                _ => (),
+            }
+            if let Some(next) = m.get_next(current) {
+                current = next;
+            } else {
+                break;
+            }
+        }
+
         Self {
             m,
             b,
             pos,
-            stack: vec![],
+            //statics: HashMap::new(),
+            stack: vec![scope],
             call_args: VecDeque::new(),
             return_link_id: None,
             jump_type: ScopeType::Function,
         }
     }
+
+    /*
+    pub fn load_static(&mut self, v: ValueId) -> Value {
+        let code = self.m.get_code(v.into());
+        let mem = self.m.get_mem(v.into());
+        assert_eq!(mem, &VarDefinitionSpace::Static);
+        //if let Some(value) = self.statics.get(&v) {
+            value.clone()
+        } else {
+            let value = match code {
+                LCode::Const(lit) => Value::from_lit(lit),
+                _ => unimplemented!()
+            };
+            self.statics.insert(v, value.clone());
+            value
+        }
+    }
+
+    pub fn save_static(&mut self, v: ValueId, value: Value) {
+        let mem = self.m.get_mem(v.into());
+        assert_eq!(mem, &VarDefinitionSpace::Static);
+        self.statics.insert(v, value.clone());
+    }
+    */
 
     pub fn advance(&mut self) {
         self.pos = ValueId::new(self.pos.index() as u32 + 1);
@@ -86,7 +136,6 @@ impl<'a> Interp<'a> {
         self.jump_type = ScopeType::Function;
         self.pos = target;
     }
-
     pub fn push_arg(&mut self, v: Value) {
         self.stack.last_mut().unwrap().args.push_back(v);
     }
@@ -103,25 +152,47 @@ impl<'a> Interp<'a> {
             .insert(self.pos, value);
     }
 
-    pub fn resolve_value(&mut self, v: ValueId) -> Value {
+    pub fn resolve_value(&mut self, v: ValueId) -> Result<Value> {
         let code = self.m.get_code(v);
-        for scope in self.stack.iter().rev() {
+        for scope in self.stack.iter_mut().rev() {
             match code {
                 LCode::Const(lit) => {
-                    return Value::from_lit(lit);
-                }
-                LCode::Arg(index) => {
-                    if let Some(value) = scope.args.get(*index as usize) {
-                        return value.clone();
+                    if let Some(value) = scope.values.get(&v) {
+                        return Ok(value.clone());
+                    } else {
+                        let value = Value::from_lit(lit);
+                        scope.values.insert(v, value);
                     }
                 }
-                LCode::Load(_) => {
+                LCode::Arg(index) => {
+                    println!("arg: {:?}", (&scope, code));
+
                     if let Some(value) = scope.values.get(&v) {
-                        return value.clone();
+                        return Ok(value.clone());
+                    }
+
+                    /*
+                    if let Some(value) = scope.args.get(*index as usize) {
+                        return Ok(value.clone());
+                    } else {
+                        let span_id = self.m.get_span_id(v);
+                        self.b.push_error_labels(vec![self
+                            .b
+                            .primary_label(&format!("Not implemented: {}, {:?}", v, code), span_id)]);
+                        return Err(Error::new(BlockifyError::Invalid));
+                        //return false;
+                        //unreachable!()
+                    }
+                    */
+                }
+                LCode::Load(_link_id) => {
+                    //let v = self.m.resolve_code_offset(link_id.into());
+                    if let Some(value) = scope.values.get(&v) {
+                        return Ok(value.clone());
                     }
                 }
                 LCode::Call(_) | LCode::Op2(_) | LCode::NaryOp(_) | LCode::Op1(_) => {
-                    return scope.values.get(&v).unwrap().clone();
+                    return Ok(scope.values.get(&v).unwrap().clone());
                 }
                 _ => unimplemented!("{:?}", code),
             }
@@ -132,6 +203,11 @@ impl<'a> Interp<'a> {
     pub fn resolve_declaration(&mut self, v: ValueId) -> Value {
         println!("resolve decl: {}", v);
         let code = self.m.get_code(v);
+        //let mem = self.m.get_mem(v.into());
+        //if self.statics.contains_key(&v) {
+        //return self.load_static(v);
+        //}
+
         for scope in self.stack.iter().rev() {
             match code {
                 LCode::Declare => {
@@ -139,8 +215,11 @@ impl<'a> Interp<'a> {
                         return value.clone();
                     }
                 }
-                LCode::Const(lit) => {
-                    return Value::from_lit(lit);
+                LCode::Const(_) => {
+                    if let Some(value) = scope.values.get(&v) {
+                        return value.clone();
+                    }
+                    //return Value::from_lit(lit);
                 }
                 _ => unimplemented!("{:?}", code),
             }
@@ -154,11 +233,12 @@ impl<'a> Interp<'a> {
             match scope.ty {
                 ScopeType::Function => return scope,
                 ScopeType::Block => (),
+                ScopeType::Static => (),
             }
         }
     }
 
-    pub fn step(&mut self) -> bool {
+    pub fn step(&mut self) -> Result<bool> {
         let pos = self.pos;
         let code = self.m.get_code(self.pos);
         let result = match code {
@@ -168,11 +248,18 @@ impl<'a> Interp<'a> {
             }
             LCode::Label => {
                 // load args into scope
-                let mut scope = Scope::new(self.jump_type, self.return_link_id);
-                scope.args = self.call_args.clone();
-                self.call_args.clear();
+                let scope = Scope::new(self.jump_type, self.return_link_id);
+                //scope.args = self.call_args.clone();
+                //self.call_args.clear();
                 self.stack.push(scope);
 
+                self.advance();
+                true
+            }
+
+            LCode::Arg(_) => {
+                let value = self.call_args.pop_front().unwrap();
+                self.stack.last_mut().unwrap().values.insert(pos, value);
                 self.advance();
                 true
             }
@@ -190,8 +277,29 @@ impl<'a> Interp<'a> {
             LCode::Store(decl, v) => {
                 let v_decl = self.m.resolve_code_offset(decl.into());
                 let v_value = self.m.resolve_code_offset(v.into());
-                let value = self.resolve_value(v_value);
-                self.stack.last_mut().unwrap().values.insert(v_decl, value);
+                let value = self.resolve_value(v_value)?;
+                let mem = self.m.get_mem(decl.into());
+
+                let scope = if *mem == VarDefinitionSpace::Static {
+                    //self.save_static(v, value);
+                    let scope = self.stack.first_mut().unwrap();
+                    scope
+                } else {
+                    let mut maybe_scope = None;
+                    for scope in self.stack.iter_mut().rev() {
+                        if scope.values.contains_key(&v_decl) {
+                            maybe_scope = Some(scope);
+                            //return true;
+                        }
+                    }
+                    if let Some(scope) = maybe_scope {
+                        scope
+                    } else {
+                        unreachable!()
+                    }
+                };
+                //scope.values.insert(pos, value.clone());
+                scope.values.insert(v_decl, value);
                 self.advance();
                 true
             }
@@ -226,14 +334,13 @@ impl<'a> Interp<'a> {
             }
 
             LCode::NaryOp(op) => {
-                let values = self.m.get_previous_values(pos);
-                let values = values
-                    .into_iter()
-                    .map(|offset| {
-                        let v = self.m.resolve_code_offset(offset);
-                        self.resolve_value(v)
-                    })
-                    .collect::<Vec<_>>();
+                let orig_values = self.m.get_previous_values(pos);
+
+                let mut values = vec![];
+                for offset in orig_values {
+                    let v = self.m.resolve_code_offset(offset);
+                    values.push(self.resolve_value(v)?);
+                }
 
                 // remove args
                 for _ in 0..values.len() {
@@ -282,15 +389,16 @@ impl<'a> Interp<'a> {
                     (BinaryOperation::Subtract, Value::Float(i1), Value::Float(i2)) => {
                         Value::Float(i1 - i2)
                     }
-                    _ => unimplemented!("{:?}", (op, v1, v2)),
+                    _ => {
+                        let span_id = self.m.get_span_id(pos);
+                        self.b.push_error_labels(vec![self
+                            .b
+                            .primary_label(&format!("Not implemented"), span_id)]);
+                        return Ok(false);
+                    }
                 };
                 self.stack.last_mut().unwrap().values.insert(self.pos, v);
                 //self.call_args.push_back(v);
-                self.advance();
-                true
-            }
-
-            LCode::Arg(_) => {
                 self.advance();
                 true
             }
@@ -304,7 +412,7 @@ impl<'a> Interp<'a> {
 
             LCode::Value(v) => {
                 let v = self.m.resolve_code_offset(v.into());
-                let value = self.resolve_value(v);
+                let value = self.resolve_value(v)?;
                 self.call_args.push_back(value);
                 self.advance();
                 true
@@ -312,7 +420,7 @@ impl<'a> Interp<'a> {
 
             LCode::CallValue(v) => {
                 let v = self.m.resolve_code_offset(*v);
-                let value = self.resolve_value(v);
+                let value = self.resolve_value(v)?;
                 self.call_args.push_back(value);
                 self.advance();
                 true
@@ -327,7 +435,7 @@ impl<'a> Interp<'a> {
 
             LCode::Ternary(condition, then_target, else_target) => {
                 let v = self.m.resolve_code_offset(*condition);
-                let c = self.resolve_value(v);
+                let c = self.resolve_value(v)?;
 
                 match c {
                     Value::Bool(cond) => {
@@ -346,7 +454,7 @@ impl<'a> Interp<'a> {
 
             LCode::Branch(condition, then_target, else_target) => {
                 let v = self.m.resolve_code_offset(*condition);
-                let c = self.resolve_value(v);
+                let c = self.resolve_value(v)?;
 
                 match c {
                     Value::Bool(cond) => {
@@ -365,7 +473,7 @@ impl<'a> Interp<'a> {
 
             LCode::Builtin(bi) => {
                 let bi = self.b.builtins.get_enum(*bi);
-                match bi {
+                let result = match bi {
                     Builtin::Import => {
                         unreachable!()
                     }
@@ -379,8 +487,8 @@ impl<'a> Interp<'a> {
                                     self.b.push_error_labels(vec![self
                                         .b
                                         .primary_label(&format!("Check Failed"), span_id)]);
-                                    return false;
                                 }
+                                condition
                             }
                             _ => unreachable!(),
                         }
@@ -389,10 +497,11 @@ impl<'a> Interp<'a> {
                         assert_eq!(self.call_args.len(), bi.arity());
                         let value = self.call_args.pop_front().unwrap();
                         println!("print: {:?}", value);
+                        true
                     }
-                }
+                };
                 self.advance();
-                true
+                result
             }
 
             LCode::Return | LCode::Yield => {
@@ -414,13 +523,7 @@ impl<'a> Interp<'a> {
             _ => unimplemented!("{:?}", code),
         };
 
-        println!("step: {}, {:?}", pos, code);
-        println!("\tcall_args: {:?}", self.call_args);
-
-        for scope in self.stack.iter() {
-            println!("\tscope: {:?}", scope);
-        }
-        result
+        Ok(result)
     }
 }
 
@@ -444,7 +547,20 @@ pub fn interp<'c>(
     let main = b.labels.s("main");
     let mut interp = Interp::new(m, b, main);
     loop {
-        if !interp.step() {
+        let pos = interp.pos;
+        let code = interp.m.get_code(pos);
+        let r = interp.step();
+        println!("step: {}, {:?}", pos, code);
+        println!("\tcall_args: {:?}", interp.call_args);
+        for (index, scope) in interp.stack.iter().enumerate() {
+            println!("\t[{}] scope: {:?}", index, scope);
+        }
+
+        if let Ok(cond) = r {
+            if !cond {
+                break;
+            }
+        } else {
             break;
         }
     }

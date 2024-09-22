@@ -1,4 +1,4 @@
-use compile_core::{AstType, LinkOptions, Span, SpanId, StringKey, VarDefinitionSpace};
+use compile_core::{AstType, LinkOptions, Literal, Span, SpanId, StringKey, VarDefinitionSpace};
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
 use std::collections::{HashMap, HashSet};
@@ -59,6 +59,7 @@ pub struct FlattenModule {
     link_map: HashMap<LinkId, ValueId>,
     block_map: HashMap<BlockId, ValueId>,
     functions: HashMap<StringKey, LinkId>,
+    statics: HashMap<StringKey, Literal>,
     pub(super) link: LinkOptions,
     pub(super) gblocks: BlockGraph,
 }
@@ -210,6 +211,7 @@ impl FlattenModule {
             link: LinkOptions::new(),
             link_map: HashMap::new(),
             functions: HashMap::new(),
+            statics: HashMap::new(),
             block_map: HashMap::new(),
             gblocks: BlockGraph::new(),
         }
@@ -311,6 +313,15 @@ impl FlattenModule {
                 let mut entry = flatten.get_entry(*link_id).clone();
                 if let Some(ty) = b.types.u.resolve(&entry.ty) {
                     entry.ty = ty;
+                }
+
+                if entry.mem == VarDefinitionSpace::Static {
+                    match &entry.code {
+                        LCode::Const(lit) => {
+                            m.statics.insert(entry.name.unwrap(), lit.clone());
+                        }
+                        _ => (),
+                    }
                 }
 
                 let v = ValueId(value_count);

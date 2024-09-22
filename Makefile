@@ -23,12 +23,16 @@ bare:
 t:
 	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/dup_func.star -o build/args3
 
+
 run:
+	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/test_recursive.star -o build/args3
+
+run2:
 	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/bare.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/test_local.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/recurse.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/test_recursive2.star -o build/args3
-	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/test_recursive.star -o build/args3
+	#RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/test_recursive.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/fix.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/loop.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/goto.star -o build/args3
@@ -43,8 +47,9 @@ run:
 	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/test_global.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/nested_loops.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/test_ternary.star -o build/args3
-	#RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/test_static.star -o build/args3
-	#RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/static_var.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/static.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/test_static.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/static_var.star -o build/args3
 
 run_test:
 	cargo check
