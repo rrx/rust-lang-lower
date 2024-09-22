@@ -1,4 +1,4 @@
-use crate::{ICodeModule, LCode, NodeBuilder, ValueId};
+use crate::{Builtin, ICodeModule, LCode, NodeBuilder, ValueId};
 use std::collections::{HashMap, VecDeque};
 
 use compile_core::{BinaryOperation, Literal, StringKey};
@@ -48,6 +48,7 @@ impl Scope {
 
 pub struct Interp<'a> {
     m: &'a dyn ICodeModule,
+    b: &'a NodeBuilder,
     pos: ValueId,
     stack: Vec<Scope>,
     call_args: VecDeque<Value>,
@@ -56,11 +57,12 @@ pub struct Interp<'a> {
 }
 
 impl<'a> Interp<'a> {
-    pub fn new(m: &'a dyn ICodeModule, name: StringKey) -> Self {
+    pub fn new(m: &'a dyn ICodeModule, b: &'a NodeBuilder, name: StringKey) -> Self {
         let link_id = m.lookup_name(&name).unwrap();
         let pos = m.resolve_code_offset(link_id.into());
         Self {
             m,
+            b,
             pos,
             stack: vec![],
             call_args: VecDeque::new(),
@@ -269,6 +271,30 @@ impl<'a> Interp<'a> {
                 true
             }
 
+            LCode::Builtin(bi) => {
+                let bi = self.b.builtins.get_enum(*bi);
+                match bi {
+                    Builtin::Import => {
+                        unreachable!()
+                    }
+                    Builtin::Assert => {
+                        assert_eq!(self.call_args.len(), bi.arity());
+                        let value = self.call_args.pop_front().unwrap();
+                        match value {
+                            Value::Bool(condition) => assert!(condition),
+                            _ => unreachable!(),
+                        }
+                    }
+                    Builtin::Print => {
+                        assert_eq!(self.call_args.len(), bi.arity());
+                        let value = self.call_args.pop_front().unwrap();
+                        println!("print: {:?}", value);
+                    }
+                }
+                self.advance();
+                true
+            }
+
             LCode::Return => {
                 let scope = self.unwind();
                 if let Some(target) = scope.return_link_id {
@@ -318,7 +344,7 @@ pub fn interp<'c>(
     let _shared = paths.iter().map(|p| p.as_str()).collect::<Vec<_>>();
 
     let main = b.labels.s("main");
-    let mut interp = Interp::new(m, main);
+    let mut interp = Interp::new(m, b, main);
     loop {
         if !interp.step() {
             break;

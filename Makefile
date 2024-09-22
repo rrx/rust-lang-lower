@@ -1,4 +1,5 @@
 export RUST_BACKTRACE=1
+export RUST_LOG=ena::unify=INFO
 default: ninja
 
 ninja:
@@ -6,7 +7,7 @@ ninja:
 	cargo build
 	python3 build.py
 	#touch target/x86_64-unknown-linux-gnu/debug/parse
-	ninja
+	ninja -v -k0 | tee out.log ; grep FAILED out.log || true
 	@echo COMPLETE
 
 clean:
@@ -14,21 +15,26 @@ clean:
 	rm -rf build
 
 bare:
-	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/bare.star
+	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/bare.star -o build/bare
 
-template:
-	RUST_BACKTRACE=1 cargo run -- -t -v -i tests/template.star
+#template:
+	#RUST_BACKTRACE=1 cargo run -- -c -t -v -i tests/template.star
 
 t:
-	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/star_args.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/dup_func.star -o build/args3
 
 run:
+	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/bare.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/test_local.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/recurse.star -o build/args3
+
+run_test:
 	cargo check
 	python3 build.py
 	touch target/x86_64-unknown-linux-gnu/debug/parse
-	ninja -v test_ternary
+	RUST_LOG=INFO ninja -v recurse
 
-run_test:
+run_test2:
 	RUST_BACKTRACE=1 cargo run --bin parse -- -l -v -x \
 		       -o target/debug/out.mlir \
 		       tests/test_global.star
