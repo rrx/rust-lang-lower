@@ -36,6 +36,15 @@ run:
 	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/dup_func.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/test_cond.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/monomorph.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/monomorph_static.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/star_args.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/test_float.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/nested_func.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/test_global.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/nested_loops.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/test_ternary.star -o build/args3
+	#RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/test_static.star -o build/args3
+	#RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/static_var.star -o build/args3
 
 run_test:
 	cargo check

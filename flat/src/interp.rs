@@ -1,7 +1,7 @@
 use crate::{Builtin, ICodeModule, LCode, NodeBuilder, ValueId};
 use std::collections::{HashMap, VecDeque};
 
-use compile_core::{BinaryOperation, Literal, NaryOperation, StringKey};
+use compile_core::{BinaryOperation, Literal, NaryOperation, StringKey, UnaryOperation};
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -120,7 +120,7 @@ impl<'a> Interp<'a> {
                         return value.clone();
                     }
                 }
-                LCode::Call(_) | LCode::Op2(_) | LCode::NaryOp(_) => {
+                LCode::Call(_) | LCode::Op2(_) | LCode::NaryOp(_) | LCode::Op1(_) => {
                     return scope.values.get(&v).unwrap().clone();
                 }
                 _ => unimplemented!("{:?}", code),
@@ -252,6 +252,19 @@ impl<'a> Interp<'a> {
                 true
             }
 
+            LCode::Op1(op) => {
+                let v1 = self.call_args.pop_front().unwrap();
+                let v = match (op, v1.clone()) {
+                    (UnaryOperation::Minus, Value::Int(i1)) => Value::Int(-i1),
+                    (UnaryOperation::Minus, Value::Float(i1)) => Value::Float(-i1),
+                    _ => unimplemented!("{:?}", (op, v1)),
+                };
+                self.stack.last_mut().unwrap().values.insert(self.pos, v);
+                //self.call_args.push_back(v);
+                self.advance();
+                true
+            }
+
             LCode::Op2(op) => {
                 assert_eq!(self.call_args.len(), 2);
                 let v1 = self.call_args.pop_front().unwrap();
@@ -289,6 +302,14 @@ impl<'a> Interp<'a> {
                 true
             }
 
+            LCode::Value(v) => {
+                let v = self.m.resolve_code_offset(v.into());
+                let value = self.resolve_value(v);
+                self.call_args.push_back(value);
+                self.advance();
+                true
+            }
+
             LCode::CallValue(v) => {
                 let v = self.m.resolve_code_offset(*v);
                 let value = self.resolve_value(v);
@@ -301,6 +322,25 @@ impl<'a> Interp<'a> {
                 // push args
                 let v = self.m.resolve_code_offset(*target);
                 self.jump(v);
+                true
+            }
+
+            LCode::Ternary(condition, then_target, else_target) => {
+                let v = self.m.resolve_code_offset(*condition);
+                let c = self.resolve_value(v);
+
+                match c {
+                    Value::Bool(cond) => {
+                        if cond {
+                            let target = self.m.resolve_code_offset(then_target.clone().into());
+                            self.call(target);
+                        } else {
+                            let target = self.m.resolve_code_offset(else_target.clone().into());
+                            self.call(target);
+                        }
+                    }
+                    _ => unreachable!(),
+                }
                 true
             }
 
@@ -355,21 +395,19 @@ impl<'a> Interp<'a> {
                 true
             }
 
-            LCode::Return => {
+            LCode::Return | LCode::Yield => {
                 let scope = self.unwind();
                 if let Some(target) = scope.return_link_id {
                     assert!(self.call_args.len() <= 1);
                     if self.call_args.len() == 1 {
                         let value = self.call_args.pop_back().unwrap();
                         self.stack.last_mut().unwrap().values.insert(target, value);
-                        //scope.values.insert(target, value);
                     }
 
                     self.jump(target.succ());
                     true
                 } else {
                     // program terminates
-                    //self.call_args = scope.args;
                     false
                 }
             }
