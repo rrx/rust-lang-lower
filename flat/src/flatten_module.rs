@@ -58,6 +58,7 @@ pub struct FlattenModule {
     entries: Vec<ModuleEntry>,
     link_map: HashMap<LinkId, ValueId>,
     block_map: HashMap<BlockId, ValueId>,
+    functions: HashMap<StringKey, LinkId>,
     pub(super) link: LinkOptions,
     pub(super) gblocks: BlockGraph,
 }
@@ -65,6 +66,10 @@ pub struct FlattenModule {
 impl ICodeModule for FlattenModule {
     fn shared_libraries(&self) -> Vec<String> {
         self.link.shared_libraries()
+    }
+
+    fn lookup_name(&self, name: &StringKey) -> Option<LinkId> {
+        self.functions.get(name).cloned()
     }
 
     fn get_span_id(&self, value_id: ValueId) -> SpanId {
@@ -204,6 +209,7 @@ impl FlattenModule {
             entries: vec![],
             link: LinkOptions::new(),
             link_map: HashMap::new(),
+            functions: HashMap::new(),
             block_map: HashMap::new(),
             gblocks: BlockGraph::new(),
         }
@@ -248,7 +254,7 @@ impl FlattenModule {
             blocks.extend(seq.into_iter().rev());
         }
 
-        //let a = self.labels.s("a".into());
+        // inject builtin prototypes
         let print_index = b.labels.s("print_index".into());
         let print_float = b.labels.s("print_float".into());
         let print_bool = b.labels.s("print_bool".into());
@@ -269,6 +275,8 @@ impl FlattenModule {
             );
         }
 
+        let mut m = FlattenModule::new();
+        m.link = flatten.link.clone();
         for index in function_entries.iter() {
             let block_id = (*index).into();
             let block = flatten.get_block(block_id);
@@ -282,6 +290,11 @@ impl FlattenModule {
             println!("X: {:?}", entry);
             println!("X: {}, {}", name, &ty);
             assert_eq!(entry.mem, VarDefinitionSpace::Static);
+
+            if let Some(key) = entry.name {
+                m.functions.insert(key, *label_link_id);
+            }
+
             flatten.push_code(
                 LCode::DeclareFunction(Some(block_id)),
                 ty,
@@ -291,8 +304,6 @@ impl FlattenModule {
             );
         }
 
-        let mut m = FlattenModule::new();
-        m.link = flatten.link.clone();
         for index in blocks.into_iter() {
             let block_id = index.into();
             let block = flatten.get_block(block_id);

@@ -192,7 +192,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     if config.interp {
-        let exit_code = p.interp(&m, "target/debug");
+        let exit_code = p.interp(&m, "target/debug", &mut b);
         std::process::exit(exit_code);
     } else if config.exec {
         let exit_code = p.exec_main(&mut module, "target/debug");

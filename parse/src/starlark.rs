@@ -684,8 +684,8 @@ impl StarlarkParser {
         Ok(())
     }
 
-    pub fn interp<'c>(&self, m: &dyn ICodeModule, libpath: &str) -> i32 {
-        flat::interp::interp(&self.link.shared_libraries(), m, libpath)
+    pub fn interp<'c>(&self, m: &dyn ICodeModule, libpath: &str, b: &mut NodeBuilder) -> i32 {
+        flat::interp::interp(&self.link.shared_libraries(), m, libpath, b)
     }
 
     pub fn exec_main<'c>(&self, module: &mut Module, libpath: &str) -> i32 {

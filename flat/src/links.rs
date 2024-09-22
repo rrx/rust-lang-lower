@@ -8,6 +8,9 @@ impl ValueId {
     pub fn index(&self) -> usize {
         self.0 as usize
     }
+    pub fn succ(&self) -> ValueId {
+        Self::new(self.index() as u32 + 1)
+    }
 }
 
 impl std::fmt::Display for ValueId {

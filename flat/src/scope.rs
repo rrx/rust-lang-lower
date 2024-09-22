@@ -102,9 +102,7 @@ pub struct ScopeLayer {
     pub entry_block: Option<BlockId>,
     pub return_block: Option<BlockId>,
     pub next_block: Vec<ValueId>,
-    //pub(crate) entry_block: Option<BlockId>,
     pub(crate) loop_block: Option<LoopScope>,
-    //pub(crate) current_block: Option<BlockId>,
     pub scope_type: ScopeType,
     pub lambdas: HashMap<StringLabel, TemplateId>,
     pub templates: HashMap<StringKey, LinkId>,
@@ -148,26 +146,6 @@ impl ScopeLayer {
         let v = self.entries.get_mut(&name).unwrap();
         v.update(variant_id, ty, link_id)
     }
-
-    /*
-    pub fn find_entry(&self, name: &StringKey, ty: &AstType) -> Option<LinkId> {
-        if let Some(e) = self.entries.get(&name) {
-            if let Some(link_id) = e.get(&ty) {
-                return Some(*link_id);
-            }
-        }
-        None
-    }
-
-    pub fn insert_entry(&mut self, name: &StringKey, ty: &AstType, link_id: LinkId) {
-        if let Some(e) = self.entries.get_mut(&name) {
-            e.insert(ty.clone(), link_id);
-        } else {
-            self.entries.insert(*name, HashMap::new());
-            self.insert_entry(name, ty, link_id);
-        }
-    }
-    */
 
     pub fn lookup(&self, name: StringKey) -> Option<LinkId> {
         self.names.get(&name).cloned()

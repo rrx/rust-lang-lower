@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 use thiserror::Error;
 
 use compile_core::{
-    AstType, BinaryOperation, BuiltinId, Literal, NaryOperation, SpanId, UnaryOperation,
+    AstType, BinaryOperation, BuiltinId, Literal, NaryOperation, SpanId, StringKey, UnaryOperation,
     VarDefinitionSpace,
 };
 
@@ -71,6 +71,7 @@ impl LCode {
 
 pub trait ICodeModule {
     fn shared_libraries(&self) -> Vec<String>;
+    fn lookup_name(&self, name: &StringKey) -> Option<LinkId>;
     fn get_span_id(&self, value_id: ValueId) -> SpanId;
     fn get_name(&self, v: CodeOffset) -> Option<StringLabel>;
     fn get_code(&self, value_id: ValueId) -> &LCode;

@@ -2313,7 +2313,7 @@ impl Flatten {
 
                 for (v, ty) in [(vx, &rx.ty), (vy, &ry.ty)] {
                     self.push_code(
-                        LCode::Value(v.into()),
+                        LCode::CallValue(v.into()),
                         ty.clone(),
                         None,
                         node.span_id,
