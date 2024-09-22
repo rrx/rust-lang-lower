@@ -225,7 +225,7 @@ impl Flatten {
         ty: &AstType,
         fenv: &FlattenEnvironment,
         b: &mut NB,
-    ) -> Option<(VariantId, LinkId)> {
+    ) -> Option<(VariantId, AstType, LinkId)> {
         /*
         let s = b.labels.r(name.into());
         println!("resolve: {}, {}, {}", block_id, s, ty);
@@ -245,7 +245,7 @@ impl Flatten {
         for (variant_id, r_ty, link_id) in self.resolve_all_function_name(block_id, &name, fenv) {
             println!("trying {}, {}<=>{}", variant_id, &ty, &r_ty);
             if let Ok(_) = b.types.u.unify(&ty, &r_ty) {
-                result = Some((variant_id, link_id));
+                result = Some((variant_id, r_ty, link_id));
                 break;
             }
         }
@@ -1116,11 +1116,21 @@ impl Flatten {
 
         // if it's defined in static scope, just call it
         println!("[{},{}] RX:  {}", s, s_global, &call_func_type);
-        fenv.dump_scope(fenv.static_scope_id(), b);
-        let (_variant_id, v_entry) = if let Some((variant_id, v_entry)) =
+        //fenv.dump_scope(fenv.static_scope_id(), b);
+        let (_variant_id, v_entry) = if let Some((variant_id, r_ty, v_entry)) =
             self.resolve_function_name(current_block_id, &name, &call_func_type, fenv, b)
         {
             println!("[{}] R2: {}, {:?}", s, call_func_type, (v_entry));
+            if b.types.u.unify(&call_func_type, &r_ty).is_err() {
+                b.push_error_labels(vec![
+                    b.primary_label(
+                        &format!("Type Mismatch Func: caller: {}", &call_func_type),
+                        call_span_id,
+                    ),
+                    b.secondary_label(&format!("source type: {}", &r_ty), def_span_id),
+                ]);
+            }
+
             (variant_id, v_entry)
         } else {
             // set the reference for the function, so we can recurse
