@@ -95,19 +95,13 @@ impl std::fmt::Display for AstType {
         match self {
             Self::Func(arg_ty, ret_ty) => {
                 assert!(arg_ty.is_composite());
-                write!(
-                    f,
-                    "fn({})->{}",
-                    arg_ty, //.fields().iter().map(|(_, ty)| ty).collect::<Vec<_>>(),
-                    ret_ty
-                )
+                write!(f, "fn({})->{}", arg_ty, ret_ty)
             }
             Self::Struct(fields) => {
                 //let mut t = f.debug_struct("Struct");
                 let mut t = f.debug_tuple("Struct");
-                for (_index, (_, ty)) in fields.iter().enumerate() {
-                    t.field(&format!("{}", ty));
-                    //t.field(&format!("{}", index), ty);
+                for (_index, (key, ty)) in fields.iter().enumerate() {
+                    t.field(&format!("{}:{}", key.map(|k| k.index()).unwrap_or(0), ty));
                 }
                 t.finish()
             }

@@ -14,6 +14,17 @@ impl NodeBuilder {
         }
     }
 
+    /*
+    pub fn format_type(&self, ty: &AstType) -> String {
+        if match
+        let mut out = vec![];
+        self.dump_strings(node, &mut out, 0);
+        for (depth, s, span_id) in out {
+            print_with_indent(&s, span_id, depth);
+        }
+    }
+    */
+
     pub fn dump_argument(
         &self,
         index: usize,

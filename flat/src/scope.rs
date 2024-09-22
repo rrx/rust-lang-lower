@@ -2,7 +2,7 @@ use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
 
 use crate::{BlockId, CodeOffset, LinkId, NodeBuilder, StringLabel, ValueId};
-use compile_core::StringKey;
+use compile_core::{AstType, StringKey};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ScopeType {
@@ -46,6 +46,7 @@ impl TemplateId {
 #[derive(Debug)]
 pub struct ScopeLayer {
     pub names: HashMap<StringKey, LinkId>,
+    pub entries: HashMap<StringKey, HashMap<AstType, LinkId>>,
     pub declarations: HashMap<StringKey, LinkId>,
     pub labels: HashMap<StringLabel, ValueId>,
     pub(crate) block_labels: HashMap<StringLabel, BlockId>,
@@ -68,6 +69,7 @@ impl ScopeLayer {
             block_labels: HashMap::new(),
             blocks: vec![],
             names: HashMap::new(),
+            entries: HashMap::new(),
             declarations: HashMap::new(),
             entry_block: None,
             return_block: None,
@@ -81,6 +83,24 @@ impl ScopeLayer {
         }
     }
 
+    pub fn find_entry(&self, name: &StringKey, ty: &AstType) -> Option<LinkId> {
+        if let Some(e) = self.entries.get(&name) {
+            if let Some(link_id) = e.get(&ty) {
+                return Some(*link_id);
+            }
+        }
+        None
+    }
+
+    pub fn insert_entry(&mut self, name: &StringKey, ty: &AstType, link_id: LinkId) {
+        if let Some(e) = self.entries.get_mut(&name) {
+            e.insert(ty.clone(), link_id);
+        } else {
+            self.entries.insert(*name, HashMap::new());
+            self.insert_entry(name, ty, link_id);
+        }
+    }
+
     pub fn lookup(&self, name: StringKey) -> Option<LinkId> {
         self.names.get(&name).cloned()
     }
@@ -90,6 +110,12 @@ impl ScopeLayer {
         for (k, v) in self.labels.iter() {
             let s = b.labels.r(*k);
             println!("Label: {}:{:?}", s, v);
+        }
+        for (k, v) in self.entries.iter() {
+            let name = b.labels.r((*k).into());
+            for (ty, link_id) in v.iter() {
+                println!("Entry: {}:{}:{}", name, ty, link_id);
+            }
         }
     }
 }

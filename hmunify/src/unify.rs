@@ -145,6 +145,7 @@ impl UnifyValue for UType {
 }
 
 pub type TypeUnifyTable = UnificationTable<InPlace<IntKey>>;
+pub type TypeUnifyTableSnapshot = Snapshot<InPlace<IntKey>>;
 
 pub struct TypeUnify {
     ut: TypeUnifyTable,
@@ -159,6 +160,14 @@ impl TypeUnify {
             args_count: 0,
             variables: vec![],
         }
+    }
+
+    pub fn snapshot(&mut self) -> TypeUnifyTableSnapshot {
+        self.ut.snapshot()
+    }
+
+    pub fn rollback_to(&mut self, snapshot: TypeUnifyTableSnapshot) {
+        self.ut.rollback_to(snapshot);
     }
 
     pub fn fresh_unknown(&mut self) -> UType {
@@ -192,7 +201,12 @@ impl TypeUnify {
     }
 
     pub fn unify(&mut self, a: &AstType, b: &AstType) -> Result<(), UError> {
-        //println!("Unify: {:?}, {:?}", a, b);
+        let r = self._unify(a, b);
+        println!("Unify: {} <=> {}, {:?}", a, b, r);
+        r
+    }
+
+    fn _unify(&mut self, a: &AstType, b: &AstType) -> Result<(), UError> {
         match (a, b) {
             (AstType::Args(v1), AstType::Args(v2)) => self.unify(&*v1, &*v2),
             (AstType::Args(v), _) => self.unify(v, b),
