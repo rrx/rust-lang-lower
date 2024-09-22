@@ -1117,7 +1117,7 @@ impl Flatten {
         // if it's defined in static scope, just call it
         println!("[{},{}] RX:  {}", s, s_global, &call_func_type);
         fenv.dump_scope(fenv.static_scope_id(), b);
-        let (variant_id, v_entry) = if let Some((variant_id, v_entry)) =
+        let (_variant_id, v_entry) = if let Some((variant_id, v_entry)) =
             self.resolve_function_name(current_block_id, &name, &call_func_type, fenv, b)
         {
             println!("[{}] R2: {}, {:?}", s, call_func_type, (v_entry));
@@ -1141,6 +1141,7 @@ impl Flatten {
                 def,
                 call_func_type.clone(),
                 name,
+                global_key,
                 ScopeType::Function,
                 Successor::FunctionDeclaration,
                 fenv,
@@ -1150,6 +1151,7 @@ impl Flatten {
                 self.drain_diagnostics(b);
             }
             let (variant_id, r) = result?;
+            //let variant_id = variant_id.unwrap();
             let v_entry = r.link_id.unwrap();
 
             self.drain_diagnostics(b);
@@ -1477,6 +1479,7 @@ impl Flatten {
         def: Lambda,
         def_func_ty: AstType,
         name: StringKey,
+        global_name: StringKey,
         scope_type: ScopeType,
         succ_type: Successor,
         fenv: &mut FlattenEnvironment,
@@ -1520,27 +1523,27 @@ impl Flatten {
         self.block_succ(fenv.static_block_id(), fun_block_id, succ_type);
         self.block_succ(fun_block_id, ret_block_id, Successor::BlockScope);
         self.switch_blocks(fun_block_id);
-        //self.replace_label(v_entry, def_func_ty.clone(), Some(name), span_id, VarDefinitionSpace::Static);
         let (entry_link_id, _) = self.push_start_block(
             fun_scope_id,
             def_func_ty.clone(),
-            Some(name),
+            Some(global_name),
             span_id,
             VarDefinitionSpace::Static,
             fenv,
         );
-        //let entry_link_id = v_entry;
 
         // add entry to static scope, for recursion
-        //let static_scope = fenv.get_scope_mut(fenv.static_scope_id());
         let r_ty1 = b.types.u.resolve(&def_func_ty).unwrap();
         // we need to know the link
-        //static_scope.insert_entry(&name, &r_ty1, entry_link_id);
+        //let variant_id = if let Some(global_name) = global_name {
         let variant_id = fenv.variant_add(fenv.static_scope_id(), name, r_ty1, entry_link_id);
+        //} else {
+        //None
+        //};
 
         // add the name to static scope
         // do this early for recursive functions
-        fenv.scope_define(fenv.static_scope_id(), name, entry_link_id);
+        fenv.scope_define(fenv.static_scope_id(), global_name, entry_link_id);
 
         let body = jump_if_needed(*body, b);
 
@@ -1884,6 +1887,7 @@ impl Flatten {
                 def,
                 func_type,
                 name,
+                name,
                 ScopeType::Function,
                 Successor::FunctionDeclaration,
                 fenv,
@@ -1952,6 +1956,7 @@ impl Flatten {
             def.clone(),
             fun_ty,
             name,
+            name,
             ScopeType::Template,
             Successor::TemplateDeclaration,
             fenv,
@@ -2017,6 +2022,7 @@ impl Flatten {
                 //LinkId(0),
                 def.clone(),
                 func_ty,
+                name,
                 name,
                 ScopeType::Template,
                 Successor::TemplateDeclaration,
