@@ -33,6 +33,9 @@ run:
 	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/loop.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/goto.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/test.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/dup_func.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/test_cond.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/monomorph.star -o build/args3
 
 run_test:
 	cargo check

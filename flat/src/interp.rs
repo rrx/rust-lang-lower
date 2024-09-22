@@ -1,13 +1,14 @@
 use crate::{Builtin, ICodeModule, LCode, NodeBuilder, ValueId};
 use std::collections::{HashMap, VecDeque};
 
-use compile_core::{BinaryOperation, Literal, StringKey};
+use compile_core::{BinaryOperation, Literal, NaryOperation, StringKey};
 
 #[derive(Debug, Clone)]
 pub enum Value {
     Int(i64),
     Float(f64),
     Bool(bool),
+    Tuple(Vec<Value>),
     None,
 }
 
@@ -119,7 +120,7 @@ impl<'a> Interp<'a> {
                         return value.clone();
                     }
                 }
-                LCode::Call(_) | LCode::Op2(_) => {
+                LCode::Call(_) | LCode::Op2(_) | LCode::NaryOp(_) => {
                     return scope.values.get(&v).unwrap().clone();
                 }
                 _ => unimplemented!("{:?}", code),
@@ -221,6 +222,33 @@ impl<'a> Interp<'a> {
                 let v_func = self.m.resolve_code_offset(f.into());
                 self.return_link_id = Some(self.pos);
                 self.call(v_func);
+                true
+            }
+
+            LCode::NaryOp(op) => {
+                let values = self.m.get_previous_values(pos);
+                let values = values
+                    .into_iter()
+                    .map(|offset| {
+                        let v = self.m.resolve_code_offset(offset);
+                        self.resolve_value(v)
+                    })
+                    .collect::<Vec<_>>();
+
+                // remove args
+                for _ in 0..values.len() {
+                    self.call_args.pop_front();
+                }
+
+                let output = match op {
+                    NaryOperation::Struct => Value::Tuple(values),
+                };
+                self.stack
+                    .last_mut()
+                    .unwrap()
+                    .values
+                    .insert(self.pos, output);
+                self.advance();
                 true
             }
 
