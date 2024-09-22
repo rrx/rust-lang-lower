@@ -25,7 +25,7 @@ def main():
   q.loop
   a = a + 1
   q.print(a)
-  if a > 1000:
+  if a > 10:
     q.loop_break
 
   q.loop_continue

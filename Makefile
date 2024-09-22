@@ -29,6 +29,8 @@ run:
 	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/recurse.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/test_recursive2.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/test_recursive.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/fix.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/loop.star -o build/args3
 
 run_test:
 	cargo check

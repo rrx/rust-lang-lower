@@ -16,7 +16,8 @@ impl Value {
         match lit {
             Literal::Int(i) => Value::Int(*i),
             Literal::Float(f) => Value::Float(*f),
-            _ => unimplemented!(),
+            Literal::Bool(v) => Value::Bool(*v),
+            _ => unimplemented!("{:?}", lit),
         }
     }
 }
@@ -226,6 +227,7 @@ impl<'a> Interp<'a> {
                 let v2 = self.call_args.pop_front().unwrap();
                 let v = match (op, v1.clone(), v2.clone()) {
                     (BinaryOperation::EQ, Value::Int(i1), Value::Int(i2)) => Value::Bool(i1 == i2),
+                    (BinaryOperation::GT, Value::Int(i1), Value::Int(i2)) => Value::Bool(i1 > i2),
                     (BinaryOperation::Add, Value::Int(i1), Value::Int(i2)) => Value::Int(i1 + i2),
                     (BinaryOperation::Add, Value::Float(i1), Value::Float(i2)) => {
                         Value::Float(i1 + i2)
