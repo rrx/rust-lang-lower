@@ -30,7 +30,7 @@ use std::convert::Into;
 use crate::{
     BlockId, BlockifyError, Builtin, CodeOffset, FlattenEnvironment, LCode, LinkId,
     NodeBuilder as NB, ScopeId, ScopeLayer, ScopeType, SequenceReader, StringLabel, Successor,
-    TemplateId,
+    TemplateId, VariantId,
 };
 
 pub type BlockGraph = DiGraph<IRBlock, Successor>;
@@ -202,14 +202,16 @@ impl Flatten {
         block_id: BlockId,
         name: &StringKey,
         fenv: &FlattenEnvironment,
-    ) -> Vec<(AstType, LinkId)> {
+    ) -> Vec<(VariantId, AstType, LinkId)> {
         let mut out = vec![];
         let block = self.get_block(block_id);
         for scope_id in fenv.walk_scopes(block.scope_id) {
             let scope = fenv.get_scope(scope_id);
+            println!("resolve: {}, {}", scope_id, scope.entries.len());
             if let Some(e) = scope.entries.get(name) {
-                for (ty, link_id) in e.iter() {
-                    out.push((ty.clone(), *link_id));
+                for (index, v) in e.variants.iter().enumerate() {
+                    let variant_id = VariantId(index as u32);
+                    out.push((variant_id, v.ty.clone(), v.link_id));
                 }
             }
         }
@@ -223,7 +225,7 @@ impl Flatten {
         ty: &AstType,
         fenv: &FlattenEnvironment,
         b: &mut NB,
-    ) -> Option<LinkId> {
+    ) -> Option<(VariantId, LinkId)> {
         /*
         let s = b.labels.r(name.into());
         println!("resolve: {}, {}, {}", block_id, s, ty);
@@ -240,9 +242,10 @@ impl Flatten {
 
         let mut result = None;
         let snapshot = b.types.u.snapshot();
-        for (r_ty, link_id) in self.resolve_all_function_name(block_id, &name, fenv) {
+        for (variant_id, r_ty, link_id) in self.resolve_all_function_name(block_id, &name, fenv) {
+            println!("trying {}, {}<=>{}", variant_id, &ty, &r_ty);
             if let Ok(_) = b.types.u.unify(&ty, &r_ty) {
-                result = Some(link_id);
+                result = Some((variant_id, link_id));
                 break;
             }
         }
@@ -430,7 +433,7 @@ impl Flatten {
         &mut self,
         //block_id: BlockId,
         fenv: &mut FlattenEnvironment,
-        b: &mut NB,
+        _b: &mut NB,
     ) -> Result<Vec<LinkId>> {
         let block_id = fenv.static_block_id();
         let block = self.get_block(block_id);
@@ -442,8 +445,8 @@ impl Flatten {
             .map(|s| s.0.clone())
             .collect::<Vec<_>>();
 
-        let mut links = vec![];
-        for key in keys.iter() {
+        let links = vec![];
+        for _key in keys.iter() {
             // reset the block position before each function
             //let name = b.labels.r(key.into());
             //println!("bake {}", name);
@@ -457,7 +460,7 @@ impl Flatten {
     pub fn push_bake_all2(
         &mut self,
         fenv: &mut FlattenEnvironment,
-        b: &mut NB,
+        _b: &mut NB,
     ) -> Result<Vec<LinkId>> {
         let static_block_id = fenv.static_block_id();
         let scope_id = fenv.static_scope_id();
@@ -468,8 +471,8 @@ impl Flatten {
             .map(|s| s.0.clone())
             .collect::<Vec<_>>();
 
-        let mut links = vec![];
-        for key in keys.iter() {
+        let links = vec![];
+        for _key in keys.iter() {
             // reset the block position before each function
             self.switch_blocks(static_block_id);
             //let link_id = self.push_bake(*key, None, fenv, b)?;
@@ -1065,6 +1068,7 @@ impl Flatten {
     ) -> Result<(LinkId, AstType, AstType)> {
         let s = b.labels.r(name.into());
         let global_key = b.labels.fresh_key(&s);
+        let s_global = b.labels.r(global_key.into());
         let current_block_id = self.block_id;
         self.switch_blocks(fenv.static_block_id());
 
@@ -1111,11 +1115,13 @@ impl Flatten {
         }
 
         // if it's defined in static scope, just call it
-        let v_entry = if let Some(v_entry) =
+        println!("[{},{}] RX:  {}", s, s_global, &call_func_type);
+        fenv.dump_scope(fenv.static_scope_id(), b);
+        let (variant_id, v_entry) = if let Some((variant_id, v_entry)) =
             self.resolve_function_name(current_block_id, &name, &call_func_type, fenv, b)
         {
-            println!("R2: {}, {:?}", call_func_type, (v_entry));
-            v_entry
+            println!("[{}] R2: {}, {:?}", s, call_func_type, (v_entry));
+            (variant_id, v_entry)
         } else {
             // set the reference for the function, so we can recurse
             //
@@ -1134,7 +1140,7 @@ impl Flatten {
                 //v_entry,
                 def,
                 call_func_type.clone(),
-                global_key,
+                name,
                 ScopeType::Function,
                 Successor::FunctionDeclaration,
                 fenv,
@@ -1143,18 +1149,36 @@ impl Flatten {
             if result.is_err() {
                 self.drain_diagnostics(b);
             }
-            let r = result?;
+            let (variant_id, r) = result?;
             let v_entry = r.link_id.unwrap();
 
             self.drain_diagnostics(b);
             self.switch_blocks(current_block_id);
 
-            let static_scope = fenv.get_scope_mut(fenv.static_scope_id());
+            //let static_scope = fenv.get_scope_mut(fenv.static_scope_id());
             let r_ty2 = b.types.u.resolve(&call_func_type).unwrap();
-            static_scope.insert_entry(&name, &r_ty2, v_entry);
-            println!("R3 insert: {}, {}, {:?}", call_func_type, r_ty2, (v_entry));
+            //let variants = static_scope.entries.get_mut(&name).unwrap();
+            fenv.variant_update(
+                fenv.static_scope_id(),
+                name,
+                variant_id,
+                r_ty2.clone(),
+                v_entry,
+            );
+            //variants.update_type(
+            //static_scope.variant_add(
+            //static_scope.entries.
+            //static_scope.insert_entry(&name, &r_ty2, v_entry);
+            println!(
+                "[{}] R3 insert: {}, {}, {:?}",
+                s,
+                call_func_type,
+                r_ty2,
+                (v_entry)
+            );
+
             //assert_eq!(&r_ty1, &r_ty2);
-            v_entry
+            (variant_id, v_entry)
         };
         Ok((v_entry, call_func_type, ret_ty))
     }
@@ -1457,7 +1481,7 @@ impl Flatten {
         succ_type: Successor,
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
-    ) -> Result<FlattenResult> {
+    ) -> Result<(VariantId, FlattenResult)> {
         let current_block_id = self.block_id;
         let block = self.get_block(current_block_id);
         println!("bake_function: {:?}", (block.scope_id, current_block_id));
@@ -1508,10 +1532,11 @@ impl Flatten {
         //let entry_link_id = v_entry;
 
         // add entry to static scope, for recursion
-        let static_scope = fenv.get_scope_mut(fenv.static_scope_id());
+        //let static_scope = fenv.get_scope_mut(fenv.static_scope_id());
         let r_ty1 = b.types.u.resolve(&def_func_ty).unwrap();
         // we need to know the link
-        static_scope.insert_entry(&name, &r_ty1, entry_link_id);
+        //static_scope.insert_entry(&name, &r_ty1, entry_link_id);
+        let variant_id = fenv.variant_add(fenv.static_scope_id(), name, r_ty1, entry_link_id);
 
         // add the name to static scope
         // do this early for recursive functions
@@ -1618,11 +1643,9 @@ impl Flatten {
 
         // restore position back to where we started
         self.switch_blocks(current_block_id);
-        Ok(FlattenResult::new(
-            current_block_id,
-            Some(entry_link_id),
-            def_func_ty,
-            false,
+        Ok((
+            variant_id,
+            FlattenResult::new(current_block_id, Some(entry_link_id), def_func_ty, false),
         ))
     }
 
@@ -1869,7 +1892,7 @@ impl Flatten {
             if result.is_err() {
                 self.drain_diagnostics(b);
             }
-            let r = result?;
+            let (_variant_id, r) = result?;
 
             //let entry_block_id = self.get_entry(r.link_id.unwrap()).block_id;
 
@@ -1938,7 +1961,7 @@ impl Flatten {
         if result.is_err() {
             self.drain_diagnostics(b);
         }
-        let r = result?;
+        let (_, r) = result?;
 
         let entry_block_id = self.get_entry(r.link_id.unwrap()).block_id;
         let entry = self.get_entry_mut(decl_link_id);
@@ -2006,7 +2029,7 @@ impl Flatten {
             if result.is_err() {
                 self.drain_diagnostics(b);
             }
-            let r = result?;
+            let (_, r) = result?;
 
             let entry_block_id = self.get_entry(r.link_id.unwrap()).block_id;
             let entry = self.get_entry_mut(decl_link_id);

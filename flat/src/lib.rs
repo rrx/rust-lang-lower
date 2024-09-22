@@ -22,4 +22,4 @@ pub use flatten_module::*;
 pub use flatten_seq::*;
 pub use graph::{Node, CFG};
 pub use links::*;
-pub use scope::{Environment, ScopeId, ScopeLayer, ScopeType, Successor, TemplateId};
+pub use scope::{Environment, ScopeId, ScopeLayer, ScopeType, Successor, TemplateId, VariantId};

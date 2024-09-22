@@ -43,10 +43,58 @@ impl TemplateId {
     }
 }
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+pub struct VariantId(pub(crate) u32);
+impl std::fmt::Display for VariantId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "V{}", self.0)
+    }
+}
+
+impl VariantId {
+    pub fn index(&self) -> usize {
+        self.0 as usize
+    }
+}
+
+#[derive(Debug)]
+pub struct FunctionVariant {
+    pub ty: AstType,
+    pub link_id: LinkId,
+}
+
+#[derive(Debug)]
+pub struct FunctionVariantBuilder {
+    pub variants: Vec<FunctionVariant>,
+}
+
+impl FunctionVariantBuilder {
+    pub fn new() -> Self {
+        Self { variants: vec![] }
+    }
+
+    pub fn add(&mut self, ty: AstType, link_id: LinkId) -> VariantId {
+        let index = self.variants.len();
+        self.variants.push(FunctionVariant { ty, link_id });
+        VariantId(index as u32)
+    }
+
+    pub fn update_type(&mut self, variant_id: VariantId, ty: AstType) {
+        let v = self.variants.get_mut(variant_id.index()).unwrap();
+        v.ty = ty;
+    }
+
+    pub fn update(&mut self, variant_id: VariantId, ty: AstType, link_id: LinkId) {
+        let v = self.variants.get_mut(variant_id.index()).unwrap();
+        v.ty = ty;
+        v.link_id = link_id;
+    }
+}
+
 #[derive(Debug)]
 pub struct ScopeLayer {
     pub names: HashMap<StringKey, LinkId>,
-    pub entries: HashMap<StringKey, HashMap<AstType, LinkId>>,
+    pub entries: HashMap<StringKey, FunctionVariantBuilder>,
     pub declarations: HashMap<StringKey, LinkId>,
     pub labels: HashMap<StringLabel, ValueId>,
     pub(crate) block_labels: HashMap<StringLabel, BlockId>,
@@ -79,10 +127,29 @@ impl ScopeLayer {
             scope_type,
             lambdas: HashMap::new(),
             templates: HashMap::new(),
-            //current_block: None,
         }
     }
 
+    pub fn variant_add(&mut self, name: StringKey, ty: AstType, link_id: LinkId) -> VariantId {
+        if !self.entries.contains_key(&name) {
+            self.entries.insert(name, FunctionVariantBuilder::new());
+        }
+        let v = self.entries.get_mut(&name).unwrap();
+        v.add(ty, link_id)
+    }
+
+    pub fn variant_update(
+        &mut self,
+        name: StringKey,
+        variant_id: VariantId,
+        ty: AstType,
+        link_id: LinkId,
+    ) {
+        let v = self.entries.get_mut(&name).unwrap();
+        v.update(variant_id, ty, link_id)
+    }
+
+    /*
     pub fn find_entry(&self, name: &StringKey, ty: &AstType) -> Option<LinkId> {
         if let Some(e) = self.entries.get(&name) {
             if let Some(link_id) = e.get(&ty) {
@@ -100,6 +167,7 @@ impl ScopeLayer {
             self.insert_entry(name, ty, link_id);
         }
     }
+    */
 
     pub fn lookup(&self, name: StringKey) -> Option<LinkId> {
         self.names.get(&name).cloned()
@@ -113,8 +181,8 @@ impl ScopeLayer {
         }
         for (k, v) in self.entries.iter() {
             let name = b.labels.r((*k).into());
-            for (ty, link_id) in v.iter() {
-                println!("Entry: {}:{}:{}", name, ty, link_id);
+            for v in v.variants.iter() {
+                println!("Entry: {}:{}:{}", name, v.ty, v.link_id);
             }
         }
     }
