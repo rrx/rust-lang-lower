@@ -8,7 +8,7 @@ compiler_release = "target/x86_64-unknown-linux-gnu/release/parse"
 def generate_inputs(fp):
     input_directory = "tests/bin"
 
-    def gen_with_rule(kind, rule, compiler, defaults=False, graphs=False):
+    def gen_with_rule(kind, compiler, defaults=False, graphs=False):
         outputs = []
         images = []
         for f in glob.glob(os.path.join(input_directory, "*.star")):
@@ -18,6 +18,7 @@ def generate_inputs(fp):
             input_filename = os.path.join(input_directory, filename)
 
             mlir_filename = os.path.join(target, f"{base}.mlir")
+            interp_filename = os.path.join(target, f"{base}.interp.out")
             blocks_input_filename = os.path.join(target, f"{base}.blocks.dot")
             blocks_output_filename = os.path.join(target, f"{base}.blocks.png")
             scopes_input_filename = os.path.join(target, f"{base}.scopes.dot")
@@ -26,7 +27,8 @@ def generate_inputs(fp):
             graph_output_filename = os.path.join(target, f"{base}.graph.png")
             cfg_input_filename = os.path.join(target, f"{base}.cfg.mmd")
             cfg_output_filename = os.path.join(target, f"{base}.cfg.png")
-            fp.write(f"build {mlir_filename} | {graph_input_filename} {blocks_input_filename} {scopes_input_filename} {cfg_input_filename}: {rule} {input_filename} | {compiler}\n")
+            fp.write(f"build {mlir_filename} | {graph_input_filename} {blocks_input_filename} {scopes_input_filename} {cfg_input_filename}: mlir-{kind} {input_filename} | {compiler}\n")
+            fp.write(f"build {interp_filename}: interpret-{kind} {input_filename} | {compiler}\n")
 
             if True:# or graphs:
                 fp.write(f"build {graph_output_filename}: dot-png {graph_input_filename}\n")
@@ -47,7 +49,7 @@ def generate_inputs(fp):
             fp.write(f"build {run_filename}: run {exe_filename}\n")
 
             top = f"{base}-{kind}"
-            fp.write(f"build {top}: phony {run_filename} {graph_output_filename} {cfg_output_filename} {blocks_output_filename} {scopes_output_filename}\n")
+            fp.write(f"build {top}: phony {run_filename} {interp_filename} {graph_output_filename} {cfg_output_filename} {blocks_output_filename} {scopes_output_filename}\n")
             outputs.append(top)
 
             if defaults:
@@ -56,8 +58,8 @@ def generate_inputs(fp):
         fp.write(f"build testbins-{kind}: phony | {compiler} {' '.join(outputs)}\n")
 
 
-    gen_with_rule("debug", "mlir-debug", compiler_debug, defaults=True)
-    gen_with_rule("release", "mlir-release", compiler_release)
+    gen_with_rule("debug", compiler_debug, defaults=True)
+    gen_with_rule("release", compiler_release)
 
     fp.write("default testbins-debug\n")
     fp.write("build all: phony testbins-debug testbins-release\n")
@@ -80,6 +82,12 @@ rule mlir-debug
 
 rule mlir-release
     command = cargo run --release -- -v -o $out -i $in
+
+rule interpret-debug
+    command = cargo run -- --interp -v -i $in -o $out
+
+rule interpret-release
+    command = cargo run -- --release --interp -v -i $in -o $out
 
 rule mlir-opt
     command = mlir-opt \
