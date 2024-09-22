@@ -9,6 +9,7 @@ pub mod flatten_graph;
 pub mod flatten_module;
 pub mod flatten_seq;
 pub mod graph;
+pub mod interp;
 pub mod links;
 pub mod scope;
 
@@ -21,5 +22,6 @@ pub use flatten_env::*;
 pub use flatten_module::*;
 pub use flatten_seq::*;
 pub use graph::{Node, CFG};
+pub use interp::*;
 pub use links::*;
 pub use scope::{Environment, ScopeId, ScopeLayer, ScopeType, Successor, TemplateId, VariantId};

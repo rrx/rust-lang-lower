@@ -20,6 +20,10 @@ struct Config {
     #[argh(switch, short = 'c')]
     compile: bool,
 
+    /// interp flag
+    #[argh(switch)]
+    interp: bool,
+
     /// template
     #[argh(switch, short = 't')]
     template: bool,
@@ -178,6 +182,18 @@ fn main() -> Result<(), Box<dyn Error>> {
         path.set_extension("o");
         lower_mlir::save_object_file(&module, &path.to_str().unwrap());
         println!("Wrote: {:?}", &path.as_os_str());
+
+        let mut path = path.clone();
+        path.set_extension("mlir");
+        let s = module.as_operation().to_string();
+        let mut output = File::create(path.clone())?;
+        write!(output, "{}", s)?;
+        println!("Wrote: {:?}", &path.as_os_str());
+    }
+
+    if config.interp {
+        let exit_code = p.interp(&m, "target/debug");
+        std::process::exit(exit_code);
     } else if config.exec {
         let exit_code = p.exec_main(&mut module, "target/debug");
         std::process::exit(exit_code);
