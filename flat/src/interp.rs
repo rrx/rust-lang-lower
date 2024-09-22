@@ -138,6 +138,9 @@ impl<'a> Interp<'a> {
                         return value.clone();
                     }
                 }
+                LCode::Const(lit) => {
+                    return Value::from_lit(lit);
+                }
                 _ => unimplemented!("{:?}", code),
             }
         }
