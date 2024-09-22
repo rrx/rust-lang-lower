@@ -7,6 +7,7 @@ use compile_core::{BinaryOperation, Literal, StringKey};
 pub enum Value {
     Int(i64),
     Float(f64),
+    Bool(bool),
     None,
 }
 
@@ -106,7 +107,9 @@ impl<'a> Interp<'a> {
                     return Value::from_lit(lit);
                 }
                 LCode::Arg(index) => {
-                    return scope.args.get(*index as usize).unwrap().clone();
+                    if let Some(value) = scope.args.get(*index as usize) {
+                        return value.clone();
+                    }
                 }
                 LCode::Load(_) => {
                     if let Some(value) = scope.values.get(&v) {
@@ -200,7 +203,8 @@ impl<'a> Interp<'a> {
                 assert_eq!(self.call_args.len(), 2);
                 let v1 = self.call_args.pop_front().unwrap();
                 let v2 = self.call_args.pop_front().unwrap();
-                let v = match (op, v1, v2) {
+                let v = match (op, v1.clone(), v2.clone()) {
+                    (BinaryOperation::EQ, Value::Int(i1), Value::Int(i2)) => Value::Bool(i1 == i2),
                     (BinaryOperation::Add, Value::Int(i1), Value::Int(i2)) => Value::Int(i1 + i2),
                     (BinaryOperation::Add, Value::Float(i1), Value::Float(i2)) => {
                         Value::Float(i1 + i2)
@@ -211,7 +215,7 @@ impl<'a> Interp<'a> {
                     (BinaryOperation::Subtract, Value::Float(i1), Value::Float(i2)) => {
                         Value::Float(i1 - i2)
                     }
-                    _ => unimplemented!(),
+                    _ => unimplemented!("{:?}", (op, v1, v2)),
                 };
                 self.stack.last_mut().unwrap().values.insert(self.pos, v);
                 //self.call_args.push_back(v);
@@ -243,6 +247,25 @@ impl<'a> Interp<'a> {
                 // push args
                 let v = self.m.resolve_code_offset(*target);
                 self.jump(v);
+                true
+            }
+
+            LCode::Branch(condition, then_target, else_target) => {
+                let v = self.m.resolve_code_offset(*condition);
+                let c = self.resolve_value(v);
+
+                match c {
+                    Value::Bool(cond) => {
+                        if cond {
+                            let target = self.m.resolve_code_offset(then_target.clone().into());
+                            self.jump(target);
+                        } else {
+                            let target = self.m.resolve_code_offset(else_target.clone().into());
+                            self.jump(target);
+                        }
+                    }
+                    _ => unreachable!(),
+                }
                 true
             }
 
