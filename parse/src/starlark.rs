@@ -325,6 +325,16 @@ impl Parser {
                 Ok(NB::assign(name, def_ast.node(span_id)))
             }
 
+            StmtP::Load(load) => {
+                let module_name = b.labels.s(&load.module.node);
+                let mut args = HashMap::new();
+                for arg in &load.args {
+                    let local = b.labels.s(&arg.local.ident);
+                    let name = b.labels.s(&arg.their.node);
+                    args.insert(name, local);
+                }
+                Ok(Ast::Import(module_name, args).node(span_id))
+            }
             StmtP::If(expr, truestmt) => {
                 let condition = self.from_expr(expr, env, b)?;
                 let truestmt = self.from_stmt(&truestmt, env, b)?;
@@ -432,42 +442,6 @@ impl Parser {
                 let node = self.from_expr(&expr, env, b)?;
                 let ast = Ast::Call(node.into(), args).node(span_id.clone());
                 Ok(ast)
-                /*
-
-                match &expr.node {
-                    ExprP::Identifier(ident) => {
-                        let name = b.labels.s(&ident.node.ident);
-                        let ident_span_id = env.span_id(ident.span, b);
-                        let ident = Ast::Identifier(name).node(ident_span_id);
-                        let ast = Ast::Call(ident.into(), args).node(span_id.clone());
-                        Ok(ast)
-                    }
-
-                    ExprP::Dot(expr, name) => {
-                        if let ExprP::Identifier(ident) = &expr.node {
-                            let key = b.labels.s(&ident.node.ident);
-                            if &ident.node.ident == "q" {
-                                // builtin namespace
-                                if let Some(ast) = b.build_builtin_from_name(&name, args, span_id) {
-                                    Ok(ast)
-                                } else {
-                                    b.spans
-                                        .push_diagnostic(env.error(name.span, "Builtin not found"));
-                                    Ok(Ast::Error.node(span_id))
-                                }
-                            } else {
-                                let ident_span_id = env.span_id(ident.span, b);
-                                let ident = Ast::Identifier(key).node(ident_span_id);
-                                let ast = Ast::Call(ident.into(), args).node(span_id.clone());
-                                Ok(ast)
-                            }
-                        } else {
-                            unimplemented!("{:?}", (expr, name))
-                        }
-                    }
-                    _ => unimplemented!("{:?}", expr.node),
-                }
-                    */
             }
 
             ExprP::Identifier(ident) => {

@@ -2475,6 +2475,31 @@ impl Flatten {
                 ))
             }
 
+            Ast::Import(module_name, args) => {
+                let module_name = b.labels.r(module_name.into());
+                if &module_name == "prelude" {
+                    for (attr_key, local_key) in args.iter() {
+                        let attr_name = b.labels.r(attr_key.into());
+                        let local_name = b.labels.r(local_key.into());
+                        if &attr_name == "q" {
+                        } else {
+                            b.push_error_labels(vec![b.primary_label(
+                                &format!("Attribute of prelude not found: {}", &attr_name),
+                                span_id,
+                            )]);
+                        }
+                    }
+                } else {
+                    unimplemented!("module {}", module_name)
+                }
+                Ok(FlattenResult::new(
+                    current_block_id,
+                    None,
+                    AstType::Unit,
+                    false,
+                ))
+            }
+
             Ast::Call(expr, args) => {
                 match &expr.node {
                     // call is an expression, it's non-terminal

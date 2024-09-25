@@ -248,7 +248,7 @@ pub enum Ast {
     Module(StringKey, Box<AstNode>),
     ControlFlowMarker(ControlFlowMarker),
     Loop(StringKey, Box<AstNode>),
-
+    Import(StringKey, HashMap<StringKey, StringKey>),
     // break and continue, yielding a value
     Break(Option<StringKey>, Vec<AstNode>),
     Continue(Option<StringKey>, Vec<AstNode>),

@@ -364,6 +364,18 @@ impl NodeBuilder {
                 self.dump_strings(body, out, depth + 1);
             }
 
+            Ast::Import(module_name, mapping) => {
+                let name = self.labels.r(module_name.into());
+                let s = format!("import({})", name);
+                out.push((depth, s, node.span_id));
+                for (k, v) in mapping.iter() {
+                    let k = self.labels.r(k.into());
+                    let v = self.labels.r(v.into());
+                    let s = format!("{}=>{}", k, v);
+                    out.push((depth + 1, s, node.span_id));
+                }
+            }
+
             _ => unimplemented!("{:?}", node),
         }
     }
