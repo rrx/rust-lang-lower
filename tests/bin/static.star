@@ -1,3 +1,4 @@
+load("prelude", "q")
 z = 0
 def main():
   q.check(z == 0)

@@ -11,9 +11,9 @@ use compile_core::{
     //BinaryOperation, BuiltinId, ControlFlowMarker,
     Lambda,
     LinkOptions,
+    Literal,
     NaryOperation,
     ReturnType,
-    //Literal,
     //ParameterNode,
     SpanId,
     StringKey,
@@ -1434,37 +1434,10 @@ impl Flatten {
         mem: VarDefinitionSpace,
         fenv: &mut FlattenEnvironment,
     ) -> (LinkId, Vec<(LinkId, AstType)>) {
-        //let s_name = name.map(|key| b.labels.r(key.into())).unwrap_or("".to_string());
-        //println!("start block: {:?}", (name, &block_ty));
         let block_link_id = self.push_empty_label(span_id);
-        //let block_link_id = self.push_code(LCode::Label, block_ty.clone(), name, span_id, mem);
         let v_args = self.push_start_block_args(scope_id, block_ty.clone(), span_id, fenv);
         self.replace_label(block_link_id, block_ty, name, span_id, mem);
         (block_link_id, v_args)
-        /*
-        if let AstType::Func(arg_ty, _ret_ty) = &block_ty {
-            assert!(arg_ty.is_composite());
-
-            let mut v_args = vec![];
-            for (i, (name, ty)) in arg_ty.fields().iter().enumerate() {
-                let link_id = self.push_code(
-                    LCode::Arg(i as u8),
-                    ty.clone(),
-                    *name,
-                    span_id,
-                    VarDefinitionSpace::Arg,
-                );
-                v_args.push((link_id, ty.clone()));
-                if let Some(name) = name {
-                    fenv.scope_define(scope_id, *name, link_id.into());
-                }
-            }
-            self.replace_label(block_link_id, block_ty, name, span_id, mem);
-            (block_link_id, v_args)
-        } else {
-            unreachable!()
-        }
-        */
     }
 
     pub fn save_ast_template(
@@ -2095,23 +2068,7 @@ impl Flatten {
                         let fun_ty = def_to_type(&def, b);
 
                         match self.mode {
-                            FlattenMode::Function => {
-                                /*
-                                let decl_link_id = self.push_code(
-                                    LCode::DeclareFunction(None),
-                                    fun_ty.clone(),
-                                    Some(name),
-                                    span_id,
-                                    VarDefinitionSpace::Static,
-                                );
-                                self.switch_blocks(current_block_id);
-                                fenv.scope_define_declaration(
-                                    fenv.static_scope_id(),
-                                    name,
-                                    decl_link_id,
-                                );
-                                */
-                            }
+                            FlattenMode::Function => {}
                             FlattenMode::Template => {
                                 if let Some(_) = &def.body {
                                     let template_link_id = self.push_code(
@@ -2402,21 +2359,6 @@ impl Flatten {
                     // We can only do the first method if we have CPS, which isn't yet implemented.
                     // The 3rd method is easiest, as we insert the code at the caller.
                     // It's simpler, and get's us most of the way there.
-                    /*
-                    let template_link_id = self.push_code(
-                        LCode::DeclareTemplate(None),
-                        fun_ty.clone(),
-                        Some(name),
-                        span_id,
-                        VarDefinitionSpace::Default,
-                    );
-
-                    fenv.scope_define_template(
-                        scope_id,
-                        name,
-                        template_link_id,
-                    );
-                    */
 
                     if self.mode == FlattenMode::Template {
                         self.push_bake_template2(name, &def, span_id, fenv, b)?;
@@ -2475,13 +2417,38 @@ impl Flatten {
                 ))
             }
 
-            Ast::Import(module_name, args) => {
-                let module_name = b.labels.r(module_name.into());
+            Ast::Import(module_key, args) => {
+                let module_name = b.labels.r(module_key.into());
+                let scope_id = block.scope_id;
+
                 if &module_name == "prelude" {
+                    let print = b.labels.s("print");
+                    let ty = AstType::Struct(vec![
+                        (
+                            Some(print),
+                            AstType::func(vec![AstType::Int], AstType::Unit),
+                        ),
+                        (
+                            Some(print),
+                            AstType::func(vec![AstType::Float], AstType::Unit),
+                        ),
+                        (
+                            Some(print),
+                            AstType::func(vec![AstType::Bool], AstType::Unit),
+                        ),
+                    ]);
+                    let link_id = self.push_code(
+                        LCode::Extern,
+                        ty,
+                        Some(module_key),
+                        node.span_id,
+                        VarDefinitionSpace::Default,
+                    );
+
                     for (attr_key, local_key) in args.iter() {
                         let attr_name = b.labels.r(attr_key.into());
-                        let local_name = b.labels.r(local_key.into());
                         if &attr_name == "q" {
+                            fenv.scope_define(scope_id, *local_key, link_id);
                         } else {
                             b.push_error_labels(vec![b.primary_label(
                                 &format!("Attribute of prelude not found: {}", &attr_name),

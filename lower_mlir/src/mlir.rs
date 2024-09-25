@@ -955,6 +955,7 @@ impl<'c> MLIRGenerator<'c> {
             LCode::ValueIndex(_, _) => (),
             LCode::CallValue(_) => (),
             LCode::Noop => (),
+            LCode::Extern => (),
 
             LCode::Builtin(id) => {
                 let bi = self.b.builtins.get_enum(*id);
