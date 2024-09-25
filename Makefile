@@ -50,6 +50,7 @@ run:
 	cargo check
 	python3 build.py
 	touch target/x86_64-unknown-linux-gnu/debug/parse
+	RUST_LOG=INFO ninja -v test_global-debug-interp
 	RUST_LOG=INFO ninja -v test_global-debug-exe
 
 fmt:

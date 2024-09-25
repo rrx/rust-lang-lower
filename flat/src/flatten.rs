@@ -2276,13 +2276,15 @@ impl Flatten {
             Ast::Literal(lit) => {
                 // literal is expression, non-terminal
                 let ty: AstType = lit.clone().into();
-                let link_id = self.push_code(
-                    LCode::Const(lit),
-                    ty.clone(),
-                    None,
-                    node.span_id,
-                    VarDefinitionSpace::Default,
-                );
+                //let mem = if block.scope_id == fenv.static_scope_id() {
+                //VarDefinitionSpace::Static
+                //} else {
+                //VarDefinitionSpace::Default
+                //};
+                let mem = VarDefinitionSpace::Default;
+
+                let link_id =
+                    self.push_code(LCode::Const(lit), ty.clone(), None, node.span_id, mem);
                 Ok(FlattenResult::new(
                     current_block_id,
                     Some(link_id),

@@ -320,9 +320,9 @@ impl Parser {
                     .collect::<Vec<_>>();
 
                 // push name to environment
-                for p in params.iter() {
-                    env.define(p.name);
-                }
+                //for p in params.iter() {
+                //env.define(p.name);
+                //}
 
                 let mut body = vec![];
                 body.extend(self.from_stmt(&def.body, env, b)?.to_vec());
@@ -385,7 +385,7 @@ impl Parser {
                     defaults,
                 });
 
-                env.define(name);
+                //env.define(name);
                 Ok(NB::assign(name, def_ast.node(span_id)))
             }
 
@@ -428,20 +428,20 @@ impl Parser {
                         let name = b.labels.s(&ident.node.ident);
 
                         // lookup
-                        if let Some(_data) = env.resolve(name) {
+                        //if let Some(_data) = env.resolve(name) {
+                        //Ok(Ast::Assign(AssignTarget::Identifier(name), rhs.into())
+                        //.node(span_id))
+                        //} else {
+                        // name does not exist in scope
+                        // Either create a global or do local, depending on context
+                        //env.define(name);
+                        if env.is_in_func() {
                             Ok(Ast::Assign(AssignTarget::Identifier(name), rhs.into())
                                 .node(span_id))
                         } else {
-                            // name does not exist in scope
-                            // Either create a global or do local, depending on context
-                            env.define(name);
-                            if env.is_in_func() {
-                                Ok(Ast::Assign(AssignTarget::Identifier(name), rhs.into())
-                                    .node(span_id))
-                            } else {
-                                Ok(Ast::Global(name, rhs.into()).node(span_id))
-                            }
+                            Ok(Ast::Global(name, rhs.into()).node(span_id))
                         }
+                        //}
                     }
                     _ => unimplemented!(),
                 }
@@ -544,7 +544,7 @@ impl Parser {
                                     // define things appropriately
                                     match ast.node {
                                         Ast::Global(name, _) => {
-                                            env.define(name);
+                                            //env.define(name);
                                         }
                                         _ => (),
                                     }
