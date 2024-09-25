@@ -251,7 +251,7 @@ mod tests {
     }
 
     fn build_module(seq: Vec<AstNode>, b: &mut NB) -> AstNode {
-        let name = b.labels.s("func");
+        let name = b.labels.s("main");
         let module_name = b.labels.s("module");
         let span_id = if let Some(first) = seq.first() {
             first.span_id
@@ -270,7 +270,8 @@ mod tests {
         b.spans.diagnostics_dump();
         let mut f = r?;
         b.spans.diagnostics_dump();
-        f.push_bake_all(&mut fenv, b)?;
+        f.push_bake_main(&mut fenv, b)?;
+        //f.push_bake_all(&mut fenv, b)?;
         let m = FlattenModule::from_builder(f, &mut fenv, b);
         m.dump(&mut fenv, b);
         m.block_graph("blocks.dot", &b);

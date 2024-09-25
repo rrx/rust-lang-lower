@@ -26,14 +26,6 @@ impl VarDefinitionSpace {
     }
 }
 
-/*
-#[derive(Debug, Clone)]
-pub struct VarDefinition {
-    ty: TypeId,
-    space: VarDefinitionSpace,
-}
-*/
-
 #[derive(Debug, Clone)]
 pub enum Literal {
     Int(i64),
@@ -41,7 +33,6 @@ pub enum Literal {
     Float(f64),
     String(String),
     Bool(bool),
-    //Type(TypeId),
 }
 
 impl From<Literal> for AstType {
@@ -58,7 +49,6 @@ impl From<&Literal> for AstType {
             Literal::Bool(_) => AstType::Bool,
             Literal::Index(_) => AstType::Index,
             Literal::String(_) => AstType::String,
-            //Literal::Type(_) => AstType::Type,
         }
     }
 }
@@ -170,7 +160,6 @@ pub enum Parameter {
     WithDefault(AstNode),
     Args,
     KwArgs,
-    //Dummy<std::marker::PhantomData//(AstNode),
 }
 
 #[derive(Debug, Clone)]
@@ -179,7 +168,6 @@ pub struct ParameterNode {
     pub ty: TypeId,
     pub node: Parameter,
     pub span_id: SpanId,
-    //pub default: Option<AstNode>,
 }
 
 #[derive(Debug, Clone)]
@@ -242,6 +230,8 @@ pub enum Ast {
     // array(element type, dimensions), empty dim is the same as scalar
     Array(TypeId, Vec<AstNode>),
     Identifier(StringKey),
+    Index(Box<AstNode>),
+    Attribute(StringKey, Box<AstNode>),
     Literal(Literal),
     Sequence(Vec<AstNode>),
     Lambda(Lambda),

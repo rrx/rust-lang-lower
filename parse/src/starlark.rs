@@ -17,29 +17,6 @@ use flat::{ICodeModule, NodeBuilder, NodeBuilder as NB, ValueId};
 
 use lower_mlir::Module;
 
-#[derive(Debug, Clone)]
-pub enum DataType {
-    Global,
-    Local,
-}
-
-#[derive(Debug, Clone)]
-pub struct Data {
-    _ty: DataType,
-}
-impl Data {
-    pub fn new_global() -> Self {
-        Data {
-            _ty: DataType::Global,
-        }
-    }
-    pub fn new_local() -> Self {
-        Data {
-            _ty: DataType::Local,
-        }
-    }
-}
-
 #[derive(Debug)]
 pub struct Environment {
     in_func: Vec<bool>,
@@ -415,23 +392,10 @@ impl Parser {
         match &item.node {
             ExprP::Dot(expr, name) => {
                 if let ExprP::Identifier(ident) = &expr.node {
-                    if &ident.node.ident == "q" {
-                        // check builtin namespace
-                        if let Some(ast) = b.build_builtin_from_name(&name, vec![], span_id) {
-                            return Ok(ast);
-                        }
-
-                        // didn't find anything matching
-                        b.spans
-                            .push_diagnostic(env.error(name.span, "Builtin not found"));
-                        Ok(Ast::Error.node(span_id))
-                    } else {
-                        b.spans.push_diagnostic(env.error(
-                            name.span,
-                            &format!("Variable not in scope: {}", ident.node.ident),
-                        ));
-                        Ok(Ast::Error.node(span_id))
-                    }
+                    let name = b.labels.s(&name.node);
+                    let ident = b.labels.s(&ident.ident);
+                    let body = Ast::Identifier(ident).node(span_id);
+                    Ok(Ast::Attribute(name, body.into()).node(span_id))
                 } else {
                     unimplemented!("{:?}", (expr, name))
                 }
@@ -464,6 +428,12 @@ impl Parser {
                 for arg in expr_args {
                     args.push(self.from_argument(&arg, env, b)?.into());
                 }
+
+                let node = self.from_expr(&expr, env, b)?;
+                let ast = Ast::Call(node.into(), args).node(span_id.clone());
+                Ok(ast)
+                /*
+
                 match &expr.node {
                     ExprP::Identifier(ident) => {
                         let name = b.labels.s(&ident.node.ident);
@@ -497,6 +467,7 @@ impl Parser {
                     }
                     _ => unimplemented!("{:?}", expr.node),
                 }
+                    */
             }
 
             ExprP::Identifier(ident) => {

@@ -351,6 +351,19 @@ impl NodeBuilder {
                 out.push((depth, s, node.span_id));
             }
 
+            Ast::Attribute(key, body) => {
+                let s = self.labels.r(key.into());
+                let s = format!("attr({})", s);
+                out.push((depth, s, node.span_id));
+                self.dump_strings(body, out, depth + 1);
+            }
+
+            Ast::Index(body) => {
+                let s = format!("index");
+                out.push((depth, s, node.span_id));
+                self.dump_strings(body, out, depth + 1);
+            }
+
             _ => unimplemented!("{:?}", node),
         }
     }

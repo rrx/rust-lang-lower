@@ -2482,6 +2482,34 @@ impl Flatten {
                     Ast::Identifier(ident) => {
                         self.push_call_by_name(*ident, args, node.span_id, fenv, b)
                     }
+                    Ast::Attribute(ident, attr) => {
+                        let attr_name = b.labels.r(ident.into());
+                        match &attr.node {
+                            Ast::Identifier(base) => {
+                                let name = b.labels.r(base.into());
+                                if &name == "q" {
+                                    if let Some(ast) =
+                                        b.build_builtin_from_name(&attr_name, args, span_id)
+                                    {
+                                        self.push_node(ast, fenv, b)
+                                    } else {
+                                        b.push_error_labels(vec![b.primary_label(
+                                            &format!("Builtin not found: {}", &name),
+                                            attr.span_id,
+                                        )]);
+                                        Err(Error::new(BlockifyError::Invalid))
+                                    }
+                                } else {
+                                    unimplemented!("{}.{}", name, attr_name)
+                                    //let ident_span_id = env.span_id(ident.span, b);
+                                    //let ident = Ast::Identifier(key).node(ident_span_id);
+                                    //let ast = Ast::Call(ident.into(), args).node(span_id.clone());
+                                    //Ok(ast)
+                                }
+                            }
+                            _ => unimplemented!("{:?}", attr),
+                        }
+                    }
                     _ => unimplemented!("{:?}", expr.node),
                 }
             }
