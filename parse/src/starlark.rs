@@ -91,6 +91,7 @@ impl Environment {
         self.in_func.len() > 0
     }
 
+    /*
     pub fn define(&mut self, name: StringKey) {
         let data = if self.is_in_func() {
             Data::new_local()
@@ -106,6 +107,7 @@ impl Environment {
         }
         None
     }
+    */
 
     pub fn dump(&self) {
         println!("{:?}", self);
@@ -311,7 +313,7 @@ impl Parser {
                 env.enter_func();
 
                 // push function name into scope
-                env.define(name);
+                //env.define(name);
 
                 let params = def
                     .params
@@ -519,35 +521,30 @@ impl Parser {
                 match &expr.node {
                     ExprP::Identifier(ident) => {
                         let name = b.labels.s(&ident.node.ident);
-                        if let Some(_data) = env.resolve(name) {
-                            let ident_span_id = env.span_id(ident.span, b);
-                            let ident = Ast::Identifier(name).node(ident_span_id);
-                            let ast = Ast::Call(ident.into(), args).node(span_id.clone());
-                            Ok(ast)
-                        } else {
-                            b.spans.push_diagnostic(env.error(ident.span, "Not found"));
-                            Ok(Ast::Error.node(span_id))
-                        }
+                        //if let Some(_data) = env.resolve(name) {
+                        let ident_span_id = env.span_id(ident.span, b);
+                        let ident = Ast::Identifier(name).node(ident_span_id);
+                        let ast = Ast::Call(ident.into(), args).node(span_id.clone());
+                        Ok(ast)
+                        //} else {
+                        //b.spans.push_diagnostic(env.error(ident.span, "Not found"));
+                        //Ok(Ast::Error.node(span_id))
+                        //}
                     }
 
                     ExprP::Dot(expr, name) => {
                         if let ExprP::Identifier(ident) = &expr.node {
                             let key = b.labels.s(&ident.node.ident);
-                            if let Some(_data) = env.resolve(key) {
-                                let ident_span_id = env.span_id(ident.span, b);
-                                let ident = Ast::Identifier(key).node(ident_span_id);
-                                let ast = Ast::Call(ident.into(), args).node(span_id.clone());
-                                Ok(ast)
-                            } else if &ident.node.ident == "q" {
+                            if &ident.node.ident == "q" {
                                 // builtin namespace
                                 if let Some(ast) = b.build_builtin_from_name(&name, args, span_id) {
                                     // define things appropriately
-                                    match ast.node {
-                                        Ast::Global(name, _) => {
-                                            //env.define(name);
-                                        }
-                                        _ => (),
-                                    }
+                                    //match ast.node {
+                                    //Ast::Global(name, _) => {
+                                    //env.define(name);
+                                    //}
+                                    //_ => (),
+                                    //}
                                     Ok(ast)
                                 } else {
                                     b.spans
@@ -555,11 +552,10 @@ impl Parser {
                                     Ok(Ast::Error.node(span_id))
                                 }
                             } else {
-                                b.spans.push_diagnostic(env.error(
-                                    name.span,
-                                    &format!("Variable not in scope: {}", ident.node.ident),
-                                ));
-                                Ok(Ast::Error.node(span_id))
+                                let ident_span_id = env.span_id(ident.span, b);
+                                let ident = Ast::Identifier(key).node(ident_span_id);
+                                let ast = Ast::Call(ident.into(), args).node(span_id.clone());
+                                Ok(ast)
                             }
                         } else {
                             unimplemented!("{:?}", (expr, name))
