@@ -41,30 +41,15 @@ impl Data {
 }
 
 #[derive(Debug)]
-pub struct Layer {
-    names: HashMap<StringKey, Data>,
-}
-impl Default for Layer {
-    fn default() -> Self {
-        Self {
-            names: HashMap::new(),
-        }
-    }
-}
-
-#[derive(Debug)]
 pub struct Environment {
     in_func: Vec<bool>,
-    layers: Vec<Layer>,
     file_id: usize,
 }
 
 impl Environment {
     pub fn new(file_id: usize) -> Self {
-        let start = Layer::default();
         Self {
             in_func: vec![],
-            layers: vec![start],
             file_id,
         }
     }
@@ -90,24 +75,6 @@ impl Environment {
     pub fn is_in_func(&self) -> bool {
         self.in_func.len() > 0
     }
-
-    /*
-    pub fn define(&mut self, name: StringKey) {
-        let data = if self.is_in_func() {
-            Data::new_local()
-        } else {
-            Data::new_global()
-        };
-        self.layers.last_mut().unwrap().names.insert(name, data);
-    }
-
-    pub fn resolve(&self, name: StringKey) -> Option<Data> {
-        for layer in self.layers.iter().rev() {
-            return layer.names.get(&name).cloned();
-        }
-        None
-    }
-    */
 
     pub fn dump(&self) {
         println!("{:?}", self);
@@ -312,19 +279,11 @@ impl Parser {
 
                 env.enter_func();
 
-                // push function name into scope
-                //env.define(name);
-
                 let params = def
                     .params
                     .iter()
                     .map(|p| self.from_parameter(p, env, b))
                     .collect::<Vec<_>>();
-
-                // push name to environment
-                //for p in params.iter() {
-                //env.define(p.name);
-                //}
 
                 let mut body = vec![];
                 body.extend(self.from_stmt(&def.body, env, b)?.to_vec());
@@ -342,7 +301,6 @@ impl Parser {
                         AstType::Unit
                     }
                 } else {
-                    //ReturnType::Single(b.types.fresh_unknown())
                     b.types.fresh_unknown()
                 };
 
@@ -387,7 +345,6 @@ impl Parser {
                     defaults,
                 });
 
-                //env.define(name);
                 Ok(NB::assign(name, def_ast.node(span_id)))
             }
 
@@ -429,21 +386,12 @@ impl Parser {
 
                         let name = b.labels.s(&ident.node.ident);
 
-                        // lookup
-                        //if let Some(_data) = env.resolve(name) {
-                        //Ok(Ast::Assign(AssignTarget::Identifier(name), rhs.into())
-                        //.node(span_id))
-                        //} else {
-                        // name does not exist in scope
-                        // Either create a global or do local, depending on context
-                        //env.define(name);
                         if env.is_in_func() {
                             Ok(Ast::Assign(AssignTarget::Identifier(name), rhs.into())
                                 .node(span_id))
                         } else {
                             Ok(Ast::Global(name, rhs.into()).node(span_id))
                         }
-                        //}
                     }
                     _ => unimplemented!(),
                 }
@@ -516,20 +464,13 @@ impl Parser {
                 for arg in expr_args {
                     args.push(self.from_argument(&arg, env, b)?.into());
                 }
-                //let t_int = b.types.s(&AstType::Int);
-
                 match &expr.node {
                     ExprP::Identifier(ident) => {
                         let name = b.labels.s(&ident.node.ident);
-                        //if let Some(_data) = env.resolve(name) {
                         let ident_span_id = env.span_id(ident.span, b);
                         let ident = Ast::Identifier(name).node(ident_span_id);
                         let ast = Ast::Call(ident.into(), args).node(span_id.clone());
                         Ok(ast)
-                        //} else {
-                        //b.spans.push_diagnostic(env.error(ident.span, "Not found"));
-                        //Ok(Ast::Error.node(span_id))
-                        //}
                     }
 
                     ExprP::Dot(expr, name) => {
@@ -538,13 +479,6 @@ impl Parser {
                             if &ident.node.ident == "q" {
                                 // builtin namespace
                                 if let Some(ast) = b.build_builtin_from_name(&name, args, span_id) {
-                                    // define things appropriately
-                                    //match ast.node {
-                                    //Ast::Global(name, _) => {
-                                    //env.define(name);
-                                    //}
-                                    //_ => (),
-                                    //}
                                     Ok(ast)
                                 } else {
                                     b.spans
