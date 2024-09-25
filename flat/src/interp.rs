@@ -1,11 +1,8 @@
-use crate::{BlockifyError, Builtin, ICodeModule, LCode, NodeBuilder, ValueId};
-use anyhow::Error;
+use crate::{Builtin, ICodeModule, LCode, NodeBuilder, ValueId};
 use anyhow::Result;
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use compile_core::{
-    BinaryOperation, Literal, NaryOperation, StringKey, UnaryOperation, VarDefinitionSpace,
-};
+use compile_core::{BinaryOperation, Literal, NaryOperation, StringKey, UnaryOperation};
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -188,7 +185,7 @@ impl<'a> Interp<'a> {
                         scope.values.insert(v, value);
                     }
                 }
-                LCode::Arg(index) => {
+                LCode::Arg(_index) => {
                     println!("arg: {:?}", (&scope, code));
 
                     if let Some(value) = scope.values.get(&v) {

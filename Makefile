@@ -1,13 +1,18 @@
 export RUST_BACKTRACE=1
 export RUST_LOG=ena::unify=INFO
+
 default: ninja
+
+all:
+	ninja testbins-release testbins-debug -v
+	@echo COMPLETE
 
 ninja:
 	cargo check
 	cargo build
 	python3 build.py
 	#touch target/x86_64-unknown-linux-gnu/debug/parse
-	ninja -v -k0 | tee out.log ; grep FAILED out.log || true
+	ninja -v -k0 | tee out.log
 	@echo COMPLETE
 
 clean:
@@ -17,17 +22,7 @@ clean:
 bare:
 	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/bare.star -o build/bare
 
-#template:
-	#RUST_BACKTRACE=1 cargo run -- -c -t -v -i tests/template.star
-
-t:
-	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/dup_func.star -o build/args3
-
-
-#run:
-	#RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/test_recursive.star -o build/args3
-
-run:
+interp:
 	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/bare.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/test_local.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/recurse.star -o build/args3
@@ -47,37 +42,15 @@ run:
 	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/test_global.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/nested_loops.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/test_ternary.star -o build/args3
-	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/static.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/static.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/test_static.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/static_var.star -o build/args3
 
-run_test:
+run:
 	cargo check
 	python3 build.py
 	touch target/x86_64-unknown-linux-gnu/debug/parse
-	RUST_LOG=INFO ninja -v recurse
-
-run_test2:
-	RUST_BACKTRACE=1 cargo run --bin parse -- -l -v -x \
-		       -o target/debug/out.mlir \
-		       tests/test_global.star
-	mlir-opt-17 \
-		--mem2reg \
-		--sccp \
-		--enable-gvn-hoist \
-		--enable-gvn-sink \
-		--test-lower-to-llvm \
-		target/debug/out.mlir | mlir-translate-17 -mlir-to-llvmir -o target/debug/out.llvm 
-	clang-17 -x ir -c -o target/debug/out.o target/debug/out.llvm
-	clang-17 -o target/debug/out target/debug/out.o target/debug/prelude.o
-
-	#mlir-opt-17 out.ll | mlir-translate-17 -mlir-to-llvmir | clang-17 -x ir -o out -
-	#mlir-opt-17 out.ll | mlir-translate-17 -mlir-to-llvmir
-	#mlir-translate-17 --mlir-to-llvmir out.ll | clang-17 -x ir -o out - 
-	#mlir-opt-17 \
-		#-test-print-defuse \
-		#out.ll
-	./target/debug/out ; echo $$?
+	RUST_LOG=INFO ninja -v test_global-debug-exe
 
 fmt:
 	cargo fmt

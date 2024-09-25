@@ -48,12 +48,16 @@ def generate_inputs(fp):
             run_filename = os.path.join(target, f"{base}.out")
             fp.write(f"build {run_filename}: run {exe_filename}\n")
 
-            top = f"{base}-{kind}"
-            fp.write(f"build {top}: phony {run_filename} {interp_filename} {graph_output_filename} {cfg_output_filename} {blocks_output_filename} {scopes_output_filename}\n")
+            top = f"{base}-{kind}-exe"
+            fp.write(f"build {top}: phony {run_filename} {graph_output_filename} {cfg_output_filename} {blocks_output_filename} {scopes_output_filename}\n")
+            outputs.append(top)
+
+            top = f"{base}-{kind}-interp"
+            fp.write(f"build {top}: phony {interp_filename}\n")
             outputs.append(top)
 
             if defaults:
-                fp.write(f"build {base}: phony {base}-{kind} | {compiler}\n")
+                fp.write(f"build {base}: phony {base}-{kind}-exe | {compiler}\n")
 
         fp.write(f"build testbins-{kind}: phony | {compiler} {' '.join(outputs)}\n")
 
@@ -87,7 +91,7 @@ rule interpret-debug
     command = cargo run -- --interp -v -i $in -o $out
 
 rule interpret-release
-    command = cargo run -- --release --interp -v -i $in -o $out
+    command = cargo run --release -- --interp -v -i $in -o $out
 
 rule mlir-opt
     command = mlir-opt \

@@ -4,7 +4,6 @@ use std::path::Path;
 use anyhow::Result;
 
 use starlark_syntax::codemap;
-//use starlark_syntax::codemap::CodeMap;
 use starlark_syntax::lexer;
 use starlark_syntax::syntax;
 use starlark_syntax::syntax::module::AstModuleFields;
@@ -202,7 +201,6 @@ impl Parser {
             }
             None => syntax::AstModule::parse_file(&path, &dialect)?,
         };
-        //println!("m: {:?}", m);
         let (codemap, stmt, _dialect, _typecheck) = m.into_parts();
         let mut env = Environment::new(file_id);
         let mut seq = b.prelude();
@@ -249,7 +247,6 @@ impl Parser {
                     ty: b.types.s(&ty.unwrap()),
                     node: ast::Parameter::Args,
                     span_id,
-                    //default: None,
                 }
             }
 
@@ -274,10 +271,6 @@ impl Parser {
                     ty
                 } else {
                     Some(b.types.fresh_unknown())
-                    //unimplemented!();
-                    //Some(b.types.fresh_unknown())
-                    //d.push_diagnostic(env.error(item.span, "Missing Type"));
-                    //Some(AstType::Unit)
                 };
                 let default = self.from_expr(expr, env, b).unwrap();
                 ast::ParameterNode {
@@ -314,7 +307,6 @@ impl Parser {
             StmtP::Def(def) => {
                 let name = b.labels.s(&def.name.ident);
                 let span_id = env.span_id(item.span, b);
-                let is_nested = env.is_in_func();
 
                 env.enter_func();
 
@@ -340,27 +332,17 @@ impl Parser {
                 let return_type = if let Some(return_type) = &def.return_type {
                     if let Some(ty) = from_type(&return_type) {
                         ty
-                        //ReturnType::Single(ty)
-                        //AstType::Struct(vec![(None, ty)])
                     } else {
                         b.spans.push_diagnostic(env.error(
                             item.span,
                             &format!("Type not recognized: {:?}", return_type),
                         ));
-                        //ReturnType::Single(AstType::Unit)
                         AstType::Unit
                     }
                 } else {
                     //ReturnType::Single(b.types.fresh_unknown())
                     b.types.fresh_unknown()
                 };
-
-                //let return_type = def
-                //.return_type
-                //.as_ref()
-                //.map(|ty| from_type(&ty));
-                //.unwrap_or(AstType::Unit))
-                //.unwrap_or(AstType::Unit);
 
                 let body = NB::seq(body, span_id).into();
 
@@ -404,11 +386,7 @@ impl Parser {
                 });
 
                 env.define(name);
-                if is_nested {
-                    Ok(NB::assign(name, def_ast.node(span_id)))
-                } else {
-                    Ok(NB::global(name, def_ast.node(span_id)))
-                }
+                Ok(NB::assign(name, def_ast.node(span_id)))
             }
 
             StmtP::If(expr, truestmt) => {
