@@ -1,0 +1,604 @@
+use crate::{BlockifyError, Builtin, ICodeModule, LCode, NodeBuilder, ValueId};
+use anyhow::Error;
+use anyhow::Result;
+use std::collections::{HashMap, HashSet, VecDeque};
+
+use compile_core::{
+    BinaryOperation, Literal, NaryOperation, StringKey, UnaryOperation, VarDefinitionSpace,
+};
+
+#[derive(Debug, Clone)]
+pub enum Value {
+    Int(i64),
+    Float(f64),
+    Bool(bool),
+    Tuple(Vec<Value>),
+    Uninitialized,
+    None,
+}
+
+impl Value {
+    pub fn from_lit(lit: &Literal) -> Self {
+        match lit {
+            Literal::Int(i) => Value::Int(*i),
+            Literal::Float(f) => Value::Float(*f),
+            Literal::Bool(v) => Value::Bool(*v),
+            _ => unimplemented!("{:?}", lit),
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum ScopeType {
+    Static,
+    Function,
+    Block,
+}
+
+#[derive(Debug)]
+pub struct Scope {
+    ty: ScopeType,
+    return_link_id: Option<ValueId>,
+    args: VecDeque<Value>,
+    values: HashMap<ValueId, Value>,
+    declarations: HashSet<ValueId>,
+}
+
+impl Scope {
+    pub fn new(ty: ScopeType, return_link_id: Option<ValueId>) -> Self {
+        Self {
+            ty,
+            return_link_id,
+            args: VecDeque::new(),
+            values: HashMap::new(),
+            declarations: HashSet::new(),
+        }
+    }
+
+    pub fn declare(&mut self, v: ValueId, value: Value) {
+        self.values.insert(v, value);
+        self.declarations.insert(v);
+    }
+}
+
+pub struct Interp<'a> {
+    m: &'a dyn ICodeModule,
+    b: &'a mut NodeBuilder,
+    pos: ValueId,
+    stack: Vec<Scope>,
+    //statics: HashMap<ValueId, Value>,
+    call_args: VecDeque<Value>,
+    return_link_id: Option<ValueId>,
+    jump_type: ScopeType,
+}
+
+impl<'a> Interp<'a> {
+    pub fn new(m: &'a dyn ICodeModule, b: &'a mut NodeBuilder, name: StringKey) -> Self {
+        let link_id = m.lookup_name(&name).unwrap();
+        let pos = m.resolve_code_offset(link_id.into());
+        let mut scope = Scope::new(ScopeType::Static, None);
+
+        let mut current = ValueId::new(0);
+        loop {
+            let code = m.get_code(current);
+            match code {
+                LCode::Const(lit) => {
+                    let value = Value::from_lit(lit);
+                    scope.declare(current, value);
+                }
+                _ => (),
+            }
+            if let Some(next) = m.get_next(current) {
+                current = next;
+            } else {
+                break;
+            }
+        }
+
+        Self {
+            m,
+            b,
+            pos,
+            //statics: HashMap::new(),
+            stack: vec![scope],
+            call_args: VecDeque::new(),
+            return_link_id: None,
+            jump_type: ScopeType::Function,
+        }
+    }
+
+    fn format_code(&self, v: ValueId) -> String {
+        let code = self.m.get_code(v);
+        match code {
+            LCode::CallValue(offset) => {
+                let v = self.m.resolve_code_offset(*offset);
+                format!("CallValue({})", v)
+            }
+            LCode::Store(decl, link) => {
+                let v_decl = self.m.resolve_code_offset(decl.into());
+                let v_link = self.m.resolve_code_offset(link.into());
+                format!("Store({},{})", v_decl, v_link)
+            }
+            _ => format!("{:?}", code),
+        }
+    }
+
+    /*
+    pub fn load_static(&mut self, v: ValueId) -> Value {
+        let code = self.m.get_code(v.into());
+        let mem = self.m.get_mem(v.into());
+        assert_eq!(mem, &VarDefinitionSpace::Static);
+        //if let Some(value) = self.statics.get(&v) {
+            value.clone()
+        } else {
+            let value = match code {
+                LCode::Const(lit) => Value::from_lit(lit),
+                _ => unimplemented!()
+            };
+            self.statics.insert(v, value.clone());
+            value
+        }
+    }
+
+    pub fn save_static(&mut self, v: ValueId, value: Value) {
+        let mem = self.m.get_mem(v.into());
+        assert_eq!(mem, &VarDefinitionSpace::Static);
+        self.statics.insert(v, value.clone());
+    }
+    */
+
+    pub fn advance(&mut self) {
+        self.pos = ValueId::new(self.pos.index() as u32 + 1);
+    }
+
+    pub fn jump(&mut self, target: ValueId) {
+        self.jump_type = ScopeType::Block;
+        self.pos = target;
+    }
+
+    pub fn call(&mut self, target: ValueId) {
+        self.jump_type = ScopeType::Function;
+        self.pos = target;
+    }
+    pub fn push_arg(&mut self, v: Value) {
+        self.stack.last_mut().unwrap().args.push_back(v);
+    }
+
+    pub fn pop_arg(&mut self) -> Value {
+        self.stack.last_mut().unwrap().args.pop_front().unwrap()
+    }
+
+    pub fn save_value(&mut self, value: Value) {
+        self.stack
+            .last_mut()
+            .unwrap()
+            .values
+            .insert(self.pos, value);
+    }
+
+    pub fn resolve_value(&mut self, v: ValueId) -> Result<Value> {
+        let code = self.m.get_code(v);
+        for scope in self.stack.iter_mut().rev() {
+            match code {
+                LCode::Const(lit) => {
+                    if let Some(value) = scope.values.get(&v) {
+                        return Ok(value.clone());
+                    } else {
+                        let value = Value::from_lit(lit);
+                        scope.values.insert(v, value);
+                    }
+                }
+                LCode::Arg(index) => {
+                    println!("arg: {:?}", (&scope, code));
+
+                    if let Some(value) = scope.values.get(&v) {
+                        return Ok(value.clone());
+                    }
+
+                    /*
+                    if let Some(value) = scope.args.get(*index as usize) {
+                        return Ok(value.clone());
+                    } else {
+                        let span_id = self.m.get_span_id(v);
+                        self.b.push_error_labels(vec![self
+                            .b
+                            .primary_label(&format!("Not implemented: {}, {:?}", v, code), span_id)]);
+                        return Err(Error::new(BlockifyError::Invalid));
+                        //return false;
+                        //unreachable!()
+                    }
+                    */
+                }
+                LCode::Load(_link_id) => {
+                    //let v = self.m.resolve_code_offset(link_id.into());
+                    if let Some(value) = scope.values.get(&v) {
+                        return Ok(value.clone());
+                    }
+                }
+                LCode::Call(_) | LCode::Op2(_) | LCode::NaryOp(_) | LCode::Op1(_) => {
+                    return Ok(scope.values.get(&v).unwrap().clone());
+                }
+                _ => unimplemented!("{:?}", code),
+            }
+        }
+        unreachable!()
+    }
+
+    pub fn resolve_declaration(&mut self, v: ValueId) -> Value {
+        println!("resolve decl: {}", v);
+        let code = self.m.get_code(v);
+        //let mem = self.m.get_mem(v.into());
+        //if self.statics.contains_key(&v) {
+        //return self.load_static(v);
+        //}
+
+        for scope in self.stack.iter().rev() {
+            match code {
+                LCode::Declare => {
+                    if let Some(value) = scope.values.get(&v) {
+                        return value.clone();
+                    }
+                }
+                LCode::Const(_) => {
+                    if let Some(value) = scope.values.get(&v) {
+                        return value.clone();
+                    }
+                    //return Value::from_lit(lit);
+                }
+                _ => unimplemented!("{:?}", code),
+            }
+        }
+        unreachable!()
+    }
+
+    pub fn unwind(&mut self) -> Scope {
+        loop {
+            let scope = self.stack.pop().unwrap();
+            match scope.ty {
+                ScopeType::Function => return scope,
+                ScopeType::Block => (),
+                ScopeType::Static => (),
+            }
+        }
+    }
+
+    pub fn step(&mut self) -> Result<bool> {
+        let pos = self.pos;
+        let code = self.m.get_code(self.pos);
+        let result = match code {
+            LCode::DeclareFunction(_) => {
+                self.advance();
+                true
+            }
+            LCode::Label => {
+                // load args into scope
+                let scope = Scope::new(self.jump_type, self.return_link_id);
+                //scope.args = self.call_args.clone();
+                //self.call_args.clear();
+                self.stack.push(scope);
+
+                self.advance();
+                true
+            }
+
+            LCode::Arg(_) => {
+                let value = self.call_args.pop_front().unwrap();
+                self.stack.last_mut().unwrap().declare(pos, value);
+                self.advance();
+                true
+            }
+
+            LCode::Declare => {
+                self.stack
+                    .last_mut()
+                    .unwrap()
+                    .declare(self.pos, Value::Uninitialized);
+                self.advance();
+                true
+            }
+
+            LCode::Store(decl, v) => {
+                let v_decl = self.m.resolve_code_offset(decl.into());
+                let v_value = self.m.resolve_code_offset(v.into());
+                let value = self.resolve_value(v_value)?;
+                //let mem = self.m.get_mem(decl.into());
+
+                //let scope = if *mem == VarDefinitionSpace::Static {
+                //self.save_static(v, value);
+                //let scope = self.stack.first_mut().unwrap();
+                //scope
+                //} else {
+                //let mut maybe_scope = None;
+                for scope in self.stack.iter_mut().rev() {
+                    if scope.values.contains_key(&v_decl) {
+                        //maybe_scope = Some(scope);
+                        //return true;
+                        scope.values.insert(v_decl, value);
+                        self.advance();
+                        return Ok(true);
+                        //
+                    }
+                }
+                //if let Some(scope) = maybe_scope {
+                //scope
+                //} else {
+                //unreachable!()
+                //}
+                //};
+                unreachable!()
+                //scope.values.insert(v_decl, value);
+                //self.advance();
+                //true
+            }
+
+            LCode::Load(decl) => {
+                let v_decl = self.m.resolve_code_offset(decl.into());
+                let value = self.resolve_declaration(v_decl);
+                /*
+                let value = self
+                    .stack
+                    .last()
+                    .unwrap()
+                    .values
+                    .get(&v_decl)
+                    .unwrap()
+                    .clone();
+                */
+                self.stack
+                    .last_mut()
+                    .unwrap()
+                    .values
+                    .insert(self.pos, value);
+                self.advance();
+                true
+            }
+
+            LCode::Call(f) => {
+                let v_func = self.m.resolve_code_offset(f.into());
+                self.return_link_id = Some(self.pos);
+                self.call(v_func);
+                true
+            }
+
+            LCode::NaryOp(op) => {
+                let orig_values = self.m.get_previous_values(pos);
+
+                let mut values = vec![];
+                for offset in orig_values {
+                    let v = self.m.resolve_code_offset(offset);
+                    values.push(self.resolve_value(v)?);
+                }
+
+                // remove args
+                for _ in 0..values.len() {
+                    self.call_args.pop_front();
+                }
+
+                let output = match op {
+                    NaryOperation::Struct => Value::Tuple(values),
+                };
+                self.stack
+                    .last_mut()
+                    .unwrap()
+                    .values
+                    .insert(self.pos, output);
+                self.advance();
+                true
+            }
+
+            LCode::Op1(op) => {
+                let v1 = self.call_args.pop_front().unwrap();
+                let v = match (op, v1.clone()) {
+                    (UnaryOperation::Minus, Value::Int(i1)) => Value::Int(-i1),
+                    (UnaryOperation::Minus, Value::Float(i1)) => Value::Float(-i1),
+                    _ => unimplemented!("{:?}", (op, v1)),
+                };
+                self.stack.last_mut().unwrap().values.insert(self.pos, v);
+                //self.call_args.push_back(v);
+                self.advance();
+                true
+            }
+
+            LCode::Op2(op) => {
+                assert_eq!(self.call_args.len(), 2);
+                let v1 = self.call_args.pop_front().unwrap();
+                let v2 = self.call_args.pop_front().unwrap();
+                let v = match (op, v1.clone(), v2.clone()) {
+                    (BinaryOperation::EQ, Value::Int(i1), Value::Int(i2)) => Value::Bool(i1 == i2),
+                    (BinaryOperation::GT, Value::Int(i1), Value::Int(i2)) => Value::Bool(i1 > i2),
+                    (BinaryOperation::Add, Value::Int(i1), Value::Int(i2)) => Value::Int(i1 + i2),
+                    (BinaryOperation::Add, Value::Float(i1), Value::Float(i2)) => {
+                        Value::Float(i1 + i2)
+                    }
+                    (BinaryOperation::Subtract, Value::Int(i1), Value::Int(i2)) => {
+                        Value::Int(i1 - i2)
+                    }
+                    (BinaryOperation::Subtract, Value::Float(i1), Value::Float(i2)) => {
+                        Value::Float(i1 - i2)
+                    }
+                    _ => {
+                        let span_id = self.m.get_span_id(pos);
+                        self.b.push_error_labels(vec![self
+                            .b
+                            .primary_label(&format!("Not implemented"), span_id)]);
+                        return Ok(false);
+                    }
+                };
+                self.stack.last_mut().unwrap().values.insert(self.pos, v);
+                //self.call_args.push_back(v);
+                self.advance();
+                true
+            }
+
+            LCode::Const(lit) => {
+                let value = Value::from_lit(lit);
+                self.save_value(value);
+                self.advance();
+                true
+            }
+
+            LCode::Value(v) => {
+                let v = self.m.resolve_code_offset(v.into());
+                let value = self.resolve_value(v)?;
+                self.call_args.push_back(value);
+                self.advance();
+                true
+            }
+
+            LCode::CallValue(v) => {
+                let v = self.m.resolve_code_offset(*v);
+                let value = self.resolve_value(v)?;
+                self.call_args.push_back(value);
+                self.advance();
+                true
+            }
+
+            LCode::Jump(target) => {
+                // push args
+                let v = self.m.resolve_code_offset(*target);
+                self.jump(v);
+                true
+            }
+
+            LCode::Ternary(condition, then_target, else_target) => {
+                let v = self.m.resolve_code_offset(*condition);
+                let c = self.resolve_value(v)?;
+
+                match c {
+                    Value::Bool(cond) => {
+                        if cond {
+                            let target = self.m.resolve_code_offset(then_target.clone().into());
+                            self.call(target);
+                        } else {
+                            let target = self.m.resolve_code_offset(else_target.clone().into());
+                            self.call(target);
+                        }
+                    }
+                    _ => unreachable!(),
+                }
+                true
+            }
+
+            LCode::Branch(condition, then_target, else_target) => {
+                let v = self.m.resolve_code_offset(*condition);
+                let c = self.resolve_value(v)?;
+
+                match c {
+                    Value::Bool(cond) => {
+                        if cond {
+                            let target = self.m.resolve_code_offset(then_target.clone().into());
+                            self.jump(target);
+                        } else {
+                            let target = self.m.resolve_code_offset(else_target.clone().into());
+                            self.jump(target);
+                        }
+                    }
+                    _ => unreachable!(),
+                }
+                true
+            }
+
+            LCode::Builtin(bi) => {
+                let bi = self.b.builtins.get_enum(*bi);
+                let result = match bi {
+                    Builtin::Import => {
+                        unreachable!()
+                    }
+                    Builtin::Assert => {
+                        assert_eq!(self.call_args.len(), bi.arity());
+                        let value = self.call_args.pop_front().unwrap();
+                        match value {
+                            Value::Bool(condition) => {
+                                if !condition {
+                                    let span_id = self.m.get_span_id(pos);
+                                    self.b.push_error_labels(vec![self
+                                        .b
+                                        .primary_label(&format!("Check Failed"), span_id)]);
+                                }
+                                condition
+                            }
+                            _ => unreachable!(),
+                        }
+                    }
+                    Builtin::Print => {
+                        assert_eq!(self.call_args.len(), bi.arity());
+                        let value = self.call_args.pop_front().unwrap();
+                        println!("print: {:?}", value);
+                        true
+                    }
+                };
+                self.advance();
+                result
+            }
+
+            LCode::Return | LCode::Yield => {
+                let scope = self.unwind();
+                if let Some(target) = scope.return_link_id {
+                    assert!(self.call_args.len() <= 1);
+                    if self.call_args.len() == 1 {
+                        let value = self.call_args.pop_back().unwrap();
+                        self.stack.last_mut().unwrap().values.insert(target, value);
+                    }
+
+                    self.jump(target.succ());
+                    true
+                } else {
+                    // program terminates
+                    false
+                }
+            }
+            _ => unimplemented!("{:?}", code),
+        };
+
+        Ok(result)
+    }
+}
+
+pub fn interp<'c>(
+    shared: &[String],
+    m: &dyn ICodeModule,
+    libpath: &str,
+    b: &mut NodeBuilder,
+) -> i32 {
+    let paths = shared
+        .iter()
+        .map(|s| {
+            let mut path = format!("{}/{}.so", libpath, s);
+            path.push('\0');
+            path
+        })
+        .collect::<Vec<_>>();
+
+    let _shared = paths.iter().map(|p| p.as_str()).collect::<Vec<_>>();
+
+    let main = b.labels.s("main");
+    let mut interp = Interp::new(m, b, main);
+    loop {
+        let pos = interp.pos;
+        //let code = interp.m.get_code(pos);
+        let r = interp.step();
+        println!("step: {}, {}", pos, interp.format_code(pos));
+        println!("\tcall_args: {:?}", interp.call_args);
+        for (index, scope) in interp.stack.iter().enumerate() {
+            println!("\t[{}] scope: {:?}", index, scope);
+        }
+
+        if let Ok(cond) = r {
+            if !cond {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+
+    let mut result: i32 = -1;
+    println!(
+        "exec: {:?}, {:?}, {}",
+        interp.call_args, interp.stack, result
+    );
+    if let Some(Value::Int(value)) = interp.call_args.get(0) {
+        result = *value as i32;
+    }
+    result
+}

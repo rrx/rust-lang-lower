@@ -1,4 +1,4 @@
-def main() -> int:
+def main():
   q.loop("loop1")
   q.loop("loop2")
   q.loop("loop3")

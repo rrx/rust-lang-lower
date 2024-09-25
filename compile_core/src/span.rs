@@ -114,6 +114,10 @@ pub fn diagnostic_error(msg: &str, span: Span) -> Diagnostic<usize> {
     error
 }
 
+pub fn diagnostic_error_labels(labels: Vec<Label<usize>>) -> Diagnostic<usize> {
+    Diagnostic::error().with_labels(labels)
+}
+
 pub fn diagnostic_warning(msg: &str, span: Span) -> Diagnostic<usize> {
     let mut labels = vec![];
     if let Span::Loc(span) = span {

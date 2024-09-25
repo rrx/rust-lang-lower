@@ -30,7 +30,7 @@ use std::convert::Into;
 use crate::{
     BlockId, BlockifyError, Builtin, CodeOffset, FlattenEnvironment, LCode, LinkId,
     NodeBuilder as NB, ScopeId, ScopeLayer, ScopeType, SequenceReader, StringLabel, Successor,
-    TemplateId,
+    TemplateId, VariantId,
 };
 
 pub type BlockGraph = DiGraph<IRBlock, Successor>;
@@ -81,6 +81,14 @@ impl CodeEntry {
     pub fn add_mem(mut self, mem: VarDefinitionSpace) -> Self {
         self.mem = mem;
         self
+    }
+
+    pub fn dump(&self) {
+        //let name = self.name.map(|key| b.labels.r(key.into())).unwrap_or("".to_string());
+        println!(
+            "[{}]{:?}, name:{:?}, ty:{}",
+            self.block_id, self.code, self.name, self.ty
+        );
     }
 }
 
@@ -135,6 +143,7 @@ impl FlattenResult {
     }
 }
 
+#[derive(PartialEq)]
 pub enum FlattenMode {
     Function,
     Template,
@@ -146,7 +155,7 @@ pub struct Flatten {
     pub(super) link: LinkOptions,
     entries: Vec<CodeEntry>,
     pub(super) gblocks: BlockGraph,
-    ast_templates: Vec<Lambda>,
+    ast_templates: Vec<(Lambda, SpanId)>,
     messages: Vec<(String, SpanId)>,
     pub mode: FlattenMode,
 }
@@ -186,6 +195,62 @@ impl Flatten {
             let block = self.gblocks.node_weight(node).unwrap();
             println!("[{}] Block: {:?}", block_id, block);
         }
+    }
+
+    pub fn resolve_all_function_name(
+        &self,
+        block_id: BlockId,
+        name: &StringKey,
+        fenv: &FlattenEnvironment,
+    ) -> Vec<(VariantId, AstType, LinkId)> {
+        let mut out = vec![];
+        let block = self.get_block(block_id);
+        for scope_id in fenv.walk_scopes(block.scope_id) {
+            let scope = fenv.get_scope(scope_id);
+            println!("resolve: {}, {}", scope_id, scope.entries.len());
+            if let Some(e) = scope.entries.get(name) {
+                for (index, v) in e.variants.iter().enumerate() {
+                    let variant_id = VariantId(index as u32);
+                    out.push((variant_id, v.ty.clone(), v.link_id));
+                }
+            }
+        }
+        out
+    }
+
+    pub fn resolve_function_name(
+        &self,
+        block_id: BlockId,
+        name: &StringKey,
+        ty: &AstType,
+        fenv: &FlattenEnvironment,
+        b: &mut NB,
+    ) -> Option<(VariantId, AstType, LinkId)> {
+        /*
+        let s = b.labels.r(name.into());
+        println!("resolve: {}, {}, {}", block_id, s, ty);
+        // resolve scope through the tree, starting at the current scope
+        let block = self.get_block(block_id);
+        for scope_id in fenv.walk_scopes(block.scope_id) {
+            let scope = fenv.get_scope(scope_id);
+            if let Some(data) = scope.find_entry(name, ty) {
+                return Some(data.clone());
+            }
+        }
+        None
+        */
+
+        let mut result = None;
+        let snapshot = b.types.u.snapshot();
+        for (variant_id, r_ty, link_id) in self.resolve_all_function_name(block_id, &name, fenv) {
+            println!("trying {}, {}<=>{}", variant_id, &ty, &r_ty);
+            if let Ok(_) = b.types.u.unify(&ty, &r_ty) {
+                result = Some((variant_id, r_ty, link_id));
+                break;
+            }
+        }
+        b.types.u.rollback_to(snapshot);
+        result
     }
 
     pub fn resolve_name(
@@ -261,13 +326,13 @@ impl Flatten {
         block_id: BlockId,
         name: StringKey,
         fenv: &mut FlattenEnvironment,
-    ) -> Option<(ScopeId, Lambda)> {
+    ) -> Option<(ScopeId, Lambda, SpanId)> {
         match self.resolve_lambda_scope(block_id, name.into(), fenv) {
             Some(scope_id) => {
                 let scope = fenv.get_scope(scope_id);
                 if let Some(template_id) = scope.lambdas.get(&name.into()).cloned() {
-                    let def = self.get_ast_template(template_id).clone();
-                    Some((scope_id, def))
+                    let (def, span_id) = self.get_ast_template(template_id).clone();
+                    Some((scope_id, def, span_id))
                 } else {
                     None
                 }
@@ -332,6 +397,7 @@ impl Flatten {
         }
     }
 
+    /*
     pub fn push_bake_main_template(
         &mut self,
         fenv: &mut FlattenEnvironment,
@@ -349,16 +415,15 @@ impl Flatten {
         r
     }
 
+    */
     pub fn push_bake_main(&mut self, fenv: &mut FlattenEnvironment, b: &mut NB) -> Result<LinkId> {
         let current_block_id = self.block_id;
         let name = b.labels.s("main");
         // reset the block position before each function
         // main is always static context
-        //self.switch_blocks(fenv.static_block_id());
-        //self.push_bake_template(name, None, fenv, b)?;
-        //self.block_id = block_id;
         self.switch_blocks(fenv.static_block_id());
-        let r = self.push_bake(name, None, fenv, b);
+        let ty = AstType::func(vec![], AstType::Int);
+        let r = self.push_bake(name, ty, fenv, b);
         // switch back after bake
         self.switch_blocks(current_block_id);
         r
@@ -368,7 +433,7 @@ impl Flatten {
         &mut self,
         //block_id: BlockId,
         fenv: &mut FlattenEnvironment,
-        b: &mut NB,
+        _b: &mut NB,
     ) -> Result<Vec<LinkId>> {
         let block_id = fenv.static_block_id();
         let block = self.get_block(block_id);
@@ -380,22 +445,22 @@ impl Flatten {
             .map(|s| s.0.clone())
             .collect::<Vec<_>>();
 
-        let mut links = vec![];
-        for key in keys.iter() {
+        let links = vec![];
+        for _key in keys.iter() {
             // reset the block position before each function
-            let name = b.labels.r(key.into());
-            println!("bake {}", name);
+            //let name = b.labels.r(key.into());
+            //println!("bake {}", name);
             self.switch_blocks(block_id);
-            let link_id = self.push_bake(*key, None, fenv, b)?;
-            links.push(link_id);
+            //let link_id = self.push_bake(*key, None, fenv, b)?;
+            //links.push(link_id);
         }
         Ok(links)
     }
 
-    pub fn push_bake_all(
+    pub fn push_bake_all2(
         &mut self,
         fenv: &mut FlattenEnvironment,
-        b: &mut NB,
+        _b: &mut NB,
     ) -> Result<Vec<LinkId>> {
         let static_block_id = fenv.static_block_id();
         let scope_id = fenv.static_scope_id();
@@ -406,12 +471,12 @@ impl Flatten {
             .map(|s| s.0.clone())
             .collect::<Vec<_>>();
 
-        let mut links = vec![];
-        for key in keys.iter() {
+        let links = vec![];
+        for _key in keys.iter() {
             // reset the block position before each function
             self.switch_blocks(static_block_id);
-            let link_id = self.push_bake(*key, None, fenv, b)?;
-            links.push(link_id);
+            //let link_id = self.push_bake(*key, None, fenv, b)?;
+            //links.push(link_id);
         }
         Ok(links)
     }
@@ -507,13 +572,13 @@ impl Flatten {
         self.entries.get_mut(link_id.index()).unwrap()
     }
 
-    pub fn insert_ast_template(&mut self, def: Lambda) -> TemplateId {
+    pub fn insert_ast_template(&mut self, def: Lambda, span_id: SpanId) -> TemplateId {
         let offset = self.ast_templates.len();
-        self.ast_templates.push(def);
+        self.ast_templates.push((def, span_id));
         TemplateId(offset as u32)
     }
 
-    pub fn get_ast_template(&self, template_id: TemplateId) -> &Lambda {
+    pub fn get_ast_template(&self, template_id: TemplateId) -> &(Lambda, SpanId) {
         self.ast_templates.get(template_id.index()).unwrap()
     }
 
@@ -911,7 +976,6 @@ impl Flatten {
         //let mut has_kwargs = false;
         // block may have changed so we use the new block returned from the
         // args
-        //println!("start");
         for a in args.into_iter() {
             match a {
                 Argument::Positional(expr) => {
@@ -989,16 +1053,146 @@ impl Flatten {
                 .collect::<Vec<_>>(),
         );
 
-        if b.types.u.unify(&func_arg, &call_ty).is_err() {
-            b.push_error(
-                &format!("5-Type Mismatch: func: {}, call: {}", &func_arg, &call_ty),
-                span_id,
-            );
+        Ok((current_block_id, ret.clone(), values, call_ty))
+    }
+
+    fn push_bake_static(
+        &mut self,
+        name: StringKey,
+        def: Lambda,
+        def_span_id: SpanId,
+        call_ty: AstType,
+        call_span_id: SpanId,
+        fenv: &mut FlattenEnvironment,
+        b: &mut NB,
+    ) -> Result<(LinkId, AstType, AstType)> {
+        let s = b.labels.r(name.into());
+        let global_key = b.labels.fresh_key(&s);
+        let s_global = b.labels.r(global_key.into());
+        let current_block_id = self.block_id;
+        self.switch_blocks(fenv.static_block_id());
+
+        let def_func_type = b.types.r(def.fun_type).clone();
+
+        // refresh variables
+        let (def_arg_ty, ret_ty) = if let AstType::Func(arg, ret) = def_func_type {
+            if let ReturnType::Single(ret_ty) = *ret {
+                (b.types.refresh(*arg.clone()), b.types.refresh(ret_ty))
+            } else {
+                unreachable!()
+            }
+        } else {
+            unreachable!()
+        };
+        let def_func_type = AstType::Func(
+            def_arg_ty.clone().into(),
+            ReturnType::Single(ret_ty.clone()).into(),
+        );
+        println!("bake_static: call: {}, def: {}", &call_ty, &def_func_type);
+
+        // construct call function type
+        // function type, based on the caller
+        let call_func_type = AstType::Func(
+            AstType::Struct(call_ty.fields()).into(),
+            ReturnType::Single(ret_ty.clone()).into(),
+        );
+
+        // match call type with function type
+        println!(
+            "call_func: {}, def_func: {}",
+            &call_func_type, def_func_type
+        );
+        if b.types.u.unify(&call_func_type, &def_func_type).is_err() {
+            let ty1 = b.types.u.resolve(&call_func_type).unwrap();
+            let ty2 = b.types.u.resolve(&def_func_type).unwrap();
+            b.push_error_labels(vec![
+                b.primary_label(
+                    &format!("Type Mismatch Func: caller: {}", &ty1),
+                    call_span_id,
+                ),
+                b.secondary_label(&format!("source type: {}", &ty2), def_span_id),
+            ]);
         }
 
-        //let _call_type_id = b.types.s(&call_ty);
-        //println!("blocks: {:?}", (block_id, current_block_id));
-        Ok((current_block_id, ret.clone(), values, call_ty))
+        // if it's defined in static scope, just call it
+        println!("[{},{}] RX:  {}", s, s_global, &call_func_type);
+        //fenv.dump_scope(fenv.static_scope_id(), b);
+        let (_variant_id, v_entry) = if let Some((variant_id, r_ty, v_entry)) =
+            self.resolve_function_name(current_block_id, &name, &call_func_type, fenv, b)
+        {
+            println!("[{}] R2: {}, {:?}", s, call_func_type, (v_entry));
+            if b.types.u.unify(&call_func_type, &r_ty).is_err() {
+                b.push_error_labels(vec![
+                    b.primary_label(
+                        &format!("Type Mismatch Func: caller: {}", &call_func_type),
+                        call_span_id,
+                    ),
+                    b.secondary_label(&format!("source type: {}", &r_ty), def_span_id),
+                ]);
+            }
+
+            (variant_id, v_entry)
+        } else {
+            // set the reference for the function, so we can recurse
+            //
+
+            /*
+            let v_entry = self.push_empty_label(def_span_id);
+            let static_scope = fenv.get_scope_mut(fenv.static_scope_id());
+            let r_ty1 = b.types.u.resolve(&call_func_type).unwrap();
+            // we need to know the link
+            static_scope.insert_entry(&name, &r_ty1, v_entry);
+            */
+
+            // if it's not already baked, we need to do that here
+            self.block_id = fenv.static_block_id();
+            let result = self.push_bake_function(
+                //v_entry,
+                def,
+                call_func_type.clone(),
+                name,
+                global_key,
+                ScopeType::Function,
+                Successor::FunctionDeclaration,
+                fenv,
+                b,
+            );
+            if result.is_err() {
+                self.drain_diagnostics(b);
+            }
+            let (variant_id, r) = result?;
+            //let variant_id = variant_id.unwrap();
+            let v_entry = r.link_id.unwrap();
+
+            self.drain_diagnostics(b);
+            self.switch_blocks(current_block_id);
+
+            //let static_scope = fenv.get_scope_mut(fenv.static_scope_id());
+            let r_ty2 = b.types.u.resolve(&call_func_type).unwrap();
+            //let variants = static_scope.entries.get_mut(&name).unwrap();
+            fenv.variant_update(
+                fenv.static_scope_id(),
+                name,
+                variant_id,
+                r_ty2.clone(),
+                v_entry,
+            );
+            //variants.update_type(
+            //static_scope.variant_add(
+            //static_scope.entries.
+            //static_scope.insert_entry(&name, &r_ty2, v_entry);
+            println!(
+                "[{}] R3 insert: {}, {}, {:?}",
+                s,
+                call_func_type,
+                r_ty2,
+                (v_entry)
+            );
+
+            //assert_eq!(&r_ty1, &r_ty2);
+            (variant_id, v_entry)
+        };
+        Ok((v_entry, call_func_type, ret_ty))
     }
 
     fn push_call_by_name(
@@ -1014,59 +1208,55 @@ impl Flatten {
         // If the lambda is in the static scope, we do a normal call
         // If it's in a non-static scope, then we bake a lambda and jump to it
         // If we wanted to so some inlining, we just have to switch to doing lambdas instead
-        if let Some((scope_id, def)) = self.resolve_lambda(current_block_id, name, fenv) {
-            //let current_block_id = self.block_id;
+
+        // 1. look up the def
+        // 2. find an already baked function if it exists
+        // 3. if no function exists, bake it
+        // - for static, we just write the function to the static scope
+        // - for lambdas and inline, it's easier, because we just write out the entire function
+        // anyways
+
+        // look up the prototype
+        if let Some((scope_id, def, def_span_id)) =
+            self.resolve_lambda(current_block_id, name, fenv)
+        {
+            // calculate the calling arguments
             let (current_block_id, ret_ty, call_values, call_ty) =
                 self.push_function_args(&def, args, span_id, fenv, b)?;
 
-            // function type, based on the caller
-            let func_ty = AstType::func(
-                call_ty.fields().iter().map(|(_, ty)| ty.clone()).collect(),
-                ret_ty.clone(),
-            );
-            println!("call ty: {}, {}", call_ty, func_ty);
-
-            let def_func_ty = def_to_type(&def, b);
-            if b.types.u.unify(&func_ty, &def_func_ty).is_err() {
-                b.push_error(
-                    &format!("Type Mismatch: caller: {}, def: {}", &call_ty, &def_func_ty),
-                    span_id,
-                );
-            }
-
             let is_static = fenv.static_scope_id() == scope_id;
             if is_static {
-                // if it's defined in static scope, just call it
-                let v_decl = if let Some(v_decl) = self.resolve_name(current_block_id, name, fenv) {
-                    v_decl
-                } else {
-                    // if it's not already baked, we need to do that here
-                    self.block_id = fenv.static_block_id(); //block_id;
-                    let v_decl = self.push_bake(name, None, fenv, b)?;
-                    v_decl
-                };
+                let r = self.push_bake_static(
+                    name,
+                    def,
+                    def_span_id,
+                    call_ty.clone(),
+                    span_id,
+                    fenv,
+                    b,
+                )?;
+                self.drain_diagnostics(b);
+                let (fun_link_id, bake_ty, ret_ty) = r;
 
                 self.switch_blocks(current_block_id);
-                self.push_function_call(v_decl, call_values, ret_ty, span_id)
+                println!(
+                    "call: call_ty: {}, bake_ty:{}, ret_ty: {}",
+                    call_ty, bake_ty, ret_ty
+                );
+                self.push_function_call(fun_link_id, call_values, ret_ty, span_id)
             } else {
-                // BAKE LAMBDA
-                // TODO: There's a better way to do this.  Use continuations
-                // eventually.
-                // create a new block for the lambda
-                // we call the lambda by jumping to it
-                // the new block points to a next block
-                // which we create here, and we return next block to the sequence
-                // This involves creating a new lambda block for each call site.  This
-                // is not efficient, if we call more than once.  In this other case, we
-                // want to pass the continuation into the block, so next is not
-                // required.
-                //
-                // Bake the lambda, this involes writing out the blocks, and passing the next block
-                // as a continuation.  This currently requires one lambda for each call.
-                // Eventually switch to CPS
                 self.switch_blocks(current_block_id);
-                let (fun_block_id, next_block_id, next_link_id) =
-                    self.push_bake_lambda(name, None, span_id, fenv, b)?;
+
+                println!(
+                    "bake lambda: {:?}",
+                    (scope_id, current_block_id, b.labels.r(name.into()))
+                );
+
+                let r =
+                    self.push_bake_lambda(Some(name), def, def_span_id, call_ty, span_id, fenv, b)?;
+                self.drain_diagnostics(b);
+                let (fun_block_id, _, _, next_block_id, next_link_id, _) = r;
+
                 self.switch_blocks(next_block_id);
 
                 // Lambda Block
@@ -1078,12 +1268,12 @@ impl Flatten {
                 self.switch_blocks(next_block_id);
 
                 // block termination
-                Ok(FlattenResult::new(
+                return Ok(FlattenResult::new(
                     next_block_id,
                     Some(next_link_id),
                     ret_ty,
                     true,
-                ))
+                ));
             }
         } else {
             let name = b.labels.r(name.into());
@@ -1101,6 +1291,7 @@ impl Flatten {
         mem: VarDefinitionSpace,
     ) -> LinkId {
         let entry = CodeEntry::new(self.block_id, code, ty, name, span_id, mem);
+        //println!("push code: {:?}", entry.dump());
         self.push_entry_with_link(entry)
     }
 
@@ -1179,17 +1370,38 @@ impl Flatten {
         ))
     }
 
-    fn push_start_block(
+    fn push_empty_label(&mut self, span_id: SpanId) -> LinkId {
+        self.push_code(
+            LCode::Label,
+            AstType::Unit,
+            None,
+            span_id,
+            VarDefinitionSpace::Default,
+        )
+    }
+
+    fn replace_label(
         &mut self,
-        scope_id: ScopeId,
-        block_ty: AstType,
+        link_id: LinkId,
+        ty: AstType,
         name: Option<StringKey>,
         span_id: SpanId,
         mem: VarDefinitionSpace,
+    ) {
+        let entry = self.get_entry_mut(link_id);
+        entry.ty = ty;
+        entry.span_id = span_id;
+        entry.mem = mem;
+        entry.name = name;
+    }
+
+    fn push_start_block_args(
+        &mut self,
+        scope_id: ScopeId,
+        block_ty: AstType,
+        span_id: SpanId,
         fenv: &mut FlattenEnvironment,
-    ) -> (LinkId, Vec<(LinkId, AstType)>) {
-        //println!("start block: {:?}", (&block_ty));
-        let block_link_id = self.push_code(LCode::Label, block_ty.clone(), name, span_id, mem);
+    ) -> Vec<(LinkId, AstType)> {
         if let AstType::Func(arg_ty, _ret_ty) = &block_ty {
             assert!(arg_ty.is_composite());
 
@@ -1207,10 +1419,52 @@ impl Flatten {
                     fenv.scope_define(scope_id, *name, link_id.into());
                 }
             }
+            v_args
+        } else {
+            unreachable!()
+        }
+    }
+
+    fn push_start_block(
+        &mut self,
+        scope_id: ScopeId,
+        block_ty: AstType,
+        name: Option<StringKey>,
+        span_id: SpanId,
+        mem: VarDefinitionSpace,
+        fenv: &mut FlattenEnvironment,
+    ) -> (LinkId, Vec<(LinkId, AstType)>) {
+        //let s_name = name.map(|key| b.labels.r(key.into())).unwrap_or("".to_string());
+        //println!("start block: {:?}", (name, &block_ty));
+        let block_link_id = self.push_empty_label(span_id);
+        //let block_link_id = self.push_code(LCode::Label, block_ty.clone(), name, span_id, mem);
+        let v_args = self.push_start_block_args(scope_id, block_ty.clone(), span_id, fenv);
+        self.replace_label(block_link_id, block_ty, name, span_id, mem);
+        (block_link_id, v_args)
+        /*
+        if let AstType::Func(arg_ty, _ret_ty) = &block_ty {
+            assert!(arg_ty.is_composite());
+
+            let mut v_args = vec![];
+            for (i, (name, ty)) in arg_ty.fields().iter().enumerate() {
+                let link_id = self.push_code(
+                    LCode::Arg(i as u8),
+                    ty.clone(),
+                    *name,
+                    span_id,
+                    VarDefinitionSpace::Arg,
+                );
+                v_args.push((link_id, ty.clone()));
+                if let Some(name) = name {
+                    fenv.scope_define(scope_id, *name, link_id.into());
+                }
+            }
+            self.replace_label(block_link_id, block_ty, name, span_id, mem);
             (block_link_id, v_args)
         } else {
             unreachable!()
         }
+        */
     }
 
     pub fn save_ast_template(
@@ -1218,10 +1472,11 @@ impl Flatten {
         block_id: BlockId,
         name: &StringKey,
         def: &Lambda,
+        span_id: SpanId,
         fenv: &mut FlattenEnvironment,
-        b: &mut NB,
+        //b: &mut NB,
     ) -> Result<()> {
-        let template_id = self.insert_ast_template(def.clone());
+        let template_id = self.insert_ast_template(def.clone(), span_id);
         let block = self.get_block(block_id);
         let scope_id = block.scope_id;
         let scope = fenv.get_scope_mut(scope_id);
@@ -1232,18 +1487,31 @@ impl Flatten {
     fn push_bake_function(
         &mut self,
         def: Lambda,
+        def_func_ty: AstType,
         name: StringKey,
+        global_name: StringKey,
         scope_type: ScopeType,
         succ_type: Successor,
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
-    ) -> Result<FlattenResult> {
+    ) -> Result<(VariantId, FlattenResult)> {
         let current_block_id = self.block_id;
         let block = self.get_block(current_block_id);
         println!("bake_function: {:?}", (block.scope_id, current_block_id));
 
-        let func_ret_ty = b.types.r(def.return_type).clone();
-        let fun_ty = def_to_type(&def, b);
+        //let func_ret_ty = b.types.r(def.return_type).clone();
+        //let fun_ty = def_to_type(&def, b);
+
+        let func_ret_ty = if let AstType::Func(_arg, ret) = def_func_ty.clone() {
+            if let ReturnType::Single(ret) = *ret {
+                ret.clone()
+            } else {
+                unreachable!()
+            }
+        } else {
+            unreachable!()
+        };
+
         let body = def.body.unwrap();
         let span_id = body.span_id;
         // create function scope
@@ -1267,15 +1535,25 @@ impl Flatten {
         self.switch_blocks(fun_block_id);
         let (entry_link_id, _) = self.push_start_block(
             fun_scope_id,
-            fun_ty.clone(),
-            Some(name),
+            def_func_ty.clone(),
+            Some(global_name),
             span_id,
             VarDefinitionSpace::Static,
             fenv,
         );
+
+        // add entry to static scope, for recursion
+        let r_ty1 = b.types.u.resolve(&def_func_ty).unwrap();
+        // we need to know the link
+        //let variant_id = if let Some(global_name) = global_name {
+        let variant_id = fenv.variant_add(fenv.static_scope_id(), name, r_ty1, entry_link_id);
+        //} else {
+        //None
+        //};
+
         // add the name to static scope
         // do this early for recursive functions
-        fenv.scope_define(fenv.static_scope_id(), name, entry_link_id);
+        fenv.scope_define(fenv.static_scope_id(), global_name, entry_link_id);
 
         let body = jump_if_needed(*body, b);
 
@@ -1323,25 +1601,32 @@ impl Flatten {
                 );
             }
         }
-
-        let single_ty = fun_block
+        // resolve the return types
+        let ret_types = fun_block
             .ret_types
             .iter()
-            .next()
-            .unwrap_or(&AstType::Unit)
-            .clone();
+            .map(|t| b.types.u.resolve(&t).unwrap_or(t.clone()))
+            .collect::<HashSet<_>>();
+
+        let single_ty = ret_types.iter().next().unwrap_or(&AstType::Unit).clone();
 
         let ret_arg_type = if arity == 0 || AstType::Unit == single_ty {
             AstType::Struct(vec![])
         } else {
-            assert!(fun_block.ret_types.len() == 1);
-            AstType::Struct(vec![(None, single_ty.clone())]) //;//ret_ty.clone())])
+            //println!("ret_types: {:?}", &ret_types);
+            assert!(ret_types.len() == 1);
+            AstType::Struct(vec![(None, single_ty.clone())])
         };
 
-        let resolved_ret_ty = if let Some(ty) = b.types.u.resolve(&ret_arg_type) {
+        //println!("resolving: {}", &ret_arg_type);
+        let resolved_ret_ty = if self.mode == FlattenMode::Template || true {
+            ret_arg_type.clone()
+        } else if let Some(ty) = b.types.u.resolve(&ret_arg_type) {
             ty
         } else {
             let s = b.labels.r(name.into());
+            println!("unable to resolve: {}", &s);
+            b.types.dump();
             b.push_error(
                 &format!(
                     "[{}] Return Type Must Resolve: {}, arity: {}",
@@ -1362,34 +1647,86 @@ impl Flatten {
             );
         }
 
-        println!(
-            "R: {:?}",
-            (&resolved_ret_ty, &ret_arg_type, &func_ret_ty, &single_ty)
-        );
+        //println!(
+        //"R: {:?}",
+        //(&resolved_ret_ty, &ret_arg_type, &func_ret_ty, &single_ty)
+        //);
         self.switch_blocks(ret_block_id);
         self.push_return_block(fun_scope_id, resolved_ret_ty.clone(), span_id, fenv, b);
 
         // restore position back to where we started
         self.switch_blocks(current_block_id);
-        Ok(FlattenResult::new(
-            current_block_id,
-            Some(entry_link_id),
-            fun_ty,
-            false,
+        Ok((
+            variant_id,
+            FlattenResult::new(current_block_id, Some(entry_link_id), def_func_ty, false),
         ))
     }
 
-    fn push_bake_lambda_inner(
+    fn push_bake_lambda(
         &mut self,
+        name: Option<StringKey>,
         def: Lambda,
-        span_id: SpanId,
+        def_span_id: SpanId,
+        call_ty: AstType,
+        call_span_id: SpanId,
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
-    ) -> Result<(BlockId, BlockId, LinkId)> {
+    ) -> Result<(BlockId, LinkId, AstType, BlockId, LinkId, AstType)> {
+        // BAKE LAMBDA
+        // TODO: There's a better way to do this.  Use continuations
+        // eventually.
+        // create a new block for the lambda
+        // we call the lambda by jumping to it
+        // the new block points to a next block
+        // which we create here, and we return next block to the sequence
+        // This involves creating a new lambda block for each call site.  This
+        // is not efficient, if we call more than once.  In this other case, we
+        // want to pass the continuation into the block, so next is not
+        // required.
+        //
+        // Bake the lambda, this involes writing out the blocks, and passing the next block
+        // as a continuation.  This currently requires one lambda for each call.
+        // Eventually switch to CPS
+
+        let def_func_type = b.types.r(def.fun_type).clone();
+
+        // refresh variables
+        let (def_arg_ty, ret_ty) = if let AstType::Func(arg, ret) = def_func_type {
+            if let ReturnType::Single(ret_ty) = *ret {
+                (b.types.refresh(*arg.clone()), b.types.refresh(ret_ty))
+            } else {
+                unreachable!()
+            }
+        } else {
+            unreachable!()
+        };
+        let def_func_type = AstType::Func(
+            def_arg_ty.clone().into(),
+            ReturnType::Single(ret_ty.clone()).into(),
+        );
+
+        // construct call function type
+        let call_func_type = AstType::func(
+            call_ty.fields().iter().map(|(_, ty)| ty.clone()).collect(),
+            ret_ty.clone(),
+        );
+
+        // match call type with function type
+        println!("push_bake_lambda: {}<=>{}", &call_func_type, &def_func_type);
+        if b.types.u.unify(&call_func_type, &def_func_type).is_err() {
+            b.push_error_labels(vec![
+                b.primary_label(
+                    &format!("Type Mismatch: caller: {}", &call_func_type),
+                    def_span_id,
+                ),
+                b.secondary_label(&format!("source type: {}", &def_func_type), def_span_id),
+            ]);
+        }
+
         let current_block_id = self.block_id;
         let block = self.get_block(current_block_id);
         let scope_id = block.scope_id;
-        let ret_ty = b.types.r(def.return_type).clone();
+        //let ret_ty = b.types.r(def.return_type).clone();
 
         // New Lambda Scope
         let (fun_block_id, fun_scope_id) =
@@ -1429,14 +1766,22 @@ impl Flatten {
         });
         // start next block
         self.switch_blocks(next_block_id);
+
+        let s_name = name.map(|key| b.labels.r(key.into()));
+
+        let next_fun_ty = AstType::Func(
+            next_arg_ty.clone().into(),
+            ReturnType::Single(AstType::Unit).into(),
+        );
+
+        let prefix = s_name
+            .map(|s| format!("{}.cont", s))
+            .unwrap_or("cont".to_string());
         let (_v_block, next_link_ids) = self.push_start_block(
             scope_id,
-            AstType::Func(
-                next_arg_ty.clone().into(),
-                ReturnType::Single(AstType::Unit).into(),
-            ),
-            Some(b.labels.fresh_key("cont")),
-            span_id,
+            next_fun_ty.clone(),
+            Some(b.labels.fresh_key(&prefix)),
+            call_span_id,
             VarDefinitionSpace::Reg,
             fenv,
         );
@@ -1447,14 +1792,19 @@ impl Flatten {
         };
 
         // Start lambda block
-        let lambda_name = b.labels.fresh_key("lambda");
-        let fun_ty = b.types.r(def.fun_type);
+        let s_name = if let Some(name) = name {
+            b.labels.r(name.into())
+        } else {
+            "lambda".to_string()
+        };
+
+        let lambda_name = b.labels.fresh_key(&s_name);
         self.switch_blocks(fun_block_id);
-        self.push_start_block(
+        let (fun_link_id, _) = self.push_start_block(
             fun_scope_id,
-            fun_ty.clone(),
+            def_func_type.clone(),
             Some(lambda_name),
-            span_id,
+            def_span_id,
             VarDefinitionSpace::Reg,
             fenv,
         );
@@ -1463,82 +1813,76 @@ impl Flatten {
         let r = self.push_node(body, fenv, b)?;
         assert_eq!(self.block_id, r.block_id);
         self.switch_blocks(next_block_id);
-        Ok((fun_block_id, next_block_id, next_link_id.unwrap()))
-    }
 
-    fn push_bake_lambda(
-        &mut self,
-        name: StringKey,
-        maybe_ty: Option<AstType>,
-        span_id: SpanId,
-        fenv: &mut FlattenEnvironment,
-        b: &mut NB,
-    ) -> Result<(BlockId, BlockId, LinkId)> {
-        if let Some((scope_id, def)) = self.resolve_lambda(self.block_id, name, fenv) {
-            println!(
-                "bake lambda: {:?}",
-                (scope_id, self.block_id, b.labels.r(name.into()))
-            );
-            if let Some(ty) = maybe_ty {
-                let fun_ty = b.types.r(def.fun_type).clone();
-                if b.types.u.unify(&ty, &fun_ty).is_err() {
-                    let span_id = b.spans.get_span_unknown();
-
-                    b.push_error(
-                        &format!("Func Mismatch: caller: {}, def: {}", &ty, fun_ty),
-                        span_id,
-                    );
-                }
-            }
-            let r = self.push_bake_lambda_inner(def, span_id, fenv, b)?;
-            self.drain_diagnostics(b);
-            Ok(r)
-        } else {
-            let s = b.labels.r(name.into());
-            let u = b.spans.get_span_unknown();
-            b.push_error(&format!("bake_lambda: not found: {}", s), u);
-            Err(Error::new(BlockifyError::NotFound(s)))
+        // match return type with the jump target
+        println!("push_bake_lambda_next: {}<=>{}", &next_arg_ty, &def_arg_ty);
+        if b.types.u.unify(&next_arg_ty, &def_arg_ty).is_err() {
+            let ty1 = b.types.u.resolve(&next_arg_ty).unwrap();
+            let ty2 = b.types.u.resolve(&def_arg_ty).unwrap();
+            b.push_error_labels(vec![
+                b.primary_label(
+                    &format!("Type Mismatch Lambda Next: caller: {}", &ty1),
+                    call_span_id,
+                ),
+                b.secondary_label(&format!("source type: {}", &ty2), def_span_id),
+            ]);
         }
+
+        Ok((
+            fun_block_id,
+            fun_link_id,
+            def_func_type.clone(),
+            next_block_id,
+            next_link_id.unwrap(),
+            next_fun_ty,
+        ))
     }
 
     pub fn push_bake(
         &mut self,
         name: StringKey,
-        maybe_ty: Option<AstType>,
+        func_type: AstType,
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
     ) -> Result<LinkId> {
         match self.mode {
-            FlattenMode::Function => self.push_bake_func(name, maybe_ty, fenv, b),
-            FlattenMode::Template => self.push_bake_template(name, maybe_ty, fenv, b),
+            FlattenMode::Function => self.push_bake_func(name, func_type, fenv, b),
+            FlattenMode::Template => self.push_bake_template(name, func_type, fenv, b),
         }
     }
 
     pub fn push_bake_func(
         &mut self,
         name: StringKey,
-        maybe_ty: Option<AstType>,
+        func_type: AstType,
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
     ) -> Result<LinkId> {
         let current_block_id = self.block_id;
-        if let Some((scope_id, def)) = self.resolve_lambda(current_block_id, name, fenv) {
-            println!(
-                "bake: {:?}",
-                (scope_id, current_block_id, b.labels.r(name.into()))
-            );
+        if let Some((__scope_id, def, _def_span_id)) =
+            self.resolve_lambda(current_block_id, name, fenv)
+        {
+            //println!(
+            //"bake: {:?}",
+            //(scope_id, current_block_id, b.labels.r(name.into()))
+            //);
+            /*
             if let Some(ty) = maybe_ty {
                 let fun_ty = b.types.r(def.fun_type).clone();
+                println!("match: {}<=>{}", &ty, &fun_ty);
                 if b.types.u.unify(&ty, &fun_ty).is_err() {
                     let span_id = b.spans.get_span_unknown();
 
                     b.push_error(
-                        &format!("Func Mismatch: caller: {}, def: {}", &ty, fun_ty),
+                        &format!("Bake Func Mismatch: caller: {}, def: {}", &ty, fun_ty),
                         span_id,
                     );
                 }
             }
+            */
+
             // update declaration
+            /*
             let decl_link_id = if let Some(decl_link_id) =
                 self.resolve_declaration(current_block_id, name, fenv)
             {
@@ -1546,9 +1890,13 @@ impl Flatten {
             } else {
                 unreachable!()
             };
+            */
 
             let result = self.push_bake_function(
+                //LinkId(0),
                 def,
+                func_type,
+                name,
                 name,
                 ScopeType::Function,
                 Successor::FunctionDeclaration,
@@ -1558,15 +1906,20 @@ impl Flatten {
             if result.is_err() {
                 self.drain_diagnostics(b);
             }
-            let r = result?;
+            let (_variant_id, r) = result?;
 
-            let entry_block_id = self.get_entry(r.link_id.unwrap()).block_id;
+            //let entry_block_id = self.get_entry(r.link_id.unwrap()).block_id;
+
+            // update declaration
+            //
+            /*
             let entry = self.get_entry_mut(decl_link_id);
             if let LCode::DeclareFunction(_) = entry.code {
             } else {
                 assert!(false);
             }
             entry.code = LCode::DeclareFunction(Some(entry_block_id));
+            */
 
             self.drain_diagnostics(b);
             self.switch_blocks(current_block_id);
@@ -1579,19 +1932,80 @@ impl Flatten {
         }
     }
 
-    pub fn push_bake_template(
+    pub fn push_bake_template2(
         &mut self,
         name: StringKey,
-        maybe_ty: Option<AstType>,
+        def: &Lambda,
+        span_id: SpanId,
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
     ) -> Result<LinkId> {
         let current_block_id = self.block_id;
-        if let Some((scope_id, def)) = self.resolve_lambda(current_block_id, name, fenv) {
-            println!(
-                "bake: {:?}",
-                (scope_id, current_block_id, b.labels.r(name.into()))
-            );
+        let block = self.get_block(current_block_id);
+        let scope_id = block.scope_id;
+
+        let fun_ty = def_to_type(&def, b);
+
+        let decl_link_id = self.push_code(
+            LCode::DeclareTemplate(None),
+            fun_ty.clone(),
+            Some(name),
+            span_id,
+            VarDefinitionSpace::Default,
+        );
+
+        fenv.scope_define_template(scope_id, name, decl_link_id);
+
+        //println!(
+        //"bake: {:?}",
+        //(scope_id, current_block_id, b.labels.r(name.into()))
+        //);
+
+        let result = self.push_bake_function(
+            //LinkId(0),
+            def.clone(),
+            fun_ty,
+            name,
+            name,
+            ScopeType::Template,
+            Successor::TemplateDeclaration,
+            fenv,
+            b,
+        );
+
+        if result.is_err() {
+            self.drain_diagnostics(b);
+        }
+        let (_, r) = result?;
+
+        let entry_block_id = self.get_entry(r.link_id.unwrap()).block_id;
+        let entry = self.get_entry_mut(decl_link_id);
+        if let LCode::DeclareTemplate(_) = entry.code {
+        } else {
+            unreachable!()
+        }
+        entry.code = LCode::DeclareTemplate(Some(entry_block_id));
+        self.drain_diagnostics(b);
+        self.switch_blocks(current_block_id);
+        Ok(r.link_id.unwrap())
+    }
+
+    pub fn push_bake_template(
+        &mut self,
+        name: StringKey,
+        func_ty: AstType,
+        fenv: &mut FlattenEnvironment,
+        b: &mut NB,
+    ) -> Result<LinkId> {
+        let current_block_id = self.block_id;
+        if let Some((_scope_id, def, _def_span_id)) =
+            self.resolve_lambda(current_block_id, name, fenv)
+        {
+            //println!(
+            //"bake: {:?}",
+            //(scope_id, current_block_id, b.labels.r(name.into()))
+            //);
+            /*
             if let Some(ty) = maybe_ty {
                 let fun_ty = b.types.r(def.fun_type).clone();
                 if b.types.u.unify(&ty, &fun_ty).is_err() {
@@ -1603,11 +2017,7 @@ impl Flatten {
                     );
                 }
             }
-
-            //println!("scope: {:?}", (scope_id, &scope));
-            //let top_block_id = scope.entry_block.unwrap();
-            //self.switch_blocks(top_block_id);
-            //self.switch_blocks(block_id);
+            */
 
             // update declaration
             let decl_link_id = if let Some(decl_link_id) =
@@ -1619,7 +2029,10 @@ impl Flatten {
             };
 
             let result = self.push_bake_function(
+                //LinkId(0),
                 def.clone(),
+                func_ty,
+                name,
                 name,
                 ScopeType::Template,
                 Successor::TemplateDeclaration,
@@ -1632,7 +2045,7 @@ impl Flatten {
             if result.is_err() {
                 self.drain_diagnostics(b);
             }
-            let r = result?;
+            let (_, r) = result?;
 
             let entry_block_id = self.get_entry(r.link_id.unwrap()).block_id;
             let entry = self.get_entry_mut(decl_link_id);
@@ -1662,6 +2075,8 @@ impl Flatten {
         let current_block_id = self.block_id;
         let block = self.get_block_mut(current_block_id);
         let span_id = node.span_id;
+        //println!("push: {}, {}", current_block_id, block.scope_id);
+        //b.dump_ast(&node);
         let ast = node.node;
 
         match ast {
@@ -1674,15 +2089,15 @@ impl Flatten {
                 self.push_sequence(exprs, span_id, fenv, b)
             }
 
-            Ast::Global(name, expr) => {
-                match expr.node {
+            Ast::Global(name, ref expr) => {
+                match &expr.node {
                     Ast::Lambda(def) => {
-                        //let ret_ty = b.types.r(def.return_type).clone();
                         let fun_ty = def_to_type(&def, b);
 
                         match self.mode {
                             FlattenMode::Function => {
-                                let func_link_id = self.push_code(
+                                /*
+                                let decl_link_id = self.push_code(
                                     LCode::DeclareFunction(None),
                                     fun_ty.clone(),
                                     Some(name),
@@ -1693,8 +2108,9 @@ impl Flatten {
                                 fenv.scope_define_declaration(
                                     fenv.static_scope_id(),
                                     name,
-                                    func_link_id,
+                                    decl_link_id,
                                 );
+                                */
                             }
                             FlattenMode::Template => {
                                 if let Some(_) = &def.body {
@@ -1717,7 +2133,7 @@ impl Flatten {
 
                         // save template for later use
                         if def.body.is_some() {
-                            self.save_ast_template(current_block_id, &name, &def, fenv, b)?;
+                            self.save_ast_template(current_block_id, &name, &def, span_id, fenv)?;
                         }
 
                         if let Some(_body) = &def.body {
@@ -1747,7 +2163,7 @@ impl Flatten {
                         let ast_ty: AstType = lit.clone().into();
                         self.switch_blocks(static_block_id);
                         let link_id = self.push_code(
-                            LCode::Const(lit),
+                            LCode::Const(lit.clone()),
                             ast_ty.clone(),
                             Some(global_name_key),
                             node.span_id,
@@ -1764,7 +2180,9 @@ impl Flatten {
                             false,
                         ))
                     }
-                    _ => unreachable!(),
+                    _ => {
+                        unreachable!("{:?}", ast)
+                    }
                 }
             }
 
@@ -1895,7 +2313,7 @@ impl Flatten {
 
                 for (v, ty) in [(vx, &rx.ty), (vy, &ry.ty)] {
                     self.push_code(
-                        LCode::Value(v.into()),
+                        LCode::CallValue(v.into()),
                         ty.clone(),
                         None,
                         node.span_id,
@@ -1923,6 +2341,7 @@ impl Flatten {
 
             Ast::Identifier(key) => {
                 // identifier is expression, non-terminal
+                //self.dump_scope(current_block_id, fenv, b);
                 if let Some(def_link_id) = self.resolve_name(current_block_id, key, fenv) {
                     let entry = self.get_entry(def_link_id).clone();
                     let ty = entry.ty.clone();
@@ -1949,6 +2368,7 @@ impl Flatten {
                     let s = b.labels.r(key.into());
                     let u = b.spans.get_span_unknown();
                     b.push_error(&format!("ident: not found: {}", s), u);
+                    assert!(false);
                     Err(Error::new(BlockifyError::NotFound(s)))
                 }
             }
@@ -1961,10 +2381,48 @@ impl Flatten {
 
                 // push the definition into the lambda list
                 if let Ast::Lambda(def) = expr.node {
-                    let ty = def_to_type(&def, b);
-                    self.save_ast_template(current_block_id, &name, &def, fenv, b)?;
+                    let fun_ty = def_to_type(&def, b);
+                    //let scope_id = block.scope_id;
                     self.switch_blocks(current_block_id);
-                    return Ok(FlattenResult::new(current_block_id, None, ty, false));
+
+                    // push template
+                    // we might not need this, we inline everything we need
+                    // at this point all scope rules should have been applied.
+                    // we have to monomorphize here in order to have correct scope
+                    // there are two ways to scope the lambda function
+                    // we scope in place, so that the function is able to access
+                    // variables in this scope.  We can accomplish this by inserting the entry
+                    // here.  The lambda is subordinate to the variables in scope, so it should
+                    // just work.
+                    // The other method is to use the scope at the point of the call.  This is
+                    // less intuitive, but also possible.
+                    // The third method is to be able to provide arbitrary scope.
+                    // We can only do the first method if we have CPS, which isn't yet implemented.
+                    // The 3rd method is easiest, as we insert the code at the caller.
+                    // It's simpler, and get's us most of the way there.
+                    /*
+                    let template_link_id = self.push_code(
+                        LCode::DeclareTemplate(None),
+                        fun_ty.clone(),
+                        Some(name),
+                        span_id,
+                        VarDefinitionSpace::Default,
+                    );
+
+                    fenv.scope_define_template(
+                        scope_id,
+                        name,
+                        template_link_id,
+                    );
+                    */
+
+                    if self.mode == FlattenMode::Template {
+                        self.push_bake_template2(name, &def, span_id, fenv, b)?;
+                    }
+
+                    self.save_ast_template(current_block_id, &name, &def, expr.span_id, fenv)?;
+                    self.switch_blocks(current_block_id);
+                    return Ok(FlattenResult::new(current_block_id, None, fun_ty, false));
                 }
 
                 self.switch_blocks(current_block_id);

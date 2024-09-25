@@ -2,7 +2,7 @@ z = 10
 
 q.use("prelude")
 
-def main() -> int:
+def main():
   y = 0 + 1
   y = y + 1
   q.print(y)

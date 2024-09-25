@@ -1,4 +1,4 @@
-use compile_core::{AstType, LinkOptions, Span, SpanId, StringKey, VarDefinitionSpace};
+use compile_core::{AstType, LinkOptions, Literal, Span, SpanId, StringKey, VarDefinitionSpace};
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
 use std::collections::{HashMap, HashSet};
@@ -58,6 +58,8 @@ pub struct FlattenModule {
     entries: Vec<ModuleEntry>,
     link_map: HashMap<LinkId, ValueId>,
     block_map: HashMap<BlockId, ValueId>,
+    functions: HashMap<StringKey, LinkId>,
+    statics: HashMap<StringKey, Literal>,
     pub(super) link: LinkOptions,
     pub(super) gblocks: BlockGraph,
 }
@@ -65,6 +67,10 @@ pub struct FlattenModule {
 impl ICodeModule for FlattenModule {
     fn shared_libraries(&self) -> Vec<String> {
         self.link.shared_libraries()
+    }
+
+    fn lookup_name(&self, name: &StringKey) -> Option<LinkId> {
+        self.functions.get(name).cloned()
     }
 
     fn get_span_id(&self, value_id: ValueId) -> SpanId {
@@ -204,6 +210,8 @@ impl FlattenModule {
             entries: vec![],
             link: LinkOptions::new(),
             link_map: HashMap::new(),
+            functions: HashMap::new(),
+            statics: HashMap::new(),
             block_map: HashMap::new(),
             gblocks: BlockGraph::new(),
         }
@@ -213,13 +221,11 @@ impl FlattenModule {
         petgraph::dot::Dot::with_config(&fenv.scopes, &[petgraph::dot::Config::EdgeNoLabel]);
     }
 
-    pub fn from_builder(flatten: Flatten, fenv: &FlattenEnvironment, b: &mut NB) -> Self {
+    pub fn from_builder(mut flatten: Flatten, fenv: &FlattenEnvironment, b: &mut NB) -> Self {
         // we want to output the blocks in a particular order
         // we use DFS post order search on each function, to ensure that the leaf
         // nodes show up last, such as the return block
         // This seems to create a nice ordering.
-        let mut m = FlattenModule::new();
-        m.link = flatten.link.clone();
 
         let mut dfs = petgraph::visit::Dfs::new(&flatten.gblocks, BlockId(0).into());
         let mut blocks = vec![BlockId(0).into()];
@@ -250,6 +256,56 @@ impl FlattenModule {
             blocks.extend(seq.into_iter().rev());
         }
 
+        // inject builtin prototypes
+        let print_index = b.labels.s("print_index".into());
+        let print_float = b.labels.s("print_float".into());
+        let print_bool = b.labels.s("print_bool".into());
+        let builtins = vec![
+            (print_index, AstType::Int, AstType::Unit),
+            (print_float, AstType::Float, AstType::Unit),
+            (print_bool, AstType::Bool, AstType::Unit),
+        ];
+        let unknown = b.spans.get_span_unknown();
+        for (key, var_ty, ret_ty) in builtins {
+            let func_ty = AstType::func(vec![var_ty], ret_ty);
+            flatten.push_code(
+                LCode::DeclareFunction(None),
+                func_ty,
+                Some(key),
+                unknown,
+                VarDefinitionSpace::Static,
+            );
+        }
+
+        let mut m = FlattenModule::new();
+        m.link = flatten.link.clone();
+        for index in function_entries.iter() {
+            let block_id = (*index).into();
+            let block = flatten.get_block(block_id);
+            let label_link_id = block.links.first().unwrap();
+            let entry = flatten.get_entry(*label_link_id).clone();
+            let ty = flatten.get_type(*label_link_id).clone();
+            let name = entry
+                .name
+                .map(|key| b.labels.r(key.into()))
+                .unwrap_or("".to_string());
+            println!("X: {:?}", entry);
+            println!("X: {}, {}", name, &ty);
+            assert_eq!(entry.mem, VarDefinitionSpace::Static);
+
+            if let Some(key) = entry.name {
+                m.functions.insert(key, *label_link_id);
+            }
+
+            flatten.push_code(
+                LCode::DeclareFunction(Some(block_id)),
+                ty,
+                entry.name,
+                entry.span_id,
+                entry.mem,
+            );
+        }
+
         for index in blocks.into_iter() {
             let block_id = index.into();
             let block = flatten.get_block(block_id);
@@ -257,6 +313,15 @@ impl FlattenModule {
                 let mut entry = flatten.get_entry(*link_id).clone();
                 if let Some(ty) = b.types.u.resolve(&entry.ty) {
                     entry.ty = ty;
+                }
+
+                if entry.mem == VarDefinitionSpace::Static {
+                    match &entry.code {
+                        LCode::Const(lit) => {
+                            m.statics.insert(entry.name.unwrap(), lit.clone());
+                        }
+                        _ => (),
+                    }
                 }
 
                 let v = ValueId(value_count);
@@ -376,6 +441,7 @@ impl FlattenModule {
         */
     }
     pub fn type_inference_enforce(&mut self, b: &mut NB) {
+        b.types.dump();
         for entry in self.entries.iter_mut() {
             if !entry.ty.is_unknown() {
                 continue;
@@ -495,7 +561,7 @@ impl FlattenModule {
         } else {
             entry.ty.clone()
         };
-        println!("X: {} => {}", &entry.ty, &r_ty);
+        //println!("X: {} => {}", &entry.ty, &r_ty);
 
         //let is_unknown = r_ty.as_ref().map(|ty| ty.is_unknown()).unwrap_or(true);
         //let s_ty = format!("{}", &r_ty.unwrap_or(ty)); //AstType::Error));

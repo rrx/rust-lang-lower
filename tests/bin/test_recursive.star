@@ -1,6 +1,6 @@
 q.use("prelude")
 
-def fibonacci_recursive(n: int, a:int, c:int) -> int:
+def fibonacci_recursive(n, a, c):
   out = 0
   if n == 0:
     out = a
@@ -10,10 +10,18 @@ def fibonacci_recursive(n: int, a:int, c:int) -> int:
     out = fibonacci_recursive(n - 1, c, a + c)
   return out
 
-def fib(n: int) -> int:
+def fib(n):
   return fibonacci_recursive(n, 0, 1)
 
-def main() -> int:
+def main():
+  r1 = fib(0)
+  q.check(r1 == 0)
+  r1 = fib(1)
+  q.check(r1 == 1)
+  r1 = fib(2)
+  q.check(r1 == 1)
+  r1 = fib(3)
+  q.check(r1 == 2)
   r1 = fib(10)
   q.check(r1 == 55)
   r1 = fib(19)

@@ -194,7 +194,8 @@ impl Parser {
         file_id: usize,
         b: &mut NodeBuilder,
     ) -> Result<compile_core::AstNode> {
-        let dialect = syntax::Dialect::Extended;
+        let mut dialect = syntax::Dialect::Extended;
+        dialect.enable_f_strings = true;
         let m = match content {
             Some(content) => {
                 syntax::AstModule::parse(path.to_str().unwrap(), content.to_string(), &dialect)?
@@ -682,6 +683,10 @@ impl StarlarkParser {
         let mut gen = lower_mlir::MLIRGenerator::new(context, blockify, module_block_id, b);
         gen.lower_module(module)?;
         Ok(())
+    }
+
+    pub fn interp<'c>(&self, m: &dyn ICodeModule, libpath: &str, b: &mut NodeBuilder) -> i32 {
+        flat::interp::interp(&self.link.shared_libraries(), m, libpath, b)
     }
 
     pub fn exec_main<'c>(&self, module: &mut Module, libpath: &str) -> i32 {

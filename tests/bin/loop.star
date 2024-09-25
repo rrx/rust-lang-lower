@@ -1,6 +1,6 @@
 q.use("prelude")
 
-def main() -> int:
+def main():
   z = 10
   q.loop("loop1")
   if z == 0:
@@ -25,7 +25,7 @@ def main() -> int:
   q.loop
   a = a + 1
   q.print(a)
-  if a > 1000:
+  if a > 10:
     q.loop_break
 
   q.loop_continue

@@ -3,9 +3,9 @@ use petgraph::graph::NodeIndex;
 
 use crate::{
     scope::LoopScope, BlockId, CodeOffset, LinkId, NodeBuilder, ScopeId, ScopeLayer, ScopeType,
-    StringLabel,
+    StringLabel, VariantId,
 };
-use compile_core::StringKey;
+use compile_core::{AstType, StringKey};
 
 pub type ScopeGraph = DiGraph<ScopeLayer, ()>;
 
@@ -159,6 +159,29 @@ impl FlattenEnvironment {
             }
         }
         None
+    }
+
+    pub fn variant_add(
+        &mut self,
+        scope_id: ScopeId,
+        name: StringKey,
+        ty: AstType,
+        link_id: LinkId,
+    ) -> VariantId {
+        let scope = self.get_scope_mut(scope_id);
+        scope.variant_add(name, ty, link_id)
+    }
+
+    pub fn variant_update(
+        &mut self,
+        scope_id: ScopeId,
+        name: StringKey,
+        variant_id: VariantId,
+        ty: AstType,
+        link_id: LinkId,
+    ) {
+        let scope = self.get_scope_mut(scope_id);
+        scope.variant_update(name, variant_id, ty, link_id);
     }
 
     pub fn dump_scope(&self, scope_id: ScopeId, b: &NodeBuilder) {

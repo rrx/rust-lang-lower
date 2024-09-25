@@ -304,6 +304,11 @@ impl<'c> MLIRGenerator<'c> {
                     continue;
                 }
 
+                if let LCode::CallValue(next_value_id) = code {
+                    current = (*next_value_id).into();
+                    continue;
+                }
+
                 if let LCode::ValueIndex(link_id, index) = code {
                     let v = self.blockify.resolve_code_offset(link_id.into());
                     let index = (*index) as usize;

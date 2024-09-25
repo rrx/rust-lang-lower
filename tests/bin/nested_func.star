@@ -1,23 +1,28 @@
 q.use("prelude")
 
-def x1() -> int:
+def x1():
   if True:
     t = 0
   return 0
 
-def main() -> int:
+def main():
   r = 0
   zero = 0
 
-  def f1(x) -> int:
+  def f1(x):
     return 0
-  f1(0)
+  r = f1(0)
 
-  def f2(x) -> int:
+  # these should work
+  # f1(0)
+  # r2 = f1(1.1)
+
+
+  def f2(x):
     q.print(x)
     return x+1 
 
-  def f3(x) -> int:
+  def f3(x):
     return zero
 
   r = f2(1)

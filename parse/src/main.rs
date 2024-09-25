@@ -20,6 +20,10 @@ struct Config {
     #[argh(switch, short = 'c')]
     compile: bool,
 
+    /// interp flag
+    #[argh(switch)]
+    interp: bool,
+
     /// template
     #[argh(switch, short = 't')]
     template: bool,
@@ -57,9 +61,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let config: Config = argh::from_env();
 
     if config.verbose {
-        log::set_max_level(log::LevelFilter::Trace);
-    } else {
         log::set_max_level(log::LevelFilter::Warn);
+    } else {
+        log::set_max_level(log::LevelFilter::Info);
     }
 
     let output_filename;
@@ -116,7 +120,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     //f.dump_blocks();
-
+    f.dump_scope(fenv.static_block_id(), &fenv, &b);
     let mut m = FlattenModule::from_builder(f, &mut fenv, &mut b);
 
     if config.template {
@@ -178,6 +182,19 @@ fn main() -> Result<(), Box<dyn Error>> {
         path.set_extension("o");
         lower_mlir::save_object_file(&module, &path.to_str().unwrap());
         println!("Wrote: {:?}", &path.as_os_str());
+
+        let mut path = path.clone();
+        path.set_extension("mlir");
+        let s = module.as_operation().to_string();
+        let mut output = File::create(path.clone())?;
+        write!(output, "{}", s)?;
+        println!("Wrote: {:?}", &path.as_os_str());
+    }
+
+    if config.interp {
+        let exit_code = p.interp(&m, "target/debug", &mut b);
+        b.spans.diagnostics_dump();
+        std::process::exit(exit_code);
     } else if config.exec {
         let exit_code = p.exec_main(&mut module, "target/debug");
         std::process::exit(exit_code);
