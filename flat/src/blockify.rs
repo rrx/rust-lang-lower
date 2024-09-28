@@ -52,9 +52,6 @@ impl From<&LinkId> for UseIndex {
 #[derive(Debug, Clone)]
 pub struct UseIndexList(Vec<UseIndex>);
 impl UseIndexList {
-    pub fn new() -> Self {
-        Self(vec![])
-    }
     pub fn offset(self) -> CodeOffset {
         self.0.get(0).unwrap().clone().offset()
     }
