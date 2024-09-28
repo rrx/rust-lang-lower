@@ -125,7 +125,7 @@ impl SequenceReader {
         }
     }
 
-    fn push_node(&mut self, node: AstNode, b: &mut NB) {
+    fn push_node(&mut self, node: AstNode, _fenv: &mut FlattenEnvironment, b: &mut NB) {
         let span_id = node.span_id;
         let node = match &node.node {
             Ast::Call(expr, args) => match &expr.node {
@@ -177,6 +177,19 @@ impl SequenceReader {
                 self.close();
             }
             Ast::Block(key, params, body) => {
+                /*
+                if fenv.resolve_block_id(scope_id, key.into()).is_none() {
+                    assert_eq!(0, params.len());
+                    let new_block_id = self.new_block(scope_id);
+                    let new_block = self.get_block_mut(new_block_id);
+                    new_block.next = seq_next_block_id;
+                    self.block_succ(self.block_id, new_block_id, Successor::BlockScope);
+                    let scope = fenv.get_scope_mut(scope_id);
+                    scope.block_labels.insert(key.into(), new_block_id);
+                    //println!("creating block: {} in {}", b.labels.r(key.into()), scope_id);
+                }
+                */
+
                 let span_id = node.span_id;
                 //println!("block: {}, {}", self.stack.len(), self.seq.len());
                 self.close_if_open();
@@ -277,7 +290,7 @@ impl SequenceReader {
         for expr in exprs.into_iter() {
             //println!("push1: {:?}", (self.stack.len(), self.seq.len()));
             //b.dump_ast(&expr);
-            self.push_node(expr, b);
+            self.push_node(expr, fenv, b);
             //println!("push2: {:?}", (self.stack.len(), self.seq.len()));
         }
 
@@ -296,10 +309,11 @@ mod tests {
     use compile_core::AstType;
     use test_log::test;
 
-    fn builder() -> NB {
+    fn builder() -> (FlattenEnvironment, NB) {
         let mut b = NB::new();
         let _file_id = b.spans.add_source("test".to_string(), "".to_string());
-        b
+        let fenv = FlattenEnvironment::new();
+        (fenv, b)
     }
 
     fn build_module(seq: Vec<AstNode>, b: &mut NB) -> AstNode {
@@ -314,18 +328,17 @@ mod tests {
         NB::module(module_name, f)
     }
 
-    fn run(seq: Vec<AstNode>, b: &mut NB) -> Result<()> {
-        let mut fenv = FlattenEnvironment::new();
+    fn run(seq: Vec<AstNode>, fenv: &mut FlattenEnvironment, b: &mut NB) -> Result<()> {
         let module = build_module(seq, b);
         b.dump_ast(&module);
-        let r = Flatten::flatten_module(module, FlattenMode::Function, &mut fenv, b);
+        let r = Flatten::flatten_module(module, FlattenMode::Function, fenv, b);
         b.spans.diagnostics_dump();
         let mut f = r?;
         b.spans.diagnostics_dump();
-        f.push_bake_main(&mut fenv, b)?;
+        f.push_bake_main(fenv, b)?;
         //f.push_bake_all(&mut fenv, b)?;
-        let m = FlattenModule::from_builder(f, &mut fenv, b);
-        m.dump(&mut fenv, b);
+        let m = FlattenModule::from_builder(f, fenv, b);
+        m.dump(fenv, b);
         m.block_graph("blocks.dot", &b);
 
         Ok(())
@@ -333,29 +346,29 @@ mod tests {
 
     #[test]
     fn test_seq1() {
-        let mut b = builder();
+        let (mut fenv, mut b) = builder();
         let a = b.labels.s("a");
         let seq = vec![NB::goto(a).into(), NB::label(a).into(), NB::index(0).into()];
-        let _ = run(seq, &mut b).unwrap();
+        let _ = run(seq, &mut fenv, &mut b).unwrap();
         b.spans.diagnostics_dump();
     }
 
     #[test]
     fn test_seq2() {
-        let mut b = builder();
+        let (mut fenv,  mut b) = builder();
         let a = b.labels.s("a");
         let seq = vec![NB::label(a).into(), Ast::CloseBlock.into()];
-        let _ = run(seq, &mut b).unwrap();
+        let _ = run(seq, &mut fenv, &mut b).unwrap();
         b.spans.diagnostics_dump();
     }
 
     #[test]
     fn test_seq3() {
-        let mut b = builder();
+        let (mut fenv,  mut b) = builder();
         let a = b.labels.s("a");
         let seq = vec![NB::label(a).into()];
         let mut r = SequenceReader::new();
-        let seq = r.build(seq, &mut b);
+        let seq = r.build(seq, &mut fenv, &mut b);
         for ast in seq.iter() {
             b.dump_ast(ast);
         }
@@ -364,13 +377,13 @@ mod tests {
 
     #[test]
     fn test_seq4() {
-        let mut b = builder();
+        let (mut fenv,  mut b) = builder();
         let a = b.labels.s("a");
         let block = Ast::Block(a, vec![], NB::index(1).into()).into();
         let seq = vec![NB::index(1), NB::index(1), block];
         let mut r = SequenceReader::new();
         //r.open_block(b.spans.get_span_unknown());
-        let seq = r.build(seq, &mut b);
+        let seq = r.build(seq, &mut fenv, &mut b);
 
         let node = Ast::Sequence(seq).into();
         b.dump_ast(&node);
