@@ -33,6 +33,9 @@ pub enum Literal {
     Float(f64),
     String(String),
     Bool(bool),
+    Tuple(Vec<Literal>),
+    Struct(Vec<(Option<StringKey>, Literal)>),
+    Array(AstType, Vec<usize>), // Type and dimension, empty dimension is the same as a scalar
 }
 
 impl From<Literal> for AstType {
@@ -49,6 +52,16 @@ impl From<&Literal> for AstType {
             Literal::Bool(_) => AstType::Bool,
             Literal::Index(_) => AstType::Index,
             Literal::String(_) => AstType::String,
+            Literal::Tuple(fields) => {
+                AstType::Struct(fields.iter().map(|lit| (None, lit.into())).collect())
+            }
+            Literal::Struct(fields) => AstType::Struct(
+                fields
+                    .iter()
+                    .map(|(maybe_key, lit)| (maybe_key.clone(), lit.into()))
+                    .collect(),
+            ),
+            Literal::Array(ty, dims) => AstType::Array(ty.clone().into(), dims.clone()),
         }
     }
 }

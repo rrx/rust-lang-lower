@@ -104,7 +104,7 @@ impl<'c> MLIRGenerator<'c> {
             }
             AstType::Array(ast_ty, dims) => {
                 let ty = self.from_type(ast_ty).0;
-                (ty, dims.clone())
+                (ty, dims.iter().map(|i| *i as i64).collect())
             }
             AstType::Args(ty) => {
                 // TODO: hardwired for now

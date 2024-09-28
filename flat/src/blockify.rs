@@ -22,6 +22,13 @@ pub enum BlockifyError {
 }
 
 #[derive(Debug, Clone)]
+pub enum UseIndex {
+    Attr(StringKey),
+    Pos(usize),
+    Use(LinkId),
+}
+
+#[derive(Debug, Clone)]
 pub enum LCode {
     Label, // number of positional arguments, number of named arguments
     Noop,
@@ -33,7 +40,8 @@ pub enum LCode {
     ValueIndex(LinkId, u8), // index into a struct
     CallValue(CodeOffset),
     Arg(u8), // get the value of a positional arg
-    Const(Literal),
+    Val(Literal),
+    Use(Vec<UseIndex>),
     Op1(UnaryOperation),
     Op2(BinaryOperation),
     NaryOp(NaryOperation),
@@ -234,7 +242,7 @@ pub trait ICodeModule {
                 format!("jump({:?}, num_args: {})", value_id, values.len())
             }
 
-            LCode::Const(Literal::String(s)) => {
+            LCode::Val(Literal::String(s)) => {
                 format!("String({})", s)
             }
 

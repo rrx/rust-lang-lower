@@ -79,7 +79,7 @@ impl<'a> Interp<'a> {
         loop {
             let code = m.get_code(current);
             match code {
-                LCode::Const(lit) => {
+                LCode::Val(lit) => {
                     let value = Value::from_lit(lit);
                     scope.declare(current, value);
                 }
@@ -177,7 +177,7 @@ impl<'a> Interp<'a> {
         let code = self.m.get_code(v);
         for scope in self.stack.iter_mut().rev() {
             match code {
-                LCode::Const(lit) => {
+                LCode::Val(lit) => {
                     if let Some(value) = scope.values.get(&v) {
                         return Ok(value.clone());
                     } else {
@@ -236,7 +236,7 @@ impl<'a> Interp<'a> {
                         return value.clone();
                     }
                 }
-                LCode::Const(_) => {
+                LCode::Val(_) => {
                     if let Some(value) = scope.values.get(&v) {
                         return value.clone();
                     }
@@ -427,7 +427,7 @@ impl<'a> Interp<'a> {
                 true
             }
 
-            LCode::Const(lit) => {
+            LCode::Val(lit) => {
                 let value = Value::from_lit(lit);
                 self.save_value(value);
                 self.advance();

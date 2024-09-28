@@ -434,8 +434,12 @@ impl<'c> MLIRGenerator<'c> {
                 self.lower_jump(v, target_value_id)?;
             }
 
-            LCode::Const(lit) => {
+            LCode::Val(lit) => {
                 self.lower_literal(v, lit);
+            }
+
+            LCode::Use(indicies) => {
+                unimplemented!()
             }
 
             LCode::Return => {

@@ -11,7 +11,7 @@ use compile_core::{
     //BinaryOperation, BuiltinId, ControlFlowMarker,
     Lambda,
     LinkOptions,
-    Literal,
+    //Literal,
     NaryOperation,
     ReturnType,
     //ParameterNode,
@@ -2120,7 +2120,7 @@ impl Flatten {
                         let ast_ty: AstType = lit.clone().into();
                         self.switch_blocks(static_block_id);
                         let link_id = self.push_code(
-                            LCode::Const(lit.clone()),
+                            LCode::Val(lit.clone()),
                             ast_ty.clone(),
                             Some(global_name_key),
                             node.span_id,
@@ -2240,8 +2240,7 @@ impl Flatten {
                 //};
                 let mem = VarDefinitionSpace::Default;
 
-                let link_id =
-                    self.push_code(LCode::Const(lit), ty.clone(), None, node.span_id, mem);
+                let link_id = self.push_code(LCode::Val(lit), ty.clone(), None, node.span_id, mem);
                 Ok(FlattenResult::new(
                     current_block_id,
                     Some(link_id),

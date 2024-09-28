@@ -317,7 +317,7 @@ impl FlattenModule {
 
                 if entry.mem == VarDefinitionSpace::Static {
                     match &entry.code {
-                        LCode::Const(lit) => {
+                        LCode::Val(lit) => {
                             m.statics.insert(entry.name.unwrap(), lit.clone());
                         }
                         _ => (),
