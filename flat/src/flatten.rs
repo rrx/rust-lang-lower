@@ -1,3 +1,4 @@
+use super::resolve_attribute;
 use anyhow::Error;
 use anyhow::Result;
 use compile_core::{
@@ -20,6 +21,7 @@ use compile_core::{
     //UnaryOperation,
     VarDefinitionSpace,
 };
+
 use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
 use std::collections::{HashMap, HashSet};
@@ -121,6 +123,10 @@ impl IRBlock {
 
     pub fn push(&mut self, link_id: LinkId) {
         self.links.push(link_id);
+    }
+
+    pub fn last(&self) -> Option<LinkId> {
+        self.links.last().cloned()
     }
 }
 
@@ -600,7 +606,9 @@ impl Flatten {
         let scope_id = block.scope_id;
 
         let mut r = SequenceReader::new();
-        let mut seq = r.build(seq.clone(), b);
+
+        // build the sequence
+        let mut seq = r.build(seq.clone(), fenv, b);
 
         for expr in seq.iter() {
             match &expr.node {
@@ -1528,7 +1536,7 @@ impl Flatten {
         // do this early for recursive functions
         fenv.scope_define(fenv.static_scope_id(), global_name, entry_link_id);
 
-        let body = jump_if_needed(*body, b);
+        let body = jump_if_needed(*body, fenv, b);
 
         self.switch_blocks(fun_block_id);
         let r = self.push_node(body, fenv, b)?;
@@ -1712,7 +1720,7 @@ impl Flatten {
         self.block_succ(current_block_id, next_block_id, Successor::BlockScope);
 
         // Lambda Body
-        let body = jump_if_needed(*def.body.unwrap(), b);
+        let body = jump_if_needed(*def.body.unwrap(), fenv, b);
 
         // get the next block
         let block = self.get_block(current_block_id);
@@ -2048,8 +2056,8 @@ impl Flatten {
         let current_block_id = self.block_id;
         let block = self.get_block_mut(current_block_id);
         let span_id = node.span_id;
-        //println!("push: {}, {}", current_block_id, block.scope_id);
-        //b.dump_ast(&node);
+        println!("push: {}, {}", current_block_id, block.scope_id);
+        b.dump_ast(&node);
         let ast = node.node;
 
         match ast {
@@ -2474,32 +2482,9 @@ impl Flatten {
                         self.push_call_by_name(*ident, args, node.span_id, fenv, b)
                     }
                     Ast::Attribute(ident, attr) => {
-                        let attr_name = b.labels.r(ident.into());
-                        match &attr.node {
-                            Ast::Identifier(base) => {
-                                let name = b.labels.r(base.into());
-                                if &name == "q" {
-                                    if let Some(ast) =
-                                        b.build_builtin_from_name(&attr_name, args, span_id)
-                                    {
-                                        self.push_node(ast, fenv, b)
-                                    } else {
-                                        b.push_error_labels(vec![b.primary_label(
-                                            &format!("Builtin not found: {}", &name),
-                                            attr.span_id,
-                                        )]);
-                                        Err(Error::new(BlockifyError::Invalid))
-                                    }
-                                } else {
-                                    unimplemented!("{}.{}", name, attr_name)
-                                    //let ident_span_id = env.span_id(ident.span, b);
-                                    //let ident = Ast::Identifier(key).node(ident_span_id);
-                                    //let ast = Ast::Call(ident.into(), args).node(span_id.clone());
-                                    //Ok(ast)
-                                }
-                            }
-                            _ => unimplemented!("{:?}", attr),
-                        }
+                        let node = attr;
+                        let ast = resolve_attribute(*ident, &node, span_id, args, b)?;
+                        self.push_node(ast, fenv, b)
                     }
                     _ => unimplemented!("{:?}", expr.node),
                 }
@@ -2622,14 +2607,26 @@ impl Flatten {
             }
 
             Ast::Block(name, args, body) => {
+                // push a new block.  But check to make sure the previous block was closed
+
+                let scope_id = block.scope_id;
+
                 //block already exists, and it is not an entry block
-                let new_block_id =
-                    fenv.resolve_block_id(block.scope_id, name.into())
-                        .expect(&format!(
-                            "block not found: {}, {:?}",
-                            b.labels.r(name.into()),
-                            name
-                        ));
+                let new_block_id = fenv
+                    .resolve_block_id(scope_id, name.into())
+                    .expect(&format!(
+                        "block not found: {}, {:?}",
+                        b.labels.r(name.into()),
+                        name
+                    ));
+
+                if let Some(last) = block.last() {
+                    let entry = self.get_entry(last);
+                    if !entry.code.is_term() {
+                        let _ = self.push_jump(new_block_id.into(), vec![], span_id);
+                    }
+                    //assert!(entry.code.is_term());
+                }
 
                 let new_block = self.get_block(new_block_id);
                 let new_scope_id = new_block.scope_id;
@@ -3056,14 +3053,14 @@ fn def_to_type(def: &Lambda, b: &mut NB) -> AstType {
     fun_ty
 }
 
-fn jump_if_needed(ast: AstNode, b: &mut NB) -> AstNode {
+fn jump_if_needed(ast: AstNode, fenv: &mut FlattenEnvironment, b: &mut NB) -> AstNode {
     let span_id = ast.span_id;
     let mut reader = SequenceReader::new();
-    let mut seq = reader.build(ast.to_vec(), b);
+    let mut seq = reader.build(ast.to_vec(), fenv, b);
     if let Some(first) = seq.first() {
         if let Ast::Block(key, args, _body) = &first.node {
             assert_eq!(args.len(), 0);
-            let jump = NB::goto(*key).node(span_id);
+            let jump = NB::goto(key.clone()).node(span_id);
             seq.insert(0, jump);
         }
     }

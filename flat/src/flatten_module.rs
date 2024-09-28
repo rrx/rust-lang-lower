@@ -289,8 +289,8 @@ impl FlattenModule {
                 .name
                 .map(|key| b.labels.r(key.into()))
                 .unwrap_or("".to_string());
-            println!("X: {:?}", entry);
-            println!("X: {}, {}", name, &ty);
+            //println!("X: {:?}", entry);
+            //println!("X: {}, {}", name, &ty);
             assert_eq!(entry.mem, VarDefinitionSpace::Static);
 
             if let Some(key) = entry.name {

@@ -120,7 +120,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     //f.dump_blocks();
-    f.dump_scope(fenv.static_block_id(), &fenv, &b);
+    //f.dump_scope(fenv.static_block_id(), &fenv, &b);
     let mut m = FlattenModule::from_builder(f, &mut fenv, &mut b);
 
     if config.template {

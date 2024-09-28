@@ -1,6 +1,8 @@
-use compile_core::{Ast, AstNode, ControlFlowMarker, SpanId, StringKey};
+use anyhow::Error;
+use anyhow::Result;
+use compile_core::{Argument, Ast, AstNode, ControlFlowMarker, SpanId, StringKey};
 
-use crate::NodeBuilder as NB;
+use crate::{BlockifyError, FlattenEnvironment, NodeBuilder as NB};
 
 #[derive(Debug)]
 pub struct SequenceReader {
@@ -16,6 +18,38 @@ pub enum StackType {
     Loop,
     Block,
     Open,
+}
+
+pub fn resolve_attribute(
+    ident: StringKey,
+    attr: &AstNode,
+    span_id: SpanId,
+    args: Vec<Argument>,
+    b: &mut NB,
+) -> Result<AstNode> {
+    let attr_name = b.labels.r(ident.into());
+    match &attr.node {
+        Ast::Identifier(base) => {
+            let name = b.labels.r(base.into());
+            if &name == "q" {
+                if let Some(ast) = b.build_builtin_from_name(&attr_name, args, span_id) {
+                    Ok(ast)
+                } else {
+                    b.push_error_labels(vec![
+                        b.primary_label(&format!("Builtin not found: {}", &name), attr.span_id)
+                    ]);
+                    Err(Error::new(BlockifyError::Invalid))
+                }
+            } else {
+                unimplemented!("{}.{}", name, attr_name)
+                //let ident_span_id = env.span_id(ident.span, b);
+                //let ident = Ast::Identifier(key).node(ident_span_id);
+                //let ast = Ast::Call(ident.into(), args).node(span_id.clone());
+                //Ok(ast)
+            }
+        }
+        _ => unimplemented!("{:?}", attr),
+    }
 }
 
 impl SequenceReader {
@@ -93,6 +127,21 @@ impl SequenceReader {
 
     fn push_node(&mut self, node: AstNode, b: &mut NB) {
         let span_id = node.span_id;
+        let node = match &node.node {
+            Ast::Call(expr, args) => match &expr.node {
+                Ast::Attribute(ident, attr) => {
+                    let node = attr;
+                    resolve_attribute(*ident, &node, node.span_id, args.clone(), b).unwrap()
+                }
+                _ => node,
+            },
+            Ast::Attribute(ident, attr) => {
+                let node = attr;
+                resolve_attribute(*ident, &node, node.span_id, vec![], b).unwrap()
+            }
+            _ => node,
+        };
+
         match &node.node {
             Ast::ControlFlowMarker(ControlFlowMarker::LoopStart(maybe_key)) => {
                 let key = if let Some(key) = maybe_key {
@@ -219,7 +268,12 @@ impl SequenceReader {
         }
     }
 
-    pub fn build(&mut self, exprs: Vec<AstNode>, b: &mut NB) -> Vec<AstNode> {
+    pub fn build(
+        &mut self,
+        exprs: Vec<AstNode>,
+        fenv: &mut FlattenEnvironment,
+        b: &mut NB,
+    ) -> Vec<AstNode> {
         for expr in exprs.into_iter() {
             //println!("push1: {:?}", (self.stack.len(), self.seq.len()));
             //b.dump_ast(&expr);
@@ -237,9 +291,7 @@ impl SequenceReader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        Flatten, FlattenEnvironment, FlattenMode, FlattenModule, ICodeModule, NodeBuilder as NB,
-    };
+    use crate::{Flatten, FlattenEnvironment, FlattenMode, FlattenModule, NodeBuilder as NB};
     use anyhow::Result;
     use compile_core::AstType;
     use test_log::test;
