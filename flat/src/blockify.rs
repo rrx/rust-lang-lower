@@ -25,7 +25,51 @@ pub enum BlockifyError {
 pub enum UseIndex {
     Attr(StringKey),
     Pos(usize),
-    Use(LinkId),
+    Use(CodeOffset),
+}
+
+impl UseIndex {
+    pub fn offset(self) -> CodeOffset {
+        match self {
+            Self::Use(offset) => offset,
+            _ => unimplemented!(),
+        }
+    }
+}
+
+impl From<LinkId> for UseIndex {
+    fn from(item: LinkId) -> Self {
+        Self::Use(item.into())
+    }
+}
+
+impl From<&LinkId> for UseIndex {
+    fn from(item: &LinkId) -> Self {
+        Self::Use(item.into())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct UseIndexList(Vec<UseIndex>);
+impl UseIndexList {
+    pub fn new() -> Self {
+        Self(vec![])
+    }
+    pub fn offset(self) -> CodeOffset {
+        self.0.get(0).unwrap().clone().offset()
+    }
+}
+
+impl From<LinkId> for UseIndexList {
+    fn from(item: LinkId) -> Self {
+        Self(vec![item.into()])
+    }
+}
+
+impl From<&LinkId> for UseIndexList {
+    fn from(item: &LinkId) -> Self {
+        Self(vec![item.into()])
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -38,7 +82,7 @@ pub enum LCode {
     Extern,                           // optional entry block
     //Value(LinkId),
     ValueIndex(LinkId, u8), // index into a struct
-    CallValue(CodeOffset),
+    CallValue(UseIndexList),
     Arg(u8), // get the value of a positional arg
     Val(Literal),
     Use(Vec<UseIndex>),
@@ -138,17 +182,10 @@ pub trait ICodeModule {
         loop {
             let value_id = self.resolve_code_offset(current);
             let code = self.get_code(value_id);
-            if let LCode::CallValue(next_value_id) = code {
-                current = next_value_id.into();
+            if let LCode::CallValue(inds) = code {
+                current = inds.clone().offset();
                 continue;
             }
-
-            /*
-            if let LCode::Link(next_link_id) = code {
-                current = (*next_link_id).into();
-                continue;
-            }
-            */
 
             return Some(current);
         }
@@ -160,8 +197,9 @@ pub trait ICodeModule {
             let i = values.len();
             let v = ValueId((v.index() - 1 - i) as u32);
             let code = self.get_code(v);
-            if let LCode::CallValue(value_id) = code {
-                values.push_front((*value_id).into());
+            if let LCode::CallValue(inds) = code {
+                let offset = inds.clone().offset();
+                values.push_front(offset.into());
                 continue;
             }
             break;

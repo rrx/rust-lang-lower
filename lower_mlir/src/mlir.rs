@@ -306,8 +306,8 @@ impl<'c> MLIRGenerator<'c> {
                 }
                 */
 
-                if let LCode::CallValue(next_value_id) = code {
-                    current = (*next_value_id).into();
+                if let LCode::CallValue(indicies) = code {
+                    current = indicies.clone().offset();
                     continue;
                 }
 

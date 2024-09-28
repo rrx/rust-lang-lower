@@ -715,7 +715,7 @@ impl Flatten {
     pub fn push_return(&mut self, link_ids: Vec<(LinkId, AstType)>, span_id: SpanId) -> LinkId {
         for (link_id, ty) in link_ids.iter() {
             self.push_code(
-                LCode::CallValue((*link_id).into()),
+                LCode::CallValue(link_id.into()),
                 ty.clone(),
                 None,
                 span_id,
