@@ -78,7 +78,7 @@ pub enum LCode {
     DeclareTemplate(Option<BlockId>), // optional entry block
     Extern,                           // optional entry block
     //Value(LinkId),
-    ValueIndex(LinkId, u8), // index into a struct
+    //ValueIndex(LinkId, u8), // index into a struct
     CallValue(UseIndexList),
     Arg(u8), // get the value of a positional arg
     Val(Literal),

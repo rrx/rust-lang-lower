@@ -311,6 +311,7 @@ impl<'c> MLIRGenerator<'c> {
                     continue;
                 }
 
+                /*
                 if let LCode::ValueIndex(link_id, index) = code {
                     let v = self.blockify.resolve_code_offset(link_id.into());
                     let index = (*index) as usize;
@@ -328,6 +329,7 @@ impl<'c> MLIRGenerator<'c> {
 
                     return Some(SymIndex::Arg(v, index));
                 }
+            */
                 break;
             }
             let v = self.blockify.resolve_code_offset(current);
@@ -958,7 +960,7 @@ impl<'c> MLIRGenerator<'c> {
             }
 
             //LCode::Value(_) => (),
-            LCode::ValueIndex(_, _) => (),
+            //LCode::ValueIndex(_, _) => (),
             LCode::CallValue(_) => (),
             LCode::Noop => (),
             LCode::Extern => (),
