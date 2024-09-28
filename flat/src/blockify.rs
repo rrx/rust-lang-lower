@@ -29,7 +29,7 @@ pub enum LCode {
     DeclareFunction(Option<BlockId>), // optional entry block
     DeclareTemplate(Option<BlockId>), // optional entry block
     Extern,                           // optional entry block
-    Value(LinkId),
+    //Value(LinkId),
     ValueIndex(LinkId, u8), // index into a struct
     CallValue(CodeOffset),
     Arg(u8), // get the value of a positional arg
@@ -130,7 +130,7 @@ pub trait ICodeModule {
         loop {
             let value_id = self.resolve_code_offset(current);
             let code = self.get_code(value_id);
-            if let LCode::Value(next_value_id) = code {
+            if let LCode::CallValue(next_value_id) = code {
                 current = next_value_id.into();
                 continue;
             }

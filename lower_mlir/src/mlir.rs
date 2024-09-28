@@ -299,10 +299,12 @@ impl<'c> MLIRGenerator<'c> {
             loop {
                 let v_decl = self.blockify.resolve_code_offset(current);
                 let code = self.blockify.get_code(v_decl);
+                /*
                 if let LCode::Value(next_value_id) = code {
                     current = (*next_value_id).into();
                     continue;
                 }
+                */
 
                 if let LCode::CallValue(next_value_id) = code {
                     current = (*next_value_id).into();
@@ -951,7 +953,7 @@ impl<'c> MLIRGenerator<'c> {
                 c.push(op);
             }
 
-            LCode::Value(_) => (),
+            //LCode::Value(_) => (),
             LCode::ValueIndex(_, _) => (),
             LCode::CallValue(_) => (),
             LCode::Noop => (),

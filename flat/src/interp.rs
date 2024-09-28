@@ -434,6 +434,7 @@ impl<'a> Interp<'a> {
                 true
             }
 
+            /*
             LCode::Value(v) => {
                 let v = self.m.resolve_code_offset(v.into());
                 let value = self.resolve_value(v)?;
@@ -441,7 +442,7 @@ impl<'a> Interp<'a> {
                 self.advance();
                 true
             }
-
+            */
             LCode::CallValue(v) => {
                 let v = self.m.resolve_code_offset(*v);
                 let value = self.resolve_value(v)?;

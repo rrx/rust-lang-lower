@@ -2514,7 +2514,7 @@ impl Flatten {
                 let current_block_id = r.block_id;
 
                 self.push_code(
-                    LCode::Value(r.link_id.unwrap().into()),
+                    LCode::CallValue(r.link_id.unwrap().into()),
                     r.ty.clone(),
                     None,
                     node.span_id,
