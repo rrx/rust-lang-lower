@@ -610,6 +610,8 @@ impl Flatten {
         // build the sequence
         let mut seq = r.build(seq.clone(), fenv, b);
 
+        // ensure the block is created, so we have something to jump to if we need to jump to later
+        // block
         for expr in seq.iter() {
             match &expr.node {
                 Ast::Block(key, args, _body) => {
@@ -641,36 +643,38 @@ impl Flatten {
                     let next_node = next_seq.first().unwrap();
                     let next_span_id = next_node.span_id;
                     let current_block_id = self.block_id;
-                    let new_block_id = match &next_node.node {
+                    let next_block_id = match &next_node.node {
                         Ast::Block(key, _, _) => {
+                            // next statement is a block, so we know what's next
                             let new_block_id = fenv.resolve_block_id(scope_id, key.into()).unwrap();
                             new_block_id
                         }
                         _ => {
-                            let new_block_id = self.new_block(scope_id);
+                            // create a new block, because the next statement needs to be enclosed
+                            // this should probably happen in the reader
+                            // We need to create the next block so we know what to jump to in the
+                            // current statement
+                            let next_block_id = self.new_block(scope_id);
                             //println!("term new: {:?}", (new_block_id, &next_node));
-                            self.switch_blocks(new_block_id);
+                            self.switch_blocks(next_block_id);
                             self.push_start_block(
                                 scope_id,
-                                AstType::Func(
-                                    AstType::Struct(vec![]).into(),
-                                    ReturnType::Single(AstType::Unit).into(),
-                                ),
+                                AstType::func(vec![], AstType::Unit), // void=>void
                                 Some(b.labels.fresh_key("new")),
                                 next_node.span_id,
                                 VarDefinitionSpace::Default,
                                 fenv,
                             );
-                            self.block_succ(current_block_id, new_block_id, Successor::BlockScope);
-                            let new_block = self.get_block_mut(new_block_id);
-                            new_block.next = seq_next_block_id;
-                            new_block_id
+                            self.block_succ(current_block_id, next_block_id, Successor::BlockScope);
+                            let next_block = self.get_block_mut(next_block_id);
+                            next_block.next = seq_next_block_id;
+                            next_block_id
                         }
                     };
 
                     // set next on current
                     let block = self.get_block_mut(current_block_id);
-                    block.next(new_block_id);
+                    block.next(next_block_id);
 
                     // flatten expr
                     //println!("expr: {:?}", (&expr));
@@ -684,7 +688,7 @@ impl Flatten {
                         span_id: next_span_id,
                     };
                     //println!("next: {:?}", (&next_node));
-                    self.switch_blocks(new_block_id);
+                    self.switch_blocks(next_block_id);
                     let r = self.push_node(next_node, fenv, b)?;
                     assert_eq!(self.block_id, r.block_id);
                     //println!("next2: {:?}", (&r));
@@ -810,12 +814,7 @@ impl Flatten {
         span_id: SpanId,
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
-    ) -> Result<(
-        BlockId,
-        AstType,
-        Vec<(Option<StringKey>, LinkId, AstType)>,
-        AstType,
-    )> {
+    ) -> Result<(AstType, Vec<(Option<StringKey>, LinkId, AstType)>, AstType)> {
         let func_arg = b.types.r(def.arg_type).clone();
         let ret = b.types.r(def.return_type).clone();
 
@@ -946,12 +945,8 @@ impl Flatten {
             .map(|(field_key, field_ty)| {
                 let field_key = field_key.unwrap();
                 match field_ty {
-                    AstType::Args(_) => {
-                        Argument::Args(field_key, args_seq.clone()) //value_map.remove(&field_key).unwrap().into())
-                    }
-                    AstType::KwArgs(_) => {
-                        Argument::KwArgs(field_key, kwargs_map.clone()) //NB::index())//value_map.remove(&field_key).unwrap().into())
-                    }
+                    AstType::Args(_) => Argument::Args(field_key, args_seq.clone()),
+                    AstType::KwArgs(_) => Argument::KwArgs(field_key, kwargs_map.clone()),
                     _ => Argument::Named(field_key, value_map.remove(&field_key).unwrap().into()),
                 }
             })
@@ -978,12 +973,28 @@ impl Flatten {
             return Err(Error::new(BlockifyError::Invalid));
         }
 
-        let mut values = vec![];
+        let values = self.push_arguments(args, span_id, fenv, b)?;
+
+        let call_ty = AstType::Struct(
+            values
+                .iter()
+                .map(|v| (v.0, v.2.clone()))
+                .collect::<Vec<_>>(),
+        );
+
+        Ok((ret.clone(), values, call_ty))
+    }
+
+    fn push_arguments(
+        &mut self,
+        args: Vec<Argument>,
+        span_id: SpanId,
+        fenv: &mut FlattenEnvironment,
+        b: &mut NB,
+    ) -> Result<Vec<(Option<StringKey>, LinkId, AstType)>> {
         let mut current_block_id = self.block_id;
         let mut link_ids = vec![];
-        //let mut has_kwargs = false;
-        // block may have changed so we use the new block returned from the
-        // args
+        let mut values = vec![];
         for a in args.into_iter() {
             match a {
                 Argument::Positional(expr) => {
@@ -1053,15 +1064,8 @@ impl Flatten {
                 }
             }
         }
-
-        let call_ty = AstType::Struct(
-            values
-                .iter()
-                .map(|v| (v.0, v.2.clone()))
-                .collect::<Vec<_>>(),
-        );
-
-        Ok((current_block_id, ret.clone(), values, call_ty))
+        self.block_id = current_block_id;
+        Ok(values)
     }
 
     fn push_bake_static(
@@ -1229,7 +1233,7 @@ impl Flatten {
             self.resolve_lambda(current_block_id, name, fenv)
         {
             // calculate the calling arguments
-            let (current_block_id, ret_ty, call_values, call_ty) =
+            let (ret_ty, call_values, call_ty) =
                 self.push_function_args(&def, args, span_id, fenv, b)?;
 
             let is_static = fenv.static_scope_id() == scope_id;
@@ -1348,8 +1352,9 @@ impl Flatten {
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
     ) -> Result<FlattenResult> {
-        let (current_block_id, ret_ty, values, _call_ty) =
-            self.push_function_args(&def, args, span_id, fenv, b)?;
+        let (ret_ty, values, _call_ty) = self.push_function_args(&def, args, span_id, fenv, b)?;
+
+        let current_block_id = self.block_id;
 
         // Add links
         for (key, link_id, ty) in values {

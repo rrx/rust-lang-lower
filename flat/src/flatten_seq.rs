@@ -355,7 +355,7 @@ mod tests {
 
     #[test]
     fn test_seq2() {
-        let (mut fenv,  mut b) = builder();
+        let (mut fenv, mut b) = builder();
         let a = b.labels.s("a");
         let seq = vec![NB::label(a).into(), Ast::CloseBlock.into()];
         let _ = run(seq, &mut fenv, &mut b).unwrap();
@@ -364,7 +364,7 @@ mod tests {
 
     #[test]
     fn test_seq3() {
-        let (mut fenv,  mut b) = builder();
+        let (mut fenv, mut b) = builder();
         let a = b.labels.s("a");
         let seq = vec![NB::label(a).into()];
         let mut r = SequenceReader::new();
@@ -377,7 +377,7 @@ mod tests {
 
     #[test]
     fn test_seq4() {
-        let (mut fenv,  mut b) = builder();
+        let (mut fenv, mut b) = builder();
         let a = b.labels.s("a");
         let block = Ast::Block(a, vec![], NB::index(1).into()).into();
         let seq = vec![NB::index(1), NB::index(1), block];
