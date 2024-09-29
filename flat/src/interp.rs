@@ -279,8 +279,6 @@ impl<'a> Interp<'a> {
             LCode::Label => {
                 // load args into scope
                 let scope = Scope::new(self.jump_type, self.return_link_id);
-                //scope.args = self.call_args.clone();
-                //self.call_args.clear();
                 self.stack.push(scope);
 
                 self.advance();
@@ -307,49 +305,19 @@ impl<'a> Interp<'a> {
                 let v_decl = self.m.resolve_code_offset(decl.into());
                 let v_value = self.m.resolve_code_offset(v.into());
                 let value = self.resolve_value(v_value)?;
-                //let mem = self.m.get_mem(decl.into());
-
-                //let scope = if *mem == VarDefinitionSpace::Static {
-                //self.save_static(v, value);
-                //let scope = self.stack.first_mut().unwrap();
-                //scope
-                //} else {
-                //let mut maybe_scope = None;
                 for scope in self.stack.iter_mut().rev() {
                     if scope.values.contains_key(&v_decl) {
-                        //maybe_scope = Some(scope);
-                        //return true;
                         scope.values.insert(v_decl, value);
                         self.advance();
                         return Ok(true);
-                        //
                     }
                 }
-                //if let Some(scope) = maybe_scope {
-                //scope
-                //} else {
-                //unreachable!()
-                //}
-                //};
                 unreachable!()
-                //scope.values.insert(v_decl, value);
-                //self.advance();
-                //true
             }
 
             LCode::Load(decl) => {
                 let v_decl = self.m.resolve_code_offset(decl.into());
                 let value = self.resolve_declaration(v_decl);
-                /*
-                let value = self
-                    .stack
-                    .last()
-                    .unwrap()
-                    .values
-                    .get(&v_decl)
-                    .unwrap()
-                    .clone();
-                */
                 self.stack
                     .last_mut()
                     .unwrap()
