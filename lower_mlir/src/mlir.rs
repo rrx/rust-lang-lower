@@ -153,7 +153,7 @@ impl<'c> OpCollection<'c> {
 
 pub struct MLIRGenerator<'c> {
     pub(crate) context: &'c Context,
-    blockify: &'c dyn ICodeModule,
+    pub(crate) blockify: &'c dyn ICodeModule,
     index: IndexMap<ValueId, SymIndex>,
     module_block_id: ValueId,
     blocks: HashMap<ValueId, OpCollection<'c>>,
@@ -415,6 +415,48 @@ impl<'c> MLIRGenerator<'c> {
         Ok(())
     }
 
+    pub fn build_struct_type(&mut self, values: Vec<CodeOffset>) -> (Type<'c>, Type<'c>) {
+        let types = values
+            .iter()
+            .map(|v| {
+                let ast_ty = self.blockify.get_type(v.into());
+                let (ty, _dims) = self.from_type(&ast_ty);
+                ty
+            })
+        .collect::<Vec<_>>();
+        let tuple_type = llvm::r#type::r#struct(self.context, &types, true);
+        let ptr_type = llvm::r#type::pointer(self.context, 0);
+        (ptr_type, tuple_type)
+    }
+
+    /*
+    pub fn build_struct2(&mut self, v: ValueId, values: Vec<CodeOffset>) -> (Type<'c>, Type<'c>) {
+        let ty = IntegerType::new(self.context, 64).into();
+        let dims = vec![values.len() as i64];
+    }
+    */
+
+    pub fn build_struct(&mut self, v: ValueId, values: Vec<CodeOffset>) -> (Type<'c>, Type<'c>) {
+        let (ptr_type, tuple_type) = self.build_struct_type(values);
+        let location = self.get_location(v);
+        // construct a sized struct memref and store it somewhere
+        let block_id = self.blockify.get_entry_id(v);
+        //let op = memref::alloca(self.context, memref_ty, &[], &[], None, location);
+        let op = self.build_int_op(1, location);
+        let c = self.blocks.get_mut(&block_id).unwrap();
+        let size_sym = c.push(op);
+        let r_size = self.value0(size_sym);
+        let options = melior::dialect::llvm::AllocaOptions::new();
+        let type_attr = TypeAttribute::new(tuple_type);
+        let options = options.elem_type(Some(type_attr));
+        let op =
+            llvm::alloca(self.context, r_size, tuple_type, location, options);
+        let c = self.blocks.get_mut(&block_id).unwrap();
+        let index = c.push(op);
+        self.index.insert(v, index);
+        (ptr_type, tuple_type)
+    }
+
     pub fn lower_code(&mut self, v: ValueId) -> Result<()> {
         let code = self.blockify.get_code(v);
         let location = self.get_location(v);
@@ -618,6 +660,30 @@ impl<'c> MLIRGenerator<'c> {
                 self.index.insert(v, index);
             }
 
+            LCode::Tuple(link_ids) => {
+                let block_id = self.blockify.get_entry_id(v);
+                let ast_ty = self.blockify.get_type(v.into());
+                let (ty, dims) = self.from_type(&ast_ty);
+                // we receive a list of uses of values, which is in a graph
+                // we need to decide if we copy, or reference
+                // With primitives, copy makes sense.  This can also be the default
+                // unless requested otherwise.
+                // A tuple is like a struct and should have a layout.  We haven't implemented
+                // layouts yet, so we will just assume 64bit alignment and primitives for now.
+                //let ast_ty = self.blockify.get_type(v.into());
+                //let (ty, dims) = self.from_type(&ast_ty);
+                //let b_ty = IntegerType::new(self.context, 64);
+                //let size = link_ids.len();
+                //let memref_ty = MemRefType::new(ty.into(), &dims, None, None);
+                //println!("declare: {:?}", (ty, dims, memref_ty));
+                //let (ptr_ty, value_ty) = self.build_struct(v, link_ids.iter().map(|a| a.into()).collect());
+                //let op = memref::alloca(self.context, memref_ty, &[], &[], None, location);
+                //let c = self.blocks.get_mut(&block_id).unwrap();
+                //let index = c.push(op);
+                //self.index.insert(v, index);
+            }
+
+
             LCode::Store(v_decl, v_value) => {
                 let block_id = self.blockify.get_entry_id(v);
                 let decl_is_static = self.blockify.is_in_static_scope(v_decl.into());
@@ -808,6 +874,7 @@ impl<'c> MLIRGenerator<'c> {
                             self.index.insert(v, index);
                         }
 
+                    /*
                         if false {
                             let ty = TupleType::new(self.context, &types);
                             //let ty = IntegerType::new(self.context, 8);
@@ -840,6 +907,7 @@ impl<'c> MLIRGenerator<'c> {
                             let index = c.push(op);
                             self.index.insert(v, index);
                         }
+                    */
                     }
                 }
             }

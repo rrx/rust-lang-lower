@@ -164,7 +164,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         //b.types.dump();
         if config.verbose {
-            //module.as_operation().dump();
+            module.as_operation().dump();
         }
         assert!(module.as_operation().verify());
 
@@ -172,7 +172,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let pass_manager = lower_mlir::default_pass_manager(&context, config.optimize);
         pass_manager.run(&mut module).unwrap();
         if config.verbose {
-            //module.as_operation().dump();
+            module.as_operation().dump();
         }
         assert!(module.as_operation().verify());
     }

@@ -351,6 +351,14 @@ impl NodeBuilder {
                 out.push((depth, s, node.span_id));
             }
 
+            Ast::Tuple(exprs) => {
+                let s = format!("tuple:");
+                out.push((depth, s, node.span_id));
+                for e in exprs {
+                    self.dump_strings(e, out, depth + 1);
+                }
+            }
+
             Ast::Attribute(key, body) => {
                 let s = self.labels.r(key.into());
                 let s = format!("attr({})", s);

@@ -467,6 +467,15 @@ impl Parser {
                 Ok(ast.node(span_id))
             }
 
+            ExprP::Tuple(elements) => {
+                let mut exprs = vec![];
+                for e in elements {
+                    let node = self.from_expr(&e, env, b)?;
+                    exprs.push(node);
+                }
+                Ok(Ast::Tuple(exprs).node(span_id))
+            }
+
             _ => unimplemented!("{:?}", item.node),
         }
     }

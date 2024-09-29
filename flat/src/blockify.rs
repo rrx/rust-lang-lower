@@ -52,6 +52,9 @@ impl From<&LinkId> for UseIndex {
 #[derive(Debug, Clone)]
 pub struct UseIndexList(Vec<UseIndex>);
 impl UseIndexList {
+    pub fn new(elements: Vec<UseIndex>) -> Self {
+        Self(elements)
+    }
     pub fn offset(self) -> CodeOffset {
         self.0.get(0).unwrap().clone().offset()
     }
@@ -79,10 +82,14 @@ pub enum LCode {
     Extern,                           // optional entry block
     //Value(LinkId),
     //ValueIndex(LinkId, u8), // index into a struct
+    //
     CallValue(UseIndexList),
+    Call(CodeOffset),
+
     Arg(u8), // get the value of a positional arg
     Val(Literal),
     Use(Vec<UseIndex>),
+    Tuple(Vec<LinkId>),
     Op1(UnaryOperation),
     Op2(BinaryOperation),
     NaryOp(NaryOperation),
@@ -97,7 +104,6 @@ pub enum LCode {
     Branch(CodeOffset, BlockId, BlockId),
     Ternary(CodeOffset, BlockId, BlockId), // condition, then_entry, else_entry
     Builtin(BuiltinId),
-    Call(CodeOffset),
 }
 
 impl LCode {

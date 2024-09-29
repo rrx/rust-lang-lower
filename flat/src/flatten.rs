@@ -12,7 +12,7 @@ use compile_core::{
     //BinaryOperation, BuiltinId, ControlFlowMarker,
     Lambda,
     LinkOptions,
-    //Literal,
+    Literal,
     NaryOperation,
     ReturnType,
     //ParameterNode,
@@ -2061,8 +2061,8 @@ impl Flatten {
         let current_block_id = self.block_id;
         let block = self.get_block_mut(current_block_id);
         let span_id = node.span_id;
-        println!("push: {}, {}", current_block_id, block.scope_id);
-        b.dump_ast(&node);
+        //println!("push: {}, {}", current_block_id, block.scope_id);
+        //b.dump_ast(&node);
         let ast = node.node;
 
         match ast {
@@ -3010,6 +3010,32 @@ impl Flatten {
                 }
                 b.push_error(&format!("AST Error"), node.span_id);
                 Err(Error::new(BlockifyError::Invalid))
+            }
+
+            Ast::Tuple(exprs) => {
+                let mut link_ids = vec![];
+                let mut types = vec![];
+                let mut current_block_id = current_block_id;
+                for e in exprs {
+                    self.switch_blocks(current_block_id);
+                    let r = self.push_node(e, fenv, b)?;
+                    assert_eq!(self.block_id, r.block_id);
+                    current_block_id = r.block_id;
+                    link_ids.push(r.link_id.unwrap());
+                    types.push(r.ty);
+                }
+
+                let ty = AstType::tuple(types);
+                let link_id = self.push_code(
+                    LCode::Tuple(link_ids),
+                    ty, None, span_id, VarDefinitionSpace::Default);
+
+                Ok(FlattenResult::new(
+                        current_block_id,
+                        Some(link_id),
+                        AstType::Unit,
+                        true,
+                ))
             }
 
             /*
