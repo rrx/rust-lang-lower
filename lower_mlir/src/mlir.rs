@@ -15,7 +15,7 @@ use melior::{
             StringAttribute,
             TypeAttribute,
         },
-        r#type::{FunctionType, IntegerType, MemRefType, RankedTensorType, TupleType},
+        r#type::{FunctionType, IntegerType, MemRefType, RankedTensorType},
         Attribute, Block, Identifier, Operation, Region, Type, TypeLike, Value, ValueLike,
     },
     Context,
@@ -298,8 +298,19 @@ impl<'c> MLIRGenerator<'c> {
                 }
                 */
 
-                if let LCode::CallValue(indicies) = code {
-                    current = indicies.clone().offset();
+                if let LCode::Use(base, indicies) = code {
+                    println!("use: {:?}", (base, indicies));
+                    assert!(false);
+                    //let base = self.resolve_value(base).unwrap();
+                    //base.
+                    current = *base;
+                    //current = indicies.clone().offset();
+                    continue;
+                }
+
+                if let LCode::CallValue(base, indicies) = code {
+                    current = *base;
+                    //current = indicies.clone().offset();
                     continue;
                 }
 
@@ -473,8 +484,17 @@ impl<'c> MLIRGenerator<'c> {
                 self.lower_literal(v, lit);
             }
 
-            LCode::Use(indicies) => {
-                unimplemented!()
+            LCode::Use(base, indicies) => {
+                println!("use: {:?}", (base, indicies));
+                //assert!(false);
+
+                /*
+                let op = self.resolve_value(*base).unwrap();
+                let block_id = self.blockify.get_entry_id(v);
+                let c = self.blocks.get_mut(&block_id).unwrap();
+                let index = c.push(op);
+                self.index.insert(v, index);
+                */
             }
 
             LCode::Return => {
@@ -1035,7 +1055,7 @@ impl<'c> MLIRGenerator<'c> {
 
             //LCode::Value(_) => (),
             //LCode::ValueIndex(_, _) => (),
-            LCode::CallValue(_) => (),
+            LCode::CallValue(_, _) => (),
             LCode::Noop => (),
             LCode::Extern => (),
 

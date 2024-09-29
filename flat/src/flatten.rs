@@ -32,7 +32,7 @@ use std::convert::Into;
 use crate::{
     BlockId, BlockifyError, Builtin, CodeOffset, FlattenEnvironment, LCode, LinkId,
     NodeBuilder as NB, ScopeId, ScopeLayer, ScopeType, SequenceReader, StringLabel, Successor,
-    TemplateId, VariantId,
+    TemplateId, UseIndexList, VariantId,
 };
 
 pub type BlockGraph = DiGraph<IRBlock, Successor>;
@@ -727,7 +727,7 @@ impl Flatten {
     pub fn push_return(&mut self, link_ids: Vec<(LinkId, AstType)>, span_id: SpanId) -> LinkId {
         for (link_id, ty) in link_ids.iter() {
             self.push_code(
-                LCode::CallValue(link_id.into()),
+                LCode::CallValue(link_id.into(), vec![]),
                 ty.clone(),
                 None,
                 span_id,
@@ -777,7 +777,7 @@ impl Flatten {
     ) -> LinkId {
         for (key, link_id, ty) in jump_args.iter() {
             self.push_code(
-                LCode::CallValue(link_id.into()),
+                LCode::CallValue(link_id.into(), vec![]),
                 ty.clone(),
                 key.clone(),
                 span_id,
@@ -1028,7 +1028,7 @@ impl Flatten {
 
                     for (link_id, ty) in args_values.iter() {
                         self.push_code(
-                            LCode::CallValue(link_id.into()),
+                            LCode::CallValue(link_id.into(), vec![]),
                             ty.clone(),
                             None,
                             span_id,
@@ -1318,7 +1318,7 @@ impl Flatten {
         // Add links
         for (key, link_id, ty) in values {
             self.push_code(
-                LCode::CallValue(link_id.into()),
+                LCode::CallValue(link_id.into(), vec![]),
                 ty,
                 key,
                 span_id,
@@ -1359,7 +1359,7 @@ impl Flatten {
         // Add links
         for (key, link_id, ty) in values {
             self.push_code(
-                LCode::CallValue(link_id.into()),
+                LCode::CallValue(link_id.into(), vec![]),
                 ty,
                 key,
                 span_id,
@@ -2284,7 +2284,7 @@ impl Flatten {
 
                 for (v, ty) in [(vx, &rx.ty), (vy, &ry.ty)] {
                     self.push_code(
-                        LCode::CallValue(v.into()),
+                        LCode::CallValue(v.into(), vec![]),
                         ty.clone(),
                         None,
                         node.span_id,
@@ -2503,7 +2503,7 @@ impl Flatten {
                 let current_block_id = r.block_id;
 
                 self.push_code(
-                    LCode::CallValue(r.link_id.unwrap().into()),
+                    LCode::CallValue(r.link_id.unwrap().into(), vec![]),
                     r.ty.clone(),
                     None,
                     node.span_id,
@@ -2781,7 +2781,7 @@ impl Flatten {
                         ty = r.ty.clone();
                         // push single arg
                         self.push_code(
-                            LCode::CallValue(v.into()),
+                            LCode::CallValue(v.into(), vec![]),
                             r.ty,
                             None,
                             node.span_id,
@@ -3038,6 +3038,43 @@ impl Flatten {
                     current_block_id,
                     Some(link_id),
                     AstType::Unit,
+                    true,
+                ))
+            }
+
+            Ast::Index(node, index) => {
+                let r_node = self.push_node(*node, fenv, b)?;
+                let r_index = self.push_node(*index, fenv, b)?;
+
+                let indicies = vec![
+                    //r_node.link_id.unwrap().into(),
+                    r_index.link_id.unwrap().into(),
+                ];
+
+                let entry = self.get_entry(r_index.link_id.unwrap());
+                let index = if let LCode::Val(Literal::Int(index)) = entry.code {
+                    index
+                } else {
+                    unimplemented!()
+                };
+
+                let ty = self.get_type(r_node.link_id.unwrap());
+                let (_, ty_field) = ty.fields().get(index as usize).unwrap().clone();
+
+                let code = LCode::Use(r_node.link_id.unwrap().into(), indicies);
+                let link_id = self.push_code(
+                    code,
+                    ty_field.clone(),
+                    None,
+                    span_id,
+                    VarDefinitionSpace::Stack,
+                );
+
+                //println!("index: {:?}", (code,
+                Ok(FlattenResult::new(
+                    current_block_id,
+                    Some(link_id),
+                    ty_field,
                     true,
                 ))
             }

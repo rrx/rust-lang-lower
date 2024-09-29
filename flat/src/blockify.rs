@@ -83,12 +83,12 @@ pub enum LCode {
     //Value(LinkId),
     //ValueIndex(LinkId, u8), // index into a struct
     //
-    CallValue(UseIndexList),
+    CallValue(CodeOffset, Vec<UseIndex>),
     Call(CodeOffset),
 
     Arg(u8), // get the value of a positional arg
     Val(Literal),
-    Use(Vec<UseIndex>),
+    Use(CodeOffset, Vec<UseIndex>),
     Tuple(Vec<LinkId>),
     Op1(UnaryOperation),
     Op2(BinaryOperation),
@@ -185,9 +185,42 @@ pub trait ICodeModule {
         loop {
             let value_id = self.resolve_code_offset(current);
             let code = self.get_code(value_id);
-            if let LCode::CallValue(inds) = code {
-                current = inds.clone().offset();
+            if let LCode::CallValue(base, inds) = code {
+                //current = inds.clone().offset();
+                current = *base;
                 continue;
+            }
+
+            if let LCode::Use(base, inds) = code {
+                if inds.len() == 0 {
+                    current = *base;
+                    continue;
+                }
+
+                assert_eq!(inds.len(), 1);
+
+                //let value_id = self.resolve_code_offset(*base);
+                //let code = self.get_code(value_id);
+                let ty = self.get_type(*base);
+                assert!(ty.is_composite());
+                let index = inds.get(0).unwrap().clone();
+                //let (_, field_type) = ty.fields().get(inds.get(0).unwrap()));
+                current = match index {
+                    UseIndex::Use(offset) => {
+                        let v = self.resolve_code_offset(offset);
+                        let code = self.get_code(v);
+                        let pos = match code {
+                            LCode::Val(Literal::Int(i)) => *i as usize,
+                            _ => unimplemented!(),
+                        };
+                        let (_, field_type) = ty.fields().get(pos).unwrap().clone();
+                        v.into()
+                    }
+                    _ => unimplemented!(),
+                };
+                //let base = self.resolve_declaration(base).unwrap();
+                //current = *base;
+                return Some(current);
             }
 
             return Some(current);
@@ -200,8 +233,9 @@ pub trait ICodeModule {
             let i = values.len();
             let v = ValueId((v.index() - 1 - i) as u32);
             let code = self.get_code(v);
-            if let LCode::CallValue(inds) = code {
-                let offset = inds.clone().offset();
+            if let LCode::CallValue(base, inds) = code {
+                //let offset = inds.clone().offset();
+                let offset = *base;
                 values.push_front(offset.into());
                 continue;
             }

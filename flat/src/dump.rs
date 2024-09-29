@@ -366,10 +366,11 @@ impl NodeBuilder {
                 self.dump_strings(body, out, depth + 1);
             }
 
-            Ast::Index(body) => {
+            Ast::Index(body, index) => {
                 let s = format!("index");
                 out.push((depth, s, node.span_id));
                 self.dump_strings(body, out, depth + 1);
+                self.dump_strings(index, out, depth + 1);
             }
 
             Ast::Import(module_name, mapping) => {

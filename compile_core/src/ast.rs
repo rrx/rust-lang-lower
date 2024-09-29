@@ -246,7 +246,7 @@ pub enum Ast {
     Tuple(Vec<AstNode>),
 
     Identifier(StringKey),
-    Index(Box<AstNode>),
+    Index(Box<AstNode>, Box<AstNode>),
     Attribute(StringKey, Box<AstNode>),
     Literal(Literal),
     Sequence(Vec<AstNode>),

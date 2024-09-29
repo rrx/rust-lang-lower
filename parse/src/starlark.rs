@@ -476,6 +476,12 @@ impl Parser {
                 Ok(Ast::Tuple(exprs).node(span_id))
             }
 
+            ExprP::Index(index) => {
+                let node = self.from_expr(&index.0, env, b)?;
+                let index = self.from_expr(&index.1, env, b)?;
+                Ok(Ast::Index(node.into(), index.into()).node(span_id))
+            }
+
             _ => unimplemented!("{:?}", item.node),
         }
     }

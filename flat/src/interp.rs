@@ -1,4 +1,4 @@
-use crate::{Builtin, ICodeModule, LCode, NodeBuilder, ValueId};
+use crate::{Builtin, ICodeModule, LCode, NodeBuilder, UseIndex, ValueId};
 use anyhow::Result;
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -22,6 +22,22 @@ impl Value {
             Literal::Bool(v) => Value::Bool(*v),
             _ => unimplemented!("{:?}", lit),
         }
+    }
+
+    pub fn resolve_index(&self, inds: &Vec<UseIndex>) -> Value {
+        let mut value = self;
+        for i in inds {
+            match value {
+                Self::Tuple(values) => match i {
+                    UseIndex::Pos(pos) => {
+                        value = values.get(*pos).unwrap();
+                    }
+                    _ => unimplemented!("{:?}", i),
+                },
+                _ => unimplemented!("{:?}", value),
+            }
+        }
+        return value.clone();
     }
 }
 
@@ -107,9 +123,10 @@ impl<'a> Interp<'a> {
     fn format_code(&self, v: ValueId) -> String {
         let code = self.m.get_code(v);
         match code {
-            LCode::CallValue(indicies) => {
-                let v = self.m.resolve_code_offset(indicies.clone().offset());
-                format!("CallValue({})", v)
+            LCode::CallValue(base, indicies) => {
+                let base = self.m.resolve_code_offset(*base);
+                //let v = self.m.resolve_code_offset(indicies.clone().offset());
+                format!("CallValue({}, {:?})", base, indicies)
             }
             LCode::Store(decl, link) => {
                 let v_decl = self.m.resolve_code_offset(decl.into());
@@ -185,6 +202,28 @@ impl<'a> Interp<'a> {
                         scope.values.insert(v, value);
                     }
                 }
+
+                LCode::Use(base, inds) => {
+                    let v = self.m.resolve_code_offset(*base);
+                    let value = scope.values.get(&v).unwrap().clone();
+                    let inds = inds
+                        .iter()
+                        .cloned()
+                        .map(|i| match i {
+                            UseIndex::Use(offset) => {
+                                let v = self.m.resolve_code_offset(offset);
+                                let v = self.resolve_value(v).unwrap();
+                                match v {
+                                    Value::Int(i) => UseIndex::Pos(i as usize),
+                                    _ => unimplemented!(),
+                                }
+                            }
+                            _ => i.clone(),
+                        })
+                        .collect::<Vec<_>>();
+                    return Ok(value.resolve_index(&inds));
+                }
+
                 LCode::Arg(_index) => {
                     println!("arg: {:?}", (&scope, code));
 
@@ -421,6 +460,11 @@ impl<'a> Interp<'a> {
                 true
             }
 
+            LCode::Use(base, inds) => {
+                self.advance();
+                true
+            }
+
             /*
             LCode::Value(v) => {
                 let v = self.m.resolve_code_offset(v.into());
@@ -430,9 +474,10 @@ impl<'a> Interp<'a> {
                 true
             }
             */
-            LCode::CallValue(inds) => {
-                let v = self.m.resolve_code_offset(inds.clone().offset());
-                let value = self.resolve_value(v)?;
+            LCode::CallValue(base, inds) => {
+                let base = self.m.resolve_code_offset(*base);
+                //let v = self.m.resolve_code_offset(inds.clone().offset());
+                let value = self.resolve_value(base)?;
                 self.call_args.push_back(value);
                 self.advance();
                 true
@@ -508,7 +553,10 @@ impl<'a> Interp<'a> {
                     Builtin::Print => {
                         assert_eq!(self.call_args.len(), bi.arity());
                         let value = self.call_args.pop_front().unwrap();
-                        println!("print: {:?}", value);
+                        println!("========================");
+                        println!("***print: {:?}", value);
+                        println!("========================");
+                        //assert!(false);
                         true
                     }
                 };
