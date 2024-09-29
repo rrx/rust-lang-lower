@@ -3,15 +3,7 @@ use flat::{Builtin, CodeOffset, ICodeModule, LCode, NodeBuilder, StringLabel, Va
 use indexmap::IndexMap;
 use melior::ir::Location;
 use melior::{
-    dialect::{
-        arith,
-        cf,
-        func,
-        llvm,
-        memref,
-        //ods,
-        scf,
-    },
+    dialect::{arith, cf, func, llvm, memref, ods, scf},
     ir::{
         self,
         attribute::FlatSymbolRefAttribute,
@@ -423,7 +415,7 @@ impl<'c> MLIRGenerator<'c> {
                 let (ty, _dims) = self.from_type(&ast_ty);
                 ty
             })
-        .collect::<Vec<_>>();
+            .collect::<Vec<_>>();
         let tuple_type = llvm::r#type::r#struct(self.context, &types, true);
         let ptr_type = llvm::r#type::pointer(self.context, 0);
         (ptr_type, tuple_type)
@@ -449,8 +441,7 @@ impl<'c> MLIRGenerator<'c> {
         let options = melior::dialect::llvm::AllocaOptions::new();
         let type_attr = TypeAttribute::new(tuple_type);
         let options = options.elem_type(Some(type_attr));
-        let op =
-            llvm::alloca(self.context, r_size, tuple_type, location, options);
+        let op = llvm::alloca(self.context, r_size, tuple_type, location, options);
         let c = self.blocks.get_mut(&block_id).unwrap();
         let index = c.push(op);
         self.index.insert(v, index);
@@ -674,15 +665,14 @@ impl<'c> MLIRGenerator<'c> {
                 //let (ty, dims) = self.from_type(&ast_ty);
                 //let b_ty = IntegerType::new(self.context, 64);
                 //let size = link_ids.len();
-                //let memref_ty = MemRefType::new(ty.into(), &dims, None, None);
+                let memref_ty = MemRefType::new(ty.into(), &dims, None, None);
                 //println!("declare: {:?}", (ty, dims, memref_ty));
                 //let (ptr_ty, value_ty) = self.build_struct(v, link_ids.iter().map(|a| a.into()).collect());
-                //let op = memref::alloca(self.context, memref_ty, &[], &[], None, location);
-                //let c = self.blocks.get_mut(&block_id).unwrap();
-                //let index = c.push(op);
-                //self.index.insert(v, index);
+                let op = memref::alloca(self.context, memref_ty, &[], &[], None, location);
+                let c = self.blocks.get_mut(&block_id).unwrap();
+                let index = c.push(op);
+                self.index.insert(v, index);
             }
-
 
             LCode::Store(v_decl, v_value) => {
                 let block_id = self.blockify.get_entry_id(v);
@@ -721,7 +711,23 @@ impl<'c> MLIRGenerator<'c> {
 
                 // emit store
                 // store(value, memref)
-                let op = memref::store(r_value, r_addr, &[], location);
+                let r_value_ty = r_value.r#type();
+                let r_addr_ty = r_addr.r#type();
+                println!(
+                    "X: {:?}",
+                    (
+                        r_addr_ty,
+                        r_addr_ty.is_mem_ref(),
+                        r_value_ty,
+                        r_value_ty.is_mem_ref()
+                    )
+                );
+
+                let op = if r_addr_ty.is_mem_ref() && r_value_ty.is_mem_ref() {
+                    ods::memref::copy(self.context, r_value, r_addr, location).into()
+                } else {
+                    memref::store(r_value, r_addr, &[], location)
+                };
 
                 let c = self.blocks.get_mut(&block_id).unwrap();
                 let index = c.push(op);
@@ -874,40 +880,40 @@ impl<'c> MLIRGenerator<'c> {
                             self.index.insert(v, index);
                         }
 
-                    /*
-                        if false {
-                            let ty = TupleType::new(self.context, &types);
-                            //let ty = IntegerType::new(self.context, 8);
-                            let memref_ty = MemRefType::new(ty.into(), &[], None, None);
-                            //println!("struct: {:?}", (block_id, ty, memref_ty));
-                            let options = melior::dialect::llvm::AllocaOptions::new();
-                            let ptr_type = memref_ty.into();
+                        /*
+                            if false {
+                                let ty = TupleType::new(self.context, &types);
+                                //let ty = IntegerType::new(self.context, 8);
+                                let memref_ty = MemRefType::new(ty.into(), &[], None, None);
+                                //println!("struct: {:?}", (block_id, ty, memref_ty));
+                                let options = melior::dialect::llvm::AllocaOptions::new();
+                                let ptr_type = memref_ty.into();
 
-                            let op = self.build_int_op(1, location);
-                            //let (op, _ast_ty) = self.emit_literal_const(&Literal::Int(1), location);
-                            let c = self.blocks.get_mut(&block_id).unwrap();
-                            let size_sym = c.push(op);
-                            let r_size = self.value0(size_sym);
-                            let op =
-                                llvm::alloca(self.context, r_size, ptr_type, location, options);
-                            let c = self.blocks.get_mut(&block_id).unwrap();
-                            let index = c.push(op);
-                            self.index.insert(v, index);
-                        }
+                                let op = self.build_int_op(1, location);
+                                //let (op, _ast_ty) = self.emit_literal_const(&Literal::Int(1), location);
+                                let c = self.blocks.get_mut(&block_id).unwrap();
+                                let size_sym = c.push(op);
+                                let r_size = self.value0(size_sym);
+                                let op =
+                                    llvm::alloca(self.context, r_size, ptr_type, location, options);
+                                let c = self.blocks.get_mut(&block_id).unwrap();
+                                let index = c.push(op);
+                                self.index.insert(v, index);
+                            }
 
-                        if false {
-                            let ty = TupleType::new(self.context, &types);
-                            //let ty = IntegerType::new(self.context, 8);
-                            let memref_ty = MemRefType::new(ty.into(), &[], None, None);
-                            //println!("struct: {:?}", (block_id, ty, memref_ty));
+                            if false {
+                                let ty = TupleType::new(self.context, &types);
+                                //let ty = IntegerType::new(self.context, 8);
+                                let memref_ty = MemRefType::new(ty.into(), &[], None, None);
+                                //println!("struct: {:?}", (block_id, ty, memref_ty));
 
-                            let op =
-                                memref::alloca(self.context, memref_ty, &[], &[], None, location);
-                            let c = self.blocks.get_mut(&block_id).unwrap();
-                            let index = c.push(op);
-                            self.index.insert(v, index);
-                        }
-                    */
+                                let op =
+                                    memref::alloca(self.context, memref_ty, &[], &[], None, location);
+                                let c = self.blocks.get_mut(&block_id).unwrap();
+                                let index = c.push(op);
+                                self.index.insert(v, index);
+                            }
+                        */
                     }
                 }
             }

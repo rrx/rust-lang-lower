@@ -3028,13 +3028,17 @@ impl Flatten {
                 let ty = AstType::tuple(types);
                 let link_id = self.push_code(
                     LCode::Tuple(link_ids),
-                    ty, None, span_id, VarDefinitionSpace::Default);
+                    ty,
+                    None,
+                    span_id,
+                    VarDefinitionSpace::Default,
+                );
 
                 Ok(FlattenResult::new(
-                        current_block_id,
-                        Some(link_id),
-                        AstType::Unit,
-                        true,
+                    current_block_id,
+                    Some(link_id),
+                    AstType::Unit,
+                    true,
                 ))
             }
 

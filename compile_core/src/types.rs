@@ -80,6 +80,7 @@ pub enum AstType {
     // T(a:int, b:float), T(int, float), defaults are handled as part of implementation
     // Tuples and NamedTuples are just Stucts
     Struct(Vec<(Option<StringKey>, AstType)>),
+    Tuple(Vec<AstType>),
     // Unions are similar to structs, but the values hold the same space
     // Naked unions, and tagged unions are implemented as part of layout and implementation
     Union(Vec<(Option<StringKey>, AstType)>),

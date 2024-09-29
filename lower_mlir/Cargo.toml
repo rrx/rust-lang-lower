@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 #melior = { path = "../../melior/melior", features = ['ods-dialects'] }
-melior = "0.18.6"
+melior = { version = "0.18.6", features = ['ods-dialects']}
 
 compile_core = { path = "../compile_core" }
 flat = { path = "../flat" }

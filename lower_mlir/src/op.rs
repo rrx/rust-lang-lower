@@ -56,12 +56,55 @@ impl<'c> MLIRGenerator<'c> {
     pub fn from_type(&self, ty: &AstType) -> (Type<'c>, Vec<i64>) {
         match ty {
             AstType::Ptr(_) => (Type::index(self.context), vec![]),
-            AstType::Struct(_args) => {
+            AstType::Tuple(args) => {
+                let types = args
+                    .iter()
+                    .map(|ast_ty| {
+                        let (ty, _dims) = self.from_type(ast_ty);
+                        ty
+                    })
+                    .collect::<Vec<_>>();
+                (
+                    IntegerType::new(self.context, 64).into(),
+                    vec![types.len() as i64],
+                )
+            }
+
+            AstType::Struct(args) => {
+                /*
+                let types = args
+                    .iter()
+                    .map(|(_, ast_ty)| {
+                        let (ty, _dims) = self.from_type(ast_ty);
+                        ty
+                    })
+                .collect::<Vec<_>>();
+                (IntegerType::new(self.context, 64).into(), vec![types.len() as i64])
+                */
+
+                /*
+                let tuple_type = llvm::r#type::r#struct(self.context, &types, true);
+                let ptr_type = llvm::r#type::pointer(self.context, 0);
+                //(ptr_type, tuple_type)
+                (tuple_type, vec![])
+                    */
+
+                /*
                 //let types = args
                 //.iter()
                 //.map(|(_, a)| self.from_type(a).0)
                 //.collect::<Vec<_>>();
                 //let tuple_type = llvm::r#type::r#struct(self.context, &types, true);
+                let b_ty = IntegerType::new(self.context, 64);
+                let size = args.len();
+                let memref_ty = MemRefType::new(b_ty.into(), &[size as i64], None, None);
+                (
+                    memref_ty.into(),
+                    vec![args.len() as i64]
+                )
+                    */
+
+                //
                 let ptr_type = llvm::r#type::pointer(self.context, 0);
                 (
                     ptr_type,

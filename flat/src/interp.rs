@@ -215,6 +215,15 @@ impl<'a> Interp<'a> {
                 LCode::Call(_) | LCode::Op2(_) | LCode::NaryOp(_) | LCode::Op1(_) => {
                     return Ok(scope.values.get(&v).unwrap().clone());
                 }
+                LCode::Tuple(link_ids) => {
+                    let mut values = vec![];
+                    for offset in link_ids {
+                        let v = self.m.resolve_code_offset(offset.into());
+                        values.push(self.resolve_value(v)?);
+                    }
+                    return Ok(Value::Tuple(values));
+                }
+
                 _ => unimplemented!("{:?}", code),
             }
         }
@@ -357,6 +366,16 @@ impl<'a> Interp<'a> {
                 true
             }
 
+            LCode::Tuple(_) => {
+                let value = self.resolve_value(self.pos)?;
+                self.stack
+                    .last_mut()
+                    .unwrap()
+                    .values
+                    .insert(self.pos, value);
+                self.advance();
+                true
+            }
             LCode::NaryOp(op) => {
                 let orig_values = self.m.get_previous_values(pos);
 
