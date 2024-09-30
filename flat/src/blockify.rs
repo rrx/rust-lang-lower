@@ -336,34 +336,3 @@ pub trait ICodeModule {
     }
     fn code_count(&self) -> usize;
 }
-
-/*
-pub fn dump_env(env: &Environment, b: &NodeBuilder) {
-    println!("current scope: {:?}", env.current_scope());
-    //println!("static block: {:?}", self.static_block_id());
-    //println!("static scope: {:?}", self.static_scope_id());
-    for block in env.blocks.iter() {
-        //let block_id = BlockId(offset as u32);
-        println!("block({:?}, {:?})", block.entry_id, block);
-    }
-
-    for (index, layer) in env.scopes.iter().enumerate() {
-        println!("scope({},{:?})", index, layer.scope_type);
-        for (key, data) in layer.names.iter() {
-            println!("  name  {} = {:?}", b.labels.r((*key).into()), data);
-        }
-        for (key, data) in layer.labels.iter() {
-            println!("  label {} = {:?}", b.labels.r(*key), data);
-        }
-        for next_id in layer.next_block.iter() {
-            println!("  next  {:?}", next_id);
-        }
-        for block_id in layer.blocks.iter() {
-            println!("  block {:?}", block_id);
-        }
-        for (name, def) in layer.lambdas.iter() {
-            println!("  def {:?}", (b.labels.r(*name), def));
-        }
-    }
-}
-*/
