@@ -32,7 +32,7 @@ use std::convert::Into;
 use crate::{
     BlockId, BlockifyError, Builtin, CodeOffset, FlattenEnvironment, LCode, LinkId,
     NodeBuilder as NB, ScopeId, ScopeLayer, ScopeType, SequenceReader, StringLabel, Successor,
-    TemplateId, UseIndexList, VariantId,
+    TemplateId, VariantId,
 };
 
 pub type BlockGraph = DiGraph<IRBlock, Successor>;
@@ -839,7 +839,7 @@ impl Flatten {
     pub fn push_jump(
         &mut self,
         target_id: CodeOffset,
-        jump_args: Vec<(Option<StringKey>, LinkId, AstType)>,
+        jump_args: Vec<(Option<StringKey>, LinkId, AstType, SpanId)>,
         span_id: SpanId,
     ) -> LinkId {
         let ty = AstType::Struct(
@@ -852,7 +852,7 @@ impl Flatten {
         let _link_ids = self.push_call_values(
             &jump_args
                 .into_iter()
-                .map(|(key, v, ty)| (key, v, ty, span_id))
+                .map(|(key, v, ty, span_id)| (key, v, ty, span_id))
                 .collect::<Vec<_>>(),
         );
 
@@ -878,7 +878,11 @@ impl Flatten {
         span_id: SpanId,
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
-    ) -> Result<(AstType, Vec<(Option<StringKey>, LinkId, AstType)>, AstType)> {
+    ) -> Result<(
+        AstType,
+        Vec<(Option<StringKey>, LinkId, AstType, SpanId)>,
+        AstType,
+    )> {
         let func_arg = b.types.r(def.arg_type).clone();
         let ret = b.types.r(def.return_type).clone();
 
@@ -1055,7 +1059,7 @@ impl Flatten {
         span_id: SpanId,
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
-    ) -> Result<Vec<(Option<StringKey>, LinkId, AstType)>> {
+    ) -> Result<Vec<(Option<StringKey>, LinkId, AstType, SpanId)>> {
         let mut current_block_id = self.block_id;
         let mut link_ids = vec![];
         let mut values = vec![];
@@ -1067,7 +1071,7 @@ impl Flatten {
                     assert_eq!(self.block_id, r.block_id);
                     current_block_id = r.block_id;
                     let link_id = r.link_id.unwrap();
-                    values.push((None, link_id, r.ty.clone()));
+                    values.push((None, link_id, r.ty.clone(), span_id));
                     link_ids.push(link_id);
                 }
                 Argument::Named(key, expr) => {
@@ -1076,7 +1080,7 @@ impl Flatten {
                     assert_eq!(self.block_id, r.block_id);
                     current_block_id = r.block_id;
                     let link_id = r.link_id.unwrap();
-                    values.push((Some(key), link_id, r.ty.clone()));
+                    values.push((Some(key), link_id, r.ty.clone(), span_id));
                     link_ids.push(link_id);
                 }
                 Argument::Args(key, exprs) => {
@@ -1106,7 +1110,7 @@ impl Flatten {
                         span_id,
                         VarDefinitionSpace::Stack,
                     );
-                    values.push((Some(key), link_id, struct_ty.clone()));
+                    values.push((Some(key), link_id, struct_ty.clone(), span_id));
                     link_ids.push(link_id);
                 }
                 Argument::KwArgs(key, _expr) => {
@@ -1116,7 +1120,7 @@ impl Flatten {
                     assert_eq!(self.block_id, r.block_id);
                     current_block_id = r.block_id;
                     let link_id = r.link_id.unwrap();
-                    values.push((Some(key), link_id, r.ty.clone()));
+                    values.push((Some(key), link_id, r.ty.clone(), span_id));
                     link_ids.push(link_id);
                 }
             }
@@ -1367,13 +1371,13 @@ impl Flatten {
     pub fn push_function_call(
         &mut self,
         v_fun: LinkId,
-        values: Vec<(Option<StringKey>, LinkId, AstType)>,
+        values: Vec<(Option<StringKey>, LinkId, AstType, SpanId)>,
         ret_ty: AstType,
         span_id: SpanId,
     ) -> Result<FlattenResult> {
         let current_block_id = self.block_id;
         // Add links
-        for (key, link_id, ty) in values {
+        for (key, link_id, ty, span_id) in values {
             self.push_code(
                 LCode::CallValue(link_id.into(), vec![]),
                 ty,
@@ -1414,7 +1418,7 @@ impl Flatten {
         let current_block_id = self.block_id;
 
         // Add links
-        for (key, link_id, ty) in values {
+        for (key, link_id, ty, span_id) in values {
             self.push_code(
                 LCode::CallValue(link_id.into(), vec![]),
                 ty,
@@ -2276,7 +2280,7 @@ impl Flatten {
                     //block_id = r.block_id;
                     let link_id = r.link_id.unwrap();
                     let entry = self.get_entry(link_id);
-                    jump_args.push((None, link_id, entry.ty.clone()));
+                    jump_args.push((None, link_id, entry.ty.clone(), span_id));
                     expr_span_id
                 } else {
                     node.span_id
@@ -2284,7 +2288,7 @@ impl Flatten {
 
                 let fun_block = self.get_block_mut(fun_block_id);
                 fun_block.num_ret_args.insert(jump_args.len());
-                for (_, _, ty) in jump_args.iter() {
+                for (_, _, ty, _) in jump_args.iter() {
                     fun_block.ret_types.insert(ty.clone());
                 }
 
