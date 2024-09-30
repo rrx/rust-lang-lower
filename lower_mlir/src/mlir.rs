@@ -751,6 +751,27 @@ impl<'c> MLIRGenerator<'c> {
             LCode::Store(v_decl, v_value) => {
                 let block_id = self.blockify.get_entry_id(v);
                 let decl_is_static = self.blockify.is_in_static_scope(v_decl.into());
+                let value_is_static = self.blockify.is_in_static_scope(v_value.into());
+                println!(
+                    "store: {}, {}, {}, {}",
+                    v_decl, v_value, decl_is_static, value_is_static
+                );
+
+                /*
+                let value_index = if value_is_static {
+                    let op = memref::get_global(self.context, &static_name, memref_ty, location);
+                    //let current = blocks.get_mut(&block_index).unwrap();
+                    //let addr_index = current.push(op);
+                    //addr_index
+                    let c = self.blocks.get_mut(&block_id).unwrap();
+                    let index = c.push(op);
+                    self.index.insert(v, index);
+                    index
+
+                } else {
+                    self.resolve_value(v_value.into()).unwrap()
+                };
+                */
 
                 let addr_index = if decl_is_static {
                     let name = self.blockify.get_name(v_decl.into()).unwrap();

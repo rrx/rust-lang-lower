@@ -791,6 +791,10 @@ impl Flatten {
             return false;
         }
 
+        if let LCode::Op1(_) = entry.code {
+            return false;
+        }
+
         if let LCode::Op2(_) = entry.code {
             return false;
         }
@@ -2404,7 +2408,10 @@ impl Flatten {
                     let ty = entry.ty.clone();
                     let mem = entry.mem;
 
-                    //let require_load = self.is_load_required(def_link_id);
+                    let link_id = def_link_id;
+                    /*
+                    let require_load = self.is_load_required(def_link_id);
+                    ///
                     // decide if a load is required or not
                     // TODO: this decision might be better made later
                     let require_load = if let VarDefinitionSpace::Arg = mem {
@@ -2429,6 +2436,7 @@ impl Flatten {
                     } else {
                         def_link_id
                     };
+                    */
 
                     Ok(FlattenResult::new(
                         current_block_id,
@@ -2489,6 +2497,7 @@ impl Flatten {
 
                 let offset_decl =
                     if let Some(v_decl) = self.resolve_name(current_block_id, name, fenv) {
+                        // already declared
                         let ty = self.get_type(v_decl).clone();
                         if b.types.u.unify(&ty, &expr_ty).is_err() {
                             b.push_error(
@@ -2498,6 +2507,7 @@ impl Flatten {
                         }
                         v_decl
                     } else {
+                        // need to declare it
                         let block = self.get_block(current_block_id);
                         let scope_id = block.scope_id;
                         let expr_ty = self.get_entry(v_expr).ty.clone();
@@ -2512,8 +2522,21 @@ impl Flatten {
                         link_id.into()
                     };
 
+                let load_link_id = if self.is_load_required(v_expr) {
+                    let link_id = self.push_code(
+                        LCode::Load(v_expr),
+                        expr_ty,
+                        None,
+                        node.span_id,
+                        VarDefinitionSpace::Default,
+                    );
+                    link_id
+                } else {
+                    v_expr
+                };
+
                 let link_id = self.push_code(
-                    LCode::Store(offset_decl, v_expr),
+                    LCode::Store(offset_decl, load_link_id),
                     AstType::Unit,
                     None,
                     node.span_id,
