@@ -376,7 +376,6 @@ impl Flatten {
                 f.switch_blocks(static_block_id);
                 let r = f.push_node(ast, fenv, b)?;
                 assert_eq!(f.block_id, r.block_id);
-                //f.block_id = r.block_id;
             }
             //let result = f.push_bake_templates(static_block_id, fenv, b);
             //let result = f.push_bake_main_template(fenv, b);
@@ -1092,7 +1091,6 @@ impl Flatten {
                     //self.switch_blocks(current_block_id);
                     let r = self.push_node(*expr, fenv, b)?;
                     assert_eq!(self.block_id, r.block_id);
-                    //current_block_id = r.block_id;
                     let link_id = r.link_id.unwrap();
                     let ty = self.get_type(link_id).clone();
                     values.push((None, link_id, ty, span_id));
@@ -1102,7 +1100,6 @@ impl Flatten {
                     //self.switch_blocks(current_block_id);
                     let r = self.push_node(*expr, fenv, b)?;
                     assert_eq!(self.block_id, r.block_id);
-                    //current_block_id = r.block_id;
                     let link_id = r.link_id.unwrap();
                     let ty = self.get_type(link_id).clone();
                     values.push((Some(key), link_id, ty, span_id));
@@ -1115,7 +1112,6 @@ impl Flatten {
                         //self.switch_blocks(current_block_id);
                         let r = self.push_node(expr, fenv, b)?;
                         assert_eq!(self.block_id, r.block_id);
-                        //current_block_id = r.block_id;
                         let link_id = r.link_id.unwrap();
                         let ty = self.get_type(link_id).clone();
                         args_values.push((Some(key), link_id, ty, span_id));
@@ -1144,7 +1140,6 @@ impl Flatten {
                     //self.switch_blocks(current_block_id);
                     let r = self.push_node(node, fenv, b)?;
                     assert_eq!(self.block_id, r.block_id);
-                    //current_block_id = r.block_id;
                     let link_id = r.link_id.unwrap();
                     let ty = self.get_type(link_id).clone();
                     values.push((Some(key), link_id, ty, span_id));
@@ -2226,8 +2221,6 @@ impl Flatten {
                     self.switch_blocks(current_block_id);
                     let r = self.push_node(*expr, fenv, b)?;
                     assert_eq!(self.block_id, r.block_id);
-                    //current_block_id = r.block_id;
-                    //block_id = r.block_id;
                     let link_id = r.link_id.unwrap();
                     let entry = self.get_entry(link_id);
                     jump_args.push((None, link_id, entry.ty.clone(), span_id));
@@ -2353,7 +2346,6 @@ impl Flatten {
                 self.switch_blocks(current_block_id);
                 let r = self.push_node(*expr, fenv, b)?;
                 assert_eq!(self.block_id, r.block_id);
-                //let current_block_id = r.block_id;
                 let v_expr = r.link_id.unwrap();
                 let expr_ty = self.get_entry(v_expr).ty.clone();
 
@@ -2474,7 +2466,6 @@ impl Flatten {
                 self.switch_blocks(current_block_id);
                 let r = self.push_node(*x, fenv, b)?;
                 assert_eq!(self.block_id, r.block_id);
-                //let current_block_id = r.block_id;
                 let link_id = r.link_id.unwrap();
                 let ty = self.get_type(link_id).clone();
 
@@ -2573,7 +2564,6 @@ impl Flatten {
                     span_id,
                     VarDefinitionSpace::Reg,
                 );
-                //self.switch_blocks(r.block_id);
                 Ok(FlattenResult::new(self.block_id, Some(v)))
             }
 
@@ -2637,7 +2627,6 @@ impl Flatten {
                 let r = self.push_node(NB::ensure_seq(*body), fenv, b)?;
                 assert_eq!(self.block_id, r.block_id);
 
-                //self.switch_blocks(r.block_id);
                 Ok(FlattenResult::new(self.block_id, r.link_id))
             }
 
@@ -2924,7 +2913,6 @@ impl Flatten {
                     //self.switch_blocks(current_block_id);
                     let r = self.push_node(d, fenv, b)?;
                     assert_eq!(self.block_id, r.block_id);
-                    //current_block_id = r.block_id;
                     link_ids.push(r.link_id.unwrap());
                 }
                 b.push_error(&format!("AST Error"), node.span_id);
@@ -2941,7 +2929,6 @@ impl Flatten {
                     self.switch_blocks(current_block_id);
                     let r = self.push_node(e, fenv, b)?;
                     assert_eq!(self.block_id, r.block_id);
-                    //current_block_id = r.block_id;
                     let link_id = r.link_id.unwrap();
                     let ty = self.get_type(link_id).clone();
                     link_ids.push(link_id);
