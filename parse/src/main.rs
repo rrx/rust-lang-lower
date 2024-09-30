@@ -102,6 +102,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let (mut f, mut fenv) = r?;
 
+    /*
     if config.template {
         let r = f.push_bake_templates(&mut fenv, &mut b);
         if r.is_err() {
@@ -109,12 +110,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         r?;
     } else {
-        let r = f.push_bake_main(&mut fenv, &mut b);
-        if r.is_err() {
-            b.spans.diagnostics_dump();
-        }
-        r?;
+    */
+    let r = f.push_bake_main(&mut fenv, &mut b);
+    if r.is_err() {
+        b.spans.diagnostics_dump();
     }
+    r?;
 
     //f.dump_blocks();
     //f.dump_scope(fenv.static_block_id(), &fenv, &b);

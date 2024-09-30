@@ -352,12 +352,9 @@ impl Flatten {
         //fenv: &mut FlattenEnvironment,
         b: &mut NB,
     ) -> Result<(Self, FlattenEnvironment)> {
-        //let scope_id = Self::new_scope(ScopeType::Static, fenv);
-        //let ir_block = IRBlock::new(scope_id);
-        //let mut gblocks = BlockGraph::new();
-        //let index = gblocks.add_node(ir_block);
-        //let _block_id = BlockId(index.index() as u32);
-
+        // setup environment with static scope and block
+        // blocks will be moved into environment eventually
+        // FlattenEnvironment represents the module level structures
         let mut f = Self::new();
         let mut fenv = FlattenEnvironment::new(BlockId(0));
         let static_scope = fenv.static_scope_id();
@@ -444,7 +441,7 @@ impl Flatten {
         r
     }
 
-    pub fn push_bake_templates(
+    pub fn push_bake_templates2(
         &mut self,
         //block_id: BlockId,
         fenv: &mut FlattenEnvironment,
@@ -1876,7 +1873,8 @@ impl Flatten {
     ) -> Result<LinkId> {
         match self.mode {
             FlattenMode::Function => self.push_bake_func(name, func_type, fenv, b),
-            FlattenMode::Template => self.push_bake_template(name, func_type, fenv, b),
+            //FlattenMode::Template => self.push_bake_template(name, func_type, fenv, b),
+            _ => unimplemented!(),
         }
     }
 
@@ -2020,7 +2018,7 @@ impl Flatten {
         Ok(r.link_id.unwrap())
     }
 
-    pub fn push_bake_template(
+    pub fn push_bake_template3(
         &mut self,
         name: StringKey,
         func_ty: AstType,
