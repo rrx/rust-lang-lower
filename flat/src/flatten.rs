@@ -2474,7 +2474,7 @@ impl Flatten {
                 self.switch_blocks(current_block_id);
                 let r = self.push_node(*x, fenv, b)?;
                 assert_eq!(self.block_id, r.block_id);
-                let current_block_id = r.block_id;
+                //let current_block_id = r.block_id;
                 let link_id = r.link_id.unwrap();
                 let ty = self.get_type(link_id).clone();
 
@@ -2487,8 +2487,8 @@ impl Flatten {
                     node.span_id,
                     VarDefinitionSpace::Reg,
                 );
-                self.switch_blocks(current_block_id);
-                Ok(FlattenResult::new(current_block_id, Some(link_id)))
+                //self.switch_blocks(current_block_id);
+                Ok(FlattenResult::new(self.block_id, Some(link_id)))
             }
 
             Ast::Conditional(condition, then_expr, maybe_else_expr) => {
