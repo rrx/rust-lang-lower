@@ -2919,12 +2919,12 @@ impl Flatten {
 
             Ast::Array(_type_id, dims) => {
                 let mut link_ids = vec![];
-                let mut current_block_id = current_block_id;
+                //let mut current_block_id = current_block_id;
                 for d in dims {
-                    self.switch_blocks(current_block_id);
+                    //self.switch_blocks(current_block_id);
                     let r = self.push_node(d, fenv, b)?;
                     assert_eq!(self.block_id, r.block_id);
-                    current_block_id = r.block_id;
+                    //current_block_id = r.block_id;
                     link_ids.push(r.link_id.unwrap());
                 }
                 b.push_error(&format!("AST Error"), node.span_id);
@@ -2934,14 +2934,14 @@ impl Flatten {
             Ast::Tuple(exprs) => {
                 let mut link_ids = vec![];
                 let mut types = vec![];
-                let mut current_block_id = current_block_id;
+                //let mut current_block_id = current_block_id;
                 let mut values = vec![];
                 for e in exprs {
                     let span_id = e.span_id;
                     self.switch_blocks(current_block_id);
                     let r = self.push_node(e, fenv, b)?;
                     assert_eq!(self.block_id, r.block_id);
-                    current_block_id = r.block_id;
+                    //current_block_id = r.block_id;
                     let link_id = r.link_id.unwrap();
                     let ty = self.get_type(link_id).clone();
                     link_ids.push(link_id);
@@ -2961,7 +2961,7 @@ impl Flatten {
                     VarDefinitionSpace::Default,
                 );
 
-                Ok(FlattenResult::new(current_block_id, Some(link_id)))
+                Ok(FlattenResult::new(self.block_id, Some(link_id)))
             }
 
             Ast::Index(node, index) => {
