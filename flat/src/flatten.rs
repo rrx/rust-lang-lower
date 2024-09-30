@@ -724,7 +724,13 @@ impl Flatten {
         Ok(FlattenResult::new(self.block_id, link_id, ty, is_term))
     }
 
-    pub fn push_return(&mut self, link_ids: Vec<(LinkId, AstType)>, span_id: SpanId) -> LinkId {
+    pub fn push_return(
+        &mut self,
+        values: Vec<(Option<StringKey>, LinkId, AstType, SpanId)>,
+        span_id: SpanId,
+    ) -> LinkId {
+        let _ = self.push_call_values(&values);
+        /*
         for (link_id, ty) in link_ids.iter() {
             self.push_code(
                 LCode::CallValue(link_id.into(), vec![]),
@@ -734,6 +740,7 @@ impl Flatten {
                 VarDefinitionSpace::Reg,
             );
         }
+        */
 
         self.push_code(
             LCode::Return,
@@ -1475,7 +1482,7 @@ impl Flatten {
         block_ty: AstType,
         span_id: SpanId,
         fenv: &mut FlattenEnvironment,
-    ) -> Vec<(LinkId, AstType)> {
+    ) -> Vec<(Option<StringKey>, LinkId, AstType, SpanId)> {
         if let AstType::Func(arg_ty, _ret_ty) = &block_ty {
             assert!(arg_ty.is_composite());
 
@@ -1488,7 +1495,7 @@ impl Flatten {
                     span_id,
                     VarDefinitionSpace::Arg,
                 );
-                v_args.push((link_id, ty.clone()));
+                v_args.push((*name, link_id, ty.clone(), span_id));
                 if let Some(name) = name {
                     fenv.scope_define(scope_id, *name, link_id.into());
                 }
@@ -1507,7 +1514,7 @@ impl Flatten {
         span_id: SpanId,
         mem: VarDefinitionSpace,
         fenv: &mut FlattenEnvironment,
-    ) -> (LinkId, Vec<(LinkId, AstType)>) {
+    ) -> (LinkId, Vec<(Option<StringKey>, LinkId, AstType, SpanId)>) {
         let block_link_id = self.push_empty_label(span_id);
         let v_args = self.push_start_block_args(scope_id, block_ty.clone(), span_id, fenv);
         self.replace_label(block_link_id, block_ty, name, span_id, mem);
@@ -1835,7 +1842,7 @@ impl Flatten {
 
         let next_link_id = match &ret_ty {
             AstType::Unit => None,
-            _ => Some(next_link_ids.first().unwrap().0),
+            _ => Some(next_link_ids.first().unwrap().1),
         };
 
         // Start lambda block
