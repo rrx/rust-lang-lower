@@ -668,7 +668,6 @@ impl Flatten {
                     block.next(next_block_id);
 
                     // flatten expr
-                    //println!("expr: {:?}", (&expr));
                     self.switch_blocks(current_block_id);
                     let _ = self.push_node(expr, fenv, b)?;
 
@@ -677,15 +676,12 @@ impl Flatten {
                         node: Ast::Sequence(next_seq),
                         span_id: next_span_id,
                     };
-                    //println!("next: {:?}", (&next_node));
                     self.switch_blocks(next_block_id);
                     let r = self.push_node(next_node, fenv, b)?;
-                    //println!("next2: {:?}", (&r));
                     return Ok(r);
                 }
 
                 // handle expr
-                b.dump_ast(&expr);
                 let r = self.push_node(expr, fenv, b)?;
 
                 // check the last entry in the block
@@ -693,14 +689,9 @@ impl Flatten {
                 let block = self.get_block(self.block_id);
                 let v_last = block.links.last().unwrap();
                 let code = &self.get_entry(*v_last).code;
-                println!("code: {:?}", code);
                 let r_is_term = code.is_term();
-                println!("r: {:?}", r);
                 link_id = r.link_id;
-                //is_term = r.is_term;
                 is_term = r_is_term;
-
-                //assert_eq!(r.is_term, r_is_term);
             } else {
                 break;
             }
@@ -860,7 +851,8 @@ impl Flatten {
         jump_args: Vec<(Option<StringKey>, LinkId, AstType, SpanId)>,
         span_id: SpanId,
     ) -> LinkId {
-        let ty = AstType::Struct(
+        // Construct the argument type
+        let arg_ty = AstType::Struct(
             jump_args
                 .iter()
                 .map(|j| (j.0, j.2.clone()))
@@ -882,7 +874,7 @@ impl Flatten {
 
         self.push_code(
             LCode::Jump(target_id.into()),
-            AstType::Func(ty.into(), ReturnType::Single(AstType::Unit).into()),
+            AstType::Func(arg_ty.into(), ReturnType::Single(AstType::Unit).into()),
             None,
             span_id,
             VarDefinitionSpace::Reg,
@@ -2932,7 +2924,6 @@ impl Flatten {
                 let r_index = self.push_node(*index, fenv, b)?;
 
                 let indicies = vec![
-                    //r_node.link_id.unwrap().into(),
                     r_index.link_id.unwrap().into(),
                 ];
 
@@ -2958,15 +2949,9 @@ impl Flatten {
                     VarDefinitionSpace::Default,
                 );
 
-                //println!("index: {:?}", (code,
                 Ok(FlattenResult::new(Some(link_id)))
             }
 
-            /*
-            Ast::Lambda(_def) => {
-            }
-
-            */
             Ast::Error => {
                 b.push_error(&format!("AST Error"), node.span_id);
                 Err(Error::new(BlockifyError::Invalid))
@@ -2997,7 +2982,6 @@ pub fn scope_graph(filename: &str, fenv: &FlattenEnvironment) {
         )
     );
     println!("saved graph {:?}", filename);
-    //println!("{}", s);
     std::fs::write(filename, s).unwrap();
 }
 
