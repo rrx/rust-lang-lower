@@ -2492,6 +2492,7 @@ impl Flatten {
             }
 
             Ast::Conditional(condition, then_expr, maybe_else_expr) => {
+                let current_block_id = self.block_id;
                 let block = self.get_block(current_block_id);
                 let v_next = block.next.unwrap();
                 let parent_scope_id = block.scope_id;
@@ -2572,8 +2573,8 @@ impl Flatten {
                     span_id,
                     VarDefinitionSpace::Reg,
                 );
-                self.switch_blocks(r.block_id);
-                Ok(FlattenResult::new(r.block_id, Some(v)))
+                //self.switch_blocks(r.block_id);
+                Ok(FlattenResult::new(self.block_id, Some(v)))
             }
 
             Ast::Block(name, args, body) => {
