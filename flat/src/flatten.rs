@@ -134,7 +134,6 @@ impl IRBlock {
 pub struct FlattenResult {
     link_id: Option<LinkId>,
     block_id: BlockId,
-    ty: AstType,
     is_term: bool,
 }
 
@@ -143,7 +142,6 @@ impl FlattenResult {
         Self {
             block_id,
             link_id,
-            ty,
             is_term,
         }
     }
@@ -1094,7 +1092,8 @@ impl Flatten {
                     assert_eq!(self.block_id, r.block_id);
                     current_block_id = r.block_id;
                     let link_id = r.link_id.unwrap();
-                    values.push((None, link_id, r.ty.clone(), span_id));
+                    let ty = self.get_type(link_id).clone();
+                    values.push((None, link_id, ty, span_id));
                     link_ids.push(link_id);
                 }
                 Argument::Named(key, expr) => {
@@ -1103,7 +1102,8 @@ impl Flatten {
                     assert_eq!(self.block_id, r.block_id);
                     current_block_id = r.block_id;
                     let link_id = r.link_id.unwrap();
-                    values.push((Some(key), link_id, r.ty.clone(), span_id));
+                    let ty = self.get_type(link_id).clone();
+                    values.push((Some(key), link_id, ty, span_id));
                     link_ids.push(link_id);
                 }
                 Argument::Args(key, exprs) => {
@@ -1115,7 +1115,8 @@ impl Flatten {
                         assert_eq!(self.block_id, r.block_id);
                         current_block_id = r.block_id;
                         let link_id = r.link_id.unwrap();
-                        args_values.push((Some(key), link_id, r.ty.clone(), span_id));
+                        let ty = self.get_type(link_id).clone();
+                        args_values.push((Some(key), link_id, ty, span_id));
                     }
 
                     self.push_call_values(&args_values);
@@ -1143,7 +1144,8 @@ impl Flatten {
                     assert_eq!(self.block_id, r.block_id);
                     current_block_id = r.block_id;
                     let link_id = r.link_id.unwrap();
-                    values.push((Some(key), link_id, r.ty.clone(), span_id));
+                    let ty = self.get_type(link_id).clone();
+                    values.push((Some(key), link_id, ty, span_id));
                     link_ids.push(link_id);
                 }
             }
@@ -2305,20 +2307,22 @@ impl Flatten {
                 let current_block_id = ry.block_id;
                 let vx = rx.link_id.unwrap();
                 let vy = ry.link_id.unwrap();
+                let rx_ty = self.get_type(vx).clone();
+                let ry_ty = self.get_type(vy).clone();
 
-                if b.types.u.unify(&rx.ty, &ry.ty).is_err() {
+                if b.types.u.unify(&rx_ty, &ry_ty).is_err() {
                     b.push_error(
-                        &format!("3-Type Mismatch: LHS: {}, RHS: {}", &rx.ty, &ry.ty),
+                        &format!("3-Type Mismatch: LHS: {}, RHS: {}", rx_ty, ry_ty),
                         x_span_id,
                     );
                 }
 
                 let _ = self.push_call_values(&[
-                    (None, vx, rx.ty.clone(), node.span_id),
-                    (None, vy, ry.ty.clone(), node.span_id),
+                    (None, vx, rx_ty.clone(), node.span_id),
+                    (None, vy, ry_ty.clone(), node.span_id),
                 ]);
 
-                let ret_ty = op.node.get_type(&rx.ty, &ry.ty);
+                let ret_ty = op.node.get_type(&rx_ty, &ry_ty);
                 let link_id = self.push_code(
                     LCode::Op2(op.node),
                     ret_ty.clone(),
