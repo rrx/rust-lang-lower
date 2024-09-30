@@ -31,8 +31,8 @@ impl ScopeId {
 #[derive(Debug, Clone, Copy)]
 pub struct LoopScope {
     pub(crate) name: Option<StringKey>,
-    pub(crate) next_block: CodeOffset,
-    pub(crate) start_block: CodeOffset,
+    pub(crate) next_block: BlockId,
+    pub(crate) start_block: BlockId,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
@@ -219,7 +219,7 @@ impl Block {
 }
 
 #[derive(Debug)]
-pub struct Environment {
+pub struct Environment2 {
     pub(crate) stack: Vec<ScopeId>,
     pub scopes: Vec<ScopeLayer>,
     pub blocks: Vec<Block>,
@@ -227,7 +227,7 @@ pub struct Environment {
     pub current_block: Option<BlockId>,
 }
 
-impl Environment {
+impl Environment2 {
     pub fn new() -> Self {
         Self {
             stack: vec![],
@@ -416,8 +416,8 @@ impl Environment {
     pub fn push_loop_blocks(
         &mut self,
         maybe_name: Option<StringKey>,
-        next_block: CodeOffset,
-        start_block: CodeOffset,
+        next_block: BlockId,
+        start_block: BlockId,
     ) {
         let scope_id = self.current_scope().unwrap();
         let scope = self.get_scope_mut(scope_id);

@@ -6,10 +6,7 @@ use compile_core::{
     VarDefinitionSpace,
 };
 
-use crate::{
-    BlockId, CodeOffset, Environment, LinkId, Node, NodeBuilder, StringLabel, Successor, ValueId,
-    CFG,
-};
+use crate::{BlockId, CodeOffset, LinkId, Node, NodeBuilder, StringLabel, Successor, ValueId, CFG};
 
 #[derive(Error, Debug)]
 pub enum BlockifyError {
@@ -340,6 +337,7 @@ pub trait ICodeModule {
     fn code_count(&self) -> usize;
 }
 
+/*
 pub fn dump_env(env: &Environment, b: &NodeBuilder) {
     println!("current scope: {:?}", env.current_scope());
     //println!("static block: {:?}", self.static_block_id());
@@ -368,3 +366,4 @@ pub fn dump_env(env: &Environment, b: &NodeBuilder) {
         }
     }
 }
+*/

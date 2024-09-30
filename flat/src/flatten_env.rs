@@ -2,8 +2,8 @@ use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
 
 use crate::{
-    scope::LoopScope, BlockId, CodeOffset, LinkId, NodeBuilder, ScopeId, ScopeLayer, ScopeType,
-    StringLabel, VariantId,
+    scope::LoopScope, BlockId, LinkId, NodeBuilder, ScopeId, ScopeLayer, ScopeType, StringLabel,
+    VariantId,
 };
 use compile_core::{AstType, StringKey};
 
@@ -104,8 +104,8 @@ impl FlattenEnvironment {
         &mut self,
         scope_id: ScopeId,
         maybe_name: Option<StringKey>,
-        next_block: CodeOffset,
-        start_block: CodeOffset,
+        next_block: BlockId,
+        start_block: BlockId,
     ) {
         let scope = self.get_scope_mut(scope_id);
         let loop_scope = LoopScope {

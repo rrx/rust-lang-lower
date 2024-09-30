@@ -30,9 +30,8 @@ use std::convert::From;
 use std::convert::Into;
 
 use crate::{
-    BlockId, BlockifyError, Builtin, CodeOffset, FlattenEnvironment, LCode, LinkId,
-    NodeBuilder as NB, ScopeId, ScopeLayer, ScopeType, SequenceReader, StringLabel, Successor,
-    TemplateId, VariantId,
+    BlockId, BlockifyError, Builtin, FlattenEnvironment, LCode, LinkId, NodeBuilder as NB, ScopeId,
+    ScopeLayer, ScopeType, SequenceReader, StringLabel, Successor, TemplateId, VariantId,
 };
 
 pub type BlockGraph = DiGraph<IRBlock, Successor>;
@@ -847,7 +846,7 @@ impl Flatten {
 
     pub fn push_jump(
         &mut self,
-        target_id: CodeOffset,
+        target_id: BlockId,
         jump_args: Vec<(Option<StringKey>, LinkId, AstType, SpanId)>,
         span_id: SpanId,
     ) -> LinkId {
@@ -866,11 +865,7 @@ impl Flatten {
                 .collect::<Vec<_>>(),
         );
 
-        if let CodeOffset::Block(target_block_id) = target_id {
-            self.block_succ(self.block_id, target_block_id, Successor::Jump);
-        } else {
-            unimplemented!()
-        }
+        self.block_succ(self.block_id, target_id, Successor::Jump);
 
         self.push_code(
             LCode::Jump(target_id.into()),
@@ -2817,7 +2812,8 @@ impl Flatten {
                 // loop up loop blocks by name
                 if let Some(loop_scope) = fenv.get_loop_scope(scope_id, maybe_name) {
                     self.switch_blocks(current_block_id);
-                    let link_id = self.push_jump(loop_scope.start_block, vec![], node.span_id);
+                    let link_id =
+                        self.push_jump(loop_scope.start_block.into(), vec![], node.span_id);
                     self.switch_blocks(current_block_id);
                     Ok(FlattenResult::new(Some(link_id)))
                 } else {
@@ -2836,7 +2832,8 @@ impl Flatten {
                 // loop up loop blocks by name
                 if let Some(loop_scope) = fenv.get_loop_scope(scope_id, maybe_name) {
                     self.switch_blocks(current_block_id);
-                    let link_id = self.push_jump(loop_scope.next_block, vec![], node.span_id);
+                    let link_id =
+                        self.push_jump(loop_scope.next_block.into(), vec![], node.span_id);
                     self.switch_blocks(current_block_id);
                     Ok(FlattenResult::new(Some(link_id)))
                 } else {
@@ -2923,9 +2920,7 @@ impl Flatten {
                 let r_node = self.push_node(*node, fenv, b)?;
                 let r_index = self.push_node(*index, fenv, b)?;
 
-                let indicies = vec![
-                    r_index.link_id.unwrap().into(),
-                ];
+                let indicies = vec![r_index.link_id.unwrap().into()];
 
                 let entry = self.get_entry(r_index.link_id.unwrap());
                 let index = if let LCode::Val(Literal::Int(index)) = entry.code {

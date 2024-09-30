@@ -1,4 +1,4 @@
-use crate::{Environment, NodeBuilder};
+use crate::NodeBuilder;
 use compile_core::{Argument, AssignTarget, Ast, AstNode, ControlFlowMarker, Literal, SpanId};
 
 pub fn print_with_indent(s: &str, span_id: SpanId, depth: usize) {
@@ -389,6 +389,7 @@ impl NodeBuilder {
         }
     }
 
+    /*
     pub fn dump_env(&self, env: &Environment) {
         println!("current scope: {:?}", env.current_scope());
         //println!("static block: {:?}", self.static_block_id());
@@ -417,4 +418,5 @@ impl NodeBuilder {
             }
         }
     }
+    */
 }
