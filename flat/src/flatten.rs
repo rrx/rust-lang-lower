@@ -2637,8 +2637,8 @@ impl Flatten {
                 let r = self.push_node(NB::ensure_seq(*body), fenv, b)?;
                 assert_eq!(self.block_id, r.block_id);
 
-                self.switch_blocks(r.block_id);
-                Ok(FlattenResult::new(r.block_id, r.link_id))
+                //self.switch_blocks(r.block_id);
+                Ok(FlattenResult::new(self.block_id, r.link_id))
             }
 
             Ast::Ternary(c, x, y) => {
@@ -2735,21 +2735,21 @@ impl Flatten {
 
             Ast::Yield(maybe_expr) => {
                 // yield is terminal
-                let mut v_block = current_block_id;
+                //let mut v_block = current_block_id;
                 let mut ty = AstType::Unit;
                 if let Some(expr) = maybe_expr {
                     self.switch_blocks(current_block_id);
                     let r = self.push_node(*expr, fenv, b)?;
                     assert_eq!(self.block_id, r.block_id);
                     if let Some(v) = r.link_id {
-                        v_block = r.block_id;
+                        //v_block = self.block_id;
                         ty = self.get_type(v).clone();
                         // push single arg
                         self.push_call_values(&[(None, v.into(), ty.clone(), node.span_id)]);
                     }
                 }
 
-                self.switch_blocks(v_block);
+                //self.switch_blocks(v_block);
                 let v = self.push_code(
                     LCode::Yield,
                     ty.clone(),
@@ -2757,8 +2757,8 @@ impl Flatten {
                     node.span_id,
                     VarDefinitionSpace::Reg,
                 );
-                self.switch_blocks(v_block);
-                Ok(FlattenResult::new(v_block, Some(v)))
+                //self.switch_blocks(v_block);
+                Ok(FlattenResult::new(self.block_id, Some(v)))
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(name, args)) => {
