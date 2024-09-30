@@ -779,7 +779,17 @@ impl Flatten {
             return entry.mem.is_static();
         }
 
-        return false;
+        if let LCode::Arg(_) = entry.code {
+            return false;
+        }
+
+        if let LCode::Load(_) = entry.code {
+            return false;
+        }
+
+        if entry.ty.is_composite() {
+            return false;
+        }
 
         if let LCode::Op2(_) = entry.code {
             return false;
@@ -788,6 +798,16 @@ impl Flatten {
         if let LCode::Call(_) = entry.code {
             return false;
         }
+
+        if let LCode::Use(_, _) = entry.code {
+            return false;
+        }
+
+        if let LCode::Ternary(_, _, _) = entry.code {
+            return false;
+        }
+
+        return true;
 
         // decide if a load is required or not
         // TODO: this decision might be better made later
