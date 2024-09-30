@@ -2318,7 +2318,12 @@ impl Flatten {
                     let ty = entry.ty.clone();
                     let mem = entry.mem;
 
+                    // decide if a load is required or not
+                    // TODO: this decision might be better made later
                     let link_id = if let VarDefinitionSpace::Arg = mem {
+                        def_link_id
+                    } else if ty.is_composite() {
+                        // skip loading if it's composite
                         def_link_id
                     } else {
                         self.push_code(
@@ -2337,9 +2342,8 @@ impl Flatten {
                     ))
                 } else {
                     let s = b.labels.r(key.into());
-                    let u = b.spans.get_span_unknown();
-                    b.push_error(&format!("ident: not found: {}", s), u);
-                    assert!(false);
+                    b.push_error(&format!("ident: not found: {}", s), span_id);
+                    //assert!(false);
                     Err(Error::new(BlockifyError::NotFound(s)))
                 }
             }
@@ -3025,7 +3029,7 @@ impl Flatten {
                     types.push(r.ty);
                 }
 
-                let ty = AstType::tuple(types);
+                let ty = AstType::build_tuple(types);
                 let link_id = self.push_code(
                     LCode::Tuple(link_ids),
                     ty,
@@ -3053,12 +3057,15 @@ impl Flatten {
 
                 let entry = self.get_entry(r_index.link_id.unwrap());
                 let index = if let LCode::Val(Literal::Int(index)) = entry.code {
-                    index
+                    index as usize
                 } else {
                     unimplemented!()
                 };
+                let entry = self.get_entry_mut(r_index.link_id.unwrap());
+                entry.code = LCode::Val(Literal::Index(index));
 
                 let ty = self.get_type(r_node.link_id.unwrap());
+                println!("index: {:?}", (ty, index));
                 let (_, ty_field) = ty.fields().get(index as usize).unwrap().clone();
 
                 let code = LCode::Use(r_node.link_id.unwrap().into(), indicies);

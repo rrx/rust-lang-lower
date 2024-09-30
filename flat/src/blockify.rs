@@ -186,12 +186,16 @@ pub trait ICodeModule {
             let value_id = self.resolve_code_offset(current);
             let code = self.get_code(value_id);
             if let LCode::CallValue(base, inds) = code {
+                assert!(inds.len() == 0);
                 //current = inds.clone().offset();
                 current = *base;
                 continue;
             }
 
             if let LCode::Use(base, inds) = code {
+                current = *base;
+                continue;
+
                 if inds.len() == 0 {
                     current = *base;
                     continue;

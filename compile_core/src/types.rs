@@ -119,12 +119,16 @@ impl std::fmt::Display for AstType {
 }
 
 impl AstType {
-    pub fn tuple(fields: Vec<Self>) -> Self {
+    pub fn build_struct(fields: Vec<Self>) -> Self {
         Self::Struct(fields.into_iter().map(|f| (None, f)).collect())
     }
 
+    pub fn build_tuple(fields: Vec<Self>) -> Self {
+        Self::Tuple(fields.into_iter().map(|f| f).collect())
+    }
+
     pub fn func(args: Vec<Self>, ret_type: Self) -> Self {
-        let t = Self::tuple(args);
+        let t = Self::build_struct(args);
         AstType::Func(t.into(), ReturnType::Single(ret_type).into())
     }
 
@@ -143,6 +147,7 @@ impl AstType {
         match self {
             Self::Args(ty) => ty.fields(),
             Self::Struct(fields) => fields.clone(),
+            Self::Tuple(fields) => fields.iter().map(|f| (None, f.clone())).collect(),
             _ => vec![],
         }
     }
@@ -151,6 +156,7 @@ impl AstType {
         match self {
             Self::Union(_) => true,
             Self::Struct(_) => true,
+            Self::Tuple(_) => true,
             _ => false,
         }
     }

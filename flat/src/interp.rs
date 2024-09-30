@@ -7,6 +7,7 @@ use compile_core::{BinaryOperation, Literal, NaryOperation, StringKey, UnaryOper
 #[derive(Debug, Clone)]
 pub enum Value {
     Int(i64),
+    Index(usize),
     Float(f64),
     Bool(bool),
     Tuple(Vec<Value>),
@@ -20,6 +21,7 @@ impl Value {
             Literal::Int(i) => Value::Int(*i),
             Literal::Float(f) => Value::Float(*f),
             Literal::Bool(v) => Value::Bool(*v),
+            Literal::Index(v) => Value::Index(*v),
             _ => unimplemented!("{:?}", lit),
         }
     }
@@ -215,6 +217,7 @@ impl<'a> Interp<'a> {
                                 let v = self.resolve_value(v).unwrap();
                                 match v {
                                     Value::Int(i) => UseIndex::Pos(i as usize),
+                                    Value::Index(i) => UseIndex::Pos(i),
                                     _ => unimplemented!(),
                                 }
                             }

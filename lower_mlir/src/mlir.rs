@@ -1,5 +1,5 @@
 use anyhow::Result;
-use flat::{Builtin, CodeOffset, ICodeModule, LCode, NodeBuilder, StringLabel, ValueId};
+use flat::{Builtin, CodeOffset, ICodeModule, LCode, NodeBuilder, StringLabel, UseIndex, ValueId};
 use indexmap::IndexMap;
 use melior::ir::Location;
 use melior::{
@@ -286,60 +286,70 @@ impl<'c> MLIRGenerator<'c> {
     }
 
     pub fn resolve_value(&self, offset: CodeOffset) -> Option<SymIndex> {
-        if let Some(offset_decl) = self.blockify.resolve_declaration(offset) {
-            let mut current = offset_decl;
-            loop {
-                let v_decl = self.blockify.resolve_code_offset(current);
-                let code = self.blockify.get_code(v_decl);
-                /*
-                if let LCode::Value(next_value_id) = code {
-                    current = (*next_value_id).into();
-                    continue;
-                }
-                */
-
-                if let LCode::Use(base, indicies) = code {
-                    println!("use: {:?}", (base, indicies));
-                    assert!(false);
-                    //let base = self.resolve_value(base).unwrap();
-                    //base.
-                    current = *base;
-                    //current = indicies.clone().offset();
-                    continue;
-                }
-
-                if let LCode::CallValue(base, indicies) = code {
-                    current = *base;
-                    //current = indicies.clone().offset();
-                    continue;
-                }
-
-                /*
-                    if let LCode::ValueIndex(link_id, index) = code {
-                        let v = self.blockify.resolve_code_offset(link_id.into());
-                        let index = (*index) as usize;
-                        /*
-                        let c = self
-                            .blocks
-                            .get(&v)
-                            .expect(&format!("missing block at {}", v));
-
-                        let block = c.block.as_ref().unwrap();
-                        let arg_count = block.argument_count();
-                        assert!(index < arg_count, "mismatch arity on index");
-                        block.argument(index).unwrap();
-                        */
-
-                        return Some(SymIndex::Arg(v, index));
-                    }
-                */
-                break;
+        //if let Some(offset_decl) = self.blockify.resolve_declaration(offset) {
+        let mut current = offset;
+        loop {
+            println!("resolve: {:?}", (offset, current));
+            let v_decl = self.blockify.resolve_code_offset(current);
+            let code = self.blockify.get_code(v_decl);
+            /*
+            if let LCode::Value(next_value_id) = code {
+                current = (*next_value_id).into();
+                continue;
             }
-            let v = self.blockify.resolve_code_offset(current);
-            self.index.get(&v).cloned()
-        } else {
-            None
+            */
+
+            /*
+            if let LCode::Use(base, indicies) = code {
+                let v = self.blockify.resolve_code_offset(*base);
+                let ty = self.blockify.get_type(*base);
+                let sym = self.index.get(&v).cloned().unwrap();
+                let v = self.value0(sym);
+                println!("use: {:?}", (base, indicies, ty, sym, v));
+                return Some(sym);
+
+                //assert!(false);
+                //let base = self.resolve_value(base).unwrap();
+                //base.
+                current = *base;
+                //current = indicies.clone().offset();
+                continue;
+            }
+            */
+
+            if let LCode::CallValue(base, indicies) = code {
+                assert!(indicies.len() == 0);
+                current = *base;
+                //current = indicies.clone().offset();
+                continue;
+            }
+
+            /*
+                if let LCode::ValueIndex(link_id, index) = code {
+                    let v = self.blockify.resolve_code_offset(link_id.into());
+                    let index = (*index) as usize;
+                    /*
+                    let c = self
+                        .blocks
+                        .get(&v)
+                        .expect(&format!("missing block at {}", v));
+
+                    let block = c.block.as_ref().unwrap();
+                    let arg_count = block.argument_count();
+                    assert!(index < arg_count, "mismatch arity on index");
+                    block.argument(index).unwrap();
+                    */
+
+                    return Some(SymIndex::Arg(v, index));
+                }
+            */
+            break;
         }
+        let v = self.blockify.resolve_code_offset(current);
+        self.index.get(&v).cloned()
+        //} else {
+        //None
+        //}
     }
 
     pub fn get_label_args(&self, v: ValueId) -> Vec<(Type<'c>, Location<'c>)> {
@@ -396,6 +406,7 @@ impl<'c> MLIRGenerator<'c> {
     pub fn lower_jump(&mut self, v: ValueId, target_value_id: ValueId) -> Result<()> {
         let block_id = self.blockify.get_entry_id(v);
         let values = self.blockify.get_previous_values(v);
+        println!("jump: {:?}", (values));
         let indicies = values
             .iter()
             .map(|value_id| self.resolve_value(*value_id).unwrap())
@@ -485,16 +496,33 @@ impl<'c> MLIRGenerator<'c> {
             }
 
             LCode::Use(base, indicies) => {
-                println!("use: {:?}", (base, indicies));
                 //assert!(false);
+                let addr = self.resolve_value(*base).unwrap();
 
-                /*
-                let op = self.resolve_value(*base).unwrap();
+                let index = indicies.get(0).unwrap().clone();
+                let v_index = match index {
+                    UseIndex::Use(offset) => {
+                        let v = self.resolve_value(offset).unwrap();
+                        v
+                    }
+                    _ => unimplemented!(),
+                };
+
+                println!("use: {:?}", (base, indicies));
+                //let block_id = self.blockify.get_entry_id(v);
+                //let c = self.blocks.get_mut(&block_id).unwrap();
+                //let index = c.push(op);
+
+                let r_addr = self.value0(addr);
+                let r_index = self.value0(v_index);
+                let op = memref::load(r_addr, &[r_index], location);
+                //let op = memref::store(r_index, r_addr, &[r_index], location);
                 let block_id = self.blockify.get_entry_id(v);
                 let c = self.blocks.get_mut(&block_id).unwrap();
-                let index = c.push(op);
-                self.index.insert(v, index);
-                */
+                let load_index = c.push(op);
+                self.index.insert(v, load_index);
+
+                //self.index.insert(v, index);
             }
 
             LCode::Return => {
@@ -675,6 +703,14 @@ impl<'c> MLIRGenerator<'c> {
                 let block_id = self.blockify.get_entry_id(v);
                 let ast_ty = self.blockify.get_type(v.into());
                 let (ty, dims) = self.from_type(&ast_ty);
+                println!("tuple: {:?}", (&ast_ty, ty, &dims));
+
+                let mut syms = vec![];
+                for link_id in link_ids {
+                    let sym = self.resolve_value(link_id.into()).unwrap();
+                    syms.push(sym);
+                }
+
                 // we receive a list of uses of values, which is in a graph
                 // we need to decide if we copy, or reference
                 // With primitives, copy makes sense.  This can also be the default
@@ -690,8 +726,27 @@ impl<'c> MLIRGenerator<'c> {
                 //let (ptr_ty, value_ty) = self.build_struct(v, link_ids.iter().map(|a| a.into()).collect());
                 let op = memref::alloca(self.context, memref_ty, &[], &[], None, location);
                 let c = self.blocks.get_mut(&block_id).unwrap();
-                let index = c.push(op);
-                self.index.insert(v, index);
+                let v_alloc = c.push(op);
+                self.index.insert(v, v_alloc);
+
+                for (i, sym) in syms.iter().enumerate() {
+                    let op = self.emit_literal_const(&Literal::Index(i), location);
+                    let c = self.blocks.get_mut(&block_id).unwrap();
+                    let index = c.push(op);
+                    //self.index.insert(v, index);
+
+                    println!("tuple copy: {:?}", (index, sym));
+                    let r_value = self.value0(*sym);
+                    let r_addr = self.value0(v_alloc);
+                    println!("tuple copy: {:?}", (index, sym, r_value, r_addr));
+
+                    //let op = ods::memref::copy(self.context, r_value, r_addr, location).into();
+                    let r_index = self.value0(index);
+                    let op = memref::store(r_value, r_addr, &[r_index], location);
+                    let c = self.blocks.get_mut(&block_id).unwrap();
+                    let store_index = c.push(op);
+                    //self.index.insert(v, store_index);
+                }
             }
 
             LCode::Store(v_decl, v_value) => {

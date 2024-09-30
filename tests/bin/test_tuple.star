@@ -1,9 +1,5 @@
 q.use("prelude")
 
-#a = [1,2,3]
-#d = {1: 2}
-#a = q.array(int, 1,2)
-
 def main() -> int:
   t = (2,1,0)
   q.check((2,1,0)[0] == 2)
@@ -18,3 +14,4 @@ def main() -> int:
   q.print(t[2])
   q.check(t[2] == 0)
   return t[2]
+
