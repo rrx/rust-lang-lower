@@ -698,7 +698,12 @@ impl Flatten {
                 // handle expr
                 let r = self.push_node(expr, fenv, b)?;
                 assert_eq!(self.block_id, r.block_id);
-                ty = r.ty;
+                let r_ty = if let Some(v) = r.link_id {
+                    self.get_type(v).clone()
+                } else {
+                    AstType::Unit
+                };
+                ty = r_ty;
                 link_id = r.link_id;
                 is_term = r.is_term;
             } else {
@@ -767,65 +772,32 @@ impl Flatten {
 
     pub fn is_load_required(&mut self, v: LinkId) -> bool {
         let entry = self.get_entry(v);
-
-        /*
-        match entry.mem {
-            VarDefinitionSpace::Stack | VarDefinitionSpace::Static => true,
-            _ => false,
+        match entry.code {
+            LCode::Val(_) => entry.mem.is_static(),
+            LCode::Declare => true,
+            LCode::Arg(_) => false,
+            LCode::Load(_) => false,
+            LCode::Tuple(_) => false,
+            LCode::NaryOp(_) => false,
+            LCode::Op1(_) => false,
+            LCode::Op2(_) => false,
+            LCode::Call(_) => false,
+            LCode::Use(_, _) => false,
+            LCode::Label => false,
+            LCode::Ternary(_, _, _) => false,
+            // shouldn't happen
+            LCode::DeclareFunction(_) => unimplemented!(),
+            LCode::Extern => unimplemented!(),
+            LCode::Store(_, _) => unreachable!(),
+            LCode::Noop => unreachable!(),
+            LCode::DeclareTemplate(_) => unreachable!(),
+            LCode::Return => unreachable!(),
+            LCode::Yield => unreachable!(),
+            LCode::Jump(_) => unreachable!(),
+            LCode::Branch(_, _, _) => unreachable!(),
+            LCode::Builtin(_) => unreachable!(),
+            LCode::CallValue(_) => unreachable!(),
         }
-        */
-
-        if let LCode::Val(_) = entry.code {
-            return entry.mem.is_static();
-        }
-
-        if let LCode::Arg(_) = entry.code {
-            return false;
-        }
-
-        if let LCode::Load(_) = entry.code {
-            return false;
-        }
-
-        if entry.ty.is_composite() {
-            return false;
-        }
-
-        if let LCode::Op1(_) = entry.code {
-            return false;
-        }
-
-        if let LCode::Op2(_) = entry.code {
-            return false;
-        }
-
-        if let LCode::Call(_) = entry.code {
-            return false;
-        }
-
-        if let LCode::Use(_, _) = entry.code {
-            return false;
-        }
-
-        if let LCode::Ternary(_, _, _) = entry.code {
-            return false;
-        }
-
-        return true;
-
-        // decide if a load is required or not
-        // TODO: this decision might be better made later
-        let require_load = if let VarDefinitionSpace::Arg = entry.mem {
-            false
-        //} else if let VarDefinitionSpace::Stack = mem {
-        //false
-        } else if entry.ty.is_composite() {
-            // skip loading if it's composite
-            false
-        } else {
-            true
-        };
-        require_load
     }
 
     pub fn push_loads_if_needed(
@@ -1257,17 +1229,6 @@ impl Flatten {
 
             (variant_id, v_entry)
         } else {
-            // set the reference for the function, so we can recurse
-            //
-
-            /*
-            let v_entry = self.push_empty_label(def_span_id);
-            let static_scope = fenv.get_scope_mut(fenv.static_scope_id());
-            let r_ty1 = b.types.u.resolve(&call_func_type).unwrap();
-            // we need to know the link
-            static_scope.insert_entry(&name, &r_ty1, v_entry);
-            */
-
             // if it's not already baked, we need to do that here
             self.block_id = fenv.static_block_id();
             let result = self.push_bake_function(
@@ -1285,15 +1246,11 @@ impl Flatten {
                 self.drain_diagnostics(b);
             }
             let (variant_id, r) = result?;
-            //let variant_id = variant_id.unwrap();
             let v_entry = r.link_id.unwrap();
 
             self.drain_diagnostics(b);
             self.switch_blocks(current_block_id);
-
-            //let static_scope = fenv.get_scope_mut(fenv.static_scope_id());
             let r_ty2 = b.types.u.resolve(&call_func_type).unwrap();
-            //let variants = static_scope.entries.get_mut(&name).unwrap();
             fenv.variant_update(
                 fenv.static_scope_id(),
                 name,
@@ -1301,19 +1258,6 @@ impl Flatten {
                 r_ty2.clone(),
                 v_entry,
             );
-            //variants.update_type(
-            //static_scope.variant_add(
-            //static_scope.entries.
-            //static_scope.insert_entry(&name, &r_ty2, v_entry);
-            println!(
-                "[{}] R3 insert: {}, {}, {:?}",
-                s,
-                call_func_type,
-                r_ty2,
-                (v_entry)
-            );
-
-            //assert_eq!(&r_ty1, &r_ty2);
             (variant_id, v_entry)
         };
         Ok((v_entry, call_func_type, ret_ty))
@@ -2283,15 +2227,6 @@ impl Flatten {
             }
 
             Ast::Return(maybe_expr) => {
-                //self.dump_scope(block_id, fenv, b);
-                //println!(
-                //"{:?}",
-                //petgraph::dot::Dot::with_config(
-                //&fenv.scopes,
-                //&[petgraph::dot::Config::EdgeNoLabel]
-                //)
-                //);
-
                 let block = self.get_block(current_block_id);
                 //println!("return: {:?}", (block_id, block.scope_id));
                 let fun_scope_id = fenv
@@ -2406,38 +2341,7 @@ impl Flatten {
                 if let Some(def_link_id) = self.resolve_name(current_block_id, key, fenv) {
                     let entry = self.get_entry(def_link_id).clone();
                     let ty = entry.ty.clone();
-                    let mem = entry.mem;
-
                     let link_id = def_link_id;
-                    /*
-                    let require_load = self.is_load_required(def_link_id);
-                    ///
-                    // decide if a load is required or not
-                    // TODO: this decision might be better made later
-                    let require_load = if let VarDefinitionSpace::Arg = mem {
-                        false
-                    //} else if let VarDefinitionSpace::Stack = mem {
-                    //false
-                    } else if ty.is_composite() {
-                        // skip loading if it's composite
-                        false
-                    } else {
-                        true
-                    };
-
-                    let link_id = if require_load {
-                        self.push_code(
-                            LCode::Load(def_link_id),
-                            ty.clone(),
-                            None,
-                            node.span_id,
-                            entry.mem,
-                        )
-                    } else {
-                        def_link_id
-                    };
-                    */
-
                     Ok(FlattenResult::new(
                         current_block_id,
                         Some(link_id),
@@ -2623,12 +2527,14 @@ impl Flatten {
                 let r = self.push_node(*x, fenv, b)?;
                 assert_eq!(self.block_id, r.block_id);
                 let current_block_id = r.block_id;
+                let link_id = r.link_id.unwrap();
+                let ty = self.get_type(link_id).clone();
 
-                self.push_call_values(&[(None, r.link_id.unwrap(), r.ty.clone(), span_id)]);
+                self.push_call_values(&[(None, link_id, ty.clone(), span_id)]);
 
                 let link_id = self.push_code(
                     LCode::Op1(op),
-                    r.ty.clone(),
+                    ty.clone(),
                     None,
                     node.span_id,
                     VarDefinitionSpace::Reg,
@@ -2637,7 +2543,7 @@ impl Flatten {
                 Ok(FlattenResult::new(
                     current_block_id,
                     Some(link_id),
-                    r.ty,
+                    ty,
                     false,
                 ))
             }
@@ -2832,8 +2738,10 @@ impl Flatten {
 
                 self.switch_blocks(then_block_id);
                 let r = self.push_node(then_ast, fenv, b)?;
+                let then_link_id = r.link_id.unwrap();
                 assert_eq!(self.block_id, r.block_id);
-                let then_ty = r.ty;
+                let then_ty = self.get_type(then_link_id).clone();
+                //let then_ty = r.ty;
 
                 // ELSE
                 let else_span_id = y.span_id;
@@ -2855,8 +2763,9 @@ impl Flatten {
 
                 self.switch_blocks(else_block_id);
                 let r = self.push_node(else_ast, fenv, b)?;
+                let else_link_id = r.link_id.unwrap();
                 assert_eq!(self.block_id, r.block_id);
-                let else_ty = r.ty;
+                let else_ty = self.get_type(else_link_id).clone();
 
                 if b.types.u.unify(&then_ty, &else_ty).is_err() {
                     b.push_error(
@@ -2894,10 +2803,9 @@ impl Flatten {
                     assert_eq!(self.block_id, r.block_id);
                     if let Some(v) = r.link_id {
                         v_block = r.block_id;
-                        ty = r.ty.clone();
-
+                        ty = self.get_type(v).clone();
                         // push single arg
-                        self.push_call_values(&[(None, v.into(), r.ty, node.span_id)]);
+                        self.push_call_values(&[(None, v.into(), ty.clone(), node.span_id)]);
                     }
                 }
 
@@ -3135,9 +3043,10 @@ impl Flatten {
                     assert_eq!(self.block_id, r.block_id);
                     current_block_id = r.block_id;
                     let link_id = r.link_id.unwrap();
+                    let ty = self.get_type(link_id).clone();
                     link_ids.push(link_id);
-                    types.push(r.ty.clone());
-                    values.push((None, link_id, r.ty, span_id));
+                    types.push(ty.clone()); //r.ty.clone());
+                    values.push((None, link_id, ty, span_id));
                 }
 
                 let ty = AstType::build_tuple(types);
