@@ -22,20 +22,25 @@ impl From<NodeIndex> for ScopeId {
 }
 
 pub struct FlattenEnvironment {
-    //pub(crate) current_block: Option<BlockId>,
+    pub(crate) current_block: BlockId,
     pub(crate) static_block: Option<BlockId>,
     pub(crate) static_scope: Option<ScopeId>,
     pub(crate) scopes: ScopeGraph,
 }
 
 impl FlattenEnvironment {
-    pub fn new() -> Self {
-        Self {
-            //current_block: None,
-            static_block: None,
+    pub fn new(block_id: BlockId) -> Self {
+        let mut env = Self {
+            current_block: block_id,
+            static_block: Some(block_id),
             static_scope: None,
             scopes: ScopeGraph::new(),
-        }
+        };
+
+        let scope_id = env.new_scope(ScopeType::Static);
+        env.static_scope = Some(scope_id);
+
+        env
     }
 
     pub fn static_scope_id(&self) -> ScopeId {
@@ -46,7 +51,7 @@ impl FlattenEnvironment {
         self.static_block.unwrap()
     }
 
-    fn _new_scope(&mut self, scope_type: ScopeType) -> ScopeId {
+    pub fn new_scope(&mut self, scope_type: ScopeType) -> ScopeId {
         let scope = ScopeLayer::new(scope_type);
         let index = self.scopes.add_node(scope);
         ScopeId(index.index() as u32)

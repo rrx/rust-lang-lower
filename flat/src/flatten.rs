@@ -31,7 +31,7 @@ use std::convert::Into;
 
 use crate::{
     BlockId, BlockifyError, Builtin, FlattenEnvironment, LCode, LinkId, NodeBuilder as NB, ScopeId,
-    ScopeLayer, ScopeType, SequenceReader, StringLabel, Successor, TemplateId, VariantId,
+    ScopeType, SequenceReader, StringLabel, Successor, TemplateId, VariantId,
 };
 
 pub type BlockGraph = DiGraph<IRBlock, Successor>;
@@ -148,7 +148,7 @@ pub enum FlattenMode {
 }
 
 pub struct Flatten {
-    _block_id: BlockId,
+    //_block_id: BlockId,
     module_key: Option<StringKey>,
     pub(super) link: LinkOptions,
     entries: Vec<CodeEntry>,
@@ -159,15 +159,15 @@ pub struct Flatten {
 }
 
 impl Flatten {
-    pub fn new(fenv: &mut FlattenEnvironment) -> Self {
-        let scope_id = Self::new_scope(ScopeType::Static, fenv);
-        let ir_block = IRBlock::new(scope_id);
-        let mut gblocks = BlockGraph::new();
-        let index = gblocks.add_node(ir_block);
-        let _block_id = BlockId(index.index() as u32);
+    pub fn new() -> Self {
+        //let scope_id = Self::new_scope(ScopeType::Static, fenv);
+        //let ir_block = IRBlock::new(scope_id);
+        let gblocks = BlockGraph::new();
+        //let index = gblocks.add_node(ir_block);
+        //let _block_id = BlockId(index.index() as u32);
 
         Self {
-            _block_id,
+            //_block_id,
             module_key: None,
             entries: vec![],
             gblocks,
@@ -179,11 +179,14 @@ impl Flatten {
     }
 
     pub fn switch_blocks(&mut self, block_id: BlockId, fenv: &mut FlattenEnvironment) {
-        self._block_id = block_id;
+        //fenv.curr
+        fenv.current_block = block_id;
+        //self._block_id = block_id;
     }
 
     pub fn current_block_id(&self, fenv: &FlattenEnvironment) -> BlockId {
-        self._block_id
+        fenv.current_block
+        //self._block_id
     }
 
     pub fn dump_scope(&self, block_id: BlockId, fenv: &FlattenEnvironment, b: &NB) {
@@ -349,9 +352,19 @@ impl Flatten {
         //fenv: &mut FlattenEnvironment,
         b: &mut NB,
     ) -> Result<(Self, FlattenEnvironment)> {
-        let mut fenv = FlattenEnvironment::new();
+        //let scope_id = Self::new_scope(ScopeType::Static, fenv);
+        //let ir_block = IRBlock::new(scope_id);
+        //let mut gblocks = BlockGraph::new();
+        //let index = gblocks.add_node(ir_block);
+        //let _block_id = BlockId(index.index() as u32);
 
-        let mut f = Self::new(&mut fenv);
+        let mut f = Self::new();
+        let mut fenv = FlattenEnvironment::new(BlockId(0));
+        let static_scope = fenv.static_scope_id();
+        let block_id = f.new_block(static_scope);
+        fenv.current_block = block_id;
+        fenv.static_block = Some(block_id);
+
         if let Ast::Module(key, body) = node.node {
             f.mode = mode;
             let static_block_id = f.current_block_id(&mut fenv);
@@ -527,9 +540,7 @@ impl Flatten {
     }
 
     fn new_scope(scope_type: ScopeType, fenv: &mut FlattenEnvironment) -> ScopeId {
-        let scope = ScopeLayer::new(scope_type);
-        let index = fenv.scopes.add_node(scope);
-        ScopeId(index.index() as u32)
+        fenv.new_scope(scope_type)
     }
 
     pub fn new_block(&mut self, scope_id: ScopeId) -> BlockId {
