@@ -6,10 +6,7 @@ use std::io::Write;
 
 use lower_mlir::default_context;
 
-use flat::{
-    BlockifyError, Flatten, FlattenEnvironment, FlattenMode, FlattenModule, ICodeModule,
-    NodeBuilder, ValueId,
-};
+use flat::{BlockifyError, Flatten, FlattenMode, FlattenModule, ICodeModule, NodeBuilder, ValueId};
 use parse::starlark::StarlarkParser;
 use std::path::PathBuf;
 
@@ -91,7 +88,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let ast = result?;
 
-    let mut fenv = FlattenEnvironment::new();
+    //let mut fenv = FlattenEnvironment::new();
 
     let mode = if config.template {
         FlattenMode::Template
@@ -99,11 +96,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         FlattenMode::Function
     };
 
-    let r = Flatten::flatten_module(ast, mode, &mut fenv, &mut b);
+    let r = Flatten::flatten_module(ast, mode, &mut b);
     if r.is_err() {
         b.spans.diagnostics_dump();
     }
-    let mut f = r?;
+    let (mut f, mut fenv) = r?;
 
     if config.template {
         let r = f.push_bake_templates(&mut fenv, &mut b);
