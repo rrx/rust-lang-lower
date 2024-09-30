@@ -695,7 +695,7 @@ impl Flatten {
 
                 // check the last entry in the block
                 // to see if the block is terminated
-                let block = self.get_block(r.block_id);
+                let block = self.get_block(self.block_id);
                 let v_last = block.links.last().unwrap();
                 let code = &self.get_entry(*v_last).code;
                 println!("code: {:?}", code);
@@ -1083,26 +1083,26 @@ impl Flatten {
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
     ) -> Result<Vec<(Option<StringKey>, LinkId, AstType, SpanId)>> {
-        let mut current_block_id = self.block_id;
+        //let mut current_block_id = self.block_id;
         let mut link_ids = vec![];
         let mut values = vec![];
         for a in args.into_iter() {
             match a {
                 Argument::Positional(expr) => {
-                    self.switch_blocks(current_block_id);
+                    //self.switch_blocks(current_block_id);
                     let r = self.push_node(*expr, fenv, b)?;
                     assert_eq!(self.block_id, r.block_id);
-                    current_block_id = r.block_id;
+                    //current_block_id = r.block_id;
                     let link_id = r.link_id.unwrap();
                     let ty = self.get_type(link_id).clone();
                     values.push((None, link_id, ty, span_id));
                     link_ids.push(link_id);
                 }
                 Argument::Named(key, expr) => {
-                    self.switch_blocks(current_block_id);
+                    //self.switch_blocks(current_block_id);
                     let r = self.push_node(*expr, fenv, b)?;
                     assert_eq!(self.block_id, r.block_id);
-                    current_block_id = r.block_id;
+                    //current_block_id = r.block_id;
                     let link_id = r.link_id.unwrap();
                     let ty = self.get_type(link_id).clone();
                     values.push((Some(key), link_id, ty, span_id));
@@ -1112,10 +1112,10 @@ impl Flatten {
                     let mut args_values = vec![];
                     for expr in exprs {
                         let span_id = expr.span_id;
-                        self.switch_blocks(current_block_id);
+                        //self.switch_blocks(current_block_id);
                         let r = self.push_node(expr, fenv, b)?;
                         assert_eq!(self.block_id, r.block_id);
-                        current_block_id = r.block_id;
+                        //current_block_id = r.block_id;
                         let link_id = r.link_id.unwrap();
                         let ty = self.get_type(link_id).clone();
                         args_values.push((Some(key), link_id, ty, span_id));
@@ -1141,10 +1141,10 @@ impl Flatten {
                 }
                 Argument::KwArgs(key, _expr) => {
                     let node: AstNode = 1.into();
-                    self.switch_blocks(current_block_id);
+                    //self.switch_blocks(current_block_id);
                     let r = self.push_node(node, fenv, b)?;
                     assert_eq!(self.block_id, r.block_id);
-                    current_block_id = r.block_id;
+                    //current_block_id = r.block_id;
                     let link_id = r.link_id.unwrap();
                     let ty = self.get_type(link_id).clone();
                     values.push((Some(key), link_id, ty, span_id));
@@ -1152,7 +1152,7 @@ impl Flatten {
                 }
             }
         }
-        self.block_id = current_block_id;
+        //self.block_id = current_block_id;
         Ok(values)
     }
 
@@ -2219,14 +2219,14 @@ impl Flatten {
                 let fun_block_id = fenv.get_entry_block(fun_scope_id);
 
                 let mut jump_args = vec![];
-                let mut current_block_id = current_block_id;
+                //let mut current_block_id = current_block_id;
                 //let block_id = current_block_id;
                 let span_id = if let Some(expr) = maybe_expr {
                     let expr_span_id = expr.span_id;
                     self.switch_blocks(current_block_id);
                     let r = self.push_node(*expr, fenv, b)?;
                     assert_eq!(self.block_id, r.block_id);
-                    current_block_id = r.block_id;
+                    //current_block_id = r.block_id;
                     //block_id = r.block_id;
                     let link_id = r.link_id.unwrap();
                     let entry = self.get_entry(link_id);
@@ -2243,10 +2243,10 @@ impl Flatten {
                 }
 
                 let scope = fenv.get_scope(fun_scope_id);
-                self.switch_blocks(current_block_id);
+                //self.switch_blocks(current_block_id);
                 self.push_jump(scope.return_block.unwrap().into(), jump_args, span_id);
-                self.switch_blocks(current_block_id);
-                Ok(FlattenResult::new(current_block_id, None))
+                //self.switch_blocks(current_block_id);
+                Ok(FlattenResult::new(self.block_id, None))
             }
 
             Ast::Literal(lit) => {
@@ -2353,36 +2353,36 @@ impl Flatten {
                 self.switch_blocks(current_block_id);
                 let r = self.push_node(*expr, fenv, b)?;
                 assert_eq!(self.block_id, r.block_id);
-                let current_block_id = r.block_id;
+                //let current_block_id = r.block_id;
                 let v_expr = r.link_id.unwrap();
                 let expr_ty = self.get_entry(v_expr).ty.clone();
 
-                let offset_decl =
-                    if let Some(v_decl) = self.resolve_name(current_block_id, name, fenv) {
-                        // already declared
-                        let ty = self.get_type(v_decl).clone();
-                        if b.types.u.unify(&ty, &expr_ty).is_err() {
-                            b.push_error(
-                                &format!("Assisgn Type Mismatch: {:?}, {:?}", ty, expr_ty),
-                                node.span_id,
-                            );
-                        }
-                        v_decl
-                    } else {
-                        // need to declare it
-                        let block = self.get_block(current_block_id);
-                        let scope_id = block.scope_id;
-                        let expr_ty = self.get_entry(v_expr).ty.clone();
-                        let link_id = self.push_code(
-                            LCode::Declare,
-                            expr_ty.clone(),
-                            Some(name),
+                let offset_decl = if let Some(v_decl) = self.resolve_name(self.block_id, name, fenv)
+                {
+                    // already declared
+                    let ty = self.get_type(v_decl).clone();
+                    if b.types.u.unify(&ty, &expr_ty).is_err() {
+                        b.push_error(
+                            &format!("Assisgn Type Mismatch: {:?}, {:?}", ty, expr_ty),
                             node.span_id,
-                            VarDefinitionSpace::Stack,
                         );
-                        fenv.scope_define(scope_id, name, link_id);
-                        link_id.into()
-                    };
+                    }
+                    v_decl
+                } else {
+                    // need to declare it
+                    let block = self.get_block(self.block_id);
+                    let scope_id = block.scope_id;
+                    let expr_ty = self.get_entry(v_expr).ty.clone();
+                    let link_id = self.push_code(
+                        LCode::Declare,
+                        expr_ty.clone(),
+                        Some(name),
+                        node.span_id,
+                        VarDefinitionSpace::Stack,
+                    );
+                    fenv.scope_define(scope_id, name, link_id);
+                    link_id.into()
+                };
 
                 let load_link_id = if self.is_load_required(v_expr) {
                     let link_id = self.push_code(
@@ -2404,8 +2404,8 @@ impl Flatten {
                     node.span_id,
                     VarDefinitionSpace::Default,
                 );
-                self.switch_blocks(current_block_id);
-                Ok(FlattenResult::new(current_block_id, Some(link_id)))
+                //self.switch_blocks(current_block_id);
+                Ok(FlattenResult::new(self.block_id, Some(link_id)))
             }
 
             Ast::Import(module_key, args) => {
