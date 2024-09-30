@@ -18,6 +18,13 @@ impl Default for VarDefinitionSpace {
 }
 
 impl VarDefinitionSpace {
+    pub fn is_static(&self) -> bool {
+        match self {
+            Self::Static => true,
+            _ => false,
+        }
+    }
+
     pub fn requires_deref(&self) -> bool {
         match self {
             Self::Static | Self::Stack | Self::Heap => true,

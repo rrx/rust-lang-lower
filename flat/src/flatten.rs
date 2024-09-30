@@ -767,10 +767,41 @@ impl Flatten {
 
     pub fn is_load_required(&mut self, v: LinkId) -> bool {
         let entry = self.get_entry(v);
+
+        /*
         match entry.mem {
-            //VarDefinitionSpace::Stack | VarDefinitionSpace::Static => true,
+            VarDefinitionSpace::Stack | VarDefinitionSpace::Static => true,
             _ => false,
         }
+        */
+
+        if let LCode::Val(_) = entry.code {
+            return entry.mem.is_static();
+        }
+
+        return false;
+
+        if let LCode::Op2(_) = entry.code {
+            return false;
+        }
+
+        if let LCode::Call(_) = entry.code {
+            return false;
+        }
+
+        // decide if a load is required or not
+        // TODO: this decision might be better made later
+        let require_load = if let VarDefinitionSpace::Arg = entry.mem {
+            false
+        //} else if let VarDefinitionSpace::Stack = mem {
+        //false
+        } else if entry.ty.is_composite() {
+            // skip loading if it's composite
+            false
+        } else {
+            true
+        };
+        require_load
     }
 
     pub fn push_loads_if_needed(
@@ -2353,6 +2384,7 @@ impl Flatten {
                     let ty = entry.ty.clone();
                     let mem = entry.mem;
 
+                    //let require_load = self.is_load_required(def_link_id);
                     // decide if a load is required or not
                     // TODO: this decision might be better made later
                     let require_load = if let VarDefinitionSpace::Arg = mem {
