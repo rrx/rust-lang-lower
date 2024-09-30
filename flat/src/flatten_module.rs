@@ -274,6 +274,7 @@ impl FlattenModule {
                 Some(key),
                 unknown,
                 VarDefinitionSpace::Static,
+                fenv,
             );
         }
 
@@ -305,6 +306,7 @@ impl FlattenModule {
                 entry.name,
                 entry.span_id,
                 entry.mem,
+                fenv,
             );
         }
 

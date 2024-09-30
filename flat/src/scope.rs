@@ -1,7 +1,16 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
-use crate::{BlockId, CodeOffset, LinkId, NodeBuilder, StringLabel, ValueId};
+use crate::{BlockId, LinkId, NodeBuilder, StringLabel, ValueId};
 use compile_core::{AstType, StringKey};
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum Successor {
+    BlockScope,
+    Operation,
+    Jump,
+    FunctionDeclaration,
+    TemplateDeclaration,
+}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ScopeType {
@@ -119,7 +128,6 @@ impl ScopeLayer {
             entry_block: None,
             return_block: None,
             next_block: vec![],
-            //entry_block: None,
             loop_block: None,
             scope_type,
             lambdas: HashMap::new(),
@@ -162,57 +170,5 @@ impl ScopeLayer {
                 println!("Entry: {}:{}:{}", name, v.ty, v.link_id);
             }
         }
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub enum Successor {
-    BlockScope,
-    Operation,
-    Jump,
-    FunctionDeclaration,
-    TemplateDeclaration,
-}
-
-#[derive(Debug)]
-pub struct Block {
-    //pub(crate) count: usize,
-    pub entry_id: Option<ValueId>,
-    //pub(crate) last_value: Option<ValueId>,
-    pub(crate) terminator: Option<ValueId>,
-    pub succ: HashSet<(Successor, CodeOffset)>,
-    pub pred: HashSet<ValueId>,
-}
-
-impl Block {
-    pub fn new() -> Self {
-        Self {
-            //count: 0,
-            entry_id: None,
-            //last_value: None,
-            terminator: None,
-            pred: HashSet::new(),
-            succ: HashSet::new(),
-        }
-    }
-
-    pub fn has_term(&self) -> bool {
-        self.terminator.is_some()
-    }
-
-    pub fn set_entry(&mut self, value_id: ValueId) {
-        self.entry_id = Some(value_id);
-    }
-
-    pub fn set_term(&mut self, value_id: ValueId) {
-        self.terminator = Some(value_id);
-    }
-
-    pub fn add_pred(&mut self, parent_id: ValueId) {
-        self.pred.insert(parent_id);
-    }
-
-    pub fn add_succ(&mut self, succ_entry_id: ValueId) {
-        self.pred.insert(succ_entry_id);
     }
 }
