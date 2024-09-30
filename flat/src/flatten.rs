@@ -730,17 +730,6 @@ impl Flatten {
         span_id: SpanId,
     ) -> LinkId {
         let _ = self.push_call_values(&values);
-        /*
-        for (link_id, ty) in link_ids.iter() {
-            self.push_code(
-                LCode::CallValue(link_id.into(), vec![]),
-                ty.clone(),
-                None,
-                span_id,
-                VarDefinitionSpace::Reg,
-            );
-        }
-        */
 
         self.push_code(
             LCode::Return,
@@ -1385,17 +1374,6 @@ impl Flatten {
         let current_block_id = self.block_id;
         // Add links
         self.push_call_values(&values);
-        /*
-        for (key, link_id, ty, span_id) in values {
-            self.push_code(
-                LCode::CallValue(link_id.into(), vec![]),
-                ty,
-                key,
-                span_id,
-                VarDefinitionSpace::Reg,
-            );
-        }
-        */
 
         // Make call
         let link_id = self.push_code(
@@ -1429,17 +1407,6 @@ impl Flatten {
 
         // Add links
         self.push_call_values(&values);
-        /*
-        for (key, link_id, ty, span_id) in values {
-            self.push_code(
-                LCode::CallValue(link_id.into(), vec![]),
-                ty,
-                key,
-                span_id,
-                VarDefinitionSpace::Reg,
-            );
-        }
-        */
 
         let link_id = self.push_code(
             LCode::Builtin(id),
@@ -2584,16 +2551,6 @@ impl Flatten {
 
                 self.push_call_values(&[(None, r.link_id.unwrap(), r.ty.clone(), span_id)]);
 
-                /*
-                self.push_code(
-                    LCode::CallValue(r.link_id.unwrap().into(), vec![]),
-                    r.ty.clone(),
-                    None,
-                    node.span_id,
-                    VarDefinitionSpace::Reg,
-                );
-                */
-
                 let link_id = self.push_code(
                     LCode::Op1(op),
                     r.ty.clone(),
@@ -2866,16 +2823,6 @@ impl Flatten {
 
                         // push single arg
                         self.push_call_values(&[(None, v.into(), r.ty, node.span_id)]);
-
-                        /*
-                        self.push_code(
-                            LCode::CallValue(v.into(), vec![]),
-                            r.ty,
-                            None,
-                            node.span_id,
-                            VarDefinitionSpace::Reg,
-                        );
-                        */
                     }
                 }
 
