@@ -70,7 +70,7 @@ impl<'c> MLIRGenerator<'c> {
                 )
             }
 
-            AstType::Struct(args) => {
+            AstType::Struct(_args) => {
                 /*
                 let types = args
                     .iter()

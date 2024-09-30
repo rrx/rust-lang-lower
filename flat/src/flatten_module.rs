@@ -285,12 +285,14 @@ impl FlattenModule {
             let label_link_id = block.links.first().unwrap();
             let entry = flatten.get_entry(*label_link_id).clone();
             let ty = flatten.get_type(*label_link_id).clone();
+            /*
             let name = entry
                 .name
                 .map(|key| b.labels.r(key.into()))
                 .unwrap_or("".to_string());
-            //println!("X: {:?}", entry);
-            //println!("X: {}, {}", name, &ty);
+            println!("X: {:?}", entry);
+            println!("X: {}, {}", name, &ty);
+            */
             assert_eq!(entry.mem, VarDefinitionSpace::Static);
 
             if let Some(key) = entry.name {

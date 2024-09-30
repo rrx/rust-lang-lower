@@ -125,10 +125,10 @@ impl<'a> Interp<'a> {
     fn format_code(&self, v: ValueId) -> String {
         let code = self.m.get_code(v);
         match code {
-            LCode::CallValue(base, indicies) => {
+            LCode::CallValue(base) => {
                 let base = self.m.resolve_code_offset(*base);
                 //let v = self.m.resolve_code_offset(indicies.clone().offset());
-                format!("CallValue({}, {:?})", base, indicies)
+                format!("CallValue({})", base)
             }
             LCode::Store(decl, link) => {
                 let v_decl = self.m.resolve_code_offset(decl.into());
@@ -463,7 +463,7 @@ impl<'a> Interp<'a> {
                 true
             }
 
-            LCode::Use(base, inds) => {
+            LCode::Use(_base, _inds) => {
                 self.advance();
                 true
             }
@@ -477,7 +477,7 @@ impl<'a> Interp<'a> {
                 true
             }
             */
-            LCode::CallValue(base, inds) => {
+            LCode::CallValue(base) => {
                 let base = self.m.resolve_code_offset(*base);
                 //let v = self.m.resolve_code_offset(inds.clone().offset());
                 let value = self.resolve_value(base)?;

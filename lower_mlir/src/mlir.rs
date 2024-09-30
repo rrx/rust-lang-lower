@@ -317,8 +317,7 @@ impl<'c> MLIRGenerator<'c> {
             }
             */
 
-            if let LCode::CallValue(base, indicies) = code {
-                assert!(indicies.len() == 0);
+            if let LCode::CallValue(base) = code {
                 current = *base;
                 //current = indicies.clone().offset();
                 continue;
@@ -744,7 +743,7 @@ impl<'c> MLIRGenerator<'c> {
                     let r_index = self.value0(index);
                     let op = memref::store(r_value, r_addr, &[r_index], location);
                     let c = self.blocks.get_mut(&block_id).unwrap();
-                    let store_index = c.push(op);
+                    let _store_index = c.push(op);
                     //self.index.insert(v, store_index);
                 }
             }
@@ -1110,7 +1109,7 @@ impl<'c> MLIRGenerator<'c> {
 
             //LCode::Value(_) => (),
             //LCode::ValueIndex(_, _) => (),
-            LCode::CallValue(_, _) => (),
+            LCode::CallValue(_) => (),
             LCode::Noop => (),
             LCode::Extern => (),
 

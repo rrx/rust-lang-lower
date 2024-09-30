@@ -822,7 +822,7 @@ impl Flatten {
             .into_iter()
             .map(|(maybe_key, v, ty, span_id)| {
                 self.push_code(
-                    LCode::CallValue(v.into(), vec![]),
+                    LCode::CallValue(v.into()),
                     ty.clone(),
                     maybe_key,
                     span_id,
