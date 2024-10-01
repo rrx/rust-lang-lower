@@ -210,7 +210,7 @@ impl From<NodeIndex> for ScopeId {
 
 pub struct FlattenEnvironment {
     pub(crate) current_block: BlockId,
-    pub(crate) static_block: Option<BlockId>,
+    //pub(crate) static_block: Option<BlockId>,
     //pub(crate) static_scope: Option<ScopeId>,
     pub scopes: ScopeGraph,
 }
@@ -219,15 +219,11 @@ impl FlattenEnvironment {
     pub fn new(block_id: BlockId) -> Self {
         let mut env = Self {
             current_block: block_id,
-            static_block: Some(block_id),
+            //static_block: Some(block_id),
             //static_scope: None,
             scopes: ScopeGraph::new(),
         };
 
         env
-    }
-
-    pub fn static_block_id(&self) -> BlockId {
-        self.static_block.unwrap()
     }
 }

@@ -103,6 +103,7 @@ pub struct Flatten {
     messages: Vec<(String, SpanId)>,
     pub mode: FlattenMode,
     pub(crate) static_scope: Option<ScopeId>,
+    pub(crate) static_block: Option<BlockId>,
 }
 
 impl Flatten {
@@ -118,11 +119,16 @@ impl Flatten {
             messages: vec![],
             mode: FlattenMode::Function,
             static_scope: None,
+            static_block: None,
         }
     }
 
     pub fn static_scope_id(&self) -> ScopeId {
         self.static_scope.unwrap()
+    }
+
+    pub fn static_block_id(&self) -> BlockId {
+        self.static_block.unwrap()
     }
 
     pub fn switch_blocks(&mut self, block_id: BlockId, fenv: &mut FlattenEnvironment) {
@@ -294,7 +300,7 @@ impl Flatten {
         let static_scope = f.static_scope_id();
         let block_id = f.blocks.new_block(static_scope);
         fenv.current_block = block_id;
-        fenv.static_block = Some(block_id);
+        f.static_block = Some(block_id);
 
         if let Ast::Module(key, body) = node.node {
             f.mode = mode;
@@ -319,7 +325,7 @@ impl Flatten {
                 &mut fenv,
             );
 
-            fenv.static_block = Some(static_block_id);
+            f.static_block = Some(static_block_id);
             f.static_scope = Some(static_scope_id);
             for ast in body.to_vec() {
                 f.switch_blocks(static_block_id, &mut fenv);
@@ -367,7 +373,7 @@ impl Flatten {
         let name = b.labels.s("main");
         // reset the block position before each function
         // main is always static context
-        self.switch_blocks(fenv.static_block_id(), fenv);
+        self.switch_blocks(self.static_block_id(), fenv);
         let ty = AstType::func(vec![], AstType::Int);
         let r = self.push_bake(name, ty, fenv, b);
         // switch back after bake
@@ -381,7 +387,7 @@ impl Flatten {
         fenv: &mut FlattenEnvironment,
         _b: &mut NB,
     ) -> Result<Vec<LinkId>> {
-        let block_id = fenv.static_block_id();
+        let block_id = self.static_block_id();
         let block = self.blocks.get_block(block_id);
         let scope_id = block.scope_id;
         let scope = fenv.scopes.get_scope(scope_id);
@@ -408,7 +414,7 @@ impl Flatten {
         fenv: &mut FlattenEnvironment,
         _b: &mut NB,
     ) -> Result<Vec<LinkId>> {
-        let static_block_id = fenv.static_block_id();
+        let static_block_id = self.static_block_id();
         let scope_id = self.static_scope_id();
         let scope = fenv.scopes.get_scope(scope_id);
         let keys = scope
@@ -1085,7 +1091,7 @@ impl Flatten {
         let global_key = b.labels.fresh_key(&s);
         let s_global = b.labels.r(global_key.into());
         let current_block_id = self.current_block_id(fenv);
-        self.switch_blocks(fenv.static_block_id(), fenv);
+        self.switch_blocks(self.static_block_id(), fenv);
 
         let def_func_type = b.types.r(def.fun_type).clone();
 
@@ -1149,7 +1155,7 @@ impl Flatten {
             (variant_id, v_entry)
         } else {
             // if it's not already baked, we need to do that here
-            self.switch_blocks(fenv.static_block_id(), fenv);
+            self.switch_blocks(self.static_block_id(), fenv);
             let result = self.push_bake_function(
                 //v_entry,
                 def,
@@ -1468,7 +1474,7 @@ impl Flatten {
 
         // block graph
         self.blocks
-            .block_succ(fenv.static_block_id(), fun_block_id, succ_type);
+            .block_succ(self.static_block_id(), fun_block_id, succ_type);
         self.blocks
             .block_succ(fun_block_id, ret_block_id, Successor::BlockScope);
         self.switch_blocks(fun_block_id, fenv);
@@ -2070,7 +2076,7 @@ impl Flatten {
                         let scope_id = block.scope_id;
                         let scope = fenv.scopes.get_scope(scope_id);
 
-                        let static_block_id = fenv.static_block_id();
+                        let static_block_id = self.static_block_id();
 
                         // Generate the global name, unique if it's local
                         let global_name = if let ScopeType::Static = scope.scope_type {
