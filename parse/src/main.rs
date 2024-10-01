@@ -139,8 +139,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut scopes_path = path.clone();
     scopes_path.set_extension("scopes.dot");
-    fenv.scopes
-        .scope_graph(scopes_path.clone().to_str().unwrap());
+    m.scopes.scope_graph(scopes_path.clone().to_str().unwrap());
 
     let table_path = make_path(&output_filename, "table.txt");
     m.dump_code_table(&table_path, &mut b);

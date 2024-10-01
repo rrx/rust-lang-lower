@@ -6,7 +6,8 @@ use std::convert::Into;
 
 use crate::{
     BlockGraph, BlockId, CodeEntry, CodeOffset, CodeRow, Flatten, FlattenEnvironment, ICodeModule,
-    LCode, LinkId, NodeBuilder as NB, ScopeId, ScopeType, StringLabel, Successor, ValueId,
+    LCode, LinkId, NodeBuilder as NB, ScopeGraph, ScopeId, ScopeType, StringLabel, Successor,
+    ValueId,
 };
 
 use tabled::{settings::Style, Table};
@@ -61,6 +62,7 @@ pub struct FlattenModule {
     statics: HashMap<StringKey, Literal>,
     pub(super) link: LinkOptions,
     pub(super) gblocks: BlockGraph,
+    pub scopes: ScopeGraph,
 }
 
 impl ICodeModule for FlattenModule {
@@ -176,11 +178,12 @@ impl FlattenModule {
             statics: HashMap::new(),
             block_map: HashMap::new(),
             gblocks: BlockGraph::new(),
+            scopes: ScopeGraph::new(),
         }
     }
 
     pub fn dump(&self, fenv: &FlattenEnvironment, _b: &NB) {
-        petgraph::dot::Dot::with_config(&fenv.scopes.0, &[petgraph::dot::Config::EdgeNoLabel]);
+        petgraph::dot::Dot::with_config(&self.scopes.0, &[petgraph::dot::Config::EdgeNoLabel]);
     }
 
     pub fn from_builder(mut flatten: Flatten, fenv: &FlattenEnvironment, b: &mut NB) -> Self {
@@ -300,7 +303,7 @@ impl FlattenModule {
                     next = ValueId(value_count + 1);
                 }
                 let scope_id = block.scope_id;
-                let scope = fenv.scopes.get_scope(scope_id);
+                let scope = flatten.scopes.get_scope(scope_id);
 
                 if index == block.links.len() - 1
                     && !entry.code.is_term()
