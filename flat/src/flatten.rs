@@ -102,6 +102,7 @@ pub struct Flatten {
     ast_templates: Vec<(Lambda, SpanId)>,
     messages: Vec<(String, SpanId)>,
     pub mode: FlattenMode,
+    pub(crate) static_scope: Option<ScopeId>,
 }
 
 impl Flatten {
@@ -116,7 +117,12 @@ impl Flatten {
             ast_templates: vec![],
             messages: vec![],
             mode: FlattenMode::Function,
+            static_scope: None,
         }
+    }
+
+    pub fn static_scope_id(&self) -> ScopeId {
+        self.static_scope.unwrap()
     }
 
     pub fn switch_blocks(&mut self, block_id: BlockId, fenv: &mut FlattenEnvironment) {
@@ -281,7 +287,11 @@ impl Flatten {
         // FlattenEnvironment represents the module level structures
         let mut f = Self::new();
         let mut fenv = FlattenEnvironment::new(BlockId(0));
-        let static_scope = fenv.static_scope_id();
+
+        let scope_id = fenv.scopes.new_scope(ScopeType::Static);
+        f.static_scope = Some(scope_id);
+
+        let static_scope = f.static_scope_id();
         let block_id = f.blocks.new_block(static_scope);
         fenv.current_block = block_id;
         fenv.static_block = Some(block_id);
@@ -310,7 +320,7 @@ impl Flatten {
             );
 
             fenv.static_block = Some(static_block_id);
-            fenv.static_scope = Some(static_scope_id);
+            f.static_scope = Some(static_scope_id);
             for ast in body.to_vec() {
                 f.switch_blocks(static_block_id, &mut fenv);
                 let _ = f.push_node(ast, &mut fenv, b)?;
@@ -399,7 +409,7 @@ impl Flatten {
         _b: &mut NB,
     ) -> Result<Vec<LinkId>> {
         let static_block_id = fenv.static_block_id();
-        let scope_id = fenv.static_scope_id();
+        let scope_id = self.static_scope_id();
         let scope = fenv.scopes.get_scope(scope_id);
         let keys = scope
             .declarations
@@ -1161,7 +1171,7 @@ impl Flatten {
             self.switch_blocks(current_block_id, fenv);
             let r_ty2 = b.types.u.resolve(&call_func_type).unwrap();
             fenv.scopes.variant_update(
-                fenv.static_scope_id(),
+                self.static_scope_id(),
                 name,
                 variant_id,
                 r_ty2.clone(),
@@ -1201,7 +1211,7 @@ impl Flatten {
             let (_ret_ty, call_values, call_ty) =
                 self.push_function_args(&def, args, span_id, fenv, b)?;
 
-            let is_static = fenv.static_scope_id() == scope_id;
+            let is_static = self.static_scope_id() == scope_id;
             if is_static {
                 let r = self.push_bake_static(
                     name,
@@ -1443,7 +1453,7 @@ impl Flatten {
         let span_id = body.span_id;
         // create function scope
         let (fun_block_id, fun_scope_id) =
-            self.new_scope_and_block(scope_type, fenv.static_scope_id(), fenv);
+            self.new_scope_and_block(scope_type, self.static_scope_id(), fenv);
         // create function block and return block
         //self.switch_blocks(fun_block_id);
         let ret_block_id = self.blocks.new_block(fun_scope_id);
@@ -1477,7 +1487,7 @@ impl Flatten {
         //let variant_id = if let Some(global_name) = global_name {
         let variant_id =
             fenv.scopes
-                .variant_add(fenv.static_scope_id(), name, r_ty1, entry_link_id);
+                .variant_add(self.static_scope_id(), name, r_ty1, entry_link_id);
         //} else {
         //None
         //};
@@ -1485,7 +1495,7 @@ impl Flatten {
         // add the name to static scope
         // do this early for recursive functions
         fenv.scopes
-            .scope_define(fenv.static_scope_id(), global_name, entry_link_id);
+            .scope_define(self.static_scope_id(), global_name, entry_link_id);
 
         let body = jump_if_needed(*body, fenv, b);
 
@@ -2036,7 +2046,7 @@ impl Flatten {
                                     );
                                     self.switch_blocks(current_block_id, fenv);
                                     fenv.scopes.scope_define_template(
-                                        fenv.static_scope_id(),
+                                        self.static_scope_id(),
                                         name,
                                         template_link_id,
                                     );
