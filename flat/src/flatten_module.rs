@@ -300,7 +300,7 @@ impl FlattenModule {
                     next = ValueId(value_count + 1);
                 }
                 let scope_id = block.scope_id;
-                let scope = fenv.get_scope(scope_id);
+                let scope = fenv.scopes.get_scope(scope_id);
 
                 if index == block.links.len() - 1
                     && !entry.code.is_term()
