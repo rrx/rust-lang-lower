@@ -2,7 +2,7 @@ use anyhow::Error;
 use anyhow::Result;
 use compile_core::{Argument, Ast, AstNode, ControlFlowMarker, SpanId, StringKey};
 
-use crate::{BlockifyError, FlattenEnvironment, NodeBuilder as NB};
+use crate::{BlockifyError, NodeBuilder as NB};
 
 #[derive(Debug)]
 pub struct SequenceReader {
@@ -125,7 +125,7 @@ impl SequenceReader {
         }
     }
 
-    fn push_node(&mut self, node: AstNode, _fenv: &mut FlattenEnvironment, b: &mut NB) {
+    fn push_node(&mut self, node: AstNode, b: &mut NB) {
         let span_id = node.span_id;
         let node = match &node.node {
             Ast::Call(expr, args) => match &expr.node {
@@ -281,16 +281,11 @@ impl SequenceReader {
         }
     }
 
-    pub fn build(
-        &mut self,
-        exprs: Vec<AstNode>,
-        fenv: &mut FlattenEnvironment,
-        b: &mut NB,
-    ) -> Vec<AstNode> {
+    pub fn build(&mut self, exprs: Vec<AstNode>, b: &mut NB) -> Vec<AstNode> {
         for expr in exprs.into_iter() {
             //println!("push1: {:?}", (self.stack.len(), self.seq.len()));
             //b.dump_ast(&expr);
-            self.push_node(expr, fenv, b);
+            self.push_node(expr, b);
             //println!("push2: {:?}", (self.stack.len(), self.seq.len()));
         }
 

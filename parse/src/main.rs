@@ -100,7 +100,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     if r.is_err() {
         b.spans.diagnostics_dump();
     }
-    let (mut f, mut fenv) = r?;
+    let mut f = r?;
 
     /*
     if config.template {
@@ -111,7 +111,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         r?;
     } else {
     */
-    let r = f.push_bake_main(&mut fenv, &mut b);
+    let r = f.push_bake_main(&mut b);
     if r.is_err() {
         b.spans.diagnostics_dump();
     }
@@ -119,7 +119,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     //f.dump_blocks();
     //f.dump_scope(fenv.static_block_id(), &fenv, &b);
-    let mut m = FlattenModule::from_builder(f, &mut fenv, &mut b);
+    let mut m = FlattenModule::from_builder(f, &mut b);
 
     if config.template {
         m.type_inference(&mut b);
@@ -128,7 +128,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     //b.labels.pool.dump();
-    m.dump(&fenv, &b);
+    m.dump(&b);
 
     let out_graph_path = make_path(&output_filename, "graph.dot");
     m.save_graph(&out_graph_path, &mut b);

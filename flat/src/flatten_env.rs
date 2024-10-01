@@ -208,14 +208,4 @@ impl From<NodeIndex> for ScopeId {
     }
 }
 
-pub struct FlattenEnvironment {
-    //pub scopes: ScopeGraph,
-}
-
-impl FlattenEnvironment {
-    pub fn new(block_id: BlockId) -> Self {
-        Self {
-            //scopes: ScopeGraph::new(),
-        }
-    }
-}
+pub struct FlattenEnvironment {}

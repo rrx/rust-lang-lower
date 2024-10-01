@@ -182,11 +182,11 @@ impl FlattenModule {
         }
     }
 
-    pub fn dump(&self, fenv: &FlattenEnvironment, _b: &NB) {
+    pub fn dump(&self, _b: &NB) {
         petgraph::dot::Dot::with_config(&self.scopes.0, &[petgraph::dot::Config::EdgeNoLabel]);
     }
 
-    pub fn from_builder(mut flatten: Flatten, fenv: &FlattenEnvironment, b: &mut NB) -> Self {
+    pub fn from_builder(mut flatten: Flatten, b: &mut NB) -> Self {
         // we want to output the blocks in a particular order
         // we use DFS post order search on each function, to ensure that the leaf
         // nodes show up last, such as the return block
@@ -239,7 +239,6 @@ impl FlattenModule {
                 Some(key),
                 unknown,
                 VarDefinitionSpace::Static,
-                fenv,
             );
         }
 
@@ -271,7 +270,6 @@ impl FlattenModule {
                 entry.name,
                 entry.span_id,
                 entry.mem,
-                fenv,
             );
         }
 
