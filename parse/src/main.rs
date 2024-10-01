@@ -131,7 +131,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     m.dump(&fenv, &b);
 
     let out_graph_path = make_path(&output_filename, "graph.dot");
-    m.dump_graph(&out_graph_path, &mut b);
+    m.save_graph(&out_graph_path, &mut b);
 
     let mut blocks_path = path.clone();
     blocks_path.set_extension("blocks.dot");

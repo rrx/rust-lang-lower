@@ -257,7 +257,6 @@ pub trait ICodeModule {
 
     fn get_entry_id_from_block_id(&self, block_id: BlockId) -> ValueId;
     fn dump_code_table(&self, filename: &str, b: &mut NodeBuilder);
-    fn dump_graph(&self, filename: &str, b: &NodeBuilder);
 
     fn get_label_args(&self, v: ValueId) -> Vec<AstType> {
         let mut current = v;
@@ -335,4 +334,51 @@ pub trait ICodeModule {
         }
     }
     fn code_count(&self) -> usize;
+
+    fn save_graph(&self, filename: &str, b: &NodeBuilder) {
+        use petgraph::dot::{Config, Dot};
+        let cfg = self.get_graph(ValueId::new(0), None, b);
+        let s = format!(
+            "{:?}",
+            Dot::with_attr_getters(
+                &cfg.g,
+                &[Config::EdgeNoLabel, Config::NodeNoLabel],
+                &|_, _er| String::new(),
+                &|_, (_index, data)| {
+                    match data.code_offset {
+                        CodeOffset::Link(link_id) => {
+                            format!(
+                                //"label = \"L{}:{}\" shape=\"{:?}\"",
+                                "label = \"L{}:{}\"",
+                                link_id.index(),
+                                &data.name,
+                                //&data.ty.to_string()
+                            )
+                        }
+                        CodeOffset::Value(value_id) => {
+                            format!(
+                                //"label = \"V{}:{}\" shape={:?}",
+                                "label = \"V{}:{}\"",
+                                value_id.index(),
+                                &data.name,
+                                //&data.ty.to_string()
+                            )
+                        }
+                        CodeOffset::Block(block_id) => {
+                            format!(
+                                //"label = \"B{}:{}\" shape={:?}",
+                                "label = \"B{}:{}\"",
+                                block_id.index(),
+                                &data.name,
+                                //&data.ty.to_string()
+                            )
+                        }
+                    }
+                }
+            )
+        );
+        println!("saved graph {:?}", filename);
+        //println!("{}", s);
+        std::fs::write(filename, s).unwrap();
+    }
 }

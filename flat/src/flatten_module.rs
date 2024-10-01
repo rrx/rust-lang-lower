@@ -164,10 +164,6 @@ impl ICodeModule for FlattenModule {
         println!("{}", s);
         std::fs::write(filename, s).unwrap();
     }
-
-    fn dump_graph(&self, filename: &str, b: &NB) {
-        save_graph(self, filename, b);
-    }
 }
 
 impl FlattenModule {
@@ -562,51 +558,4 @@ impl FlattenModule {
             unknown: is_unknown,
         }
     }
-}
-
-fn save_graph(blockify: &dyn ICodeModule, filename: &str, b: &NB) {
-    use petgraph::dot::{Config, Dot};
-    let cfg = blockify.get_graph(ValueId::new(0), None, b);
-    let s = format!(
-        "{:?}",
-        Dot::with_attr_getters(
-            &cfg.g,
-            &[Config::EdgeNoLabel, Config::NodeNoLabel],
-            &|_, _er| String::new(),
-            &|_, (_index, data)| {
-                match data.code_offset {
-                    CodeOffset::Link(link_id) => {
-                        format!(
-                            //"label = \"L{}:{}\" shape=\"{:?}\"",
-                            "label = \"L{}:{}\"",
-                            link_id.index(),
-                            &data.name,
-                            //&data.ty.to_string()
-                        )
-                    }
-                    CodeOffset::Value(value_id) => {
-                        format!(
-                            //"label = \"V{}:{}\" shape={:?}",
-                            "label = \"V{}:{}\"",
-                            value_id.index(),
-                            &data.name,
-                            //&data.ty.to_string()
-                        )
-                    }
-                    CodeOffset::Block(block_id) => {
-                        format!(
-                            //"label = \"B{}:{}\" shape={:?}",
-                            "label = \"B{}:{}\"",
-                            block_id.index(),
-                            &data.name,
-                            //&data.ty.to_string()
-                        )
-                    }
-                }
-            }
-        )
-    );
-    println!("saved graph {:?}", filename);
-    //println!("{}", s);
-    std::fs::write(filename, s).unwrap();
 }
