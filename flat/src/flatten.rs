@@ -2931,10 +2931,6 @@ impl Flatten {
     }
 }
 
-pub fn scope_graph(filename: &str, fenv: &FlattenEnvironment) {
-    fenv.scopes.scope_graph(filename);
-}
-
 fn def_to_type(def: &Lambda, b: &mut NB) -> AstType {
     let arg_type = b.types.r(def.arg_type).clone();
     let return_type = b.types.r(def.return_type).clone();

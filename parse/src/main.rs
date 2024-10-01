@@ -139,15 +139,15 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut scopes_path = path.clone();
     scopes_path.set_extension("scopes.dot");
-    flat::flatten::scope_graph(scopes_path.clone().to_str().unwrap(), &fenv);
+    fenv.scopes
+        .scope_graph(scopes_path.clone().to_str().unwrap());
 
     let table_path = make_path(&output_filename, "table.txt");
     m.dump_code_table(&table_path, &mut b);
 
     let mut cfg_path = path.clone();
     cfg_path.set_extension("cfg.mmd");
-    m.block_graph2(cfg_path.clone().to_str().unwrap(), &b)?;
-    flat::flatten::scope_graph(path.clone().to_str().unwrap(), &fenv);
+    m.flow_graph(cfg_path.clone().to_str().unwrap(), &b)?;
 
     if b.spans.has_errors {
         b.spans.diagnostics_dump();

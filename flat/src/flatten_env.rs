@@ -68,7 +68,7 @@ pub struct FlattenEnvironment {
     pub(crate) current_block: BlockId,
     pub(crate) static_block: Option<BlockId>,
     pub(crate) static_scope: Option<ScopeId>,
-    pub(crate) scopes: ScopeGraph,
+    pub scopes: ScopeGraph,
 }
 
 impl FlattenEnvironment {

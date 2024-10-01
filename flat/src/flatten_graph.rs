@@ -5,7 +5,7 @@ use petgraph::visit::EdgeRef;
 use std::collections::{HashMap, HashSet};
 
 impl FlattenModule {
-    pub fn block_graph2(&self, filename: &str, b: &NB) -> Result<()> {
+    pub fn flow_graph(&self, filename: &str, b: &NB) -> Result<()> {
         use std::fs::File;
         use std::io::Write;
 
