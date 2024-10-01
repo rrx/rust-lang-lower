@@ -1,5 +1,6 @@
 pub mod block_format;
 pub mod blockify;
+pub mod blocks;
 pub mod builder;
 pub mod builtin;
 mod dump;
@@ -15,6 +16,7 @@ pub mod scope;
 
 pub use block_format::*;
 pub use blockify::{BlockifyError, ICodeModule, LCode, UseIndex, UseIndexList};
+pub use blocks::*;
 pub use builder::*;
 pub use builtin::*;
 pub use flatten::*;
@@ -24,4 +26,4 @@ pub use flatten_seq::*;
 pub use graph::{Node, CFG};
 pub use interp::*;
 pub use links::*;
-pub use scope::{ScopeId, ScopeLayer, ScopeType, Successor, TemplateId, VariantId};
+pub use scope::{ScopeId, ScopeLayer, ScopeType, TemplateId, VariantId};

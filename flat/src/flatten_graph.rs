@@ -9,10 +9,10 @@ impl FlattenModule {
         use std::fs::File;
         use std::io::Write;
 
-        let mut dfs = petgraph::visit::Dfs::new(&self.gblocks, BlockId(0).into());
+        let mut dfs = petgraph::visit::Dfs::new(&self.gblocks.0, BlockId(0).into());
         let mut entries = HashSet::new();
-        while let Some(visited) = dfs.next(&self.gblocks) {
-            for edge in self.gblocks.edges(visited) {
+        while let Some(visited) = dfs.next(&self.gblocks.0) {
+            for edge in self.gblocks.0.edges(visited) {
                 if Successor::FunctionDeclaration == *edge.weight() {
                     entries.insert(edge.target());
                 }
@@ -37,17 +37,18 @@ graph TD\n\
             let fun_name = b.labels.r(fun_key);
             let mut h: HashMap<String, Vec<String>> = HashMap::new();
             let mut edges = vec![];
-            let mut bfs = petgraph::visit::Bfs::new(&self.gblocks, entry);
-            while let Some(index) = bfs.next(&self.gblocks) {
+            let mut bfs = petgraph::visit::Bfs::new(&self.gblocks.0, entry);
+            while let Some(index) = bfs.next(&self.gblocks.0) {
                 for edge in self
                     .gblocks
+                    .0
                     .edges_directed(index, petgraph::Direction::Outgoing)
                 {
                     let succ = edge.weight();
                     let block_id: BlockId = edge.source().into();
                     let target_id: BlockId = edge.target().into();
-                    let block = self.gblocks.node_weight(index).unwrap();
-                    let target_block = self.gblocks.node_weight(target_id.into()).unwrap();
+                    let block = self.gblocks.0.node_weight(index).unwrap();
+                    let target_block = self.gblocks.0.node_weight(target_id.into()).unwrap();
                     if succ != &Successor::Jump || block.dead || target_block.dead {
                         continue;
                     }
@@ -100,7 +101,7 @@ graph TD\n\
 
     pub fn block_graph(&self, filename: &str, b: &NB) {
         use petgraph::dot::{Config, Dot};
-        let g = self.gblocks.filter_map(
+        let g = self.gblocks.0.filter_map(
             |_n_index, n| Some(n.clone()),
             |_e_index, e| {
                 if let Successor::Jump = e {

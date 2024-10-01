@@ -3,15 +3,6 @@ use std::collections::HashMap;
 use crate::{BlockId, LinkId, NodeBuilder, StringLabel, ValueId};
 use compile_core::{AstType, StringKey};
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub enum Successor {
-    BlockScope,
-    Operation,
-    Jump,
-    FunctionDeclaration,
-    TemplateDeclaration,
-}
-
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ScopeType {
     Static,

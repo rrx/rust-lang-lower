@@ -1,5 +1,4 @@
 use compile_core::{AstType, LinkOptions, Literal, Span, SpanId, StringKey, VarDefinitionSpace};
-use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
 use std::collections::{HashMap, HashSet};
 
@@ -106,42 +105,9 @@ impl ICodeModule for FlattenModule {
     }
 
     fn get_block_successors(&self, entry_id: ValueId) -> Vec<(Successor, CodeOffset)> {
-        /*
-        for (index, entry) in self.entries.iter().enumerate() {
-            println!(
-                "entry: {}: {:?}",
-                index,
-                (entry.block_id, &entry.code, &entry.name)
-            );
-        }
-        for index in self.gblocks.node_indices() {
-            let n = self.gblocks.node_weight(index).unwrap();
-            let block_id: BlockId = index.into();
-            println!("block: {}: {:?}", block_id, n.links.len());
-        }
-        for (k, v) in self.block_map.iter() {
-            println!("block_map: {}: {}", k, v);
-        }
-        println!("g: {:?}", self.gblocks);
-        */
         let entry = self.get_entry(entry_id);
         let block_id = entry.block_id;
-        let index = NodeIndex::new(block_id.index());
-        let edges = self
-            .gblocks
-            .edges_directed(index, petgraph::Direction::Outgoing)
-            .collect::<Vec<_>>();
-        let mut out = vec![];
-        for edge in edges {
-            let succ_type = edge.weight();
-            let i = edge.target();
-            let block = self.gblocks.node_weight(i).unwrap();
-            if !block.dead {
-                let block_id = BlockId(i.index() as u32).into();
-                out.push((*succ_type, block_id));
-            }
-        }
-        out
+        self.gblocks.get_block_successors(block_id)
     }
 
     fn get_type(&self, v: CodeOffset) -> AstType {
@@ -227,13 +193,13 @@ impl FlattenModule {
         // nodes show up last, such as the return block
         // This seems to create a nice ordering.
 
-        let mut dfs = petgraph::visit::Dfs::new(&flatten.gblocks, BlockId(0).into());
+        let mut dfs = petgraph::visit::Dfs::new(&flatten.blocks.0, BlockId(0).into());
         let mut blocks = vec![BlockId(0).into()];
 
         let mut function_entries = vec![];
         let mut template_entries = vec![];
-        while let Some(visited) = dfs.next(&flatten.gblocks) {
-            for edge in flatten.gblocks.edges(visited) {
+        while let Some(visited) = dfs.next(&flatten.blocks.0) {
+            for edge in flatten.blocks.0.edges(visited) {
                 match *edge.weight() {
                     Successor::FunctionDeclaration => {
                         function_entries.push(edge.target());
@@ -249,8 +215,8 @@ impl FlattenModule {
         let mut value_count = 0;
         for index in function_entries.iter().chain(template_entries.iter()) {
             let mut seq = vec![];
-            let mut dfs = petgraph::visit::DfsPostOrder::new(&flatten.gblocks, *index);
-            while let Some(index) = dfs.next(&flatten.gblocks) {
+            let mut dfs = petgraph::visit::DfsPostOrder::new(&flatten.blocks.0, *index);
+            while let Some(index) = dfs.next(&flatten.blocks.0) {
                 seq.push(index);
             }
             blocks.extend(seq.into_iter().rev());
@@ -282,7 +248,7 @@ impl FlattenModule {
         m.link = flatten.link.clone();
         for index in function_entries.iter() {
             let block_id = (*index).into();
-            let block = flatten.get_block(block_id);
+            let block = flatten.blocks.get_block(block_id);
             let label_link_id = block.links.first().unwrap();
             let entry = flatten.get_entry(*label_link_id).clone();
             let ty = flatten.get_type(*label_link_id).clone();
@@ -312,7 +278,7 @@ impl FlattenModule {
 
         for index in blocks.into_iter() {
             let block_id = index.into();
-            let block = flatten.get_block(block_id);
+            let block = flatten.blocks.get_block(block_id);
             for (index, link_id) in block.links.iter().enumerate() {
                 let mut entry = flatten.get_entry(*link_id).clone();
                 if let Some(ty) = b.types.u.resolve(&entry.ty) {
@@ -353,7 +319,7 @@ impl FlattenModule {
                 value_count += 1;
             }
         }
-        m.gblocks = flatten.gblocks;
+        m.gblocks = flatten.blocks;
         m.find_dead_blocks(b);
         m
     }
@@ -466,17 +432,17 @@ impl FlattenModule {
     }
 
     pub fn find_dead_blocks(&mut self, b: &mut NB) {
-        let mut dfs = petgraph::visit::Dfs::new(&self.gblocks, BlockId(0).into());
+        let mut dfs = petgraph::visit::Dfs::new(&self.gblocks.0, BlockId(0).into());
         let mut entries = HashSet::new();
-        while let Some(visited) = dfs.next(&self.gblocks) {
-            for edge in self.gblocks.edges(visited) {
+        while let Some(visited) = dfs.next(&self.gblocks.0) {
+            for edge in self.gblocks.0.edges(visited) {
                 if Successor::FunctionDeclaration == *edge.weight() {
                     entries.insert(edge.target());
                 }
             }
         }
 
-        let subgraph = self.gblocks.filter_map(
+        let subgraph = self.gblocks.0.filter_map(
             |_n_index, n| Some(n.clone()),
             |_e_index, e| {
                 if let Successor::Jump = e {
@@ -494,8 +460,8 @@ impl FlattenModule {
             all.insert(entry.into());
 
             let mut dfs = petgraph::visit::Dfs::new(&subgraph, entry.into());
-            while let Some(visited) = dfs.next(&self.gblocks) {
-                for edge in self.gblocks.edges(visited) {
+            while let Some(visited) = dfs.next(&self.gblocks.0) {
+                for edge in self.gblocks.0.edges(visited) {
                     let b: BlockId = edge.target().into();
                     all.insert(b);
                 }
@@ -516,7 +482,7 @@ impl FlattenModule {
             //println!("[{:?}] Reachable: {:?}", entry, &reachable);
             for block_id in dead {
                 let index = (*block_id).into();
-                let block = self.gblocks.node_weight_mut(index).unwrap();
+                let block = self.gblocks.0.node_weight_mut(index).unwrap();
                 block.dead = true;
                 let v = self.get_entry_id_from_block_id(*block_id);
                 let span_id = self.get_span_id(v);
@@ -558,7 +524,7 @@ impl FlattenModule {
         //println!("row: {}, {:?}", v, (self.entries.len()));
         let entry_id = self.get_entry_id(v);
         let block_id = entry.block_id;
-        let block = self.gblocks.node_weight(block_id.into()).unwrap();
+        let block = self.gblocks.0.node_weight(block_id.into()).unwrap();
 
         let r_ty = if let Some(r_ty) = b.types.u.resolve(&entry.ty) {
             r_ty
