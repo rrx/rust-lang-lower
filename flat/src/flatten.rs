@@ -104,6 +104,7 @@ pub struct Flatten {
     pub mode: FlattenMode,
     pub(crate) static_scope: Option<ScopeId>,
     pub(crate) static_block: Option<BlockId>,
+    pub(crate) current_block: BlockId,
 }
 
 impl Flatten {
@@ -120,6 +121,7 @@ impl Flatten {
             mode: FlattenMode::Function,
             static_scope: None,
             static_block: None,
+            current_block: BlockId(0),
         }
     }
 
@@ -132,11 +134,11 @@ impl Flatten {
     }
 
     pub fn switch_blocks(&mut self, block_id: BlockId, fenv: &mut FlattenEnvironment) {
-        fenv.current_block = block_id;
+        self.current_block = block_id;
     }
 
     pub fn current_block_id(&self, fenv: &FlattenEnvironment) -> BlockId {
-        fenv.current_block
+        self.current_block
     }
 
     pub fn dump_scope(&self, block_id: BlockId, fenv: &FlattenEnvironment, b: &NB) {
@@ -299,7 +301,7 @@ impl Flatten {
 
         let static_scope = f.static_scope_id();
         let block_id = f.blocks.new_block(static_scope);
-        fenv.current_block = block_id;
+        f.current_block = block_id;
         f.static_block = Some(block_id);
 
         if let Ast::Module(key, body) = node.node {
