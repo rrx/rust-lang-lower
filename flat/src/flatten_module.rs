@@ -5,9 +5,8 @@ use std::collections::{HashMap, HashSet};
 use std::convert::Into;
 
 use crate::{
-    BlockGraph, BlockId, CodeEntry, CodeOffset, CodeRow, Flatten, FlattenEnvironment, ICodeModule,
-    LCode, LinkId, NodeBuilder as NB, ScopeGraph, ScopeId, ScopeType, StringLabel, Successor,
-    ValueId,
+    BlockGraph, BlockId, CodeEntry, CodeOffset, CodeRow, Flatten, ICodeModule, LCode, LinkId,
+    NodeBuilder as NB, ScopeGraph, ScopeId, ScopeType, StringLabel, Successor, ValueId,
 };
 
 use tabled::{settings::Style, Table};

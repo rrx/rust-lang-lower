@@ -27,9 +27,8 @@ use std::collections::{HashMap, HashSet};
 use std::convert::Into;
 
 use crate::{
-    BlockGraph, BlockId, BlockifyError, Builtin, FlattenEnvironment, LCode, LinkId,
-    NodeBuilder as NB, ScopeGraph, ScopeId, ScopeType, SequenceReader, StringLabel, Successor,
-    TemplateId, VariantId,
+    BlockGraph, BlockId, BlockifyError, Builtin, LCode, LinkId, NodeBuilder as NB, ScopeGraph,
+    ScopeId, ScopeType, SequenceReader, StringLabel, Successor, TemplateId, VariantId,
 };
 
 #[derive(Debug, Clone)]
