@@ -6,8 +6,51 @@ use crate::{
     VariantId,
 };
 use compile_core::{AstType, StringKey};
+use std::ops::{Deref, DerefMut};
 
-pub type ScopeGraph = DiGraph<ScopeLayer, ()>;
+pub struct ScopeGraph(pub(super) DiGraph<ScopeLayer, ()>);
+
+impl Deref for ScopeGraph {
+    type Target = DiGraph<ScopeLayer, ()>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+impl DerefMut for ScopeGraph {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl ScopeGraph {
+    pub fn new() -> Self {
+        Self(DiGraph::new())
+    }
+
+    pub fn scope_graph(&self, filename: &str) {
+        use petgraph::dot::{Config, Dot};
+        let s = format!(
+            "{:?}",
+            Dot::with_attr_getters(
+                &self.0,
+                &[Config::EdgeNoLabel, Config::NodeNoLabel],
+                &|_, _er| String::new(),
+                &|_, (index, scope)| {
+                    format!(
+                        //"label = \"S{}:{:?}\" shape=\"{:?}\"",
+                        "label = \"S{}:{:?}\"",
+                        index.index(),
+                        &scope.scope_type,
+                        //&scope.scope_type
+                    )
+                }
+            )
+        );
+        println!("saved graph {:?}", filename);
+        std::fs::write(filename, s).unwrap();
+    }
+}
 
 impl Into<NodeIndex> for ScopeId {
     fn into(self) -> NodeIndex {

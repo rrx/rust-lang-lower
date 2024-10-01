@@ -184,7 +184,7 @@ impl FlattenModule {
     }
 
     pub fn dump(&self, fenv: &FlattenEnvironment, _b: &NB) {
-        petgraph::dot::Dot::with_config(&fenv.scopes, &[petgraph::dot::Config::EdgeNoLabel]);
+        petgraph::dot::Dot::with_config(&fenv.scopes.0, &[petgraph::dot::Config::EdgeNoLabel]);
     }
 
     pub fn from_builder(mut flatten: Flatten, fenv: &FlattenEnvironment, b: &mut NB) -> Self {
@@ -435,14 +435,14 @@ impl FlattenModule {
         let mut dfs = petgraph::visit::Dfs::new(&self.gblocks.0, BlockId(0).into());
         let mut entries = HashSet::new();
         while let Some(visited) = dfs.next(&self.gblocks.0) {
-            for edge in self.gblocks.0.edges(visited) {
+            for edge in self.gblocks.edges(visited) {
                 if Successor::FunctionDeclaration == *edge.weight() {
                     entries.insert(edge.target());
                 }
             }
         }
 
-        let subgraph = self.gblocks.0.filter_map(
+        let subgraph = self.gblocks.filter_map(
             |_n_index, n| Some(n.clone()),
             |_e_index, e| {
                 if let Successor::Jump = e {
@@ -461,7 +461,7 @@ impl FlattenModule {
 
             let mut dfs = petgraph::visit::Dfs::new(&subgraph, entry.into());
             while let Some(visited) = dfs.next(&self.gblocks.0) {
-                for edge in self.gblocks.0.edges(visited) {
+                for edge in self.gblocks.edges(visited) {
                     let b: BlockId = edge.target().into();
                     all.insert(b);
                 }
@@ -482,7 +482,7 @@ impl FlattenModule {
             //println!("[{:?}] Reachable: {:?}", entry, &reachable);
             for block_id in dead {
                 let index = (*block_id).into();
-                let block = self.gblocks.0.node_weight_mut(index).unwrap();
+                let block = self.gblocks.node_weight_mut(index).unwrap();
                 block.dead = true;
                 let v = self.get_entry_id_from_block_id(*block_id);
                 let span_id = self.get_span_id(v);
@@ -524,7 +524,7 @@ impl FlattenModule {
         //println!("row: {}, {:?}", v, (self.entries.len()));
         let entry_id = self.get_entry_id(v);
         let block_id = entry.block_id;
-        let block = self.gblocks.0.node_weight(block_id.into()).unwrap();
+        let block = self.gblocks.node_weight(block_id.into()).unwrap();
 
         let r_ty = if let Some(r_ty) = b.types.u.resolve(&entry.ty) {
             r_ty

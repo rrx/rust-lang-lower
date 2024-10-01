@@ -77,46 +77,9 @@ impl CodeEntry {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct IRBlock {
-    pub(super) scope_id: ScopeId,
-    pub(super) dead: bool,
-    num_ret_args: HashSet<usize>,
-    ret_types: HashSet<AstType>,
-    pub(super) next: Option<BlockId>,
-    pub(super) links: Vec<LinkId>,
-}
-
-impl IRBlock {
-    pub fn new(scope_id: ScopeId) -> Self {
-        Self {
-            scope_id,
-            dead: false,
-            //ast,
-            links: vec![],
-            next: None,
-            num_ret_args: HashSet::new(),
-            ret_types: HashSet::new(),
-        }
-    }
-
-    pub fn next(&mut self, next_block_id: BlockId) {
-        self.next = Some(next_block_id);
-    }
-
-    pub fn push(&mut self, link_id: LinkId) {
-        self.links.push(link_id);
-    }
-
-    pub fn last(&self) -> Option<LinkId> {
-        self.links.last().cloned()
-    }
-}
-
 #[derive(Debug)]
 pub struct FlattenResult {
     link_id: Option<LinkId>,
-    //block_id: BlockId,
 }
 
 impl FlattenResult {
@@ -132,7 +95,6 @@ pub enum FlattenMode {
 }
 
 pub struct Flatten {
-    //_block_id: BlockId,
     module_key: Option<StringKey>,
     pub(super) link: LinkOptions,
     entries: Vec<CodeEntry>,
@@ -147,7 +109,6 @@ impl Flatten {
         let blocks = BlockGraph::new();
 
         Self {
-            //_block_id,
             module_key: None,
             entries: vec![],
             blocks,
@@ -159,14 +120,11 @@ impl Flatten {
     }
 
     pub fn switch_blocks(&mut self, block_id: BlockId, fenv: &mut FlattenEnvironment) {
-        //fenv.curr
         fenv.current_block = block_id;
-        //self._block_id = block_id;
     }
 
     pub fn current_block_id(&self, fenv: &FlattenEnvironment) -> BlockId {
         fenv.current_block
-        //self._block_id
     }
 
     pub fn dump_scope(&self, block_id: BlockId, fenv: &FlattenEnvironment, b: &NB) {
@@ -175,9 +133,9 @@ impl Flatten {
     }
 
     pub fn dump_blocks(&self) {
-        for node in self.blocks.0.node_indices() {
+        for node in self.blocks.node_indices() {
             let block_id: BlockId = node.into();
-            let block = self.blocks.0.node_weight(node).unwrap();
+            let block = self.blocks.node_weight(node).unwrap();
             println!("[{}] Block: {:?}", block_id, block);
         }
     }
@@ -211,20 +169,6 @@ impl Flatten {
         fenv: &FlattenEnvironment,
         b: &mut NB,
     ) -> Option<(VariantId, AstType, LinkId)> {
-        /*
-        let s = b.labels.r(name.into());
-        println!("resolve: {}, {}, {}", block_id, s, ty);
-        // resolve scope through the tree, starting at the current scope
-        let block = self.get_block(block_id);
-        for scope_id in fenv.walk_scopes(block.scope_id) {
-            let scope = fenv.get_scope(scope_id);
-            if let Some(data) = scope.find_entry(name, ty) {
-                return Some(data.clone());
-            }
-        }
-        None
-        */
-
         let mut result = None;
         let snapshot = b.types.u.snapshot();
         for (variant_id, r_ty, link_id) in self.resolve_all_function_name(block_id, &name, fenv) {
@@ -549,7 +493,6 @@ impl Flatten {
         fenv: &mut FlattenEnvironment,
         b: &mut NB,
     ) -> Result<FlattenResult> {
-        //let mut ty = AstType::Unit;
         let mut link_id = None;
         let mut is_term = false;
 
@@ -1879,7 +1822,6 @@ impl Flatten {
             */
 
             let result = self.push_bake_function(
-                //LinkId(0),
                 def,
                 func_type,
                 name,
@@ -1949,7 +1891,6 @@ impl Flatten {
         //);
 
         let result = self.push_bake_function(
-            //LinkId(0),
             def.clone(),
             fun_ty,
             name,
@@ -2016,7 +1957,6 @@ impl Flatten {
             };
 
             let result = self.push_bake_function(
-                //LinkId(0),
                 def.clone(),
                 func_ty,
                 name,
@@ -2992,26 +2932,7 @@ impl Flatten {
 }
 
 pub fn scope_graph(filename: &str, fenv: &FlattenEnvironment) {
-    use petgraph::dot::{Config, Dot};
-    let s = format!(
-        "{:?}",
-        Dot::with_attr_getters(
-            &fenv.scopes,
-            &[Config::EdgeNoLabel, Config::NodeNoLabel],
-            &|_, _er| String::new(),
-            &|_, (index, scope)| {
-                format!(
-                    //"label = \"S{}:{:?}\" shape=\"{:?}\"",
-                    "label = \"S{}:{:?}\"",
-                    index.index(),
-                    &scope.scope_type,
-                    //&scope.scope_type
-                )
-            }
-        )
-    );
-    println!("saved graph {:?}", filename);
-    std::fs::write(filename, s).unwrap();
+    fenv.scopes.scope_graph(filename);
 }
 
 fn def_to_type(def: &Lambda, b: &mut NB) -> AstType {
