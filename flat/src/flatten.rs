@@ -489,14 +489,7 @@ impl Flatten {
         self.ast_templates.get(template_id.index()).unwrap()
     }
 
-    pub fn push_sequence(
-        &mut self,
-        seq: Vec<AstNode>,
-        seq_span_id: SpanId,
-        b: &mut NB,
-    ) -> Result<FlattenResult> {
-        let mut current_span_id = seq_span_id;
-
+    pub fn push_sequence(&mut self, mut seq: Vec<AstNode>, b: &mut NB) -> Result<FlattenResult> {
         let block = self.blocks.get_block(self.current_block_id());
         let seq_next_block_id = block.next;
         let scope_id = block.scope_id;
@@ -530,86 +523,20 @@ impl Flatten {
             }
         }
 
-        let mut link_id = None;
-        let mut is_term = false;
-
         let mut d = seq.drain(..);
+        let mut out_link_id = None;
         loop {
             if let Some(expr) = d.next() {
                 let span_id = expr.span_id;
-                current_span_id = span_id;
-                let expr_is_term = expr.node.is_term();
-                let is_last = d.len() == 0;
-
-                /*
-                if expr_is_term && !is_last {
-                    let next_seq = d.collect::<Vec<_>>();
-                    let next_node = next_seq.first().unwrap();
-                    let next_span_id = next_node.span_id;
-                    let current_block_id = self.current_block_id();
-                    let next_block_id = match &next_node.node {
-                        Ast::Block(key, _, _) => {
-                            // next statement is a block, so we know what's next
-                            let new_block_id =
-                                self.scopes.resolve_block_id(scope_id, key.into()).unwrap();
-                            new_block_id
-                        }
-                        _ => {
-                            // create a new block, because the next statement needs to be enclosed
-                            // this should probably happen in the reader
-                            // We need to create the next block so we know what to jump to in the
-                            // current statement
-                            let next_block_id = self.blocks.new_block(scope_id);
-                            //println!("term new: {:?}", (new_block_id, &next_node));
-                            self.switch_blocks(next_block_id);
-                            self.push_start_block(
-                                scope_id,
-                                AstType::func(vec![], AstType::Unit), // void=>void
-                                Some(b.labels.fresh_key("new")),
-                                next_node.span_id,
-                                VarDefinitionSpace::Default,
-                            );
-                            self.blocks.block_succ(
-                                current_block_id,
-                                next_block_id,
-                                Successor::BlockScope,
-                            );
-                            let next_block = self.blocks.get_block_mut(next_block_id);
-                            next_block.next = seq_next_block_id;
-                            next_block_id
-                        }
-                    };
-
-                    // set next on current
-                    let block = self.blocks.get_block_mut(current_block_id);
-                    block.next(next_block_id);
-
-                    // flatten expr
-                    self.switch_blocks(current_block_id);
-                    let _ = self.push_node(expr, b)?;
-
-                    // flatten next
-                    let next_node = AstNode {
-                        node: Ast::Sequence(next_seq),
-                        span_id: next_span_id,
-                    };
-                    self.switch_blocks(next_block_id);
-                    let r = self.push_node(next_node, b)?;
-                    return Ok(r);
-                }
-                */
-
-                if is_term {
-                    println!("is term: {}", self.current_block_id());
-                    b.dump_ast(&expr);
-                }
+                let current_span_id = span_id;
 
                 // handle expr
-                let r = self.push_node(expr, b)?;
+                let _ = self.push_node(expr, b)?;
 
                 let current_block_id = self.current_block_id();
-                let block = self.blocks.get_block(self.current_block_id());
+                let block = self.blocks.get_block(current_block_id);
                 let link_id = block.links.last().unwrap().clone();
+                out_link_id = Some(link_id);
                 let entry = self.get_entry(link_id);
                 if entry.code.is_term() {
                     let next_block_id = self.blocks.new_block(scope_id);
@@ -625,60 +552,11 @@ impl Flatten {
                     self.blocks
                         .block_succ(current_block_id, next_block_id, Successor::BlockScope);
                 }
-
-                /*
-                // check the last entry in the block
-                // to see if the block is terminated
-                let block = self.blocks.get_block(self.current_block_id());
-                is_term = if let Some(v_last) = block.links.last() {
-                    let code = &self.get_entry(*v_last).code;
-                    let r_is_term = code.is_term();
-                    r_is_term
-                } else {
-                    false
-                };
-                link_id = r.link_id;
-                */
             } else {
                 break;
             }
         }
-
-        /*
-        if let Some(v_next) = seq_next_block_id {
-            self.maybe_terminate_block(v_next, current_span_id);
-        }
-        */
-        /*
-        if !is_term {
-            let block = self.blocks.get_block(self.current_block_id());
-            if let Some(next) = seq_next_block_id {
-                println!(
-                    "adding term on block: {}, jump: {}",
-                    self.current_block_id(),
-                    next
-                );
-                let jump_link_id = self.push_jump(next.into(), vec![], current_span_id);
-                link_id = Some(jump_link_id);
-            } else if let Some(next) = block.next {
-                println!(
-                    "adding term on block: {}, jump: {}",
-                    self.current_block_id(),
-                    next
-                );
-                let jump_link_id = self.push_jump(next.into(), vec![], current_span_id);
-                link_id = Some(jump_link_id);
-            } else {
-                println!("missing term on block: {}", self.current_block_id());
-                b.push_error(
-                    &format!("Missing next block on block_id={}", self.current_block_id()),
-                    current_span_id,
-                );
-            }
-        }
-        */
-
-        Ok(FlattenResult::new(link_id))
+        Ok(FlattenResult::new(out_link_id))
     }
 
     pub fn push_return(
@@ -1997,7 +1875,7 @@ impl Flatten {
 
             Ast::Sequence(exprs) => {
                 self.switch_blocks(current_block_id);
-                self.push_sequence(exprs, span_id, b)
+                self.push_sequence(exprs, b)
             }
 
             Ast::Global(name, ref expr) => {
@@ -2669,7 +2547,12 @@ impl Flatten {
                 Ok(FlattenResult::new(Some(v)))
             }
 
+            Ast::ControlFlowMarker(ControlFlowMarker::BlockEnd) => {
+                unimplemented!();
+            }
             Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(name, args)) => {
+                unimplemented!();
+                assert!(false);
                 // all blocks should have been forward declared in the sequence
                 let name = name.unwrap();
                 let current_dom_block_id = self

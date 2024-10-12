@@ -192,6 +192,7 @@ pub trait ICodeModule {
                 current = *base;
                 continue;
 
+                /*
                 if _inds.len() == 0 {
                     current = *base;
                     continue;
@@ -221,6 +222,7 @@ pub trait ICodeModule {
                 //let base = self.resolve_declaration(base).unwrap();
                 //current = *base;
                 return Some(current);
+                */
             }
 
             return Some(current);
