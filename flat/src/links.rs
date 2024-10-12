@@ -94,3 +94,9 @@ impl From<BlockId> for CodeOffset {
         Self::Block(item)
     }
 }
+
+impl From<&BlockId> for CodeOffset {
+    fn from(item: &BlockId) -> Self {
+        Self::Block(*item)
+    }
+}

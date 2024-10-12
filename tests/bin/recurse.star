@@ -1,3 +1,5 @@
+q.use("prelude")
+
 def f(x):
   q.print(x)
   if x == 0:

@@ -16,7 +16,7 @@ pub struct ModuleEntry {
     value_id: ValueId,
     next: ValueId,
     prev: ValueId,
-    code: LCode,
+    pub(super) code: LCode,
     name: Option<StringKey>,
     link: Option<LinkId>,
     block_id: BlockId,
@@ -56,7 +56,7 @@ impl ModuleEntry {
 pub struct FlattenModule {
     entries: Vec<ModuleEntry>,
     link_map: HashMap<LinkId, ValueId>,
-    block_map: HashMap<BlockId, ValueId>,
+    pub(super) block_map: HashMap<BlockId, ValueId>,
     functions: HashMap<StringKey, LinkId>,
     statics: HashMap<StringKey, Literal>,
     pub(super) link: LinkOptions,
@@ -158,8 +158,11 @@ impl ICodeModule for FlattenModule {
     fn dump_code_table(&self, filename: &str, b: &mut NB) {
         let mut rows = vec![];
         for entry in self.entries.iter() {
-            let row = self.get_code_row(entry.value_id, b);
-            rows.push(row);
+            if let Some(row) = self.get_code_row(entry.value_id, b) {
+                rows.push(row);
+            } else {
+                println!("Unable to load entry: {}", entry.value_id);
+            }
         }
         let s = Table::new(rows).with(Style::sharp()).to_string();
         println!("{}", s);
@@ -459,18 +462,20 @@ impl FlattenModule {
         self.get_code(*value_id)
     }
 
-    pub fn get_code_row(&self, v: ValueId, b: &mut NB) -> CodeRow {
+    pub fn get_code_row(&self, v: ValueId, b: &mut NB) -> Option<CodeRow> {
         let entry = self.get_entry(v);
         let code = self.get_code(v);
         //let ty = self.get_type(v.into());
 
         let mem = self.get_mem(v.into());
+        let block_id = entry.block_id;
+        let block = self.gblocks.node_weight(block_id.into()).unwrap();
+        println!("block: {:?}", (block_id, block, v, entry));
+
         //let next = self.get_next(v).unwrap_or(v).index();
         //let prev = self.get_prev(v).unwrap_or(v).index();
         //println!("row: {}, {:?}", v, (self.entries.len()));
         let entry_id = self.get_entry_id(v);
-        let block_id = entry.block_id;
-        let block = self.gblocks.node_weight(block_id.into()).unwrap();
 
         let r_ty = if let Some(r_ty) = b.types.u.resolve(&entry.ty) {
             r_ty
@@ -484,7 +489,7 @@ impl FlattenModule {
         let is_unknown = r_ty.is_unknown();
         let s_ty = format!("{}", &r_ty);
 
-        CodeRow {
+        Some(CodeRow {
             pos: v.index(),
             link: entry.link.unwrap().index(),
             //next: 0,
@@ -506,6 +511,6 @@ impl FlattenModule {
             term: code.is_term(),
             dead: block.dead,
             unknown: is_unknown,
-        }
+        })
     }
 }

@@ -259,7 +259,7 @@ impl ScopeGraph {
         self.get_scope(scope_id).entry_block.unwrap()
     }
 
-    pub fn push_loop_blocks(
+    pub fn update_loop_blocks(
         &mut self,
         scope_id: ScopeId,
         maybe_name: Option<StringKey>,

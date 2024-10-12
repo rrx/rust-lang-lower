@@ -56,7 +56,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     set_up_color_terminal();
     SimpleLogger::new().init().unwrap();
     let config: Config = argh::from_env();
+    let mut b: NodeBuilder = NodeBuilder::new();
+    let r = run(&config, &mut b);
+    b.spans.diagnostics_dump();
+    let exit_code = r?;
+    std::process::exit(exit_code);
+}
 
+fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
     if config.verbose {
         log::set_max_level(log::LevelFilter::Warn);
     } else {
@@ -80,15 +87,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let location = lower_mlir::Location::unknown(&context);
     let mut module = lower_mlir::Module::new(location);
     let mut p: StarlarkParser = StarlarkParser::new();
-    let mut b: NodeBuilder = NodeBuilder::new();
 
-    let result = p.parse(&config.input, &mut b, config.verbose);
-    if result.is_err() {
-        b.spans.diagnostics_dump();
-    }
-    let ast = result?;
-
-    //let mut fenv = FlattenEnvironment::new();
+    let ast = p.parse(&config.input, b, config.verbose)?;
 
     let mode = if config.template {
         FlattenMode::Template
@@ -96,42 +96,37 @@ fn main() -> Result<(), Box<dyn Error>> {
         FlattenMode::Function
     };
 
-    let r = Flatten::flatten_module(ast, mode, &mut b);
-    if r.is_err() {
-        b.spans.diagnostics_dump();
-    }
-    let mut f = r?;
+    let mut f = Flatten::flatten_module(ast, mode, b)?;
 
     /*
     if config.template {
-        let r = f.push_bake_templates(&mut fenv, &mut b);
-        if r.is_err() {
-            b.spans.diagnostics_dump();
-        }
-        r?;
+        let r = f.push_bake_templates(&mut fenv, &mut b)?;
     } else {
     */
-    let r = f.push_bake_main(&mut b);
-    if r.is_err() {
-        b.spans.diagnostics_dump();
-    }
-    r?;
+    f.push_bake_main(b)?;
 
     //f.dump_blocks();
     //f.dump_scope(fenv.static_block_id(), &fenv, &b);
-    let mut m = FlattenModule::from_builder(f, &mut b);
+    let pre_graph_path = make_path(&output_filename, "pre.dot");
+    f.save_graph(&pre_graph_path);
+
+    //
+    let mut m = FlattenModule::from_builder(f, b);
 
     if config.template {
-        m.type_inference(&mut b);
+        m.type_inference(b);
     } else {
-        m.type_inference_enforce(&mut b);
+        m.type_inference_enforce(b);
     }
 
     //b.labels.pool.dump();
     m.dump(&b);
 
+    let table_path = make_path(&output_filename, "table.txt");
+    m.dump_code_table(&table_path, b);
+
     let out_graph_path = make_path(&output_filename, "graph.dot");
-    m.save_graph(&out_graph_path, &mut b);
+    m.save_graph(&out_graph_path, b);
 
     let mut blocks_path = path.clone();
     blocks_path.set_extension("blocks.dot");
@@ -141,23 +136,17 @@ fn main() -> Result<(), Box<dyn Error>> {
     scopes_path.set_extension("scopes.dot");
     m.scopes.scope_graph(scopes_path.clone().to_str().unwrap());
 
-    let table_path = make_path(&output_filename, "table.txt");
-    m.dump_code_table(&table_path, &mut b);
-
     let mut cfg_path = path.clone();
     cfg_path.set_extension("cfg.mmd");
     m.flow_graph(cfg_path.clone().to_str().unwrap(), &b)?;
 
     if b.spans.has_errors {
-        b.spans.diagnostics_dump();
         return Err(anyhow::Error::new(BlockifyError::Invalid).into());
     }
 
     if config.template {
     } else {
-        let r = p.codegen(&m, ValueId::new(0), &context, &mut module, &mut b);
-        b.spans.diagnostics_dump();
-        r?;
+        p.codegen(&m, ValueId::new(0), &context, &mut module, b)?;
 
         //b.types.dump();
         if config.verbose {
@@ -188,13 +177,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!("Wrote: {:?}", &path.as_os_str());
     }
 
-    if config.interp {
-        let exit_code = p.interp(&m, "target/debug", &mut b);
-        b.spans.diagnostics_dump();
-        std::process::exit(exit_code);
+    let exit_code = if config.interp {
+        let exit_code = p.interp(&m, "target/debug", b);
+        exit_code
     } else if config.exec {
         let exit_code = p.exec_main(&mut module, "target/debug");
-        std::process::exit(exit_code);
+        exit_code
     } else {
         let mut path = path.clone();
         path.set_extension("mlir");
@@ -202,7 +190,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let mut output = File::create(path.clone())?;
         write!(output, "{}", s)?;
         println!("Wrote: {:?}", &path.as_os_str());
-    }
-
-    Ok(())
+        0
+    };
+    Ok(exit_code)
 }

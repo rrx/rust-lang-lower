@@ -321,10 +321,10 @@ impl Ast {
     pub fn is_term(&self) -> bool {
         match self {
             Ast::Branch(_, _, _) => true,
-            Ast::Conditional(_, _, _) => true,
+            Ast::Conditional(_, _, _) => false,
             Ast::While(_, _) => true,
             Ast::Return(_) => true,
-            Ast::Loop(_, _) => true,
+            Ast::Loop(_, _) => false,
             Ast::Module(_, _) => true,
             Ast::Break(_, _) => true,
             Ast::Continue(_, _) => true,

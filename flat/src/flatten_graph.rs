@@ -1,43 +1,135 @@
 use super::FlattenModule;
-use crate::{BlockId, ICodeModule, NodeBuilder as NB, Successor};
+use crate::{BlockId, ICodeModule, LCode, NodeBuilder as NB, Successor, ValueId};
 use anyhow::Result;
 use petgraph::visit::EdgeRef;
 use std::collections::{HashMap, HashSet};
+use std::fs::File;
+use std::io::Write;
 
-impl FlattenModule {
-    pub fn flow_graph(&self, filename: &str, b: &NB) -> Result<()> {
-        use std::fs::File;
-        use std::io::Write;
+pub fn write_with_indent(f: &mut File, s: &str, depth: usize) -> Result<()> {
+    f.write(format!("{:width$}{}", "", s, width = depth * 2).as_bytes())?;
+    Ok(())
+}
 
-        let mut dfs = petgraph::visit::Dfs::new(&self.gblocks.0, BlockId(0).into());
-        let mut entries = HashSet::new();
-        while let Some(visited) = dfs.next(&self.gblocks.0) {
-            for edge in self.gblocks.0.edges(visited) {
-                if Successor::FunctionDeclaration == *edge.weight() {
-                    entries.insert(edge.target());
-                }
+struct GroupValue {
+    key: String,
+    display: String,
+}
+
+impl GroupValue {
+    fn new(key: String, display: String) -> Self {
+        Self { key, display }
+    }
+
+    fn write(&self, f: &mut File, depth: usize) -> Result<()> {
+        let s = format!("{}[\"{}\"]\n", self.key, self.display);
+        write_with_indent(f, &s, depth)
+    }
+}
+
+struct Group {
+    name: String,
+    children: Vec<GroupEnum>,
+    body: String,
+}
+
+impl Group {
+    fn new(name: String, body: String) -> Self {
+        Self {
+            name,
+            body,
+            children: vec![],
+        }
+    }
+
+    fn push_group(&mut self, group: Group) {
+        self.children.push(GroupEnum::Group(group));
+    }
+
+    fn push_value(&mut self, value: GroupValue) {
+        self.children.push(GroupEnum::Value(value));
+    }
+
+    fn write(&self, f: &mut File, depth: usize) -> Result<()> {
+        write_with_indent(
+            f,
+            &format!("subgraph {}[\"{}:{}\"]\n", self.name, self.name, self.body),
+            depth,
+        )?;
+        write_with_indent(f, "direction TB\n", depth + 1)?;
+        for c in &self.children {
+            match c {
+                GroupEnum::Group(group) => group.write(f, depth + 1)?,
+                GroupEnum::Value(value) => value.write(f, depth + 1)?,
             }
         }
+        write_with_indent(f, "end\n", depth)?;
+        Ok(())
+    }
+}
 
-        let mut s = String::new();
-        s.push_str(
-            "\n\
+enum GroupEnum {
+    Group(Group),
+    Value(GroupValue),
+}
+
+struct NestedGraph {
+    edges: Vec<(ValueId, ValueId)>,
+    group: Group,
+}
+
+impl NestedGraph {
+    fn new() -> Self {
+        Self {
+            edges: vec![],
+            group: Group::new("module".into(), "".into()),
+        }
+    }
+
+    fn write(&self, f: &mut File) -> Result<()> {
+        let start = "\n\
 ---
 config:
    look: classic 
    theme: dark
 ---
 graph TD\n\
-",
-        );
+";
+
+        write_with_indent(f, start, 0)?;
+        self.group.write(f, 0)?;
+        for (src, dst) in &self.edges {
+            write_with_indent(f, &format!("{} --> {}\n", src, dst), 0)?;
+        }
+        Ok(())
+    }
+}
+
+impl FlattenModule {
+    fn graph_get_entries(&self) -> HashSet<BlockId> {
+        let mut dfs = petgraph::visit::Dfs::new(&self.gblocks.0, BlockId(0).into());
+        let mut entries = HashSet::new();
+        while let Some(visited) = dfs.next(&self.gblocks.0) {
+            for edge in self.gblocks.0.edges(visited) {
+                if Successor::FunctionDeclaration == *edge.weight() {
+                    entries.insert(edge.target().into());
+                }
+            }
+        }
+        entries
+    }
+
+    pub fn flow_graph(&self, filename: &str, b: &NB) -> Result<()> {
+        let entries = self.graph_get_entries();
+        let mut ng = NestedGraph::new();
 
         for entry in entries {
             let fun_block_id: BlockId = entry.into();
             let fun_key = self.get_name(fun_block_id.into()).unwrap();
             let fun_name = b.labels.r(fun_key);
-            let mut h: HashMap<String, Vec<String>> = HashMap::new();
-            let mut edges = vec![];
-            let mut bfs = petgraph::visit::Bfs::new(&self.gblocks.0, entry);
+            let mut fun_group = Group::new(fun_name.clone(), "".to_string());
+            let mut h = HashMap::new();
+            let mut bfs = petgraph::visit::Bfs::new(&self.gblocks.0, entry.into());
             while let Some(index) = bfs.next(&self.gblocks.0) {
                 for edge in self
                     .gblocks
@@ -52,24 +144,16 @@ graph TD\n\
                     if succ != &Successor::Jump || block.dead || target_block.dead {
                         continue;
                     }
-                    let source_key = self.get_name(block_id.into()).unwrap();
-                    let target_key = self.get_name(target_id.into()).unwrap();
-                    let source_name = b.labels.r(source_key);
-                    let target_name = b.labels.r(target_key);
                     let source_scope_name = format!("S{}", block.scope_id.index());
                     let target_scope_name = format!("S{}", target_block.scope_id.index());
-                    let source = format!("{}[{}:{}]", block_id, block_id, source_name);
-                    let target = format!("{}[{}:{}]", target_id, target_id, target_name);
-                    //let line = format!("{}[{}:{}] --> {}[{}:{}]", block_id, block_id, source_name, target_id, target_id, target_name);
                     if !h.contains_key(&source_scope_name) {
                         h.insert(source_scope_name.clone(), vec![]);
                     }
                     if !h.contains_key(&target_scope_name) {
                         h.insert(target_scope_name.clone(), vec![]);
                     }
-                    h.get_mut(&source_scope_name).unwrap().push(source);
-                    h.get_mut(&target_scope_name).unwrap().push(target);
-                    edges.push(format!("{} --> {}", block_id, target_id));
+                    h.get_mut(&source_scope_name).unwrap().push(block_id);
+                    h.get_mut(&target_scope_name).unwrap().push(target_id);
                 }
             }
 
@@ -77,25 +161,68 @@ graph TD\n\
                 continue;
             }
 
-            s.push_str(&format!("subgraph {}\n", fun_name));
+            let mut track = HashSet::new();
 
             for (scope_name, values) in h.iter() {
                 if values.len() > 0 {
-                    s.push_str(&format!("\tsubgraph {}\n", scope_name));
-                    for line in values {
-                        s.push_str(&format!("\t\t{}\n", &line));
+                    let mut scope_group = Group::new(scope_name.clone(), "".into());
+                    for block_id in values {
+                        if !track.contains(block_id) {
+                            let block_name = format!("{}", block_id);
+                            let block_body = if let Some(key) = self.get_name(block_id.into()) {
+                                b.labels.r(key)
+                            } else {
+                                "".into()
+                            };
+
+                            let mut block_group = Group::new(block_name, block_body);
+
+                            let mut v = self.resolve_code_offset(block_id.into());
+                            loop {
+                                let entry = self.get_entry(v);
+                                match &entry.code {
+                                    LCode::Jump(offset) => {
+                                        let v_target = self.resolve_code_offset(*offset);
+                                        ng.edges.push((v, v_target));
+                                    }
+                                    LCode::Branch(c, b1, b2) => {
+                                        let v_target = self.resolve_code_offset(*c);
+                                        ng.edges.push((v, v_target));
+                                        let v_target = self.resolve_code_offset(b1.into());
+                                        ng.edges.push((v, v_target));
+                                        let v_target = self.resolve_code_offset(b2.into());
+                                        ng.edges.push((v, v_target));
+                                    }
+                                    LCode::CallValue(offset) => {
+                                        let v_target = self.resolve_code_offset(*offset);
+                                        ng.edges.push((v, v_target));
+                                    }
+                                    LCode::Call(offset) => {
+                                        let v_target = self.resolve_code_offset(*offset);
+                                        ng.edges.push((v, v_target));
+                                    }
+                                    _ => (),
+                                }
+                                let s = format!("{}:{}", v, self.code_to_string(v, b));
+                                block_group.push_value(GroupValue::new(format!("{}", v), s));
+                                if let Some(v_next) = self.get_next(v) {
+                                    ng.edges.push((v, v_next));
+                                    v = v_next;
+                                } else {
+                                    break;
+                                }
+                            }
+                            scope_group.push_group(block_group);
+                            track.insert(block_id);
+                        }
                     }
-                    s.push_str("\tend\n");
+                    fun_group.push_group(scope_group);
                 }
             }
-            s.push_str("end\n");
-            for line in edges {
-                s.push_str(&format!("{}\n", line));
-            }
+            ng.group.push_group(fun_group);
         }
-        //println!("{}", s);
         let mut f = File::create(filename)?;
-        f.write(s.as_bytes())?;
+        ng.write(&mut f)?;
         Ok(())
     }
 
@@ -122,15 +249,19 @@ graph TD\n\
                 &|_, _er| String::new(),
                 &|_, (index, _block)| {
                     let block_id: BlockId = index.into();
-                    let key = self.get_name(block_id.into()).unwrap();
-                    let name = b.labels.r(key);
-                    format!(
-                        //"label = \"B{:?}:{}\" shape=\"{:?}\"",
-                        "label = \"B{:?}:{}\"",
-                        index.index(),
-                        name,
-                        //&block.scope_id,
-                    )
+                    if self.block_map.contains_key(&block_id) {
+                        let key = self.get_name(block_id.into()).unwrap();
+                        let name = b.labels.r(key);
+                        format!(
+                            //"label = \"B{:?}:{}\" shape=\"{:?}\"",
+                            "label = \"B{:?}:{}\"",
+                            index.index(),
+                            name,
+                            //&block.scope_id,
+                        )
+                    } else {
+                        format!("label = \"B{:?}:?\"", index.index(),)
+                    }
                 }
             )
         );
