@@ -532,8 +532,6 @@ impl Flatten {
                     if self.scopes.resolve_block_id(scope_id, key.into()).is_none() {
                         assert_eq!(0, args.len());
                         let new_block_id = self.blocks.new_block(scope_id);
-                        //let new_block = self.blocks.get_block_mut(new_block_id);
-                        //new_block.next = seq_next_block_id;
                         self.blocks.block_succ(
                             self.current_block_id(),
                             new_block_id,
@@ -541,7 +539,6 @@ impl Flatten {
                         );
                         let scope = self.scopes.get_scope_mut(scope_id);
                         scope.block_labels.insert(key.into(), new_block_id);
-                        //println!("creating block: {} in {}", b.labels.r(key.into()), scope_id);
                     }
                 }
                 _ => (),
