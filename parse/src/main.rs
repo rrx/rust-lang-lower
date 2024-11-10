@@ -110,6 +110,14 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
     let pre_graph_path = make_path(&output_filename, "pre.dot");
     f.save_graph(&pre_graph_path);
 
+    let table_path = make_path(&output_filename, "pretable.txt");
+    f.dump_code_table(&table_path, b);
+    f.dump_scopes(b);
+
+    let mut cfg_path = path.clone();
+    cfg_path.set_extension("cfg.mmd");
+    f.flow_graph(cfg_path.clone().to_str().unwrap(), &b)?;
+
     //
     let mut m = FlattenModule::from_builder(f, b);
 

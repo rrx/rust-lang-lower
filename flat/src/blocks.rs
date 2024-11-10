@@ -131,4 +131,80 @@ impl BlockGraph {
         }
         out
     }
+
+    pub fn find_dead_blocks_from_graph(&mut self) -> Vec<BlockId> {
+        let mut dfs = petgraph::visit::Dfs::new(&self.0, BlockId(0).into());
+        let mut entries = HashSet::new();
+        while let Some(visited) = dfs.next(&self.0) {
+            for edge in self.edges(visited) {
+                if Successor::FunctionDeclaration == *edge.weight() {
+                    entries.insert(edge.target());
+                }
+            }
+        }
+
+        let subgraph = self.filter_map(
+            |_n_index, n| Some(n.clone()),
+            |_e_index, e| {
+                if let Successor::Jump = e {
+                    Some(e.clone())
+                } else {
+                    None
+                }
+            },
+        );
+
+        let mut out = vec![];
+        for entry in entries {
+            let mut reachable = HashSet::new();
+            let mut all = HashSet::new();
+            reachable.insert(entry.into());
+            all.insert(entry.into());
+
+            let mut dfs = petgraph::visit::Dfs::new(&subgraph, entry.into());
+            while let Some(visited) = dfs.next(&self.0) {
+                for edge in self.edges(visited) {
+                    let b: BlockId = edge.target().into();
+                    all.insert(b);
+                }
+            }
+
+            let mut dfs = petgraph::visit::Dfs::new(&subgraph, entry.into());
+            while let Some(visited) = dfs.next(&subgraph) {
+                for edge in subgraph.edges(visited) {
+                    if Successor::Jump == *edge.weight() {
+                        let b: BlockId = edge.target().into();
+                        reachable.insert(b);
+                    }
+                }
+            }
+            let dead = all.difference(&reachable);
+            //println!("[{:?}] Dead: {:?}", entry, &dead);
+            //println!("[{:?}] All: {:?}", entry, &all);
+            //println!("[{:?}] Reachable: {:?}", entry, &reachable);
+            for block_id in dead {
+                let index = (*block_id).into();
+                let block = self.node_weight_mut(index).unwrap();
+                block.dead = true;
+                out.push(*block_id);
+                //let v = self.get_entry_id_from_block_id(*block_id);
+                //let span_id = self.get_span_id(v);
+                //b.push_warning(&format!("Dead Block: {}", block_id), span_id);
+            }
+        }
+        out
+    }
+
+    pub fn graph_get_entries(&self) -> HashSet<BlockId> {
+        let mut dfs = petgraph::visit::Dfs::new(&self.0, BlockId(0).into());
+        let mut entries = HashSet::new();
+        while let Some(visited) = dfs.next(&self.0) {
+            for edge in self.0.edges(visited) {
+                if Successor::FunctionDeclaration == *edge.weight() {
+                    entries.insert(edge.target().into());
+                }
+            }
+        }
+        entries
+    }
 }

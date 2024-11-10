@@ -381,62 +381,11 @@ impl FlattenModule {
     }
 
     pub fn find_dead_blocks(&mut self, b: &mut NB) {
-        let mut dfs = petgraph::visit::Dfs::new(&self.gblocks.0, BlockId(0).into());
-        let mut entries = HashSet::new();
-        while let Some(visited) = dfs.next(&self.gblocks.0) {
-            for edge in self.gblocks.edges(visited) {
-                if Successor::FunctionDeclaration == *edge.weight() {
-                    entries.insert(edge.target());
-                }
-            }
-        }
-
-        let subgraph = self.gblocks.filter_map(
-            |_n_index, n| Some(n.clone()),
-            |_e_index, e| {
-                if let Successor::Jump = e {
-                    Some(e.clone())
-                } else {
-                    None
-                }
-            },
-        );
-
-        for entry in entries {
-            let mut reachable = HashSet::new();
-            let mut all = HashSet::new();
-            reachable.insert(entry.into());
-            all.insert(entry.into());
-
-            let mut dfs = petgraph::visit::Dfs::new(&subgraph, entry.into());
-            while let Some(visited) = dfs.next(&self.gblocks.0) {
-                for edge in self.gblocks.edges(visited) {
-                    let b: BlockId = edge.target().into();
-                    all.insert(b);
-                }
-            }
-
-            let mut dfs = petgraph::visit::Dfs::new(&subgraph, entry.into());
-            while let Some(visited) = dfs.next(&subgraph) {
-                for edge in subgraph.edges(visited) {
-                    if Successor::Jump == *edge.weight() {
-                        let b: BlockId = edge.target().into();
-                        reachable.insert(b);
-                    }
-                }
-            }
-            let dead = all.difference(&reachable);
-            //println!("[{:?}] Dead: {:?}", entry, &dead);
-            //println!("[{:?}] All: {:?}", entry, &all);
-            //println!("[{:?}] Reachable: {:?}", entry, &reachable);
-            for block_id in dead {
-                let index = (*block_id).into();
-                let block = self.gblocks.node_weight_mut(index).unwrap();
-                block.dead = true;
-                let v = self.get_entry_id_from_block_id(*block_id);
-                let span_id = self.get_span_id(v);
-                b.push_warning(&format!("Dead Block: {}", block_id), span_id);
-            }
+        let dead_blocks = self.gblocks.find_dead_blocks_from_graph();
+        for block_id in dead_blocks {
+            let v = self.get_entry_id_from_block_id(block_id);
+            let span_id = self.get_span_id(v);
+            b.push_warning(&format!("Dead Block: {}", block_id), span_id);
         }
     }
 
@@ -492,8 +441,8 @@ impl FlattenModule {
         Some(CodeRow {
             pos: v.index(),
             link: entry.link.unwrap().index(),
-            //next: 0,
-            //prev: 0,
+            next: entry.next.index(),
+            prev: entry.prev.index(),
             value: self.code_to_string(v, b),
             //ty: ty.clone(),
             ty: s_ty,

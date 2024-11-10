@@ -6,8 +6,8 @@ use tabled::Tabled;
 pub struct CodeRow {
     pub pos: usize,
     pub link: usize,
-    //pub next: usize,
-    //pub prev: usize,
+    pub next: usize,
+    pub prev: usize,
     pub value: String,
     pub ty: String,
     pub mem: String,

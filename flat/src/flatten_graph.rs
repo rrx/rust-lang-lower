@@ -1,5 +1,5 @@
 use super::FlattenModule;
-use crate::{BlockId, ICodeModule, LCode, NodeBuilder as NB, Successor, ValueId};
+use crate::{BlockGraph, BlockId, ICodeModule, LCode, NodeBuilder as NB, Successor, ValueId};
 use anyhow::Result;
 use petgraph::visit::EdgeRef;
 use std::collections::{HashMap, HashSet};
@@ -106,124 +106,8 @@ graph TD\n\
 }
 
 impl FlattenModule {
-    fn graph_get_entries(&self) -> HashSet<BlockId> {
-        let mut dfs = petgraph::visit::Dfs::new(&self.gblocks.0, BlockId(0).into());
-        let mut entries = HashSet::new();
-        while let Some(visited) = dfs.next(&self.gblocks.0) {
-            for edge in self.gblocks.0.edges(visited) {
-                if Successor::FunctionDeclaration == *edge.weight() {
-                    entries.insert(edge.target().into());
-                }
-            }
-        }
-        entries
-    }
-
     pub fn flow_graph(&self, filename: &str, b: &NB) -> Result<()> {
-        let entries = self.graph_get_entries();
-        let mut ng = NestedGraph::new();
-
-        for entry in entries {
-            let fun_block_id: BlockId = entry.into();
-            let fun_key = self.get_name(fun_block_id.into()).unwrap();
-            let fun_name = b.labels.r(fun_key);
-            let mut fun_group = Group::new(fun_name.clone(), "".to_string());
-            let mut h = HashMap::new();
-            let mut bfs = petgraph::visit::Bfs::new(&self.gblocks.0, entry.into());
-            while let Some(index) = bfs.next(&self.gblocks.0) {
-                for edge in self
-                    .gblocks
-                    .0
-                    .edges_directed(index, petgraph::Direction::Outgoing)
-                {
-                    let succ = edge.weight();
-                    let block_id: BlockId = edge.source().into();
-                    let target_id: BlockId = edge.target().into();
-                    let block = self.gblocks.0.node_weight(index).unwrap();
-                    let target_block = self.gblocks.0.node_weight(target_id.into()).unwrap();
-                    if succ != &Successor::Jump || block.dead || target_block.dead {
-                        continue;
-                    }
-                    let source_scope_name = format!("S{}", block.scope_id.index());
-                    let target_scope_name = format!("S{}", target_block.scope_id.index());
-                    if !h.contains_key(&source_scope_name) {
-                        h.insert(source_scope_name.clone(), vec![]);
-                    }
-                    if !h.contains_key(&target_scope_name) {
-                        h.insert(target_scope_name.clone(), vec![]);
-                    }
-                    h.get_mut(&source_scope_name).unwrap().push(block_id);
-                    h.get_mut(&target_scope_name).unwrap().push(target_id);
-                }
-            }
-
-            if h.len() == 0 {
-                continue;
-            }
-
-            let mut track = HashSet::new();
-
-            for (scope_name, values) in h.iter() {
-                if values.len() > 0 {
-                    let mut scope_group = Group::new(scope_name.clone(), "".into());
-                    for block_id in values {
-                        if !track.contains(block_id) {
-                            let block_name = format!("{}", block_id);
-                            let block_body = if let Some(key) = self.get_name(block_id.into()) {
-                                b.labels.r(key)
-                            } else {
-                                "".into()
-                            };
-
-                            let mut block_group = Group::new(block_name, block_body);
-
-                            let mut v = self.resolve_code_offset(block_id.into());
-                            loop {
-                                let entry = self.get_entry(v);
-                                match &entry.code {
-                                    LCode::Jump(offset) => {
-                                        let v_target = self.resolve_code_offset(*offset);
-                                        ng.edges.push((v, v_target));
-                                    }
-                                    LCode::Branch(c, b1, b2) => {
-                                        let v_target = self.resolve_code_offset(*c);
-                                        ng.edges.push((v, v_target));
-                                        let v_target = self.resolve_code_offset(b1.into());
-                                        ng.edges.push((v, v_target));
-                                        let v_target = self.resolve_code_offset(b2.into());
-                                        ng.edges.push((v, v_target));
-                                    }
-                                    LCode::CallValue(offset) => {
-                                        let v_target = self.resolve_code_offset(*offset);
-                                        ng.edges.push((v, v_target));
-                                    }
-                                    LCode::Call(offset) => {
-                                        let v_target = self.resolve_code_offset(*offset);
-                                        ng.edges.push((v, v_target));
-                                    }
-                                    _ => (),
-                                }
-                                let s = format!("{}:{}", v, self.code_to_string(v, b));
-                                block_group.push_value(GroupValue::new(format!("{}", v), s));
-                                if let Some(v_next) = self.get_next(v) {
-                                    ng.edges.push((v, v_next));
-                                    v = v_next;
-                                } else {
-                                    break;
-                                }
-                            }
-                            scope_group.push_group(block_group);
-                            track.insert(block_id);
-                        }
-                    }
-                    fun_group.push_group(scope_group);
-                }
-            }
-            ng.group.push_group(fun_group);
-        }
-        let mut f = File::create(filename)?;
-        ng.write(&mut f)?;
-        Ok(())
+        flow_graph(self, &self.gblocks, filename, b)
     }
 
     pub fn block_graph(&self, filename: &str, b: &NB) {
@@ -269,4 +153,110 @@ impl FlattenModule {
         //println!("{}", s);
         std::fs::write(filename, s).unwrap();
     }
+}
+
+pub fn flow_graph(m: &dyn ICodeModule, gblocks: &BlockGraph, filename: &str, b: &NB) -> Result<()> {
+    let entries = gblocks.graph_get_entries();
+    let mut ng = NestedGraph::new();
+
+    for entry in entries {
+        let fun_block_id: BlockId = entry.into();
+        let fun_key = m.get_name(fun_block_id.into()).unwrap();
+        let fun_name = b.labels.r(fun_key);
+        let mut fun_group = Group::new(fun_name.clone(), "".to_string());
+        let mut h = HashMap::new();
+        let mut bfs = petgraph::visit::Bfs::new(&gblocks.0, entry.into());
+        while let Some(index) = bfs.next(&gblocks.0) {
+            for edge in gblocks
+                .0
+                .edges_directed(index, petgraph::Direction::Outgoing)
+            {
+                let succ = edge.weight();
+                let block_id: BlockId = edge.source().into();
+                let target_id: BlockId = edge.target().into();
+                let block = gblocks.0.node_weight(index).unwrap();
+                let target_block = gblocks.0.node_weight(target_id.into()).unwrap();
+                if succ != &Successor::Jump || block.dead || target_block.dead {
+                    continue;
+                }
+                let source_scope_name = format!("S{}", block.scope_id.index());
+                let target_scope_name = format!("S{}", target_block.scope_id.index());
+                if !h.contains_key(&source_scope_name) {
+                    h.insert(source_scope_name.clone(), vec![]);
+                }
+                if !h.contains_key(&target_scope_name) {
+                    h.insert(target_scope_name.clone(), vec![]);
+                }
+                h.get_mut(&source_scope_name).unwrap().push(block_id);
+                h.get_mut(&target_scope_name).unwrap().push(target_id);
+            }
+        }
+
+        if h.len() == 0 {
+            continue;
+        }
+
+        let mut track = HashSet::new();
+
+        for (scope_name, values) in h.iter() {
+            if values.len() > 0 {
+                let mut scope_group = Group::new(scope_name.clone(), "".into());
+                for block_id in values {
+                    if !track.contains(block_id) {
+                        let block_name = format!("{}", block_id);
+                        let block_body = if let Some(key) = m.get_name(block_id.into()) {
+                            b.labels.r(key)
+                        } else {
+                            "".into()
+                        };
+
+                        let mut block_group = Group::new(block_name, block_body);
+
+                        let mut v = m.resolve_code_offset(block_id.into());
+                        loop {
+                            let code = m.get_code(v);
+                            match code {
+                                LCode::Jump(offset) => {
+                                    let v_target = m.resolve_code_offset(*offset);
+                                    ng.edges.push((v, v_target));
+                                }
+                                LCode::Branch(c, b1, b2) => {
+                                    let v_target = m.resolve_code_offset(*c);
+                                    ng.edges.push((v, v_target));
+                                    let v_target = m.resolve_code_offset(b1.into());
+                                    ng.edges.push((v, v_target));
+                                    let v_target = m.resolve_code_offset(b2.into());
+                                    ng.edges.push((v, v_target));
+                                }
+                                LCode::CallValue(offset) => {
+                                    let v_target = m.resolve_code_offset(*offset);
+                                    ng.edges.push((v, v_target));
+                                }
+                                LCode::Call(offset) => {
+                                    let v_target = m.resolve_code_offset(*offset);
+                                    ng.edges.push((v, v_target));
+                                }
+                                _ => (),
+                            }
+                            let s = format!("{}:{}", v, m.code_to_string(v, b));
+                            block_group.push_value(GroupValue::new(format!("{}", v), s));
+                            if let Some(v_next) = m.get_next(v) {
+                                ng.edges.push((v, v_next));
+                                v = v_next;
+                            } else {
+                                break;
+                            }
+                        }
+                        scope_group.push_group(block_group);
+                        track.insert(block_id);
+                    }
+                }
+                fun_group.push_group(scope_group);
+            }
+        }
+        ng.group.push_group(fun_group);
+    }
+    let mut f = File::create(filename)?;
+    ng.write(&mut f)?;
+    Ok(())
 }

@@ -27,12 +27,17 @@ use std::collections::{HashMap, HashSet};
 use std::convert::Into;
 
 use crate::{
-    BlockGraph, BlockId, BlockifyError, Builtin, LCode, LinkId, NodeBuilder as NB, ScopeGraph,
-    ScopeId, ScopeType, SequenceReader, StringLabel, Successor, TemplateId, VariantId,
+    BlockGraph, BlockId, BlockifyError, Builtin, CodeOffset, CodeRow, ICodeModule, LCode, LinkId,
+    NodeBuilder as NB, ScopeGraph, ScopeId, ScopeType, SequenceReader, StringLabel, Successor,
+    TemplateId, ValueId, VariantId,
 };
+
+use tabled::{settings::Style, Table};
 
 #[derive(Debug, Clone)]
 pub struct CodeEntry {
+    next: LinkId,
+    prev: LinkId,
     pub(super) code: LCode,
     pub(super) name: Option<StringKey>,
     pub(super) link: Option<LinkId>,
@@ -52,6 +57,8 @@ impl CodeEntry {
         mem: VarDefinitionSpace,
     ) -> Self {
         Self {
+            next: LinkId(0),
+            prev: LinkId(0),
             block_id,
             code,
             name,
@@ -110,6 +117,132 @@ pub struct Flatten {
     pub(crate) static_block: Option<BlockId>,
     pub(crate) current_block: BlockId,
     pub scopes: ScopeGraph,
+    block_links: HashMap<BlockId, LinkId>,
+    functions: HashMap<StringKey, LinkId>,
+}
+
+impl ICodeModule for Flatten {
+    fn shared_libraries(&self) -> Vec<String> {
+        self.link.shared_libraries()
+    }
+
+    fn lookup_name(&self, name: &StringKey) -> Option<LinkId> {
+        self.functions.get(name).cloned()
+    }
+
+    fn get_span_id(&self, value_id: ValueId) -> SpanId {
+        let link_id = LinkId(value_id.index() as u32);
+        let entry = self.get_entry(link_id);
+        entry.span_id
+    }
+
+    fn get_name(&self, offset: CodeOffset) -> Option<StringLabel> {
+        let value_id = self.resolve_code_offset(offset);
+        let link_id = LinkId(value_id.index() as u32);
+        self.get_entry(link_id).name.map(|n| n.into())
+    }
+
+    fn get_code(&self, value_id: ValueId) -> &LCode {
+        let link_id = LinkId(value_id.index() as u32);
+        &self.get_entry(link_id).code
+    }
+
+    fn get_next(&self, value_id: ValueId) -> Option<ValueId> {
+        let value_id = LinkId(value_id.index() as u32);
+        let entry = self.get_entry(value_id);
+        if entry.next != value_id {
+            Some(ValueId(entry.next.index() as u32))
+        } else {
+            None
+        }
+    }
+
+    fn get_prev(&self, value_id: ValueId) -> Option<ValueId> {
+        let value_id = LinkId(value_id.index() as u32);
+        let entry = self.get_entry(value_id);
+        if entry.prev != value_id {
+            Some(ValueId(entry.prev.index() as u32))
+        } else {
+            None
+        }
+    }
+
+    fn get_block_successors(&self, entry_id: ValueId) -> Vec<(Successor, CodeOffset)> {
+        let entry_id = LinkId(entry_id.index() as u32);
+        let entry = self.get_entry(entry_id);
+        let block_id = entry.block_id;
+        self.blocks.get_block_successors(block_id)
+    }
+
+    fn get_type(&self, v: CodeOffset) -> AstType {
+        let value_id = self.resolve_code_offset(v);
+        let value_id = LinkId(value_id.index() as u32);
+        let entry = self.get_entry(value_id);
+        entry.clone().ty
+    }
+
+    fn get_entry_id(&self, value_id: ValueId) -> ValueId {
+        let value_id = LinkId(value_id.index() as u32);
+        let block_id = self.get_entry(value_id).block_id;
+        let link_id = *self
+            .block_links
+            .get(&block_id)
+            .expect(&format!("Unable to find block {}", block_id));
+        ValueId(link_id.index() as u32)
+    }
+
+    fn is_in_static_scope(&self, offset: CodeOffset) -> bool {
+        let value_id = self.resolve_code_offset(offset);
+        let value_id = LinkId(value_id.index() as u32);
+        let entry = self.get_entry(value_id);
+        let block = self.blocks.get_block(entry.block_id);
+        let scope = self.scopes.get_scope(block.scope_id);
+        scope.scope_type == ScopeType::Static
+    }
+
+    fn get_mem(&self, offset: CodeOffset) -> &VarDefinitionSpace {
+        let value_id = self.resolve_code_offset(offset);
+        let value_id = LinkId(value_id.index() as u32);
+        &self.get_entry(value_id).mem
+    }
+
+    fn resolve_code_offset(&self, code_offset: CodeOffset) -> ValueId {
+        match code_offset {
+            CodeOffset::Value(v) => v,
+            CodeOffset::Link(v) => ValueId(v.index() as u32),
+            CodeOffset::Block(block_id) => {
+                let link_id = *self
+                    .block_links
+                    .get(&block_id)
+                    .expect(&format!("Missing block {}", block_id));
+                ValueId(link_id.index() as u32)
+            }
+        }
+    }
+
+    fn get_entry_id_from_block_id(&self, block_id: BlockId) -> ValueId {
+        self.resolve_code_offset(block_id.into())
+    }
+
+    fn code_count(&self) -> usize {
+        self.entries.len()
+    }
+
+    fn dump_code_table(&self, filename: &str, b: &mut NB) {
+        let mut rows = vec![];
+        for entry in self.entries.iter() {
+            let link_id = entry.link.unwrap();
+            let value_id = ValueId(link_id.index() as u32);
+            if let Some(row) = self.get_code_row(value_id, b) {
+                rows.push(row);
+            } else {
+                println!("Unable to load entry: {}", value_id);
+            }
+        }
+        let s = Table::new(rows).with(Style::sharp()).to_string();
+        println!("{}", s);
+        std::fs::write(filename, s).unwrap();
+    }
 }
 
 impl Flatten {
@@ -128,7 +261,109 @@ impl Flatten {
             static_block: None,
             current_block: BlockId(0),
             scopes: ScopeGraph::new(),
+            block_links: HashMap::new(),
+            functions: HashMap::new(),
         }
+    }
+
+    pub fn get_code_row(&self, v: ValueId, b: &mut NB) -> Option<CodeRow> {
+        let link_id = LinkId(v.index() as u32);
+        let entry = self.get_entry(link_id);
+        let code = self.get_code(v);
+        //let ty = self.get_type(v.into());
+
+        let mem = self.get_mem(v.into());
+        let block_id = entry.block_id;
+        let block = self.blocks.node_weight(block_id.into()).unwrap();
+        //println!("block: {:?}", (block_id, block, v, entry));
+
+        //let next = self.get_next(v).unwrap_or(v).index();
+        //let prev = self.get_prev(v).unwrap_or(v).index();
+        //println!("row: {}, {:?}", v, (self.entries.len()));
+        let entry_id = self.get_entry_id(v);
+
+        let r_ty = if let Some(r_ty) = b.types.u.resolve(&entry.ty) {
+            r_ty
+        } else {
+            entry.ty.clone()
+        };
+        //println!("X: {} => {}", &entry.ty, &r_ty);
+
+        //let is_unknown = r_ty.as_ref().map(|ty| ty.is_unknown()).unwrap_or(true);
+        //let s_ty = format!("{}", &r_ty.unwrap_or(ty)); //AstType::Error));
+        let is_unknown = r_ty.is_unknown();
+        let s_ty = format!("{}", &r_ty);
+
+        let scope_id = block.scope_id;
+
+        Some(CodeRow {
+            pos: v.index(),
+            link: entry.link.unwrap().index(),
+            next: entry.next.index(),
+            prev: entry.prev.index(),
+            value: self.code_to_string(v, b),
+            //ty: ty.clone(),
+            ty: s_ty,
+            //r_ty: r_ty.unwrap_or(AstType::Error),
+            mem: format!("{:?}", mem),
+            name: self
+                .get_name(v.into())
+                .map(|key| b.labels.r(key))
+                .unwrap_or("".to_string())
+                .to_string(),
+            span_id: self.get_span_id(v).index(),
+            scope_id: scope_id.index(),
+            entry_id: entry_id.index(),
+            block_id: block_id.index(),
+            term: code.is_term(),
+            dead: block.dead,
+            unknown: is_unknown,
+        })
+    }
+
+    pub fn type_inference_enforce(&mut self, b: &mut NB) {
+        b.types.dump();
+        for entry in self.entries.iter_mut() {
+            if !entry.ty.is_unknown() {
+                continue;
+            }
+
+            if let Some(ty) = b.types.u.resolve(&entry.ty) {
+                /*
+                b.push_warning(
+                    &format!("Late Unresolved Type: {}=>{}", &entry.ty, &ty),
+                    entry.span_id,
+                );
+                */
+                entry.ty = ty;
+            } else {
+                b.push_error(&format!("Unresolved Type: {}", &entry.ty), entry.span_id);
+            }
+        }
+    }
+
+    pub fn dump_code_table(&self, filename: &str, b: &mut NB) {
+        let mut rows = vec![];
+        for entry in self.entries.iter() {
+            let link_id = entry.link.unwrap();
+            let value_id = ValueId(link_id.index() as u32);
+            if let Some(row) = self.get_code_row(value_id, b) {
+                rows.push(row);
+            } else {
+                println!("Unable to load entry: {}", value_id);
+            }
+        }
+        let s = Table::new(rows).with(Style::sharp()).to_string();
+        println!("{}", s);
+        std::fs::write(filename, s).unwrap();
+    }
+
+    pub fn flow_graph(&self, filename: &str, b: &NB) -> Result<()> {
+        crate::flatten_graph::flow_graph(self, &self.blocks, filename, b)
+    }
+
+    pub fn dump_scopes(&self, _b: &NB) {
+        petgraph::dot::Dot::with_config(&self.scopes.0, &[petgraph::dot::Config::EdgeNoLabel]);
     }
 
     pub fn static_scope_id(&self) -> ScopeId {
@@ -379,6 +614,15 @@ impl Flatten {
         let r = self.push_bake(name, ty, b);
         // switch back after bake
         self.switch_blocks(current_block_id);
+        let dead_blocks = self.blocks.find_dead_blocks_from_graph();
+        for block_id in dead_blocks {
+            let link_id = self.block_links.get(&block_id).unwrap().clone();
+            //let v = self.get_entry_id_from_block_id(block_id);
+            let entry = self.get_entry(link_id);
+            //let span_id = self.get_span_id(v);
+            b.push_warning(&format!("Dead Block: {}", block_id), entry.span_id);
+        }
+        self.type_inference_enforce(b);
         r
     }
 
@@ -429,10 +673,16 @@ impl Flatten {
         Ok(links)
     }
 
-    fn _insert_entry(&mut self, mut entry: CodeEntry) -> LinkId {
+    fn _insert_entry(&mut self, mut entry: CodeEntry, prev: Option<LinkId>) -> LinkId {
         let index = self.entries.len();
         let link_id = LinkId(index as u32);
         entry.link = Some(link_id);
+        if let Some(prev) = prev {
+            entry.prev = prev;
+        } else {
+            entry.prev = link_id;
+        }
+        entry.next = link_id;
         self.entries.push(entry);
         link_id
     }
@@ -440,10 +690,12 @@ impl Flatten {
     pub fn push_entry_with_link(&mut self, entry: CodeEntry) -> LinkId {
         let block_id = entry.block_id;
         let span_id = entry.span_id;
-        let link_id = self._insert_entry(entry);
+        let block = self.blocks.get_block(block_id);
+        let link_id = self._insert_entry(entry, block.links.last().cloned());
         let block = self.blocks.get_block(block_id);
         if let Some(last_link_id) = block.links.last() {
-            let last_entry = self.get_entry(*last_link_id);
+            let last_entry = self.get_entry_mut(*last_link_id);
+            last_entry.next = link_id;
             let is_term = last_entry.code.is_term();
             if is_term {
                 let backtrace = std::backtrace::Backtrace::capture();
@@ -1017,7 +1269,7 @@ impl Flatten {
     ) -> Result<(LinkId, AstType, AstType)> {
         let s = b.labels.r(name.into());
         let global_key = b.labels.fresh_key(&s);
-        let s_global = b.labels.r(global_key.into());
+        //let s_global = b.labels.r(global_key.into());
         let current_block_id = self.current_block_id();
         self.switch_blocks(self.static_block_id());
 
@@ -1111,6 +1363,8 @@ impl Flatten {
             );
             (variant_id, v_entry)
         };
+        self.functions.insert(name, v_entry);
+
         Ok((v_entry, call_func_type, ret_ty))
     }
 
@@ -1313,6 +1567,8 @@ impl Flatten {
         let block_link_id = self.push_empty_label(span_id);
         let v_args = self.push_start_block_args(scope_id, block_ty.clone(), span_id);
         self.replace_label(block_link_id, block_ty, name, span_id, mem);
+        self.block_links
+            .insert(self.current_block_id(), block_link_id);
         (block_link_id, v_args)
     }
 
@@ -1918,7 +2174,7 @@ impl Flatten {
         &mut self,
         name: StringKey,
         scope_id: ScopeId,
-        span_id: SpanId,
+        //span_id: SpanId,
     ) -> (BlockId, BlockId) {
         let current_block_id = self.current_block_id();
         let next_block_id = self.blocks.new_block(scope_id);
@@ -3053,7 +3309,7 @@ impl Flatten {
             _ => {
                 b.push_error(&format!("AST Unimplemented"), node.span_id);
                 unimplemented!("{:?}", ast);
-                Err(Error::new(BlockifyError::Unimplemented))
+                //Err(Error::new(BlockifyError::Unimplemented))
             }
         }
     }
