@@ -110,6 +110,7 @@ pub struct ScopeLayer {
     pub scope_type: ScopeType,
     pub lambdas: HashMap<StringLabel, TemplateId>,
     pub templates: HashMap<StringKey, LinkId>,
+    pub unclaimed_labels: HashMap<StringKey, BlockId>,
 }
 
 impl ScopeLayer {
@@ -128,6 +129,7 @@ impl ScopeLayer {
             scope_type,
             lambdas: HashMap::new(),
             templates: HashMap::new(),
+            unclaimed_labels: HashMap::new(),
         }
     }
 

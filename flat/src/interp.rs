@@ -613,11 +613,11 @@ pub fn interp<'c>(
         let pos = interp.pos;
         //let code = interp.m.get_code(pos);
         let r = interp.step();
-        println!("step: {}, {}", pos, interp.format_code(pos));
-        println!("\tcall_args: {:?}", interp.call_args);
-        for (index, scope) in interp.stack.iter().enumerate() {
-            println!("\t[{}] scope: {:?}", index, scope);
-        }
+        //println!("step: {}, {}", pos, interp.format_code(pos));
+        //println!("\tcall_args: {:?}", interp.call_args);
+        //for (index, scope) in interp.stack.iter().enumerate() {
+        //println!("\t[{}] scope: {:?}", index, scope);
+        //}
 
         if let Ok(cond) = r {
             if !cond {

@@ -10,6 +10,8 @@ use crate::{BlockId, CodeOffset, LinkId, Node, NodeBuilder, StringLabel, Success
 
 #[derive(Error, Debug)]
 pub enum BlockifyError {
+    #[error("BlockifyError: Unimplemented")]
+    Unimplemented,
     #[error("BlockifyError: Invalid")]
     Invalid,
     #[error("BlockifyError: NotFound")]
