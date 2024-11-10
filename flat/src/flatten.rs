@@ -329,14 +329,13 @@ impl Flatten {
 
             f.static_block = Some(static_block_id);
             f.static_scope = Some(static_scope_id);
-            for ast in body.to_vec() {
-                f.switch_blocks(static_block_id);
-                let _ = f.push_node(ast, b)?;
-            }
+            f.switch_blocks(static_block_id);
+            let _ = f.push_node(*body, b)?;
+            assert_eq!(static_block_id, f.current_block_id());
+
             //let result = f.push_bake_templates(static_block_id, b);
             //let result = f.push_bake_main_template(b);
             f.drain_diagnostics(b);
-            //result?;
             Ok(f)
         } else {
             b.push_error("Not a module", node.span_id);
@@ -1900,6 +1899,28 @@ impl Flatten {
         &mut self,
         name: StringKey,
         scope_id: ScopeId,
+    ) -> Option<BlockId> {
+        //let current_block_id = self.current_block_id();
+        let new_block_id =
+            if let Some(block_id) = self.scopes.resolve_block_id(scope_id, name.into()) {
+                Some(block_id)
+            } else {
+                let scope = self.scopes.get_scope_mut(scope_id);
+                let maybe_unclaimed_block_id = scope.unclaimed_labels.remove(&name);
+                if let Some(block_id) = maybe_unclaimed_block_id {
+                    Some(block_id)
+                } else {
+                    None
+                }
+            };
+
+        new_block_id
+    }
+
+    pub fn create_new_block_in_scope2(
+        &mut self,
+        name: StringKey,
+        scope_id: ScopeId,
         span_id: SpanId,
     ) -> (BlockId, BlockId) {
         let current_block_id = self.current_block_id();
@@ -2450,13 +2471,56 @@ impl Flatten {
                 Ok(FlattenResult::link(v))
             }
 
-            Ast::Block(name, args, body) => {
+            Ast::ControlFlowMarker(ControlFlowMarker::BlockEnd) => {
+                unimplemented!();
+            }
+            /*
+            Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(name, args)) => {
+                unimplemented!();
+                assert!(false);
+                // all blocks should have been forward declared in the sequence
+                let name = name.unwrap();
+                let current_dom_block_id = self
+                    .scopes
+                    .resolve_block_id(block.scope_id, name.into())
+                    .unwrap();
+                assert_eq!(0, args.len());
+                //let next = block.next;
+                let current_dom_block = self.blocks.get_block_mut(current_dom_block_id);
+                //current_dom_block.next = next;
+                let current_scope_id = current_dom_block.scope_id;
+                self.blocks.block_succ(
+                    current_block_id,
+                    current_dom_block_id,
+                    Successor::BlockScope,
+                );
+
+                let arg_ty = AstType::Struct(vec![]);
+                let block_ty = AstType::Func(
+                    arg_ty.clone().into(),
+                    ReturnType::Single(AstType::Unit).into(),
+                );
+                self.switch_blocks(current_dom_block_id);
+                self.push_start_block(
+                    current_scope_id,
+                    block_ty,
+                    Some(name),
+                    span_id,
+                    VarDefinitionSpace::Reg,
+                );
+                Ok(FlattenResult::statement())
+            }
+            */
+            Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(name, args)) => {
+                let name = name.unwrap();
+
                 // push a new block.  But check to make sure the previous block was closed
                 let scope_id = block.scope_id;
 
-                //let (new_block_id, next_block_id) = self.create_new_block_in_scope(name, scope_id, span_id);
-
-                let new_block_id = self.scopes.resolve_block_id(scope_id, name.into()).unwrap();
+                //let (new_block_id, next_block_id) = self.create_new_block_in_scope(name, scope_id);
+                let maybe_new_block_id = self.create_new_block_in_scope(name, scope_id);
+                let new_block_id = maybe_new_block_id.unwrap();
+                //let new_block_id = self.scopes.resolve_block_id(scope_id, name.into()).unwrap();
 
                 /*
                     let next_block_id = self.blocks.new_block(scope_id);
@@ -2485,7 +2549,7 @@ impl Flatten {
                                 Successor::BlockScope,
                             );
                             let scope = self.scopes.get_scope_mut(scope_id);
-                            scope.block_labels.insert(name.into(), new_block_id);
+                            scope.block_labels.insert(name.into(), nmouth tape for sleepingew_block_id);
                             //println!("creating block: {} in {}", b.labels.r(key.into()), scope_id);
                             */
                             new_block_id
@@ -2539,7 +2603,7 @@ impl Flatten {
                 */
 
                 self.switch_blocks(new_block_id);
-                self.push_start_block(
+                let (link_id, _) = self.push_start_block(
                     new_scope_id,
                     AstType::Func(
                         arg_ty.clone().into(),
@@ -2550,6 +2614,12 @@ impl Flatten {
                     VarDefinitionSpace::Default,
                 );
                 self.switch_blocks(new_block_id);
+                Ok(FlattenResult::link(link_id))
+            }
+
+            Ast::Block(name, args, body) => {
+                let ast: Ast = ControlFlowMarker::BlockStart(Some(name), args).into();
+                self.push_node(ast.node(span_id), b)?;
                 self.push_node(NB::ensure_seq(*body), b)
                 //let _ = self.push_node(NB::ensure_seq(*body), b);
                 //self.switch_blocks(next_block_id);
@@ -2675,45 +2745,6 @@ impl Flatten {
                 );
                 //self.switch_blocks(v_block);
                 Ok(FlattenResult::link(v))
-            }
-
-            Ast::ControlFlowMarker(ControlFlowMarker::BlockEnd) => {
-                unimplemented!();
-            }
-            Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(name, args)) => {
-                unimplemented!();
-                assert!(false);
-                // all blocks should have been forward declared in the sequence
-                let name = name.unwrap();
-                let current_dom_block_id = self
-                    .scopes
-                    .resolve_block_id(block.scope_id, name.into())
-                    .unwrap();
-                assert_eq!(0, args.len());
-                //let next = block.next;
-                let current_dom_block = self.blocks.get_block_mut(current_dom_block_id);
-                //current_dom_block.next = next;
-                let current_scope_id = current_dom_block.scope_id;
-                self.blocks.block_succ(
-                    current_block_id,
-                    current_dom_block_id,
-                    Successor::BlockScope,
-                );
-
-                let arg_ty = AstType::Struct(vec![]);
-                let block_ty = AstType::Func(
-                    arg_ty.clone().into(),
-                    ReturnType::Single(AstType::Unit).into(),
-                );
-                self.switch_blocks(current_dom_block_id);
-                self.push_start_block(
-                    current_scope_id,
-                    block_ty,
-                    Some(name),
-                    span_id,
-                    VarDefinitionSpace::Reg,
-                );
-                Ok(FlattenResult::statement())
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::Goto(label)) => {
