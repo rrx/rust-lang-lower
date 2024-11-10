@@ -2780,6 +2780,18 @@ impl Flatten {
                     new_block_id
                 };
 
+                // start a new block.  If the last block isn't terminated, then we create a new
+                // block and jump to it.
+                // TODO: We can also check if the previous block was empty and compatible, and reuse it.
+                let block = self.blocks.get_block(current_block_id);
+                if let Some(last_link_id) = block.last() {
+                    let entry = self.get_entry(last_link_id);
+                    if entry.code.is_term() {
+                        assert_eq!(args.len(), 0);
+                        self.push_jump(new_block_id, vec![], span_id);
+                    }
+                }
+
                 //let new_block_id = self.scopes.resolve_block_id(scope_id, name.into()).unwrap();
 
                 /*
@@ -3333,12 +3345,18 @@ fn jump_if_needed(ast: AstNode, b: &mut NB) -> AstNode {
     let span_id = ast.span_id;
     let mut reader = SequenceReader::new();
     let mut seq = reader.build(ast.to_vec(), b);
+    //let mut seq = ast.to_vec();
+    /*
     if let Some(first) = seq.first() {
-        if let Ast::Block(key, args, _body) = &first.node {
-            assert_eq!(args.len(), 0);
-            let jump = NB::goto(key.clone()).node(span_id);
-            seq.insert(0, jump);
+        match &first.node {
+            Ast::Block(key, args, _) => {
+                assert_eq!(args.len(), 0);
+                let jump = NB::goto(key.clone()).node(span_id);
+                seq.insert(0, jump);
+            }
+            _ => ()
         }
     }
+    */
     NB::seq(seq, span_id)
 }
