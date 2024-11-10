@@ -238,19 +238,22 @@ impl ScopeGraph {
         None
     }
 
+    pub fn step_up(&self, scope_id: ScopeId) -> Option<ScopeId> {
+        self.neighbors_directed(scope_id.into(), petgraph::Direction::Incoming)
+            .next()
+            .map(|n| (n).into())
+    }
+
     pub fn walk_scopes(&self, scope_id: ScopeId) -> Vec<ScopeId> {
         let mut out = vec![];
         let mut current = scope_id;
         loop {
             out.push(current);
-            let incoming = self
-                .neighbors_directed(current.into(), petgraph::Direction::Incoming)
-                .collect::<Vec<_>>();
-            if incoming.len() == 0 {
+            if let Some(next_scope_id) = self.step_up(current) {
+                current = next_scope_id;
+            } else {
                 break;
             }
-            assert_eq!(1, incoming.len());
-            current = incoming.first().unwrap().clone().into();
         }
         out
     }

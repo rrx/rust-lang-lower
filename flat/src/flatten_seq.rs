@@ -28,6 +28,8 @@ pub fn resolve_attribute(
     b: &mut NB,
 ) -> Result<AstNode> {
     let attr_name = b.labels.r(ident.into());
+    // This is where we should check for comptime functions and resolve them
+    // We are taking a shortcut for now.
     match &attr.node {
         Ast::Identifier(base) => {
             let name = b.labels.r(base.into());

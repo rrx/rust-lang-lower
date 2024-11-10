@@ -247,6 +247,7 @@ pub enum Ast {
     NaryOp(NaryOperation, Vec<AstNode>),
     // func, args, return type
     Call(Box<AstNode>, Vec<Argument>),
+    ComptimeCall(Box<AstNode>, Vec<Argument>),
 
     // array(element type, dimensions), empty dim is the same as scalar
     Array(TypeId, Vec<AstNode>),

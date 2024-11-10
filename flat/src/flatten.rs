@@ -82,8 +82,13 @@ pub struct FlattenResult {
 }
 
 impl FlattenResult {
-    pub fn new(link_id: Option<LinkId>) -> Self {
-        Self { link_id }
+    pub fn link(link_id: LinkId) -> Self {
+        Self {
+            link_id: Some(link_id),
+        }
+    }
+    pub fn statement() -> Self {
+        Self { link_id: None }
     }
 }
 
@@ -489,6 +494,26 @@ impl Flatten {
         self.ast_templates.get(template_id.index()).unwrap()
     }
 
+    /*
+    pub fn push_sequence(&mut self, mut seq: Vec<AstNode>, b: &mut NB) -> Result<FlattenResult> {
+        let block = self.blocks.get_block(self.current_block_id());
+        let seq_next_block_id = block.next;
+        let start_scope_id = block.scope_id;
+        for expr in seq.iter() {
+            let _ = self.push_node(expr, b)?;
+        }
+
+        // close the sequence by closing any open scopes
+        let block = self.blocks.get_block(self.current_block_id());
+        loop {
+            if block.scope_id == start_scope_id {
+                break;
+            }
+        }
+        let _stack = self.scopes.walk_scopes(block.scope_id);
+    }
+    */
+
     pub fn push_sequence(&mut self, mut seq: Vec<AstNode>, b: &mut NB) -> Result<FlattenResult> {
         let block = self.blocks.get_block(self.current_block_id());
         let seq_next_block_id = block.next;
@@ -556,7 +581,10 @@ impl Flatten {
                 break;
             }
         }
-        Ok(FlattenResult::new(out_link_id))
+        let current_block_id = self.current_block_id();
+        let block = self.blocks.get_block(current_block_id);
+        let link_id = block.links.last().unwrap().clone();
+        Ok(FlattenResult::link(link_id))
     }
 
     pub fn push_return(
@@ -1145,7 +1173,7 @@ impl Flatten {
                 self.switch_blocks(next_block_id);
 
                 // block termination
-                return Ok(FlattenResult::new(Some(next_link_id)));
+                return Ok(FlattenResult::link(next_link_id));
             }
         } else {
             let name = b.labels.r(name.into());
@@ -1187,7 +1215,7 @@ impl Flatten {
             VarDefinitionSpace::Default,
         );
 
-        Ok(FlattenResult::new(Some(link_id)))
+        Ok(FlattenResult::link(link_id))
     }
 
     pub fn push_builtin_call(
@@ -1213,7 +1241,7 @@ impl Flatten {
             VarDefinitionSpace::Default,
         );
         self.switch_blocks(current_block_id);
-        Ok(FlattenResult::new(Some(link_id)))
+        Ok(FlattenResult::link(link_id))
     }
 
     fn push_empty_label(&mut self, span_id: SpanId) -> LinkId {
@@ -1474,7 +1502,7 @@ impl Flatten {
 
         // restore position back to where we started
         self.switch_blocks(current_block_id);
-        Ok((variant_id, FlattenResult::new(Some(entry_link_id))))
+        Ok((variant_id, FlattenResult::link(entry_link_id)))
     }
 
     fn push_bake_lambda(
@@ -1910,9 +1938,9 @@ impl Flatten {
                         }
 
                         if let Some(_body) = &def.body {
-                            Ok(FlattenResult::new(None))
+                            Ok(FlattenResult::statement())
                         } else {
-                            Ok(FlattenResult::new(None))
+                            Ok(FlattenResult::statement())
                         }
                     }
 
@@ -1946,7 +1974,7 @@ impl Flatten {
                         self.scopes.scope_define(scope_id, name, link_id.into());
 
                         self.switch_blocks(current_block_id);
-                        Ok(FlattenResult::new(Some(link_id)))
+                        Ok(FlattenResult::link(link_id))
                     }
                     _ => {
                         unreachable!("{:?}", ast)
@@ -1966,7 +1994,7 @@ impl Flatten {
                             b.push_error("Expected string", span_id);
                         }
                         self.switch_blocks(current_block_id);
-                        Ok(FlattenResult::new(None))
+                        Ok(FlattenResult::statement())
                     }
                     _ => {
                         let args_size = args.len();
@@ -2018,7 +2046,7 @@ impl Flatten {
                 //self.switch_blocks(current_block_id);
                 self.push_jump(scope.return_block.unwrap().into(), jump_args, span_id);
                 //self.switch_blocks(current_block_id);
-                Ok(FlattenResult::new(None))
+                Ok(FlattenResult::statement())
             }
 
             Ast::Literal(lit) => {
@@ -2032,7 +2060,7 @@ impl Flatten {
                 let mem = VarDefinitionSpace::Default;
 
                 let link_id = self.push_code(LCode::Val(lit), ty.clone(), None, node.span_id, mem);
-                Ok(FlattenResult::new(Some(link_id)))
+                Ok(FlattenResult::link(link_id))
             }
 
             Ast::BinaryOp(op, x, y) => {
@@ -2072,14 +2100,14 @@ impl Flatten {
                 );
 
                 //self.switch_blocks(current_block_id);
-                Ok(FlattenResult::new(Some(link_id)))
+                Ok(FlattenResult::link(link_id))
             }
 
             Ast::Identifier(key) => {
                 // identifier is expression, non-terminal
                 if let Some(def_link_id) = self.resolve_name(current_block_id, key) {
                     let link_id = def_link_id;
-                    Ok(FlattenResult::new(Some(link_id)))
+                    Ok(FlattenResult::link(link_id))
                 } else {
                     let s = b.labels.r(key.into());
                     b.push_error(&format!("ident: not found: {}", s), span_id);
@@ -2119,7 +2147,7 @@ impl Flatten {
 
                     self.save_ast_template(current_block_id, &name, &def, expr.span_id)?;
                     self.switch_blocks(current_block_id);
-                    return Ok(FlattenResult::new(None));
+                    return Ok(FlattenResult::statement());
                 }
 
                 self.switch_blocks(current_block_id);
@@ -2175,7 +2203,7 @@ impl Flatten {
                     VarDefinitionSpace::Default,
                 );
                 //self.switch_blocks(current_block_id);
-                Ok(FlattenResult::new(Some(link_id)))
+                Ok(FlattenResult::link(link_id))
             }
 
             Ast::Import(module_key, args) => {
@@ -2220,7 +2248,7 @@ impl Flatten {
                 } else {
                     unimplemented!("module {}", module_name)
                 }
-                Ok(FlattenResult::new(None))
+                Ok(FlattenResult::statement())
             }
 
             Ast::Call(expr, args) => {
@@ -2254,7 +2282,7 @@ impl Flatten {
                     VarDefinitionSpace::Reg,
                 );
                 //self.switch_blocks(current_block_id);
-                Ok(FlattenResult::new(Some(link_id)))
+                Ok(FlattenResult::link(link_id))
             }
 
             Ast::Conditional(condition, then_expr, maybe_else_expr) => {
@@ -2360,7 +2388,7 @@ impl Flatten {
                     VarDefinitionSpace::Reg,
                 );
                 self.switch_blocks(v_next);
-                Ok(FlattenResult::new(Some(v)))
+                Ok(FlattenResult::link(v))
             }
 
             Ast::Block(name, args, body) => {
@@ -2421,9 +2449,7 @@ impl Flatten {
                     VarDefinitionSpace::Default,
                 );
                 self.switch_blocks(new_block_id);
-                let r = self.push_node(NB::ensure_seq(*body), b)?;
-
-                Ok(FlattenResult::new(r.link_id))
+                self.push_node(NB::ensure_seq(*body), b)
             }
 
             Ast::Ternary(c, x, y) => {
@@ -2517,7 +2543,7 @@ impl Flatten {
                     VarDefinitionSpace::Reg,
                 );
                 //self.switch_blocks(rc.block_id);
-                Ok(FlattenResult::new(Some(v)))
+                Ok(FlattenResult::link(v))
             }
 
             Ast::Yield(maybe_expr) => {
@@ -2544,7 +2570,7 @@ impl Flatten {
                     VarDefinitionSpace::Reg,
                 );
                 //self.switch_blocks(v_block);
-                Ok(FlattenResult::new(Some(v)))
+                Ok(FlattenResult::link(v))
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::BlockEnd) => {
@@ -2583,7 +2609,7 @@ impl Flatten {
                     span_id,
                     VarDefinitionSpace::Reg,
                 );
-                Ok(FlattenResult::new(None))
+                Ok(FlattenResult::statement())
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::Goto(label)) => {
@@ -2594,7 +2620,7 @@ impl Flatten {
                     self.switch_blocks(current_block_id);
                     let link_id = self.push_jump(target_block_id.into(), vec![], node.span_id);
                     self.switch_blocks(current_block_id);
-                    Ok(FlattenResult::new(Some(link_id)))
+                    Ok(FlattenResult::link(link_id))
                 } else {
                     b.push_error(
                         &format!("Block name not found: {}", b.labels.r(label.into())),
@@ -2658,7 +2684,7 @@ impl Flatten {
                 self.switch_blocks(current_block_id);
                 self.maybe_terminate_block(v_next, span_id);
                 self.switch_blocks(v_next);
-                Ok(FlattenResult::new(None))
+                Ok(FlattenResult::statement())
             }
 
             Ast::Continue(maybe_name, args) => {
@@ -2673,7 +2699,7 @@ impl Flatten {
                     let link_id =
                         self.push_jump(loop_scope.start_block.into(), vec![], node.span_id);
                     self.switch_blocks(current_block_id);
-                    Ok(FlattenResult::new(Some(link_id)))
+                    Ok(FlattenResult::link(link_id))
                 } else {
                     // mismatch name
                     b.push_error(&format!("Continue without loop"), node.span_id);
@@ -2693,7 +2719,7 @@ impl Flatten {
                     let link_id =
                         self.push_jump(loop_scope.next_block.into(), vec![], node.span_id);
                     self.switch_blocks(current_block_id);
-                    Ok(FlattenResult::new(Some(link_id)))
+                    Ok(FlattenResult::link(link_id))
                 } else {
                     // mismatch name
                     b.push_error(&format!("Break without loop"), node.span_id);
@@ -2717,17 +2743,17 @@ impl Flatten {
                         node.span_id,
                     );
                     self.switch_blocks(current_block_id);
-                    return Ok(FlattenResult::new(None));
+                    return Ok(FlattenResult::statement());
                 }
 
                 if let Some(next) = block.next {
                     self.switch_blocks(current_block_id);
                     let link_id = self.push_jump(next.into(), vec![], node.span_id);
                     self.switch_blocks(current_block_id);
-                    Ok(FlattenResult::new(Some(link_id)))
+                    Ok(FlattenResult::link(link_id))
                 } else {
                     self.switch_blocks(current_block_id);
-                    Ok(FlattenResult::new(None))
+                    Ok(FlattenResult::statement())
                 }
             }
 
@@ -2771,7 +2797,7 @@ impl Flatten {
                     VarDefinitionSpace::Default,
                 );
 
-                Ok(FlattenResult::new(Some(link_id)))
+                Ok(FlattenResult::link(link_id))
             }
 
             Ast::Index(node, index) => {
@@ -2802,7 +2828,7 @@ impl Flatten {
                     VarDefinitionSpace::Default,
                 );
 
-                Ok(FlattenResult::new(Some(link_id)))
+                Ok(FlattenResult::link(link_id))
             }
 
             Ast::Error => {
