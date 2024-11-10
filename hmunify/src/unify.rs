@@ -202,7 +202,7 @@ impl TypeUnify {
 
     pub fn unify(&mut self, a: &AstType, b: &AstType) -> Result<(), UError> {
         let r = self._unify(a, b);
-        println!("Unify: {} <=> {}, {:?}", a, b, r);
+        //println!("Unify: {} <=> {}, {:?}", a, b, r);
         r
     }
 

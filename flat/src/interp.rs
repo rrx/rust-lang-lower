@@ -629,12 +629,10 @@ pub fn interp<'c>(
     }
 
     let mut result: i32 = -1;
-    println!(
-        "exec: {:?}, {:?}, {}",
-        interp.call_args, interp.stack, result
-    );
+    println!("exec: {:?}, {:?}", interp.call_args, interp.stack);
     if let Some(Value::Int(value)) = interp.call_args.get(0) {
         result = *value as i32;
     }
+    println!("main({:?}) => {:?}", interp.call_args, result);
     result
 }

@@ -193,7 +193,7 @@ impl Flatten {
         let block = self.blocks.get_block(block_id);
         for scope_id in self.scopes.walk_scopes(block.scope_id) {
             let scope = self.scopes.get_scope(scope_id);
-            println!("resolve: {}, {}", scope_id, scope.entries.len());
+            //println!("resolve: {}, {}", scope_id, scope.entries.len());
             if let Some(e) = scope.entries.get(name) {
                 for (index, v) in e.variants.iter().enumerate() {
                     let variant_id = VariantId(index as u32);
@@ -519,10 +519,10 @@ impl Flatten {
         //let seq_next_block_id = block.next;
         let scope_id = block.scope_id;
 
-        let mut r = SequenceReader::new();
+        //let mut r = SequenceReader::new();
 
         // build the sequence
-        let mut seq = r.build(seq.clone(), b);
+        //let mut seq = r.build(seq.clone(), b);
 
         // ensure the block is created, so we have something to jump to if we need to jump to later
         // block
@@ -1040,7 +1040,7 @@ impl Flatten {
             def_arg_ty.clone().into(),
             ReturnType::Single(ret_ty.clone()).into(),
         );
-        println!("bake_static: call: {}, def: {}", &call_ty, &def_func_type);
+        //println!("bake_static: call: {}, def: {}", &call_ty, &def_func_type);
 
         // construct call function type
         // function type, based on the caller
@@ -1050,10 +1050,10 @@ impl Flatten {
         );
 
         // match call type with function type
-        println!(
-            "call_func: {}, def_func: {}",
-            &call_func_type, def_func_type
-        );
+        //println!(
+        //"call_func: {}, def_func: {}",
+        //&call_func_type, def_func_type
+        //);
         if b.types.u.unify(&call_func_type, &def_func_type).is_err() {
             let ty1 = b.types.u.resolve(&call_func_type).unwrap();
             let ty2 = b.types.u.resolve(&def_func_type).unwrap();
@@ -1067,7 +1067,7 @@ impl Flatten {
         }
 
         // if it's defined in static scope, just call it
-        println!("[{},{}] RX:  {}", s, s_global, &call_func_type);
+        //println!("[{},{}] RX:  {}", s, s_global, &call_func_type);
         let (_variant_id, v_entry) = if let Some((variant_id, r_ty, v_entry)) =
             self.resolve_function_name(current_block_id, &name, &call_func_type, b)
         {
@@ -1151,10 +1151,10 @@ impl Flatten {
                 let (fun_link_id, bake_ty, ret_ty) = r;
 
                 self.switch_blocks(current_block_id);
-                println!(
-                    "call: call_ty: {}, bake_ty:{}, ret_ty: {}",
-                    call_ty, bake_ty, ret_ty
-                );
+                //println!(
+                //"call: call_ty: {}, bake_ty:{}, ret_ty: {}",
+                //call_ty, bake_ty, ret_ty
+                //);
                 self.push_function_call(fun_link_id, call_values, ret_ty, span_id)
             } else {
                 self.switch_blocks(current_block_id);
@@ -1345,8 +1345,8 @@ impl Flatten {
         b: &mut NB,
     ) -> Result<(VariantId, FlattenResult)> {
         let current_block_id = self.current_block_id();
-        let block = self.blocks.get_block(current_block_id);
-        println!("bake_function: {:?}", (block.scope_id, current_block_id));
+        //let block = self.blocks.get_block(current_block_id);
+        //println!("bake_function: {:?}", (block.scope_id, current_block_id));
 
         //let func_ret_ty = b.types.r(def.return_type).clone();
         //let fun_ty = def_to_type(&def, b);
@@ -2519,7 +2519,22 @@ impl Flatten {
 
                 //let (new_block_id, next_block_id) = self.create_new_block_in_scope(name, scope_id);
                 let maybe_new_block_id = self.create_new_block_in_scope(name, scope_id);
-                let new_block_id = maybe_new_block_id.unwrap();
+                let new_block_id = if let Some(new_block_id) = maybe_new_block_id {
+                    new_block_id
+                } else {
+                    assert_eq!(0, args.len());
+                    let new_block_id = self.blocks.new_block(scope_id);
+                    self.blocks.block_succ(
+                        self.current_block_id(),
+                        new_block_id,
+                        Successor::BlockScope,
+                    );
+                    let scope = self.scopes.get_scope_mut(scope_id);
+                    scope.block_labels.insert(name.into(), new_block_id);
+                    //println!("creating block: {} in {}", b.labels.r(key.into()), scope_id);
+                    new_block_id
+                };
+
                 //let new_block_id = self.scopes.resolve_block_id(scope_id, name.into()).unwrap();
 
                 /*
