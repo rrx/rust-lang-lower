@@ -517,7 +517,7 @@ impl Flatten {
     pub fn push_sequence(&mut self, mut seq: Vec<AstNode>, b: &mut NB) -> Result<FlattenResult> {
         let block = self.blocks.get_block(self.current_block_id());
         let start_stack = self.scopes.walk_scopes(block.scope_id);
-        let seq_next_block_id = block.next;
+        //let seq_next_block_id = block.next;
         let scope_id = block.scope_id;
 
         let mut r = SequenceReader::new();
@@ -533,8 +533,8 @@ impl Flatten {
                     if self.scopes.resolve_block_id(scope_id, key.into()).is_none() {
                         assert_eq!(0, args.len());
                         let new_block_id = self.blocks.new_block(scope_id);
-                        let new_block = self.blocks.get_block_mut(new_block_id);
-                        new_block.next = seq_next_block_id;
+                        //let new_block = self.blocks.get_block_mut(new_block_id);
+                        //new_block.next = seq_next_block_id;
                         self.blocks.block_succ(
                             self.current_block_id(),
                             new_block_id,
@@ -550,7 +550,7 @@ impl Flatten {
         }
 
         let mut d = seq.drain(..);
-        let mut out_link_id = None;
+        //let mut out_link_id = None;
         loop {
             if let Some(expr) = d.next() {
                 let span_id = expr.span_id;
@@ -562,7 +562,7 @@ impl Flatten {
                 let current_block_id = self.current_block_id();
                 let block = self.blocks.get_block(current_block_id);
                 let link_id = block.links.last().unwrap().clone();
-                out_link_id = Some(link_id);
+                //out_link_id = Some(link_id);
                 let entry = self.get_entry(link_id);
                 if entry.code.is_term() {
                     let next_block_id = self.blocks.new_block(scope_id);
@@ -1376,8 +1376,8 @@ impl Flatten {
         fun_scope.return_block = Some(ret_block_id);
 
         // next in scope
-        let fun_block = self.blocks.get_block_mut(fun_block_id);
-        fun_block.next = Some(ret_block_id);
+        //let fun_block = self.blocks.get_block_mut(fun_block_id);
+        //fun_block.next = Some(ret_block_id);
 
         // block graph
         self.blocks
@@ -1592,21 +1592,21 @@ impl Flatten {
         let body = jump_if_needed(*def.body.unwrap(), b);
 
         // get the next block
-        let block = self.blocks.get_block(current_block_id);
-        let next = block.next;
+        //let block = self.blocks.get_block(current_block_id);
+        //let next = block.next;
 
         // set next for lambda block, which is the new continuation we just
         // created
-        let next_block = self.blocks.get_block_mut(fun_block_id);
-        next_block.next(next_block_id);
+        //let next_block = self.blocks.get_block_mut(fun_block_id);
+        //next_block.next(next_block_id);
 
         let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
         fun_scope.return_block = Some(next_block_id);
 
         // set next for the continuation block, which should be next of the
         // containing block
-        let next_block = self.blocks.get_block_mut(next_block_id);
-        next_block.next = next;
+        //let next_block = self.blocks.get_block_mut(next_block_id);
+        //next_block.next = next;
 
         // setup arguments for continuation block with appropriate parameters
         // matching the return type of the lambda block
@@ -1915,8 +1915,8 @@ impl Flatten {
                 } else {
                     //assert_eq!(0, args.len());
                     let new_block_id = self.blocks.new_block(scope_id);
-                    let new_block = self.blocks.get_block_mut(new_block_id);
-                    new_block.next = Some(next_block_id);
+                    //let new_block = self.blocks.get_block_mut(new_block_id);
+                    //new_block.next = Some(next_block_id);
                     self.blocks
                         .block_succ(current_block_id, new_block_id, Successor::BlockScope);
                     let scope = self.scopes.get_scope_mut(scope_id);
@@ -2375,8 +2375,8 @@ impl Flatten {
                     .block_succ(current_block_id, then_block_id, Successor::BlockScope);
                 self.blocks
                     .block_succ(current_block_id, then_block_id, Successor::Jump);
-                let block = self.blocks.get_block_mut(then_block_id);
-                block.next(v_next);
+                //let block = self.blocks.get_block_mut(then_block_id);
+                //block.next(v_next);
 
                 let branch_block_type = AstType::Func(
                     AstType::Struct(vec![]).into(),
@@ -2405,8 +2405,8 @@ impl Flatten {
                         .block_succ(current_block_id, else_block_id, Successor::BlockScope);
                     self.blocks
                         .block_succ(current_block_id, else_block_id, Successor::Jump);
-                    let block = self.blocks.get_block_mut(else_block_id);
-                    block.next = Some(v_next);
+                    //let block = self.blocks.get_block_mut(else_block_id);
+                    //block.next = Some(v_next);
 
                     let name = b.labels.fresh_key("else");
 
@@ -2690,9 +2690,9 @@ impl Flatten {
                     .resolve_block_id(block.scope_id, name.into())
                     .unwrap();
                 assert_eq!(0, args.len());
-                let next = block.next;
+                //let next = block.next;
                 let current_dom_block = self.blocks.get_block_mut(current_dom_block_id);
-                current_dom_block.next = next;
+                //current_dom_block.next = next;
                 let current_scope_id = current_dom_block.scope_id;
                 self.blocks.block_succ(
                     current_block_id,
@@ -2770,8 +2770,8 @@ impl Flatten {
                     loop_block_id.into(),
                 );
 
-                let loop_block = self.blocks.get_block_mut(loop_block_id);
-                loop_block.next = Some(loop_block_id);
+                //let loop_block = self.blocks.get_block_mut(loop_block_id);
+                //loop_block.next = Some(loop_block_id);
 
                 self.switch_blocks(loop_block_id);
                 self.push_start_block(
@@ -2910,15 +2910,17 @@ impl Flatten {
                     return Ok(FlattenResult::statement());
                 }
 
+                /*
                 if let Some(next) = block.next {
                     self.switch_blocks(current_block_id);
                     let link_id = self.push_jump(next.into(), vec![], node.span_id);
                     self.switch_blocks(current_block_id);
                     Ok(FlattenResult::link(link_id))
                 } else {
-                    self.switch_blocks(current_block_id);
-                    Ok(FlattenResult::statement())
-                }
+                */
+                self.switch_blocks(current_block_id);
+                Ok(FlattenResult::statement())
+                //}
             }
 
             Ast::Array(_type_id, dims) => {

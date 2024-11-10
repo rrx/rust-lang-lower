@@ -23,7 +23,7 @@ pub struct IRBlock {
     pub(super) dead: bool,
     pub(super) num_ret_args: HashSet<usize>,
     pub(super) ret_types: HashSet<AstType>,
-    pub(super) next: Option<BlockId>,
+    //pub(super) next: Option<BlockId>,
     pub(super) links: Vec<LinkId>,
 }
 
@@ -34,15 +34,15 @@ impl IRBlock {
             dead: false,
             //ast,
             links: vec![],
-            next: None,
+            //next: None,
             num_ret_args: HashSet::new(),
             ret_types: HashSet::new(),
         }
     }
 
-    pub fn next(&mut self, next_block_id: BlockId) {
-        self.next = Some(next_block_id);
-    }
+    //pub fn next(&mut self, next_block_id: BlockId) {
+    //self.next = Some(next_block_id);
+    //}
 
     pub fn push(&mut self, link_id: LinkId) {
         self.links.push(link_id);
