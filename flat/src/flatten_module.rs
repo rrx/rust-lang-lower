@@ -1,6 +1,6 @@
 use compile_core::{AstType, LinkOptions, Literal, Span, SpanId, StringKey, VarDefinitionSpace};
-use petgraph::visit::EdgeRef;
-use std::collections::{HashMap, HashSet};
+//use petgraph::visit::EdgeRef;
+use std::collections::HashMap;
 
 use std::convert::Into;
 
@@ -194,29 +194,12 @@ impl FlattenModule {
         // nodes show up last, such as the return block
         // This seems to create a nice ordering.
 
-        let mut dfs = petgraph::visit::Dfs::new(&flatten.blocks.0, BlockId(0).into());
         let mut blocks = vec![BlockId(0).into()];
 
-        let mut function_entries = vec![];
-        let mut template_entries = vec![];
-        while let Some(visited) = dfs.next(&flatten.blocks.0) {
-            for edge in flatten.blocks.0.edges(visited) {
-                match *edge.weight() {
-                    Successor::FunctionDeclaration => {
-                        function_entries.push(edge.target());
-                    }
-                    Successor::TemplateDeclaration => {
-                        template_entries.push(edge.target());
-                    }
-                    _ => (), //_ => unreachable!("{:?}", edge.weight())
-                }
-            }
-        }
-
         let mut value_count = 0;
-        for index in function_entries.iter().chain(template_entries.iter()) {
+        for block_id in flatten.blocks.graph_get_entries() {
             let mut seq = vec![];
-            let mut dfs = petgraph::visit::DfsPostOrder::new(&flatten.blocks.0, *index);
+            let mut dfs = petgraph::visit::DfsPostOrder::new(&flatten.blocks.0, block_id.into());
             while let Some(index) = dfs.next(&flatten.blocks.0) {
                 seq.push(index);
             }
@@ -246,20 +229,11 @@ impl FlattenModule {
 
         let mut m = FlattenModule::new();
         m.link = flatten.link.clone();
-        for index in function_entries.iter() {
-            let block_id = (*index).into();
+        for block_id in flatten.blocks.graph_get_entries() {
             let block = flatten.blocks.get_block(block_id);
             let label_link_id = block.links.first().unwrap();
             let entry = flatten.get_entry(*label_link_id).clone();
             let ty = flatten.get_type(*label_link_id).clone();
-            /*
-            let name = entry
-                .name
-                .map(|key| b.labels.r(key.into()))
-                .unwrap_or("".to_string());
-            println!("X: {:?}", entry);
-            println!("X: {}, {}", name, &ty);
-            */
             assert_eq!(entry.mem, VarDefinitionSpace::Static);
 
             if let Some(key) = entry.name {

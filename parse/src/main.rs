@@ -105,6 +105,8 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
     */
     f.push_bake_main(b)?;
 
+    f.finish(b)?;
+
     //f.dump_blocks();
     //f.dump_scope(fenv.static_block_id(), &fenv, &b);
     let pre_graph_path = make_path(&output_filename, "pre.dot");

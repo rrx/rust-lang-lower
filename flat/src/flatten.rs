@@ -604,6 +604,20 @@ impl Flatten {
     }
 
     */
+
+    pub fn finish(&mut self, b: &mut NB) -> Result<()> {
+        let dead_blocks = self.blocks.find_dead_blocks_from_graph();
+        for block_id in dead_blocks {
+            let link_id = self.block_links.get(&block_id).unwrap().clone();
+            //let v = self.get_entry_id_from_block_id(block_id);
+            let entry = self.get_entry(link_id);
+            //let span_id = self.get_span_id(v);
+            b.push_warning(&format!("Dead Block: {}", block_id), entry.span_id);
+        }
+        self.type_inference_enforce(b);
+        Ok(())
+    }
+
     pub fn push_bake_main(&mut self, b: &mut NB) -> Result<LinkId> {
         let current_block_id = self.current_block_id();
         let name = b.labels.s("main");
@@ -614,15 +628,6 @@ impl Flatten {
         let r = self.push_bake(name, ty, b);
         // switch back after bake
         self.switch_blocks(current_block_id);
-        let dead_blocks = self.blocks.find_dead_blocks_from_graph();
-        for block_id in dead_blocks {
-            let link_id = self.block_links.get(&block_id).unwrap().clone();
-            //let v = self.get_entry_id_from_block_id(block_id);
-            let entry = self.get_entry(link_id);
-            //let span_id = self.get_span_id(v);
-            b.push_warning(&format!("Dead Block: {}", block_id), entry.span_id);
-        }
-        self.type_inference_enforce(b);
         r
     }
 
