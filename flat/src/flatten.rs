@@ -750,36 +750,11 @@ impl Flatten {
         self.ast_templates.get(template_id.index()).unwrap()
     }
 
-    /*
-    pub fn push_sequence(&mut self, mut seq: Vec<AstNode>, b: &mut NB) -> Result<FlattenResult> {
-        let block = self.blocks.get_block(self.current_block_id());
-        let seq_next_block_id = block.next;
-        let start_scope_id = block.scope_id;
-        for expr in seq.iter() {
-            let _ = self.push_node(expr, b)?;
-        }
-
-        // close the sequence by closing any open scopes
-        let block = self.blocks.get_block(self.current_block_id());
-        loop {
-            if block.scope_id == start_scope_id {
-                break;
-            }
-        }
-        let _stack = self.scopes.walk_scopes(block.scope_id);
-    }
-    */
-
     pub fn push_sequence(&mut self, mut seq: Vec<AstNode>, b: &mut NB) -> Result<FlattenResult> {
         let block = self.blocks.get_block(self.current_block_id());
         let start_stack = self.scopes.walk_scopes(block.scope_id);
         //let seq_next_block_id = block.next;
         let scope_id = block.scope_id;
-
-        //let mut r = SequenceReader::new();
-
-        // build the sequence
-        //let mut seq = r.build(seq.clone(), b);
 
         // ensure the block is created, so we have something to jump to if we need to jump to later
         // block
@@ -3314,6 +3289,9 @@ impl Flatten {
             }
 
             Ast::Attribute(ident, attr) => {
+                // <ident>.<attr>
+                // currently all attributes can be resolved this way, and they
+                // resolve to an ast node, which we can then lower.
                 let node = attr;
                 let ast = resolve_attribute(ident, &node, span_id, vec![], b)?;
                 self.push_node(ast, b)
