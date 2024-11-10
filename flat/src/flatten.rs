@@ -812,6 +812,8 @@ impl Flatten {
                 // handle expr
                 let _ = self.push_node(expr, b)?;
 
+                // we check if we encounter a terminal.  If we do, then we start another block
+                // This should be moved somewhere else.  Though it is specific to a sequence.
                 let current_block_id = self.current_block_id();
                 let block = self.blocks.get_block(current_block_id);
                 let link_id = block.links.last().unwrap().clone();
@@ -835,16 +837,26 @@ impl Flatten {
                 break;
             }
         }
+
+        // ensure that we close any blocks that were opened
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
-        let end_stack = self.scopes.walk_scopes(block.scope_id);
-        assert_eq!(end_stack.len(), start_stack.len());
-        let link_id = block.links.last().unwrap().clone();
+        let mut end_stack = self.scopes.walk_scopes(block.scope_id);
+        // throwing an error for now, but we will want to handle these properly.
+        loop {
+            if end_stack.len() == start_stack.len() {
+                break;
+            }
+            let el = end_stack.pop().unwrap();
+            unimplemented!("unhandled stack close: {:?}", el);
+        }
 
         // ensure we have no unclaimed labels.
+        // throw an error if we do
         let scope = self.scopes.get_scope(block.scope_id);
         assert_eq!(scope.unclaimed_labels.len(), 0);
 
+        let link_id = block.links.last().unwrap().clone();
         Ok(FlattenResult::link(link_id))
     }
 
