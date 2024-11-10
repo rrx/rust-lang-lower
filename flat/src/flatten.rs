@@ -1653,7 +1653,7 @@ impl Flatten {
         self.scopes
             .scope_define(self.static_scope_id(), global_name, entry_link_id);
 
-        let body = jump_if_needed(*body, b);
+        let body = make_sequence(*body, b);
 
         self.switch_blocks(fun_block_id);
         let _ = self.push_node(body, b)?;
@@ -1833,7 +1833,7 @@ impl Flatten {
             .block_succ(current_block_id, next_block_id, Successor::BlockScope);
 
         // Lambda Body
-        let body = jump_if_needed(*def.body.unwrap(), b);
+        let body = make_sequence(*def.body.unwrap(), b);
 
         // get the next block
         //let block = self.blocks.get_block(current_block_id);
@@ -3341,22 +3341,9 @@ fn def_to_type(def: &Lambda, b: &mut NB) -> AstType {
     fun_ty
 }
 
-fn jump_if_needed(ast: AstNode, b: &mut NB) -> AstNode {
+fn make_sequence(ast: AstNode, b: &mut NB) -> AstNode {
     let span_id = ast.span_id;
     let mut reader = SequenceReader::new();
-    let mut seq = reader.build(ast.to_vec(), b);
-    //let mut seq = ast.to_vec();
-    /*
-    if let Some(first) = seq.first() {
-        match &first.node {
-            Ast::Block(key, args, _) => {
-                assert_eq!(args.len(), 0);
-                let jump = NB::goto(key.clone()).node(span_id);
-                seq.insert(0, jump);
-            }
-            _ => ()
-        }
-    }
-    */
+    let seq = reader.build(ast.to_vec(), b);
     NB::seq(seq, span_id)
 }
