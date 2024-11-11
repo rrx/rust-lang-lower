@@ -745,20 +745,9 @@ impl Flatten {
         for expr in seq {
             let _ = self.push_node(expr, b)?;
         }
-        /*
-        let mut d = seq.drain(..);
-        loop {
-            if let Some(expr) = d.next() {
-                let _ = self.push_node(expr, b)?;
-            } else {
-                break;
-            }
-        }
-        */
 
         // ensure that we close any blocks that were opened
         let current_block_id = self.current_block_id();
-        // throwing an error for now, but we will want to handle these properly.
         let block = self.blocks.get_block(current_block_id);
         let scope_id = block.scope_id;
         let end_stack = self.scopes.walk_scopes(scope_id);
@@ -1396,7 +1385,6 @@ impl Flatten {
         ret_ty: AstType,
         span_id: SpanId,
     ) -> Result<FlattenResult> {
-        //let current_block_id = self.block_id;
         // Add links
         self.push_call_values(&values);
 
@@ -1535,11 +1523,6 @@ impl Flatten {
         b: &mut NB,
     ) -> Result<(VariantId, FlattenResult)> {
         let current_block_id = self.current_block_id();
-        //let block = self.blocks.get_block(current_block_id);
-        //println!("bake_function: {:?}", (block.scope_id, current_block_id));
-
-        //let func_ret_ty = b.types.r(def.return_type).clone();
-        //let fun_ty = def_to_type(&def, b);
 
         let func_ret_ty = if let AstType::Func(_arg, ret) = def_func_ty.clone() {
             if let ReturnType::Single(ret) = *ret {
@@ -1557,16 +1540,11 @@ impl Flatten {
         let (fun_block_id, fun_scope_id) =
             self.new_scope_and_block(scope_type, self.static_scope_id());
         // create function block and return block
-        //self.switch_blocks(fun_block_id);
         let ret_block_id = self.blocks.new_block(fun_scope_id);
 
         // return in scope
         let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
         fun_scope.return_block = Some(ret_block_id);
-
-        // next in scope
-        //let fun_block = self.blocks.get_block_mut(fun_block_id);
-        //fun_block.next = Some(ret_block_id);
 
         // block graph
         self.blocks
@@ -1659,7 +1637,6 @@ impl Flatten {
             AstType::Struct(vec![(None, single_ty.clone())])
         };
 
-        //println!("resolving: {}", &ret_arg_type);
         let resolved_ret_ty = if self.mode == FlattenMode::Template || true {
             ret_arg_type.clone()
         } else if let Some(ty) = b.types.u.resolve(&ret_arg_type) {
@@ -1688,10 +1665,6 @@ impl Flatten {
             );
         }
 
-        //println!(
-        //"R: {:?}",
-        //(&resolved_ret_ty, &ret_arg_type, &func_ret_ty, &single_ty)
-        //);
         self.switch_blocks(ret_block_id);
         self.push_return_block_start(fun_scope_id, resolved_ret_ty.clone(), span_id, b);
 
@@ -1763,7 +1736,6 @@ impl Flatten {
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
         let scope_id = block.scope_id;
-        //let ret_ty = b.types.r(def.return_type).clone();
 
         // New Lambda Scope
         let (fun_block_id, fun_scope_id) = self.new_scope_and_block(ScopeType::Function, scope_id);
@@ -1778,22 +1750,8 @@ impl Flatten {
         // Lambda Body
         let body = *def.body.unwrap();
 
-        // get the next block
-        //let block = self.blocks.get_block(current_block_id);
-        //let next = block.next;
-
-        // set next for lambda block, which is the new continuation we just
-        // created
-        //let next_block = self.blocks.get_block_mut(fun_block_id);
-        //next_block.next(next_block_id);
-
         let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
         fun_scope.return_block = Some(next_block_id);
-
-        // set next for the continuation block, which should be next of the
-        // containing block
-        //let next_block = self.blocks.get_block_mut(next_block_id);
-        //next_block.next = next;
 
         // setup arguments for continuation block with appropriate parameters
         // matching the return type of the lambda block
@@ -1981,11 +1939,6 @@ impl Flatten {
         self.scopes
             .scope_define_template(scope_id, name, decl_link_id);
 
-        //println!(
-        //"bake: {:?}",
-        //(scope_id, current_block_id, b.labels.r(name.into()))
-        //);
-
         let result = self.push_bake_function(
             def.clone(),
             fun_ty,
@@ -2083,12 +2036,12 @@ impl Flatten {
         }
     }
 
-    pub fn create_new_block_in_scope(
+    /*
+    pub fn find_block_in_scope(
         &mut self,
         name: StringKey,
         scope_id: ScopeId,
     ) -> Option<BlockId> {
-        //let current_block_id = self.current_block_id();
         let new_block_id =
             if let Some(block_id) = self.scopes.resolve_block_id(scope_id, name.into()) {
                 println!("create new resolved: {}", block_id);
@@ -2113,57 +2066,60 @@ impl Flatten {
 
         new_block_id
     }
+    */
 
-    pub fn create_new_block_in_scope2(
-        &mut self,
-        name: StringKey,
-        scope_id: ScopeId,
-        //span_id: SpanId,
-    ) -> (BlockId, BlockId) {
-        let current_block_id = self.current_block_id();
-        let next_block_id = self.blocks.new_block(scope_id);
-        let new_block_id =
-            if let Some(block_id) = self.scopes.resolve_block_id(scope_id, name.into()) {
-                block_id
-            } else {
-                let scope = self.scopes.get_scope_mut(scope_id);
-                let maybe_unclaimed_block_id = scope.unclaimed_labels.remove(&name);
-                if let Some(block_id) = maybe_unclaimed_block_id {
+    /*
+        pub fn create_new_block_in_scope2(
+            &mut self,
+            name: StringKey,
+            scope_id: ScopeId,
+            //span_id: SpanId,
+        ) -> (BlockId, BlockId) {
+            let current_block_id = self.current_block_id();
+            let next_block_id = self.blocks.new_block(scope_id);
+            let new_block_id =
+                if let Some(block_id) = self.scopes.resolve_block_id(scope_id, name.into()) {
                     block_id
                 } else {
-                    //assert_eq!(0, args.len());
-                    let new_block_id = self.blocks.new_block(scope_id);
-                    //let new_block = self.blocks.get_block_mut(new_block_id);
-                    //new_block.next = Some(next_block_id);
-                    self.blocks
-                        .block_succ(current_block_id, new_block_id, Successor::BlockScope);
                     let scope = self.scopes.get_scope_mut(scope_id);
-                    scope.block_labels.insert(name.into(), new_block_id);
-                    /*
-                    //println!("creating block: {} in {}", b.labels.r(key.into()), scope_id);
-                     */
-                    new_block_id
-                }
-            };
+                    let maybe_unclaimed_block_id = scope.unclaimed_labels.remove(&name);
+                    if let Some(block_id) = maybe_unclaimed_block_id {
+                        block_id
+                    } else {
+                        //assert_eq!(0, args.len());
+                        let new_block_id = self.blocks.new_block(scope_id);
+                        //let new_block = self.blocks.get_block_mut(new_block_id);
+                        //new_block.next = Some(next_block_id);
+                        self.blocks
+                            .block_succ(current_block_id, new_block_id, Successor::BlockScope);
+                        let scope = self.scopes.get_scope_mut(scope_id);
+                        scope.block_labels.insert(name.into(), new_block_id);
+                        /*
+                        //println!("creating block: {} in {}", b.labels.r(key.into()), scope_id);
+                         */
+                        new_block_id
+                    }
+                };
 
-        (new_block_id, next_block_id)
+            (new_block_id, next_block_id)
 
-        /*
-        self.switch_blocks(next_block_id);
-        let (link_id, _) = self.push_start_block(
-            scope_id,
-            AstType::Func(
-                AstType::Struct(vec![]).into(),
-                ReturnType::Single(AstType::Unit).into(),
-            ),
-            //AstType::Unit,
-            Some(name),
-            span_id,
-            VarDefinitionSpace::Default,
-        );
-        Ok(FlattenResult::link(link_id))
-            */
-    }
+            /*
+            self.switch_blocks(next_block_id);
+            let (link_id, _) = self.push_start_block(
+                scope_id,
+                AstType::Func(
+                    AstType::Struct(vec![]).into(),
+                    ReturnType::Single(AstType::Unit).into(),
+                ),
+                //AstType::Unit,
+                Some(name),
+                span_id,
+                VarDefinitionSpace::Default,
+            );
+            Ok(FlattenResult::link(link_id))
+                */
+        }
+    */
 
     pub fn push_node(&mut self, node: AstNode, b: &mut NB) -> Result<FlattenResult> {
         let current_block_id = self.current_block_id();
@@ -2713,7 +2669,7 @@ impl Flatten {
                 let scope_id = block.scope_id;
 
                 //let (new_block_id, next_block_id) = self.create_new_block_in_scope(name, scope_id);
-                let maybe_new_block_id = self.create_new_block_in_scope(name, scope_id);
+                let maybe_new_block_id = self.scopes.resolve_block_id(scope_id, name.into());
                 let new_block_id = if let Some(new_block_id) = maybe_new_block_id {
                     println!("block start existing: {}", new_block_id);
                     new_block_id
@@ -2984,13 +2940,15 @@ impl Flatten {
                 } else {
                     let scope = self.scopes.get_scope_mut(scope_id);
 
-                    if let Some(unclaimed_block_id) = scope.unclaimed_labels.get(&label) {
+                    if let Some(unclaimed_block_id) = scope.unclaimed_labels.get(&label.into()) {
                         println!("block goto existing claim: {}", unclaimed_block_id);
                         // already declared as unclaimed
                         *unclaimed_block_id
                     } else {
                         let unclaimed_block_id = self.blocks.new_block(scope_id);
-                        scope.unclaimed_labels.insert(label, unclaimed_block_id);
+                        scope
+                            .unclaimed_labels
+                            .insert(label.into(), unclaimed_block_id);
                         println!("block goto new claim: {}", unclaimed_block_id);
                         unclaimed_block_id
                     }

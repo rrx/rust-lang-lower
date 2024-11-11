@@ -110,7 +110,7 @@ pub struct ScopeLayer {
     pub scope_type: ScopeType,
     pub lambdas: HashMap<StringLabel, TemplateId>,
     pub templates: HashMap<StringKey, LinkId>,
-    pub unclaimed_labels: HashMap<StringKey, BlockId>,
+    pub unclaimed_labels: HashMap<StringLabel, BlockId>,
 }
 
 impl ScopeLayer {
@@ -297,11 +297,28 @@ impl ScopeGraph {
         None
     }
 
-    pub fn resolve_block_id(&self, start_scope_id: ScopeId, name: StringLabel) -> Option<BlockId> {
+    pub fn resolve_block_id(
+        &mut self,
+        start_scope_id: ScopeId,
+        name: StringLabel,
+    ) -> Option<BlockId> {
+        // the purpose of this function is to find a block with a name in the current scope
+        // We look for blocks already defined in scope, as well as unclaimed ones
+        // Unclaimed blocks are created by jumps that are made before the corresponding block has
+        // been created.  So when we create the block, we check to see if the block has already
+        // been created by the jump.
+        // All unclaimed blocks need to be accounted for or we throw an error.  This means we
+        // jumped to a block that was never defined.
         for scope_id in self.walk_scopes(start_scope_id) {
-            let scope = self.get_scope(scope_id);
+            let scope = self.get_scope_mut(scope_id);
             if let Some(block_id) = scope.block_labels.get(&name) {
                 return Some(*block_id);
+            }
+            let maybe_unclaimed_block_id = scope.unclaimed_labels.remove(&name);
+            if let Some(block_id) = maybe_unclaimed_block_id {
+                return Some(block_id);
+            } else {
+                return None;
             }
         }
         None
