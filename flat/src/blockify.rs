@@ -132,6 +132,20 @@ pub trait ICodeModule {
     fn get_code(&self, value_id: ValueId) -> &LCode;
     fn get_next(&self, value_id: ValueId) -> Option<ValueId>;
     //fn get_prev(&self, value_id: ValueId) -> Option<ValueId>;
+    //
+
+    fn get_links(&self, mut value_id: ValueId) -> Vec<ValueId> {
+        let mut out = vec![];
+        loop {
+            if let Some(v) = self.get_next(value_id) {
+                out.push(v);
+                value_id = v;
+            } else {
+                break;
+            }
+        }
+        out
+    }
 
     fn get_cfg(&self, block_id: BlockId, b: &NodeBuilder) -> CFG {
         let entry_id = self.resolve_code_offset(block_id.into());

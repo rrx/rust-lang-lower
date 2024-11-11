@@ -254,8 +254,25 @@ impl FlattenModule {
         for index in blocks.into_iter() {
             let block_id = index.into();
             let block = flatten.blocks.get_block(block_id);
-            for (index, link_id) in block.links.iter().enumerate() {
-                let mut entry = flatten.get_entry(*link_id).clone();
+            let entry_id = block.entry.unwrap();
+
+            let mut entries = vec![];
+            let mut v = entry_id;
+            loop {
+                let entry = flatten.get_entry(v).clone();
+                let next = entry.next;
+                entries.push(entry);
+                if next == v {
+                    break;
+                } else {
+                    v = next;
+                }
+            }
+
+            //for (index, link_id) in block.links.iter().enumerate() {
+            //let mut entry = flatten.get_entry(*link_id).clone();
+            let mut index = 0;
+            for mut entry in entries.into_iter() {
                 if let Some(ty) = b.types.u.resolve(&entry.ty) {
                     entry.ty = ty;
                 }
@@ -292,6 +309,7 @@ impl FlattenModule {
                     ModuleEntry::from_code_entry(v, next, scope_id, scope.scope_type, entry);
                 m.add(mentry);
                 value_count += 1;
+                index += 1;
             }
         }
         m.gblocks = flatten.blocks;

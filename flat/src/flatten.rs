@@ -36,7 +36,7 @@ use tabled::{settings::Style, Table};
 
 #[derive(Debug, Clone)]
 pub struct CodeEntry {
-    next: LinkId,
+    pub(super) next: LinkId,
     prev: LinkId,
     pub(super) code: LCode,
     pub(super) name: Option<StringKey>,
