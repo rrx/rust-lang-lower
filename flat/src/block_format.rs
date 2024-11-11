@@ -7,7 +7,7 @@ pub struct CodeRow {
     pub pos: usize,
     pub link: usize,
     pub next: usize,
-    pub prev: usize,
+    //pub prev: usize,
     pub value: String,
     pub ty: String,
     pub mem: String,
@@ -24,8 +24,8 @@ pub struct CodeRow {
 impl CodeRow {
     pub fn header() -> Vec<&'static str> {
         vec![
-            "pos", "link", "next", "prev", "value", "ty", "mem", "name", "span_id", "scope_id",
-            "block_id", "term", "dead", "unknown",
+            "pos", "link", "next", "value", "ty", "mem", "name", "span_id", "scope_id", "block_id",
+            "term", "dead", "unknown",
         ]
     }
 }

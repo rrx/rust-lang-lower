@@ -302,7 +302,7 @@ impl Flatten {
             pos: v.index(),
             link: entry.link.unwrap().index(),
             next: entry.next.index(),
-            prev: entry.prev.index(),
+            //prev: entry.prev.index(),
             value: self.code_to_string(v, b),
             //ty: ty.clone(),
             ty: s_ty,
@@ -1326,7 +1326,7 @@ impl Flatten {
                 let r =
                     self.push_bake_static(name, def, def_span_id, call_ty.clone(), span_id, b)?;
                 self.drain_diagnostics(b);
-                let (fun_link_id, bake_ty, ret_ty) = r;
+                let (fun_link_id, _bake_ty, ret_ty) = r;
 
                 self.switch_blocks(current_block_id);
                 //println!(
@@ -2608,6 +2608,7 @@ impl Flatten {
                 Ok(FlattenResult::link(link_id))
             }
 
+            /*
             Ast::Block(name, args, body) => {
                 unimplemented!();
                 let ast: Ast = ControlFlowMarker::BlockStart(Some(name), args).into();
@@ -2617,7 +2618,7 @@ impl Flatten {
                 //self.switch_blocks(next_block_id);
                 //Ok(FlattenResult::link(next_link_id))
             }
-
+            */
             Ast::Ternary(c, x, y) => {
                 // expression, non-terminal
                 let block = self.blocks.get_block(current_block_id);
@@ -2836,6 +2837,7 @@ impl Flatten {
                 Ok(FlattenResult::link(link_id))
             }
 
+            /*
             Ast::Loop(name, body) => {
                 unimplemented!();
                 let scope_id = block.scope_id;
@@ -2851,7 +2853,7 @@ impl Flatten {
                 self.switch_blocks(loop_block.next_block);
                 Ok(FlattenResult::statement())
             }
-
+            */
             Ast::ControlFlowMarker(ControlFlowMarker::LoopContinue(maybe_key)) => {
                 let block = self.blocks.get_block(current_block_id);
                 let scope_id = block.scope_id;

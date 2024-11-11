@@ -15,7 +15,7 @@ use tabled::{settings::Style, Table};
 pub struct ModuleEntry {
     value_id: ValueId,
     next: ValueId,
-    prev: ValueId,
+    //prev: ValueId,
     pub(super) code: LCode,
     name: Option<StringKey>,
     link: Option<LinkId>,
@@ -31,7 +31,7 @@ impl ModuleEntry {
     pub fn from_code_entry(
         value_id: ValueId,
         next: ValueId,
-        prev: ValueId,
+        //prev: ValueId,
         scope_id: ScopeId,
         scope_type: ScopeType,
         entry: CodeEntry,
@@ -39,7 +39,7 @@ impl ModuleEntry {
         Self {
             value_id,
             next,
-            prev,
+            //prev,
             scope_id,
             scope_type,
             code: entry.code,
@@ -289,7 +289,7 @@ impl FlattenModule {
                 }
 
                 let mentry =
-                    ModuleEntry::from_code_entry(v, next, prev, scope_id, scope.scope_type, entry);
+                    ModuleEntry::from_code_entry(v, next, scope_id, scope.scope_type, entry);
                 m.add(mentry);
                 value_count += 1;
             }
@@ -418,7 +418,7 @@ impl FlattenModule {
             pos: v.index(),
             link: entry.link.unwrap().index(),
             next: entry.next.index(),
-            prev: entry.prev.index(),
+            //prev: entry.prev.index(),
             value: self.code_to_string(v, b),
             //ty: ty.clone(),
             ty: s_ty,
