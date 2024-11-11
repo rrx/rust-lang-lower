@@ -2036,91 +2036,6 @@ impl Flatten {
         }
     }
 
-    /*
-    pub fn find_block_in_scope(
-        &mut self,
-        name: StringKey,
-        scope_id: ScopeId,
-    ) -> Option<BlockId> {
-        let new_block_id =
-            if let Some(block_id) = self.scopes.resolve_block_id(scope_id, name.into()) {
-                println!("create new resolved: {}", block_id);
-                Some(block_id)
-            } else {
-                let scope = self.scopes.get_scope_mut(scope_id);
-                let maybe_unclaimed_block_id = scope.unclaimed_labels.remove(&name);
-                if let Some(block_id) = maybe_unclaimed_block_id {
-                    println!(
-                        "create new unclaimed: {}, from scope {}",
-                        block_id, scope_id
-                    );
-                    Some(block_id)
-                } else {
-                    println!(
-                        "create new unclaimed not found in scope: {}, {:?}",
-                        scope_id, scope.unclaimed_labels
-                    );
-                    None
-                }
-            };
-
-        new_block_id
-    }
-    */
-
-    /*
-        pub fn create_new_block_in_scope2(
-            &mut self,
-            name: StringKey,
-            scope_id: ScopeId,
-            //span_id: SpanId,
-        ) -> (BlockId, BlockId) {
-            let current_block_id = self.current_block_id();
-            let next_block_id = self.blocks.new_block(scope_id);
-            let new_block_id =
-                if let Some(block_id) = self.scopes.resolve_block_id(scope_id, name.into()) {
-                    block_id
-                } else {
-                    let scope = self.scopes.get_scope_mut(scope_id);
-                    let maybe_unclaimed_block_id = scope.unclaimed_labels.remove(&name);
-                    if let Some(block_id) = maybe_unclaimed_block_id {
-                        block_id
-                    } else {
-                        //assert_eq!(0, args.len());
-                        let new_block_id = self.blocks.new_block(scope_id);
-                        //let new_block = self.blocks.get_block_mut(new_block_id);
-                        //new_block.next = Some(next_block_id);
-                        self.blocks
-                            .block_succ(current_block_id, new_block_id, Successor::BlockScope);
-                        let scope = self.scopes.get_scope_mut(scope_id);
-                        scope.block_labels.insert(name.into(), new_block_id);
-                        /*
-                        //println!("creating block: {} in {}", b.labels.r(key.into()), scope_id);
-                         */
-                        new_block_id
-                    }
-                };
-
-            (new_block_id, next_block_id)
-
-            /*
-            self.switch_blocks(next_block_id);
-            let (link_id, _) = self.push_start_block(
-                scope_id,
-                AstType::Func(
-                    AstType::Struct(vec![]).into(),
-                    ReturnType::Single(AstType::Unit).into(),
-                ),
-                //AstType::Unit,
-                Some(name),
-                span_id,
-                VarDefinitionSpace::Default,
-            );
-            Ok(FlattenResult::link(link_id))
-                */
-        }
-    */
-
     pub fn push_node(&mut self, node: AstNode, b: &mut NB) -> Result<FlattenResult> {
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block_mut(current_block_id);
@@ -2255,8 +2170,6 @@ impl Flatten {
                 let fun_block_id = self.scopes.get_entry_block(fun_scope_id);
 
                 let mut jump_args = vec![];
-                //let mut current_block_id = current_block_id;
-                //let block_id = current_block_id;
                 let span_id = if let Some(expr) = maybe_expr {
                     let expr_span_id = expr.span_id;
                     self.switch_blocks(current_block_id);
@@ -2276,9 +2189,7 @@ impl Flatten {
                 }
 
                 let scope = self.scopes.get_scope(fun_scope_id);
-                //self.switch_blocks(current_block_id);
                 self.push_jump(scope.return_block.unwrap().into(), jump_args, span_id);
-                //self.switch_blocks(current_block_id);
                 Ok(FlattenResult::statement())
             }
 
@@ -2302,11 +2213,7 @@ impl Flatten {
                 let x_span_id = x.span_id;
                 self.switch_blocks(current_block_id);
                 let rx = self.push_node(*x, b)?;
-                //assert_eq!(self.block_id, rx.block_id);
-                //self.switch_blocks(rx.block_id);
                 let ry = self.push_node(*y, b)?;
-                //assert_eq!(self.block_id, ry.block_id);
-                //let current_block_id = ry.block_id;
                 let vx = rx.link_id.unwrap();
                 let vy = ry.link_id.unwrap();
                 let rx_ty = self.get_type(vx).clone();
@@ -2534,13 +2441,6 @@ impl Flatten {
                     VarDefinitionSpace::Default,
                 );
                 self.switch_blocks(current_block_id);
-                //self.blocks.block_succ(
-                //current_block_id,
-                //v_next,
-                //Successor::BlockScope,
-                //);
-
-                //let v_next = block.next.unwrap();
 
                 // THEN
                 let (then_block_id, then_scope_id) =
@@ -2550,8 +2450,6 @@ impl Flatten {
                     .block_succ(current_block_id, then_block_id, Successor::BlockScope);
                 self.blocks
                     .block_succ(current_block_id, then_block_id, Successor::Jump);
-                //let block = self.blocks.get_block_mut(then_block_id);
-                //block.next(v_next);
 
                 let branch_block_type = AstType::Func(
                     AstType::Struct(vec![]).into(),
@@ -2580,8 +2478,6 @@ impl Flatten {
                         .block_succ(current_block_id, else_block_id, Successor::BlockScope);
                     self.blocks
                         .block_succ(current_block_id, else_block_id, Successor::Jump);
-                    //let block = self.blocks.get_block_mut(else_block_id);
-                    //block.next = Some(v_next);
 
                     let name = b.labels.fresh_key("else");
 
@@ -2625,43 +2521,6 @@ impl Flatten {
                 Ok(FlattenResult::link(v))
             }
 
-            /*
-            Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(name, args)) => {
-                unimplemented!();
-                assert!(false);
-                // all blocks should have been forward declared in the sequence
-                let name = name.unwrap();
-                let current_dom_block_id = self
-                    .scopes
-                    .resolve_block_id(block.scope_id, name.into())
-                    .unwrap();
-                assert_eq!(0, args.len());
-                //let next = block.next;
-                let current_dom_block = self.blocks.get_block_mut(current_dom_block_id);
-                //current_dom_block.next = next;
-                let current_scope_id = current_dom_block.scope_id;
-                self.blocks.block_succ(
-                    current_block_id,
-                    current_dom_block_id,
-                    Successor::BlockScope,
-                );
-
-                let arg_ty = AstType::Struct(vec![]);
-                let block_ty = AstType::Func(
-                    arg_ty.clone().into(),
-                    ReturnType::Single(AstType::Unit).into(),
-                );
-                self.switch_blocks(current_dom_block_id);
-                self.push_start_block(
-                    current_scope_id,
-                    block_ty,
-                    Some(name),
-                    span_id,
-                    VarDefinitionSpace::Reg,
-                );
-                Ok(FlattenResult::statement())
-            }
-            */
             Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(name, args)) => {
                 let name = name.unwrap();
 
@@ -2701,43 +2560,6 @@ impl Flatten {
                     }
                 }
 
-                //let new_block_id = self.scopes.resolve_block_id(scope_id, name.into()).unwrap();
-
-                /*
-                    let next_block_id = self.blocks.new_block(scope_id);
-
-                    // check if block already exists, if not check unclaimed in scope
-                    // if it's not unclaimed, then we create it
-
-                    let new_block_id = if let Some(block_id) = self.scopes
-                            .resolve_block_id(scope_id, name.into())
-                    {
-                        block_id
-                    } else {
-                        let scope = self.scopes.get_scope_mut(scope_id);
-                        let maybe_unclaimed_block_id = scope.unclaimed_labels.remove(&name);
-                        if let Some(block_id) = maybe_unclaimed_block_id {
-                            block_id
-                        } else {
-                            assert_eq!(0, args.len());
-                            let new_block_id = self.blocks.new_block(scope_id);
-                            /*
-                            let new_block = self.blocks.get_block_mut(new_block_id);
-                            new_block.next = Some(next_block_id);
-                            self.blocks.block_succ(
-                                current_block_id,
-                                new_block_id,
-                                Successor::BlockScope,
-                            );
-                            let scope = self.scopes.get_scope_mut(scope_id);
-                            scope.block_labels.insert(name.into(), nmouth tape for sleepingew_block_id);
-                            //println!("creating block: {} in {}", b.labels.r(key.into()), scope_id);
-                            */
-                            new_block_id
-                        }
-                    };
-                */
-
                 let block = self.blocks.get_block(current_block_id);
                 // this is a new block, check to make sure the last block terminated
                 // if not, we close it out with a jump to this block
@@ -2768,21 +2590,6 @@ impl Flatten {
                         .collect::<Vec<_>>(),
                 );
 
-                /*
-                self.switch_blocks(next_block_id);
-                let (next_link_id, _)= self.push_start_block(
-                    scope_id,
-                    AstType::Func(
-                        AstType::Struct(vec![]).into(),
-                        ReturnType::Single(AstType::Unit).into(),
-                    ),
-                    //AstType::Unit,
-                    Some(name),
-                    span_id,
-                    VarDefinitionSpace::Default,
-                );
-                */
-
                 println!("block start: {}", new_block_id);
                 self.switch_blocks(new_block_id);
                 let (link_id, _) = self.push_start_block(
@@ -2800,6 +2607,7 @@ impl Flatten {
             }
 
             Ast::Block(name, args, body) => {
+                unimplemented!();
                 let ast: Ast = ControlFlowMarker::BlockStart(Some(name), args).into();
                 self.push_node(ast.node(span_id), b)?;
                 self.push_node(NB::ensure_seq(*body), b)
@@ -2904,7 +2712,6 @@ impl Flatten {
 
             Ast::Yield(maybe_expr) => {
                 // yield is terminal
-                //let mut v_block = current_block_id;
                 let mut ty = AstType::Unit;
                 if let Some(expr) = maybe_expr {
                     self.switch_blocks(current_block_id);
@@ -2917,7 +2724,6 @@ impl Flatten {
                     }
                 }
 
-                //self.switch_blocks(v_block);
                 let v = self.push_code(
                     LCode::Yield,
                     ty.clone(),
@@ -2925,7 +2731,6 @@ impl Flatten {
                     node.span_id,
                     VarDefinitionSpace::Reg,
                 );
-                //self.switch_blocks(v_block);
                 Ok(FlattenResult::link(v))
             }
 
@@ -2963,57 +2768,17 @@ impl Flatten {
 
             Ast::ControlFlowMarker(ControlFlowMarker::BlockEnd) | Ast::CloseBlock => {
                 let scope_id = block.scope_id;
-                //let current_block_id = self.current_block_id();
                 let scope = self.scopes.get_scope(scope_id);
                 if let Some(loop_block) = scope.loop_block {
-                    //self.switch_blocks(loop_block.start_block);
                     let link_id = self.maybe_terminate_block(loop_block.start_block, span_id);
                     println!("block loop end: {}, {}", loop_block.next_block, link_id);
                     self.switch_blocks(loop_block.next_block);
                     Ok(FlattenResult::link(link_id))
-
-                    //self.switch_blocks(current_block_id);
-                    //self.maybe_terminate_block(loop_block.next_block, span_id);
-                    //self.switch_blocks(loop_block.next_block);
                 } else {
                     unimplemented!()
                 }
-                //Ok(FlattenResult::statement())
             }
 
-            /*
-                Ast::CloseBlock => {
-                    let block = self.blocks.get_block(current_block_id);
-                    let v_last = block.links.last().unwrap().clone();
-                    let entry_last = self.get_entry(v_last);
-                    let is_term = entry_last.code.is_term();
-                    if is_term {
-                        // XXX: We are closing an already closed block
-                        // Possible malformed AST
-                        b.push_warning(
-                            &format!(
-                                "Closing already closed block: block={}, link={}",
-                                current_block_id, v_last
-                            ),
-                            node.span_id,
-                        );
-                        self.switch_blocks(current_block_id);
-                        return Ok(FlattenResult::statement());
-                    }
-
-                    /*
-                    if let Some(next) = block.next {
-                        self.switch_blocks(current_block_id);
-                        let link_id = self.push_jump(next.into(), vec![], node.span_id);
-                        self.switch_blocks(current_block_id);
-                        Ok(FlattenResult::link(link_id))
-                    } else {
-                    */
-                    self.switch_blocks(current_block_id);
-                    Ok(FlattenResult::statement())
-                    //}
-                }
-            */
             Ast::ControlFlowMarker(ControlFlowMarker::LoopStart(maybe_key)) => {
                 let block = self.blocks.get_block(current_block_id);
                 let parent_scope_id = block.scope_id;
@@ -3029,7 +2794,6 @@ impl Flatten {
                 );
                 self.switch_blocks(current_block_id);
 
-                //let next = block.next.unwrap();
                 let (loop_block_id, loop_scope_id) =
                     self.new_scope_and_block(ScopeType::Region, parent_scope_id);
                 let scope = self.scopes.get_scope_mut(loop_scope_id);
@@ -3071,10 +2835,10 @@ impl Flatten {
             }
 
             Ast::Loop(name, body) => {
+                unimplemented!();
                 let scope_id = block.scope_id;
                 let ast: Ast = ControlFlowMarker::LoopStart(Some(name)).into();
                 let _ = self.push_node(ast.node(span_id), b);
-                //let loop_block_id = self.current_block_id();
                 let _ = self.push_node(*body, b)?;
                 // terminate block by looping
                 let scope = self.scopes.get_scope(scope_id);
@@ -3136,7 +2900,6 @@ impl Flatten {
                         "loop break jump: {}, link: {}",
                         loop_scope.next_block, link_id
                     );
-                    //self.switch_blocks(current_block_id);
 
                     let v_next = self.blocks.new_block(scope_id);
                     self.switch_blocks(v_next);
@@ -3153,25 +2916,6 @@ impl Flatten {
                     b.push_error(&format!("Break without loop"), node.span_id);
                     Err(Error::new(BlockifyError::Invalid))
                 }
-                /*
-                if let Some(loop_scope) = self.scopes.get_loop_scope(block.scope_id, maybe_key) {
-                    let link_id = self.push_jump(loop_scope.next_block, vec![], node.span_id);
-                    Ok(FlattenResult::link(link_id))
-                } else {
-                    if let Some(key) = maybe_key {
-                        b.push_error(
-                            &format!("Loop scope not found: {}", b.labels.r(key.into())),
-                            node.span_id,
-                        );
-                    } else {
-                        b.push_error(
-                            &format!("Not in loop scope"),
-                            node.span_id,
-                        );
-                    }
-                    Err(Error::new(BlockifyError::Invalid))
-                }
-                */
             }
 
             Ast::Break(maybe_name, args) => {
@@ -3196,9 +2940,7 @@ impl Flatten {
 
             Ast::Array(_type_id, dims) => {
                 let mut link_ids = vec![];
-                //let mut current_block_id = current_block_id;
                 for d in dims {
-                    //self.switch_blocks(current_block_id);
                     let r = self.push_node(d, b)?;
                     link_ids.push(r.link_id.unwrap());
                 }
@@ -3209,7 +2951,6 @@ impl Flatten {
             Ast::Tuple(exprs) => {
                 let mut link_ids = vec![];
                 let mut types = vec![];
-                //let mut current_block_id = current_block_id;
                 let mut values = vec![];
                 for e in exprs {
                     let span_id = e.span_id;
