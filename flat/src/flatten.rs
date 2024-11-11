@@ -118,7 +118,7 @@ pub struct Flatten {
     pub(crate) current_block: BlockId,
     pub scopes: ScopeGraph,
     block_links: HashMap<BlockId, LinkId>,
-    functions: HashMap<StringKey, LinkId>,
+    pub(crate) functions: HashMap<StringKey, LinkId>,
 }
 
 impl ICodeModule for Flatten {
@@ -586,8 +586,47 @@ impl Flatten {
         }
     }
 
+    pub fn inject_builtin_prototypes(&mut self, b: &mut NB) {
+        // inject builtin prototypes
+        let print_index = b.labels.s("print_index".into());
+        let print_float = b.labels.s("print_float".into());
+        let print_bool = b.labels.s("print_bool".into());
+        let builtins = vec![
+            (print_index, AstType::Int, AstType::Unit),
+            (print_float, AstType::Float, AstType::Unit),
+            (print_bool, AstType::Bool, AstType::Unit),
+        ];
+        let unknown = b.spans.get_span_unknown();
+        for (key, var_ty, ret_ty) in builtins {
+            let func_ty = AstType::func(vec![var_ty], ret_ty);
+            self.push_code(
+                LCode::DeclareFunction(None),
+                func_ty,
+                Some(key),
+                unknown,
+                VarDefinitionSpace::Static,
+            );
+        }
+    }
+
     pub fn finish(&mut self, b: &mut NB) -> Result<()> {
         let blocks = self.blocks.post_order_blocks();
+        self.inject_builtin_prototypes(b);
+
+        for block_id in self.blocks.graph_get_entries() {
+            let block = self.blocks.get_block(block_id);
+            let label_link_id = block.entry.unwrap();
+            let entry = self.get_entry(label_link_id).clone();
+            let ty = self.get_type(label_link_id).clone();
+            assert_eq!(entry.mem, VarDefinitionSpace::Static);
+            self.push_code(
+                LCode::DeclareFunction(Some(block_id)),
+                ty,
+                entry.name,
+                entry.span_id,
+                entry.mem,
+            );
+        }
 
         // DEAD BLOCKS
         let dead_blocks = self.blocks.find_dead_blocks_from_graph();

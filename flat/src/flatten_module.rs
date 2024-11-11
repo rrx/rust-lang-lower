@@ -198,27 +198,6 @@ impl FlattenModule {
 
         let blocks = flatten.blocks.post_order_blocks();
 
-        // inject builtin prototypes
-        let print_index = b.labels.s("print_index".into());
-        let print_float = b.labels.s("print_float".into());
-        let print_bool = b.labels.s("print_bool".into());
-        let builtins = vec![
-            (print_index, AstType::Int, AstType::Unit),
-            (print_float, AstType::Float, AstType::Unit),
-            (print_bool, AstType::Bool, AstType::Unit),
-        ];
-        let unknown = b.spans.get_span_unknown();
-        for (key, var_ty, ret_ty) in builtins {
-            let func_ty = AstType::func(vec![var_ty], ret_ty);
-            flatten.push_code(
-                LCode::DeclareFunction(None),
-                func_ty,
-                Some(key),
-                unknown,
-                VarDefinitionSpace::Static,
-            );
-        }
-
         let mut m = FlattenModule::new();
         m.link = flatten.link.clone();
         for block_id in flatten.blocks.graph_get_entries() {
@@ -232,13 +211,13 @@ impl FlattenModule {
                 m.functions.insert(key, label_link_id);
             }
 
-            flatten.push_code(
-                LCode::DeclareFunction(Some(block_id)),
-                ty,
-                entry.name,
-                entry.span_id,
-                entry.mem,
-            );
+            //flatten.push_code(
+            //LCode::DeclareFunction(Some(block_id)),
+            //ty,
+            //entry.name,
+            //entry.span_id,
+            //entry.mem,
+            //);
         }
 
         let mut value_count = 0;
