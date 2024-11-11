@@ -149,6 +149,7 @@ pub struct MLIRGenerator<'c> {
     index: IndexMap<ValueId, SymIndex>,
     module_block_id: ValueId,
     blocks: HashMap<ValueId, OpCollection<'c>>,
+    call_args: Vec<ValueId>,
     b: &'c NodeBuilder,
 }
 
@@ -165,12 +166,21 @@ impl<'c> MLIRGenerator<'c> {
             index: IndexMap::new(),
             module_block_id,
             blocks: HashMap::new(),
+            call_args: vec![],
             b,
         }
     }
 }
 
 impl<'c> MLIRGenerator<'c> {
+    pub fn take_call_args(&mut self) -> Vec<ValueId> {
+        self.call_args.drain(..).collect()
+    }
+
+    pub fn ensure_call_args_empty(&self) {
+        assert_eq!(self.call_args.len(), 0);
+    }
+
     pub fn take_block(&mut self, block_id: ValueId) -> Block<'c> {
         self.blocks.get_mut(&block_id).unwrap().take_block()
     }
@@ -404,11 +414,13 @@ impl<'c> MLIRGenerator<'c> {
 
     pub fn lower_jump(&mut self, v: ValueId, target_value_id: ValueId) -> Result<()> {
         let block_id = self.blockify.get_entry_id(v);
-        let values = self.blockify.get_previous_values(v);
+        let values = self.take_call_args();
+        let arity = values.len();
+        //let values = self.blockify.get_previous_values(v);
         println!("jump: {:?}", (values));
         let indicies = values
-            .iter()
-            .map(|value_id| self.resolve_value(*value_id).unwrap())
+            .into_iter()
+            .map(|value_id| self.resolve_value(value_id.into()).unwrap())
             .collect();
         let rs = self.values(indicies);
 
@@ -417,7 +429,7 @@ impl<'c> MLIRGenerator<'c> {
             .get(&target_value_id)
             .expect(&format!("missing block at {}", target_value_id));
         let arg_count = c.block.as_ref().unwrap().argument_count();
-        assert_eq!(arg_count, values.len(), "mismatch arity on jump");
+        assert_eq!(arg_count, arity, "mismatch arity on jump");
 
         let location = self.get_location(v);
         let op = cf::br(&c.block.as_ref().unwrap(), &rs, location);
@@ -475,26 +487,31 @@ impl<'c> MLIRGenerator<'c> {
 
         match code {
             LCode::Label => {
+                self.ensure_call_args_empty();
                 // should already exist
                 assert!(self.blocks.get(&v).is_some());
             }
 
             LCode::Arg(pos) => {
+                self.ensure_call_args_empty();
                 let block_id = self.blockify.get_entry_id(v);
                 let index = SymIndex::Arg(block_id, *pos as usize);
                 self.index.insert(v, index);
             }
 
             LCode::Jump(target) => {
+                //self.ensure_call_args_empty();
                 let target_value_id = self.blockify.resolve_code_offset(*target);
                 self.lower_jump(v, target_value_id)?;
             }
 
             LCode::Val(lit) => {
+                self.ensure_call_args_empty();
                 self.lower_literal(v, lit);
             }
 
             LCode::Use(base, indicies) => {
+                self.ensure_call_args_empty();
                 //assert!(false);
                 let addr = self.resolve_value(*base).unwrap();
 
@@ -525,10 +542,11 @@ impl<'c> MLIRGenerator<'c> {
             }
 
             LCode::Return => {
-                let values = self.blockify.get_previous_values(v);
+                let values = self.take_call_args();
+                //let values = self.blockify.get_previous_values(v);
                 let indicies = values
                     .iter()
-                    .map(|value_id| self.resolve_value(*value_id).unwrap())
+                    .map(|value_id| self.resolve_value((*value_id).into()).unwrap())
                     .collect();
                 let rs = self.values(indicies);
                 let op = func::r#return(&rs, location);
@@ -539,6 +557,7 @@ impl<'c> MLIRGenerator<'c> {
             }
 
             LCode::DeclareFunction(maybe_block_id) => {
+                self.ensure_call_args_empty();
                 let static_block_id = self.module_block_id;
                 //let _block_id = self.blockify.get_entry_id(v);
                 let key = self.blockify.get_name(v.into()).unwrap();
@@ -596,6 +615,7 @@ impl<'c> MLIRGenerator<'c> {
             }
 
             LCode::Call(v_f) => {
+                let values = self.take_call_args();
                 // TODO: ensure calling static
 
                 // function to call
@@ -625,10 +645,10 @@ impl<'c> MLIRGenerator<'c> {
                     assert_eq!(dims.len(), 0);
                     // handle call arguments
 
-                    let values = self.blockify.get_previous_values(v);
+                    //let values = self.blockify.get_previous_values(v);
                     let indicies = values
                         .iter()
-                        .map(|value_id| self.resolve_value(*value_id).unwrap())
+                        .map(|value_id| self.resolve_value((*value_id).into()).unwrap())
                         .collect();
                     let rs = self.values(indicies);
 
@@ -650,6 +670,7 @@ impl<'c> MLIRGenerator<'c> {
             }
 
             LCode::Declare => {
+                self.ensure_call_args_empty();
                 //if let Some(name) = self.blockify.get_name(v.into()) {
                 //let s = self.b.labels.r(name);
                 //println!("declare: {:?}", (s));
@@ -699,6 +720,7 @@ impl<'c> MLIRGenerator<'c> {
             }
 
             LCode::Tuple(link_ids) => {
+                self.ensure_call_args_empty();
                 let block_id = self.blockify.get_entry_id(v);
                 let ast_ty = self.blockify.get_type(v.into());
                 let (ty, dims) = self.from_type(&ast_ty);
@@ -749,6 +771,7 @@ impl<'c> MLIRGenerator<'c> {
             }
 
             LCode::Store(v_decl, v_value) => {
+                self.ensure_call_args_empty();
                 let block_id = self.blockify.get_entry_id(v);
                 let decl_is_static = self.blockify.is_in_static_scope(v_decl.into());
                 let value_is_static = self.blockify.is_in_static_scope(v_value.into());
@@ -830,6 +853,7 @@ impl<'c> MLIRGenerator<'c> {
             }
 
             LCode::Load(v_decl) => {
+                self.ensure_call_args_empty();
                 let block_id = self.blockify.get_entry_id(v);
                 let v_decl = self.blockify.resolve_declaration(v_decl.into()).unwrap();
                 if self.blockify.is_in_static_scope(v_decl) {
@@ -862,7 +886,9 @@ impl<'c> MLIRGenerator<'c> {
             }
 
             LCode::Op1(op) => {
-                let x = self.blockify.get_prev(v).unwrap().into();
+                let mut values = self.take_call_args();
+                let x = values.pop().unwrap().into();
+                //let x = self.blockify.get_prev(v).unwrap().into();
 
                 let block_id = self.blockify.get_entry_id(v);
                 let x_index = self.resolve_value(x).unwrap();
@@ -900,8 +926,11 @@ impl<'c> MLIRGenerator<'c> {
             }
 
             LCode::Op2(op) => {
-                let y = self.blockify.get_prev(v).unwrap();
-                let x = self.blockify.get_prev(y).unwrap();
+                let mut values = self.take_call_args();
+                let y = values.pop().unwrap();
+                let x = values.pop().unwrap();
+                //let y = self.blockify.get_prev(v).unwrap();
+                //let x = self.blockify.get_prev(y).unwrap();
 
                 let vx = self.blockify.resolve_code_offset(x.into());
                 let vy = self.blockify.resolve_code_offset(y.into());
@@ -923,11 +952,12 @@ impl<'c> MLIRGenerator<'c> {
             }
 
             LCode::NaryOp(op) => {
-                let values = self.blockify.get_previous_values(v);
+                let values = self.take_call_args();
+                //let values = self.blockify.get_previous_values(v);
                 let types = values
                     .iter()
                     .map(|v| {
-                        let ast_ty = self.blockify.get_type(v.into());
+                        let ast_ty = self.blockify.get_type((*v).into());
                         let (ty, _dims) = self.from_type(&ast_ty);
                         ty
                     })
@@ -1014,6 +1044,7 @@ impl<'c> MLIRGenerator<'c> {
             }
 
             LCode::Branch(condition, then_block_id, else_block_id) => {
+                self.ensure_call_args_empty();
                 let v_then = self.blockify.resolve_code_offset((*then_block_id).into());
                 let v_else = self.blockify.resolve_code_offset((*else_block_id).into());
 
@@ -1045,6 +1076,7 @@ impl<'c> MLIRGenerator<'c> {
             }
 
             LCode::Ternary(condition, then_block_id, else_block_id) => {
+                self.ensure_call_args_empty();
                 // THEN
                 //let then_block_id = blockify.get_entry_id(*v_then);
                 //let then_block_id = blockify.resolve_code_offset(v_then);
@@ -1116,10 +1148,11 @@ impl<'c> MLIRGenerator<'c> {
 
             LCode::Yield => {
                 let block_id = self.blockify.get_entry_id(v);
-                let values = self.blockify.get_previous_values(v);
+                let values = self.take_call_args();
+                //let values = self.blockify.get_previous_values(v);
                 let indicies = values
                     .iter()
-                    .map(|value_id| self.resolve_value(*value_id).unwrap())
+                    .map(|value_id| self.resolve_value((*value_id).into()).unwrap())
                     .collect();
                 let rs = self.values(indicies);
                 let r = rs[0];
@@ -1130,21 +1163,28 @@ impl<'c> MLIRGenerator<'c> {
 
             //LCode::Value(_) => (),
             //LCode::ValueIndex(_, _) => (),
-            LCode::CallValue(_) => (),
-            LCode::Noop => (),
-            LCode::Extern => (),
+            LCode::CallValue(_) => {
+                self.call_args.push(v);
+            }
+            LCode::Noop => {
+                self.ensure_call_args_empty();
+            }
+            LCode::Extern => {
+                self.ensure_call_args_empty();
+            }
 
             LCode::Builtin(id) => {
+                let values = self.take_call_args();
                 let bi = self.b.builtins.get_enum(*id);
                 match bi {
                     Builtin::Import => {
                         unreachable!()
                     }
                     Builtin::Assert => {
-                        let values = self.blockify.get_previous_values(v);
+                        //let values = self.blockify.get_previous_values(v);
                         let indicies = values
-                            .iter()
-                            .map(|value_id| self.resolve_value(*value_id).unwrap())
+                            .into_iter()
+                            .map(|value_id| self.resolve_value(value_id.into()).unwrap())
                             .collect();
                         let rs = self.values(indicies);
 
@@ -1157,10 +1197,10 @@ impl<'c> MLIRGenerator<'c> {
                         self.index.insert(v, index);
                     }
                     Builtin::Print => {
-                        let values = self.blockify.get_previous_values(v);
+                        //let values = self.blockify.get_previous_values(v);
                         let indicies = values
-                            .iter()
-                            .map(|value_id| self.resolve_value(*value_id).unwrap())
+                            .into_iter()
+                            .map(|value_id| self.resolve_value(value_id.into()).unwrap())
                             .collect();
                         let rs = self.values(indicies);
                         let r = rs[0];
@@ -1191,7 +1231,9 @@ impl<'c> MLIRGenerator<'c> {
                     } //_ => unreachable!("{:?}", bi),
                 }
             } //_ => unimplemented!("{:?}", (v, code)),
-            LCode::DeclareTemplate(_) => (),
+            LCode::DeclareTemplate(_) => {
+                self.ensure_call_args_empty();
+            }
         }
         Ok(())
     }
