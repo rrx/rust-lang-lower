@@ -131,7 +131,7 @@ pub trait ICodeModule {
     fn get_name(&self, v: CodeOffset) -> Option<StringLabel>;
     fn get_code(&self, value_id: ValueId) -> &LCode;
     fn get_next(&self, value_id: ValueId) -> Option<ValueId>;
-    fn get_prev(&self, value_id: ValueId) -> Option<ValueId>;
+    //fn get_prev(&self, value_id: ValueId) -> Option<ValueId>;
 
     fn get_cfg(&self, block_id: BlockId, b: &NodeBuilder) -> CFG {
         let entry_id = self.resolve_code_offset(block_id.into());
@@ -231,6 +231,7 @@ pub trait ICodeModule {
         }
     }
 
+    /*
     fn get_previous_values(&self, v: ValueId) -> Vec<CodeOffset> {
         let mut values = VecDeque::new();
         loop {
@@ -247,6 +248,7 @@ pub trait ICodeModule {
         }
         values.into()
     }
+    */
 
     fn get_type(&self, v: CodeOffset) -> AstType;
     fn get_entry_id(&self, value_id: ValueId) -> ValueId;
@@ -316,8 +318,8 @@ pub trait ICodeModule {
             }
 
             LCode::Jump(value_id) => {
-                let values = self.get_previous_values(v);
-                format!("jump({:?}, num_args: {})", value_id, values.len())
+                //let values = self.get_previous_values(v);
+                format!("jump({:?})", value_id)
             }
 
             LCode::Val(Literal::String(s)) => {

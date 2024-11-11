@@ -387,8 +387,10 @@ impl<'a> Interp<'a> {
                 true
             }
             LCode::NaryOp(op) => {
-                let orig_values = self.m.get_previous_values(pos);
+                let values = self.call_args.drain(..).collect();
+                //let orig_values = self.m.get_previous_values(pos);
 
+                /*
                 let mut values = vec![];
                 for offset in orig_values {
                     let v = self.m.resolve_code_offset(offset);
@@ -399,6 +401,7 @@ impl<'a> Interp<'a> {
                 for _ in 0..values.len() {
                     self.call_args.pop_front();
                 }
+                */
 
                 let output = match op {
                     NaryOperation::Struct => Value::Tuple(values),

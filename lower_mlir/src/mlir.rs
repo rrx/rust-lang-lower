@@ -416,7 +416,6 @@ impl<'c> MLIRGenerator<'c> {
         let block_id = self.blockify.get_entry_id(v);
         let values = self.take_call_args();
         let arity = values.len();
-        //let values = self.blockify.get_previous_values(v);
         println!("jump: {:?}", (values));
         let indicies = values
             .into_iter()
@@ -500,7 +499,6 @@ impl<'c> MLIRGenerator<'c> {
             }
 
             LCode::Jump(target) => {
-                //self.ensure_call_args_empty();
                 let target_value_id = self.blockify.resolve_code_offset(*target);
                 self.lower_jump(v, target_value_id)?;
             }
@@ -543,7 +541,6 @@ impl<'c> MLIRGenerator<'c> {
 
             LCode::Return => {
                 let values = self.take_call_args();
-                //let values = self.blockify.get_previous_values(v);
                 let indicies = values
                     .iter()
                     .map(|value_id| self.resolve_value((*value_id).into()).unwrap())
@@ -559,7 +556,6 @@ impl<'c> MLIRGenerator<'c> {
             LCode::DeclareFunction(maybe_block_id) => {
                 self.ensure_call_args_empty();
                 let static_block_id = self.module_block_id;
-                //let _block_id = self.blockify.get_entry_id(v);
                 let key = self.blockify.get_name(v.into()).unwrap();
                 let ty = self.blockify.get_type(v.into());
 
@@ -645,10 +641,9 @@ impl<'c> MLIRGenerator<'c> {
                     assert_eq!(dims.len(), 0);
                     // handle call arguments
 
-                    //let values = self.blockify.get_previous_values(v);
                     let indicies = values
-                        .iter()
-                        .map(|value_id| self.resolve_value((*value_id).into()).unwrap())
+                        .into_iter()
+                        .map(|value_id| self.resolve_value(value_id.into()).unwrap())
                         .collect();
                     let rs = self.values(indicies);
 
@@ -888,7 +883,6 @@ impl<'c> MLIRGenerator<'c> {
             LCode::Op1(op) => {
                 let mut values = self.take_call_args();
                 let x = values.pop().unwrap().into();
-                //let x = self.blockify.get_prev(v).unwrap().into();
 
                 let block_id = self.blockify.get_entry_id(v);
                 let x_index = self.resolve_value(x).unwrap();
@@ -929,8 +923,6 @@ impl<'c> MLIRGenerator<'c> {
                 let mut values = self.take_call_args();
                 let y = values.pop().unwrap();
                 let x = values.pop().unwrap();
-                //let y = self.blockify.get_prev(v).unwrap();
-                //let x = self.blockify.get_prev(y).unwrap();
 
                 let vx = self.blockify.resolve_code_offset(x.into());
                 let vy = self.blockify.resolve_code_offset(y.into());
@@ -953,7 +945,6 @@ impl<'c> MLIRGenerator<'c> {
 
             LCode::NaryOp(op) => {
                 let values = self.take_call_args();
-                //let values = self.blockify.get_previous_values(v);
                 let types = values
                     .iter()
                     .map(|v| {
@@ -1149,7 +1140,6 @@ impl<'c> MLIRGenerator<'c> {
             LCode::Yield => {
                 let block_id = self.blockify.get_entry_id(v);
                 let values = self.take_call_args();
-                //let values = self.blockify.get_previous_values(v);
                 let indicies = values
                     .iter()
                     .map(|value_id| self.resolve_value((*value_id).into()).unwrap())
@@ -1181,7 +1171,6 @@ impl<'c> MLIRGenerator<'c> {
                         unreachable!()
                     }
                     Builtin::Assert => {
-                        //let values = self.blockify.get_previous_values(v);
                         let indicies = values
                             .into_iter()
                             .map(|value_id| self.resolve_value(value_id.into()).unwrap())
@@ -1197,7 +1186,6 @@ impl<'c> MLIRGenerator<'c> {
                         self.index.insert(v, index);
                     }
                     Builtin::Print => {
-                        //let values = self.blockify.get_previous_values(v);
                         let indicies = values
                             .into_iter()
                             .map(|value_id| self.resolve_value(value_id.into()).unwrap())

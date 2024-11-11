@@ -157,6 +157,7 @@ impl ICodeModule for Flatten {
         }
     }
 
+    /*
     fn get_prev(&self, value_id: ValueId) -> Option<ValueId> {
         let value_id = LinkId(value_id.index() as u32);
         let entry = self.get_entry(value_id);
@@ -166,6 +167,7 @@ impl ICodeModule for Flatten {
             None
         }
     }
+    */
 
     fn get_block_successors(&self, entry_id: ValueId) -> Vec<(Successor, CodeOffset)> {
         let entry_id = LinkId(entry_id.index() as u32);

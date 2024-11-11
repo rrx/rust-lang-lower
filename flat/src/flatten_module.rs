@@ -96,6 +96,7 @@ impl ICodeModule for FlattenModule {
         }
     }
 
+    /*
     fn get_prev(&self, value_id: ValueId) -> Option<ValueId> {
         let entry = self.get_entry(value_id);
         if entry.prev != value_id {
@@ -104,6 +105,7 @@ impl ICodeModule for FlattenModule {
             None
         }
     }
+    */
 
     fn get_block_successors(&self, entry_id: ValueId) -> Vec<(Successor, CodeOffset)> {
         let entry = self.get_entry(entry_id);
