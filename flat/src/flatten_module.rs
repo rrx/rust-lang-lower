@@ -210,14 +210,6 @@ impl FlattenModule {
             if let Some(key) = entry.name {
                 m.functions.insert(key, label_link_id);
             }
-
-            //flatten.push_code(
-            //LCode::DeclareFunction(Some(block_id)),
-            //ty,
-            //entry.name,
-            //entry.span_id,
-            //entry.mem,
-            //);
         }
 
         let mut value_count = 0;

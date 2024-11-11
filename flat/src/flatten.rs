@@ -41,6 +41,7 @@ pub struct CodeEntry {
     pub(super) code: LCode,
     pub(super) name: Option<StringKey>,
     pub(super) link: Option<LinkId>,
+    pub(super) value_id: Option<ValueId>,
     pub(super) block_id: BlockId,
     pub(super) ty: AstType,
     pub(super) span_id: SpanId,
@@ -62,6 +63,7 @@ impl CodeEntry {
             block_id,
             code,
             name,
+            value_id: None,
             link: None,
             ty,
             span_id,
@@ -109,6 +111,7 @@ pub struct Flatten {
     module_key: Option<StringKey>,
     pub(super) link: LinkOptions,
     entries: Vec<CodeEntry>,
+    values: Vec<LinkId>,
     pub(super) blocks: BlockGraph,
     ast_templates: Vec<(Lambda, SpanId)>,
     messages: Vec<(String, SpanId)>,
@@ -119,6 +122,7 @@ pub struct Flatten {
     pub scopes: ScopeGraph,
     block_links: HashMap<BlockId, LinkId>,
     pub(crate) functions: HashMap<StringKey, LinkId>,
+    statics: HashMap<StringKey, Literal>,
 }
 
 impl ICodeModule for Flatten {
@@ -232,6 +236,17 @@ impl ICodeModule for Flatten {
 
     fn dump_code_table(&self, filename: &str, b: &mut NB) {
         let mut rows = vec![];
+        /*
+        for (index, link_id) in self.values.iter().enumerate() {
+            let value_id = ValueId::new(index as u32);
+            if let Some(row) = self.get_code_row(value_id, b) {
+                rows.push(row);
+            } else {
+                println!("Unable to load entry: {}", value_id);
+            }
+        }
+        */
+
         for entry in self.entries.iter() {
             let link_id = entry.link.unwrap();
             let value_id = ValueId(link_id.index() as u32);
@@ -254,6 +269,7 @@ impl Flatten {
         Self {
             module_key: None,
             entries: vec![],
+            values: vec![],
             blocks,
             link: LinkOptions::new(),
             ast_templates: vec![],
@@ -265,6 +281,7 @@ impl Flatten {
             scopes: ScopeGraph::new(),
             block_links: HashMap::new(),
             functions: HashMap::new(),
+            statics: HashMap::new(),
         }
     }
 
@@ -626,6 +643,56 @@ impl Flatten {
                 entry.span_id,
                 entry.mem,
             );
+        }
+
+        for block_id in blocks.into_iter() {
+            let block = self.blocks.get_block(block_id);
+            let size = block.len();
+            let scope_id = block.scope_id;
+            let entry_id = block.entry.unwrap();
+
+            let mut entries = vec![];
+            let mut v = entry_id;
+            loop {
+                let entry = self.get_entry(v).clone();
+                let next = entry.next;
+                entries.push(entry);
+                if next == v {
+                    break;
+                } else {
+                    v = next;
+                }
+            }
+
+            let mut index = 0;
+            for mut entry in entries.into_iter() {
+                if let Some(ty) = b.types.u.resolve(&entry.ty) {
+                    entry.ty = ty;
+                }
+
+                if entry.mem == VarDefinitionSpace::Static {
+                    match &entry.code {
+                        LCode::Val(lit) => {
+                            self.statics.insert(entry.name.unwrap(), lit.clone());
+                        }
+                        _ => (),
+                    }
+                }
+
+                let scope = self.scopes.get_scope(scope_id);
+                let scope_type = scope.scope_type;
+                let is_term = entry.code.is_term();
+                if index == size && !is_term && scope_type != ScopeType::Static {
+                    b.push_error(&format!("Unterminated Block: {}", block_id), entry.span_id);
+                }
+
+                let link_id = entry.link.unwrap();
+                let value_id = ValueId::new(self.values.len() as u32);
+                self.values.push(link_id);
+                let entry = self.get_entry_mut(link_id);
+                entry.value_id = Some(value_id);
+                index += 1;
+            }
         }
 
         // DEAD BLOCKS
