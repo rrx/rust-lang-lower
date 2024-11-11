@@ -28,8 +28,8 @@ use std::convert::Into;
 
 use crate::{
     BlockGraph, BlockId, BlockifyError, Builtin, CodeOffset, CodeRow, ICodeModule, LCode, LinkId,
-    NodeBuilder as NB, ScopeGraph, ScopeId, ScopeType, SequenceReader, StringLabel, Successor,
-    TemplateId, ValueId, VariantId,
+    NodeBuilder as NB, ScopeGraph, ScopeId, ScopeType, StringLabel, Successor, TemplateId, ValueId,
+    VariantId,
 };
 
 use tabled::{settings::Style, Table};
@@ -584,26 +584,6 @@ impl Flatten {
         }
     }
 
-    /*
-    pub fn push_bake_main_template(
-        &mut self,
-        fenv: &mut FlattenEnvironment,
-        b: &mut NB,
-    ) -> Result<LinkId> {
-        //self.mode = FlattenMode::Template;
-        let current_block_id = self.block_id;
-        let name = b.labels.s("main");
-        // reset the block position before each function
-        // main is always static context
-        self.switch_blocks(fenv.static_block_id());
-        let r = self.push_bake_template(name, None, b);
-        // switch back after bake
-        self.switch_blocks(current_block_id);
-        r
-    }
-
-    */
-
     pub fn finish(&mut self, b: &mut NB) -> Result<()> {
         let dead_blocks = self.blocks.find_dead_blocks_from_graph();
         for block_id in dead_blocks {
@@ -755,74 +735,26 @@ impl Flatten {
 
     pub fn push_sequence(
         &mut self,
-        mut seq: Vec<AstNode>,
+        seq: Vec<AstNode>,
         span_id: SpanId,
         b: &mut NB,
     ) -> Result<FlattenResult> {
         let block = self.blocks.get_block(self.current_block_id());
         let start_stack = self.scopes.walk_scopes(block.scope_id);
-        //let seq_next_block_id = block.next;
-        //let scope_id = block.scope_id;
 
-        // ensure the block is created, so we have something to jump to if we need to jump to later
-        // block
-        /*
-        for expr in seq.iter() {
-            match &expr.node {
-                Ast::Block(key, args, _body) => {
-                    if self.scopes.resolve_block_id(scope_id, key.into()).is_none() {
-                        assert_eq!(0, args.len());
-                        let new_block_id = self.blocks.new_block(scope_id);
-                        self.blocks.block_succ(
-                            self.current_block_id(),
-                            new_block_id,
-                            Successor::BlockScope,
-                        );
-                        let scope = self.scopes.get_scope_mut(scope_id);
-                        scope.block_labels.insert(key.into(), new_block_id);
-                    }
-                }
-                _ => (),
-            }
+        for expr in seq {
+            let _ = self.push_node(expr, b)?;
         }
-        */
-
+        /*
         let mut d = seq.drain(..);
-        //let mut out_link_id = None;
         loop {
             if let Some(expr) = d.next() {
-                //let span_id = expr.span_id;
-                //let current_span_id = span_id;
-                // handle expr
                 let _ = self.push_node(expr, b)?;
-
-                /*
-                // we check if we encounter a terminal.  If we do, then we start another block
-                // This should be moved somewhere else.  Though it is specific to a sequence.
-                let current_block_id = self.current_block_id();
-                let block = self.blocks.get_block(current_block_id);
-                let link_id = block.links.last().unwrap().clone();
-                //out_link_id = Some(link_id);
-                let entry = self.get_entry(link_id);
-                if entry.code.is_term() {
-                    let next_block_id = self.blocks.new_block(scope_id);
-                    //println!("term new: {:?}", (new_block_id, &next_node));
-                    self.switch_blocks(next_block_id);
-                    self.push_start_block(
-                        scope_id,
-                        AstType::func(vec![], AstType::Unit), // void=>void
-                        Some(b.labels.fresh_key("seq_new")),
-                        current_span_id,
-                        VarDefinitionSpace::Default,
-                    );
-                    self.blocks
-                        .block_succ(current_block_id, next_block_id, Successor::BlockScope);
-                }
-                */
             } else {
                 break;
             }
         }
+        */
 
         // ensure that we close any blocks that were opened
         let current_block_id = self.current_block_id();
@@ -833,22 +765,8 @@ impl Flatten {
         for _ in 0..end_stack.len() - start_stack.len() {
             let ast: Ast = ControlFlowMarker::BlockEnd.into();
             let node = ast.node(span_id);
-            let r = self.push_node(node, b)?;
-            println!("stack close: {:?}", r);
+            let _ = self.push_node(node, b)?;
         }
-        /*
-        loop {
-            if end_stack.len() == start_stack.len() {
-                break;
-            }
-
-            let ast: Ast = ControlFlowMarker::BlockEnd.into();
-            let node = ast.node(span_id);
-            self.push_node(node, b)?;
-            //unimplemented!("unhandled stack close: {:?}", end_stack);
-            //let el = end_stack.pop().unwrap();
-        }
-        */
 
         // ensure we have no unclaimed labels.
         // throw an error if we do
@@ -1680,8 +1598,6 @@ impl Flatten {
         self.scopes
             .scope_define(self.static_scope_id(), global_name, entry_link_id);
 
-        //let body = make_sequence(*body, b);
-
         self.switch_blocks(fun_block_id);
         let _ = self.push_node(*body, b)?;
         self.maybe_terminate_block(ret_block_id, span_id);
@@ -1860,7 +1776,6 @@ impl Flatten {
             .block_succ(current_block_id, next_block_id, Successor::BlockScope);
 
         // Lambda Body
-        //let body = make_sequence(*def.body.unwrap(), b);
         let body = *def.body.unwrap();
 
         // get the next block
@@ -3444,13 +3359,3 @@ fn def_to_type(def: &Lambda, b: &mut NB) -> AstType {
     let fun_ty = AstType::Func(arg_type.into(), ReturnType::Single(return_type).into());
     fun_ty
 }
-
-/*
-fn make_sequence(ast: AstNode, b: &mut NB) -> AstNode {
-    let span_id = ast.span_id;
-    //let mut reader = SequenceReader::new();
-    //let seq = reader.build(ast.to_vec(), b);
-    let seq = ast.to_vec();
-    NB::seq(seq, span_id)
-}
-*/
