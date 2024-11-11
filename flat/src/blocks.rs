@@ -142,15 +142,10 @@ impl BlockGraph {
     }
 
     pub fn find_dead_blocks_from_graph(&mut self) -> Vec<BlockId> {
-        let mut dfs = petgraph::visit::Dfs::new(&self.0, BlockId(0).into());
-        let mut entries = HashSet::new();
-        while let Some(visited) = dfs.next(&self.0) {
-            for edge in self.edges(visited) {
-                if Successor::FunctionDeclaration == *edge.weight() {
-                    entries.insert(edge.target());
-                }
-            }
-        }
+        let entries = self
+            .graph_get_entries()
+            .into_iter()
+            .collect::<Vec<BlockId>>();
 
         let subgraph = self.filter_map(
             |_n_index, n| Some(n.clone()),
@@ -165,9 +160,9 @@ impl BlockGraph {
 
         let mut out = vec![];
         for entry in entries {
-            let mut reachable = HashSet::new();
+            let mut reachable: HashSet<BlockId> = HashSet::new();
             let mut all = HashSet::new();
-            reachable.insert(entry.into());
+            reachable.insert(entry);
             all.insert(entry.into());
 
             let mut dfs = petgraph::visit::Dfs::new(&subgraph, entry.into());
@@ -215,5 +210,18 @@ impl BlockGraph {
             }
         }
         entries
+    }
+
+    pub fn post_order_blocks(&self) -> Vec<BlockId> {
+        let mut blocks = vec![BlockId(0).into()];
+        for block_id in self.graph_get_entries() {
+            let mut seq: Vec<BlockId> = vec![];
+            let mut dfs = petgraph::visit::DfsPostOrder::new(&self.0, block_id.into());
+            while let Some(index) = dfs.next(&self.0) {
+                seq.push(index.into());
+            }
+            blocks.extend(seq.into_iter().rev());
+        }
+        blocks
     }
 }

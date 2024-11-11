@@ -196,17 +196,7 @@ impl FlattenModule {
         // nodes show up last, such as the return block
         // This seems to create a nice ordering.
 
-        let mut blocks = vec![BlockId(0).into()];
-
-        let mut value_count = 0;
-        for block_id in flatten.blocks.graph_get_entries() {
-            let mut seq = vec![];
-            let mut dfs = petgraph::visit::DfsPostOrder::new(&flatten.blocks.0, block_id.into());
-            while let Some(index) = dfs.next(&flatten.blocks.0) {
-                seq.push(index);
-            }
-            blocks.extend(seq.into_iter().rev());
-        }
+        let blocks = flatten.blocks.post_order_blocks();
 
         // inject builtin prototypes
         let print_index = b.labels.s("print_index".into());
@@ -251,6 +241,7 @@ impl FlattenModule {
             );
         }
 
+        let mut value_count = 0;
         for index in blocks.into_iter() {
             let block_id = index.into();
             let block = flatten.blocks.get_block(block_id);
@@ -269,8 +260,6 @@ impl FlattenModule {
                 }
             }
 
-            //for (index, link_id) in block.links.iter().enumerate() {
-            //let mut entry = flatten.get_entry(*link_id).clone();
             let mut index = 0;
             for mut entry in entries.into_iter() {
                 if let Some(ty) = b.types.u.resolve(&entry.ty) {

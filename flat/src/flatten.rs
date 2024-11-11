@@ -587,6 +587,9 @@ impl Flatten {
     }
 
     pub fn finish(&mut self, b: &mut NB) -> Result<()> {
+        let blocks = self.blocks.post_order_blocks();
+
+        // DEAD BLOCKS
         let dead_blocks = self.blocks.find_dead_blocks_from_graph();
         for block_id in dead_blocks {
             if let Some(link_id) = self.block_links.get(&block_id).cloned() {
@@ -597,7 +600,6 @@ impl Flatten {
                 let span_id = b.spans.get_span_unknown();
                 b.push_warning(&format!("Missing Block: {}", block_id), span_id);
             }
-            //let span_id = self.get_span_id(v);
         }
         self.type_inference_enforce(b);
         Ok(())
