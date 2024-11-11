@@ -137,10 +137,12 @@ impl SequenceReader {
                 }
                 _ => node,
             },
+            /*
             Ast::Attribute(ident, attr) => {
                 let node = attr;
                 resolve_attribute(*ident, &node, node.span_id, vec![], b).unwrap()
             }
+            */
             _ => node,
         };
 

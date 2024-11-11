@@ -134,7 +134,9 @@ impl FlattenModule {
                 &|_, (index, _block)| {
                     let block_id: BlockId = index.into();
                     if self.block_map.contains_key(&block_id) {
-                        let key = self.get_name(block_id.into()).unwrap();
+                        let key = self
+                            .get_name(block_id.into())
+                            .expect(&format!("missing name for block {}", block_id));
                         let name = b.labels.r(key);
                         format!(
                             //"label = \"B{:?}:{}\" shape=\"{:?}\"",

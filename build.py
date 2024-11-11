@@ -5,10 +5,10 @@ import glob
 compiler_debug = "target/x86_64-unknown-linux-gnu/debug/parse"
 compiler_release = "target/x86_64-unknown-linux-gnu/release/parse"
 
-def generate_inputs(fp):
+def generate_inputs(fp, interp=True, graphs=True):
     input_directory = "tests/bin"
 
-    def gen_with_rule(kind, compiler, defaults=False, graphs=False):
+    def gen_with_rule(kind, compiler, defaults=False):
         outputs = []
         images = []
         for f in glob.glob(os.path.join(input_directory, "*.star")):
@@ -28,9 +28,11 @@ def generate_inputs(fp):
             cfg_input_filename = os.path.join(target, f"{base}.cfg.mmd")
             cfg_output_filename = os.path.join(target, f"{base}.cfg.png")
             fp.write(f"build {mlir_filename} | {graph_input_filename} {blocks_input_filename} {scopes_input_filename} {cfg_input_filename}: mlir-{kind} {input_filename} | {compiler}\n")
-            fp.write(f"build {interp_filename}: interpret-{kind} {input_filename} | {compiler}\n")
 
-            if True:# or graphs:
+            if interp:
+                fp.write(f"build {interp_filename}: interpret-{kind} {input_filename} | {compiler}\n")
+
+            if graphs:
                 fp.write(f"build {graph_output_filename}: dot-png {graph_input_filename}\n")
                 fp.write(f"build {blocks_output_filename}: dot-png {blocks_input_filename}\n")
                 fp.write(f"build {scopes_output_filename}: dot-png {scopes_input_filename}\n")
@@ -65,7 +67,7 @@ def generate_inputs(fp):
     gen_with_rule("debug", compiler_debug, defaults=True)
     gen_with_rule("release", compiler_release)
 
-    fp.write("default testbins-debug\n")
+    fp.write("default prelude-debug testbins-debug\n")
     fp.write("build all: phony testbins-debug testbins-release\n")
 
 
