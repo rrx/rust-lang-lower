@@ -415,13 +415,6 @@ impl Flatten {
             )
         );
         println!("saved graph {:?}", filename);
-        //println!("{}", s);
-        let path = std::path::Path::new(filename);
-        let directory = path
-            .parent()
-            .map(|dir| dir.to_string_lossy().into_owned())
-            .unwrap();
-        std::fs::create_dir_all(directory).unwrap();
         std::fs::write(filename, s).unwrap();
     }
 
@@ -1687,10 +1680,10 @@ impl Flatten {
         self.scopes
             .scope_define(self.static_scope_id(), global_name, entry_link_id);
 
-        let body = make_sequence(*body, b);
+        //let body = make_sequence(*body, b);
 
         self.switch_blocks(fun_block_id);
-        let _ = self.push_node(body, b)?;
+        let _ = self.push_node(*body, b)?;
         self.maybe_terminate_block(ret_block_id, span_id);
 
         // write out return block
@@ -1867,7 +1860,8 @@ impl Flatten {
             .block_succ(current_block_id, next_block_id, Successor::BlockScope);
 
         // Lambda Body
-        let body = make_sequence(*def.body.unwrap(), b);
+        //let body = make_sequence(*def.body.unwrap(), b);
+        let body = *def.body.unwrap();
 
         // get the next block
         //let block = self.blocks.get_block(current_block_id);
@@ -3451,6 +3445,7 @@ fn def_to_type(def: &Lambda, b: &mut NB) -> AstType {
     fun_ty
 }
 
+/*
 fn make_sequence(ast: AstNode, b: &mut NB) -> AstNode {
     let span_id = ast.span_id;
     //let mut reader = SequenceReader::new();
@@ -3458,3 +3453,4 @@ fn make_sequence(ast: AstNode, b: &mut NB) -> AstNode {
     let seq = ast.to_vec();
     NB::seq(seq, span_id)
 }
+*/
