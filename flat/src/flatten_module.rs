@@ -233,13 +233,13 @@ impl FlattenModule {
         m.link = flatten.link.clone();
         for block_id in flatten.blocks.graph_get_entries() {
             let block = flatten.blocks.get_block(block_id);
-            let label_link_id = block.links.first().unwrap();
-            let entry = flatten.get_entry(*label_link_id).clone();
-            let ty = flatten.get_type(*label_link_id).clone();
+            let label_link_id = block.entry.unwrap();
+            let entry = flatten.get_entry(label_link_id).clone();
+            let ty = flatten.get_type(label_link_id).clone();
             assert_eq!(entry.mem, VarDefinitionSpace::Static);
 
             if let Some(key) = entry.name {
-                m.functions.insert(key, *label_link_id);
+                m.functions.insert(key, label_link_id);
             }
 
             flatten.push_code(
@@ -271,10 +271,10 @@ impl FlattenModule {
 
                 let v = ValueId(value_count);
                 let mut next = v;
-                let mut prev = v;
-                if index != 0 {
-                    prev = ValueId(value_count - 1);
-                }
+                //let mut prev = v;
+                //if index != 0 {
+                //prev = ValueId(value_count - 1);
+                //}
                 if index < block.links.len() - 1 {
                     next = ValueId(value_count + 1);
                 }
