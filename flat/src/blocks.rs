@@ -27,7 +27,7 @@ pub struct IRBlock {
     pub(super) last: Option<LinkId>,
     pub(super) num_ret_args: HashSet<usize>,
     pub(super) ret_types: HashSet<AstType>,
-    pub(super) links: Vec<LinkId>,
+    //pub(super) links: Vec<LinkId>,
 }
 
 impl IRBlock {
@@ -39,7 +39,7 @@ impl IRBlock {
             entry: None,
             last: None,
             size: 0,
-            links: vec![],
+            //links: vec![],
             num_ret_args: HashSet::new(),
             ret_types: HashSet::new(),
         }
@@ -54,7 +54,7 @@ impl IRBlock {
         if self.entry.is_none() {
             self.entry = Some(link_id);
         }
-        self.links.push(link_id);
+        //self.links.push(link_id);
         self.term = term;
         self.last = Some(link_id);
         self.size += 1;
