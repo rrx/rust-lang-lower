@@ -412,7 +412,7 @@ impl Flatten {
                 },
                 &|_, (index, block)| {
                     let block_id: BlockId = index.into();
-                    format!("label = \"{}:{}\"", block_id, block.links.len())
+                    format!("label = \"{}:{}\"", block_id, block.len())
                 }
             )
         );
@@ -682,10 +682,10 @@ impl Flatten {
         let block_id = entry.block_id;
         let span_id = entry.span_id;
         let block = self.blocks.get_block(block_id);
-        let link_id = self._insert_entry(entry, block.links.last().cloned());
+        let link_id = self._insert_entry(entry, block.last());
         let block = self.blocks.get_block(block_id);
-        if let Some(last_link_id) = block.links.last() {
-            let last_entry = self.get_entry_mut(*last_link_id);
+        if let Some(last_link_id) = block.last() {
+            let last_entry = self.get_entry_mut(last_link_id);
             last_entry.next = link_id;
             let is_term = last_entry.code.is_term();
             if is_term {
@@ -769,7 +769,7 @@ impl Flatten {
         let scope = self.scopes.get_scope(block.scope_id);
         assert_eq!(scope.unclaimed_labels.len(), 0);
 
-        let link_id = block.links.last().unwrap().clone();
+        let link_id = block.last().unwrap();
         Ok(FlattenResult::link(link_id))
     }
 
@@ -3039,7 +3039,7 @@ impl Flatten {
 
     pub fn ensure_open(&self) {
         let block = self.blocks.get_block(self.current_block_id());
-        let link_id = block.links.last().unwrap().clone();
+        let link_id = block.last().unwrap().clone();
         let entry = self.get_entry(link_id);
         assert!(!entry.code.is_term());
     }
@@ -3047,7 +3047,7 @@ impl Flatten {
     pub fn maybe_terminate_block(&mut self, v_next: BlockId, span_id: SpanId) -> LinkId {
         // is the block isn't terminated, terminate it with a jump to another block
         let block = self.blocks.get_block(self.current_block_id());
-        let mut link_id = block.links.last().unwrap().clone();
+        let mut link_id = block.last().unwrap().clone();
         let entry = self.get_entry(link_id);
         if !entry.code.is_term() {
             link_id = self.push_jump(v_next, vec![], span_id);

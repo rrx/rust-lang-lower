@@ -275,13 +275,13 @@ impl FlattenModule {
                 //if index != 0 {
                 //prev = ValueId(value_count - 1);
                 //}
-                if index < block.links.len() - 1 {
+                if index < block.len() - 1 {
                     next = ValueId(value_count + 1);
                 }
                 let scope_id = block.scope_id;
                 let scope = flatten.scopes.get_scope(scope_id);
 
-                if index == block.links.len() - 1
+                if index == block.len() - 1
                     && !entry.code.is_term()
                     && scope.scope_type != ScopeType::Static
                 {

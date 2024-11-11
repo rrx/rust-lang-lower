@@ -22,6 +22,7 @@ pub struct IRBlock {
     pub(super) scope_id: ScopeId,
     pub(super) dead: bool,
     pub(super) term: bool,
+    pub(super) size: usize,
     pub(super) entry: Option<LinkId>,
     pub(super) last: Option<LinkId>,
     pub(super) num_ret_args: HashSet<usize>,
@@ -37,10 +38,15 @@ impl IRBlock {
             term: false,
             entry: None,
             last: None,
+            size: 0,
             links: vec![],
             num_ret_args: HashSet::new(),
             ret_types: HashSet::new(),
         }
+    }
+
+    pub fn len(&self) -> usize {
+        self.size
     }
 
     pub fn push(&mut self, link_id: LinkId, term: bool) {
@@ -51,6 +57,7 @@ impl IRBlock {
         self.links.push(link_id);
         self.term = term;
         self.last = Some(link_id);
+        self.size += 1;
     }
 
     pub fn last(&self) -> Option<LinkId> {
