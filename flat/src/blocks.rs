@@ -21,9 +21,10 @@ pub enum Successor {
 pub struct IRBlock {
     pub(super) scope_id: ScopeId,
     pub(super) dead: bool,
+    pub(super) term: bool,
+    pub(super) last: Option<LinkId>,
     pub(super) num_ret_args: HashSet<usize>,
     pub(super) ret_types: HashSet<AstType>,
-    //pub(super) next: Option<BlockId>,
     pub(super) links: Vec<LinkId>,
 }
 
@@ -32,24 +33,24 @@ impl IRBlock {
         Self {
             scope_id,
             dead: false,
-            //ast,
+            term: false,
+            last: None,
             links: vec![],
-            //next: None,
             num_ret_args: HashSet::new(),
             ret_types: HashSet::new(),
         }
     }
 
-    //pub fn next(&mut self, next_block_id: BlockId) {
-    //self.next = Some(next_block_id);
-    //}
-
-    pub fn push(&mut self, link_id: LinkId) {
+    pub fn push(&mut self, link_id: LinkId, term: bool) {
+        assert!(!self.term);
         self.links.push(link_id);
+        self.term = term;
+        self.last = Some(link_id);
     }
 
     pub fn last(&self) -> Option<LinkId> {
-        self.links.last().cloned()
+        self.last
+        //self.links.last().cloned()
     }
 }
 

@@ -678,6 +678,7 @@ impl Flatten {
     }
 
     pub fn push_entry_with_link(&mut self, entry: CodeEntry) -> LinkId {
+        let entry_is_term = entry.code.is_term();
         let block_id = entry.block_id;
         let span_id = entry.span_id;
         let block = self.blocks.get_block(block_id);
@@ -695,7 +696,9 @@ impl Flatten {
                 ));
             }
         }
-        self.blocks.get_block_mut(block_id).push(link_id);
+        self.blocks
+            .get_block_mut(block_id)
+            .push(link_id, entry_is_term);
         link_id
     }
 
