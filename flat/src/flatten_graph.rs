@@ -205,6 +205,10 @@ pub fn flow_graph(m: &dyn ICodeModule, gblocks: &BlockGraph, filename: &str, b: 
                 let mut scope_group = Group::new(scope_name.clone(), "".into());
                 for block_id in values {
                     if !track.contains(block_id) {
+                        let block = gblocks.get_block(*block_id);
+                        if block.dead {
+                            continue;
+                        }
                         let block_name = format!("{}", block_id);
                         let block_body = if let Some(key) = m.get_name(block_id.into()) {
                             b.labels.r(key)

@@ -135,27 +135,33 @@ impl ICodeModule for Flatten {
     }
 
     fn get_span_id(&self, value_id: ValueId) -> SpanId {
-        let link_id = LinkId(value_id.index() as u32);
+        //let link_id = LinkId(value_id.index() as u32);
+        let link_id = self.values[value_id.index()];
         let entry = self.get_entry(link_id);
         entry.span_id
     }
 
     fn get_name(&self, offset: CodeOffset) -> Option<StringLabel> {
         let value_id = self.resolve_code_offset(offset);
-        let link_id = LinkId(value_id.index() as u32);
+        //let link_id = LinkId(value_id.index() as u32);
+        let link_id = self.values[value_id.index()];
         self.get_entry(link_id).name.map(|n| n.into())
     }
 
     fn get_code(&self, value_id: ValueId) -> &LCode {
-        let link_id = LinkId(value_id.index() as u32);
+        //let link_id = LinkId(value_id.index() as u32);
+        let link_id = self.values[value_id.index()];
         &self.get_entry(link_id).code
     }
 
     fn get_next(&self, value_id: ValueId) -> Option<ValueId> {
-        let value_id = LinkId(value_id.index() as u32);
-        let entry = self.get_entry(value_id);
-        if entry.next != value_id {
-            Some(ValueId(entry.next.index() as u32))
+        let link_id = self.values[value_id.index()];
+        //let value_id = LinkId(value_id.index() as u32);
+        let entry = self.get_entry(link_id);
+        if entry.next != link_id {
+            let next_entry = self.get_entry(entry.next);
+            next_entry.value_id
+            //Some(ValueId(entry.next.index() as u32))
         } else {
             None
         }
@@ -174,22 +180,25 @@ impl ICodeModule for Flatten {
     */
 
     fn get_block_successors(&self, entry_id: ValueId) -> Vec<(Successor, CodeOffset)> {
-        let entry_id = LinkId(entry_id.index() as u32);
-        let entry = self.get_entry(entry_id);
+        //let entry_id = LinkId(entry_id.index() as u32);
+        let link_id = self.values[entry_id.index()];
+        let entry = self.get_entry(link_id);
         let block_id = entry.block_id;
         self.blocks.get_block_successors(block_id)
     }
 
     fn get_type(&self, v: CodeOffset) -> AstType {
         let value_id = self.resolve_code_offset(v);
-        let value_id = LinkId(value_id.index() as u32);
-        let entry = self.get_entry(value_id);
+        //let value_id = LinkId(value_id.index() as u32);
+        let link_id = self.values[value_id.index()];
+        let entry = self.get_entry(link_id);
         entry.clone().ty
     }
 
     fn get_entry_id(&self, value_id: ValueId) -> ValueId {
-        let value_id = LinkId(value_id.index() as u32);
-        let block_id = self.get_entry(value_id).block_id;
+        //let value_id = LinkId(value_id.index() as u32);
+        let link_id = self.values[value_id.index()];
+        let block_id = self.get_entry(link_id).block_id;
         let link_id = *self
             .block_links
             .get(&block_id)
@@ -199,8 +208,9 @@ impl ICodeModule for Flatten {
 
     fn is_in_static_scope(&self, offset: CodeOffset) -> bool {
         let value_id = self.resolve_code_offset(offset);
-        let value_id = LinkId(value_id.index() as u32);
-        let entry = self.get_entry(value_id);
+        //let value_id = LinkId(value_id.index() as u32);
+        let link_id = self.values[value_id.index()];
+        let entry = self.get_entry(link_id);
         let block = self.blocks.get_block(entry.block_id);
         let scope = self.scopes.get_scope(block.scope_id);
         scope.scope_type == ScopeType::Static
@@ -208,20 +218,27 @@ impl ICodeModule for Flatten {
 
     fn get_mem(&self, offset: CodeOffset) -> &VarDefinitionSpace {
         let value_id = self.resolve_code_offset(offset);
-        let value_id = LinkId(value_id.index() as u32);
-        &self.get_entry(value_id).mem
+        //let value_id = LinkId(value_id.index() as u32);
+        let link_id = self.values[value_id.index()];
+        &self.get_entry(link_id).mem
     }
 
     fn resolve_code_offset(&self, code_offset: CodeOffset) -> ValueId {
         match code_offset {
             CodeOffset::Value(v) => v,
-            CodeOffset::Link(v) => ValueId(v.index() as u32),
+            CodeOffset::Link(link_id) => {
+                let entry = self.get_entry(link_id);
+                entry.value_id.unwrap()
+                //let link_id = self.values[value_id.index()];
+                //ValueId(v.index() as u32),
+            }
             CodeOffset::Block(block_id) => {
                 let link_id = *self
                     .block_links
                     .get(&block_id)
                     .expect(&format!("Missing block {}", block_id));
-                ValueId(link_id.index() as u32)
+                let entry = self.get_entry(link_id);
+                entry.value_id.unwrap()
             }
         }
     }
@@ -236,20 +253,9 @@ impl ICodeModule for Flatten {
 
     fn dump_code_table(&self, filename: &str, b: &mut NB) {
         let mut rows = vec![];
-        /*
-        for (index, link_id) in self.values.iter().enumerate() {
+        for index in 0..self.values.len() {
+            //for (index, link_id) in self.values.iter().enumerate() {
             let value_id = ValueId::new(index as u32);
-            if let Some(row) = self.get_code_row(value_id, b) {
-                rows.push(row);
-            } else {
-                println!("Unable to load entry: {}", value_id);
-            }
-        }
-        */
-
-        for entry in self.entries.iter() {
-            let link_id = entry.link.unwrap();
-            let value_id = ValueId(link_id.index() as u32);
             if let Some(row) = self.get_code_row(value_id, b) {
                 rows.push(row);
             } else {
@@ -286,19 +292,13 @@ impl Flatten {
     }
 
     pub fn get_code_row(&self, v: ValueId, b: &mut NB) -> Option<CodeRow> {
-        let link_id = LinkId(v.index() as u32);
+        let link_id = self.values[v.index()];
         let entry = self.get_entry(link_id);
         let code = self.get_code(v);
-        //let ty = self.get_type(v.into());
 
         let mem = self.get_mem(v.into());
         let block_id = entry.block_id;
         let block = self.blocks.node_weight(block_id.into()).unwrap();
-        //println!("block: {:?}", (block_id, block, v, entry));
-
-        //let next = self.get_next(v).unwrap_or(v).index();
-        //let prev = self.get_prev(v).unwrap_or(v).index();
-        //println!("row: {}, {:?}", v, (self.entries.len()));
         let entry_id = self.get_entry_id(v);
 
         let r_ty = if let Some(r_ty) = b.types.u.resolve(&entry.ty) {
@@ -308,8 +308,6 @@ impl Flatten {
         };
         //println!("X: {} => {}", &entry.ty, &r_ty);
 
-        //let is_unknown = r_ty.as_ref().map(|ty| ty.is_unknown()).unwrap_or(true);
-        //let s_ty = format!("{}", &r_ty.unwrap_or(ty)); //AstType::Error));
         let is_unknown = r_ty.is_unknown();
         let s_ty = format!("{}", &r_ty);
 
@@ -321,9 +319,7 @@ impl Flatten {
             next: entry.next.index(),
             //prev: entry.prev.index(),
             value: self.code_to_string(v, b),
-            //ty: ty.clone(),
             ty: s_ty,
-            //r_ty: r_ty.unwrap_or(AstType::Error),
             mem: format!("{:?}", mem),
             name: self
                 .get_name(v.into())
@@ -363,9 +359,8 @@ impl Flatten {
 
     pub fn dump_code_table(&self, filename: &str, b: &mut NB) {
         let mut rows = vec![];
-        for entry in self.entries.iter() {
-            let link_id = entry.link.unwrap();
-            let value_id = ValueId(link_id.index() as u32);
+        for index in 0..self.values.len() {
+            let value_id = ValueId::new(index as u32);
             if let Some(row) = self.get_code_row(value_id, b) {
                 rows.push(row);
             } else {
@@ -446,7 +441,6 @@ impl Flatten {
         let block = self.blocks.get_block(block_id);
         for scope_id in self.scopes.walk_scopes(block.scope_id) {
             let scope = self.scopes.get_scope(scope_id);
-            //println!("resolve: {}, {}", scope_id, scope.entries.len());
             if let Some(e) = scope.entries.get(name) {
                 for (index, v) in e.variants.iter().enumerate() {
                     let variant_id = VariantId(index as u32);
@@ -743,7 +737,6 @@ impl Flatten {
         for _key in keys.iter() {
             // reset the block position before each function
             //let name = b.labels.r(key.into());
-            //println!("bake {}", name);
             self.switch_blocks(block_id);
             //let link_id = self.push_bake(*key, None, b)?;
             //links.push(link_id);
@@ -1358,7 +1351,7 @@ impl Flatten {
         let (_variant_id, v_entry) = if let Some((variant_id, r_ty, v_entry)) =
             self.resolve_function_name(current_block_id, &name, &call_func_type, b)
         {
-            println!("[{}] R2: {}, {:?}", s, call_func_type, (v_entry));
+            //println!("[{}] R2: {}, {:?}", s, call_func_type, (v_entry));
             if b.types.u.unify(&call_func_type, &r_ty).is_err() {
                 b.push_error_labels(vec![
                     b.primary_label(
