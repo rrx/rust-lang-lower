@@ -98,14 +98,10 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
 
     let mut f = Flatten::flatten_module(ast, mode, b)?;
 
-    /*
-    if config.template {
-        let r = f.push_bake_templates(&mut fenv, &mut b)?;
-    } else {
-    */
     f.push_bake_main(b)?;
 
-    let m = f.finish(b)?;
+    let m = FlattenModule::build(f, b)?;
+    //let m = f.finish(b)?;
 
     let directory = std::path::Path::new(output_filename)
         .parent()
@@ -113,8 +109,6 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
         .unwrap();
     std::fs::create_dir_all(directory).unwrap();
 
-    //f.dump_blocks();
-    //f.dump_scope(fenv.static_block_id(), &fenv, &b);
     let pre_graph_path = make_path(&output_filename, "f.dot");
     m.save_graph(&pre_graph_path, &b);
 
@@ -134,38 +128,6 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
     let mut scopes_path = path.clone();
     scopes_path.set_extension("f.scopes.dot");
     m.scopes.scope_graph(scopes_path.clone().to_str().unwrap());
-
-    //let m = f;
-    /*
-    let mut m = FlattenModule::from_builder(f, b);
-
-    if config.template {
-        m.type_inference(b);
-    } else {
-        m.type_inference_enforce(b);
-    }
-
-    //b.labels.pool.dump();
-    m.dump(&b);
-
-    let table_path = make_path(&output_filename, "table.txt");
-    m.dump_code_table(&table_path, b);
-
-    let out_graph_path = make_path(&output_filename, "graph.dot");
-    m.save_graph(&out_graph_path, b);
-
-    let mut blocks_path = path.clone();
-    blocks_path.set_extension("blocks.dot");
-    m.block_graph(blocks_path.clone().to_str().unwrap(), &b);
-
-    let mut scopes_path = path.clone();
-    scopes_path.set_extension("scopes.dot");
-    m.scopes.scope_graph(scopes_path.clone().to_str().unwrap());
-
-    let mut cfg_path = path.clone();
-    cfg_path.set_extension("cfg.mmd");
-    m.flow_graph(cfg_path.clone().to_str().unwrap(), &b)?;
-    */
 
     if b.spans.has_errors {
         return Err(anyhow::Error::new(BlockifyError::Invalid).into());

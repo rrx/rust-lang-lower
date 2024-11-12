@@ -109,19 +109,19 @@ pub enum FlattenMode {
 
 pub struct Flatten {
     pub(super) link: LinkOptions,
-    entries: Vec<CodeEntry>,
-    values: Vec<LinkId>,
+    pub(super) entries: Vec<CodeEntry>,
+    //pub(super) values: Vec<LinkId>,
     pub blocks: BlockGraph,
     ast_templates: Vec<(Lambda, SpanId)>,
-    messages: Vec<(String, SpanId)>,
+    pub(super) messages: Vec<(String, SpanId)>,
     pub mode: FlattenMode,
     pub(crate) static_scope: Option<ScopeId>,
     pub(crate) static_block: Option<BlockId>,
     pub(crate) current_block: BlockId,
     pub scopes: ScopeGraph,
-    block_links: HashMap<BlockId, LinkId>,
+    pub(super) block_links: HashMap<BlockId, LinkId>,
     pub(crate) functions: HashMap<StringKey, LinkId>,
-    statics: HashMap<StringKey, Literal>,
+    pub(crate) statics: HashMap<StringKey, Literal>,
 }
 
 impl Flatten {
@@ -130,7 +130,7 @@ impl Flatten {
 
         Self {
             entries: vec![],
-            values: vec![],
+            //values: vec![],
             blocks,
             link: LinkOptions::new(),
             ast_templates: vec![],
@@ -406,7 +406,7 @@ impl Flatten {
         }
     }
 
-    pub fn finish(mut self, b: &mut NB) -> Result<FlattenModule> {
+    pub fn finish(mut self, b: &mut NB) -> Result<(Flatten, Vec<LinkId>)> {
         self.inject_builtin_prototypes(b);
 
         for block_id in self.blocks.graph_get_entries() {
@@ -496,6 +496,9 @@ impl Flatten {
         }
         self.type_inference_enforce(b);
 
+        Ok((self, values))
+        /*
+
         Ok(FlattenModule {
             link: self.link,
             entries: self.entries,
@@ -509,6 +512,7 @@ impl Flatten {
             functions: self.functions,
             statics: self.statics,
         })
+            */
     }
 
     pub fn push_bake_main(&mut self, b: &mut NB) -> Result<LinkId> {
