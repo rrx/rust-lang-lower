@@ -222,13 +222,20 @@ pub fn flow_graph(m: &dyn ICodeModule, gblocks: &BlockGraph, filename: &str, b: 
 
                         let mut block_group = Group::new(block_name, block_body);
 
-                        let mut v = m.resolve_code_offset(block_id.into());
+                        let maybe_v = m.maybe_resolve_code_offset(block_id.into());
+
+                        if maybe_v.is_none() {
+                            continue;
+                        }
+                        let mut v = maybe_v.unwrap();
+
                         loop {
                             let code = m.get_code(v);
                             match code {
                                 LCode::Jump(offset) => {
-                                    let v_target = m.resolve_code_offset(*offset);
-                                    ng.edges.push((v, v_target));
+                                    if let Some(v_target) = m.maybe_resolve_code_offset(*offset) {
+                                        ng.edges.push((v, v_target));
+                                    }
                                 }
                                 LCode::Branch(c, b1, b2) => {
                                     let v_target = m.resolve_code_offset(*c);

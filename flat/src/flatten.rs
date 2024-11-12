@@ -401,7 +401,7 @@ impl Flatten {
         }
     }
 
-    pub fn finish(mut self, b: &mut NB) -> Result<(Flatten, Vec<LinkId>)> {
+    pub(super) fn finish(mut self, b: &mut NB) -> Result<(Flatten, Vec<LinkId>)> {
         self.inject_builtin_prototypes(b);
 
         // DEAD BLOCKS
@@ -446,6 +446,10 @@ impl Flatten {
             let block = self.blocks.get_block(block_id);
             let size = block.len();
             let scope_id = block.scope_id;
+            if block.entry.is_none() {
+                continue;
+            }
+
             let entry_id = block.entry.unwrap();
 
             let mut entries = vec![];
@@ -660,7 +664,11 @@ impl Flatten {
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
         let scope = self.scopes.get_scope(block.scope_id);
-        assert_eq!(scope.unclaimed_labels.len(), 0);
+        for (key, _block_id) in scope.unclaimed_labels.iter() {
+            let s = b.labels.r(*key);
+            b.push_error(&format!("Unclaimed label: {}", s), span_id);
+        }
+        //assert_eq!(scope.unclaimed_labels.len(), 0);
 
         let link_id = block.last().unwrap();
         Ok(FlattenResult::link(link_id))

@@ -42,9 +42,12 @@ impl ICodeModule for FlattenModule {
     }
 
     fn get_name(&self, offset: CodeOffset) -> Option<StringLabel> {
-        let value_id = self.resolve_code_offset(offset);
-        let link_id = self.values[value_id.index()];
-        self.get_entry(link_id).name.map(|n| n.into())
+        if let Some(value_id) = self.maybe_resolve_code_offset(offset) {
+            let link_id = self.values[value_id.index()];
+            self.get_entry(link_id).name.map(|n| n.into())
+        } else {
+            None
+        }
     }
 
     fn get_code(&self, value_id: ValueId) -> &LCode {
@@ -111,21 +114,23 @@ impl ICodeModule for FlattenModule {
     }
 
     fn resolve_code_offset(&self, code_offset: CodeOffset) -> ValueId {
+        self.maybe_resolve_code_offset(code_offset).unwrap()
+    }
+
+    fn maybe_resolve_code_offset(&self, code_offset: CodeOffset) -> Option<ValueId> {
         match code_offset {
-            CodeOffset::Value(v) => v,
+            CodeOffset::Value(v) => Some(v),
             CodeOffset::Link(link_id) => {
                 let entry = self.get_entry(link_id);
-                entry.value_id.unwrap()
+                entry.value_id
             }
             CodeOffset::Block(block_id) => {
-                let link_id = *self
-                    .block_links
-                    .get(&block_id)
-                    .expect(&format!("Missing block {}", block_id));
-                let entry = self.get_entry(link_id);
-                entry
-                    .value_id
-                    .expect(&format!("value not included: {}", block_id))
+                if let Some(link_id) = self.block_links.get(&block_id) {
+                    let entry = self.get_entry(*link_id);
+                    entry.value_id
+                } else {
+                    None
+                }
             }
         }
     }
@@ -281,7 +286,8 @@ impl FlattenModule {
                         } else {
                             // block not found
                             // this should never happen
-                            unreachable!();
+                            format!("label = \"B{:?}:?\"", index.index(),)
+                            //unreachable!();
                         }
                     }
                 }

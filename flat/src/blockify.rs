@@ -169,9 +169,10 @@ pub trait ICodeModule {
                 let c = cfg.g.add_node(Node::new_block(name, entry_id.into()));
                 cfg.ids.insert(entry_id, c);
                 for (succ_type, next_code_offset) in self.get_block_successors(entry_id) {
-                    let v = self.resolve_code_offset(next_code_offset);
-                    if scope.is_none() || scope == Some(succ_type) {
-                        stack.push_back(v);
+                    if let Some(v) = self.maybe_resolve_code_offset(next_code_offset) {
+                        if scope.is_none() || scope == Some(succ_type) {
+                            stack.push_back(v);
+                        }
                     }
                 }
             } else {
@@ -184,9 +185,10 @@ pub trait ICodeModule {
             let id = cfg.ids.get(entry_id).unwrap();
             for (succ_type, next_code_offset) in self.get_block_successors(*entry_id) {
                 if let Successor::BlockScope = succ_type {
-                    let v = self.resolve_code_offset(next_code_offset);
-                    let child_id = cfg.ids.get(&v).unwrap();
-                    cfg.g.add_edge(*id, *child_id, ());
+                    if let Some(v) = self.maybe_resolve_code_offset(next_code_offset) {
+                        let child_id = cfg.ids.get(&v).unwrap();
+                        cfg.g.add_edge(*id, *child_id, ());
+                    }
                 }
             }
         }
@@ -269,6 +271,7 @@ pub trait ICodeModule {
     fn is_in_static_scope(&self, v: CodeOffset) -> bool;
     fn get_mem(&self, offset: CodeOffset) -> &VarDefinitionSpace;
     fn resolve_code_offset(&self, code_offset: CodeOffset) -> ValueId;
+    fn maybe_resolve_code_offset(&self, code_offset: CodeOffset) -> Option<ValueId>;
 
     fn blocks(&self, block_id: BlockId, v: ValueId, b: &NodeBuilder) -> Vec<CodeOffset> {
         let cfg = self.get_cfg(block_id, b);
