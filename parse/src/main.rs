@@ -126,6 +126,17 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
     cfg_path.set_extension("f.cfg.mmd");
     f.flow_graph(cfg_path.clone().to_str().unwrap(), &b)?;
 
+    let mut blocks_path = path.clone();
+    blocks_path.set_extension("f.blocks.dot");
+    f.blocks
+        .block_graph(blocks_path.clone().to_str().unwrap(), &b);
+
+    let mut scopes_path = path.clone();
+    scopes_path.set_extension("f.scopes.dot");
+    f.scopes.scope_graph(scopes_path.clone().to_str().unwrap());
+
+    let m = f;
+    /*
     let mut m = FlattenModule::from_builder(f, b);
 
     if config.template {
@@ -154,6 +165,7 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
     let mut cfg_path = path.clone();
     cfg_path.set_extension("cfg.mmd");
     m.flow_graph(cfg_path.clone().to_str().unwrap(), &b)?;
+    */
 
     if b.spans.has_errors {
         return Err(anyhow::Error::new(BlockifyError::Invalid).into());

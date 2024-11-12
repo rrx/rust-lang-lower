@@ -271,7 +271,10 @@ impl<'c> LowerIR<'c> for MLIRGenerator<'c> {
             self.index.insert(v, index);
         } else {
             let op = self.emit_literal_const(lit, location);
-            let c = self.blocks.get_mut(&block_id).unwrap();
+            let c = self
+                .blocks
+                .get_mut(&block_id)
+                .expect(&format!("block not found: {}", block_id));
             let index = c.push(op);
             self.index.insert(v, index);
         }

@@ -5,7 +5,7 @@ use petgraph::visit::EdgeRef;
 use std::collections::HashSet;
 use std::convert::From;
 
-use crate::{BlockId, CodeOffset, LinkId, ScopeId};
+use crate::{BlockId, CodeOffset, LinkId, NodeBuilder, ScopeId};
 use std::ops::{Deref, DerefMut};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -223,5 +223,53 @@ impl BlockGraph {
             blocks.extend(seq.into_iter().rev());
         }
         blocks
+    }
+
+    pub fn block_graph(&self, filename: &str, b: &NodeBuilder) {
+        use petgraph::dot::{Config, Dot};
+        let g = self.0.filter_map(
+            |_n_index, n| Some(n.clone()),
+            |_e_index, e| {
+                if let Successor::Jump = e {
+                    Some(e.clone())
+                } else {
+                    None
+                }
+            },
+        );
+        let num = petgraph::algo::connected_components(&g);
+        println!("components: {}", num);
+
+        let s = format!(
+            "{:?}",
+            Dot::with_attr_getters(
+                &g,
+                &[Config::NodeNoLabel],
+                &|_, _er| String::new(),
+                &|_, (index, _block)| {
+                    //let block_id: BlockId = index.into();
+                    /*
+                    if self.block_map.contains_key(&block_id) {
+                        let key = self
+                            .get_name(block_id.into())
+                            .expect(&format!("missing name for block {}", block_id));
+                        let name = b.labels.r(key);
+                        format!(
+                            //"label = \"B{:?}:{}\" shape=\"{:?}\"",
+                            "label = \"B{:?}:{}\"",
+                            index.index(),
+                            name,
+                            //&block.scope_id,
+                        )
+                    } else {
+                    */
+                    format!("label = \"B{:?}:?\"", index.index(),)
+                    //}
+                }
+            )
+        );
+        println!("saved graph {:?}", filename);
+        //println!("{}", s);
+        std::fs::write(filename, s).unwrap();
     }
 }

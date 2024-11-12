@@ -263,6 +263,7 @@ pub fn flow_graph(m: &dyn ICodeModule, gblocks: &BlockGraph, filename: &str, b: 
         ng.group.push_group(fun_group);
     }
     let mut f = File::create(filename)?;
+    println!("saved graph {:?}", filename);
     ng.write(&mut f)?;
     Ok(())
 }

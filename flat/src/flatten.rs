@@ -112,7 +112,7 @@ pub struct Flatten {
     pub(super) link: LinkOptions,
     entries: Vec<CodeEntry>,
     values: Vec<LinkId>,
-    pub(super) blocks: BlockGraph,
+    pub blocks: BlockGraph,
     ast_templates: Vec<(Lambda, SpanId)>,
     messages: Vec<(String, SpanId)>,
     pub mode: FlattenMode,
@@ -199,11 +199,14 @@ impl ICodeModule for Flatten {
         //let value_id = LinkId(value_id.index() as u32);
         let link_id = self.values[value_id.index()];
         let block_id = self.get_entry(link_id).block_id;
+        /*
         let link_id = *self
             .block_links
             .get(&block_id)
             .expect(&format!("Unable to find block {}", block_id));
-        ValueId(link_id.index() as u32)
+        */
+        self.resolve_code_offset(block_id.into())
+        //ValueId(link_id.index() as u32)
     }
 
     fn is_in_static_scope(&self, offset: CodeOffset) -> bool {
@@ -630,6 +633,11 @@ impl Flatten {
             let entry = self.get_entry(label_link_id).clone();
             let ty = self.get_type(label_link_id).clone();
             assert_eq!(entry.mem, VarDefinitionSpace::Static);
+
+            if let Some(key) = entry.name {
+                self.functions.insert(key, label_link_id);
+            }
+
             self.push_code(
                 LCode::DeclareFunction(Some(block_id)),
                 ty,
