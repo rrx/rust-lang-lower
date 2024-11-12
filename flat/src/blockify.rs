@@ -275,7 +275,6 @@ pub trait ICodeModule {
         cfg.blocks(v)
     }
 
-    fn get_entry_id_from_block_id(&self, block_id: BlockId) -> ValueId;
     fn dump_code_table(&self, filename: &str, b: &mut NodeBuilder);
 
     fn get_label_args(&self, v: ValueId) -> Vec<AstType> {

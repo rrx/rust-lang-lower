@@ -135,7 +135,6 @@ impl ICodeModule for Flatten {
     }
 
     fn get_span_id(&self, value_id: ValueId) -> SpanId {
-        //let link_id = LinkId(value_id.index() as u32);
         let link_id = self.values[value_id.index()];
         let entry = self.get_entry(link_id);
         entry.span_id
@@ -143,25 +142,21 @@ impl ICodeModule for Flatten {
 
     fn get_name(&self, offset: CodeOffset) -> Option<StringLabel> {
         let value_id = self.resolve_code_offset(offset);
-        //let link_id = LinkId(value_id.index() as u32);
         let link_id = self.values[value_id.index()];
         self.get_entry(link_id).name.map(|n| n.into())
     }
 
     fn get_code(&self, value_id: ValueId) -> &LCode {
-        //let link_id = LinkId(value_id.index() as u32);
         let link_id = self.values[value_id.index()];
         &self.get_entry(link_id).code
     }
 
     fn get_next(&self, value_id: ValueId) -> Option<ValueId> {
         let link_id = self.values[value_id.index()];
-        //let value_id = LinkId(value_id.index() as u32);
         let entry = self.get_entry(link_id);
         if entry.next != link_id {
             let next_entry = self.get_entry(entry.next);
             next_entry.value_id
-            //Some(ValueId(entry.next.index() as u32))
         } else {
             None
         }
@@ -180,7 +175,6 @@ impl ICodeModule for Flatten {
     */
 
     fn get_block_successors(&self, entry_id: ValueId) -> Vec<(Successor, CodeOffset)> {
-        //let entry_id = LinkId(entry_id.index() as u32);
         let link_id = self.values[entry_id.index()];
         let entry = self.get_entry(link_id);
         let block_id = entry.block_id;
@@ -189,29 +183,19 @@ impl ICodeModule for Flatten {
 
     fn get_type(&self, v: CodeOffset) -> AstType {
         let value_id = self.resolve_code_offset(v);
-        //let value_id = LinkId(value_id.index() as u32);
         let link_id = self.values[value_id.index()];
         let entry = self.get_entry(link_id);
         entry.clone().ty
     }
 
     fn get_entry_id(&self, value_id: ValueId) -> ValueId {
-        //let value_id = LinkId(value_id.index() as u32);
         let link_id = self.values[value_id.index()];
         let block_id = self.get_entry(link_id).block_id;
-        /*
-        let link_id = *self
-            .block_links
-            .get(&block_id)
-            .expect(&format!("Unable to find block {}", block_id));
-        */
         self.resolve_code_offset(block_id.into())
-        //ValueId(link_id.index() as u32)
     }
 
     fn is_in_static_scope(&self, offset: CodeOffset) -> bool {
         let value_id = self.resolve_code_offset(offset);
-        //let value_id = LinkId(value_id.index() as u32);
         let link_id = self.values[value_id.index()];
         let entry = self.get_entry(link_id);
         let block = self.blocks.get_block(entry.block_id);
@@ -221,7 +205,6 @@ impl ICodeModule for Flatten {
 
     fn get_mem(&self, offset: CodeOffset) -> &VarDefinitionSpace {
         let value_id = self.resolve_code_offset(offset);
-        //let value_id = LinkId(value_id.index() as u32);
         let link_id = self.values[value_id.index()];
         &self.get_entry(link_id).mem
     }
@@ -232,8 +215,6 @@ impl ICodeModule for Flatten {
             CodeOffset::Link(link_id) => {
                 let entry = self.get_entry(link_id);
                 entry.value_id.unwrap()
-                //let link_id = self.values[value_id.index()];
-                //ValueId(v.index() as u32),
             }
             CodeOffset::Block(block_id) => {
                 let link_id = *self
@@ -246,10 +227,6 @@ impl ICodeModule for Flatten {
         }
     }
 
-    fn get_entry_id_from_block_id(&self, block_id: BlockId) -> ValueId {
-        self.resolve_code_offset(block_id.into())
-    }
-
     fn code_count(&self) -> usize {
         self.entries.len()
     }
@@ -257,7 +234,6 @@ impl ICodeModule for Flatten {
     fn dump_code_table(&self, filename: &str, b: &mut NB) {
         let mut rows = vec![];
         for index in 0..self.values.len() {
-            //for (index, link_id) in self.values.iter().enumerate() {
             let value_id = ValueId::new(index as u32);
             if let Some(row) = self.get_code_row(value_id, b) {
                 rows.push(row);
@@ -309,7 +285,6 @@ impl Flatten {
         } else {
             entry.ty.clone()
         };
-        //println!("X: {} => {}", &entry.ty, &r_ty);
 
         let is_unknown = r_ty.is_unknown();
         let s_ty = format!("{}", &r_ty);

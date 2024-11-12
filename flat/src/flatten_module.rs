@@ -149,10 +149,6 @@ impl ICodeModule for FlattenModule {
         }
     }
 
-    fn get_entry_id_from_block_id(&self, block_id: BlockId) -> ValueId {
-        self.resolve_code_offset(block_id.into())
-    }
-
     fn code_count(&self) -> usize {
         self.entries.len()
     }
@@ -190,7 +186,7 @@ impl FlattenModule {
         petgraph::dot::Dot::with_config(&self.scopes.0, &[petgraph::dot::Config::EdgeNoLabel]);
     }
 
-    pub fn from_builder(mut flatten: Flatten, b: &mut NB) -> Self {
+    pub fn from_builder(flatten: Flatten, b: &mut NB) -> Self {
         // we want to output the blocks in a particular order
         // we use DFS post order search on each function, to ensure that the leaf
         // nodes show up last, such as the return block
@@ -204,7 +200,7 @@ impl FlattenModule {
             let block = flatten.blocks.get_block(block_id);
             let label_link_id = block.entry.unwrap();
             let entry = flatten.get_entry(label_link_id).clone();
-            let ty = flatten.get_type(label_link_id).clone();
+            //let ty = flatten.get_type(label_link_id).clone();
             assert_eq!(entry.mem, VarDefinitionSpace::Static);
 
             if let Some(key) = entry.name {
@@ -336,7 +332,7 @@ impl FlattenModule {
     pub fn find_dead_blocks(&mut self, b: &mut NB) {
         let dead_blocks = self.gblocks.find_dead_blocks_from_graph();
         for block_id in dead_blocks {
-            let v = self.get_entry_id_from_block_id(block_id);
+            let v = self.resolve_code_offset(block_id.into());
             let span_id = self.get_span_id(v);
             b.push_warning(&format!("Dead Block: {}", block_id), span_id);
         }
