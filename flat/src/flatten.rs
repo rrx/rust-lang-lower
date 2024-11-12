@@ -27,9 +27,9 @@ use std::collections::{HashMap, HashSet};
 use std::convert::Into;
 
 use crate::{
-    BlockGraph, BlockId, BlockifyError, Builtin, CodeOffset, CodeRow, ICodeModule, LCode, LinkId,
-    NodeBuilder as NB, ScopeGraph, ScopeId, ScopeType, StringLabel, Successor, TemplateId, ValueId,
-    VariantId,
+    BlockGraph, BlockId, BlockifyError, Builtin, CodeOffset, CodeRow, FlattenModule, ICodeModule,
+    LCode, LinkId, NodeBuilder as NB, ScopeGraph, ScopeId, ScopeType, StringLabel, Successor,
+    TemplateId, ValueId, VariantId,
 };
 
 use tabled::{settings::Style, Table};
@@ -108,7 +108,6 @@ pub enum FlattenMode {
 }
 
 pub struct Flatten {
-    module_key: Option<StringKey>,
     pub(super) link: LinkOptions,
     entries: Vec<CodeEntry>,
     values: Vec<LinkId>,
@@ -125,134 +124,11 @@ pub struct Flatten {
     statics: HashMap<StringKey, Literal>,
 }
 
-impl ICodeModule for Flatten {
-    fn shared_libraries(&self) -> Vec<String> {
-        self.link.shared_libraries()
-    }
-
-    fn lookup_name(&self, name: &StringKey) -> Option<LinkId> {
-        self.functions.get(name).cloned()
-    }
-
-    fn get_span_id(&self, value_id: ValueId) -> SpanId {
-        let link_id = self.values[value_id.index()];
-        let entry = self.get_entry(link_id);
-        entry.span_id
-    }
-
-    fn get_name(&self, offset: CodeOffset) -> Option<StringLabel> {
-        let value_id = self.resolve_code_offset(offset);
-        let link_id = self.values[value_id.index()];
-        self.get_entry(link_id).name.map(|n| n.into())
-    }
-
-    fn get_code(&self, value_id: ValueId) -> &LCode {
-        let link_id = self.values[value_id.index()];
-        &self.get_entry(link_id).code
-    }
-
-    fn get_next(&self, value_id: ValueId) -> Option<ValueId> {
-        let link_id = self.values[value_id.index()];
-        let entry = self.get_entry(link_id);
-        if entry.next != link_id {
-            let next_entry = self.get_entry(entry.next);
-            next_entry.value_id
-        } else {
-            None
-        }
-    }
-
-    /*
-    fn get_prev(&self, value_id: ValueId) -> Option<ValueId> {
-        let value_id = LinkId(value_id.index() as u32);
-        let entry = self.get_entry(value_id);
-        if entry.prev != value_id {
-            Some(ValueId(entry.prev.index() as u32))
-        } else {
-            None
-        }
-    }
-    */
-
-    fn get_block_successors(&self, entry_id: ValueId) -> Vec<(Successor, CodeOffset)> {
-        let link_id = self.values[entry_id.index()];
-        let entry = self.get_entry(link_id);
-        let block_id = entry.block_id;
-        self.blocks.get_block_successors(block_id)
-    }
-
-    fn get_type(&self, v: CodeOffset) -> AstType {
-        let value_id = self.resolve_code_offset(v);
-        let link_id = self.values[value_id.index()];
-        let entry = self.get_entry(link_id);
-        entry.clone().ty
-    }
-
-    fn get_entry_id(&self, value_id: ValueId) -> ValueId {
-        let link_id = self.values[value_id.index()];
-        let block_id = self.get_entry(link_id).block_id;
-        self.resolve_code_offset(block_id.into())
-    }
-
-    fn is_in_static_scope(&self, offset: CodeOffset) -> bool {
-        let value_id = self.resolve_code_offset(offset);
-        let link_id = self.values[value_id.index()];
-        let entry = self.get_entry(link_id);
-        let block = self.blocks.get_block(entry.block_id);
-        let scope = self.scopes.get_scope(block.scope_id);
-        scope.scope_type == ScopeType::Static
-    }
-
-    fn get_mem(&self, offset: CodeOffset) -> &VarDefinitionSpace {
-        let value_id = self.resolve_code_offset(offset);
-        let link_id = self.values[value_id.index()];
-        &self.get_entry(link_id).mem
-    }
-
-    fn resolve_code_offset(&self, code_offset: CodeOffset) -> ValueId {
-        match code_offset {
-            CodeOffset::Value(v) => v,
-            CodeOffset::Link(link_id) => {
-                let entry = self.get_entry(link_id);
-                entry.value_id.unwrap()
-            }
-            CodeOffset::Block(block_id) => {
-                let link_id = *self
-                    .block_links
-                    .get(&block_id)
-                    .expect(&format!("Missing block {}", block_id));
-                let entry = self.get_entry(link_id);
-                entry.value_id.unwrap()
-            }
-        }
-    }
-
-    fn code_count(&self) -> usize {
-        self.entries.len()
-    }
-
-    fn dump_code_table(&self, filename: &str, b: &mut NB) {
-        let mut rows = vec![];
-        for index in 0..self.values.len() {
-            let value_id = ValueId::new(index as u32);
-            if let Some(row) = self.get_code_row(value_id, b) {
-                rows.push(row);
-            } else {
-                println!("Unable to load entry: {}", value_id);
-            }
-        }
-        let s = Table::new(rows).with(Style::sharp()).to_string();
-        println!("{}", s);
-        std::fs::write(filename, s).unwrap();
-    }
-}
-
 impl Flatten {
     pub fn new() -> Self {
         let blocks = BlockGraph::new();
 
         Self {
-            module_key: None,
             entries: vec![],
             values: vec![],
             blocks,
@@ -268,50 +144,6 @@ impl Flatten {
             functions: HashMap::new(),
             statics: HashMap::new(),
         }
-    }
-
-    pub fn get_code_row(&self, v: ValueId, b: &mut NB) -> Option<CodeRow> {
-        let link_id = self.values[v.index()];
-        let entry = self.get_entry(link_id);
-        let code = self.get_code(v);
-
-        let mem = self.get_mem(v.into());
-        let block_id = entry.block_id;
-        let block = self.blocks.node_weight(block_id.into()).unwrap();
-        let entry_id = self.get_entry_id(v);
-
-        let r_ty = if let Some(r_ty) = b.types.u.resolve(&entry.ty) {
-            r_ty
-        } else {
-            entry.ty.clone()
-        };
-
-        let is_unknown = r_ty.is_unknown();
-        let s_ty = format!("{}", &r_ty);
-
-        let scope_id = block.scope_id;
-
-        Some(CodeRow {
-            pos: v.index(),
-            link: entry.link.unwrap().index(),
-            next: entry.next.index(),
-            //prev: entry.prev.index(),
-            value: self.code_to_string(v, b),
-            ty: s_ty,
-            mem: format!("{:?}", mem),
-            name: self
-                .get_name(v.into())
-                .map(|key| b.labels.r(key))
-                .unwrap_or("".to_string())
-                .to_string(),
-            span_id: self.get_span_id(v).index(),
-            scope_id: scope_id.index(),
-            entry_id: entry_id.index(),
-            block_id: block_id.index(),
-            term: code.is_term(),
-            dead: block.dead,
-            unknown: is_unknown,
-        })
     }
 
     pub fn type_inference_enforce(&mut self, b: &mut NB) {
@@ -333,29 +165,6 @@ impl Flatten {
                 b.push_error(&format!("Unresolved Type: {}", &entry.ty), entry.span_id);
             }
         }
-    }
-
-    pub fn dump_code_table(&self, filename: &str, b: &mut NB) {
-        let mut rows = vec![];
-        for index in 0..self.values.len() {
-            let value_id = ValueId::new(index as u32);
-            if let Some(row) = self.get_code_row(value_id, b) {
-                rows.push(row);
-            } else {
-                println!("Unable to load entry: {}", value_id);
-            }
-        }
-        let s = Table::new(rows).with(Style::sharp()).to_string();
-        println!("{}", s);
-        std::fs::write(filename, s).unwrap();
-    }
-
-    pub fn flow_graph(&self, filename: &str, b: &NB) -> Result<()> {
-        crate::flatten_graph::flow_graph(self, &self.blocks, filename, b)
-    }
-
-    pub fn dump_scopes(&self, _b: &NB) {
-        petgraph::dot::Dot::with_config(&self.scopes.0, &[petgraph::dot::Config::EdgeNoLabel]);
     }
 
     pub fn static_scope_id(&self) -> ScopeId {
@@ -533,7 +342,6 @@ impl Flatten {
         if let Ast::Module(key, body) = node.node {
             f.mode = mode;
             let static_block_id = f.current_block_id();
-            f.module_key = Some(key);
 
             let block = f.blocks.get_block(static_block_id);
             let static_scope_id = block.scope_id;
@@ -598,8 +406,7 @@ impl Flatten {
         }
     }
 
-    pub fn finish(&mut self, b: &mut NB) -> Result<()> {
-        let blocks = self.blocks.post_order_blocks();
+    pub fn finish(mut self, b: &mut NB) -> Result<FlattenModule> {
         self.inject_builtin_prototypes(b);
 
         for block_id in self.blocks.graph_get_entries() {
@@ -621,6 +428,9 @@ impl Flatten {
                 entry.mem,
             );
         }
+
+        let blocks = self.blocks.post_order_blocks();
+        let mut values = vec![];
 
         for block_id in blocks.into_iter() {
             let block = self.blocks.get_block(block_id);
@@ -664,8 +474,8 @@ impl Flatten {
                 }
 
                 let link_id = entry.link.unwrap();
-                let value_id = ValueId::new(self.values.len() as u32);
-                self.values.push(link_id);
+                let value_id = ValueId::new(values.len() as u32);
+                values.push(link_id);
                 let entry = self.get_entry_mut(link_id);
                 entry.value_id = Some(value_id);
                 index += 1;
@@ -685,7 +495,20 @@ impl Flatten {
             }
         }
         self.type_inference_enforce(b);
-        Ok(())
+
+        Ok(FlattenModule {
+            link: self.link,
+            entries: self.entries,
+            values,
+            blocks: self.blocks,
+            messages: self.messages,
+            static_scope: self.static_scope,
+            static_block: self.static_block,
+            scopes: self.scopes,
+            block_links: self.block_links,
+            functions: self.functions,
+            statics: self.statics,
+        })
     }
 
     pub fn push_bake_main(&mut self, b: &mut NB) -> Result<LinkId> {

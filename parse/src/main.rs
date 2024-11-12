@@ -105,7 +105,7 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
     */
     f.push_bake_main(b)?;
 
-    f.finish(b)?;
+    let m = f.finish(b)?;
 
     let directory = std::path::Path::new(output_filename)
         .parent()
@@ -116,26 +116,26 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
     //f.dump_blocks();
     //f.dump_scope(fenv.static_block_id(), &fenv, &b);
     let pre_graph_path = make_path(&output_filename, "f.dot");
-    f.save_graph(&pre_graph_path);
+    m.save_graph(&pre_graph_path, &b);
 
     let table_path = make_path(&output_filename, "f.table.txt");
-    f.dump_code_table(&table_path, b);
-    f.dump_scopes(b);
+    m.dump_code_table(&table_path, b);
+    m.dump_scopes();
 
     let mut cfg_path = path.clone();
     cfg_path.set_extension("f.cfg.mmd");
-    f.flow_graph(cfg_path.clone().to_str().unwrap(), &b)?;
+    m.flow_graph(cfg_path.clone().to_str().unwrap(), &b)?;
 
     let mut blocks_path = path.clone();
     blocks_path.set_extension("f.blocks.dot");
-    f.blocks
+    m.blocks
         .block_graph(blocks_path.clone().to_str().unwrap(), &b);
 
     let mut scopes_path = path.clone();
     scopes_path.set_extension("f.scopes.dot");
-    f.scopes.scope_graph(scopes_path.clone().to_str().unwrap());
+    m.scopes.scope_graph(scopes_path.clone().to_str().unwrap());
 
-    let m = f;
+    //let m = f;
     /*
     let mut m = FlattenModule::from_builder(f, b);
 

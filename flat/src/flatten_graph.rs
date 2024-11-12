@@ -106,10 +106,13 @@ graph TD\n\
 }
 
 impl FlattenModule {
+    /*
     pub fn flow_graph(&self, filename: &str, b: &NB) -> Result<()> {
         flow_graph(self, &self.gblocks, filename, b)
     }
+    */
 
+    /*
     pub fn block_graph(&self, filename: &str, b: &NB) {
         use petgraph::dot::{Config, Dot};
         let g = self.gblocks.0.filter_map(
@@ -155,6 +158,7 @@ impl FlattenModule {
         //println!("{}", s);
         std::fs::write(filename, s).unwrap();
     }
+    */
 }
 
 pub fn flow_graph(m: &dyn ICodeModule, gblocks: &BlockGraph, filename: &str, b: &NB) -> Result<()> {
