@@ -404,6 +404,19 @@ impl Flatten {
     pub fn finish(mut self, b: &mut NB) -> Result<(Flatten, Vec<LinkId>)> {
         self.inject_builtin_prototypes(b);
 
+        // DEAD BLOCKS
+        let dead_blocks = self.blocks.find_dead_blocks_from_graph();
+        for block_id in dead_blocks {
+            if let Some(link_id) = self.block_links.get(&block_id).cloned() {
+                //let v = self.get_entry_id_from_block_id(block_id);
+                let entry = self.get_entry(link_id);
+                b.push_warning(&format!("Dead Block: {}", block_id), entry.span_id);
+            } else {
+                let span_id = b.spans.get_span_unknown();
+                b.push_warning(&format!("Missing Block: {}", block_id), span_id);
+            }
+        }
+
         for block_id in self.blocks.graph_get_entries() {
             let block = self.blocks.get_block(block_id);
             let label_link_id = block.entry.unwrap();
@@ -477,18 +490,6 @@ impl Flatten {
             }
         }
 
-        // DEAD BLOCKS
-        let dead_blocks = self.blocks.find_dead_blocks_from_graph();
-        for block_id in dead_blocks {
-            if let Some(link_id) = self.block_links.get(&block_id).cloned() {
-                //let v = self.get_entry_id_from_block_id(block_id);
-                let entry = self.get_entry(link_id);
-                b.push_warning(&format!("Dead Block: {}", block_id), entry.span_id);
-            } else {
-                let span_id = b.spans.get_span_unknown();
-                b.push_warning(&format!("Missing Block: {}", block_id), span_id);
-            }
-        }
         self.type_inference_enforce(b);
 
         Ok((self, values))

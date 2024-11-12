@@ -123,7 +123,7 @@ impl ICodeModule for FlattenModule {
                     .get(&block_id)
                     .expect(&format!("Missing block {}", block_id));
                 let entry = self.get_entry(link_id);
-                entry.value_id.unwrap()
+                entry.value_id.expect(&format!("value not included: {}", block_id))
             }
         }
     }
@@ -237,7 +237,7 @@ impl FlattenModule {
         petgraph::dot::Dot::with_config(&self.scopes.0, &[petgraph::dot::Config::EdgeNoLabel]);
     }
 
-    pub fn block_graph(&self, filename: &str, b: &NB) {
+    pub fn block_graph(&self, filename: &str, _b: &NB) {
         use petgraph::dot::{Config, Dot};
         let g = self.blocks.0.filter_map(
             |_n_index, n| Some(n.clone()),
@@ -260,10 +260,15 @@ impl FlattenModule {
                 &[Config::NodeNoLabel],
                 &|_, _er| String::new(),
                 &|_, (index, _block)| {
-                    //let block_id: BlockId = index.into();
-                    format!("label = \"B{:?}:?\"", index.index(),)
-                    /*
+                    let block_id: BlockId = index.into();
                     let block = self.blocks.get_block(block_id);
+                    //let v = self.resolve_code_offset(block_id.into());
+                    if block.dead {
+                        format!("label = \"B{:?}:dead", index.index(),)
+                    } else {
+                        format!("label = \"B{:?}:?\"", index.index(),)
+                    }
+                    /*
                     if block.dead {
                         format!("label = \"B{:?}:?\"", index.index(),)
                     } else if self.block_links.contains_key(&block_id) {
