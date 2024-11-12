@@ -1,5 +1,5 @@
 use anyhow::Result;
-use compile_core::{AstType, LinkOptions, Literal, Span, SpanId, StringKey, VarDefinitionSpace};
+use compile_core::{AstType, LinkOptions, Literal, SpanId, StringKey, VarDefinitionSpace};
 //use petgraph::visit::EdgeRef;
 use std::collections::HashMap;
 
@@ -7,7 +7,7 @@ use std::convert::Into;
 
 use crate::{
     BlockGraph, BlockId, CodeEntry, CodeOffset, CodeRow, Flatten, ICodeModule, LCode, LinkId,
-    NodeBuilder as NB, ScopeGraph, ScopeId, ScopeType, StringLabel, Successor, ValueId,
+    NodeBuilder as NB, ScopeGraph, ScopeType, StringLabel, Successor, ValueId,
 };
 
 use tabled::{settings::Style, Table};
@@ -18,8 +18,8 @@ pub struct FlattenModule {
     pub values: Vec<LinkId>,
     pub blocks: BlockGraph,
     pub messages: Vec<(String, SpanId)>,
-    pub(crate) static_scope: Option<ScopeId>,
-    pub(crate) static_block: Option<BlockId>,
+    //pub(crate) static_scope: Option<ScopeId>,
+    //pub(crate) static_block: Option<BlockId>,
     pub scopes: ScopeGraph,
     pub block_links: HashMap<BlockId, LinkId>,
     pub(crate) functions: HashMap<StringKey, LinkId>,
@@ -157,8 +157,8 @@ impl FlattenModule {
             values,
             blocks: f.blocks,
             messages: f.messages,
-            static_scope: f.static_scope,
-            static_block: f.static_block,
+            //static_scope: f.static_scope,
+            //static_block: f.static_block,
             scopes: f.scopes,
             block_links: f.block_links,
             functions: f.functions,
@@ -235,5 +235,58 @@ impl FlattenModule {
 
     pub fn dump_scopes(&self) {
         petgraph::dot::Dot::with_config(&self.scopes.0, &[petgraph::dot::Config::EdgeNoLabel]);
+    }
+
+    pub fn block_graph(&self, filename: &str, b: &NB) {
+        use petgraph::dot::{Config, Dot};
+        let g = self.blocks.0.filter_map(
+            |_n_index, n| Some(n.clone()),
+            |_e_index, e| {
+                if let Successor::Jump = e {
+                    Some(e.clone())
+                } else {
+                    None
+                }
+            },
+        );
+
+        let num = petgraph::algo::connected_components(&g);
+        println!("components: {}", num);
+
+        let s = format!(
+            "{:?}",
+            Dot::with_attr_getters(
+                &g,
+                &[Config::NodeNoLabel],
+                &|_, _er| String::new(),
+                &|_, (index, _block)| {
+                    //let block_id: BlockId = index.into();
+                    format!("label = \"B{:?}:?\"", index.index(),)
+                    /*
+                    let block = self.blocks.get_block(block_id);
+                    if block.dead {
+                        format!("label = \"B{:?}:?\"", index.index(),)
+                    } else if self.block_links.contains_key(&block_id) {
+                        if let Some(key) = self.get_name(block_id.into()) {
+                            let name = b.labels.r(key);
+                            format!(
+                                //"label = \"B{:?}:{}\" shape=\"{:?}\"",
+                                "label = \"B{:?}:{}\"",
+                                index.index(),
+                                name,
+                                //&block.scope_id,
+                            )
+                        } else {
+                            format!("label = \"B{:?}:?\"", index.index(),)
+                        }
+                    } else {
+                        format!("label = \"B{:?}:?\"", index.index(),)
+                    }
+                        */
+                }
+            )
+        );
+        println!("saved graph {:?}", filename);
+        std::fs::write(filename, s).unwrap();
     }
 }

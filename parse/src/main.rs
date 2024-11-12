@@ -101,7 +101,6 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
     f.push_bake_main(b)?;
 
     let m = FlattenModule::build(f, b)?;
-    //let m = f.finish(b)?;
 
     let directory = std::path::Path::new(output_filename)
         .parent()
@@ -122,8 +121,7 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
 
     let mut blocks_path = path.clone();
     blocks_path.set_extension("f.blocks.dot");
-    m.blocks
-        .block_graph(blocks_path.clone().to_str().unwrap(), &b);
+    m.block_graph(blocks_path.clone().to_str().unwrap(), &b);
 
     let mut scopes_path = path.clone();
     scopes_path.set_extension("f.scopes.dot");

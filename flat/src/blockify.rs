@@ -400,4 +400,21 @@ pub trait ICodeModule {
         //println!("{}", s);
         std::fs::write(filename, s).unwrap();
     }
+
+    fn format_code(&self, v: ValueId) -> String {
+        let code = self.get_code(v);
+        match code {
+            LCode::CallValue(base) => {
+                let base = self.resolve_code_offset(*base);
+                //let v = self.m.resolve_code_offset(indicies.clone().offset());
+                format!("CallValue({})", base)
+            }
+            LCode::Store(decl, link) => {
+                let v_decl = self.resolve_code_offset(decl.into());
+                let v_link = self.resolve_code_offset(link.into());
+                format!("Store({},{})", v_decl, v_link)
+            }
+            _ => format!("{:?}", code),
+        }
+    }
 }

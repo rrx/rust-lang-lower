@@ -122,23 +122,6 @@ impl<'a> Interp<'a> {
         }
     }
 
-    fn format_code(&self, v: ValueId) -> String {
-        let code = self.m.get_code(v);
-        match code {
-            LCode::CallValue(base) => {
-                let base = self.m.resolve_code_offset(*base);
-                //let v = self.m.resolve_code_offset(indicies.clone().offset());
-                format!("CallValue({})", base)
-            }
-            LCode::Store(decl, link) => {
-                let v_decl = self.m.resolve_code_offset(decl.into());
-                let v_link = self.m.resolve_code_offset(link.into());
-                format!("Store({},{})", v_decl, v_link)
-            }
-            _ => format!("{:?}", code),
-        }
-    }
-
     /*
     pub fn load_static(&mut self, v: ValueId) -> Value {
         let code = self.m.get_code(v.into());
@@ -613,7 +596,7 @@ pub fn interp<'c>(
     let main = b.labels.s("main");
     let mut interp = Interp::new(m, b, main);
     loop {
-        let pos = interp.pos;
+        //let pos = interp.pos;
         //let code = interp.m.get_code(pos);
         let r = interp.step();
         //println!("step: {}, {}", pos, interp.format_code(pos));

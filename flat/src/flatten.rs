@@ -27,12 +27,9 @@ use std::collections::{HashMap, HashSet};
 use std::convert::Into;
 
 use crate::{
-    BlockGraph, BlockId, BlockifyError, Builtin, CodeOffset, CodeRow, FlattenModule, ICodeModule,
-    LCode, LinkId, NodeBuilder as NB, ScopeGraph, ScopeId, ScopeType, StringLabel, Successor,
-    TemplateId, ValueId, VariantId,
+    BlockGraph, BlockId, BlockifyError, Builtin, LCode, LinkId, NodeBuilder as NB, ScopeGraph,
+    ScopeId, ScopeType, StringLabel, Successor, TemplateId, ValueId, VariantId,
 };
-
-use tabled::{settings::Style, Table};
 
 #[derive(Debug, Clone)]
 pub struct CodeEntry {
@@ -110,7 +107,6 @@ pub enum FlattenMode {
 pub struct Flatten {
     pub(super) link: LinkOptions,
     pub(super) entries: Vec<CodeEntry>,
-    //pub(super) values: Vec<LinkId>,
     pub blocks: BlockGraph,
     ast_templates: Vec<(Lambda, SpanId)>,
     pub(super) messages: Vec<(String, SpanId)>,
@@ -130,7 +126,6 @@ impl Flatten {
 
         Self {
             entries: vec![],
-            //values: vec![],
             blocks,
             link: LinkOptions::new(),
             ast_templates: vec![],
