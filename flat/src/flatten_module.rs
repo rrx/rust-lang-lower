@@ -286,6 +286,7 @@ impl FlattenModule {
                         } else {
                             // block not found
                             // this should never happen
+                            // it does happen in error cases, like unclaimed labels
                             format!("label = \"B{:?}:?\"", index.index(),)
                             //unreachable!();
                         }

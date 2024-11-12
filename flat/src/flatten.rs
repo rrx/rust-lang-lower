@@ -808,6 +808,11 @@ impl Flatten {
         jump_args: Vec<(Option<StringKey>, LinkId, AstType, SpanId)>,
         span_id: SpanId,
     ) -> LinkId {
+        // handle leaving scope here?
+        let current_block_id = self.current_block_id();
+        let block = self.blocks.get_block(current_block_id);
+        let start_stack = self.scopes.walk_scopes(block.scope_id);
+
         // Construct the argument type
         let arg_ty = AstType::Struct(
             jump_args
@@ -2650,19 +2655,30 @@ impl Flatten {
                     println!("block goto resolved: {}", target_block_id);
                     target_block_id
                 } else {
-                    let scope = self.scopes.get_scope_mut(scope_id);
-
-                    if let Some(unclaimed_block_id) = scope.unclaimed_labels.get(&label.into()) {
-                        println!("block goto existing claim: {}", unclaimed_block_id);
-                        // already declared as unclaimed
-                        *unclaimed_block_id
+                    // add it to the function scope, which is the top most scope at which it
+                    // can exist.  When we resolve it, we can find it there
+                    // This is easier than having the unclaimed blocks follow the control flow
+                    if let Some(fun_scope_id) = self
+                        .scopes
+                        .find_nearest_scope(scope_id, &[ScopeType::Function])
+                    {
+                        let scope = self.scopes.get_scope_mut(fun_scope_id);
+                        if let Some(unclaimed_block_id) = scope.unclaimed_labels.get(&label.into())
+                        {
+                            println!("block goto existing claim: {}", unclaimed_block_id);
+                            // already declared as unclaimed
+                            *unclaimed_block_id
+                        } else {
+                            let unclaimed_block_id = self.blocks.new_block(scope_id);
+                            scope
+                                .unclaimed_labels
+                                .insert(label.into(), unclaimed_block_id);
+                            println!("block goto new claim: {}", unclaimed_block_id);
+                            unclaimed_block_id
+                        }
                     } else {
-                        let unclaimed_block_id = self.blocks.new_block(scope_id);
-                        scope
-                            .unclaimed_labels
-                            .insert(label.into(), unclaimed_block_id);
-                        println!("block goto new claim: {}", unclaimed_block_id);
-                        unclaimed_block_id
+                        // goto without function scope
+                        unreachable!()
                     }
                 };
 
@@ -2682,7 +2698,10 @@ impl Flatten {
                     self.switch_blocks(loop_block.next_block);
                     Ok(FlattenResult::link(link_id))
                 } else {
-                    unimplemented!()
+                    let block_id = scope.entry_block.unwrap();
+                    let block = self.blocks.get_block(block_id);
+                    //unimplemented!("{:?}", (scope_id, scope, block_id, block))
+                    Ok(FlattenResult::link(block.last().unwrap()))
                 }
             }
 

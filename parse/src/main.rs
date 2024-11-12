@@ -108,23 +108,23 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
         .unwrap();
     std::fs::create_dir_all(directory).unwrap();
 
-    let pre_graph_path = make_path(&output_filename, "f.dot");
+    let pre_graph_path = make_path(&output_filename, "graph.dot");
     m.save_graph(&pre_graph_path, &b);
 
-    let table_path = make_path(&output_filename, "f.table.txt");
+    let table_path = make_path(&output_filename, "table.txt");
     m.dump_code_table(&table_path, b);
     m.dump_scopes();
 
     let mut cfg_path = path.clone();
-    cfg_path.set_extension("f.cfg.mmd");
+    cfg_path.set_extension("cfg.mmd");
     m.flow_graph(cfg_path.clone().to_str().unwrap(), &b)?;
 
     let mut blocks_path = path.clone();
-    blocks_path.set_extension("f.blocks.dot");
+    blocks_path.set_extension("blocks.dot");
     m.block_graph(blocks_path.clone().to_str().unwrap(), &b);
 
     let mut scopes_path = path.clone();
-    scopes_path.set_extension("f.scopes.dot");
+    scopes_path.set_extension("scopes.dot");
     m.scopes.scope_graph(scopes_path.clone().to_str().unwrap());
 
     if b.spans.has_errors {
