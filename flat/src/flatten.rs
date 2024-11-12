@@ -828,6 +828,7 @@ impl Flatten {
                 .collect::<Vec<_>>(),
         );
 
+        println!("jump to: {}=>{}", self.current_block_id(), target_id);
         self.blocks
             .block_succ(self.current_block_id(), target_id, Successor::Jump);
         self.blocks
@@ -2105,7 +2106,7 @@ impl Flatten {
             }
 
             Ast::Literal(lit) => {
-                //self.ensure_open();
+                self.ensure_open(span_id, b);
                 // literal is expression, non-terminal
                 let ty: AstType = lit.clone().into();
                 //let mem = if block.scope_id == fenv.static_scope_id() {
@@ -2340,6 +2341,7 @@ impl Flatten {
             Ast::Conditional(condition, then_expr, maybe_else_expr) => {
                 let current_block_id = self.current_block_id();
                 let block = self.blocks.get_block(current_block_id);
+                let term = block.term;
                 let parent_scope_id = block.scope_id;
 
                 let v_next = self.blocks.new_block(parent_scope_id);
@@ -2347,7 +2349,7 @@ impl Flatten {
                 self.push_start_block(
                     parent_scope_id,
                     AstType::func(vec![], AstType::Unit), // void=>void
-                    Some(b.labels.fresh_key("cond_new")),
+                    Some(b.labels.fresh_key("cond_next")),
                     span_id,
                     VarDefinitionSpace::Default,
                 );
@@ -2357,10 +2359,18 @@ impl Flatten {
                 let (then_block_id, then_scope_id) =
                     self.new_scope_and_block(ScopeType::Block, parent_scope_id);
                 let then_span_id = then_expr.span_id;
-                self.blocks
-                    .block_succ(current_block_id, then_block_id, Successor::BlockScope);
-                self.blocks
-                    .block_succ(current_block_id, then_block_id, Successor::Jump);
+                println!(
+                    "cond jump to: {}=>{}, {:?}",
+                    current_block_id, then_block_id, term
+                );
+                // only jump if we are in an open block
+                if !term {
+                    self.blocks
+                        .block_succ(current_block_id, then_block_id, Successor::BlockScope);
+
+                    self.blocks
+                        .block_succ(current_block_id, then_block_id, Successor::Jump);
+                }
 
                 let branch_block_type = AstType::Func(
                     AstType::Struct(vec![]).into(),
@@ -2385,6 +2395,7 @@ impl Flatten {
                     let (else_block_id, else_scope_id) =
                         self.new_scope_and_block(ScopeType::Block, parent_scope_id);
                     let else_span_id = else_expr.span_id;
+                    println!("else jump to: {}=>{}", current_block_id, else_block_id);
                     self.blocks
                         .block_succ(current_block_id, else_block_id, Successor::BlockScope);
                     self.blocks
@@ -2406,10 +2417,13 @@ impl Flatten {
                     self.maybe_terminate_block(v_next, span_id);
                     else_block_id
                 } else {
-                    self.blocks
-                        .block_succ(current_block_id, v_next, Successor::BlockScope);
-                    self.blocks
-                        .block_succ(current_block_id, v_next, Successor::Jump);
+                    println!("else default jump to: {}=>{}", current_block_id, v_next);
+                    if !term {
+                        self.blocks
+                            .block_succ(current_block_id, v_next, Successor::BlockScope);
+                        self.blocks
+                            .block_succ(current_block_id, v_next, Successor::Jump);
+                    }
                     v_next
                 };
 
@@ -2985,11 +2999,35 @@ impl Flatten {
         }
     }
 
-    pub fn ensure_open(&self) {
+    pub fn ensure_open(&mut self, span_id: SpanId, b: &mut NB) {
+        //let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(self.current_block_id());
-        let link_id = block.last().unwrap().clone();
-        let entry = self.get_entry(link_id);
-        assert!(!entry.code.is_term());
+        let scope_id = block.scope_id;
+        //let link_id = block.last().unwrap().clone();
+        //let entry = self.get_entry(link_id);
+        if block.term {
+            let new_block_id = self.blocks.new_block(scope_id);
+            //self.blocks
+            //.block_succ(current_block_id, new_block_id, Successor::Operation);
+            //self.blocks
+            //.block_succ(current_block_id, new_block_id, Successor::Jump);
+            let name = b.labels.fresh_key("dead");
+
+            self.switch_blocks(new_block_id);
+            self.push_start_block(
+                scope_id,
+                AstType::Func(
+                    AstType::Struct(vec![]).into(),
+                    ReturnType::Single(AstType::Unit).into(),
+                ),
+                Some(name),
+                span_id,
+                VarDefinitionSpace::Reg,
+            );
+        }
+        //if entry.code.is_term() {
+        //}
+        //assert!(!entry.code.is_term());
     }
 
     pub fn maybe_terminate_block(&mut self, v_next: BlockId, span_id: SpanId) -> LinkId {
