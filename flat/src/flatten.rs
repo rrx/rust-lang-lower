@@ -2450,11 +2450,18 @@ impl Flatten {
                         block_id
                     }
                     PlacedBlockId::Unclaimed(block_id) => {
-                        let block = self.blocks.get_block(block_id);
+                        let block = self.blocks.get_block_mut(block_id);
                         println!(
                             "block start unclaimed: {}, {}, {}",
                             block_id, block.scope_id, scope_id
                         );
+                        if block.scope_id != scope_id {
+                            // unclaimed block needs to be moved into this scope
+                            // When the unclaimed block was created, it was put into the function
+                            // scope.  When we claim it, we need to place it in the correct scope
+                            // at the point where the block is defined.
+                            block.scope_id = scope_id;
+                        }
                         block_id
                     }
                     PlacedBlockId::NotFound => {
