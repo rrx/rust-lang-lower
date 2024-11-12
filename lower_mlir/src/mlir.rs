@@ -302,7 +302,7 @@ impl<'c> MLIRGenerator<'c> {
         //if let Some(offset_decl) = self.blockify.resolve_declaration(offset) {
         let mut current = offset;
         loop {
-            println!("resolve: {:?}", (offset, current));
+            //println!("resolve: {:?}", (offset, current));
             let v_decl = self.blockify.resolve_code_offset(current);
             let code = self.blockify.get_code(v_decl);
             /*

@@ -417,6 +417,7 @@ impl Flatten {
             }
         }
 
+        // declare functions
         for block_id in self.blocks.graph_get_entries() {
             let block = self.blocks.get_block(block_id);
             let label_link_id = block.entry.unwrap();
@@ -437,6 +438,7 @@ impl Flatten {
             );
         }
 
+        // get block ordering
         let blocks = self.blocks.post_order_blocks();
         let mut values = vec![];
 
@@ -493,22 +495,6 @@ impl Flatten {
         self.type_inference_enforce(b);
 
         Ok((self, values))
-        /*
-
-        Ok(FlattenModule {
-            link: self.link,
-            entries: self.entries,
-            values,
-            blocks: self.blocks,
-            messages: self.messages,
-            static_scope: self.static_scope,
-            static_block: self.static_block,
-            scopes: self.scopes,
-            block_links: self.block_links,
-            functions: self.functions,
-            statics: self.statics,
-        })
-            */
     }
 
     pub fn push_bake_main(&mut self, b: &mut NB) -> Result<LinkId> {

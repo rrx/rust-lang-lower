@@ -123,7 +123,9 @@ impl ICodeModule for FlattenModule {
                     .get(&block_id)
                     .expect(&format!("Missing block {}", block_id));
                 let entry = self.get_entry(link_id);
-                entry.value_id.expect(&format!("value not included: {}", block_id))
+                entry
+                    .value_id
+                    .expect(&format!("value not included: {}", block_id))
             }
         }
     }
@@ -262,32 +264,26 @@ impl FlattenModule {
                 &|_, (index, _block)| {
                     let block_id: BlockId = index.into();
                     let block = self.blocks.get_block(block_id);
-                    //let v = self.resolve_code_offset(block_id.into());
                     if block.dead {
-                        format!("label = \"B{:?}:dead", index.index(),)
+                        // block marked dead
+                        format!("label = \"B{:?}:dead\"", index.index(),)
                     } else {
-                        format!("label = \"B{:?}:?\"", index.index(),)
-                    }
-                    /*
-                    if block.dead {
-                        format!("label = \"B{:?}:?\"", index.index(),)
-                    } else if self.block_links.contains_key(&block_id) {
-                        if let Some(key) = self.get_name(block_id.into()) {
-                            let name = b.labels.r(key);
-                            format!(
-                                //"label = \"B{:?}:{}\" shape=\"{:?}\"",
-                                "label = \"B{:?}:{}\"",
-                                index.index(),
-                                name,
-                                //&block.scope_id,
-                            )
+                        if let Some(link_id) = self.block_links.get(&block_id) {
+                            let entry = self.get_entry(*link_id);
+                            if entry.value_id.is_some() {
+                                let v = self.resolve_code_offset(block_id.into());
+                                // block found
+                                format!("label = \"B{:?}:{}\"", index.index(), v)
+                            } else {
+                                // block is not included in our list
+                                format!("label = \"B{:?}:oob\"", index.index(),)
+                            }
                         } else {
-                            format!("label = \"B{:?}:?\"", index.index(),)
+                            // block not found
+                            // this should never happen
+                            unreachable!();
                         }
-                    } else {
-                        format!("label = \"B{:?}:?\"", index.index(),)
                     }
-                        */
                 }
             )
         );
