@@ -24,4 +24,4 @@ pub use flatten_seq::*;
 pub use graph::{Node, CFG};
 pub use interp::*;
 pub use links::*;
-pub use scope::{ScopeGraph, ScopeId, ScopeLayer, ScopeType, TemplateId, VariantId};
+pub use scope::{PlacedBlockId, ScopeGraph, ScopeId, ScopeLayer, ScopeType, TemplateId, VariantId};

@@ -8,6 +8,13 @@ use std::collections::HashMap;
 use crate::{BlockId, LinkId, NodeBuilder, StringLabel, ValueId};
 use compile_core::{AstType, StringKey};
 
+#[derive(Debug)]
+pub enum PlacedBlockId {
+    Unclaimed(BlockId),
+    Claimed(BlockId),
+    NotFound,
+}
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ScopeType {
     Static,
@@ -301,7 +308,7 @@ impl ScopeGraph {
         &mut self,
         start_scope_id: ScopeId,
         name: StringLabel,
-    ) -> Option<BlockId> {
+    ) -> PlacedBlockId {
         // the purpose of this function is to find a block with a name in the current scope
         // We look for blocks already defined in scope, as well as unclaimed ones
         // Unclaimed blocks are created by jumps that are made before the corresponding block has
@@ -312,16 +319,16 @@ impl ScopeGraph {
         for scope_id in self.walk_scopes(start_scope_id) {
             let scope = self.get_scope_mut(scope_id);
             if let Some(block_id) = scope.block_labels.get(&name) {
-                return Some(*block_id);
+                return PlacedBlockId::Claimed(*block_id);
             }
             let maybe_unclaimed_block_id = scope.unclaimed_labels.remove(&name);
             if let Some(block_id) = maybe_unclaimed_block_id {
-                return Some(block_id);
+                return PlacedBlockId::Unclaimed(block_id);
             } else {
-                return None;
+                return PlacedBlockId::NotFound;
             }
         }
-        None
+        PlacedBlockId::NotFound
     }
 
     pub fn variant_add(

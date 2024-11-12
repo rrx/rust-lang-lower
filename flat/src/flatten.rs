@@ -27,8 +27,8 @@ use std::collections::{HashMap, HashSet};
 use std::convert::Into;
 
 use crate::{
-    BlockGraph, BlockId, BlockifyError, Builtin, LCode, LinkId, NodeBuilder as NB, ScopeGraph,
-    ScopeId, ScopeType, StringLabel, Successor, TemplateId, ValueId, VariantId,
+    BlockGraph, BlockId, BlockifyError, Builtin, LCode, LinkId, NodeBuilder as NB, PlacedBlockId,
+    ScopeGraph, ScopeId, ScopeType, StringLabel, Successor, TemplateId, ValueId, VariantId,
 };
 
 #[derive(Debug, Clone)]
@@ -2440,22 +2440,37 @@ impl Flatten {
 
                 //let (new_block_id, next_block_id) = self.create_new_block_in_scope(name, scope_id);
                 let maybe_new_block_id = self.scopes.resolve_block_id(scope_id, name.into());
-                let new_block_id = if let Some(new_block_id) = maybe_new_block_id {
-                    println!("block start existing: {}", new_block_id);
-                    new_block_id
-                } else {
-                    assert_eq!(0, args.len());
-                    let new_block_id = self.blocks.new_block(scope_id);
-                    println!("block start new: {}", new_block_id);
-                    self.blocks.block_succ(
-                        self.current_block_id(),
-                        new_block_id,
-                        Successor::BlockScope,
-                    );
-                    let scope = self.scopes.get_scope_mut(scope_id);
-                    scope.block_labels.insert(name.into(), new_block_id);
-                    //println!("creating block: {} in {}", b.labels.r(key.into()), scope_id);
-                    new_block_id
+                let new_block_id = match maybe_new_block_id {
+                    PlacedBlockId::Claimed(block_id) => {
+                        let block = self.blocks.get_block(block_id);
+                        println!(
+                            "block start claimed: {}, {}, {}",
+                            block_id, block.scope_id, scope_id
+                        );
+                        block_id
+                    }
+                    PlacedBlockId::Unclaimed(block_id) => {
+                        let block = self.blocks.get_block(block_id);
+                        println!(
+                            "block start unclaimed: {}, {}, {}",
+                            block_id, block.scope_id, scope_id
+                        );
+                        block_id
+                    }
+                    PlacedBlockId::NotFound => {
+                        assert_eq!(0, args.len());
+                        let new_block_id = self.blocks.new_block(scope_id);
+                        println!("block start new: {}", new_block_id);
+                        self.blocks.block_succ(
+                            self.current_block_id(),
+                            new_block_id,
+                            Successor::BlockScope,
+                        );
+                        let scope = self.scopes.get_scope_mut(scope_id);
+                        scope.block_labels.insert(name.into(), new_block_id);
+                        //println!("creating block: {} in {}", b.labels.r(key.into()), scope_id);
+                        new_block_id
+                    }
                 };
 
                 // start a new block.  If the last block isn't terminated, then we create a new
@@ -2649,36 +2664,42 @@ impl Flatten {
             Ast::ControlFlowMarker(ControlFlowMarker::Goto(label)) => {
                 // Goto is terminal
                 let scope_id = block.scope_id;
-                let target_block_id = if let Some(target_block_id) =
-                    self.scopes.resolve_block_id(scope_id, label.into())
-                {
-                    println!("block goto resolved: {}", target_block_id);
-                    target_block_id
-                } else {
-                    // add it to the function scope, which is the top most scope at which it
-                    // can exist.  When we resolve it, we can find it there
-                    // This is easier than having the unclaimed blocks follow the control flow
-                    if let Some(fun_scope_id) = self
-                        .scopes
-                        .find_nearest_scope(scope_id, &[ScopeType::Function])
-                    {
-                        let scope = self.scopes.get_scope_mut(fun_scope_id);
-                        if let Some(unclaimed_block_id) = scope.unclaimed_labels.get(&label.into())
+                let target_block_id = match self.scopes.resolve_block_id(scope_id, label.into()) {
+                    PlacedBlockId::Claimed(block_id) => {
+                        println!("block goto claimed: {}", block_id);
+                        block_id
+                    }
+                    PlacedBlockId::Unclaimed(block_id) => {
+                        println!("block goto unclaimed: {}", block_id);
+                        block_id
+                    }
+                    PlacedBlockId::NotFound => {
+                        // add it to the function scope, which is the top most scope at which it
+                        // can exist.  When we resolve it, we can find it there
+                        // This is easier than having the unclaimed blocks follow the control flow
+                        if let Some(fun_scope_id) = self
+                            .scopes
+                            .find_nearest_scope(scope_id, &[ScopeType::Function])
                         {
-                            println!("block goto existing claim: {}", unclaimed_block_id);
-                            // already declared as unclaimed
-                            *unclaimed_block_id
+                            let scope = self.scopes.get_scope_mut(fun_scope_id);
+                            if let Some(unclaimed_block_id) =
+                                scope.unclaimed_labels.get(&label.into())
+                            {
+                                println!("block goto existing claim: {}", unclaimed_block_id);
+                                // already declared as unclaimed
+                                *unclaimed_block_id
+                            } else {
+                                let unclaimed_block_id = self.blocks.new_block(scope_id);
+                                scope
+                                    .unclaimed_labels
+                                    .insert(label.into(), unclaimed_block_id);
+                                println!("block goto new claim: {}", unclaimed_block_id);
+                                unclaimed_block_id
+                            }
                         } else {
-                            let unclaimed_block_id = self.blocks.new_block(scope_id);
-                            scope
-                                .unclaimed_labels
-                                .insert(label.into(), unclaimed_block_id);
-                            println!("block goto new claim: {}", unclaimed_block_id);
-                            unclaimed_block_id
+                            // goto without function scope
+                            unreachable!()
                         }
-                    } else {
-                        // goto without function scope
-                        unreachable!()
                     }
                 };
 
