@@ -514,6 +514,7 @@ impl Flatten {
         r
     }
 
+    /*
     pub fn push_bake_templates2(
         &mut self,
         //block_id: BlockId,
@@ -539,6 +540,7 @@ impl Flatten {
         }
         Ok(links)
     }
+    */
 
     pub fn push_bake_all2(&mut self, _b: &mut NB) -> Result<Vec<LinkId>> {
         let static_block_id = self.static_block_id();
@@ -811,7 +813,7 @@ impl Flatten {
         // handle leaving scope here?
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
-        let start_stack = self.scopes.walk_scopes(block.scope_id);
+        let _start_stack = self.scopes.walk_scopes(block.scope_id);
 
         // Construct the argument type
         let arg_ty = AstType::Struct(
@@ -1109,24 +1111,9 @@ impl Flatten {
         //let s_global = b.labels.r(global_key.into());
         let current_block_id = self.current_block_id();
         self.switch_blocks(self.static_block_id());
-
-        let def_func_type = b.types.r(def.fun_type).clone();
-
-        // refresh variables
-        let (def_arg_ty, ret_ty) = if let AstType::Func(arg, ret) = def_func_type {
-            if let ReturnType::Single(ret_ty) = *ret {
-                (b.types.refresh(*arg.clone()), b.types.refresh(ret_ty))
-            } else {
-                unreachable!()
-            }
-        } else {
-            unreachable!()
-        };
-        let def_func_type = AstType::Func(
-            def_arg_ty.clone().into(),
-            ReturnType::Single(ret_ty.clone()).into(),
-        );
-        //println!("bake_static: call: {}, def: {}", &call_ty, &def_func_type);
+        // refresh variables, as each bake of the function might have different solutions based on
+        // the caller
+        let (def_func_type, _def_arg_ty, ret_ty) = self.refresh_func_type(&def, b);
 
         // construct call function type
         // function type, based on the caller
@@ -1135,11 +1122,7 @@ impl Flatten {
             ReturnType::Single(ret_ty.clone()).into(),
         );
 
-        // match call type with function type
-        //println!(
-        //"call_func: {}, def_func: {}",
-        //&call_func_type, def_func_type
-        //);
+        // unify the caller and the refreshed function definition
         if b.types.u.unify(&call_func_type, &def_func_type).is_err() {
             let ty1 = b.types.u.resolve(&call_func_type).unwrap();
             let ty2 = b.types.u.resolve(&def_func_type).unwrap();
@@ -1585,6 +1568,26 @@ impl Flatten {
         Ok((variant_id, FlattenResult::link(entry_link_id)))
     }
 
+    fn refresh_func_type(&self, def: &Lambda, b: &mut NB) -> (AstType, AstType, AstType) {
+        let def_func_type = b.types.r(def.fun_type).clone();
+
+        // refresh variables
+        let (def_arg_ty, ret_ty) = if let AstType::Func(arg, ret) = def_func_type {
+            if let ReturnType::Single(ret_ty) = *ret {
+                (b.types.refresh(*arg.clone()), b.types.refresh(ret_ty))
+            } else {
+                unreachable!()
+            }
+        } else {
+            unreachable!()
+        };
+        let def_func_type = AstType::Func(
+            def_arg_ty.clone().into(),
+            ReturnType::Single(ret_ty.clone()).into(),
+        );
+        (def_func_type, def_arg_ty, ret_ty)
+    }
+
     fn push_bake_lambda(
         &mut self,
         name: Option<StringKey>,
@@ -1610,22 +1613,8 @@ impl Flatten {
         // as a continuation.  This currently requires one lambda for each call.
         // Eventually switch to CPS
 
-        let def_func_type = b.types.r(def.fun_type).clone();
-
         // refresh variables
-        let (def_arg_ty, ret_ty) = if let AstType::Func(arg, ret) = def_func_type {
-            if let ReturnType::Single(ret_ty) = *ret {
-                (b.types.refresh(*arg.clone()), b.types.refresh(ret_ty))
-            } else {
-                unreachable!()
-            }
-        } else {
-            unreachable!()
-        };
-        let def_func_type = AstType::Func(
-            def_arg_ty.clone().into(),
-            ReturnType::Single(ret_ty.clone()).into(),
-        );
+        let (def_func_type, def_arg_ty, ret_ty) = self.refresh_func_type(&def, b);
 
         // construct call function type
         let call_func_type = AstType::func(
@@ -1720,7 +1709,7 @@ impl Flatten {
         self.switch_blocks(next_block_id);
 
         // match return type with the jump target
-        println!("push_bake_lambda_next: {}<=>{}", &next_arg_ty, &def_arg_ty);
+        //println!("push_bake_lambda_next: {}<=>{}", &next_arg_ty, &def_arg_ty);
         if b.types.u.unify(&next_arg_ty, &def_arg_ty).is_err() {
             let ty1 = b.types.u.resolve(&next_arg_ty).unwrap();
             let ty2 = b.types.u.resolve(&def_arg_ty).unwrap();
@@ -1744,51 +1733,8 @@ impl Flatten {
     }
 
     pub fn push_bake(&mut self, name: StringKey, func_type: AstType, b: &mut NB) -> Result<LinkId> {
-        match self.mode {
-            FlattenMode::Function => self.push_bake_func(name, func_type, b),
-            //FlattenMode::Template => self.push_bake_template(name, func_type, b),
-            _ => unimplemented!(),
-        }
-    }
-
-    pub fn push_bake_func(
-        &mut self,
-        name: StringKey,
-        func_type: AstType,
-        b: &mut NB,
-    ) -> Result<LinkId> {
         let current_block_id = self.current_block_id();
         if let Some((__scope_id, def, _def_span_id)) = self.resolve_lambda(current_block_id, name) {
-            //println!(
-            //"bake: {:?}",
-            //(scope_id, current_block_id, b.labels.r(name.into()))
-            //);
-            /*
-            if let Some(ty) = maybe_ty {
-                let fun_ty = b.types.r(def.fun_type).clone();
-                println!("match: {}<=>{}", &ty, &fun_ty);
-                if b.types.u.unify(&ty, &fun_ty).is_err() {
-                    let span_id = b.spans.get_span_unknown();
-
-                    b.push_error(
-                        &format!("Bake Func Mismatch: caller: {}, def: {}", &ty, fun_ty),
-                        span_id,
-                    );
-                }
-            }
-            */
-
-            // update declaration
-            /*
-            let decl_link_id = if let Some(decl_link_id) =
-                self.resolve_declaration(current_block_id, name)
-            {
-                decl_link_id
-            } else {
-                unreachable!()
-            };
-            */
-
             let result = self.push_bake_function(
                 def,
                 func_type,
@@ -1803,19 +1749,6 @@ impl Flatten {
             }
             let (_variant_id, r) = result?;
 
-            //let entry_block_id = self.get_entry(r.link_id.unwrap()).block_id;
-
-            // update declaration
-            //
-            /*
-            let entry = self.get_entry_mut(decl_link_id);
-            if let LCode::DeclareFunction(_) = entry.code {
-            } else {
-                assert!(false);
-            }
-            entry.code = LCode::DeclareFunction(Some(entry_block_id));
-            */
-
             self.drain_diagnostics(b);
             self.switch_blocks(current_block_id);
             Ok(r.link_id.unwrap())
@@ -1825,8 +1758,14 @@ impl Flatten {
             b.push_error(&format!("push_bake: not found: {}", s), u);
             Err(Error::new(BlockifyError::NotFound(s)))
         }
+        //match self.mode {
+        //FlattenMode::Function => self.push_bake_func(name, func_type, b),
+        //FlattenMode::Template => self.push_bake_template(name, func_type, b),
+        //_ => unimplemented!(),
+        //}
     }
 
+    /*
     pub fn push_bake_template2(
         &mut self,
         name: StringKey,
@@ -1877,76 +1816,79 @@ impl Flatten {
         self.switch_blocks(current_block_id);
         Ok(r.link_id.unwrap())
     }
+    */
 
-    pub fn push_bake_template3(
-        &mut self,
-        name: StringKey,
-        func_ty: AstType,
-        b: &mut NB,
-    ) -> Result<LinkId> {
-        let current_block_id = self.current_block_id();
-        if let Some((_scope_id, def, _def_span_id)) = self.resolve_lambda(current_block_id, name) {
-            //println!(
-            //"bake: {:?}",
-            //(scope_id, current_block_id, b.labels.r(name.into()))
-            //);
-            /*
-            if let Some(ty) = maybe_ty {
-                let fun_ty = b.types.r(def.fun_type).clone();
-                if b.types.u.unify(&ty, &fun_ty).is_err() {
-                    let span_id = b.spans.get_span_unknown();
+    /*
+        pub fn push_bake_template3(
+            &mut self,
+            name: StringKey,
+            func_ty: AstType,
+            b: &mut NB,
+        ) -> Result<LinkId> {
+            let current_block_id = self.current_block_id();
+            if let Some((_scope_id, def, _def_span_id)) = self.resolve_lambda(current_block_id, name) {
+                //println!(
+                //"bake: {:?}",
+                //(scope_id, current_block_id, b.labels.r(name.into()))
+                //);
+                /*
+                if let Some(ty) = maybe_ty {
+                    let fun_ty = b.types.r(def.fun_type).clone();
+                    if b.types.u.unify(&ty, &fun_ty).is_err() {
+                        let span_id = b.spans.get_span_unknown();
 
-                    b.push_error(
-                        &format!("Func Mismatch: caller: {}, def: {}", &ty, fun_ty),
-                        span_id,
-                    );
+                        b.push_error(
+                            &format!("Func Mismatch: caller: {}, def: {}", &ty, fun_ty),
+                            span_id,
+                        );
+                    }
                 }
-            }
-            */
+                */
 
-            // update declaration
-            let decl_link_id =
-                if let Some(decl_link_id) = self.resolve_template(current_block_id, name.into()) {
-                    decl_link_id
+                // update declaration
+                let decl_link_id =
+                    if let Some(decl_link_id) = self.resolve_template(current_block_id, name.into()) {
+                        decl_link_id
+                    } else {
+                        unreachable!()
+                    };
+
+                let result = self.push_bake_function(
+                    def.clone(),
+                    func_ty,
+                    name,
+                    name,
+                    ScopeType::Template,
+                    Successor::TemplateDeclaration,
+                    b,
+                );
+
+                //let result = self.push_bake_function(def, name, ScopeType::Function, Successor::FunctionDeclaration, b);
+
+                if result.is_err() {
+                    self.drain_diagnostics(b);
+                }
+                let (_, r) = result?;
+
+                let entry_block_id = self.get_entry(r.link_id.unwrap()).block_id;
+                let entry = self.get_entry_mut(decl_link_id);
+                if let LCode::DeclareTemplate(_) = entry.code {
                 } else {
-                    unreachable!()
-                };
+                    assert!(false);
+                }
+                entry.code = LCode::DeclareTemplate(Some(entry_block_id));
 
-            let result = self.push_bake_function(
-                def.clone(),
-                func_ty,
-                name,
-                name,
-                ScopeType::Template,
-                Successor::TemplateDeclaration,
-                b,
-            );
-
-            //let result = self.push_bake_function(def, name, ScopeType::Function, Successor::FunctionDeclaration, b);
-
-            if result.is_err() {
                 self.drain_diagnostics(b);
-            }
-            let (_, r) = result?;
-
-            let entry_block_id = self.get_entry(r.link_id.unwrap()).block_id;
-            let entry = self.get_entry_mut(decl_link_id);
-            if let LCode::DeclareTemplate(_) = entry.code {
+                self.switch_blocks(current_block_id);
+                Ok(r.link_id.unwrap())
             } else {
-                assert!(false);
+                let s = b.labels.r(name.into());
+                let u = b.spans.get_span_unknown();
+                b.push_error(&format!("push_bake_template: not found: {}", s), u);
+                Err(Error::new(BlockifyError::NotFound(s)))
             }
-            entry.code = LCode::DeclareTemplate(Some(entry_block_id));
-
-            self.drain_diagnostics(b);
-            self.switch_blocks(current_block_id);
-            Ok(r.link_id.unwrap())
-        } else {
-            let s = b.labels.r(name.into());
-            let u = b.spans.get_span_unknown();
-            b.push_error(&format!("push_bake_template: not found: {}", s), u);
-            Err(Error::new(BlockifyError::NotFound(s)))
         }
-    }
+    */
 
     pub fn push_node(&mut self, node: AstNode, b: &mut NB) -> Result<FlattenResult> {
         let current_block_id = self.current_block_id();
@@ -2194,9 +2136,9 @@ impl Flatten {
                     // The 3rd method is easiest, as we insert the code at the caller.
                     // It's simpler, and get's us most of the way there.
 
-                    if self.mode == FlattenMode::Template {
-                        self.push_bake_template2(name, &def, span_id, b)?;
-                    }
+                    //if self.mode == FlattenMode::Template {
+                    //self.push_bake_template2(name, &def, span_id, b)?;
+                    //}
 
                     self.save_ast_template(current_block_id, &name, &def, expr.span_id)?;
                     self.switch_blocks(current_block_id);
@@ -2396,10 +2338,15 @@ impl Flatten {
                         self.new_scope_and_block(ScopeType::Block, parent_scope_id);
                     let else_span_id = else_expr.span_id;
                     println!("else jump to: {}=>{}", current_block_id, else_block_id);
-                    self.blocks
-                        .block_succ(current_block_id, else_block_id, Successor::BlockScope);
-                    self.blocks
-                        .block_succ(current_block_id, else_block_id, Successor::Jump);
+                    if !term {
+                        self.blocks.block_succ(
+                            current_block_id,
+                            else_block_id,
+                            Successor::BlockScope,
+                        );
+                        self.blocks
+                            .block_succ(current_block_id, else_block_id, Successor::Jump);
+                    }
 
                     let name = b.labels.fresh_key("else");
 
