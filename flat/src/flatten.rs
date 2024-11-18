@@ -1135,7 +1135,14 @@ impl Flatten {
             // if it's not already baked, we need to do that here
             self.switch_blocks(self.static_block_id());
 
-            let result = self.push_bake_function(def, call_func_type.clone(), name, global_key, b);
+            let result = self.push_bake_function(
+                def,
+                call_func_type.clone(),
+                def_span_id,
+                name,
+                global_key,
+                b,
+            );
             if result.is_err() {
                 self.drain_diagnostics(b);
             }
@@ -1601,7 +1608,8 @@ impl Flatten {
     fn push_bake_function_inner(
         &mut self,
         def: Lambda,
-        def_func_ty: AstType,
+        def_func_type: AstType,
+        def_span_id: SpanId,
         name: StringKey,
         global_name: StringKey,
         succ_type: Successor,
@@ -1630,14 +1638,14 @@ impl Flatten {
         self.switch_blocks(fun_block_id);
         let (entry_link_id, _) = self.push_start_block(
             fun_scope_id,
-            def_func_ty.clone(),
+            def_func_type.clone(),
             Some(global_name),
-            span_id,
+            def_span_id,
             mem,
         );
 
         // add entry to scope, for recursion
-        let r_ty1 = b.types.u.resolve(&def_func_ty).unwrap();
+        let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
         // we need to know the link
         //let variant_id = if let Some(global_name) = global_name {
         let variant_id = self
@@ -1657,7 +1665,7 @@ impl Flatten {
         let _ = self.push_node(body, b)?;
         self.maybe_terminate_block(next_block_id, span_id);
 
-        let resolved_ret_ty = self.resolve_return_type(fun_block_id, def_func_ty, span_id, b);
+        let resolved_ret_ty = self.resolve_return_type(fun_block_id, def_func_type, span_id, b);
         self.switch_blocks(next_block_id);
 
         assert!(resolved_ret_ty.is_composite());
@@ -1690,6 +1698,7 @@ impl Flatten {
         &mut self,
         def: Lambda,
         def_func_ty: AstType,
+        def_span_id: SpanId,
         name: StringKey,
         global_name: StringKey,
         b: &mut NB,
@@ -1703,6 +1712,7 @@ impl Flatten {
         let (v_id, _, _, span_id, entry_link_id, v_args) = self.push_bake_function_inner(
             def,
             def_func_ty,
+            def_span_id,
             name,
             global_name,
             Successor::FunctionDeclaration,
@@ -1841,8 +1851,8 @@ impl Flatten {
 
     pub fn push_bake(&mut self, name: StringKey, func_type: AstType, b: &mut NB) -> Result<LinkId> {
         let current_block_id = self.current_block_id();
-        if let Some((__scope_id, def, _def_span_id)) = self.resolve_lambda(current_block_id, name) {
-            let result = self.push_bake_function(def, func_type, name, name, b);
+        if let Some((__scope_id, def, def_span_id)) = self.resolve_lambda(current_block_id, name) {
+            let result = self.push_bake_function(def, func_type, def_span_id, name, name, b);
             if result.is_err() {
                 self.drain_diagnostics(b);
             }
