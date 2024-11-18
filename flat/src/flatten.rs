@@ -1651,7 +1651,7 @@ impl Flatten {
         // add the name to static scope
         // do this early for recursive functions
         self.scopes
-            .scope_define(self.static_scope_id(), global_name, entry_link_id);
+            .scope_define(scope_id, global_name, entry_link_id);
 
         // flatten function, and switch to next
         self.switch_blocks(fun_block_id);
