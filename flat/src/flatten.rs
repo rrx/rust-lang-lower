@@ -1192,7 +1192,7 @@ impl Flatten {
             let (_ret_ty, call_values, call_ty) =
                 self.push_function_args(&def, args, span_id, b)?;
 
-            let (def_func_type, def_arg_ty, def_ret_ty) = self.refresh_func_type(&def, b);
+            let (def_func_type, _def_arg_ty, def_ret_ty) = self.refresh_func_type(&def, b);
 
             // construct call function type
             let call_func_type = AstType::Func(
@@ -1242,17 +1242,8 @@ impl Flatten {
                     (scope_id, current_block_id, b.labels.r(name.into()))
                 );
 
-                let result = self.push_bake_lambda(
-                    Some(name),
-                    def,
-                    def_func_type,
-                    def_arg_ty,
-                    def_ret_ty,
-                    def_span_id,
-                    call_func_type,
-                    span_id,
-                    b,
-                )?;
+                let result =
+                    self.push_bake_lambda(Some(name), def, def_func_type, def_span_id, span_id, b)?;
                 self.drain_diagnostics(b);
                 let (_variant_id, _, fun_block_id, _, _, next_block_id, _, r) = result;
 
@@ -1423,10 +1414,7 @@ impl Flatten {
         name: Option<StringKey>,
         def: Lambda,
         def_func_type: AstType,
-        def_arg_ty: AstType,
-        def_ret_ty: AstType,
         def_span_id: SpanId,
-        call_func_type: AstType,
         call_span_id: SpanId,
         b: &mut NB,
     ) -> Result<(
@@ -1467,8 +1455,6 @@ impl Flatten {
         };
         let lambda_name = b.labels.fresh_key(&s_name);
 
-        //let (next_block_id, next_scope_id) =
-        //self.new_scope_and_block(ScopeType::Function, scope_id);
         let next_block_id = self.blocks.new_block(scope_id);
 
         let r = self.push_bake_lambda_inner(
@@ -1625,11 +1611,9 @@ impl Flatten {
         // This behavior is slightly different than inline functions that jump back into the same
         // scope from which they were called.
 
-        //let next_scope_id = self.scopes.new_scope(ScopeType::Block);
-        //self.scopes.scope_succ(next_scope_id, scope_id);
         let (next_block_id, next_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
 
-        let (v_id, _scope, _block, entry_link_id, _, v_args, r) = self.push_bake_lambda_inner(
+        let (v_id, _scope, _block, entry_link_id, _, v_args, _r) = self.push_bake_lambda_inner(
             name,
             global_name,
             next_scope_id,
