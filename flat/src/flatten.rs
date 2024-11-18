@@ -1641,14 +1641,14 @@ impl Flatten {
         let r_ty1 = b.types.u.resolve(&def_func_ty).unwrap();
         // we need to know the link
         //let variant_id = if let Some(global_name) = global_name {
-        let variant_id =
-            self.scopes
-                .variant_add(self.static_scope_id(), name, r_ty1, entry_link_id);
+        let variant_id = self
+            .scopes
+            .variant_add(scope_id, name, r_ty1, entry_link_id);
         //} else {
         //None
         //};
 
-        // add the name to static scope
+        // add the name to scope
         // do this early for recursive functions
         self.scopes
             .scope_define(scope_id, global_name, entry_link_id);
