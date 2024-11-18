@@ -1541,8 +1541,8 @@ impl Flatten {
         // setup arguments for continuation block with appropriate parameters
         // matching the return type of the lambda block
         //let next_arg_ty = AstType::Struct(match &def_ret_ty {
-            //AstType::Unit => vec![],
-            //_ => vec![(None, def_ret_ty.clone())],
+        //AstType::Unit => vec![],
+        //_ => vec![(None, def_ret_ty.clone())],
         //});
         let next_fun_ty = AstType::Func(
             next_arg_ty.clone().into(),
@@ -1561,6 +1561,7 @@ impl Flatten {
             _ => Some(v_args.first().unwrap().1),
         };
 
+        /*
         if b.types.u.unify(&next_arg_ty, &def_arg_ty).is_err() {
             let ty1 = b.types.u.resolve(&next_arg_ty).unwrap();
             let ty2 = b.types.u.resolve(&def_arg_ty).unwrap();
@@ -1572,6 +1573,7 @@ impl Flatten {
                 b.secondary_label(&format!("source type: {}", &ty2), def_span_id),
             ]);
         }
+        */
 
         Ok((
             fun_block_id,
