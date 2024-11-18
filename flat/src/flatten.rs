@@ -1467,6 +1467,7 @@ impl Flatten {
         let (fun_block_id, fun_scope_id) = self.new_scope_and_block(ScopeType::Function, scope_id);
         // Lambda Body
         let body = *def.body.unwrap();
+        let span_id = body.span_id;
 
         let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
         fun_scope.return_block = Some(next_block_id);
@@ -1577,13 +1578,8 @@ impl Flatten {
         let (fun_block_id, fun_scope_id) = self.new_scope_and_block(scope_type, scope_id);
         // Func Body
         let body = *def.body.unwrap();
-
-        //let body = def.body.unwrap();
         let span_id = body.span_id;
-        // create function scope
-        //let (fun_block_id, fun_scope_id) =
-        //self.new_scope_and_block(scope_type, self.static_scope_id());
-        // create function block and return block
+
         let ret_block_id = self.blocks.new_block(fun_scope_id);
 
         // return in scope
@@ -1592,7 +1588,7 @@ impl Flatten {
 
         // block graph
         self.blocks
-            .block_succ(self.static_block_id(), fun_block_id, succ_type);
+            .block_succ(current_block_id, fun_block_id, succ_type);
         self.blocks
             .block_succ(fun_block_id, ret_block_id, Successor::BlockScope);
         self.switch_blocks(fun_block_id);
