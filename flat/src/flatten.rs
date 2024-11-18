@@ -1482,12 +1482,12 @@ impl Flatten {
         let body = *def.body.unwrap();
 
         //let next_block_id = self.blocks.new_block(fun_scope_id);
+        let next_block_id = self.blocks.new_block(scope_id);
         let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
 
-        let next_block_id = self.blocks.new_block(scope_id);
-
+        // block graph
         self.blocks
-            .block_succ(current_block_id, next_block_id, Successor::BlockScope);
+            .block_succ(fun_block_id, next_block_id, Successor::BlockScope);
 
         fun_scope.return_block = Some(next_block_id);
 
@@ -1619,6 +1619,7 @@ impl Flatten {
         );
         self.blocks
             .block_succ(fun_block_id, next_block_id, Successor::BlockScope);
+
         self.switch_blocks(fun_block_id);
         let (entry_link_id, _) = self.push_start_block(
             fun_scope_id,
