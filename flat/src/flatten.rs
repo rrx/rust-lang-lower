@@ -1464,7 +1464,7 @@ impl Flatten {
         //
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
-        let next_scope_id = block.scope_id;
+        let scope_id = block.scope_id;
 
         // Start lambda block
         let s_name = if let Some(name) = name {
@@ -1473,6 +1473,9 @@ impl Flatten {
             "anon".to_string()
         };
         let lambda_name = b.labels.fresh_key(&s_name);
+
+        let (next_block_id, next_scope_id) =
+            self.new_scope_and_block(ScopeType::Function, scope_id);
 
         let r = self.push_bake_lambda_inner(
             &s_name,
@@ -1484,7 +1487,8 @@ impl Flatten {
             def_span_id,
             call_func_type,
             call_span_id,
-            next_scope_id,
+            scope_id,
+            next_block_id,
             Successor::BlockScope,
             VarDefinitionSpace::Reg,
             b,
@@ -1504,6 +1508,7 @@ impl Flatten {
         call_func_type: AstType,
         call_span_id: SpanId,
         next_scope_id: ScopeId,
+        next_block_id: BlockId,
         succ_type: Successor,
         mem: VarDefinitionSpace,
         b: &mut NB,
@@ -1523,9 +1528,10 @@ impl Flatten {
         let scope_id = block.scope_id;
 
         // New Func Scope
-        let (fun_block_id, fun_scope_id) = self.new_scope_and_block(ScopeType::Function, scope_id);
+        let (fun_block_id, fun_scope_id) =
+            self.new_scope_and_block(ScopeType::Function, next_scope_id);
         let body = *def.body.unwrap();
-        let span_id = body.span_id;
+        //let span_id = body.span_id;
 
         //let next_block_id = self.blocks.new_block(fun_scope_id);
         let next_block_id = self.blocks.new_block(next_scope_id);
@@ -1577,7 +1583,7 @@ impl Flatten {
         let prefix = format!("{}.cont", s_name);
         self.switch_blocks(next_block_id);
         let (_v_block, v_args) = self.push_start_block(
-            scope_id,
+            next_scope_id,
             next_fun_ty.clone(),
             Some(b.labels.fresh_key(&prefix)),
             call_span_id,
@@ -1671,7 +1677,6 @@ impl Flatten {
         self.maybe_terminate_block(next_block_id, span_id);
 
         let resolved_ret_ty = self.resolve_return_type(fun_block_id, def_func_type, span_id, b);
-        self.switch_blocks(next_block_id);
 
         assert!(resolved_ret_ty.is_composite());
         let name = b.labels.fresh_key("ret");
@@ -1681,8 +1686,9 @@ impl Flatten {
             ReturnType::Single(AstType::Unit).into(),
         );
 
+        self.switch_blocks(next_block_id);
         let (_v_block, v_args) = self.push_start_block(
-            fun_scope_id,
+            next_scope_id,
             block_ty,
             Some(name),
             span_id,
