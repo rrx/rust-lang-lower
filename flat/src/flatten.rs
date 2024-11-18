@@ -1251,10 +1251,6 @@ impl Flatten {
 
                 self.switch_blocks(next_block_id);
 
-                // Lambda Block
-                self.blocks
-                    .block_succ(current_block_id, fun_block_id, Successor::BlockScope);
-
                 // now that we have the arguments calculated, and the lambda baked, jump!
                 self.switch_blocks(current_block_id);
                 self.push_jump(fun_block_id.into(), call_values, span_id);
@@ -1523,6 +1519,9 @@ impl Flatten {
         // block graph
         self.blocks
             .block_succ(fun_block_id, next_block_id, Successor::BlockScope);
+        // Lambda Block
+        self.blocks
+            .block_succ(current_block_id, fun_block_id, Successor::BlockScope);
 
         // start next block
         self.switch_blocks(next_block_id);
