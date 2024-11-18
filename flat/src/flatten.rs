@@ -1451,25 +1451,54 @@ impl Flatten {
         // Bake the lambda, this involes writing out the blocks, and passing the next block
         // as a continuation.  This currently requires one lambda for each call.
         // Eventually switch to CPS
-
+        //
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
         let scope_id = block.scope_id;
+
+        self.push_bake_lambda_inner(
+            name,
+            def,
+            def_func_type,
+            def_arg_ty,
+            def_ret_ty,
+            def_span_id,
+            call_func_type,
+            call_span_id,
+            b,
+        )
+    }
+
+    fn push_bake_lambda_inner(
+        &mut self,
+        name: Option<StringKey>,
+        def: Lambda,
+        def_func_type: AstType,
+        def_arg_ty: AstType,
+        def_ret_ty: AstType,
+        def_span_id: SpanId,
+        call_func_type: AstType,
+        call_span_id: SpanId,
+        b: &mut NB,
+    ) -> Result<(BlockId, LinkId, AstType, BlockId, LinkId, AstType)> {
+        let current_block_id = self.current_block_id();
+        let block = self.blocks.get_block(current_block_id);
+        let scope_id = block.scope_id;
+
+        // New Scope
+        let (fun_block_id, fun_scope_id) = self.new_scope_and_block(ScopeType::Function, scope_id);
+        let body = *def.body.unwrap();
+
+        let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
 
         // NEXT BLOCK(ret_ty)
         // We create a new block for the lambda to return to
         // this is the continuation
         let next_block_id = self.blocks.new_block(scope_id);
+
         self.blocks
             .block_succ(current_block_id, next_block_id, Successor::BlockScope);
 
-        // New Lambda Scope
-        let (fun_block_id, fun_scope_id) = self.new_scope_and_block(ScopeType::Function, scope_id);
-        // Lambda Body
-        let body = *def.body.unwrap();
-        let span_id = body.span_id;
-
-        let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
         fun_scope.return_block = Some(next_block_id);
 
         // setup arguments for continuation block with appropriate parameters
@@ -1560,6 +1589,27 @@ impl Flatten {
         succ_type: Successor,
         b: &mut NB,
     ) -> Result<(VariantId, FlattenResult)> {
+        self.push_bake_function_inner(
+            def,
+            def_func_ty,
+            name,
+            global_name,
+            scope_type,
+            succ_type,
+            b,
+        )
+    }
+
+    fn push_bake_function_inner(
+        &mut self,
+        def: Lambda,
+        def_func_ty: AstType,
+        name: StringKey,
+        global_name: StringKey,
+        scope_type: ScopeType,
+        succ_type: Successor,
+        b: &mut NB,
+    ) -> Result<(VariantId, FlattenResult)> {
         let func_ret_ty = if let AstType::Func(_arg, ret) = def_func_ty.clone() {
             if let ReturnType::Single(ret) = *ret {
                 ret.clone()
@@ -1576,12 +1626,10 @@ impl Flatten {
 
         // New Func Scope
         let (fun_block_id, fun_scope_id) = self.new_scope_and_block(scope_type, scope_id);
-        // Func Body
         let body = *def.body.unwrap();
         let span_id = body.span_id;
 
         let ret_block_id = self.blocks.new_block(fun_scope_id);
-
         // return in scope
         let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
         fun_scope.return_block = Some(ret_block_id);
