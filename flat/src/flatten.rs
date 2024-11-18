@@ -1472,15 +1472,11 @@ impl Flatten {
         let next_block_id = self.blocks.new_block(scope_id);
 
         let r = self.push_bake_lambda_inner(
-            &s_name,
             lambda_name,
             lambda_name,
             def,
-            def_func_type,
-            def_arg_ty,
-            def_ret_ty,
+            def_func_type.clone(),
             def_span_id,
-            call_func_type,
             call_span_id,
             scope_id,
             next_block_id,
@@ -1488,20 +1484,16 @@ impl Flatten {
             VarDefinitionSpace::Reg,
             b,
         )?;
-        Ok((r.0, r.1, r.2, r.3, r.4, next_block_id, r.5, r.6))
+        Ok((r.0, r.1, r.2, r.3, def_func_type, next_block_id, r.5, r.6))
     }
 
     fn push_bake_lambda_inner(
         &mut self,
-        s_name: &str,
         local_name: StringKey,
         global_name: StringKey,
         def: Lambda,
         def_func_type: AstType,
-        def_arg_ty: AstType,
-        def_ret_ty: AstType,
         def_span_id: SpanId,
-        call_func_type: AstType,
         call_span_id: SpanId,
         next_scope_id: ScopeId,
         next_block_id: BlockId,
@@ -1606,7 +1598,7 @@ impl Flatten {
             fun_scope_id,
             fun_block_id,
             entry_link_id,
-            def_func_type.clone(),
+            next_arg_ty,
             v_args,
             r,
         ))
@@ -1631,7 +1623,6 @@ impl Flatten {
         BlockId,
         LinkId,
         AstType,
-        SpanId,
         ArgVec,
         FlattenResult,
     )> {
@@ -1725,7 +1716,6 @@ impl Flatten {
             fun_block_id,
             entry_link_id,
             next_arg_ty,
-            def_span_id,
             v_args,
             r,
         ))
@@ -1756,22 +1746,21 @@ impl Flatten {
         //self.scopes.scope_succ(next_scope_id, scope_id);
         let (next_block_id, next_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
 
-        let (v_id, _scope, _block, entry_link_id, _, span_id, v_args, r) = self
-            .push_bake_function_inner(
-                def,
-                def_func_ty,
-                def_span_id,
-                def_span_id,
-                name,
-                global_name,
-                Successor::FunctionDeclaration,
-                next_scope_id,
-                next_block_id,
-                VarDefinitionSpace::Static,
-                b,
-            )?;
+        let (v_id, _scope, _block, entry_link_id, _, v_args, r) = self.push_bake_function_inner(
+            def,
+            def_func_ty,
+            def_span_id,
+            def_span_id,
+            name,
+            global_name,
+            Successor::FunctionDeclaration,
+            next_scope_id,
+            next_block_id,
+            VarDefinitionSpace::Static,
+            b,
+        )?;
 
-        self.push_return(v_args, span_id);
+        self.push_return(v_args, def_span_id);
 
         // restore position back to where we started
         self.switch_blocks(current_block_id);
