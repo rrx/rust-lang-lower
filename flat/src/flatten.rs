@@ -1490,37 +1490,14 @@ impl Flatten {
         self.blocks
             .block_succ(fun_block_id, next_block_id, Successor::BlockScope);
 
-        // setup arguments for continuation block with appropriate parameters
-        // matching the return type of the lambda block
-        let next_arg_ty = AstType::Struct(match &def_ret_ty {
-            AstType::Unit => vec![],
-            _ => vec![(None, def_ret_ty.clone())],
-        });
         // start next block
         self.switch_blocks(next_block_id);
 
         let s_name = name.map(|key| b.labels.r(key.into()));
 
-        let next_fun_ty = AstType::Func(
-            next_arg_ty.clone().into(),
-            ReturnType::Single(AstType::Unit).into(),
-        );
-
         let prefix = s_name
             .map(|s| format!("{}.cont", s))
             .unwrap_or("cont".to_string());
-        let (_v_block, next_link_ids) = self.push_start_block(
-            scope_id,
-            next_fun_ty.clone(),
-            Some(b.labels.fresh_key(&prefix)),
-            call_span_id,
-            VarDefinitionSpace::Reg,
-        );
-
-        let next_link_id = match &def_ret_ty {
-            AstType::Unit => None,
-            _ => Some(next_link_ids.first().unwrap().1),
-        };
 
         // Start lambda block
         let s_name = if let Some(name) = name {
@@ -1565,7 +1542,30 @@ impl Flatten {
         let resolved_ret_ty =
             self.resolve_return_type(fun_block_id, def_func_type.clone(), call_span_id, b);
         // match return type with the jump target
-        //println!("push_bake_lambda_next: {}<=>{}", &next_arg_ty, &def_arg_ty);
+        // setup arguments for continuation block with appropriate parameters
+        // matching the return type of the lambda block
+        let next_arg_ty = AstType::Struct(match &def_ret_ty {
+            AstType::Unit => vec![],
+            _ => vec![(None, def_ret_ty.clone())],
+        });
+        let next_fun_ty = AstType::Func(
+            next_arg_ty.clone().into(),
+            ReturnType::Single(AstType::Unit).into(),
+        );
+
+        let (_v_block, next_link_ids) = self.push_start_block(
+            scope_id,
+            next_fun_ty.clone(),
+            Some(b.labels.fresh_key(&prefix)),
+            call_span_id,
+            VarDefinitionSpace::Reg,
+        );
+
+        let next_link_id = match &def_ret_ty {
+            AstType::Unit => None,
+            _ => Some(next_link_ids.first().unwrap().1),
+        };
+
         if b.types.u.unify(&next_arg_ty, &def_arg_ty).is_err() {
             let ty1 = b.types.u.resolve(&next_arg_ty).unwrap();
             let ty2 = b.types.u.resolve(&def_arg_ty).unwrap();
