@@ -1658,6 +1658,25 @@ impl Flatten {
         let _ = self.push_node(body, b)?;
         self.maybe_terminate_block(next_block_id, span_id);
 
+        let resolved_ret_ty = self.resolve_return_type(name, fun_block_id, func_ret_ty, span_id, b);
+        self.switch_blocks(next_block_id);
+        Ok((
+            variant_id,
+            fun_scope_id,
+            resolved_ret_ty,
+            span_id,
+            FlattenResult::link(entry_link_id),
+        ))
+    }
+
+    fn resolve_return_type(
+        &self,
+        name: StringKey,
+        fun_block_id: BlockId,
+        func_ret_ty: AstType,
+        span_id: SpanId,
+        b: &mut NB,
+    ) -> AstType {
         // write out return block
         let fun_block = self.blocks.get_block(fun_block_id);
 
@@ -1742,15 +1761,7 @@ impl Flatten {
                 span_id,
             );
         }
-
-        self.switch_blocks(next_block_id);
-        Ok((
-            variant_id,
-            fun_scope_id,
-            resolved_ret_ty,
-            span_id,
-            FlattenResult::link(entry_link_id),
-        ))
+        resolved_ret_ty
     }
 
     fn refresh_func_type(&self, def: &Lambda, b: &mut NB) -> (AstType, AstType, AstType) {
