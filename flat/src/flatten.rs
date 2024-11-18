@@ -542,6 +542,7 @@ impl Flatten {
     }
     */
 
+    /*
     pub fn push_bake_all2(&mut self, _b: &mut NB) -> Result<Vec<LinkId>> {
         let static_block_id = self.static_block_id();
         let scope_id = self.static_scope_id();
@@ -561,6 +562,7 @@ impl Flatten {
         }
         Ok(links)
     }
+    */
 
     fn _insert_entry(&mut self, mut entry: CodeEntry, prev: Option<LinkId>) -> LinkId {
         let index = self.entries.len();
@@ -1101,8 +1103,11 @@ impl Flatten {
         &mut self,
         name: StringKey,
         def: Lambda,
+        def_func_type: AstType,
+        def_arg_ty: AstType,
+        def_ret_ty: AstType,
         def_span_id: SpanId,
-        call_ty: AstType,
+        call_func_type: AstType,
         call_span_id: SpanId,
         b: &mut NB,
     ) -> Result<(LinkId, AstType, AstType)> {
@@ -1111,29 +1116,6 @@ impl Flatten {
         //let s_global = b.labels.r(global_key.into());
         let current_block_id = self.current_block_id();
         self.switch_blocks(self.static_block_id());
-        // refresh variables, as each bake of the function might have different solutions based on
-        // the caller
-        let (def_func_type, _def_arg_ty, ret_ty) = self.refresh_func_type(&def, b);
-
-        // construct call function type
-        // function type, based on the caller
-        let call_func_type = AstType::Func(
-            AstType::Struct(call_ty.fields()).into(),
-            ReturnType::Single(ret_ty.clone()).into(),
-        );
-
-        // unify the caller and the refreshed function definition
-        if b.types.u.unify(&call_func_type, &def_func_type).is_err() {
-            let ty1 = b.types.u.resolve(&call_func_type).unwrap();
-            let ty2 = b.types.u.resolve(&def_func_type).unwrap();
-            b.push_error_labels(vec![
-                b.primary_label(
-                    &format!("Type Mismatch Func: caller: {}", &ty1),
-                    call_span_id,
-                ),
-                b.secondary_label(&format!("source type: {}", &ty2), def_span_id),
-            ]);
-        }
 
         // if it's defined in static scope, just call it
         //println!("[{},{}] RX:  {}", s, s_global, &call_func_type);
@@ -1156,7 +1138,6 @@ impl Flatten {
             // if it's not already baked, we need to do that here
             self.switch_blocks(self.static_block_id());
             let result = self.push_bake_function(
-                //v_entry,
                 def,
                 call_func_type.clone(),
                 name,
@@ -1185,7 +1166,7 @@ impl Flatten {
         };
         self.functions.insert(name, v_entry);
 
-        Ok((v_entry, call_func_type, ret_ty))
+        Ok((v_entry, call_func_type, def_ret_ty))
     }
 
     fn push_call_by_name(
@@ -1214,10 +1195,48 @@ impl Flatten {
             let (_ret_ty, call_values, call_ty) =
                 self.push_function_args(&def, args, span_id, b)?;
 
+            let (def_func_type, def_arg_ty, ret_ty) = self.refresh_func_type(&def, b);
+
+            // construct call function type
+            let call_func_type = AstType::Func(
+                AstType::Struct(call_ty.fields()).into(),
+                ReturnType::Single(ret_ty.clone()).into(),
+            );
+
+            // match call type with function type
+            if b.types.u.unify(&call_func_type, &def_func_type).is_err() {
+                b.push_error_labels(vec![
+                    b.primary_label(
+                        &format!("Type Mismatch: caller: {}", &call_func_type),
+                        def_span_id,
+                    ),
+                    b.secondary_label(&format!("source type: {}", &def_func_type), def_span_id),
+                ]);
+            }
+
+            // unify the caller and the refreshed function definition
+            if b.types.u.unify(&call_func_type, &def_func_type).is_err() {
+                let ty1 = b.types.u.resolve(&call_func_type).unwrap();
+                let ty2 = b.types.u.resolve(&def_func_type).unwrap();
+                b.push_error_labels(vec![
+                    b.primary_label(&format!("Type Mismatch Func: caller: {}", &ty1), span_id),
+                    b.secondary_label(&format!("source type: {}", &ty2), def_span_id),
+                ]);
+            }
+
             let is_static = self.static_scope_id() == scope_id;
             if is_static {
-                let r =
-                    self.push_bake_static(name, def, def_span_id, call_ty.clone(), span_id, b)?;
+                let r = self.push_bake_static(
+                    name,
+                    def,
+                    def_func_type,
+                    def_arg_ty,
+                    ret_ty,
+                    def_span_id,
+                    call_func_type,
+                    span_id,
+                    b,
+                )?;
                 self.drain_diagnostics(b);
                 let (fun_link_id, _bake_ty, ret_ty) = r;
 
@@ -1235,7 +1254,17 @@ impl Flatten {
                     (scope_id, current_block_id, b.labels.r(name.into()))
                 );
 
-                let r = self.push_bake_lambda(Some(name), def, def_span_id, call_ty, span_id, b)?;
+                let r = self.push_bake_lambda(
+                    Some(name),
+                    def,
+                    def_func_type,
+                    def_arg_ty,
+                    ret_ty,
+                    def_span_id,
+                    call_func_type,
+                    span_id,
+                    b,
+                )?;
                 self.drain_diagnostics(b);
                 let (fun_block_id, _, _, next_block_id, next_link_id, _) = r;
 
@@ -1592,8 +1621,11 @@ impl Flatten {
         &mut self,
         name: Option<StringKey>,
         def: Lambda,
+        def_func_type: AstType,
+        def_arg_ty: AstType,
+        ret_ty: AstType,
         def_span_id: SpanId,
-        call_ty: AstType,
+        call_func_type: AstType,
         call_span_id: SpanId,
         b: &mut NB,
     ) -> Result<(BlockId, LinkId, AstType, BlockId, LinkId, AstType)> {
@@ -1612,27 +1644,6 @@ impl Flatten {
         // Bake the lambda, this involes writing out the blocks, and passing the next block
         // as a continuation.  This currently requires one lambda for each call.
         // Eventually switch to CPS
-
-        // refresh variables
-        let (def_func_type, def_arg_ty, ret_ty) = self.refresh_func_type(&def, b);
-
-        // construct call function type
-        let call_func_type = AstType::func(
-            call_ty.fields().iter().map(|(_, ty)| ty.clone()).collect(),
-            ret_ty.clone(),
-        );
-
-        // match call type with function type
-        println!("push_bake_lambda: {}<=>{}", &call_func_type, &def_func_type);
-        if b.types.u.unify(&call_func_type, &def_func_type).is_err() {
-            b.push_error_labels(vec![
-                b.primary_label(
-                    &format!("Type Mismatch: caller: {}", &call_func_type),
-                    def_span_id,
-                ),
-                b.secondary_label(&format!("source type: {}", &def_func_type), def_span_id),
-            ]);
-        }
 
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
