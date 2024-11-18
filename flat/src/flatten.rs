@@ -1254,7 +1254,7 @@ impl Flatten {
                     b,
                 )?;
                 self.drain_diagnostics(b);
-                let (_variant_id, fun_block_id, _, _, next_block_id, next_link_id, _, r) = result;
+                let (_variant_id, fun_block_id, _, _, next_block_id, _, r) = result;
 
                 self.switch_blocks(next_block_id);
 
@@ -1262,14 +1262,7 @@ impl Flatten {
                 self.switch_blocks(current_block_id);
                 self.push_jump(fun_block_id.into(), call_values, span_id);
                 self.switch_blocks(next_block_id);
-
-                // block termination
                 Ok(r)
-                //if let Some(link_id) = next_link_id {
-                //Ok(FlattenResult::link(link_id))
-                //} else {
-                //Ok(FlattenResult::statement())
-                //}
             }
         } else {
             let name = b.labels.r(name.into());
@@ -1442,7 +1435,6 @@ impl Flatten {
         LinkId,
         AstType,
         BlockId,
-        Option<LinkId>,
         ArgVec,
         FlattenResult,
     )> {
@@ -1521,7 +1513,6 @@ impl Flatten {
         LinkId,
         AstType,
         BlockId,
-        Option<LinkId>,
         ArgVec,
         FlattenResult,
     )> {
@@ -1591,7 +1582,7 @@ impl Flatten {
             VarDefinitionSpace::Reg,
         );
 
-        let next_link_id = match &def_ret_ty {
+        let next_link_id = match &next_arg_ty {
             AstType::Unit => None,
             _ => {
                 if v_args.len() == 0 {
@@ -1614,7 +1605,6 @@ impl Flatten {
             entry_link_id,
             def_func_type.clone(),
             next_block_id,
-            next_link_id,
             v_args,
             r,
         ))
@@ -1700,6 +1690,22 @@ impl Flatten {
             VarDefinitionSpace::Reg,
         );
 
+        let next_link_id = match &next_arg_ty {
+            AstType::Unit => None,
+            _ => {
+                if v_args.len() == 0 {
+                    None
+                } else {
+                    Some(v_args.first().unwrap().1)
+                }
+            }
+        };
+
+        let r = if let Some(link_id) = next_link_id {
+            FlattenResult::link(link_id)
+        } else {
+            FlattenResult::statement()
+        };
         Ok((
             variant_id,
             fun_scope_id,
