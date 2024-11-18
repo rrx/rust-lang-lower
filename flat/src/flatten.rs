@@ -1254,7 +1254,7 @@ impl Flatten {
                     b,
                 )?;
                 self.drain_diagnostics(b);
-                let (_variant_id, fun_block_id, _, _, next_block_id, next_link_id, _, _, _) = r;
+                let (_variant_id, fun_block_id, _, _, next_block_id, next_link_id, _) = r;
 
                 self.switch_blocks(next_block_id);
 
@@ -1442,8 +1442,6 @@ impl Flatten {
         AstType,
         BlockId,
         Option<LinkId>,
-        AstType,
-        AstType,
         ArgVec,
     )> {
         // BAKE LAMBDA
@@ -1522,8 +1520,6 @@ impl Flatten {
         AstType,
         BlockId,
         Option<LinkId>,
-        AstType,
-        AstType,
         ArgVec,
     )> {
         let current_block_id = self.current_block_id();
@@ -1574,7 +1570,9 @@ impl Flatten {
 
         let next_arg_ty =
             self.resolve_return_type(fun_block_id, def_func_type.clone(), call_span_id, b);
-        let next_fun_ty = AstType::Func(
+
+        assert!(next_arg_ty.is_composite());
+        let block_ty = AstType::Func(
             next_arg_ty.clone().into(),
             ReturnType::Single(AstType::Unit).into(),
         );
@@ -1583,7 +1581,7 @@ impl Flatten {
         self.switch_blocks(next_block_id);
         let (_v_block, v_args) = self.push_start_block(
             next_scope_id,
-            next_fun_ty.clone(),
+            block_ty.clone(),
             Some(b.labels.fresh_key(&prefix)),
             call_span_id,
             VarDefinitionSpace::Reg,
@@ -1606,8 +1604,6 @@ impl Flatten {
             def_func_type.clone(),
             next_block_id,
             next_link_id,
-            next_fun_ty,
-            next_arg_ty,
             v_args,
         ))
     }
@@ -1617,6 +1613,7 @@ impl Flatten {
         def: Lambda,
         def_func_type: AstType,
         def_span_id: SpanId,
+        call_span_id: SpanId,
         local_name: StringKey,
         global_name: StringKey,
         succ_type: Successor,
@@ -1671,15 +1668,15 @@ impl Flatten {
         let _ = self.push_node(body, b)?;
         self.maybe_terminate_block(next_block_id, def_span_id);
 
-        let resolved_ret_ty = self.resolve_return_type(fun_block_id, def_func_type, def_span_id, b);
+        let next_arg_ty =
+            self.resolve_return_type(fun_block_id, def_func_type.clone(), call_span_id, b);
 
-        assert!(resolved_ret_ty.is_composite());
-        let name = b.labels.fresh_key("ret");
-
+        assert!(next_arg_ty.is_composite());
         let block_ty = AstType::Func(
-            resolved_ret_ty.clone().into(),
+            next_arg_ty.clone().into(),
             ReturnType::Single(AstType::Unit).into(),
         );
+        let name = b.labels.fresh_key("ret");
 
         self.switch_blocks(next_block_id);
         let (_v_block, v_args) = self.push_start_block(
@@ -1693,7 +1690,7 @@ impl Flatten {
         Ok((
             variant_id,
             fun_scope_id,
-            resolved_ret_ty,
+            next_arg_ty,
             def_span_id,
             entry_link_id,
             v_args,
@@ -1728,6 +1725,7 @@ impl Flatten {
         let (v_id, _, _, span_id, entry_link_id, v_args) = self.push_bake_function_inner(
             def,
             def_func_ty,
+            def_span_id,
             def_span_id,
             name,
             global_name,
