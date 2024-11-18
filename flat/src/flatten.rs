@@ -1110,7 +1110,7 @@ impl Flatten {
         call_func_type: AstType,
         call_span_id: SpanId,
         b: &mut NB,
-    ) -> Result<(LinkId, AstType, AstType)> {
+    ) -> Result<(LinkId, AstType)> {
         let s = b.labels.r(name.into());
         let global_key = b.labels.fresh_key(&s);
         //let s_global = b.labels.r(global_key.into());
@@ -1166,7 +1166,7 @@ impl Flatten {
         };
         self.functions.insert(name, v_entry);
 
-        Ok((v_entry, call_func_type, def_ret_ty))
+        Ok((v_entry, call_func_type))
     }
 
     fn push_call_by_name(
@@ -1195,12 +1195,12 @@ impl Flatten {
             let (_ret_ty, call_values, call_ty) =
                 self.push_function_args(&def, args, span_id, b)?;
 
-            let (def_func_type, def_arg_ty, ret_ty) = self.refresh_func_type(&def, b);
+            let (def_func_type, def_arg_ty, def_ret_ty) = self.refresh_func_type(&def, b);
 
             // construct call function type
             let call_func_type = AstType::Func(
                 AstType::Struct(call_ty.fields()).into(),
-                ReturnType::Single(ret_ty.clone()).into(),
+                ReturnType::Single(def_ret_ty.clone()).into(),
             );
 
             // match call type with function type
@@ -1231,21 +1231,21 @@ impl Flatten {
                     def,
                     def_func_type,
                     def_arg_ty,
-                    ret_ty,
+                    def_ret_ty.clone(),
                     def_span_id,
                     call_func_type,
                     span_id,
                     b,
                 )?;
                 self.drain_diagnostics(b);
-                let (fun_link_id, _bake_ty, ret_ty) = r;
+                let (fun_link_id, _bake_ty) = r;
 
                 self.switch_blocks(current_block_id);
                 //println!(
                 //"call: call_ty: {}, bake_ty:{}, ret_ty: {}",
                 //call_ty, bake_ty, ret_ty
                 //);
-                self.push_function_call(fun_link_id, call_values, ret_ty, span_id)
+                self.push_function_call(fun_link_id, call_values, def_ret_ty, span_id)
             } else {
                 self.switch_blocks(current_block_id);
 
@@ -1259,7 +1259,7 @@ impl Flatten {
                     def,
                     def_func_type,
                     def_arg_ty,
-                    ret_ty,
+                    def_ret_ty,
                     def_span_id,
                     call_func_type,
                     span_id,
