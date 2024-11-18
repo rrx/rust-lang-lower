@@ -1623,7 +1623,15 @@ impl Flatten {
         next_block_id: BlockId,
         mem: VarDefinitionSpace,
         b: &mut NB,
-    ) -> Result<(VariantId, ScopeId, AstType, SpanId, LinkId, ArgVec)> {
+    ) -> Result<(
+        VariantId,
+        ScopeId,
+        AstType,
+        SpanId,
+        LinkId,
+        ArgVec,
+        FlattenResult,
+    )> {
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
         let scope_id = block.scope_id;
@@ -1706,6 +1714,7 @@ impl Flatten {
         } else {
             FlattenResult::statement()
         };
+
         Ok((
             variant_id,
             fun_scope_id,
@@ -1713,6 +1722,7 @@ impl Flatten {
             def_span_id,
             entry_link_id,
             v_args,
+            r,
         ))
     }
 
@@ -1741,7 +1751,7 @@ impl Flatten {
         //self.scopes.scope_succ(next_scope_id, scope_id);
         let (next_block_id, next_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
 
-        let (v_id, _, _, span_id, entry_link_id, v_args) = self.push_bake_function_inner(
+        let (v_id, _, _, span_id, entry_link_id, v_args, r) = self.push_bake_function_inner(
             def,
             def_func_ty,
             def_span_id,
