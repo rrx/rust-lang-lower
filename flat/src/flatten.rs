@@ -1531,13 +1531,30 @@ impl Flatten {
 
         let lambda_name = b.labels.fresh_key(&s_name);
         self.switch_blocks(fun_block_id);
-        let (fun_link_id, _) = self.push_start_block(
+        let (entry_link_id, _) = self.push_start_block(
             fun_scope_id,
             def_func_type.clone(),
             Some(lambda_name),
             def_span_id,
             VarDefinitionSpace::Reg,
         );
+
+        if let Some(name) = name {
+            // add entry to scope, for recursion
+            let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
+            // we need to know the link
+            //let variant_id = if let Some(global_name) = global_name {
+            let variant_id = self
+                .scopes
+                .variant_add(scope_id, name, r_ty1, entry_link_id);
+            //} else {
+            //None
+            //};
+
+            // add the name to scope
+            // do this early for recursive functions
+            self.scopes.scope_define(scope_id, name, entry_link_id);
+        }
 
         // flatten function, and switch to next
         self.switch_blocks(fun_block_id);
@@ -1561,7 +1578,7 @@ impl Flatten {
 
         Ok((
             fun_block_id,
-            fun_link_id,
+            entry_link_id,
             def_func_type.clone(),
             next_block_id,
             next_link_id.unwrap(),
