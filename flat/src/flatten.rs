@@ -1596,16 +1596,6 @@ impl Flatten {
         global_name: StringKey,
         b: &mut NB,
     ) -> Result<(VariantId, ScopeId, AstType, SpanId, FlattenResult)> {
-        let func_ret_ty = if let AstType::Func(_arg, ret) = def_func_ty.clone() {
-            if let ReturnType::Single(ret) = *ret {
-                ret.clone()
-            } else {
-                unreachable!()
-            }
-        } else {
-            unreachable!()
-        };
-
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
         let scope_id = block.scope_id;
@@ -1637,7 +1627,7 @@ impl Flatten {
             VarDefinitionSpace::Static,
         );
 
-        // add entry to static scope, for recursion
+        // add entry to scope, for recursion
         let r_ty1 = b.types.u.resolve(&def_func_ty).unwrap();
         // we need to know the link
         //let variant_id = if let Some(global_name) = global_name {
@@ -1658,7 +1648,7 @@ impl Flatten {
         let _ = self.push_node(body, b)?;
         self.maybe_terminate_block(next_block_id, span_id);
 
-        let resolved_ret_ty = self.resolve_return_type(name, fun_block_id, func_ret_ty, span_id, b);
+        let resolved_ret_ty = self.resolve_return_type(name, fun_block_id, def_func_ty, span_id, b);
         self.switch_blocks(next_block_id);
         Ok((
             variant_id,
@@ -1673,10 +1663,20 @@ impl Flatten {
         &self,
         name: StringKey,
         fun_block_id: BlockId,
-        func_ret_ty: AstType,
+        def_func_ty: AstType,
         span_id: SpanId,
         b: &mut NB,
     ) -> AstType {
+        let func_ret_ty = if let AstType::Func(_arg, ret) = def_func_ty.clone() {
+            if let ReturnType::Single(ret) = *ret {
+                ret.clone()
+            } else {
+                unreachable!()
+            }
+        } else {
+            unreachable!()
+        };
+
         // write out return block
         let fun_block = self.blocks.get_block(fun_block_id);
 
