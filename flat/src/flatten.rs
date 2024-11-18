@@ -1637,8 +1637,8 @@ impl Flatten {
         // block graph
         self.blocks
             .block_succ(current_block_id, fun_block_id, succ_type);
-        self.blocks
-            .block_succ(fun_block_id, next_block_id, Successor::BlockScope);
+        //self.blocks
+            //.block_succ(fun_block_id, next_block_id, Successor::BlockScope);
 
         self.switch_blocks(fun_block_id);
         let (entry_link_id, _) = self.push_start_block(
