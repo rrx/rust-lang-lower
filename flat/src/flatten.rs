@@ -1484,12 +1484,11 @@ impl Flatten {
         //let next_block_id = self.blocks.new_block(fun_scope_id);
         let next_block_id = self.blocks.new_block(scope_id);
         let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
+        fun_scope.return_block = Some(next_block_id);
 
         // block graph
         self.blocks
             .block_succ(fun_block_id, next_block_id, Successor::BlockScope);
-
-        fun_scope.return_block = Some(next_block_id);
 
         // setup arguments for continuation block with appropriate parameters
         // matching the return type of the lambda block
@@ -1539,7 +1538,8 @@ impl Flatten {
             def_span_id,
             VarDefinitionSpace::Reg,
         );
-        // flatten lambda block
+
+        // flatten function, and switch to next
         self.switch_blocks(fun_block_id);
         let _ = self.push_node(body, b)?;
         self.maybe_terminate_block(next_block_id, call_span_id);
@@ -1577,7 +1577,15 @@ impl Flatten {
         global_name: StringKey,
         b: &mut NB,
     ) -> Result<(VariantId, FlattenResult)> {
-        self.push_bake_function_inner(def, def_func_ty, name, global_name, b)
+        let current_block_id = self.current_block_id();
+        let (v_id, fun_scope_id, ret_ty, span_id, r) =
+            self.push_bake_function_inner(def, def_func_ty, name, global_name, b)?;
+
+        self.push_return_block_start(fun_scope_id, ret_ty.clone(), span_id, b);
+
+        // restore position back to where we started
+        self.switch_blocks(current_block_id);
+        Ok((v_id, r))
     }
 
     fn push_bake_function_inner(
@@ -1587,7 +1595,7 @@ impl Flatten {
         name: StringKey,
         global_name: StringKey,
         b: &mut NB,
-    ) -> Result<(VariantId, FlattenResult)> {
+    ) -> Result<(VariantId, ScopeId, AstType, SpanId, FlattenResult)> {
         let func_ret_ty = if let AstType::Func(_arg, ret) = def_func_ty.clone() {
             if let ReturnType::Single(ret) = *ret {
                 ret.clone()
@@ -1645,6 +1653,7 @@ impl Flatten {
         self.scopes
             .scope_define(self.static_scope_id(), global_name, entry_link_id);
 
+        // flatten function, and switch to next
         self.switch_blocks(fun_block_id);
         let _ = self.push_node(body, b)?;
         self.maybe_terminate_block(next_block_id, span_id);
@@ -1735,11 +1744,13 @@ impl Flatten {
         }
 
         self.switch_blocks(next_block_id);
-        self.push_return_block_start(fun_scope_id, resolved_ret_ty.clone(), span_id, b);
-
-        // restore position back to where we started
-        self.switch_blocks(current_block_id);
-        Ok((variant_id, FlattenResult::link(entry_link_id)))
+        Ok((
+            variant_id,
+            fun_scope_id,
+            resolved_ret_ty,
+            span_id,
+            FlattenResult::link(entry_link_id),
+        ))
     }
 
     fn refresh_func_type(&self, def: &Lambda, b: &mut NB) -> (AstType, AstType, AstType) {
