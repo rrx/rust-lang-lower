@@ -1604,123 +1604,6 @@ impl Flatten {
         ))
     }
 
-    fn push_bake_function_inner(
-        &mut self,
-        local_name: StringKey,
-        global_name: StringKey,
-        next_scope_id: ScopeId,
-        next_block_id: BlockId,
-        def: Lambda,
-        def_func_type: AstType,
-        def_span_id: SpanId,
-        call_span_id: SpanId,
-        succ_type: Successor,
-        mem: VarDefinitionSpace,
-        b: &mut NB,
-    ) -> Result<(
-        VariantId,
-        ScopeId,
-        BlockId,
-        LinkId,
-        AstType,
-        ArgVec,
-        FlattenResult,
-    )> {
-        let current_block_id = self.current_block_id();
-        let block = self.blocks.get_block(current_block_id);
-        let scope_id = block.scope_id;
-
-        // New Func Scope
-        let (fun_block_id, fun_scope_id) =
-            self.new_scope_and_block(ScopeType::Function, next_scope_id);
-        let body = *def.body.unwrap();
-
-        let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
-        fun_scope.return_block = Some(next_block_id);
-
-        // block graph
-        self.blocks
-            .block_succ(current_block_id, fun_block_id, succ_type);
-
-        self.switch_blocks(fun_block_id);
-        let (entry_link_id, _) = self.push_start_block(
-            fun_scope_id,
-            def_func_type.clone(),
-            Some(global_name),
-            def_span_id,
-            mem,
-        );
-
-        // add entry to scope, for recursion
-        let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
-        // we need to know the link
-        //let variant_id = if let Some(global_name) = global_name {
-        let variant_id = self
-            .scopes
-            .variant_add(scope_id, local_name, r_ty1, entry_link_id);
-        //} else {
-        //None
-        //};
-
-        // add the name to scope
-        // do this early for recursive functions
-        self.scopes
-            .scope_define(scope_id, global_name, entry_link_id);
-
-        // flatten function, and switch to next
-        self.switch_blocks(fun_block_id);
-        let _ = self.push_node(body, b)?;
-        self.maybe_terminate_block(next_block_id, def_span_id);
-
-        let next_arg_ty =
-            self.resolve_return_type(fun_block_id, def_func_type.clone(), call_span_id, b);
-
-        assert!(next_arg_ty.is_composite());
-        let block_ty = AstType::Func(
-            next_arg_ty.clone().into(),
-            ReturnType::Single(AstType::Unit).into(),
-        );
-        let s_name = b.labels.r(local_name.into());
-        let prefix = format!("{}.cont", s_name);
-
-        self.switch_blocks(next_block_id);
-        let (_v_block, v_args) = self.push_start_block(
-            next_scope_id,
-            block_ty,
-            Some(b.labels.fresh_key(&prefix)),
-            call_span_id,
-            VarDefinitionSpace::Reg,
-        );
-
-        let next_link_id = match &next_arg_ty {
-            AstType::Unit => None,
-            _ => {
-                if v_args.len() == 0 {
-                    None
-                } else {
-                    Some(v_args.first().unwrap().1)
-                }
-            }
-        };
-
-        let r = if let Some(link_id) = next_link_id {
-            FlattenResult::link(link_id)
-        } else {
-            FlattenResult::statement()
-        };
-
-        // ASDF
-        Ok((
-            variant_id,
-            fun_scope_id,
-            fun_block_id,
-            entry_link_id,
-            next_arg_ty,
-            v_args,
-            r,
-        ))
-    }
-
     fn push_bake_function(
         &mut self,
         def: Lambda,
@@ -1746,7 +1629,7 @@ impl Flatten {
         //self.scopes.scope_succ(next_scope_id, scope_id);
         let (next_block_id, next_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
 
-        let (v_id, _scope, _block, entry_link_id, _, v_args, r) = self.push_bake_function_inner(
+        let (v_id, _scope, _block, entry_link_id, _, v_args, r) = self.push_bake_lambda_inner(
             name,
             global_name,
             next_scope_id,
