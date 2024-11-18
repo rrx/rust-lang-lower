@@ -1247,7 +1247,7 @@ impl Flatten {
                     b,
                 )?;
                 self.drain_diagnostics(b);
-                let (fun_block_id, _, _, next_block_id, next_link_id, _, _) = r;
+                let (_variant_id, fun_block_id, _, _, next_block_id, next_link_id, _, _) = r;
 
                 self.switch_blocks(next_block_id);
 
@@ -1428,7 +1428,7 @@ impl Flatten {
         call_func_type: AstType,
         call_span_id: SpanId,
         b: &mut NB,
-    ) -> Result<(BlockId, LinkId, AstType, BlockId, LinkId, AstType, AstType)> {
+    ) -> Result<(VariantId, BlockId, LinkId, AstType, BlockId, LinkId, AstType, AstType)> {
         // BAKE LAMBDA
         // TODO: There's a better way to do this.  Use continuations
         // eventually.
@@ -1484,7 +1484,7 @@ impl Flatten {
         call_func_type: AstType,
         call_span_id: SpanId,
         b: &mut NB,
-    ) -> Result<(BlockId, LinkId, AstType, BlockId, LinkId, AstType, AstType)> {
+    ) -> Result<(VariantId, BlockId, LinkId, AstType, BlockId, LinkId, AstType, AstType)> {
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
         let scope_id = block.scope_id;
@@ -1538,13 +1538,6 @@ impl Flatten {
 
         let next_arg_ty =
             self.resolve_return_type(fun_block_id, def_func_type.clone(), call_span_id, b);
-        // match return type with the jump target
-        // setup arguments for continuation block with appropriate parameters
-        // matching the return type of the lambda block
-        //let next_arg_ty = AstType::Struct(match &def_ret_ty {
-        //AstType::Unit => vec![],
-        //_ => vec![(None, def_ret_ty.clone())],
-        //});
         let next_fun_ty = AstType::Func(
             next_arg_ty.clone().into(),
             ReturnType::Single(AstType::Unit).into(),
@@ -1562,21 +1555,8 @@ impl Flatten {
             _ => Some(v_args.first().unwrap().1),
         };
 
-        /*
-        if b.types.u.unify(&next_arg_ty, &def_arg_ty).is_err() {
-            let ty1 = b.types.u.resolve(&next_arg_ty).unwrap();
-            let ty2 = b.types.u.resolve(&def_arg_ty).unwrap();
-            b.push_error_labels(vec![
-                b.primary_label(
-                    &format!("Type Mismatch Lambda Next: caller: {}", &ty1),
-                    call_span_id,
-                ),
-                b.secondary_label(&format!("source type: {}", &ty2), def_span_id),
-            ]);
-        }
-        */
-
         Ok((
+            variant_id,
             fun_block_id,
             entry_link_id,
             def_func_type.clone(),
@@ -1585,27 +1565,6 @@ impl Flatten {
             next_fun_ty,
             next_arg_ty,
         ))
-    }
-
-    fn push_bake_function(
-        &mut self,
-        def: Lambda,
-        def_func_ty: AstType,
-        name: StringKey,
-        global_name: StringKey,
-        b: &mut NB,
-    ) -> Result<(VariantId, FlattenResult)> {
-        let current_block_id = self.current_block_id();
-        let (v_id, fun_scope_id, ret_ty, span_id, entry_link_id, v_args) =
-            self.push_bake_function_inner(def, def_func_ty, name, global_name, b)?;
-
-        self.push_return(v_args, span_id);
-
-        //self.push_return_block_start(fun_scope_id, ret_ty.clone(), "ret", span_id, b);
-
-        // restore position back to where we started
-        self.switch_blocks(current_block_id);
-        Ok((v_id, FlattenResult::link(entry_link_id)))
     }
 
     fn push_bake_function_inner(
@@ -1696,6 +1655,26 @@ impl Flatten {
             v_args,
         ))
     }
+
+    fn push_bake_function(
+        &mut self,
+        def: Lambda,
+        def_func_ty: AstType,
+        name: StringKey,
+        global_name: StringKey,
+        b: &mut NB,
+    ) -> Result<(VariantId, FlattenResult)> {
+        let current_block_id = self.current_block_id();
+        let (v_id, _, _, span_id, entry_link_id, v_args) =
+            self.push_bake_function_inner(def, def_func_ty, name, global_name, b)?;
+
+        self.push_return(v_args, span_id);
+
+        // restore position back to where we started
+        self.switch_blocks(current_block_id);
+        Ok((v_id, FlattenResult::link(entry_link_id)))
+    }
+
 
     fn resolve_return_type(
         &self,
