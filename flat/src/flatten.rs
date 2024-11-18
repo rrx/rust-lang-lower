@@ -1242,7 +1242,7 @@ impl Flatten {
                     (scope_id, current_block_id, b.labels.r(name.into()))
                 );
 
-                let r = self.push_bake_lambda(
+                let result = self.push_bake_lambda(
                     Some(name),
                     def,
                     def_func_type,
@@ -1254,7 +1254,7 @@ impl Flatten {
                     b,
                 )?;
                 self.drain_diagnostics(b);
-                let (_variant_id, fun_block_id, _, _, next_block_id, next_link_id, _) = r;
+                let (_variant_id, fun_block_id, _, _, next_block_id, next_link_id, _, r) = result;
 
                 self.switch_blocks(next_block_id);
 
@@ -1264,11 +1264,12 @@ impl Flatten {
                 self.switch_blocks(next_block_id);
 
                 // block termination
-                if let Some(link_id) = next_link_id {
-                    Ok(FlattenResult::link(link_id))
-                } else {
-                    Ok(FlattenResult::statement())
-                }
+                Ok(r)
+                //if let Some(link_id) = next_link_id {
+                //Ok(FlattenResult::link(link_id))
+                //} else {
+                //Ok(FlattenResult::statement())
+                //}
             }
         } else {
             let name = b.labels.r(name.into());
@@ -1443,6 +1444,7 @@ impl Flatten {
         BlockId,
         Option<LinkId>,
         ArgVec,
+        FlattenResult,
     )> {
         // BAKE LAMBDA
         // TODO: There's a better way to do this.  Use continuations
@@ -1521,6 +1523,7 @@ impl Flatten {
         BlockId,
         Option<LinkId>,
         ArgVec,
+        FlattenResult,
     )> {
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
@@ -1578,6 +1581,7 @@ impl Flatten {
         );
         let s_name = b.labels.r(local_name.into());
         let prefix = format!("{}.cont", s_name);
+
         self.switch_blocks(next_block_id);
         let (_v_block, v_args) = self.push_start_block(
             next_scope_id,
@@ -1586,6 +1590,7 @@ impl Flatten {
             call_span_id,
             VarDefinitionSpace::Reg,
         );
+
         let next_link_id = match &def_ret_ty {
             AstType::Unit => None,
             _ => {
@@ -1597,6 +1602,12 @@ impl Flatten {
             }
         };
 
+        let r = if let Some(link_id) = next_link_id {
+            FlattenResult::link(link_id)
+        } else {
+            FlattenResult::statement()
+        };
+
         Ok((
             variant_id,
             fun_block_id,
@@ -1605,6 +1616,7 @@ impl Flatten {
             next_block_id,
             next_link_id,
             v_args,
+            r,
         ))
     }
 
@@ -1676,14 +1688,15 @@ impl Flatten {
             next_arg_ty.clone().into(),
             ReturnType::Single(AstType::Unit).into(),
         );
-        let name = b.labels.fresh_key("ret");
+        let s_name = b.labels.r(local_name.into());
+        let prefix = format!("{}.cont", s_name);
 
         self.switch_blocks(next_block_id);
         let (_v_block, v_args) = self.push_start_block(
             next_scope_id,
             block_ty,
-            Some(name),
-            def_span_id,
+            Some(b.labels.fresh_key(&prefix)),
+            call_span_id,
             VarDefinitionSpace::Reg,
         );
 
