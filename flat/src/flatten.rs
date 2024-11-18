@@ -1474,8 +1474,9 @@ impl Flatten {
         };
         let lambda_name = b.labels.fresh_key(&s_name);
 
-        let (next_block_id, next_scope_id) =
-            self.new_scope_and_block(ScopeType::Function, scope_id);
+        //let (next_block_id, next_scope_id) =
+        //self.new_scope_and_block(ScopeType::Function, scope_id);
+        let next_block_id = self.blocks.new_block(scope_id);
 
         let r = self.push_bake_lambda_inner(
             &s_name,
@@ -1532,7 +1533,7 @@ impl Flatten {
             self.new_scope_and_block(ScopeType::Function, next_scope_id);
         let body = *def.body.unwrap();
 
-        let next_block_id = self.blocks.new_block(next_scope_id);
+        //let next_block_id = self.blocks.new_block(next_scope_id);
         let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
         fun_scope.return_block = Some(next_block_id);
 
