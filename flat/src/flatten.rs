@@ -1095,7 +1095,6 @@ impl Flatten {
                 }
             }
         }
-        //self.block_id = current_block_id;
         Ok(values)
     }
 
@@ -1103,9 +1102,6 @@ impl Flatten {
         &mut self,
         name: StringKey,
         def: Lambda,
-        def_func_type: AstType,
-        def_arg_ty: AstType,
-        def_ret_ty: AstType,
         def_span_id: SpanId,
         call_func_type: AstType,
         call_span_id: SpanId,
@@ -1137,6 +1133,7 @@ impl Flatten {
         } else {
             // if it's not already baked, we need to do that here
             self.switch_blocks(self.static_block_id());
+
             let result = self.push_bake_function(
                 def,
                 call_func_type.clone(),
@@ -1226,17 +1223,8 @@ impl Flatten {
 
             let is_static = self.static_scope_id() == scope_id;
             if is_static {
-                let r = self.push_bake_static(
-                    name,
-                    def,
-                    def_func_type,
-                    def_arg_ty,
-                    def_ret_ty.clone(),
-                    def_span_id,
-                    call_func_type,
-                    span_id,
-                    b,
-                )?;
+                let r =
+                    self.push_bake_static(name, def, def_span_id, call_func_type, span_id, b)?;
                 self.drain_diagnostics(b);
                 let (fun_link_id, _bake_ty) = r;
 
@@ -1436,6 +1424,131 @@ impl Flatten {
         Ok(())
     }
 
+    fn push_bake_lambda(
+        &mut self,
+        name: Option<StringKey>,
+        def: Lambda,
+        def_func_type: AstType,
+        def_arg_ty: AstType,
+        def_ret_ty: AstType,
+        def_span_id: SpanId,
+        call_func_type: AstType,
+        call_span_id: SpanId,
+        b: &mut NB,
+    ) -> Result<(BlockId, LinkId, AstType, BlockId, LinkId, AstType)> {
+        // BAKE LAMBDA
+        // TODO: There's a better way to do this.  Use continuations
+        // eventually.
+        // create a new block for the lambda
+        // we call the lambda by jumping to it
+        // the new block points to a next block
+        // which we create here, and we return next block to the sequence
+        // This involves creating a new lambda block for each call site.  This
+        // is not efficient, if we call more than once.  In this other case, we
+        // want to pass the continuation into the block, so next is not
+        // required.
+        //
+        // Bake the lambda, this involes writing out the blocks, and passing the next block
+        // as a continuation.  This currently requires one lambda for each call.
+        // Eventually switch to CPS
+
+        let current_block_id = self.current_block_id();
+        let block = self.blocks.get_block(current_block_id);
+        let scope_id = block.scope_id;
+
+        // NEXT BLOCK(ret_ty)
+        // We create a new block for the lambda to return to
+        // this is the continuation
+        let next_block_id = self.blocks.new_block(scope_id);
+        self.blocks
+            .block_succ(current_block_id, next_block_id, Successor::BlockScope);
+
+        // New Lambda Scope
+        let (fun_block_id, fun_scope_id) = self.new_scope_and_block(ScopeType::Function, scope_id);
+        // Lambda Body
+        let body = *def.body.unwrap();
+
+        let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
+        fun_scope.return_block = Some(next_block_id);
+
+        // setup arguments for continuation block with appropriate parameters
+        // matching the return type of the lambda block
+        let next_arg_ty = AstType::Struct(match &def_ret_ty {
+            AstType::Unit => vec![],
+            _ => vec![(None, def_ret_ty.clone())],
+        });
+        // start next block
+        self.switch_blocks(next_block_id);
+
+        let s_name = name.map(|key| b.labels.r(key.into()));
+
+        let next_fun_ty = AstType::Func(
+            next_arg_ty.clone().into(),
+            ReturnType::Single(AstType::Unit).into(),
+        );
+
+        let prefix = s_name
+            .map(|s| format!("{}.cont", s))
+            .unwrap_or("cont".to_string());
+        let (_v_block, next_link_ids) = self.push_start_block(
+            scope_id,
+            next_fun_ty.clone(),
+            Some(b.labels.fresh_key(&prefix)),
+            call_span_id,
+            VarDefinitionSpace::Reg,
+        );
+
+        let next_link_id = match &def_ret_ty {
+            AstType::Unit => None,
+            _ => Some(next_link_ids.first().unwrap().1),
+        };
+
+        // Start lambda block
+        let s_name = if let Some(name) = name {
+            b.labels.r(name.into())
+        } else {
+            "lambda".to_string()
+        };
+
+        let lambda_name = b.labels.fresh_key(&s_name);
+        self.switch_blocks(fun_block_id);
+        let (fun_link_id, _) = self.push_start_block(
+            fun_scope_id,
+            def_func_type.clone(),
+            Some(lambda_name),
+            def_span_id,
+            VarDefinitionSpace::Reg,
+        );
+        // flatten lambda block
+        self.switch_blocks(fun_block_id);
+        let _ = self.push_node(body, b)?;
+        self.maybe_terminate_block(next_block_id, call_span_id);
+        self.switch_blocks(next_block_id);
+
+        // match return type with the jump target
+        //println!("push_bake_lambda_next: {}<=>{}", &next_arg_ty, &def_arg_ty);
+        if b.types.u.unify(&next_arg_ty, &def_arg_ty).is_err() {
+            let ty1 = b.types.u.resolve(&next_arg_ty).unwrap();
+            let ty2 = b.types.u.resolve(&def_arg_ty).unwrap();
+            b.push_error_labels(vec![
+                b.primary_label(
+                    &format!("Type Mismatch Lambda Next: caller: {}", &ty1),
+                    call_span_id,
+                ),
+                b.secondary_label(&format!("source type: {}", &ty2), def_span_id),
+            ]);
+        }
+
+        Ok((
+            fun_block_id,
+            fun_link_id,
+            def_func_type.clone(),
+            next_block_id,
+            next_link_id.unwrap(),
+            next_fun_ty,
+        ))
+    }
+
     fn push_bake_function(
         &mut self,
         def: Lambda,
@@ -1446,8 +1559,6 @@ impl Flatten {
         succ_type: Successor,
         b: &mut NB,
     ) -> Result<(VariantId, FlattenResult)> {
-        let current_block_id = self.current_block_id();
-
         let func_ret_ty = if let AstType::Func(_arg, ret) = def_func_ty.clone() {
             if let ReturnType::Single(ret) = *ret {
                 ret.clone()
@@ -1458,11 +1569,20 @@ impl Flatten {
             unreachable!()
         };
 
-        let body = def.body.unwrap();
+        let current_block_id = self.current_block_id();
+        let block = self.blocks.get_block(current_block_id);
+        let scope_id = block.scope_id;
+
+        // New Func Scope
+        let (fun_block_id, fun_scope_id) = self.new_scope_and_block(scope_type, scope_id);
+        // Func Body
+        let body = *def.body.unwrap();
+
+        //let body = def.body.unwrap();
         let span_id = body.span_id;
         // create function scope
-        let (fun_block_id, fun_scope_id) =
-            self.new_scope_and_block(scope_type, self.static_scope_id());
+        //let (fun_block_id, fun_scope_id) =
+        //self.new_scope_and_block(scope_type, self.static_scope_id());
         // create function block and return block
         let ret_block_id = self.blocks.new_block(fun_scope_id);
 
@@ -1501,7 +1621,7 @@ impl Flatten {
             .scope_define(self.static_scope_id(), global_name, entry_link_id);
 
         self.switch_blocks(fun_block_id);
-        let _ = self.push_node(*body, b)?;
+        let _ = self.push_node(body, b)?;
         self.maybe_terminate_block(ret_block_id, span_id);
 
         // write out return block
@@ -1615,132 +1735,6 @@ impl Flatten {
             ReturnType::Single(ret_ty.clone()).into(),
         );
         (def_func_type, def_arg_ty, ret_ty)
-    }
-
-    fn push_bake_lambda(
-        &mut self,
-        name: Option<StringKey>,
-        def: Lambda,
-        def_func_type: AstType,
-        def_arg_ty: AstType,
-        ret_ty: AstType,
-        def_span_id: SpanId,
-        call_func_type: AstType,
-        call_span_id: SpanId,
-        b: &mut NB,
-    ) -> Result<(BlockId, LinkId, AstType, BlockId, LinkId, AstType)> {
-        // BAKE LAMBDA
-        // TODO: There's a better way to do this.  Use continuations
-        // eventually.
-        // create a new block for the lambda
-        // we call the lambda by jumping to it
-        // the new block points to a next block
-        // which we create here, and we return next block to the sequence
-        // This involves creating a new lambda block for each call site.  This
-        // is not efficient, if we call more than once.  In this other case, we
-        // want to pass the continuation into the block, so next is not
-        // required.
-        //
-        // Bake the lambda, this involes writing out the blocks, and passing the next block
-        // as a continuation.  This currently requires one lambda for each call.
-        // Eventually switch to CPS
-
-        let current_block_id = self.current_block_id();
-        let block = self.blocks.get_block(current_block_id);
-        let scope_id = block.scope_id;
-
-        // New Lambda Scope
-        let (fun_block_id, fun_scope_id) = self.new_scope_and_block(ScopeType::Function, scope_id);
-
-        // NEXT BLOCK(ret_ty)
-        // We create a new block for the lambda to return to
-        // this is the continuation
-        let next_block_id = self.blocks.new_block(scope_id);
-        self.blocks
-            .block_succ(current_block_id, next_block_id, Successor::BlockScope);
-
-        // Lambda Body
-        let body = *def.body.unwrap();
-
-        let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
-        fun_scope.return_block = Some(next_block_id);
-
-        // setup arguments for continuation block with appropriate parameters
-        // matching the return type of the lambda block
-        let next_arg_ty = AstType::Struct(match &ret_ty {
-            AstType::Unit => vec![],
-            _ => vec![(None, ret_ty.clone())],
-        });
-        // start next block
-        self.switch_blocks(next_block_id);
-
-        let s_name = name.map(|key| b.labels.r(key.into()));
-
-        let next_fun_ty = AstType::Func(
-            next_arg_ty.clone().into(),
-            ReturnType::Single(AstType::Unit).into(),
-        );
-
-        let prefix = s_name
-            .map(|s| format!("{}.cont", s))
-            .unwrap_or("cont".to_string());
-        let (_v_block, next_link_ids) = self.push_start_block(
-            scope_id,
-            next_fun_ty.clone(),
-            Some(b.labels.fresh_key(&prefix)),
-            call_span_id,
-            VarDefinitionSpace::Reg,
-        );
-
-        let next_link_id = match &ret_ty {
-            AstType::Unit => None,
-            _ => Some(next_link_ids.first().unwrap().1),
-        };
-
-        // Start lambda block
-        let s_name = if let Some(name) = name {
-            b.labels.r(name.into())
-        } else {
-            "lambda".to_string()
-        };
-
-        let lambda_name = b.labels.fresh_key(&s_name);
-        self.switch_blocks(fun_block_id);
-        let (fun_link_id, _) = self.push_start_block(
-            fun_scope_id,
-            def_func_type.clone(),
-            Some(lambda_name),
-            def_span_id,
-            VarDefinitionSpace::Reg,
-        );
-        // flatten lambda block
-        self.switch_blocks(fun_block_id);
-        let _ = self.push_node(body, b)?;
-        self.maybe_terminate_block(next_block_id, call_span_id);
-        self.switch_blocks(next_block_id);
-
-        // match return type with the jump target
-        //println!("push_bake_lambda_next: {}<=>{}", &next_arg_ty, &def_arg_ty);
-        if b.types.u.unify(&next_arg_ty, &def_arg_ty).is_err() {
-            let ty1 = b.types.u.resolve(&next_arg_ty).unwrap();
-            let ty2 = b.types.u.resolve(&def_arg_ty).unwrap();
-            b.push_error_labels(vec![
-                b.primary_label(
-                    &format!("Type Mismatch Lambda Next: caller: {}", &ty1),
-                    call_span_id,
-                ),
-                b.secondary_label(&format!("source type: {}", &ty2), def_span_id),
-            ]);
-        }
-
-        Ok((
-            fun_block_id,
-            fun_link_id,
-            def_func_type.clone(),
-            next_block_id,
-            next_link_id.unwrap(),
-            next_fun_ty,
-        ))
     }
 
     pub fn push_bake(&mut self, name: StringKey, func_type: AstType, b: &mut NB) -> Result<LinkId> {
