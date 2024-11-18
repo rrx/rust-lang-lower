@@ -1247,7 +1247,7 @@ impl Flatten {
                     b,
                 )?;
                 self.drain_diagnostics(b);
-                let (_variant_id, fun_block_id, _, _, next_block_id, next_link_id, _, _) = r;
+                let (_variant_id, fun_block_id, _, _, next_block_id, next_link_id, _, _, _) = r;
 
                 self.switch_blocks(next_block_id);
 
@@ -1437,6 +1437,7 @@ impl Flatten {
         Option<LinkId>,
         AstType,
         AstType,
+        ArgVec,
     )> {
         // BAKE LAMBDA
         // TODO: There's a better way to do this.  Use continuations
@@ -1477,6 +1478,7 @@ impl Flatten {
             call_func_type,
             call_span_id,
             Successor::BlockScope,
+            VarDefinitionSpace::Reg,
             b,
         )?;
         Ok(r)
@@ -1494,6 +1496,7 @@ impl Flatten {
         call_func_type: AstType,
         call_span_id: SpanId,
         succ_type: Successor,
+        mem: VarDefinitionSpace,
         b: &mut NB,
     ) -> Result<(
         VariantId,
@@ -1504,14 +1507,16 @@ impl Flatten {
         Option<LinkId>,
         AstType,
         AstType,
+        ArgVec,
     )> {
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
         let scope_id = block.scope_id;
 
-        // New Scope
+        // New Func Scope
         let (fun_block_id, fun_scope_id) = self.new_scope_and_block(ScopeType::Function, scope_id);
         let body = *def.body.unwrap();
+        let span_id = body.span_id;
 
         //let next_block_id = self.blocks.new_block(fun_scope_id);
         let next_block_id = self.blocks.new_block(scope_id);
@@ -1524,17 +1529,13 @@ impl Flatten {
         self.blocks
             .block_succ(fun_block_id, next_block_id, Successor::BlockScope);
 
-        // start next block
-        self.switch_blocks(next_block_id);
-
-        let s_name = b.labels.r(name.into());
         self.switch_blocks(fun_block_id);
         let (entry_link_id, _) = self.push_start_block(
             fun_scope_id,
             def_func_type.clone(),
             Some(name),
             def_span_id,
-            VarDefinitionSpace::Reg,
+            mem,
         );
 
         // add entry to scope, for recursion
@@ -1564,6 +1565,7 @@ impl Flatten {
             next_arg_ty.clone().into(),
             ReturnType::Single(AstType::Unit).into(),
         );
+        let s_name = b.labels.r(name.into());
         let prefix = format!("{}.cont", s_name);
         let (_v_block, v_args) = self.push_start_block(
             scope_id,
@@ -1592,6 +1594,7 @@ impl Flatten {
             next_link_id,
             next_fun_ty,
             next_arg_ty,
+            v_args,
         ))
     }
 
@@ -1602,6 +1605,7 @@ impl Flatten {
         name: StringKey,
         global_name: StringKey,
         succ_type: Successor,
+        mem: VarDefinitionSpace,
         b: &mut NB,
     ) -> Result<(VariantId, ScopeId, AstType, SpanId, LinkId, ArgVec)> {
         let current_block_id = self.current_block_id();
@@ -1629,7 +1633,7 @@ impl Flatten {
             def_func_ty.clone(),
             Some(global_name),
             span_id,
-            VarDefinitionSpace::Static,
+            mem,
         );
 
         // add entry to scope, for recursion
@@ -1691,12 +1695,18 @@ impl Flatten {
         b: &mut NB,
     ) -> Result<(VariantId, FlattenResult)> {
         let current_block_id = self.current_block_id();
+        let block = self.blocks.get_block(current_block_id);
+        let scope_id = block.scope_id;
+
+        let (next_block_id, next_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
+
         let (v_id, _, _, span_id, entry_link_id, v_args) = self.push_bake_function_inner(
             def,
             def_func_ty,
             name,
             global_name,
             Successor::FunctionDeclaration,
+            VarDefinitionSpace::Static,
             b,
         )?;
 
