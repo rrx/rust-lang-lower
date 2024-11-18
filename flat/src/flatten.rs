@@ -1476,6 +1476,7 @@ impl Flatten {
             def_span_id,
             call_func_type,
             call_span_id,
+            Successor::BlockScope,
             b,
         )?;
         Ok(r)
@@ -1492,6 +1493,7 @@ impl Flatten {
         def_span_id: SpanId,
         call_func_type: AstType,
         call_span_id: SpanId,
+        succ_type: Successor,
         b: &mut NB,
     ) -> Result<(
         VariantId,
@@ -1518,10 +1520,9 @@ impl Flatten {
 
         // block graph
         self.blocks
-            .block_succ(fun_block_id, next_block_id, Successor::BlockScope);
-        // Lambda Block
+            .block_succ(current_block_id, fun_block_id, succ_type);
         self.blocks
-            .block_succ(current_block_id, fun_block_id, Successor::BlockScope);
+            .block_succ(fun_block_id, next_block_id, Successor::BlockScope);
 
         // start next block
         self.switch_blocks(next_block_id);
@@ -1600,6 +1601,7 @@ impl Flatten {
         def_func_ty: AstType,
         name: StringKey,
         global_name: StringKey,
+        succ_type: Successor,
         b: &mut NB,
     ) -> Result<(VariantId, ScopeId, AstType, SpanId, LinkId, ArgVec)> {
         let current_block_id = self.current_block_id();
@@ -1616,11 +1618,8 @@ impl Flatten {
         fun_scope.return_block = Some(next_block_id);
 
         // block graph
-        self.blocks.block_succ(
-            current_block_id,
-            fun_block_id,
-            Successor::FunctionDeclaration,
-        );
+        self.blocks
+            .block_succ(current_block_id, fun_block_id, succ_type);
         self.blocks
             .block_succ(fun_block_id, next_block_id, Successor::BlockScope);
 
@@ -1692,8 +1691,14 @@ impl Flatten {
         b: &mut NB,
     ) -> Result<(VariantId, FlattenResult)> {
         let current_block_id = self.current_block_id();
-        let (v_id, _, _, span_id, entry_link_id, v_args) =
-            self.push_bake_function_inner(def, def_func_ty, name, global_name, b)?;
+        let (v_id, _, _, span_id, entry_link_id, v_args) = self.push_bake_function_inner(
+            def,
+            def_func_ty,
+            name,
+            global_name,
+            Successor::FunctionDeclaration,
+            b,
+        )?;
 
         self.push_return(v_args, span_id);
 
