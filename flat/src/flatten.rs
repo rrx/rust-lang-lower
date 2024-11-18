@@ -1616,6 +1616,7 @@ impl Flatten {
         global_name: StringKey,
         succ_type: Successor,
         next_scope_id: ScopeId,
+        next_block_id: BlockId,
         mem: VarDefinitionSpace,
         b: &mut NB,
     ) -> Result<(VariantId, ScopeId, AstType, SpanId, LinkId, ArgVec)> {
@@ -1629,7 +1630,7 @@ impl Flatten {
         let body = *def.body.unwrap();
         let span_id = body.span_id;
 
-        let next_block_id = self.blocks.new_block(next_scope_id);
+        //let next_block_id = self.blocks.new_block(next_scope_id);
         let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
         fun_scope.return_block = Some(next_block_id);
 
@@ -1711,6 +1712,16 @@ impl Flatten {
         let block = self.blocks.get_block(current_block_id);
         let scope_id = block.scope_id;
 
+        // create a next scope, that includes the function
+        // when the function returns it jumps to the return block, which is the next function
+        // which is out of scope for the function.  This requires that the function cleanup the
+        // stack before jumping to the return block
+        // This scope is empty, and isn't used for anything other than including the function scope
+        // This behavior is slightly different than inline functions that jump back into the same
+        // scope from which they were called.
+
+        //let next_scope_id = self.scopes.new_scope(ScopeType::Block);
+        //self.scopes.scope_succ(next_scope_id, scope_id);
         let (next_block_id, next_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
 
         let (v_id, _, _, span_id, entry_link_id, v_args) = self.push_bake_function_inner(
@@ -1721,6 +1732,7 @@ impl Flatten {
             global_name,
             Successor::FunctionDeclaration,
             next_scope_id,
+            next_block_id,
             VarDefinitionSpace::Static,
             b,
         )?;
