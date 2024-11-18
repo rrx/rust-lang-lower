@@ -1488,7 +1488,7 @@ impl Flatten {
             VarDefinitionSpace::Reg,
             b,
         )?;
-        Ok(r)
+        Ok((r.0, r.1, r.2, r.3, r.4, next_block_id, r.5, r.6))
     }
 
     fn push_bake_lambda_inner(
@@ -1514,7 +1514,6 @@ impl Flatten {
         BlockId,
         LinkId,
         AstType,
-        BlockId,
         ArgVec,
         FlattenResult,
     )> {
@@ -1601,13 +1600,13 @@ impl Flatten {
             FlattenResult::statement()
         };
 
+        // ASDF
         Ok((
             variant_id,
             fun_scope_id,
             fun_block_id,
             entry_link_id,
             def_func_type.clone(),
-            next_block_id,
             v_args,
             r,
         ))
@@ -1719,6 +1718,7 @@ impl Flatten {
             FlattenResult::statement()
         };
 
+        // ASDF
         Ok((
             variant_id,
             fun_scope_id,
