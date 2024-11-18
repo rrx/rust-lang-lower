@@ -1247,7 +1247,7 @@ impl Flatten {
                     b,
                 )?;
                 self.drain_diagnostics(b);
-                let (fun_block_id, _, _, next_block_id, next_link_id, _) = r;
+                let (fun_block_id, _, _, next_block_id, next_link_id, _, _) = r;
 
                 self.switch_blocks(next_block_id);
 
@@ -1428,7 +1428,7 @@ impl Flatten {
         call_func_type: AstType,
         call_span_id: SpanId,
         b: &mut NB,
-    ) -> Result<(BlockId, LinkId, AstType, BlockId, LinkId, AstType)> {
+    ) -> Result<(BlockId, LinkId, AstType, BlockId, LinkId, AstType, AstType)> {
         // BAKE LAMBDA
         // TODO: There's a better way to do this.  Use continuations
         // eventually.
@@ -1457,7 +1457,7 @@ impl Flatten {
         };
         let lambda_name = b.labels.fresh_key(&s_name);
 
-        self.push_bake_lambda_inner(
+        let r = self.push_bake_lambda_inner(
             &s_name,
             lambda_name,
             def,
@@ -1468,7 +1468,8 @@ impl Flatten {
             call_func_type,
             call_span_id,
             b,
-        )
+        )?;
+        Ok(r)
     }
 
     fn push_bake_lambda_inner(
@@ -1483,7 +1484,7 @@ impl Flatten {
         call_func_type: AstType,
         call_span_id: SpanId,
         b: &mut NB,
-    ) -> Result<(BlockId, LinkId, AstType, BlockId, LinkId, AstType)> {
+    ) -> Result<(BlockId, LinkId, AstType, BlockId, LinkId, AstType, AstType)> {
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
         let scope_id = block.scope_id;
@@ -1582,6 +1583,7 @@ impl Flatten {
             next_block_id,
             next_link_id.unwrap(),
             next_fun_ty,
+            next_arg_ty,
         ))
     }
 
@@ -1594,14 +1596,31 @@ impl Flatten {
         b: &mut NB,
     ) -> Result<(VariantId, FlattenResult)> {
         let current_block_id = self.current_block_id();
-        let (v_id, fun_scope_id, ret_ty, span_id, r) =
+        let (v_id, fun_scope_id, ret_ty, span_id, entry_link_id) =
             self.push_bake_function_inner(def, def_func_ty, name, global_name, b)?;
 
-        self.push_return_block_start(fun_scope_id, ret_ty.clone(), "ret", span_id, b);
+        assert!(ret_ty.is_composite());
+        let name = b.labels.fresh_key("ret");
+
+        let block_ty = AstType::Func(
+            ret_ty.clone().into(),
+            ReturnType::Single(AstType::Unit).into(),
+        );
+
+        let (_v_block, v_args) = self.push_start_block(
+            fun_scope_id,
+            block_ty,
+            Some(name),
+            span_id,
+            VarDefinitionSpace::Reg,
+        );
+        self.push_return(v_args, span_id);
+
+        //self.push_return_block_start(fun_scope_id, ret_ty.clone(), "ret", span_id, b);
 
         // restore position back to where we started
         self.switch_blocks(current_block_id);
-        Ok((v_id, r))
+        Ok((v_id, FlattenResult::link(entry_link_id)))
     }
 
     fn push_bake_function_inner(
@@ -1611,7 +1630,7 @@ impl Flatten {
         name: StringKey,
         global_name: StringKey,
         b: &mut NB,
-    ) -> Result<(VariantId, ScopeId, AstType, SpanId, FlattenResult)> {
+    ) -> Result<(VariantId, ScopeId, AstType, SpanId, LinkId)> {
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
         let scope_id = block.scope_id;
@@ -1671,7 +1690,7 @@ impl Flatten {
             fun_scope_id,
             resolved_ret_ty,
             span_id,
-            FlattenResult::link(entry_link_id),
+            entry_link_id,
         ))
     }
 
