@@ -1134,15 +1134,7 @@ impl Flatten {
             // if it's not already baked, we need to do that here
             self.switch_blocks(self.static_block_id());
 
-            let result = self.push_bake_function(
-                def,
-                call_func_type.clone(),
-                name,
-                global_key,
-                ScopeType::Function,
-                Successor::FunctionDeclaration,
-                b,
-            );
+            let result = self.push_bake_function(def, call_func_type.clone(), name, global_key, b);
             if result.is_err() {
                 self.drain_diagnostics(b);
             }
@@ -1489,11 +1481,9 @@ impl Flatten {
         let (fun_block_id, fun_scope_id) = self.new_scope_and_block(ScopeType::Function, scope_id);
         let body = *def.body.unwrap();
 
+        //let next_block_id = self.blocks.new_block(fun_scope_id);
         let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
 
-        // NEXT BLOCK(ret_ty)
-        // We create a new block for the lambda to return to
-        // this is the continuation
         let next_block_id = self.blocks.new_block(scope_id);
 
         self.blocks
@@ -1585,19 +1575,9 @@ impl Flatten {
         def_func_ty: AstType,
         name: StringKey,
         global_name: StringKey,
-        scope_type: ScopeType,
-        succ_type: Successor,
         b: &mut NB,
     ) -> Result<(VariantId, FlattenResult)> {
-        self.push_bake_function_inner(
-            def,
-            def_func_ty,
-            name,
-            global_name,
-            scope_type,
-            succ_type,
-            b,
-        )
+        self.push_bake_function_inner(def, def_func_ty, name, global_name, b)
     }
 
     fn push_bake_function_inner(
@@ -1606,8 +1586,6 @@ impl Flatten {
         def_func_ty: AstType,
         name: StringKey,
         global_name: StringKey,
-        scope_type: ScopeType,
-        succ_type: Successor,
         b: &mut NB,
     ) -> Result<(VariantId, FlattenResult)> {
         let func_ret_ty = if let AstType::Func(_arg, ret) = def_func_ty.clone() {
@@ -1625,20 +1603,22 @@ impl Flatten {
         let scope_id = block.scope_id;
 
         // New Func Scope
-        let (fun_block_id, fun_scope_id) = self.new_scope_and_block(scope_type, scope_id);
+        let (fun_block_id, fun_scope_id) = self.new_scope_and_block(ScopeType::Function, scope_id);
         let body = *def.body.unwrap();
         let span_id = body.span_id;
 
-        let ret_block_id = self.blocks.new_block(fun_scope_id);
-        // return in scope
+        let next_block_id = self.blocks.new_block(fun_scope_id);
         let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
-        fun_scope.return_block = Some(ret_block_id);
+        fun_scope.return_block = Some(next_block_id);
 
         // block graph
+        self.blocks.block_succ(
+            current_block_id,
+            fun_block_id,
+            Successor::FunctionDeclaration,
+        );
         self.blocks
-            .block_succ(current_block_id, fun_block_id, succ_type);
-        self.blocks
-            .block_succ(fun_block_id, ret_block_id, Successor::BlockScope);
+            .block_succ(fun_block_id, next_block_id, Successor::BlockScope);
         self.switch_blocks(fun_block_id);
         let (entry_link_id, _) = self.push_start_block(
             fun_scope_id,
@@ -1666,7 +1646,7 @@ impl Flatten {
 
         self.switch_blocks(fun_block_id);
         let _ = self.push_node(body, b)?;
-        self.maybe_terminate_block(ret_block_id, span_id);
+        self.maybe_terminate_block(next_block_id, span_id);
 
         // write out return block
         let fun_block = self.blocks.get_block(fun_block_id);
@@ -1753,7 +1733,7 @@ impl Flatten {
             );
         }
 
-        self.switch_blocks(ret_block_id);
+        self.switch_blocks(next_block_id);
         self.push_return_block_start(fun_scope_id, resolved_ret_ty.clone(), span_id, b);
 
         // restore position back to where we started
@@ -1784,15 +1764,7 @@ impl Flatten {
     pub fn push_bake(&mut self, name: StringKey, func_type: AstType, b: &mut NB) -> Result<LinkId> {
         let current_block_id = self.current_block_id();
         if let Some((__scope_id, def, _def_span_id)) = self.resolve_lambda(current_block_id, name) {
-            let result = self.push_bake_function(
-                def,
-                func_type,
-                name,
-                name,
-                ScopeType::Function,
-                Successor::FunctionDeclaration,
-                b,
-            );
+            let result = self.push_bake_function(def, func_type, name, name, b);
             if result.is_err() {
                 self.drain_diagnostics(b);
             }
