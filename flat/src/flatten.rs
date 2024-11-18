@@ -698,11 +698,12 @@ impl Flatten {
         &mut self,
         scope_id: ScopeId,
         return_type: AstType,
+        prefix: &str,
         span_id: SpanId,
         b: &mut NB,
     ) {
         assert!(return_type.is_composite());
-        let name = b.labels.fresh_key("ret");
+        let name = b.labels.fresh_key(prefix);
 
         let (_v_block, v_args) = self.push_start_block(
             scope_id,
@@ -1444,12 +1445,21 @@ impl Flatten {
         // as a continuation.  This currently requires one lambda for each call.
         // Eventually switch to CPS
         //
-        let current_block_id = self.current_block_id();
-        let block = self.blocks.get_block(current_block_id);
-        let scope_id = block.scope_id;
+        //let current_block_id = self.current_block_id();
+        //let block = self.blocks.get_block(current_block_id);
+        //let scope_id = block.scope_id;
+
+        // Start lambda block
+        let s_name = if let Some(name) = name {
+            b.labels.r(name.into())
+        } else {
+            "anon".to_string()
+        };
+        let lambda_name = b.labels.fresh_key(&s_name);
 
         self.push_bake_lambda_inner(
-            name,
+            &s_name,
+            lambda_name,
             def,
             def_func_type,
             def_arg_ty,
@@ -1463,7 +1473,8 @@ impl Flatten {
 
     fn push_bake_lambda_inner(
         &mut self,
-        name: Option<StringKey>,
+        s_name: &str,
+        name: StringKey,
         def: Lambda,
         def_func_type: AstType,
         def_arg_ty: AstType,
@@ -1493,45 +1504,30 @@ impl Flatten {
         // start next block
         self.switch_blocks(next_block_id);
 
-        let s_name = name.map(|key| b.labels.r(key.into()));
-
-        let prefix = s_name
-            .map(|s| format!("{}.cont", s))
-            .unwrap_or("cont".to_string());
-
-        // Start lambda block
-        let s_name = if let Some(name) = name {
-            b.labels.r(name.into())
-        } else {
-            "lambda".to_string()
-        };
-
-        let lambda_name = b.labels.fresh_key(&s_name);
+        let s_name = b.labels.r(name.into());
         self.switch_blocks(fun_block_id);
         let (entry_link_id, _) = self.push_start_block(
             fun_scope_id,
             def_func_type.clone(),
-            Some(lambda_name),
+            Some(name),
             def_span_id,
             VarDefinitionSpace::Reg,
         );
 
-        if let Some(name) = name {
-            // add entry to scope, for recursion
-            let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
-            // we need to know the link
-            //let variant_id = if let Some(global_name) = global_name {
-            let variant_id = self
-                .scopes
-                .variant_add(scope_id, name, r_ty1, entry_link_id);
-            //} else {
-            //None
-            //};
+        // add entry to scope, for recursion
+        let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
+        // we need to know the link
+        //let variant_id = if let Some(global_name) = global_name {
+        let variant_id = self
+            .scopes
+            .variant_add(scope_id, name, r_ty1, entry_link_id);
+        //} else {
+        //None
+        //};
 
-            // add the name to scope
-            // do this early for recursive functions
-            self.scopes.scope_define(scope_id, name, entry_link_id);
-        }
+        // add the name to scope
+        // do this early for recursive functions
+        self.scopes.scope_define(scope_id, name, entry_link_id);
 
         // flatten function, and switch to next
         self.switch_blocks(fun_block_id);
@@ -1552,18 +1548,17 @@ impl Flatten {
             next_arg_ty.clone().into(),
             ReturnType::Single(AstType::Unit).into(),
         );
-
-        let (_v_block, next_link_ids) = self.push_start_block(
+        let prefix = format!("{}.cont", s_name);
+        let (_v_block, v_args) = self.push_start_block(
             scope_id,
             next_fun_ty.clone(),
             Some(b.labels.fresh_key(&prefix)),
             call_span_id,
             VarDefinitionSpace::Reg,
         );
-
         let next_link_id = match &def_ret_ty {
             AstType::Unit => None,
-            _ => Some(next_link_ids.first().unwrap().1),
+            _ => Some(v_args.first().unwrap().1),
         };
 
         if b.types.u.unify(&next_arg_ty, &def_arg_ty).is_err() {
@@ -1600,7 +1595,7 @@ impl Flatten {
         let (v_id, fun_scope_id, ret_ty, span_id, r) =
             self.push_bake_function_inner(def, def_func_ty, name, global_name, b)?;
 
-        self.push_return_block_start(fun_scope_id, ret_ty.clone(), span_id, b);
+        self.push_return_block_start(fun_scope_id, ret_ty.clone(), "ret", span_id, b);
 
         // restore position back to where we started
         self.switch_blocks(current_block_id);
