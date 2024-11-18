@@ -1261,7 +1261,11 @@ impl Flatten {
                 self.switch_blocks(next_block_id);
 
                 // block termination
-                return Ok(FlattenResult::link(next_link_id));
+                if let Some(link_id) = next_link_id {
+                    Ok(FlattenResult::link(link_id))
+                } else {
+                    Ok(FlattenResult::statement())
+                }
             }
         } else {
             let name = b.labels.r(name.into());
@@ -1428,7 +1432,16 @@ impl Flatten {
         call_func_type: AstType,
         call_span_id: SpanId,
         b: &mut NB,
-    ) -> Result<(VariantId, BlockId, LinkId, AstType, BlockId, LinkId, AstType, AstType)> {
+    ) -> Result<(
+        VariantId,
+        BlockId,
+        LinkId,
+        AstType,
+        BlockId,
+        Option<LinkId>,
+        AstType,
+        AstType,
+    )> {
         // BAKE LAMBDA
         // TODO: There's a better way to do this.  Use continuations
         // eventually.
@@ -1484,7 +1497,16 @@ impl Flatten {
         call_func_type: AstType,
         call_span_id: SpanId,
         b: &mut NB,
-    ) -> Result<(VariantId, BlockId, LinkId, AstType, BlockId, LinkId, AstType, AstType)> {
+    ) -> Result<(
+        VariantId,
+        BlockId,
+        LinkId,
+        AstType,
+        BlockId,
+        Option<LinkId>,
+        AstType,
+        AstType,
+    )> {
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
         let scope_id = block.scope_id;
@@ -1552,7 +1574,13 @@ impl Flatten {
         );
         let next_link_id = match &def_ret_ty {
             AstType::Unit => None,
-            _ => Some(v_args.first().unwrap().1),
+            _ => {
+                if v_args.len() == 0 {
+                    None
+                } else {
+                    Some(v_args.first().unwrap().1)
+                }
+            }
         };
 
         Ok((
@@ -1561,7 +1589,7 @@ impl Flatten {
             entry_link_id,
             def_func_type.clone(),
             next_block_id,
-            next_link_id.unwrap(),
+            next_link_id,
             next_fun_ty,
             next_arg_ty,
         ))
@@ -1674,7 +1702,6 @@ impl Flatten {
         self.switch_blocks(current_block_id);
         Ok((v_id, FlattenResult::link(entry_link_id)))
     }
-
 
     fn resolve_return_type(
         &self,
