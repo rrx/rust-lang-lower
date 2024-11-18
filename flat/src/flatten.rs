@@ -1535,15 +1535,15 @@ impl Flatten {
         self.maybe_terminate_block(next_block_id, call_span_id);
         self.switch_blocks(next_block_id);
 
-        let resolved_ret_ty =
+        let next_arg_ty =
             self.resolve_return_type(fun_block_id, def_func_type.clone(), call_span_id, b);
         // match return type with the jump target
         // setup arguments for continuation block with appropriate parameters
         // matching the return type of the lambda block
-        let next_arg_ty = AstType::Struct(match &def_ret_ty {
-            AstType::Unit => vec![],
-            _ => vec![(None, def_ret_ty.clone())],
-        });
+        //let next_arg_ty = AstType::Struct(match &def_ret_ty {
+            //AstType::Unit => vec![],
+            //_ => vec![(None, def_ret_ty.clone())],
+        //});
         let next_fun_ty = AstType::Func(
             next_arg_ty.clone().into(),
             ReturnType::Single(AstType::Unit).into(),
