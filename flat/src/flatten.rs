@@ -31,6 +31,8 @@ use crate::{
     ScopeGraph, ScopeId, ScopeType, StringLabel, Successor, TemplateId, ValueId, VariantId,
 };
 
+type ArgVec = Vec<(Option<StringKey>, LinkId, AstType, SpanId)>;
+
 #[derive(Debug, Clone)]
 pub struct CodeEntry {
     pub(super) next: LinkId,
@@ -678,11 +680,7 @@ impl Flatten {
         Ok(FlattenResult::link(link_id))
     }
 
-    pub fn push_return(
-        &mut self,
-        values: Vec<(Option<StringKey>, LinkId, AstType, SpanId)>,
-        span_id: SpanId,
-    ) -> LinkId {
+    pub fn push_return(&mut self, values: ArgVec, span_id: SpanId) -> LinkId {
         let _ = self.push_call_values(&values);
 
         self.push_code(
@@ -694,6 +692,7 @@ impl Flatten {
         )
     }
 
+    /*
     pub fn push_return_block_start(
         &mut self,
         scope_id: ScopeId,
@@ -717,6 +716,7 @@ impl Flatten {
         );
         self.push_return(v_args, span_id);
     }
+    */
 
     pub fn is_load_required(&mut self, v: LinkId) -> bool {
         let entry = self.get_entry(v);
@@ -1596,24 +1596,9 @@ impl Flatten {
         b: &mut NB,
     ) -> Result<(VariantId, FlattenResult)> {
         let current_block_id = self.current_block_id();
-        let (v_id, fun_scope_id, ret_ty, span_id, entry_link_id) =
+        let (v_id, fun_scope_id, ret_ty, span_id, entry_link_id, v_args) =
             self.push_bake_function_inner(def, def_func_ty, name, global_name, b)?;
 
-        assert!(ret_ty.is_composite());
-        let name = b.labels.fresh_key("ret");
-
-        let block_ty = AstType::Func(
-            ret_ty.clone().into(),
-            ReturnType::Single(AstType::Unit).into(),
-        );
-
-        let (_v_block, v_args) = self.push_start_block(
-            fun_scope_id,
-            block_ty,
-            Some(name),
-            span_id,
-            VarDefinitionSpace::Reg,
-        );
         self.push_return(v_args, span_id);
 
         //self.push_return_block_start(fun_scope_id, ret_ty.clone(), "ret", span_id, b);
@@ -1630,7 +1615,7 @@ impl Flatten {
         name: StringKey,
         global_name: StringKey,
         b: &mut NB,
-    ) -> Result<(VariantId, ScopeId, AstType, SpanId, LinkId)> {
+    ) -> Result<(VariantId, ScopeId, AstType, SpanId, LinkId, ArgVec)> {
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
         let scope_id = block.scope_id;
@@ -1685,12 +1670,30 @@ impl Flatten {
 
         let resolved_ret_ty = self.resolve_return_type(fun_block_id, def_func_ty, span_id, b);
         self.switch_blocks(next_block_id);
+
+        assert!(resolved_ret_ty.is_composite());
+        let name = b.labels.fresh_key("ret");
+
+        let block_ty = AstType::Func(
+            resolved_ret_ty.clone().into(),
+            ReturnType::Single(AstType::Unit).into(),
+        );
+
+        let (_v_block, v_args) = self.push_start_block(
+            fun_scope_id,
+            block_ty,
+            Some(name),
+            span_id,
+            VarDefinitionSpace::Reg,
+        );
+
         Ok((
             variant_id,
             fun_scope_id,
             resolved_ret_ty,
             span_id,
             entry_link_id,
+            v_args,
         ))
     }
 
