@@ -1481,6 +1481,7 @@ impl Flatten {
         let r = self.push_bake_lambda_inner(
             &s_name,
             lambda_name,
+            lambda_name,
             def,
             def_func_type,
             def_arg_ty,
@@ -1500,7 +1501,8 @@ impl Flatten {
     fn push_bake_lambda_inner(
         &mut self,
         s_name: &str,
-        name: StringKey,
+        local_name: StringKey,
+        global_name: StringKey,
         def: Lambda,
         def_func_type: AstType,
         def_arg_ty: AstType,
@@ -1533,21 +1535,18 @@ impl Flatten {
             self.new_scope_and_block(ScopeType::Function, next_scope_id);
         let body = *def.body.unwrap();
 
-        //let next_block_id = self.blocks.new_block(next_scope_id);
         let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
         fun_scope.return_block = Some(next_block_id);
 
         // block graph
         self.blocks
             .block_succ(current_block_id, fun_block_id, succ_type);
-        //self.blocks
-        //.block_succ(fun_block_id, next_block_id, Successor::BlockScope);
 
         self.switch_blocks(fun_block_id);
         let (entry_link_id, _) = self.push_start_block(
             fun_scope_id,
             def_func_type.clone(),
-            Some(name),
+            Some(global_name),
             def_span_id,
             mem,
         );
@@ -1558,14 +1557,15 @@ impl Flatten {
         //let variant_id = if let Some(global_name) = global_name {
         let variant_id = self
             .scopes
-            .variant_add(scope_id, name, r_ty1, entry_link_id);
+            .variant_add(scope_id, local_name, r_ty1, entry_link_id);
         //} else {
         //None
         //};
 
         // add the name to scope
         // do this early for recursive functions
-        self.scopes.scope_define(scope_id, name, entry_link_id);
+        self.scopes
+            .scope_define(scope_id, global_name, entry_link_id);
 
         // flatten function, and switch to next
         self.switch_blocks(fun_block_id);
@@ -1578,7 +1578,7 @@ impl Flatten {
             next_arg_ty.clone().into(),
             ReturnType::Single(AstType::Unit).into(),
         );
-        let s_name = b.labels.r(name.into());
+        let s_name = b.labels.r(local_name.into());
         let prefix = format!("{}.cont", s_name);
         self.switch_blocks(next_block_id);
         let (_v_block, v_args) = self.push_start_block(
@@ -1617,7 +1617,7 @@ impl Flatten {
         def: Lambda,
         def_func_type: AstType,
         def_span_id: SpanId,
-        name: StringKey,
+        local_name: StringKey,
         global_name: StringKey,
         succ_type: Successor,
         next_scope_id: ScopeId,
@@ -1633,17 +1633,13 @@ impl Flatten {
         let (fun_block_id, fun_scope_id) =
             self.new_scope_and_block(ScopeType::Function, next_scope_id);
         let body = *def.body.unwrap();
-        let span_id = body.span_id;
 
-        //let next_block_id = self.blocks.new_block(next_scope_id);
         let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
         fun_scope.return_block = Some(next_block_id);
 
         // block graph
         self.blocks
             .block_succ(current_block_id, fun_block_id, succ_type);
-        //self.blocks
-        //.block_succ(fun_block_id, next_block_id, Successor::BlockScope);
 
         self.switch_blocks(fun_block_id);
         let (entry_link_id, _) = self.push_start_block(
@@ -1660,7 +1656,7 @@ impl Flatten {
         //let variant_id = if let Some(global_name) = global_name {
         let variant_id = self
             .scopes
-            .variant_add(scope_id, name, r_ty1, entry_link_id);
+            .variant_add(scope_id, local_name, r_ty1, entry_link_id);
         //} else {
         //None
         //};
@@ -1673,9 +1669,9 @@ impl Flatten {
         // flatten function, and switch to next
         self.switch_blocks(fun_block_id);
         let _ = self.push_node(body, b)?;
-        self.maybe_terminate_block(next_block_id, span_id);
+        self.maybe_terminate_block(next_block_id, def_span_id);
 
-        let resolved_ret_ty = self.resolve_return_type(fun_block_id, def_func_type, span_id, b);
+        let resolved_ret_ty = self.resolve_return_type(fun_block_id, def_func_type, def_span_id, b);
 
         assert!(resolved_ret_ty.is_composite());
         let name = b.labels.fresh_key("ret");
@@ -1690,7 +1686,7 @@ impl Flatten {
             next_scope_id,
             block_ty,
             Some(name),
-            span_id,
+            def_span_id,
             VarDefinitionSpace::Reg,
         );
 
@@ -1698,7 +1694,7 @@ impl Flatten {
             variant_id,
             fun_scope_id,
             resolved_ret_ty,
-            span_id,
+            def_span_id,
             entry_link_id,
             v_args,
         ))
