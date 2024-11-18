@@ -1462,9 +1462,9 @@ impl Flatten {
         // as a continuation.  This currently requires one lambda for each call.
         // Eventually switch to CPS
         //
-        //let current_block_id = self.current_block_id();
-        //let block = self.blocks.get_block(current_block_id);
-        //let scope_id = block.scope_id;
+        let current_block_id = self.current_block_id();
+        let block = self.blocks.get_block(current_block_id);
+        let next_scope_id = block.scope_id;
 
         // Start lambda block
         let s_name = if let Some(name) = name {
@@ -1484,6 +1484,7 @@ impl Flatten {
             def_span_id,
             call_func_type,
             call_span_id,
+            next_scope_id,
             Successor::BlockScope,
             VarDefinitionSpace::Reg,
             b,
@@ -1502,6 +1503,7 @@ impl Flatten {
         def_span_id: SpanId,
         call_func_type: AstType,
         call_span_id: SpanId,
+        next_scope_id: ScopeId,
         succ_type: Successor,
         mem: VarDefinitionSpace,
         b: &mut NB,
@@ -1526,7 +1528,7 @@ impl Flatten {
         let span_id = body.span_id;
 
         //let next_block_id = self.blocks.new_block(fun_scope_id);
-        let next_block_id = self.blocks.new_block(scope_id);
+        let next_block_id = self.blocks.new_block(next_scope_id);
         let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
         fun_scope.return_block = Some(next_block_id);
 
@@ -1564,7 +1566,6 @@ impl Flatten {
         self.switch_blocks(fun_block_id);
         let _ = self.push_node(body, b)?;
         self.maybe_terminate_block(next_block_id, call_span_id);
-        self.switch_blocks(next_block_id);
 
         let next_arg_ty =
             self.resolve_return_type(fun_block_id, def_func_type.clone(), call_span_id, b);
@@ -1574,6 +1575,7 @@ impl Flatten {
         );
         let s_name = b.labels.r(name.into());
         let prefix = format!("{}.cont", s_name);
+        self.switch_blocks(next_block_id);
         let (_v_block, v_args) = self.push_start_block(
             scope_id,
             next_fun_ty.clone(),
@@ -1613,6 +1615,7 @@ impl Flatten {
         name: StringKey,
         global_name: StringKey,
         succ_type: Successor,
+        next_scope_id: ScopeId,
         mem: VarDefinitionSpace,
         b: &mut NB,
     ) -> Result<(VariantId, ScopeId, AstType, SpanId, LinkId, ArgVec)> {
@@ -1621,11 +1624,12 @@ impl Flatten {
         let scope_id = block.scope_id;
 
         // New Func Scope
-        let (fun_block_id, fun_scope_id) = self.new_scope_and_block(ScopeType::Function, scope_id);
+        let (fun_block_id, fun_scope_id) =
+            self.new_scope_and_block(ScopeType::Function, next_scope_id);
         let body = *def.body.unwrap();
         let span_id = body.span_id;
 
-        let next_block_id = self.blocks.new_block(fun_scope_id);
+        let next_block_id = self.blocks.new_block(next_scope_id);
         let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
         fun_scope.return_block = Some(next_block_id);
 
@@ -1716,6 +1720,7 @@ impl Flatten {
             name,
             global_name,
             Successor::FunctionDeclaration,
+            next_scope_id,
             VarDefinitionSpace::Static,
             b,
         )?;
