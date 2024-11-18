@@ -1254,7 +1254,7 @@ impl Flatten {
                     b,
                 )?;
                 self.drain_diagnostics(b);
-                let (_variant_id, fun_block_id, _, _, next_block_id, _, r) = result;
+                let (_variant_id, _, fun_block_id, _, _, next_block_id, _, r) = result;
 
                 self.switch_blocks(next_block_id);
 
@@ -1431,6 +1431,7 @@ impl Flatten {
         b: &mut NB,
     ) -> Result<(
         VariantId,
+        ScopeId,
         BlockId,
         LinkId,
         AstType,
@@ -1509,6 +1510,7 @@ impl Flatten {
         b: &mut NB,
     ) -> Result<(
         VariantId,
+        ScopeId,
         BlockId,
         LinkId,
         AstType,
@@ -1560,7 +1562,7 @@ impl Flatten {
         // flatten function, and switch to next
         self.switch_blocks(fun_block_id);
         let _ = self.push_node(body, b)?;
-        self.maybe_terminate_block(next_block_id, call_span_id);
+        self.maybe_terminate_block(next_block_id, def_span_id);
 
         let next_arg_ty =
             self.resolve_return_type(fun_block_id, def_func_type.clone(), call_span_id, b);
@@ -1601,6 +1603,7 @@ impl Flatten {
 
         Ok((
             variant_id,
+            fun_scope_id,
             fun_block_id,
             entry_link_id,
             def_func_type.clone(),
@@ -1626,6 +1629,7 @@ impl Flatten {
     ) -> Result<(
         VariantId,
         ScopeId,
+        BlockId,
         AstType,
         SpanId,
         LinkId,
@@ -1718,6 +1722,7 @@ impl Flatten {
         Ok((
             variant_id,
             fun_scope_id,
+            fun_block_id,
             next_arg_ty,
             def_span_id,
             entry_link_id,
@@ -1751,7 +1756,7 @@ impl Flatten {
         //self.scopes.scope_succ(next_scope_id, scope_id);
         let (next_block_id, next_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
 
-        let (v_id, _, _, span_id, entry_link_id, v_args, r) = self.push_bake_function_inner(
+        let (v_id, _, _, _, span_id, entry_link_id, v_args, r) = self.push_bake_function_inner(
             def,
             def_func_ty,
             def_span_id,
