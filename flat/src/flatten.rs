@@ -1562,6 +1562,8 @@ impl Flatten {
         self.maybe_terminate_block(next_block_id, call_span_id);
         self.switch_blocks(next_block_id);
 
+        let resolved_ret_ty =
+            self.resolve_return_type(fun_block_id, def_func_type.clone(), call_span_id, b);
         // match return type with the jump target
         //println!("push_bake_lambda_next: {}<=>{}", &next_arg_ty, &def_arg_ty);
         if b.types.u.unify(&next_arg_ty, &def_arg_ty).is_err() {
@@ -1665,7 +1667,7 @@ impl Flatten {
         let _ = self.push_node(body, b)?;
         self.maybe_terminate_block(next_block_id, span_id);
 
-        let resolved_ret_ty = self.resolve_return_type(name, fun_block_id, def_func_ty, span_id, b);
+        let resolved_ret_ty = self.resolve_return_type(fun_block_id, def_func_ty, span_id, b);
         self.switch_blocks(next_block_id);
         Ok((
             variant_id,
@@ -1678,7 +1680,6 @@ impl Flatten {
 
     fn resolve_return_type(
         &self,
-        name: StringKey,
         fun_block_id: BlockId,
         def_func_ty: AstType,
         span_id: SpanId,
@@ -1756,13 +1757,11 @@ impl Flatten {
         } else if let Some(ty) = b.types.u.resolve(&ret_arg_type) {
             ty
         } else {
-            let s = b.labels.r(name.into());
-            println!("unable to resolve: {}", &s);
             b.types.dump();
             b.push_error(
                 &format!(
-                    "[{}] Return Type Must Resolve: {}, arity: {}",
-                    &s, &func_ret_ty, arity
+                    "Return Type Must Resolve: {}, arity: {}",
+                    &func_ret_ty, arity
                 ),
                 span_id,
             );
