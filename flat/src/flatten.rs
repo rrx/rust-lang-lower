@@ -1166,11 +1166,14 @@ impl Flatten {
         Ok((v_entry, call_func_type))
     }
 
-    fn push_call_by_name(
+    fn push_call(
         &mut self,
         name: StringKey,
+        scope_id: ScopeId,
+        def: Lambda,
+        def_span_id: SpanId,
+        call_span_id: SpanId,
         args: Vec<Argument>,
-        span_id: SpanId,
         b: &mut NB,
     ) -> Result<FlattenResult> {
         let current_block_id = self.current_block_id();
@@ -1187,78 +1190,82 @@ impl Flatten {
         // anyways
 
         // look up the prototype
-        if let Some((scope_id, def, def_span_id)) = self.resolve_lambda(current_block_id, name) {
-            // calculate the calling arguments
-            let (_ret_ty, call_values, call_ty) =
-                self.push_function_args(&def, args, span_id, b)?;
+        // calculate the calling arguments
+        let (_ret_ty, call_values, call_ty) =
+            self.push_function_args(&def, args, call_span_id, b)?;
 
-            let (def_func_type, _def_arg_ty, def_ret_ty) = self.refresh_func_type(&def, b);
+        let (def_func_type, _def_arg_ty, def_ret_ty) = self.refresh_func_type(&def, b);
 
-            // construct call function type
-            let call_func_type = AstType::Func(
-                AstType::Struct(call_ty.fields()).into(),
-                ReturnType::Single(def_ret_ty.clone()).into(),
+        // construct call function type
+        let call_func_type = AstType::Func(
+            AstType::Struct(call_ty.fields()).into(),
+            ReturnType::Single(def_ret_ty.clone()).into(),
+        );
+
+        // match call type with function type
+        if b.types.u.unify(&call_func_type, &def_func_type).is_err() {
+            b.push_error_labels(vec![
+                b.primary_label(
+                    &format!("Type Mismatch: caller: {}", &call_func_type),
+                    def_span_id,
+                ),
+                b.secondary_label(&format!("source type: {}", &def_func_type), def_span_id),
+            ]);
+        }
+
+        // unify the caller and the refreshed function definition
+        if b.types.u.unify(&call_func_type, &def_func_type).is_err() {
+            let ty1 = b.types.u.resolve(&call_func_type).unwrap();
+            let ty2 = b.types.u.resolve(&def_func_type).unwrap();
+            b.push_error_labels(vec![
+                b.primary_label(
+                    &format!("Type Mismatch Func: caller: {}", &ty1),
+                    call_span_id,
+                ),
+                b.secondary_label(&format!("source type: {}", &ty2), def_span_id),
+            ]);
+        }
+
+        let is_static = self.static_scope_id() == scope_id;
+        if is_static {
+            let r =
+                self.push_bake_static(name, def, def_span_id, call_func_type, call_span_id, b)?;
+            self.drain_diagnostics(b);
+            let (fun_link_id, _bake_ty) = r;
+
+            self.switch_blocks(current_block_id);
+            //println!(
+            //"call: call_ty: {}, bake_ty:{}, ret_ty: {}",
+            //call_ty, bake_ty, ret_ty
+            //);
+            self.push_function_call(fun_link_id, call_values, def_ret_ty, call_span_id)
+        } else {
+            self.switch_blocks(current_block_id);
+
+            println!(
+                "bake lambda: {:?}",
+                (scope_id, current_block_id, b.labels.r(name.into()))
             );
 
-            // match call type with function type
-            if b.types.u.unify(&call_func_type, &def_func_type).is_err() {
-                b.push_error_labels(vec![
-                    b.primary_label(
-                        &format!("Type Mismatch: caller: {}", &call_func_type),
-                        def_span_id,
-                    ),
-                    b.secondary_label(&format!("source type: {}", &def_func_type), def_span_id),
-                ]);
-            }
+            let result = self.push_bake_lambda(
+                Some(name),
+                def,
+                def_func_type,
+                ScopeType::Function,
+                def_span_id,
+                call_span_id,
+                b,
+            )?;
+            self.drain_diagnostics(b);
+            let (_variant_id, _, fun_block_id, _, _, next_block_id, _, r) = result;
 
-            // unify the caller and the refreshed function definition
-            if b.types.u.unify(&call_func_type, &def_func_type).is_err() {
-                let ty1 = b.types.u.resolve(&call_func_type).unwrap();
-                let ty2 = b.types.u.resolve(&def_func_type).unwrap();
-                b.push_error_labels(vec![
-                    b.primary_label(&format!("Type Mismatch Func: caller: {}", &ty1), span_id),
-                    b.secondary_label(&format!("source type: {}", &ty2), def_span_id),
-                ]);
-            }
+            self.switch_blocks(next_block_id);
 
-            let is_static = self.static_scope_id() == scope_id;
-            if is_static {
-                let r =
-                    self.push_bake_static(name, def, def_span_id, call_func_type, span_id, b)?;
-                self.drain_diagnostics(b);
-                let (fun_link_id, _bake_ty) = r;
-
-                self.switch_blocks(current_block_id);
-                //println!(
-                //"call: call_ty: {}, bake_ty:{}, ret_ty: {}",
-                //call_ty, bake_ty, ret_ty
-                //);
-                self.push_function_call(fun_link_id, call_values, def_ret_ty, span_id)
-            } else {
-                self.switch_blocks(current_block_id);
-
-                println!(
-                    "bake lambda: {:?}",
-                    (scope_id, current_block_id, b.labels.r(name.into()))
-                );
-
-                let result =
-                    self.push_bake_lambda(Some(name), def, def_func_type, def_span_id, span_id, b)?;
-                self.drain_diagnostics(b);
-                let (_variant_id, _, fun_block_id, _, _, next_block_id, _, r) = result;
-
-                self.switch_blocks(next_block_id);
-
-                // now that we have the arguments calculated, and the lambda baked, jump!
-                self.switch_blocks(current_block_id);
-                self.push_jump(fun_block_id.into(), call_values, span_id);
-                self.switch_blocks(next_block_id);
-                Ok(r)
-            }
-        } else {
-            let name = b.labels.r(name.into());
-            b.push_error(&format!("Call name not found: {}", name), span_id);
-            Err(Error::new(BlockifyError::Invalid))
+            // now that we have the arguments calculated, and the lambda baked, jump!
+            self.switch_blocks(current_block_id);
+            self.push_jump(fun_block_id.into(), call_values, call_span_id);
+            self.switch_blocks(next_block_id);
+            Ok(r)
         }
     }
 
@@ -1414,6 +1421,7 @@ impl Flatten {
         name: Option<StringKey>,
         def: Lambda,
         def_func_type: AstType,
+        scope_type: ScopeType,
         def_span_id: SpanId,
         call_span_id: SpanId,
         b: &mut NB,
@@ -1466,6 +1474,7 @@ impl Flatten {
             def_func_type.clone(),
             def_span_id,
             call_span_id,
+            scope_type,
             Successor::BlockScope,
             VarDefinitionSpace::Reg,
             b,
@@ -1483,6 +1492,7 @@ impl Flatten {
         def_func_type: AstType,
         def_span_id: SpanId,
         call_span_id: SpanId,
+        scope_type: ScopeType,
         succ_type: Successor,
         mem: VarDefinitionSpace,
         b: &mut NB,
@@ -1500,8 +1510,7 @@ impl Flatten {
         let scope_id = block.scope_id;
 
         // New Func Scope
-        let (fun_block_id, fun_scope_id) =
-            self.new_scope_and_block(ScopeType::Function, next_scope_id);
+        let (fun_block_id, fun_scope_id) = self.new_scope_and_block(scope_type, next_scope_id);
         let body = *def.body.unwrap();
 
         let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
@@ -1550,13 +1559,14 @@ impl Flatten {
             ReturnType::Single(AstType::Unit).into(),
         );
         let s_name = b.labels.r(local_name.into());
-        let prefix = format!("{}.cont", s_name);
+        let cont_name = format!("{}.cont", s_name);
 
         self.switch_blocks(next_block_id);
         let (_v_block, v_args) = self.push_start_block(
             next_scope_id,
             block_ty.clone(),
-            Some(b.labels.fresh_key(&prefix)),
+            //Some(b.labels.fresh_key(&prefix)),
+            Some(b.labels.s(&cont_name)),
             call_span_id,
             VarDefinitionSpace::Reg,
         );
@@ -1622,6 +1632,7 @@ impl Flatten {
             def_func_ty,
             def_span_id,
             def_span_id,
+            ScopeType::Function,
             Successor::FunctionDeclaration,
             VarDefinitionSpace::Static,
             b,
@@ -1732,6 +1743,9 @@ impl Flatten {
                 ),
                 span_id,
             );
+        }
+        if func_ret_ty != resolved_ret_ty {
+            println!("ret res: {}=>{}", func_ret_ty, resolved_ret_ty);
         }
         resolved_ret_ty
     }
@@ -2002,7 +2016,7 @@ impl Flatten {
 
             Ast::Builtin(id, mut args) => {
                 let bi = b.builtins.get_enum(id);
-                println!("bi: {:?}", bi);
+                //println!("bi: {:?}", bi);
                 match bi {
                     Builtin::Import => {
                         let arg = args.pop().unwrap();
@@ -2266,7 +2280,17 @@ impl Flatten {
                 match &expr.node {
                     // call is an expression, it's non-terminal
                     // lambdas should also be non-terminal
-                    Ast::Identifier(ident) => self.push_call_by_name(*ident, args, node.span_id, b),
+                    Ast::Identifier(ident) => {
+                        if let Some((scope_id, def, def_span_id)) =
+                            self.resolve_lambda(current_block_id, *ident)
+                        {
+                            self.push_call(*ident, scope_id, def, def_span_id, span_id, args, b)
+                        } else {
+                            let name = b.labels.r(ident.into());
+                            b.push_error(&format!("Call name not found: {}", name), span_id);
+                            Err(Error::new(BlockifyError::Invalid))
+                        }
+                    }
                     Ast::Attribute(ident, attr) => {
                         let node = attr;
                         let ast = resolve_attribute(*ident, &node, span_id, args, b)?;
@@ -2648,6 +2672,58 @@ impl Flatten {
             Ast::ControlFlowMarker(ControlFlowMarker::Goto(label)) => {
                 // Goto is terminal
                 let scope_id = block.scope_id;
+
+                // first check if we have a lambda
+                if let Some((scope_id, def, def_span_id)) =
+                    self.resolve_lambda(current_block_id, label.into())
+                {
+                    let args = vec![];
+                    let call_span_id = span_id;
+                    let name = label;
+                    // TODO: handle actual args
+
+                    let (_ret_ty, call_values, call_ty) =
+                        self.push_function_args(&def, args, call_span_id, b)?;
+
+                    let (def_func_type, _def_arg_ty, def_ret_ty) = self.refresh_func_type(&def, b);
+
+                    println!("found: {:?}", def);
+                    //return self.push_call(label, scope_id, def, def_span_id, span_id, vec![], b);
+                    self.switch_blocks(current_block_id);
+
+                    println!(
+                        "bake cps: {:?}",
+                        (scope_id, current_block_id, b.labels.r(name.into()))
+                    );
+
+                    let result = self.push_bake_lambda(
+                        Some(name),
+                        def,
+                        def_func_type,
+                        ScopeType::Block,
+                        def_span_id,
+                        call_span_id,
+                        b,
+                    )?;
+
+                    // if this really is a CPS function, then it should never return
+                    // TODO: verify that it never returns, could be with the function signature
+                    // What does it even mean that a CPS function never calls it's continuation?
+
+                    self.drain_diagnostics(b);
+                    let (_variant_id, _, fun_block_id, _, _, next_block_id, _, r) = result;
+
+                    // all this stuff is just opening things up for anything that follows the goto
+                    // this should be dead code, unless it's a label that actually gets jumped to
+                    self.switch_blocks(next_block_id);
+
+                    // now that we have the arguments calculated, and the lambda baked, jump!
+                    self.switch_blocks(current_block_id);
+                    self.push_jump(fun_block_id.into(), call_values, call_span_id);
+                    self.switch_blocks(next_block_id);
+                    return Ok(r);
+                }
+
                 let target_block_id = match self.scopes.resolve_block_id(scope_id, label.into()) {
                     PlacedBlockId::Claimed(block_id) => {
                         println!("block goto claimed: {}", block_id);
@@ -2669,7 +2745,10 @@ impl Flatten {
                             if let Some(unclaimed_block_id) =
                                 scope.unclaimed_labels.get(&label.into())
                             {
-                                println!("block goto existing claim: {}", unclaimed_block_id);
+                                println!(
+                                    "block goto existing claim: {}, in scope: {}",
+                                    unclaimed_block_id, fun_scope_id
+                                );
                                 // already declared as unclaimed
                                 *unclaimed_block_id
                             } else {
@@ -2677,7 +2756,10 @@ impl Flatten {
                                 scope
                                     .unclaimed_labels
                                     .insert(label.into(), unclaimed_block_id);
-                                println!("block goto new claim: {}", unclaimed_block_id);
+                                println!(
+                                    "block goto new claim: {}, in scope: {}",
+                                    unclaimed_block_id, fun_scope_id
+                                );
                                 unclaimed_block_id
                             }
                         } else {

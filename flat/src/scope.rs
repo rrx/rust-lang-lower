@@ -324,9 +324,8 @@ impl ScopeGraph {
             let maybe_unclaimed_block_id = scope.unclaimed_labels.remove(&name);
             if let Some(block_id) = maybe_unclaimed_block_id {
                 return PlacedBlockId::Unclaimed(block_id);
-            } else {
-                return PlacedBlockId::NotFound;
             }
+            return PlacedBlockId::NotFound;
         }
         PlacedBlockId::NotFound
     }

@@ -17,9 +17,11 @@ fn get_string_arg(args: &[Argument], b: &mut NodeBuilder) -> Option<StringKey> {
         None
     } else if args.len() == 1 {
         let arg = args.get(0).unwrap().get_expr();
-        let s = arg.try_string().unwrap();
-        let key = b.labels.s(&s);
-        Some(key)
+        match &arg.node {
+            Ast::Literal(Literal::String(s)) => Some(b.labels.s(&s)),
+            Ast::Identifier(key) => Some(*key),
+            _ => unimplemented!(),
+        }
     } else {
         unreachable!()
     }

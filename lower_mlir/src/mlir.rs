@@ -419,7 +419,7 @@ impl<'c> MLIRGenerator<'c> {
         let block_id = self.blockify.get_entry_id(v);
         let values = self.take_call_args();
         let arity = values.len();
-        println!("jump: {:?}", (values));
+        //println!("jump: {:?}", (values));
         let indicies = values
             .into_iter()
             .map(|value_id| self.resolve_value(value_id.into()).unwrap())
@@ -772,11 +772,11 @@ impl<'c> MLIRGenerator<'c> {
                 self.ensure_call_args_empty();
                 let block_id = self.blockify.get_entry_id(v);
                 let decl_is_static = self.blockify.is_in_static_scope(v_decl.into());
-                let value_is_static = self.blockify.is_in_static_scope(v_value.into());
-                println!(
-                    "store: {}, {}, {}, {}",
-                    v_decl, v_value, decl_is_static, value_is_static
-                );
+                //let value_is_static = self.blockify.is_in_static_scope(v_value.into());
+                //println!(
+                //"store: {}, {}, {}, {}",
+                //v_decl, v_value, decl_is_static, value_is_static
+                //);
 
                 /*
                 let value_index = if value_is_static {
@@ -829,15 +829,15 @@ impl<'c> MLIRGenerator<'c> {
                 // store(value, memref)
                 let r_value_ty = r_value.r#type();
                 let r_addr_ty = r_addr.r#type();
-                println!(
-                    "X: {:?}",
-                    (
-                        r_addr_ty,
-                        r_addr_ty.is_mem_ref(),
-                        r_value_ty,
-                        r_value_ty.is_mem_ref()
-                    )
-                );
+                //println!(
+                //"X: {:?}",
+                //(
+                //r_addr_ty,
+                //r_addr_ty.is_mem_ref(),
+                //r_value_ty,
+                //r_value_ty.is_mem_ref()
+                //)
+                //);
 
                 let op = if r_addr_ty.is_mem_ref() && r_value_ty.is_mem_ref() {
                     ods::memref::copy(self.context, r_value, r_addr, location).into()
