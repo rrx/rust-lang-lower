@@ -15,21 +15,19 @@ pub enum Builtin {
 fn get_string_arg(args: &[Argument], b: &mut NodeBuilder) -> Option<StringKey> {
     if args.len() == 0 {
         None
-    } else if args.len() == 1 {
+    } else {
         let arg = args.get(0).unwrap().get_expr();
         match &arg.node {
             Ast::Literal(Literal::String(s)) => Some(b.labels.s(&s)),
             Ast::Identifier(key) => Some(*key),
             _ => unimplemented!(),
         }
-    } else {
-        unreachable!()
     }
 }
 
 pub fn builtin_from_name(
     name: &str,
-    args: Vec<Argument>,
+    mut args: Vec<Argument>,
     span_id: SpanId,
     b: &mut NodeBuilder,
 ) -> Option<AstNode> {
@@ -44,7 +42,8 @@ pub fn builtin_from_name(
             Some(Ast::CloseBlock.node(span_id))
         }
         "goto" => {
-            Some(ControlFlowMarker::Goto(get_string_arg(&args, b).unwrap(), args).node(span_id))
+            let rem = args.split_off(1);
+            Some(ControlFlowMarker::Goto(get_string_arg(&args, b).unwrap(), rem).node(span_id))
         }
         "label" => {
             Some(ControlFlowMarker::BlockStart(get_string_arg(&args, b), vec![]).node(span_id))

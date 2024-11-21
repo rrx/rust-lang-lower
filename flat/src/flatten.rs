@@ -855,6 +855,8 @@ impl Flatten {
         span_id: SpanId,
         b: &mut NB,
     ) -> Result<(AstType, ArgVec, AstType)> {
+        println!("args: {:?}", args);
+
         let func_arg = b.types.r(def.arg_type).clone();
         let ret = b.types.r(def.return_type).clone();
 
@@ -979,6 +981,8 @@ impl Flatten {
         //value_map.insert(key, Ast::Sequence(args_seq).into());
         //}
         // Do the same with kwargs eventually
+
+        println!("field_list: {:?}", fields_list);
 
         let args: Vec<Argument> = fields_list
             .iter()
@@ -1433,6 +1437,7 @@ impl Flatten {
     pub fn push_goto(
         &mut self,
         label: StringKey,
+        args: Vec<Argument>,
         span_id: SpanId,
         b: &mut NB,
     ) -> Result<FlattenResult> {
@@ -1445,7 +1450,15 @@ impl Flatten {
         if let Some((scope_id, def, def_span_id)) =
             self.resolve_lambda(current_block_id, label.into())
         {
-            return self.push_bake_cps(Some(label.into()), scope_id, def, def_span_id, span_id, b);
+            return self.push_bake_cps(
+                Some(label.into()),
+                scope_id,
+                def,
+                def_span_id,
+                span_id,
+                args,
+                b,
+            );
         }
 
         let target_block_id = match self.scopes.resolve_block_id(scope_id, label.into()) {
@@ -1505,10 +1518,10 @@ impl Flatten {
         def: Lambda,
         def_span_id: SpanId,
         call_span_id: SpanId,
+        args: Vec<Argument>,
         b: &mut NB,
     ) -> Result<FlattenResult> {
         let current_block_id = self.current_block_id();
-        let args = vec![];
         // TODO: handle actual args
 
         let (_ret_ty, call_values, _call_ty) =
@@ -2810,7 +2823,7 @@ impl Flatten {
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::Goto(label, args)) => {
-                self.push_goto(label, span_id, b)
+                self.push_goto(label, args, span_id, b)
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::BlockEnd) | Ast::CloseBlock => {
