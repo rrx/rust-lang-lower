@@ -1416,6 +1416,65 @@ impl Flatten {
         Ok(())
     }
 
+    fn push_bake_cps(
+        &mut self,
+        name: Option<StringKey>,
+        scope_id: ScopeId,
+        def: Lambda,
+        //scope_type: ScopeType,
+        def_span_id: SpanId,
+        call_span_id: SpanId,
+        b: &mut NB,
+    ) -> Result<FlattenResult> {
+        let current_block_id = self.current_block_id();
+        let args = vec![];
+        // TODO: handle actual args
+
+        let (_ret_ty, call_values, call_ty) =
+            self.push_function_args(&def, args, call_span_id, b)?;
+
+        let (def_func_type, _def_arg_ty, _def_ret_ty) = self.refresh_func_type(&def, b);
+
+        println!("found: {:?}", def);
+        //return self.push_call(label, scope_id, def, def_span_id, span_id, vec![], b);
+        self.switch_blocks(current_block_id);
+
+        let s_name = name
+            .map(|key| b.labels.r(key.into()))
+            .unwrap_or(String::new());
+        println!(
+            "bake cps: {:?}",
+            (scope_id, self.current_block_id(), s_name)
+        );
+
+        let result = self.push_bake_lambda(
+            name,
+            def,
+            def_func_type,
+            ScopeType::Block,
+            def_span_id,
+            call_span_id,
+            b,
+        )?;
+
+        // if this really is a CPS function, then it should never return
+        // TODO: verify that it never returns, could be with the function signature
+        // What does it even mean that a CPS function never calls it's continuation?
+
+        self.drain_diagnostics(b);
+        let (_variant_id, _, fun_block_id, _, _, next_block_id, _, r) = result;
+
+        // all this stuff is just opening things up for anything that follows the goto
+        // this should be dead code, unless it's a label that actually gets jumped to
+        self.switch_blocks(next_block_id);
+
+        // now that we have the arguments calculated, and the lambda baked, jump!
+        self.switch_blocks(current_block_id);
+        self.push_jump(fun_block_id.into(), call_values, call_span_id);
+        self.switch_blocks(next_block_id);
+        return Ok(r);
+    }
+
     fn push_bake_lambda(
         &mut self,
         name: Option<StringKey>,
@@ -2677,15 +2736,23 @@ impl Flatten {
                 if let Some((scope_id, def, def_span_id)) =
                     self.resolve_lambda(current_block_id, label.into())
                 {
-                    let args = vec![];
                     let call_span_id = span_id;
+                    let (def_func_type, _def_arg_ty, def_ret_ty) = self.refresh_func_type(&def, b);
+                    return self.push_bake_cps(
+                        Some(label.into()),
+                        scope_id,
+                        def,
+                        def_span_id,
+                        call_span_id,
+                        b,
+                    );
+
+                    let args = vec![];
                     let name = label;
                     // TODO: handle actual args
 
                     let (_ret_ty, call_values, call_ty) =
                         self.push_function_args(&def, args, call_span_id, b)?;
-
-                    let (def_func_type, _def_arg_ty, def_ret_ty) = self.refresh_func_type(&def, b);
 
                     println!("found: {:?}", def);
                     //return self.push_call(label, scope_id, def, def_span_id, span_id, vec![], b);
