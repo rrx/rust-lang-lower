@@ -34,8 +34,9 @@ def ident(x) -> int:
   return x
 
 def main():
-  q.goto("f")
-  q.label("f")
+  # it can be confusing if we are going to function f, or label f
+  q.goto("F")
+  q.label("F")
   x = ident(0)
   test1()
   test2()

@@ -1539,23 +1539,6 @@ impl Flatten {
         // Goto is terminal
         let scope_id = block.scope_id;
 
-        /*
-        // first check if we have a lambda
-        if let Some((scope_id, def, def_span_id)) =
-            self.resolve_lambda(current_block_id, label.into())
-        {
-            return self.push_bake_cps(
-                Some(label.into()),
-                scope_id,
-                def,
-                def_span_id,
-                span_id,
-                args,
-                b,
-            );
-        }
-        */
-
         let target_block_id = match self.take_claimed_block(scope_id, label.into()) {
             PlacedBlockId::Claimed(block_id) => {
                 println!(

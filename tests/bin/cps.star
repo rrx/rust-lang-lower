@@ -20,7 +20,15 @@ def main():
   # nothing happens here
   1
 
-
   # the CPS function lands here
   q.label("B")
+
+  def label_d(x):
+    q.print(x)
+    q.goto("final")
+
+  q.goto(label_d, 2)
+
+  q.label("final")
+
   return 0
