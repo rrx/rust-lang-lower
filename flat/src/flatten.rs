@@ -284,7 +284,7 @@ impl Flatten {
         let block = self.blocks.get_block(block_id);
         for scope_id in self.scopes.walk_scopes(block.scope_id) {
             let scope = self.scopes.get_scope(scope_id);
-            if let Some(_data) = scope.lambdas.get(&name) {
+            if let Some(_template_id) = scope.lambdas.get(&name) {
                 return Some(scope_id);
             }
         }
@@ -321,6 +321,87 @@ impl Flatten {
             None => None,
         }
     }
+
+    pub fn take_claimed_block(
+        &mut self,
+        start_scope_id: ScopeId,
+        name: StringLabel,
+    ) -> PlacedBlockId {
+        // the purpose of this function is to find a block with a name in the current scope
+        // We look for blocks already defined in scope, as well as unclaimed ones
+        // Unclaimed blocks are created by jumps that are made before the corresponding block has
+        // been created.  So when we create the block, we check to see if the block has already
+        // been created by the jump.
+        // All unclaimed blocks need to be accounted for or we throw an error.  This means we
+        // jumped to a block that was never defined.
+
+        // search scopes to find a lambda
+        for scope_id in self.scopes.walk_scopes(start_scope_id) {
+            let scope = self.scopes.get_scope_mut(scope_id);
+            if let Some(template_id) = scope.lambdas.get(&name).cloned() {
+                let maybe_unclaimed_block_id = scope.unclaimed_labels.remove(&name);
+                let (def, span_id) = self.get_ast_template(template_id).clone();
+                if let Some(block_id) = maybe_unclaimed_block_id {
+                    return PlacedBlockId::ClaimedLambda(block_id, scope_id, def, span_id);
+                } else {
+                    return PlacedBlockId::UnclaimedLambda(scope_id, def, span_id);
+                }
+            }
+        }
+
+        // just search up the scopes for either labels or claims
+        // if we find a claim, then take it
+        for scope_id in self.scopes.walk_scopes(start_scope_id) {
+            let scope = self.scopes.get_scope_mut(scope_id);
+
+            // search block labels
+            if let Some(block_id) = scope.block_labels.get(&name) {
+                return PlacedBlockId::Claimed(*block_id);
+            }
+
+            // search unclaimed
+            let maybe_unclaimed_block_id = scope.unclaimed_labels.remove(&name);
+            if let Some(block_id) = maybe_unclaimed_block_id {
+                return PlacedBlockId::Unclaimed(block_id);
+            }
+            return PlacedBlockId::NotFound;
+        }
+        PlacedBlockId::NotFound
+    }
+
+    /*
+    pub fn resolve_block_id(
+        &mut self,
+        start_scope_id: ScopeId,
+        name: StringLabel,
+    ) -> PlacedBlockId {
+        for scope_id in self.scopes.walk_scopes(start_scope_id) {
+            let scope = self.scopes.get_scope_mut(scope_id);
+            if let Some(template_id) = scope.lambdas.get(&name).cloned() {
+                let maybe_unclaimed_block_id = scope.unclaimed_labels.remove(&name);
+                let (def, span_id) = self.get_ast_template(template_id).clone();
+                if let Some(block_id) = maybe_unclaimed_block_id {
+                    return PlacedBlockId::ClaimedLambda(block_id, scope_id, def, span_id);
+                } else {
+                    return PlacedBlockId::UnclaimedLambda(scope_id, def, span_id);
+                }
+            }
+
+            // search block labels
+            if let Some(block_id) = scope.block_labels.get(&name) {
+                return PlacedBlockId::Claimed(*block_id);
+            }
+
+            // search unclaimed
+            let maybe_unclaimed_block_id = scope.unclaimed_labels.remove(&name);
+            if let Some(block_id) = maybe_unclaimed_block_id {
+                return PlacedBlockId::Unclaimed(block_id);
+            }
+            return PlacedBlockId::NotFound;
+        }
+        PlacedBlockId::NotFound
+    }
+    */
 
     pub fn flatten_module(node: AstNode, mode: FlattenMode, b: &mut NB) -> Result<Self> {
         // setup environment with static scope and block
@@ -672,9 +753,11 @@ impl Flatten {
         let scope = self.scopes.get_scope(block.scope_id);
         for (key, _block_id) in scope.unclaimed_labels.iter() {
             let s = b.labels.r(*key);
-            b.push_error(&format!("Unclaimed label: {}", s), span_id);
+            b.push_error(
+                &format!("Unclaimed label: {}, in scope: {}", s, block.scope_id),
+                span_id,
+            );
         }
-        //assert_eq!(scope.unclaimed_labels.len(), 0);
 
         let link_id = block.last().unwrap();
         Ok(FlattenResult::link(link_id))
@@ -855,7 +938,7 @@ impl Flatten {
         span_id: SpanId,
         b: &mut NB,
     ) -> Result<(AstType, ArgVec, AstType)> {
-        println!("args: {:?}", args);
+        //println!("args: {:?}", args);
 
         let func_arg = b.types.r(def.arg_type).clone();
         let ret = b.types.r(def.return_type).clone();
@@ -982,7 +1065,7 @@ impl Flatten {
         //}
         // Do the same with kwargs eventually
 
-        println!("field_list: {:?}", fields_list);
+        //println!("field_list: {:?}", fields_list);
 
         let args: Vec<Argument> = fields_list
             .iter()
@@ -1456,6 +1539,7 @@ impl Flatten {
         // Goto is terminal
         let scope_id = block.scope_id;
 
+        /*
         // first check if we have a lambda
         if let Some((scope_id, def, def_span_id)) =
             self.resolve_lambda(current_block_id, label.into())
@@ -1470,11 +1554,46 @@ impl Flatten {
                 b,
             );
         }
+        */
 
-        let target_block_id = match self.scopes.resolve_block_id(scope_id, label.into()) {
+        let target_block_id = match self.take_claimed_block(scope_id, label.into()) {
             PlacedBlockId::Claimed(block_id) => {
-                println!("block goto claimed: {}", block_id);
+                println!(
+                    "block goto claimed: {:?}",
+                    (b.labels.r(label.into()), block_id)
+                );
                 block_id
+            }
+            PlacedBlockId::UnclaimedLambda(scope_id, def, def_span_id) => {
+                println!(
+                    "block goto lambda unclaimed: {:?}",
+                    (b.labels.r(label.into()), scope_id)
+                );
+                return self.push_bake_cps(
+                    Some(label.into()),
+                    scope_id,
+                    def,
+                    def_span_id,
+                    span_id,
+                    args,
+                    b,
+                );
+            }
+            PlacedBlockId::ClaimedLambda(block_id, scope_id, def, def_span_id) => {
+                println!(
+                    "block goto lambda claimed: {:?}",
+                    (b.labels.r(label.into()), block_id, scope_id)
+                );
+                unimplemented!();
+                return self.push_bake_cps(
+                    Some(label.into()),
+                    scope_id,
+                    def,
+                    def_span_id,
+                    span_id,
+                    args,
+                    b,
+                );
             }
             PlacedBlockId::Unclaimed(block_id) => {
                 println!("block goto unclaimed: {}", block_id);
@@ -1552,7 +1671,7 @@ impl Flatten {
             ]);
         }
 
-        println!("found: {:?}", def);
+        //println!("found: {:?}", def);
         //return self.push_call(label, scope_id, def, def_span_id, span_id, vec![], b);
         self.switch_blocks(current_block_id);
 
@@ -2616,8 +2735,14 @@ impl Flatten {
                 let scope_id = block.scope_id;
 
                 //let (new_block_id, next_block_id) = self.create_new_block_in_scope(name, scope_id);
-                let maybe_new_block_id = self.scopes.resolve_block_id(scope_id, name.into());
+                let maybe_new_block_id = self.take_claimed_block(scope_id, name.into());
                 let new_block_id = match maybe_new_block_id {
+                    PlacedBlockId::UnclaimedLambda(_scope_id, _def, _def_span_id) => {
+                        unimplemented!()
+                    }
+                    PlacedBlockId::ClaimedLambda(_block_id, _scope_id, _def, _def_span_id) => {
+                        unimplemented!()
+                    }
                     PlacedBlockId::Claimed(block_id) => {
                         let block = self.blocks.get_block(block_id);
                         println!(
