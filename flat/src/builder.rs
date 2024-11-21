@@ -189,7 +189,7 @@ impl NodeBuilder {
         args: Vec<Argument>,
         span_id: SpanId,
     ) -> Option<AstNode> {
-        if let Some(node) = crate::builtin_from_name(name, &args, span_id, self) {
+        if let Some(node) = crate::builtin_from_name(name, args, span_id, self) {
             Some(node)
         } else {
             None
@@ -378,8 +378,8 @@ impl NodeBuilder {
         ControlFlowMarker::BlockStart(Some(name), params).into()
     }
 
-    pub fn goto(name: StringKey) -> Ast {
-        ControlFlowMarker::Goto(name).into()
+    pub fn goto(name: StringKey, args: Vec<Argument>) -> Ast {
+        ControlFlowMarker::Goto(name, args).into()
     }
 
     pub fn param(&mut self, name: StringKey, ty: AstType) -> ParameterNode {

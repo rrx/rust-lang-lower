@@ -149,9 +149,14 @@ impl NodeBuilder {
                 }
             }
 
-            Ast::ControlFlowMarker(ControlFlowMarker::Goto(key)) => {
+            Ast::ControlFlowMarker(ControlFlowMarker::Goto(key, args)) => {
                 let s = format!("goto: {}", self.labels.r(key.into()),);
                 out.push((depth, s, node.span_id));
+                if args.len() > 0 {
+                    for (pos, a) in args.iter().enumerate() {
+                        self.dump_argument(pos, a, out, depth + 2);
+                    }
+                }
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::BlockEnd) => {

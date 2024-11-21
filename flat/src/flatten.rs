@@ -851,14 +851,10 @@ impl Flatten {
     pub fn push_function_args(
         &mut self,
         def: &Lambda,
-        args: Vec<Argument>,
+        args: &[Argument],
         span_id: SpanId,
         b: &mut NB,
-    ) -> Result<(
-        AstType,
-        Vec<(Option<StringKey>, LinkId, AstType, SpanId)>,
-        AstType,
-    )> {
+    ) -> Result<(AstType, ArgVec, AstType)> {
         let func_arg = b.types.r(def.arg_type).clone();
         let ret = b.types.r(def.return_type).clone();
 
@@ -1192,7 +1188,7 @@ impl Flatten {
         // look up the prototype
         // calculate the calling arguments
         let (_ret_ty, call_values, call_ty) =
-            self.push_function_args(&def, args, call_span_id, b)?;
+            self.push_function_args(&def, &args, call_span_id, b)?;
 
         let (def_func_type, _def_arg_ty, def_ret_ty) = self.refresh_func_type(&def, b);
 
@@ -1312,7 +1308,7 @@ impl Flatten {
         span_id: SpanId,
         b: &mut NB,
     ) -> Result<FlattenResult> {
-        let (ret_ty, values, _call_ty) = self.push_function_args(&def, args, span_id, b)?;
+        let (ret_ty, values, _call_ty) = self.push_function_args(&def, &args, span_id, b)?;
 
         let current_block_id = self.current_block_id();
 
@@ -1416,12 +1412,97 @@ impl Flatten {
         Ok(())
     }
 
+    pub fn push_close_block(&mut self, span_id: SpanId, _b: &mut NB) -> Result<FlattenResult> {
+        let current_block_id = self.current_block_id();
+        let block = self.blocks.get_block(current_block_id);
+        let scope_id = block.scope_id;
+        let scope = self.scopes.get_scope(scope_id);
+        if let Some(loop_block) = scope.loop_block {
+            let link_id = self.maybe_terminate_block(loop_block.start_block, span_id);
+            println!("block loop end: {}, {}", loop_block.next_block, link_id);
+            self.switch_blocks(loop_block.next_block);
+            Ok(FlattenResult::link(link_id))
+        } else {
+            let block_id = scope.entry_block.unwrap();
+            let block = self.blocks.get_block(block_id);
+            //unimplemented!("{:?}", (scope_id, scope, block_id, block))
+            Ok(FlattenResult::link(block.last().unwrap()))
+        }
+    }
+
+    pub fn push_goto(
+        &mut self,
+        label: StringKey,
+        span_id: SpanId,
+        b: &mut NB,
+    ) -> Result<FlattenResult> {
+        let current_block_id = self.current_block_id();
+        let block = self.blocks.get_block(current_block_id);
+        // Goto is terminal
+        let scope_id = block.scope_id;
+
+        // first check if we have a lambda
+        if let Some((scope_id, def, def_span_id)) =
+            self.resolve_lambda(current_block_id, label.into())
+        {
+            return self.push_bake_cps(Some(label.into()), scope_id, def, def_span_id, span_id, b);
+        }
+
+        let target_block_id = match self.scopes.resolve_block_id(scope_id, label.into()) {
+            PlacedBlockId::Claimed(block_id) => {
+                println!("block goto claimed: {}", block_id);
+                block_id
+            }
+            PlacedBlockId::Unclaimed(block_id) => {
+                println!("block goto unclaimed: {}", block_id);
+                block_id
+            }
+            PlacedBlockId::NotFound => {
+                // add it to the function scope, which is the top most scope at which it
+                // can exist.  When we resolve it, we can find it there
+                // This is easier than having the unclaimed blocks follow the control flow
+                if let Some(fun_scope_id) = self
+                    .scopes
+                    .find_nearest_scope(scope_id, &[ScopeType::Function])
+                {
+                    let scope = self.scopes.get_scope_mut(fun_scope_id);
+                    if let Some(unclaimed_block_id) = scope.unclaimed_labels.get(&label.into()) {
+                        println!(
+                            "block goto existing claim: {}, in scope: {}",
+                            unclaimed_block_id, fun_scope_id
+                        );
+                        // already declared as unclaimed
+                        *unclaimed_block_id
+                    } else {
+                        let unclaimed_block_id = self.blocks.new_block(scope_id);
+                        scope
+                            .unclaimed_labels
+                            .insert(label.into(), unclaimed_block_id);
+                        println!(
+                            "block goto new claim: {}, in scope: {}",
+                            unclaimed_block_id, fun_scope_id
+                        );
+                        unclaimed_block_id
+                    }
+                } else {
+                    // goto without function scope
+                    unreachable!()
+                }
+            }
+        };
+
+        self.switch_blocks(current_block_id);
+        let link_id = self.push_jump(target_block_id.into(), vec![], span_id);
+        println!("block goto: {}, link: {}", target_block_id, link_id);
+        self.switch_blocks(current_block_id);
+        Ok(FlattenResult::link(link_id))
+    }
+
     fn push_bake_cps(
         &mut self,
         name: Option<StringKey>,
         scope_id: ScopeId,
         def: Lambda,
-        //scope_type: ScopeType,
         def_span_id: SpanId,
         call_span_id: SpanId,
         b: &mut NB,
@@ -1430,8 +1511,8 @@ impl Flatten {
         let args = vec![];
         // TODO: handle actual args
 
-        let (_ret_ty, call_values, call_ty) =
-            self.push_function_args(&def, args, call_span_id, b)?;
+        let (_ret_ty, call_values, _call_ty) =
+            self.push_function_args(&def, &args, call_span_id, b)?;
 
         let (def_func_type, _def_arg_ty, _def_ret_ty) = self.refresh_func_type(&def, b);
 
@@ -2728,135 +2809,12 @@ impl Flatten {
                 Ok(FlattenResult::link(v))
             }
 
-            Ast::ControlFlowMarker(ControlFlowMarker::Goto(label)) => {
-                // Goto is terminal
-                let scope_id = block.scope_id;
-
-                // first check if we have a lambda
-                if let Some((scope_id, def, def_span_id)) =
-                    self.resolve_lambda(current_block_id, label.into())
-                {
-                    let call_span_id = span_id;
-                    let (def_func_type, _def_arg_ty, def_ret_ty) = self.refresh_func_type(&def, b);
-                    return self.push_bake_cps(
-                        Some(label.into()),
-                        scope_id,
-                        def,
-                        def_span_id,
-                        call_span_id,
-                        b,
-                    );
-
-                    let args = vec![];
-                    let name = label;
-                    // TODO: handle actual args
-
-                    let (_ret_ty, call_values, call_ty) =
-                        self.push_function_args(&def, args, call_span_id, b)?;
-
-                    println!("found: {:?}", def);
-                    //return self.push_call(label, scope_id, def, def_span_id, span_id, vec![], b);
-                    self.switch_blocks(current_block_id);
-
-                    println!(
-                        "bake cps: {:?}",
-                        (scope_id, current_block_id, b.labels.r(name.into()))
-                    );
-
-                    let result = self.push_bake_lambda(
-                        Some(name),
-                        def,
-                        def_func_type,
-                        ScopeType::Block,
-                        def_span_id,
-                        call_span_id,
-                        b,
-                    )?;
-
-                    // if this really is a CPS function, then it should never return
-                    // TODO: verify that it never returns, could be with the function signature
-                    // What does it even mean that a CPS function never calls it's continuation?
-
-                    self.drain_diagnostics(b);
-                    let (_variant_id, _, fun_block_id, _, _, next_block_id, _, r) = result;
-
-                    // all this stuff is just opening things up for anything that follows the goto
-                    // this should be dead code, unless it's a label that actually gets jumped to
-                    self.switch_blocks(next_block_id);
-
-                    // now that we have the arguments calculated, and the lambda baked, jump!
-                    self.switch_blocks(current_block_id);
-                    self.push_jump(fun_block_id.into(), call_values, call_span_id);
-                    self.switch_blocks(next_block_id);
-                    return Ok(r);
-                }
-
-                let target_block_id = match self.scopes.resolve_block_id(scope_id, label.into()) {
-                    PlacedBlockId::Claimed(block_id) => {
-                        println!("block goto claimed: {}", block_id);
-                        block_id
-                    }
-                    PlacedBlockId::Unclaimed(block_id) => {
-                        println!("block goto unclaimed: {}", block_id);
-                        block_id
-                    }
-                    PlacedBlockId::NotFound => {
-                        // add it to the function scope, which is the top most scope at which it
-                        // can exist.  When we resolve it, we can find it there
-                        // This is easier than having the unclaimed blocks follow the control flow
-                        if let Some(fun_scope_id) = self
-                            .scopes
-                            .find_nearest_scope(scope_id, &[ScopeType::Function])
-                        {
-                            let scope = self.scopes.get_scope_mut(fun_scope_id);
-                            if let Some(unclaimed_block_id) =
-                                scope.unclaimed_labels.get(&label.into())
-                            {
-                                println!(
-                                    "block goto existing claim: {}, in scope: {}",
-                                    unclaimed_block_id, fun_scope_id
-                                );
-                                // already declared as unclaimed
-                                *unclaimed_block_id
-                            } else {
-                                let unclaimed_block_id = self.blocks.new_block(scope_id);
-                                scope
-                                    .unclaimed_labels
-                                    .insert(label.into(), unclaimed_block_id);
-                                println!(
-                                    "block goto new claim: {}, in scope: {}",
-                                    unclaimed_block_id, fun_scope_id
-                                );
-                                unclaimed_block_id
-                            }
-                        } else {
-                            // goto without function scope
-                            unreachable!()
-                        }
-                    }
-                };
-
-                self.switch_blocks(current_block_id);
-                let link_id = self.push_jump(target_block_id.into(), vec![], node.span_id);
-                println!("block goto: {}, link: {}", target_block_id, link_id);
-                self.switch_blocks(current_block_id);
-                Ok(FlattenResult::link(link_id))
+            Ast::ControlFlowMarker(ControlFlowMarker::Goto(label, args)) => {
+                self.push_goto(label, span_id, b)
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::BlockEnd) | Ast::CloseBlock => {
-                let scope_id = block.scope_id;
-                let scope = self.scopes.get_scope(scope_id);
-                if let Some(loop_block) = scope.loop_block {
-                    let link_id = self.maybe_terminate_block(loop_block.start_block, span_id);
-                    println!("block loop end: {}, {}", loop_block.next_block, link_id);
-                    self.switch_blocks(loop_block.next_block);
-                    Ok(FlattenResult::link(link_id))
-                } else {
-                    let block_id = scope.entry_block.unwrap();
-                    let block = self.blocks.get_block(block_id);
-                    //unimplemented!("{:?}", (scope_id, scope, block_id, block))
-                    Ok(FlattenResult::link(block.last().unwrap()))
-                }
+                self.push_close_block(span_id, b)
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::LoopStart(maybe_key)) => {

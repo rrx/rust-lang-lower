@@ -29,23 +29,25 @@ fn get_string_arg(args: &[Argument], b: &mut NodeBuilder) -> Option<StringKey> {
 
 pub fn builtin_from_name(
     name: &str,
-    args: &[Argument],
+    args: Vec<Argument>,
     span_id: SpanId,
     b: &mut NodeBuilder,
 ) -> Option<AstNode> {
     match name {
-        "loop" => Some(ControlFlowMarker::LoopStart(get_string_arg(args, b)).node(span_id)),
-        "loop_break" => Some(ControlFlowMarker::LoopBreak(get_string_arg(args, b)).node(span_id)),
+        "loop" => Some(ControlFlowMarker::LoopStart(get_string_arg(&args, b)).node(span_id)),
+        "loop_break" => Some(ControlFlowMarker::LoopBreak(get_string_arg(&args, b)).node(span_id)),
         "loop_continue" => {
-            Some(ControlFlowMarker::LoopContinue(get_string_arg(args, b)).node(span_id))
+            Some(ControlFlowMarker::LoopContinue(get_string_arg(&args, b)).node(span_id))
         }
         "end" => {
             assert_eq!(args.len(), 0);
             Some(Ast::CloseBlock.node(span_id))
         }
-        "goto" => Some(ControlFlowMarker::Goto(get_string_arg(args, b).unwrap()).node(span_id)),
+        "goto" => {
+            Some(ControlFlowMarker::Goto(get_string_arg(&args, b).unwrap(), args).node(span_id))
+        }
         "label" => {
-            Some(ControlFlowMarker::BlockStart(get_string_arg(args, b), vec![]).node(span_id))
+            Some(ControlFlowMarker::BlockStart(get_string_arg(&args, b), vec![]).node(span_id))
         }
         "array" => {
             let mut args = args.iter().collect::<VecDeque<_>>();

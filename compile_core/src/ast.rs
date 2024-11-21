@@ -218,7 +218,7 @@ pub enum ControlFlowMarker {
     LoopContinue(Option<StringKey>),
     BlockStart(Option<StringKey>, Vec<ParameterNode>),
     BlockEnd,
-    Goto(StringKey),
+    Goto(StringKey, Vec<Argument>),
 }
 
 impl From<ControlFlowMarker> for AstNode {
@@ -330,7 +330,7 @@ impl Ast {
             Ast::Break(_, _) => true,
             Ast::Continue(_, _) => true,
             Ast::CloseBlock => true,
-            Ast::ControlFlowMarker(ControlFlowMarker::Goto(_)) => true,
+            Ast::ControlFlowMarker(ControlFlowMarker::Goto(_, _)) => true,
             _ => false,
         }
     }
