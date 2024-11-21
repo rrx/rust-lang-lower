@@ -235,6 +235,26 @@ impl ScopeGraph {
         self.add_edge(source_scope_id.into(), target_scope_id.into(), ());
     }
 
+    pub fn ensure_claims(&self, b: &mut NodeBuilder) {
+        for index in self.0.node_indices() {
+            let scope_id: ScopeId = index.into();
+            let scope = self.0.node_weight(index).unwrap();
+            for (key, block_id) in scope.unclaimed_labels.iter() {
+                let s = b.labels.r(*key);
+                let span_id = b.spans.get_span_unknown();
+                b.push_error(
+                    &format!(
+                        "Unclaimed label: {}, block {} in scope: {}",
+                        s, block_id, scope_id
+                    ),
+                    span_id,
+                );
+                //assert!(false);
+                println!("unclaimed:{:?}", (s, block_id, scope_id))
+            }
+        }
+    }
+
     pub fn find_nearest_scope(
         &self,
         scope_id: ScopeId,
