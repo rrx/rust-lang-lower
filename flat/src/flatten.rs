@@ -1570,7 +1570,7 @@ impl Flatten {
         // if this really is a CPS function, then it should never return
         // TODO: verify that it never returns, could be with the function signature
         // If the function returns, it has no meaning, because a goto must be terminal,
-        // it's too confusing to try to treat it like a call in that case, it's better 
+        // it's too confusing to try to treat it like a call in that case, it's better
         // to just error out
         // What does it even mean that a CPS function never calls it's continuation?
 
