@@ -731,7 +731,11 @@ impl Flatten {
         let block = self.blocks.get_block(self.current_block_id());
         let start_stack = self.scopes.walk_scopes(block.scope_id);
 
-        for expr in seq {
+        let size = seq.len();
+        for (i, expr) in seq.into_iter().enumerate() {
+            let block = self.blocks.get_block(self.current_block_id());
+            println!("push: {:?}", (i, &block.scope_id));
+            b.dump_ast(&expr);
             let _ = self.push_node(expr, b)?;
         }
 
@@ -751,13 +755,18 @@ impl Flatten {
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
         let scope = self.scopes.get_scope(block.scope_id);
-        for (key, _block_id) in scope.unclaimed_labels.iter() {
+        /*
+         // do this after everything is done
+        for (key, block_id) in scope.unclaimed_labels.iter() {
             let s = b.labels.r(*key);
             b.push_error(
-                &format!("Unclaimed label: {}, in scope: {}", s, block.scope_id),
+                &format!("Unclaimed label: {}, block {} in scope: {}", s, block_id, block.scope_id),
                 span_id,
             );
+            //assert!(false);
+            println!("unclaimed:{:?}", (s, block_id, block.scope_id, size))
         }
+        */
 
         let link_id = block.last().unwrap();
         Ok(FlattenResult::link(link_id))
@@ -935,12 +944,17 @@ impl Flatten {
         &mut self,
         def: &Lambda,
         args: &[Argument],
-        span_id: SpanId,
+        call_span_id: SpanId,
         b: &mut NB,
-    ) -> Result<(AstType, ArgVec, AstType)> {
-        //println!("args: {:?}", args);
+    ) -> Result<(
+        AstType, // return type
+        ArgVec,  // argvec
+        AstType, // call type
+    )> {
+        println!("args: {:?}", args);
 
         let func_arg = b.types.r(def.arg_type).clone();
+
         let ret = b.types.r(def.return_type).clone();
 
         // A rough outline of this large function
@@ -975,6 +989,7 @@ impl Flatten {
         // 7. Pass that to the function
 
         let fields_list = func_arg.fields();
+
         let mut value_map = HashMap::with_capacity(fields_list.len());
         let mut populated_set = HashSet::with_capacity(fields_list.len());
         let mut args_seq = vec![];
@@ -1023,7 +1038,10 @@ impl Flatten {
                                 }
                             }
                         } else {
-                            b.push_error(&format!("Extra positional field: {}", index), span_id);
+                            b.push_error(
+                                &format!("Extra positional field: {}", index),
+                                call_span_id,
+                            );
                         }
                     }
                 }
@@ -1033,7 +1051,10 @@ impl Flatten {
                     // make sure we don't double add
                     if populated_set.contains(key) {
                         let name = b.labels.r(key.into());
-                        b.push_error(&format!("Keyword argument duplicate: {}", name), span_id);
+                        b.push_error(
+                            &format!("Keyword argument duplicate: {}", name),
+                            call_span_id,
+                        );
                     }
                     //assert!(!populated_set.contains(key));
                     value_map.insert(*key, *(*expr).clone());
@@ -1065,8 +1086,6 @@ impl Flatten {
         //}
         // Do the same with kwargs eventually
 
-        //println!("field_list: {:?}", fields_list);
-
         let args: Vec<Argument> = fields_list
             .iter()
             .map(|(field_key, field_ty)| {
@@ -1079,28 +1098,29 @@ impl Flatten {
             })
             .collect();
 
+        println!("field_list: {:?}", fields_list);
+
         if args_seq.len() > 0 && def_has_args {
             // extra fields
             b.push_error(
                 &format!("extra fields, no args field: {:?}", args_seq),
-                span_id,
+                call_span_id,
             );
         }
 
         if fields_list.len() != args.len() {
-            b.push_error(
-                &format!(
-                    "Call arity mismatch: {}<=>{}",
-                    fields_list.len(),
-                    args.len()
+            b.push_error_labels(vec![
+                b.primary_label(
+                    &format!("Call arity mismatch: args: {:?}", &args),
+                    call_span_id,
                 ),
-                span_id,
-            );
-            assert!(false);
+                b.secondary_label(&format!("source type: {:?}", &fields_list), call_span_id),
+            ]);
+            //assert!(false);
             return Err(Error::new(BlockifyError::Invalid));
         }
 
-        let values = self.push_arguments(args, span_id, b)?;
+        let values = self.push_arguments(args, call_span_id, b)?;
 
         let call_ty = AstType::Struct(
             values
@@ -1117,7 +1137,7 @@ impl Flatten {
         args: Vec<Argument>,
         span_id: SpanId,
         b: &mut NB,
-    ) -> Result<Vec<(Option<StringKey>, LinkId, AstType, SpanId)>> {
+    ) -> Result<ArgVec> {
         //let mut current_block_id = self.block_id;
         let mut link_ids = vec![];
         let mut values = vec![];
@@ -1402,10 +1422,10 @@ impl Flatten {
         def: &Lambda,
         id: BuiltinId,
         args: Vec<Argument>,
-        span_id: SpanId,
+        call_span_id: SpanId,
         b: &mut NB,
     ) -> Result<FlattenResult> {
-        let (ret_ty, values, _call_ty) = self.push_function_args(&def, &args, span_id, b)?;
+        let (ret_ty, values, _call_ty) = self.push_function_args(&def, &args, call_span_id, b)?;
 
         let current_block_id = self.current_block_id();
 
@@ -1416,7 +1436,7 @@ impl Flatten {
             LCode::Builtin(id),
             ret_ty.clone(),
             None,
-            span_id,
+            call_span_id,
             VarDefinitionSpace::Default,
         );
         self.switch_blocks(current_block_id);
@@ -1454,7 +1474,7 @@ impl Flatten {
         scope_id: ScopeId,
         block_ty: AstType,
         span_id: SpanId,
-    ) -> Vec<(Option<StringKey>, LinkId, AstType, SpanId)> {
+    ) -> ArgVec {
         if let AstType::Func(arg_ty, _ret_ty) = &block_ty {
             assert!(arg_ty.is_composite());
 
@@ -1500,13 +1520,13 @@ impl Flatten {
         name: &StringKey,
         def: &Lambda,
         span_id: SpanId,
-    ) -> Result<()> {
+    ) -> Result<TemplateId> {
         let template_id = self.insert_ast_template(def.clone(), span_id);
         let block = self.blocks.get_block(block_id);
         let scope_id = block.scope_id;
         let scope = self.scopes.get_scope_mut(scope_id);
         scope.lambdas.insert(name.into(), template_id);
-        Ok(())
+        Ok(template_id)
     }
 
     pub fn push_close_block(&mut self, span_id: SpanId, _b: &mut NB) -> Result<FlattenResult> {
@@ -1539,19 +1559,11 @@ impl Flatten {
         // Goto is terminal
         let scope_id = block.scope_id;
 
+        let s_name = b.labels.r(label.into());
+
         let target_block_id = match self.take_claimed_block(scope_id, label.into()) {
-            PlacedBlockId::Claimed(block_id) => {
-                println!(
-                    "block goto claimed: {:?}",
-                    (b.labels.r(label.into()), block_id)
-                );
-                block_id
-            }
             PlacedBlockId::UnclaimedLambda(scope_id, def, def_span_id) => {
-                println!(
-                    "block goto lambda unclaimed: {:?}",
-                    (b.labels.r(label.into()), scope_id)
-                );
+                println!("block goto lambda unclaimed: {:?}", (s_name, scope_id));
                 return self.push_bake_cps(
                     Some(label.into()),
                     scope_id,
@@ -1565,7 +1577,7 @@ impl Flatten {
             PlacedBlockId::ClaimedLambda(block_id, scope_id, def, def_span_id) => {
                 println!(
                     "block goto lambda claimed: {:?}",
-                    (b.labels.r(label.into()), block_id, scope_id)
+                    (s_name, block_id, scope_id)
                 );
                 unimplemented!();
                 return self.push_bake_cps(
@@ -1578,8 +1590,12 @@ impl Flatten {
                     b,
                 );
             }
+            PlacedBlockId::Claimed(block_id) => {
+                println!("block goto claimed: {:?}", (s_name, block_id));
+                block_id
+            }
             PlacedBlockId::Unclaimed(block_id) => {
-                println!("block goto unclaimed: {}", block_id);
+                println!("[{}] block goto unclaimed: {}", s_name, block_id);
                 block_id
             }
             PlacedBlockId::NotFound => {
@@ -1593,8 +1609,8 @@ impl Flatten {
                     let scope = self.scopes.get_scope_mut(fun_scope_id);
                     if let Some(unclaimed_block_id) = scope.unclaimed_labels.get(&label.into()) {
                         println!(
-                            "block goto existing claim: {}, in scope: {}",
-                            unclaimed_block_id, fun_scope_id
+                            "[{}] block goto existing claim: {}, in scope: {}",
+                            s_name, unclaimed_block_id, fun_scope_id
                         );
                         // already declared as unclaimed
                         *unclaimed_block_id
@@ -1604,8 +1620,8 @@ impl Flatten {
                             .unclaimed_labels
                             .insert(label.into(), unclaimed_block_id);
                         println!(
-                            "block goto new claim: {}, in scope: {}",
-                            unclaimed_block_id, fun_scope_id
+                            "[{}], block goto new claim: {}, in scope: {}",
+                            s_name, unclaimed_block_id, fun_scope_id
                         );
                         unclaimed_block_id
                     }
@@ -1617,7 +1633,8 @@ impl Flatten {
         };
 
         self.switch_blocks(current_block_id);
-        let link_id = self.push_jump(target_block_id.into(), vec![], span_id);
+        let jump_args = self.push_arguments(args, span_id, b)?;
+        let link_id = self.push_jump(target_block_id.into(), jump_args, span_id);
         println!("block goto: {}, link: {}", target_block_id, link_id);
         self.switch_blocks(current_block_id);
         Ok(FlattenResult::link(link_id))
@@ -1758,6 +1775,50 @@ impl Flatten {
             b,
         )?;
         Ok((r.0, r.1, r.2, r.3, def_func_type, next_block_id, r.5, r.6))
+    }
+
+    fn push_bake_block(
+        &mut self,
+        local_name: StringKey,
+        global_name: StringKey,
+        def: Lambda,
+        def_func_type: AstType,
+        def_span_id: SpanId,
+        b: &mut NB,
+    ) -> Result<(VariantId, ScopeId, BlockId)> {
+        let fun_block_id = self.current_block_id();
+        let block = self.blocks.get_block(fun_block_id);
+        assert!(block.len() == 0);
+        let fun_scope_id = block.scope_id;
+
+        let (entry_link_id, _) = self.push_start_block(
+            fun_scope_id,
+            def_func_type.clone(),
+            Some(global_name),
+            def_span_id,
+            VarDefinitionSpace::Default,
+        );
+
+        // add entry to scope, for recursion
+        let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
+        let variant_id = self
+            .scopes
+            .variant_add(fun_scope_id, local_name, r_ty1, entry_link_id);
+
+        // add the name to scope
+        // do this early for recursive functions
+        self.scopes
+            .scope_define(fun_scope_id, global_name, entry_link_id);
+
+        // flatten function, and switch to next
+        self.switch_blocks(fun_block_id);
+        let body = def.body.unwrap();
+        let _ = self.push_node(*body, b)?;
+        let block = self.blocks.get_block(self.current_block_id());
+        assert!(block.is_term());
+
+        // ASDF
+        Ok((variant_id, fun_scope_id, fun_block_id))
     }
 
     fn push_bake_lambda_inner(
@@ -2426,6 +2487,7 @@ impl Flatten {
 
                 // push the definition into the lambda list
                 if let Ast::Lambda(def) = expr.node {
+                    let scope_id = block.scope_id;
                     self.switch_blocks(current_block_id);
 
                     // push template
@@ -2448,7 +2510,68 @@ impl Flatten {
                     //self.push_bake_template2(name, &def, span_id, b)?;
                     //}
 
-                    self.save_ast_template(current_block_id, &name, &def, expr.span_id)?;
+                    // save the template
+                    let def_span_id = expr.span_id;
+                    let _template_id =
+                        self.save_ast_template(current_block_id, &name, &def, def_span_id)?;
+
+                    // but we also need to check if anyone has already jumped to this CPS function
+                    let scope = self.scopes.get_scope_mut(scope_id);
+                    if let Some(unclaimed_block_id) = scope.unclaimed_labels.remove(&name.into()) {
+                        self.switch_blocks(unclaimed_block_id);
+                        //let block = self.blocks.get(unclaimed_block_id);
+                        //let claimed_scope_id = block.scope_id;
+
+                        println!("r: {:?}", (unclaimed_block_id));
+                        //self.push_bake_lambda(Some(name.into()), def,
+                        //self.push_start_block(claimed_scope_id,
+                        //let (def, def_span_id) = self.get_ast_template(template_id);
+
+                        // refresh
+                        let (def_func_type, def_arg_type, _def_ret_ty) =
+                            self.refresh_func_type(&def, b);
+
+                        //
+                        self.push_bake_block(
+                            name.into(),
+                            name.into(),
+                            def.clone(),
+                            def_func_type,
+                            def_span_id,
+                            b,
+                        )?;
+                    }
+                    /*
+                    //
+                    let r = self.take_claimed_block(scope_id, name.into());
+                    match r {
+                        PlacedBlockId::ClaimedLambda(claimed_block_id, claimed_scope_id, def, def_span_id) => {
+                            println!("r: {:?}", (claimed_block_id, claimed_scope_id, def_span_id));
+                            // we have an open block at `claimed_block_id`, and we need to fill it
+                            // we can just push a goto
+                            //self.push_return(
+                            // we need the args
+                            self.push_bake_cps(
+                                Some(name.into()),
+                                claimed_scope_id,
+                                def,
+                                def_span_id,
+                                span_id,
+                                vec![],
+                                b,
+                            )?;
+
+                            self.switch_blocks(claimed_block_id);
+                            let block_ty = AstType::func(vec![], AstType::Unit);
+                            self.push_start_block_args(claimed_scope_id, block_ty, def_span_id);
+                            self.push_goto(name, vec![], def_span_id, b)?;
+
+                        }
+                        PlacedBlockId::UnclaimedLambda(_,_,_) => (),
+                        _ => unimplemented!("{:?}", r)
+                    }
+                    */
+
                     self.switch_blocks(current_block_id);
                     return Ok(FlattenResult::statement());
                 }
@@ -2713,6 +2836,8 @@ impl Flatten {
 
             Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(name, args)) => {
                 let name = name.unwrap();
+                //let s_name = name.map(|key| b.labels.r(key)).unwrap_or(String::new());
+                let s_name = b.labels.r(name.into());
 
                 // push a new block.  But check to make sure the previous block was closed
                 let scope_id = block.scope_id;
@@ -2729,30 +2854,36 @@ impl Flatten {
                     PlacedBlockId::Claimed(block_id) => {
                         let block = self.blocks.get_block(block_id);
                         println!(
-                            "block start claimed: {}, {}, {}",
-                            block_id, block.scope_id, scope_id
+                            "{}: block start claimed: {}, {}, {}",
+                            s_name, block_id, block.scope_id, scope_id
                         );
                         block_id
                     }
                     PlacedBlockId::Unclaimed(block_id) => {
                         let block = self.blocks.get_block_mut(block_id);
                         println!(
-                            "block start unclaimed: {}, {}, {}",
-                            block_id, block.scope_id, scope_id
+                            "{}: block start unclaimed: {}, scope: {}",
+                            s_name, block_id, scope_id
                         );
                         if block.scope_id != scope_id {
+                            println!("{}: scope move: {}=>{}", s_name, block.scope_id, scope_id);
                             // unclaimed block needs to be moved into this scope
                             // When the unclaimed block was created, it was put into the function
                             // scope.  When we claim it, we need to place it in the correct scope
                             // at the point where the block is defined.
                             block.scope_id = scope_id;
                         }
+
+                        let scope = self.scopes.get_scope_mut(scope_id);
+                        scope.block_labels.insert(name.into(), block_id);
+                        println!("scope: {:?}", scope);
+
                         block_id
                     }
                     PlacedBlockId::NotFound => {
                         assert_eq!(0, args.len());
                         let new_block_id = self.blocks.new_block(scope_id);
-                        println!("block start new: {}", new_block_id);
+                        println!("{}: block start new: {}", s_name, new_block_id);
                         self.blocks.block_succ(
                             self.current_block_id(),
                             new_block_id,

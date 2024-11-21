@@ -23,12 +23,18 @@ def main():
   # the CPS function lands here
   q.label("B")
 
-  def label_d(x):
-    q.print(x)
+  # we can only goto a cps function that has already been declared in scope
+  # it should be possible to goto a cps function that is declared in the scope
+  # but further down
+  q.goto(label_d)
+
+  def label_d():
+    #q.print(x)
     q.goto("final")
 
-  q.goto(label_d, 2)
 
   q.label("final")
+
+  1
 
   return 0

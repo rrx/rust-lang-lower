@@ -60,6 +60,10 @@ impl IRBlock {
     pub fn last(&self) -> Option<LinkId> {
         self.last
     }
+
+    pub fn is_term(&self) -> bool {
+        self.term
+    }
 }
 
 impl Into<NodeIndex> for BlockId {
