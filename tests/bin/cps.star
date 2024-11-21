@@ -1,6 +1,6 @@
 def main():
   # CPS function that never returns
-  def unit(x: int):
+  def unit(x):
     # verify that the function scope here is able to access highler level scopes
     # by jumping to B
     q.goto("B")

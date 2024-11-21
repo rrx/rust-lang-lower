@@ -1120,6 +1120,8 @@ impl Flatten {
             self.resolve_function_name(current_block_id, &name, &call_func_type, b)
         {
             //println!("[{}] R2: {}, {:?}", s, call_func_type, (v_entry));
+            // unify the resolved function with the caller
+            // the function should be resolved, this resolves any thing missing in the caller
             if b.types.u.unify(&call_func_type, &r_ty).is_err() {
                 b.push_error_labels(vec![
                     b.primary_label(
@@ -1152,6 +1154,8 @@ impl Flatten {
             self.drain_diagnostics(b);
             self.switch_blocks(current_block_id);
             let r_ty2 = b.types.u.resolve(&call_func_type).unwrap();
+
+            // update the variant with the resolved type
             self.scopes.variant_update(
                 self.static_scope_id(),
                 name,
@@ -1161,6 +1165,10 @@ impl Flatten {
             );
             (variant_id, v_entry)
         };
+
+        // we are keeping a list of function names so we can look them up later
+        // there's a better way to do this.  A function only makes sense in the context of a call
+        // so our lookups should actually be resolved by the caller
         self.functions.insert(name, v_entry);
 
         Ok((v_entry, call_func_type))
@@ -1202,6 +1210,7 @@ impl Flatten {
             ReturnType::Single(def_ret_ty.clone()).into(),
         );
 
+        /*
         // match call type with function type
         if b.types.u.unify(&call_func_type, &def_func_type).is_err() {
             b.push_error_labels(vec![
@@ -1212,6 +1221,7 @@ impl Flatten {
                 b.secondary_label(&format!("source type: {}", &def_func_type), def_span_id),
             ]);
         }
+        */
 
         // unify the caller and the refreshed function definition
         if b.types.u.unify(&call_func_type, &def_func_type).is_err() {
@@ -1524,10 +1534,23 @@ impl Flatten {
         let current_block_id = self.current_block_id();
         // TODO: handle actual args
 
-        let (_ret_ty, call_values, _call_ty) =
+        let (_ret_ty, call_values, call_func_type) =
             self.push_function_args(&def, &args, call_span_id, b)?;
 
-        let (def_func_type, _def_arg_ty, _def_ret_ty) = self.refresh_func_type(&def, b);
+        let (def_func_type, def_arg_type, _def_ret_ty) = self.refresh_func_type(&def, b);
+
+        // unify the caller args and the refreshed function args
+        if b.types.u.unify(&call_func_type, &def_arg_type).is_err() {
+            let ty1 = b.types.u.resolve(&call_func_type).unwrap();
+            let ty2 = b.types.u.resolve(&def_func_type).unwrap();
+            b.push_error_labels(vec![
+                b.primary_label(
+                    &format!("Type Mismatch CPS: caller: {}", &ty1),
+                    call_span_id,
+                ),
+                b.secondary_label(&format!("source type: {}", &ty2), def_span_id),
+            ]);
+        }
 
         println!("found: {:?}", def);
         //return self.push_call(label, scope_id, def, def_span_id, span_id, vec![], b);
