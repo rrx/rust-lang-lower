@@ -28,8 +28,7 @@ use std::convert::Into;
 
 use crate::{
     BlockGraph, BlockId, BlockifyError, Builtin, DeferredGoto, LCode, LinkId, NodeBuilder as NB,
-    PlacedBlockId, ScopeGraph, ScopeId, ScopeType, StringLabel, Successor, TemplateId, ValueId,
-    VariantId,
+    ScopeGraph, ScopeId, ScopeType, StringLabel, Successor, TemplateId, ValueId, VariantId,
 };
 
 type ArgVec = Vec<(Option<StringKey>, LinkId, AstType, SpanId)>;
@@ -292,20 +291,6 @@ impl Flatten {
         None
     }
 
-    /*
-    pub fn resolve_template(&self, block_id: BlockId, name: StringKey) -> Option<LinkId> {
-        // resolve scope through the tree, starting at the current scope
-        let block = self.blocks.get_block(block_id);
-        for scope_id in self.scopes.walk_scopes(block.scope_id) {
-            let scope = self.scopes.get_scope(scope_id);
-            if let Some(link_id) = scope.templates.get(&name) {
-                return Some(*link_id);
-            }
-        }
-        None
-    }
-    */
-
     pub fn resolve_lambda(
         &self,
         block_id: BlockId,
@@ -349,64 +334,6 @@ impl Flatten {
             }
         }
         None
-    }
-
-    pub fn take_claimed_block(
-        &mut self,
-        start_scope_id: ScopeId,
-        name: StringLabel,
-    ) -> PlacedBlockId {
-        // the purpose of this function is to find a block with a name in the current scope
-        // We look for blocks already defined in scope, as well as unclaimed ones
-        // Unclaimed blocks are created by jumps that are made before the corresponding block has
-        // been created.  So when we create the block, we check to see if the block has already
-        // been created by the jump.
-        // All unclaimed blocks need to be accounted for or we throw an error.  This means we
-        // jumped to a block that was never defined.
-
-        // search scopes to find a lambda
-        for scope_id in self.scopes.walk_scopes(start_scope_id) {
-            let scope = self.scopes.get_scope_mut(scope_id);
-            if let Some(template_id) = scope.lambdas.get(&name).cloned() {
-                if let Some(d) = scope.deferred_goto.pop(name) {
-                    let (def, span_id) = self.get_ast_template(template_id).clone();
-                    return PlacedBlockId::Deferred(scope_id, def, span_id, d);
-                }
-
-                let maybe_unclaimed_block_id = scope.unclaimed_labels.remove(&name);
-                let (def, span_id) = self.get_ast_template(template_id).clone();
-                if let Some(block_id) = maybe_unclaimed_block_id {
-                    return PlacedBlockId::ClaimedLambda(block_id, scope_id, def, span_id);
-                } else {
-                    return PlacedBlockId::UnclaimedLambda(scope_id, def, span_id);
-                }
-            }
-        }
-
-        // just search up the scopes for either labels or claims
-        // if we find a claim, then take it
-        println!("start walk: {}", start_scope_id);
-        for scope_id in self.scopes.walk_scopes(start_scope_id) {
-            let scope = self.scopes.get_scope_mut(scope_id);
-            println!("X: {:?}", (scope_id, &scope));
-
-            // search block labels
-            if let Some(block_id) = scope.block_labels.get(&name) {
-                return PlacedBlockId::Claimed(*block_id);
-            }
-
-            // search unclaimed
-            let maybe_unclaimed_block_id = scope.unclaimed_labels.remove(&name);
-            if let Some(block_id) = maybe_unclaimed_block_id {
-                return PlacedBlockId::Unclaimed(block_id);
-            }
-
-            if let Some(d) = scope.deferred_goto.pop(name) {
-                return PlacedBlockId::DeferredBlock(d);
-            }
-        }
-
-        PlacedBlockId::NotFound
     }
 
     pub fn flatten_module(node: AstNode, mode: FlattenMode, b: &mut NB) -> Result<Self> {
@@ -1551,95 +1478,6 @@ impl Flatten {
             // goto without function scope
             unreachable!()
         }
-
-        /*
-        let target_block_id = match self.take_claimed_block(scope_id, label.into()) {
-            PlacedBlockId::Deferred(scope_id, def, def_span_id, d) => {
-                None
-            }
-            PlacedBlockId::DeferredBlock(d) => {
-                None
-            }
-            PlacedBlockId::UnclaimedLambda(scope_id, def, def_span_id) => {
-                println!("block goto lambda unclaimed: {:?}", (s_name, scope_id));
-                return self.push_bake_cps(
-                    Some(label.into()),
-                    scope_id,
-                    def,
-                    def_span_id,
-                    call_span_id,
-                    args,
-                    b,
-                );
-            }
-            PlacedBlockId::ClaimedLambda(block_id, scope_id, def, def_span_id) => {
-                println!(
-                    "block goto lambda claimed: {:?}",
-                    (s_name, block_id, scope_id)
-                );
-                unimplemented!();
-                return self.push_bake_cps(
-                    Some(label.into()),
-                    scope_id,
-                    def,
-                    def_span_id,
-                    call_span_id,
-                    args,
-                    b,
-                );
-            }
-            PlacedBlockId::Claimed(block_id) => {
-                println!("block goto claimed: {:?}", (s_name, block_id));
-                Some(block_id)
-            }
-            PlacedBlockId::Unclaimed(block_id) => {
-                println!("[{}] block goto unclaimed: {}", s_name, block_id);
-                Some(block_id)
-            }
-            PlacedBlockId::NotFound => {
-                // add it to the function scope, which is the top most scope at which it
-                // can exist.  When we resolve it, we can find it there
-                // This is easier than having the unclaimed blocks follow the control flow
-                if let Some(fun_scope_id) = self
-                    .scopes
-                    .find_nearest_scope(scope_id, &[ScopeType::Function])
-                {
-                    let scope = self.scopes.get_scope_mut(fun_scope_id);
-                    if let Some(unclaimed_block_id) = scope.unclaimed_labels.get(&label.into()) {
-                        println!(
-                            "[{}] block goto existing claim: {}, in scope: {}",
-                            s_name, unclaimed_block_id, fun_scope_id
-                        );
-                        // already declared as unclaimed
-                        Some(*unclaimed_block_id)
-                    } else {
-                        let unclaimed_block_id = self.blocks.new_block(scope_id);
-                        scope
-                            .unclaimed_labels
-                            .insert(label.into(), unclaimed_block_id);
-                        println!(
-                            "[{}], block goto new claim: {}, in scope: {}",
-                            s_name, unclaimed_block_id, fun_scope_id
-                        );
-                        scope.deferred_goto.add(DeferredGoto::new(label.into(), args.clone(), call_span_id));
-                        Some(unclaimed_block_id)
-                    }
-                } else {
-                    // goto without function scope
-                    unreachable!()
-                }
-            }
-        };
-
-        self.switch_blocks(current_block_id);
-        if let Some(target_block_id) = target_block_id {
-            let jump_args = self.push_arguments(args, call_span_id, b)?;
-            let link_id = self.push_jump(target_block_id.into(), jump_args, call_span_id);
-            println!("block goto: {}, link: {}", target_block_id, link_id);
-            self.switch_blocks(current_block_id);
-        }
-        Ok(FlattenResult::statement())
-        */
     }
 
     fn push_bake_cps(
@@ -2440,33 +2278,6 @@ impl Flatten {
                     }
                     self.switch_blocks(current_block_id);
 
-                    /*
-                    // but we also need to check if anyone has already jumped to this CPS function
-                    // if so, then we need to take the claim.
-                    let scope = self.scopes.get_scope_mut(scope_id);
-                    if let Some(claimed_block_id) = scope.block_labels.get(&name.into()) {
-                        unimplemented!();
-                    }
-
-                    if let Some(unclaimed_block_id) = scope.unclaimed_labels.remove(&name.into()) {
-                        println!("take claim: {}", unclaimed_block_id);
-                        self.switch_blocks(unclaimed_block_id);
-
-                        // refresh
-                        let (def_func_type, _def_arg_type, _def_ret_ty) =
-                            self.refresh_func_type(&def, b);
-
-                        self.push_bake_block(
-                            name.into(),
-                            name.into(),
-                            def.clone(),
-                            def_func_type,
-                            def_span_id,
-                            b,
-                        )?;
-                    }
-                    */
-
                     self.switch_blocks(current_block_id);
                     return Ok(FlattenResult::statement());
                 }
@@ -2793,68 +2604,6 @@ impl Flatten {
                 }
 
                 self.switch_blocks(current_block_id);
-
-                /*
-                //let (new_block_id, next_block_id) = self.create_new_block_in_scope(name, scope_id);
-                let maybe_new_block_id = self.take_claimed_block(scope_id, name.into());
-                let new_block_id = match maybe_new_block_id {
-                    PlacedBlockId::Deferred(_scope_id, _def, _def_span_id, _d) => {
-                        unimplemented!()
-                    }
-                    PlacedBlockId::DeferredBlock(_d) => {
-                        unimplemented!()
-                    }
-                    PlacedBlockId::UnclaimedLambda(_scope_id, _def, _def_span_id) => {
-                        unimplemented!()
-                    }
-                    PlacedBlockId::ClaimedLambda(_block_id, _scope_id, _def, _def_span_id) => {
-                        unimplemented!()
-                    }
-                    PlacedBlockId::Claimed(block_id) => {
-                        let block = self.blocks.get_block(block_id);
-                        println!(
-                            "{}: block start claimed: {}, {}, {}",
-                            s_name, block_id, block.scope_id, scope_id
-                        );
-                        block_id
-                    }
-                    PlacedBlockId::Unclaimed(block_id) => {
-                        let block = self.blocks.get_block_mut(block_id);
-                        println!(
-                            "{}: block start unclaimed: {}, scope: {}",
-                            s_name, block_id, scope_id
-                        );
-                        if block.scope_id != scope_id {
-                            println!("{}: scope move: {}=>{}", s_name, block.scope_id, scope_id);
-                            // unclaimed block needs to be moved into this scope
-                            // When the unclaimed block was created, it was put into the function
-                            // scope.  When we claim it, we need to place it in the correct scope
-                            // at the point where the block is defined.
-                            block.scope_id = scope_id;
-                        }
-
-                        let scope = self.scopes.get_scope_mut(scope_id);
-                        scope.block_labels.insert(name.into(), block_id);
-                        println!("scope: {:?}", scope);
-
-                        block_id
-                    }
-                    PlacedBlockId::NotFound => {
-                        assert_eq!(0, args.len());
-                        let new_block_id = self.blocks.new_block(scope_id);
-                        println!("{}: block start new: {}", s_name, new_block_id);
-                        self.blocks.block_succ(
-                            self.current_block_id(),
-                            new_block_id,
-                            Successor::BlockScope,
-                        );
-                        let scope = self.scopes.get_scope_mut(scope_id);
-                        scope.block_labels.insert(name.into(), new_block_id);
-                        //println!("creating block: {} in {}", b.labels.r(key.into()), scope_id);
-                        new_block_id
-                    }
-                };
-                */
 
                 // start a new block.  If the last block isn't terminated, then we create a new
                 // block and jump to it.

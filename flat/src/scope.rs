@@ -169,7 +169,6 @@ pub struct ScopeLayer {
     pub blocks: Vec<ValueId>,
     pub entry_block: Option<BlockId>,
     pub return_block: Option<BlockId>,
-    //pub next_block: Vec<ValueId>,
     pub(crate) loop_block: Option<LoopScope>,
     pub scope_type: ScopeType,
     pub lambdas: HashMap<StringLabel, TemplateId>,
