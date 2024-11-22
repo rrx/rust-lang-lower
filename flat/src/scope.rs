@@ -6,7 +6,7 @@ use std::ops::{Deref, DerefMut};
 use std::collections::HashMap;
 
 use crate::{BlockId, LinkId, NodeBuilder, StringLabel, ValueId};
-use compile_core::{AstType, Lambda, SpanId, StringKey};
+use compile_core::{Argument, AstType, Lambda, SpanId, StringKey};
 
 #[derive(Debug)]
 pub enum PlacedBlockId {
@@ -14,6 +14,8 @@ pub enum PlacedBlockId {
     Claimed(BlockId),
     ClaimedLambda(BlockId, ScopeId, Lambda, SpanId),
     UnclaimedLambda(ScopeId, Lambda, SpanId),
+    Deferred(ScopeId, Lambda, SpanId, DeferredGoto),
+    DeferredBlock(DeferredGoto),
     NotFound,
 }
 
@@ -105,6 +107,59 @@ impl FunctionVariantBuilder {
 }
 
 #[derive(Debug)]
+pub struct DeferredGoto {
+    pub block_id: BlockId,
+    pub link_id: LinkId,
+    pub name: StringLabel,
+    pub call_span_id: SpanId,
+    pub args: Vec<Argument>,
+}
+
+impl DeferredGoto {
+    pub fn new(
+        name: StringLabel,
+        args: Vec<Argument>,
+        call_span_id: SpanId,
+        block_id: BlockId,
+        link_id: LinkId,
+    ) -> Self {
+        Self {
+            name,
+            args,
+            call_span_id,
+            block_id,
+            link_id,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct DeferredGotoList {
+    h: HashMap<StringLabel, Vec<DeferredGoto>>,
+}
+impl DeferredGotoList {
+    pub fn new() -> Self {
+        Self { h: HashMap::new() }
+    }
+
+    pub fn add(&mut self, d: DeferredGoto) {
+        if let Some(arr) = self.h.get_mut(&d.name) {
+            arr.push(d);
+        } else {
+            self.h.insert(d.name, vec![d]);
+        }
+    }
+
+    pub fn pop(&mut self, name: StringLabel) -> Option<DeferredGoto> {
+        if let Some(arr) = self.h.get_mut(&name) {
+            arr.pop()
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct ScopeLayer {
     pub names: HashMap<StringKey, LinkId>,
     pub entries: HashMap<StringKey, FunctionVariantBuilder>,
@@ -120,6 +175,7 @@ pub struct ScopeLayer {
     pub lambdas: HashMap<StringLabel, TemplateId>,
     pub templates: HashMap<StringKey, LinkId>,
     pub unclaimed_labels: HashMap<StringLabel, BlockId>,
+    pub deferred_goto: DeferredGotoList,
 }
 
 impl ScopeLayer {
@@ -139,6 +195,7 @@ impl ScopeLayer {
             lambdas: HashMap::new(),
             templates: HashMap::new(),
             unclaimed_labels: HashMap::new(),
+            deferred_goto: DeferredGotoList::new(),
         }
     }
 

@@ -27,8 +27,9 @@ use std::collections::{HashMap, HashSet};
 use std::convert::Into;
 
 use crate::{
-    BlockGraph, BlockId, BlockifyError, Builtin, LCode, LinkId, NodeBuilder as NB, PlacedBlockId,
-    ScopeGraph, ScopeId, ScopeType, StringLabel, Successor, TemplateId, ValueId, VariantId,
+    BlockGraph, BlockId, BlockifyError, Builtin, DeferredGoto, LCode, LinkId, NodeBuilder as NB,
+    PlacedBlockId, ScopeGraph, ScopeId, ScopeType, StringLabel, Successor, TemplateId, ValueId,
+    VariantId,
 };
 
 type ArgVec = Vec<(Option<StringKey>, LinkId, AstType, SpanId)>;
@@ -291,6 +292,7 @@ impl Flatten {
         None
     }
 
+    /*
     pub fn resolve_template(&self, block_id: BlockId, name: StringKey) -> Option<LinkId> {
         // resolve scope through the tree, starting at the current scope
         let block = self.blocks.get_block(block_id);
@@ -302,6 +304,7 @@ impl Flatten {
         }
         None
     }
+    */
 
     pub fn resolve_lambda(
         &self,
@@ -322,6 +325,32 @@ impl Flatten {
         }
     }
 
+    pub fn resolve_template(
+        &self,
+        start_scope_id: ScopeId,
+        name: StringLabel,
+    ) -> Option<TemplateId> {
+        // search scopes to find a template
+        for scope_id in self.scopes.walk_scopes(start_scope_id) {
+            let scope = self.scopes.get_scope(scope_id);
+            if let Some(template_id) = scope.lambdas.get(&name).cloned() {
+                return Some(template_id);
+            }
+        }
+        None
+    }
+
+    pub fn resolve_label(&self, start_scope_id: ScopeId, name: StringLabel) -> Option<BlockId> {
+        // search scopes to find a template
+        for scope_id in self.scopes.walk_scopes(start_scope_id) {
+            let scope = self.scopes.get_scope(scope_id);
+            if let Some(block_id) = scope.block_labels.get(&name) {
+                return Some(*block_id);
+            }
+        }
+        None
+    }
+
     pub fn take_claimed_block(
         &mut self,
         start_scope_id: ScopeId,
@@ -339,6 +368,11 @@ impl Flatten {
         for scope_id in self.scopes.walk_scopes(start_scope_id) {
             let scope = self.scopes.get_scope_mut(scope_id);
             if let Some(template_id) = scope.lambdas.get(&name).cloned() {
+                if let Some(d) = scope.deferred_goto.pop(name) {
+                    let (def, span_id) = self.get_ast_template(template_id).clone();
+                    return PlacedBlockId::Deferred(scope_id, def, span_id, d);
+                }
+
                 let maybe_unclaimed_block_id = scope.unclaimed_labels.remove(&name);
                 let (def, span_id) = self.get_ast_template(template_id).clone();
                 if let Some(block_id) = maybe_unclaimed_block_id {
@@ -365,6 +399,10 @@ impl Flatten {
             let maybe_unclaimed_block_id = scope.unclaimed_labels.remove(&name);
             if let Some(block_id) = maybe_unclaimed_block_id {
                 return PlacedBlockId::Unclaimed(block_id);
+            }
+
+            if let Some(d) = scope.deferred_goto.pop(name) {
+                return PlacedBlockId::DeferredBlock(d);
             }
         }
 
@@ -1429,7 +1467,7 @@ impl Flatten {
         &mut self,
         label: StringKey,
         args: Vec<Argument>,
-        span_id: SpanId,
+        call_span_id: SpanId,
         b: &mut NB,
     ) -> Result<FlattenResult> {
         // push a goto
@@ -1440,6 +1478,10 @@ impl Flatten {
         // are calling, so we need to defer writing out the goto until we have the definition
         // We need to do the goto and the function definition at the same time, so we can do type
         // unification, as well as monomorphization.
+        // Also save the caller span, so we can present a good error
+
+        // goto may not get pushed here, it may be deferred
+        // if it exists, then we might handle it here properly.
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
         // Goto is terminal
@@ -1447,7 +1489,77 @@ impl Flatten {
 
         let s_name = b.labels.r(label.into());
 
+        // if a template exists, use it
+        if let Some(template_id) = self.resolve_template(scope_id, label.into()) {
+            let (def, def_span_id) = self.get_ast_template(template_id).clone();
+            let new_block_id = self.blocks.new_block(scope_id);
+            self.switch_blocks(new_block_id);
+            self.push_bake_cps(
+                Some(label.into()),
+                scope_id,
+                def,
+                def_span_id,
+                call_span_id,
+                args.clone(),
+                b,
+            )?;
+
+            let jump_args = self.push_arguments(args, call_span_id, b)?;
+            let link_id = self.push_jump(new_block_id.into(), jump_args, call_span_id);
+            println!(
+                "{}: block goto lambda: {}, link: {}",
+                s_name, new_block_id, link_id
+            );
+            self.switch_blocks(current_block_id);
+            return Ok(FlattenResult::statement());
+        }
+
+        // if a label exists, then jump to it
+        if let Some(target_block_id) = self.resolve_label(scope_id, label.into()) {
+            let jump_args = self.push_arguments(args, call_span_id, b)?;
+            let link_id = self.push_jump(target_block_id.into(), jump_args, call_span_id);
+            println!(
+                "{}: block goto label: {}, link: {}",
+                s_name, target_block_id, link_id
+            );
+            self.switch_blocks(current_block_id);
+            return Ok(FlattenResult::statement());
+        }
+
+        // if we don't have a template or a label already, then we defer
+        if let Some(fun_scope_id) = self
+            .scopes
+            .find_nearest_scope(scope_id, &[ScopeType::Function])
+        {
+            let link_id = block.last().unwrap();
+            // push dummy jump, which we will drop later
+            //self.push_jump(BlockId(0), vec![], call_span_id);
+            self.push_code(
+                LCode::Jump(BlockId(0).into()),
+                AstType::Unit,
+                None,
+                call_span_id,
+                VarDefinitionSpace::Default,
+            );
+
+            let scope = self.scopes.get_scope_mut(fun_scope_id);
+            let d = DeferredGoto::new(label.into(), args, call_span_id, current_block_id, link_id);
+            println!("{}: defer goto: {:?}, scope: {}", s_name, d, fun_scope_id);
+            scope.deferred_goto.add(d);
+            return Ok(FlattenResult::statement());
+        } else {
+            // goto without function scope
+            unreachable!()
+        }
+
+        /*
         let target_block_id = match self.take_claimed_block(scope_id, label.into()) {
+            PlacedBlockId::Deferred(scope_id, def, def_span_id, d) => {
+                None
+            }
+            PlacedBlockId::DeferredBlock(d) => {
+                None
+            }
             PlacedBlockId::UnclaimedLambda(scope_id, def, def_span_id) => {
                 println!("block goto lambda unclaimed: {:?}", (s_name, scope_id));
                 return self.push_bake_cps(
@@ -1455,7 +1567,7 @@ impl Flatten {
                     scope_id,
                     def,
                     def_span_id,
-                    span_id,
+                    call_span_id,
                     args,
                     b,
                 );
@@ -1471,7 +1583,7 @@ impl Flatten {
                     scope_id,
                     def,
                     def_span_id,
-                    span_id,
+                    call_span_id,
                     args,
                     b,
                 );
@@ -1509,6 +1621,7 @@ impl Flatten {
                             "[{}], block goto new claim: {}, in scope: {}",
                             s_name, unclaimed_block_id, fun_scope_id
                         );
+                        scope.deferred_goto.add(DeferredGoto::new(label.into(), args.clone(), call_span_id));
                         Some(unclaimed_block_id)
                     }
                 } else {
@@ -1520,12 +1633,13 @@ impl Flatten {
 
         self.switch_blocks(current_block_id);
         if let Some(target_block_id) = target_block_id {
-            let jump_args = self.push_arguments(args, span_id, b)?;
-            let link_id = self.push_jump(target_block_id.into(), jump_args, span_id);
+            let jump_args = self.push_arguments(args, call_span_id, b)?;
+            let link_id = self.push_jump(target_block_id.into(), jump_args, call_span_id);
             println!("block goto: {}, link: {}", target_block_id, link_id);
             self.switch_blocks(current_block_id);
         }
         Ok(FlattenResult::statement())
+        */
     }
 
     fn push_bake_cps(
@@ -2278,9 +2392,55 @@ impl Flatten {
 
                     // save the template
                     let def_span_id = expr.span_id;
-                    let _template_id =
+                    let template_id =
                         self.save_ast_template(current_block_id, &name, &def, def_span_id)?;
 
+                    // check for deferrals and apply them
+                    let scope = self.scopes.get_scope_mut(scope_id);
+                    let mut deferrals = vec![];
+                    loop {
+                        if let Some(d) = scope.deferred_goto.pop(name.into()) {
+                            deferrals.push(d);
+                        } else {
+                            break;
+                        }
+                    }
+
+                    for d in deferrals {
+                        let new_block_id = self.blocks.new_block(scope_id);
+                        self.switch_blocks(new_block_id);
+
+                        let (def, def_span_id) = self.get_ast_template(template_id).clone();
+
+                        self.push_bake_cps(
+                            Some(name.into()),
+                            scope_id,
+                            def,
+                            def_span_id,
+                            d.call_span_id,
+                            d.args.clone(),
+                            b,
+                        )?;
+
+                        // terminate deferred blocks
+                        self.switch_blocks(d.block_id);
+
+                        // invalidate dummy jump
+                        let entry = self.get_entry_mut(d.link_id);
+                        entry.next = d.link_id;
+                        let block = self.blocks.get_block_mut(d.block_id);
+                        // remove last entry in the block
+                        block.last = Some(d.link_id);
+                        block.term = false;
+
+                        let jump_args = self.push_arguments(d.args, d.call_span_id, b)?;
+                        let link_id =
+                            self.push_jump(new_block_id.into(), jump_args, d.call_span_id);
+                        println!("bake deferred goto: {}, link: {}", new_block_id, link_id);
+                    }
+                    self.switch_blocks(current_block_id);
+
+                    /*
                     // but we also need to check if anyone has already jumped to this CPS function
                     // if so, then we need to take the claim.
                     let scope = self.scopes.get_scope_mut(scope_id);
@@ -2305,6 +2465,7 @@ impl Flatten {
                             b,
                         )?;
                     }
+                    */
 
                     self.switch_blocks(current_block_id);
                     return Ok(FlattenResult::statement());
@@ -2569,6 +2730,8 @@ impl Flatten {
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(name, args)) => {
+                // LABEL
+
                 let name = name.unwrap();
                 //let s_name = name.map(|key| b.labels.r(key)).unwrap_or(String::new());
                 let s_name = b.labels.r(name.into());
@@ -2576,9 +2739,71 @@ impl Flatten {
                 // push a new block.  But check to make sure the previous block was closed
                 let scope_id = block.scope_id;
 
+                // check for duplicates
+                if let Some(block_id) = self.resolve_label(scope_id, name.into()) {
+                    //block_id
+                    unimplemented!("duplicate label: {}", block_id);
+                }
+
+                // create a new block
+                assert_eq!(0, args.len());
+                let new_block_id = self.blocks.new_block(scope_id);
+                println!("{}: block start new: {}", s_name, new_block_id);
+                self.blocks.block_succ(
+                    self.current_block_id(),
+                    new_block_id,
+                    Successor::BlockScope,
+                );
+                let scope = self.scopes.get_scope_mut(scope_id);
+                scope.block_labels.insert(name.into(), new_block_id);
+                println!("creating block: {} in {}", s_name, scope_id);
+
+                // get all deferrals in this scope
+                // and generate jumps to the new block
+                let scope = self.scopes.get_scope_mut(scope_id);
+                let mut deferrals = vec![];
+                loop {
+                    if let Some(d) = scope.deferred_goto.pop(name.into()) {
+                        deferrals.push(d);
+                    } else {
+                        break;
+                    }
+                }
+
+                // terminate deferred blocks
+                for d in deferrals {
+                    self.switch_blocks(d.block_id);
+                    println!("{}: bake deferred: {:?}", s_name, d);
+
+                    // invalidate dummy jump
+                    let entry = self.get_entry_mut(d.link_id);
+                    entry.next = d.link_id;
+                    let block = self.blocks.get_block_mut(d.block_id);
+                    // remove last entry in the block
+                    block.last = Some(d.link_id);
+                    block.term = false;
+
+                    // delete the dummy jump and replace it
+                    let jump_args = self.push_arguments(d.args, d.call_span_id, b)?;
+                    let link_id = self.push_jump(new_block_id.into(), jump_args, d.call_span_id);
+                    println!(
+                        "{}: bake deferred goto: {}, link: {}",
+                        s_name, new_block_id, link_id
+                    );
+                }
+
+                self.switch_blocks(current_block_id);
+
+                /*
                 //let (new_block_id, next_block_id) = self.create_new_block_in_scope(name, scope_id);
                 let maybe_new_block_id = self.take_claimed_block(scope_id, name.into());
                 let new_block_id = match maybe_new_block_id {
+                    PlacedBlockId::Deferred(_scope_id, _def, _def_span_id, _d) => {
+                        unimplemented!()
+                    }
+                    PlacedBlockId::DeferredBlock(_d) => {
+                        unimplemented!()
+                    }
                     PlacedBlockId::UnclaimedLambda(_scope_id, _def, _def_span_id) => {
                         unimplemented!()
                     }
@@ -2629,6 +2854,7 @@ impl Flatten {
                         new_block_id
                     }
                 };
+                */
 
                 // start a new block.  If the last block isn't terminated, then we create a new
                 // block and jump to it.
