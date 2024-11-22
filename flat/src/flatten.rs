@@ -351,8 +351,10 @@ impl Flatten {
 
         // just search up the scopes for either labels or claims
         // if we find a claim, then take it
+        println!("start walk: {}", start_scope_id);
         for scope_id in self.scopes.walk_scopes(start_scope_id) {
             let scope = self.scopes.get_scope_mut(scope_id);
+            println!("X: {:?}", (scope_id, &scope));
 
             // search block labels
             if let Some(block_id) = scope.block_labels.get(&name) {
@@ -364,8 +366,8 @@ impl Flatten {
             if let Some(block_id) = maybe_unclaimed_block_id {
                 return PlacedBlockId::Unclaimed(block_id);
             }
-            return PlacedBlockId::NotFound;
         }
+
         PlacedBlockId::NotFound
     }
 
@@ -1676,6 +1678,13 @@ impl Flatten {
             VarDefinitionSpace::Default,
         );
 
+        // block graph
+        // make sure it's not orphaned
+        let scope = self.scopes.get_scope(fun_scope_id);
+        let parent = scope.entry_block.unwrap();
+        self.blocks
+            .block_succ(parent, fun_block_id, Successor::BlockScope);
+
         // add entry to scope, for recursion
         let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
         let variant_id = self
@@ -2265,7 +2274,12 @@ impl Flatten {
                     // but we also need to check if anyone has already jumped to this CPS function
                     // if so, then we need to take the claim.
                     let scope = self.scopes.get_scope_mut(scope_id);
+                    if let Some(claimed_block_id) = scope.block_labels.get(&name.into()) {
+                        unimplemented!();
+                    }
+
                     if let Some(unclaimed_block_id) = scope.unclaimed_labels.remove(&name.into()) {
+                        println!("take claim: {}", unclaimed_block_id);
                         self.switch_blocks(unclaimed_block_id);
 
                         // refresh
