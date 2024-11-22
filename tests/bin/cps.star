@@ -38,11 +38,12 @@ def main():
 
   1
 
+  def label_e():
+    q.goto("final")
+
   q.label("final")
   q.goto("last")
 
-  def label_e():
-    q.goto("final")
 
   q.label("last")
 

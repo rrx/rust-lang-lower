@@ -211,8 +211,7 @@ impl<'a> Interp<'a> {
                 }
 
                 LCode::Arg(_index) => {
-                    println!("arg: {:?}", (&scope, code));
-
+                    //println!("arg: {:?}", (&scope, code));
                     if let Some(value) = scope.values.get(&v) {
                         return Ok(value.clone());
                     }
