@@ -1432,6 +1432,14 @@ impl Flatten {
         span_id: SpanId,
         b: &mut NB,
     ) -> Result<FlattenResult> {
+        // push a goto
+        // if the label exists, then it's straightforward
+        // if it doesn't exist, then we save a marker to be picked up by a future definition
+        // A definition could be a CPS function, or it could be a label
+        // The problem here is that we can't really define the goto, until we know what function we
+        // are calling, so we need to defer writing out the goto until we have the definition
+        // We need to do the goto and the function definition at the same time, so we can do type
+        // unification, as well as monomorphization.
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
         // Goto is terminal
@@ -1470,11 +1478,11 @@ impl Flatten {
             }
             PlacedBlockId::Claimed(block_id) => {
                 println!("block goto claimed: {:?}", (s_name, block_id));
-                block_id
+                Some(block_id)
             }
             PlacedBlockId::Unclaimed(block_id) => {
                 println!("[{}] block goto unclaimed: {}", s_name, block_id);
-                block_id
+                Some(block_id)
             }
             PlacedBlockId::NotFound => {
                 // add it to the function scope, which is the top most scope at which it
@@ -1491,7 +1499,7 @@ impl Flatten {
                             s_name, unclaimed_block_id, fun_scope_id
                         );
                         // already declared as unclaimed
-                        *unclaimed_block_id
+                        Some(*unclaimed_block_id)
                     } else {
                         let unclaimed_block_id = self.blocks.new_block(scope_id);
                         scope
@@ -1501,7 +1509,7 @@ impl Flatten {
                             "[{}], block goto new claim: {}, in scope: {}",
                             s_name, unclaimed_block_id, fun_scope_id
                         );
-                        unclaimed_block_id
+                        Some(unclaimed_block_id)
                     }
                 } else {
                     // goto without function scope
@@ -1511,11 +1519,13 @@ impl Flatten {
         };
 
         self.switch_blocks(current_block_id);
-        let jump_args = self.push_arguments(args, span_id, b)?;
-        let link_id = self.push_jump(target_block_id.into(), jump_args, span_id);
-        println!("block goto: {}, link: {}", target_block_id, link_id);
-        self.switch_blocks(current_block_id);
-        Ok(FlattenResult::link(link_id))
+        if let Some(target_block_id) = target_block_id {
+            let jump_args = self.push_arguments(args, span_id, b)?;
+            let link_id = self.push_jump(target_block_id.into(), jump_args, span_id);
+            println!("block goto: {}, link: {}", target_block_id, link_id);
+            self.switch_blocks(current_block_id);
+        }
+        Ok(FlattenResult::statement())
     }
 
     fn push_bake_cps(
