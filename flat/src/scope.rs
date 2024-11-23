@@ -33,7 +33,7 @@ pub enum ScopeType {
 pub struct ScopeId(pub(crate) u32);
 impl std::fmt::Display for ScopeId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "S{}", self.index())
     }
 }
 
