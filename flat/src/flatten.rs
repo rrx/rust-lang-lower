@@ -787,6 +787,7 @@ impl Flatten {
         &mut self,
         def: &Lambda,
         args: &[Argument],
+        def_span_id: SpanId,
         call_span_id: SpanId,
         b: &mut NB,
     ) -> Result<(
@@ -928,20 +929,39 @@ impl Flatten {
         //value_map.insert(key, Ast::Sequence(args_seq).into());
         //}
         // Do the same with kwargs eventually
+        println!("field_list: {:?}", fields_list);
+
+        if fields_list.len() != args.len() {
+            b.push_error_labels(vec![
+                b.primary_label(&format!("Call arity mismatch: call"), call_span_id),
+                b.secondary_label(&format!("function"), def_span_id),
+            ]);
+            //assert!(false);
+            //return Err(Error::new(BlockifyError::Invalid));
+        }
 
         let args: Vec<Argument> = fields_list
             .iter()
-            .map(|(field_key, field_ty)| {
+            .filter_map(|(field_key, field_ty)| {
                 let field_key = field_key.unwrap();
                 match field_ty {
-                    AstType::Args(_) => Argument::Args(field_key, args_seq.clone()),
-                    AstType::KwArgs(_) => Argument::KwArgs(field_key, kwargs_map.clone()),
-                    _ => Argument::Named(field_key, value_map.remove(&field_key).unwrap().into()),
+                    AstType::Args(_) => Some(Argument::Args(field_key, args_seq.clone())),
+                    AstType::KwArgs(_) => Some(Argument::KwArgs(field_key, kwargs_map.clone())),
+                    _ => {
+                        if let Some(v) = value_map.remove(&field_key) {
+                            Some(Argument::Named(field_key, v.into()))
+                        } else {
+                            let s_name = b.labels.r(field_key.into());
+                            b.push_error(
+                                &format!("caller missing named field: {}", s_name),
+                                call_span_id,
+                            );
+                            None
+                        }
+                    }
                 }
             })
             .collect();
-
-        println!("field_list: {:?}", fields_list);
 
         if args_seq.len() > 0 && def_has_args {
             // extra fields
@@ -951,28 +971,16 @@ impl Flatten {
             );
         }
 
-        if fields_list.len() != args.len() {
-            b.push_error_labels(vec![
-                b.primary_label(
-                    &format!("Call arity mismatch: args: {:?}", &args),
-                    call_span_id,
-                ),
-                b.secondary_label(&format!("source type: {:?}", &fields_list), call_span_id),
-            ]);
-            //assert!(false);
-            return Err(Error::new(BlockifyError::Invalid));
-        }
-
-        let values = self.push_arguments(args, call_span_id, b)?;
+        let call_values = self.push_arguments(args, call_span_id, b)?;
 
         let call_ty = AstType::Struct(
-            values
+            call_values
                 .iter()
                 .map(|v| (v.0, v.2.clone()))
                 .collect::<Vec<_>>(),
         );
 
-        Ok((ret.clone(), values, call_ty))
+        Ok((ret.clone(), call_values, call_ty))
     }
 
     fn push_arguments(
@@ -1146,7 +1154,7 @@ impl Flatten {
         // look up the prototype
         // calculate the calling arguments
         let (_ret_ty, call_values, call_ty) =
-            self.push_function_args(&def, &args, call_span_id, b)?;
+            self.push_function_args(&def, &args, def_span_id, call_span_id, b)?;
 
         let (def_func_type, _def_arg_ty, def_ret_ty) = self.refresh_func_type(&def, b);
 
@@ -1268,7 +1276,9 @@ impl Flatten {
         call_span_id: SpanId,
         b: &mut NB,
     ) -> Result<FlattenResult> {
-        let (ret_ty, values, _call_ty) = self.push_function_args(&def, &args, call_span_id, b)?;
+        let def_span_id = b.spans.get_span_unknown();
+        let (ret_ty, values, _call_ty) =
+            self.push_function_args(&def, &args, def_span_id, call_span_id, b)?;
 
         let current_block_id = self.current_block_id();
 
@@ -1494,7 +1504,7 @@ impl Flatten {
         // TODO: handle actual args
 
         let (_ret_ty, call_values, call_func_type) =
-            self.push_function_args(&def, &args, call_span_id, b)?;
+            self.push_function_args(&def, &args, def_span_id, call_span_id, b)?;
 
         let (def_func_type, def_arg_type, _def_ret_ty) = self.refresh_func_type(&def, b);
 
@@ -2193,6 +2203,10 @@ impl Flatten {
                 } else {
                     let s = b.labels.r(key.into());
                     b.push_error(&format!("ident: not found: {}", s), span_id);
+                    let backtrace = std::backtrace::Backtrace::capture();
+                    self.messages
+                        .push((format!("ident: not found {}\n{}", s, backtrace), span_id));
+
                     Err(Error::new(BlockifyError::NotFound(s)))
                 }
             }
