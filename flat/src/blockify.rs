@@ -99,6 +99,7 @@ pub enum LCode {
 
     // jump to block, with num args
     Jump(CodeOffset),
+    DummyTerminal,
 
     Branch(CodeOffset, BlockId, BlockId),
     Ternary(CodeOffset, BlockId, BlockId), // condition, then_entry, else_entry
@@ -116,6 +117,7 @@ impl LCode {
     pub fn is_term(&self) -> bool {
         match self {
             Self::Jump(_) => true,
+            Self::DummyTerminal => true,
             Self::Branch(_, _, _) => true,
             Self::Return => true,
             Self::Yield => true,
@@ -267,7 +269,7 @@ pub trait ICodeModule {
     */
 
     fn get_type(&self, v: CodeOffset) -> AstType;
-    fn get_entry_id(&self, value_id: ValueId) -> ValueId;
+    fn get_entry_id(&self, value_id: ValueId) -> Option<ValueId>;
     fn is_in_static_scope(&self, v: CodeOffset) -> bool;
     fn get_mem(&self, offset: CodeOffset) -> &VarDefinitionSpace;
     fn resolve_code_offset(&self, code_offset: CodeOffset) -> ValueId;

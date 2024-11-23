@@ -620,9 +620,19 @@ impl Flatten {
 
         for (i, expr) in seq.into_iter().enumerate() {
             let block = self.blocks.get_block(self.current_block_id());
-            println!("push: {:?}", (i, &block.scope_id));
+            let scope_id = block.scope_id;
+            println!("push: {} - {}:{}", i, scope_id, self.current_block_id());
             //b.dump_ast(&expr);
-            let _ = self.push_node(expr, b)?;
+            let r = self.push_node(expr, b)?;
+            let block = self.blocks.get_block(self.current_block_id());
+            let scope_id = block.scope_id;
+            println!(
+                "push: {} - {}:{} - {:?}",
+                i,
+                scope_id,
+                self.current_block_id(),
+                r
+            );
         }
 
         // ensure that we close any blocks that were opened
@@ -678,6 +688,7 @@ impl Flatten {
             LCode::Return => unreachable!(),
             LCode::Yield => unreachable!(),
             LCode::Jump(_) => unreachable!(),
+            LCode::DummyTerminal => unreachable!(),
             LCode::Branch(_, _, _) => unreachable!(),
             LCode::Builtin(_) => unreachable!(),
             LCode::CallValue(_) => unreachable!(),
@@ -1494,7 +1505,7 @@ impl Flatten {
             // push dummy jump, which we will drop later
             //self.push_jump(BlockId(0), vec![], call_span_id);
             self.push_code(
-                LCode::Jump(BlockId(0).into()),
+                LCode::DummyTerminal,
                 AstType::Unit,
                 None,
                 call_span_id,
@@ -1547,7 +1558,7 @@ impl Flatten {
             ]);
         }
 
-        self.switch_blocks(current_block_id);
+        //self.switch_blocks(current_block_id);
 
         // Start lambda block
         let s_name = if let Some(name) = name {
@@ -1612,7 +1623,16 @@ impl Flatten {
         let _ = self.push_node(body, b)?;
 
         let block = self.blocks.get_block(self.current_block_id());
-        assert!(block.is_term());
+        if !block.is_term() {
+            self.push_code(
+                LCode::DummyTerminal,
+                AstType::Unit,
+                None,
+                def_span_id,
+                VarDefinitionSpace::Default,
+            );
+        }
+
         //self.maybe_terminate_block(next_block_id, def_span_id);
 
         // if this really is a CPS function, then it should never return
@@ -2270,12 +2290,12 @@ impl Flatten {
                     }
 
                     for d in deferrals {
-                        let new_block_id = self.blocks.new_block(scope_id);
-                        self.switch_blocks(new_block_id);
+                        //let new_block_id = self.blocks.new_block(scope_id);
+                        //self.switch_blocks(new_block_id);
 
                         let (def, def_span_id) = self.get_ast_template(template_id).clone();
 
-                        self.push_bake_cps_and_jump(
+                        let (_, fun_block_id, link_id) = self.push_bake_cps_and_jump(
                             Some(name.into()),
                             scope_id,
                             def,
@@ -2298,8 +2318,8 @@ impl Flatten {
 
                         let jump_args = self.push_arguments(d.args, d.call_span_id, b)?;
                         let link_id =
-                            self.push_jump(new_block_id.into(), jump_args, d.call_span_id);
-                        println!("bake deferred goto: {}, link: {}", new_block_id, link_id);
+                            self.push_jump(fun_block_id.into(), jump_args, d.call_span_id);
+                        println!("bake deferred goto: link: {}", link_id);
                     }
                     self.switch_blocks(current_block_id);
 
@@ -3077,12 +3097,22 @@ impl Flatten {
     }
 
     pub fn ensure_open(&mut self, span_id: SpanId, b: &mut NB) {
-        //let current_block_id = self.current_block_id();
+        let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(self.current_block_id());
         let scope_id = block.scope_id;
         if block.term {
             let new_block_id = self.blocks.new_block(scope_id);
             let name = b.labels.fresh_key("dead");
+            let scope = self.scopes.get_scope(scope_id);
+            println!(
+                "ensure open: {}:{} => {}:{}",
+                scope_id, current_block_id, scope_id, new_block_id
+            );
+            self.blocks.block_succ(
+                scope.entry_block.unwrap(),
+                new_block_id,
+                Successor::BlockScope,
+            );
 
             self.switch_blocks(new_block_id);
             self.push_start_block(

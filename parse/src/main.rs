@@ -111,14 +111,6 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
     let pre_graph_path = make_path(&output_filename, "graph.dot");
     m.save_graph(&pre_graph_path, &b);
 
-    let table_path = make_path(&output_filename, "table.txt");
-    m.dump_code_table(&table_path, b);
-    m.dump_scopes();
-
-    let mut cfg_path = path.clone();
-    cfg_path.set_extension("cfg.mmd");
-    m.flow_graph(cfg_path.clone().to_str().unwrap(), &b)?;
-
     let mut blocks_path = path.clone();
     blocks_path.set_extension("blocks.dot");
     m.block_graph(blocks_path.clone().to_str().unwrap(), &b);
@@ -126,6 +118,14 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
     let mut scopes_path = path.clone();
     scopes_path.set_extension("scopes.dot");
     m.scopes.scope_graph(scopes_path.clone().to_str().unwrap());
+
+    let mut cfg_path = path.clone();
+    cfg_path.set_extension("cfg.mmd");
+    m.flow_graph(cfg_path.clone().to_str().unwrap(), &b)?;
+
+    let table_path = make_path(&output_filename, "table.txt");
+    m.dump_code_table(&table_path, b);
+    m.dump_scopes();
 
     if b.spans.has_errors {
         return Err(anyhow::Error::new(BlockifyError::Invalid).into());

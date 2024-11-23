@@ -92,10 +92,10 @@ impl ICodeModule for FlattenModule {
         entry.clone().ty
     }
 
-    fn get_entry_id(&self, value_id: ValueId) -> ValueId {
+    fn get_entry_id(&self, value_id: ValueId) -> Option<ValueId> {
         let link_id = self.values[value_id.index()];
         let block_id = self.get_entry(link_id).block_id;
-        self.resolve_code_offset(block_id.into())
+        self.maybe_resolve_code_offset(block_id.into())
     }
 
     fn is_in_static_scope(&self, offset: CodeOffset) -> bool {
@@ -114,7 +114,8 @@ impl ICodeModule for FlattenModule {
     }
 
     fn resolve_code_offset(&self, code_offset: CodeOffset) -> ValueId {
-        self.maybe_resolve_code_offset(code_offset).unwrap()
+        self.maybe_resolve_code_offset(code_offset)
+            .expect(&format!("Unable to resolve: {}", code_offset))
     }
 
     fn maybe_resolve_code_offset(&self, code_offset: CodeOffset) -> Option<ValueId> {
@@ -213,7 +214,7 @@ impl FlattenModule {
                 .to_string(),
             span_id: self.get_span_id(v).index(),
             scope_id: scope_id.index(),
-            entry_id: entry_id.index(),
+            entry_id: entry_id.map(|v| v.index()).unwrap_or(0),
             block_id: block_id.index(),
             term: code.is_term(),
             dead: block.dead,
