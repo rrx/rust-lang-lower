@@ -5,13 +5,14 @@ def main():
   def unit(x):
     # verify that the function scope here is able to access highler level scopes
     # by jumping to B
-    q.goto(label_c, x)
+    q.goto(label_c, x+1)
     # nothing happens here
     1
 
-  def label_d():
-    #q.print(x)
-    q.goto(label_e)
+  def label_d(x: int):
+    q.print(x)
+    # unable to use x to pass to goto
+    q.goto(label_e, 1)
 
   def label_c(x):
     q.print(x)
@@ -34,17 +35,16 @@ def main():
   # we can only goto a cps function that has already been declared in scope
   # it should be possible to goto a cps function that is declared in the scope
   # but further down
-  q.goto(label_d)
+  q.goto(label_d, 1)
 
   1
 
-  def label_e():
+  def label_e(x):
+    q.print(x)
     q.goto("final")
 
   q.label("final")
   q.goto("last")
-
-
   q.label("last")
 
   return 0
