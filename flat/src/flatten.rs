@@ -1446,19 +1446,12 @@ impl Flatten {
 
         let s_name = b.labels.r(label.into());
 
-        println!(
-            "{}: push_goto: from {}:{}",
-            s_name,
-            scope_id,
-            self.current_block_id()
-        );
-
         // if a template exists, use it
         if let Some(template_id) = self.resolve_template(scope_id, label.into()) {
             let (def, def_span_id) = self.get_ast_template(template_id).clone();
-            let new_block_id = self.blocks.new_block(scope_id);
-            self.switch_blocks(new_block_id);
-            self.push_bake_cps_and_jump(
+            //let new_block_id = self.blocks.new_block(scope_id);
+            //self.switch_blocks(new_block_id);
+            let (fun_scope_id, fun_block_id, link_id) = self.push_bake_cps_and_jump(
                 Some(label.into()),
                 scope_id,
                 def,
@@ -1468,11 +1461,11 @@ impl Flatten {
                 b,
             )?;
 
-            let jump_args = self.push_arguments(args, call_span_id, b)?;
-            let link_id = self.push_jump(new_block_id.into(), jump_args, call_span_id);
+            //let jump_args = self.push_arguments(args, call_span_id, b)?;
+            //let link_id = self.push_jump(new_block_id.into(), jump_args, call_span_id);
             println!(
-                "{}: block goto lambda: {}=>{}, link: {}, scope: {}",
-                s_name, current_block_id, new_block_id, link_id, scope_id
+                "{}: push_goto lambda: from {}:{}=>{}:{}, link: {}",
+                s_name, scope_id, current_block_id, fun_scope_id, fun_block_id, link_id
             );
             self.switch_blocks(current_block_id);
             return Ok(FlattenResult::statement());
@@ -1480,11 +1473,13 @@ impl Flatten {
 
         // if a label exists, then jump to it
         if let Some(target_block_id) = self.resolve_label(scope_id, label.into()) {
+            let target_block = self.blocks.get_block(target_block_id);
+            let target_scope_id = target_block.scope_id;
             let jump_args = self.push_arguments(args, call_span_id, b)?;
             let link_id = self.push_jump(target_block_id.into(), jump_args, call_span_id);
             println!(
-                "{}: block goto label: {}=>{}, link: {}, scope: {}",
-                s_name, current_block_id, target_block_id, link_id, scope_id
+                "{}: push_goto label: {}:{}=>{}:{}, link: {}",
+                s_name, scope_id, current_block_id, target_scope_id, target_block_id, link_id
             );
             self.switch_blocks(current_block_id);
             return Ok(FlattenResult::statement());
@@ -1529,7 +1524,7 @@ impl Flatten {
         call_span_id: SpanId,
         args: Vec<Argument>,
         b: &mut NB,
-    ) -> Result<FlattenResult> {
+    ) -> Result<(ScopeId, BlockId, LinkId)> {
         let current_block_id = self.current_block_id();
         // TODO: handle actual args
         //
@@ -1562,28 +1557,63 @@ impl Flatten {
         };
         let lambda_name = b.labels.fresh_key(&s_name);
 
+        //let next_block_id = self.blocks.new_block(scope_id);
+
+        // New Func Scope
+        let (fun_block_id, fun_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
+
         println!(
-            "{}: push_bake_cps in {}:{}",
+            "{}: push_bake_cps in {}:{} => {}:{}",
             s_name,
             scope_id,
-            self.current_block_id()
+            self.current_block_id(),
+            fun_scope_id,
+            fun_block_id
         );
 
-        let next_block_id = self.blocks.new_block(scope_id);
-        let result = self.push_bake_lambda_inner(
-            lambda_name,
-            lambda_name,
-            scope_id,
-            next_block_id,
-            def,
+        let body = *def.body.unwrap();
+
+        //let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
+        // we might want to handle this later
+        // return in a CPS will return from the scoped function
+        //fun_scope.return_block = Some(next_block_id);
+
+        // block graph
+        self.blocks
+            .block_succ(current_block_id, fun_block_id, Successor::BlockScope);
+
+        self.switch_blocks(fun_block_id);
+        let (entry_link_id, _) = self.push_start_block(
+            fun_scope_id,
             def_func_type.clone(),
+            Some(lambda_name),
             def_span_id,
-            call_span_id,
-            ScopeType::Block,
-            Successor::BlockScope,
-            VarDefinitionSpace::Reg,
-            b,
-        )?;
+            VarDefinitionSpace::Default,
+        );
+
+        // add entry to scope, for recursion
+        let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
+        // we need to know the link
+        //let variant_id = if let Some(global_name) = global_name {
+        let _variant_id = self
+            .scopes
+            .variant_add(scope_id, lambda_name, r_ty1, entry_link_id);
+        //} else {
+        //None
+        //};
+
+        // add the name to scope
+        // do this early for recursive functions
+        self.scopes
+            .scope_define(scope_id, lambda_name, entry_link_id);
+
+        // flatten function, and switch to next
+        self.switch_blocks(fun_block_id);
+        let _ = self.push_node(body, b)?;
+
+        let block = self.blocks.get_block(self.current_block_id());
+        assert!(block.is_term());
+        //self.maybe_terminate_block(next_block_id, def_span_id);
 
         // if this really is a CPS function, then it should never return
         // TODO: verify that it never returns, could be with the function signature
@@ -1593,7 +1623,7 @@ impl Flatten {
         // What does it even mean that a CPS function never calls it's continuation?
 
         self.drain_diagnostics(b);
-        let (_variant_id, _, fun_block_id, _, _, _, r) = result;
+        //let (_variant_id, _, fun_block_id, _, _, _, r) = result;
 
         // all this stuff is just opening things up for anything that follows the goto
         // this should be dead code, unless it's a label that actually gets jumped to
@@ -1601,9 +1631,9 @@ impl Flatten {
 
         // now that we have the arguments calculated, and the lambda baked, jump!
         self.switch_blocks(current_block_id);
-        self.push_jump(fun_block_id.into(), call_values, call_span_id);
-        self.switch_blocks(next_block_id);
-        return Ok(r);
+        let link_id = self.push_jump(fun_block_id.into(), call_values, call_span_id);
+        //self.switch_blocks(next_block_id);
+        return Ok((fun_scope_id, fun_block_id, link_id));
     }
 
     fn push_bake_block(
