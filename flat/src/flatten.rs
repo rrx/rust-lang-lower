@@ -2228,12 +2228,13 @@ impl Flatten {
 
             Ast::Identifier(key) => {
                 // identifier is expression, non-terminal
+                let scope_id = block.scope_id;
                 if let Some(def_link_id) = self.resolve_name(current_block_id, key) {
                     let link_id = def_link_id;
                     Ok(FlattenResult::link(link_id))
                 } else {
                     let s = b.labels.r(key.into());
-                    b.push_error(&format!("ident: not found: {}", s), span_id);
+                    b.push_error(&format!("ident `{}` not found in {}", s, scope_id), span_id);
                     let backtrace = std::backtrace::Backtrace::capture();
                     self.messages
                         .push((format!("ident: not found {}\n{}", s, backtrace), span_id));
