@@ -1460,11 +1460,22 @@ impl Flatten {
         // if a template exists, use it
         if let Some(template_id) = self.resolve_template(scope_id, label.into()) {
             let (def, def_span_id) = self.get_ast_template(template_id).clone();
-            //let new_block_id = self.blocks.new_block(scope_id);
             //self.switch_blocks(new_block_id);
+            // New Func Scope
+            let (fun_block_id, fun_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
+            let scope = self.scopes.get_scope(scope_id);
+            // block graph
+            self.blocks.block_succ(
+                scope.entry_block.unwrap(),
+                fun_block_id,
+                Successor::BlockScope,
+            );
+
             let (fun_scope_id, fun_block_id, link_id) = self.push_bake_cps_and_jump(
                 Some(label.into()),
                 scope_id,
+                fun_scope_id,
+                fun_block_id,
                 def,
                 def_span_id,
                 call_span_id,
@@ -1564,6 +1575,8 @@ impl Flatten {
         &mut self,
         name: Option<StringKey>,
         scope_id: ScopeId,
+        fun_scope_id: ScopeId,
+        fun_block_id: BlockId,
         def: Lambda,
         def_span_id: SpanId,
         call_span_id: SpanId,
@@ -1572,10 +1585,11 @@ impl Flatten {
     ) -> Result<(ScopeId, BlockId, LinkId)> {
         let current_block_id = self.current_block_id();
 
+        /*
         // New Func Scope
         let (fun_block_id, fun_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
 
-        let block = self.blocks.get_block(current_block_id);
+        let block = self.blocks.get_block(self.current_block_id());
         let scope = self.scopes.get_scope(block.scope_id);
         // block graph
         self.blocks.block_succ(
@@ -1583,6 +1597,7 @@ impl Flatten {
             fun_block_id,
             Successor::BlockScope,
         );
+        */
 
         //let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
         // we might want to handle this later
@@ -2335,9 +2350,23 @@ impl Flatten {
 
                         let (def, def_span_id) = self.get_ast_template(template_id).clone();
 
+                        // New Func Scope
+                        let (fun_block_id, fun_scope_id) =
+                            self.new_scope_and_block(ScopeType::Block, scope_id);
+                        let block = self.blocks.get_block(d.block_id);
+                        let scope = self.scopes.get_scope(block.scope_id);
+                        // block graph
+                        self.blocks.block_succ(
+                            scope.entry_block.unwrap(),
+                            fun_block_id,
+                            Successor::BlockScope,
+                        );
+
                         let (_, fun_block_id, link_id) = self.push_bake_cps_and_jump(
                             Some(name.into()),
                             scope_id,
+                            fun_scope_id,
+                            fun_block_id,
                             def,
                             def_span_id,
                             d.call_span_id,
