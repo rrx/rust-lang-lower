@@ -1472,20 +1472,19 @@ impl Flatten {
             );
 
             let (fun_scope_id, fun_block_id, def_func_type, def_arg_type, _) = self
-                .push_bake_cps_and_jump(
+                .push_cps_block(
                     Some(label.into()),
                     scope_id,
                     fun_scope_id,
                     fun_block_id,
                     def.clone(),
                     def_span_id,
-                    call_span_id,
-                    args.clone(),
                     b,
                 )?;
 
+            // switch back to goto block
             self.switch_blocks(current_block_id);
-            let link_id = self.push_bake_cps_jump(
+            let link_id = self.push_cps_jump(
                 &def,
                 def_func_type,
                 def_arg_type,
@@ -1496,8 +1495,6 @@ impl Flatten {
                 b,
             )?;
 
-            //let jump_args = self.push_arguments(args, call_span_id, b)?;
-            //let link_id = self.push_jump(new_block_id.into(), jump_args, call_span_id);
             println!(
                 "{}: push_goto lambda: from {}:{}=>{}:{}, link: {}",
                 s_name, scope_id, current_block_id, fun_scope_id, fun_block_id, link_id
@@ -1550,7 +1547,7 @@ impl Flatten {
         }
     }
 
-    fn push_bake_cps_jump(
+    fn push_cps_jump(
         &mut self,
         def: &Lambda,
         def_func_type: AstType,
@@ -1561,7 +1558,6 @@ impl Flatten {
         args: Vec<Argument>,
         b: &mut NB,
     ) -> Result<LinkId> {
-        //let current_block_id = self.current_block_id();
         let (_ret_ty, call_values, call_func_type) =
             self.push_function_call_args(&def, &args, def_span_id, call_span_id, b)?;
 
@@ -1579,12 +1575,11 @@ impl Flatten {
         }
 
         // now that we have the arguments calculated, and the lambda baked, jump!
-        //self.switch_blocks(current_block_id);
         let link_id = self.push_jump(target_block_id.into(), call_values, call_span_id);
         Ok(link_id)
     }
 
-    fn push_bake_cps_and_jump(
+    fn push_cps_block(
         &mut self,
         name: Option<StringKey>,
         scope_id: ScopeId,
@@ -1592,39 +1587,17 @@ impl Flatten {
         fun_block_id: BlockId,
         def: Lambda,
         def_span_id: SpanId,
-        call_span_id: SpanId,
-        args: Vec<Argument>,
         b: &mut NB,
     ) -> Result<(ScopeId, BlockId, AstType, AstType, AstType)> {
-        //let current_block_id = self.current_block_id();
+        let current_block_id = self.current_block_id();
 
         //let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
         // we might want to handle this later
         // return in a CPS will return from the scoped function
         //fun_scope.return_block = Some(next_block_id);
 
-        // TODO: handle actual args
-        //
         // This expects to be called in a block that is ready to jump
         let (def_func_type, def_arg_type, def_ret_type) = self.refresh_func_type(&def, b);
-
-        /*
-        let (_ret_ty, call_values, call_func_type) =
-            self.push_function_call_args(&def, &args, def_span_id, call_span_id, b)?;
-
-        // unify the caller args and the refreshed function args
-        if b.types.u.unify(&call_func_type, &def_arg_type).is_err() {
-            let ty1 = b.types.u.resolve(&call_func_type).unwrap();
-            let ty2 = b.types.u.resolve(&def_func_type).unwrap();
-            b.push_error_labels(vec![
-                b.primary_label(
-                    &format!("Type Mismatch CPS: caller: {}", &ty1),
-                    call_span_id,
-                ),
-                b.secondary_label(&format!("source type: {}", &ty2), def_span_id),
-            ]);
-        }
-        */
 
         // Start lambda block
         let s_name = if let Some(name) = name {
@@ -1635,7 +1608,7 @@ impl Flatten {
         let lambda_name = b.labels.fresh_key(&s_name);
 
         println!(
-            "{}: push_bake_cps in {}:{} => {}:{}",
+            "{}: push_cps_block in {}:{} => {}:{}",
             s_name,
             scope_id,
             self.current_block_id(),
@@ -1653,6 +1626,10 @@ impl Flatten {
             def_span_id,
             VarDefinitionSpace::Default,
         );
+        // add the name to scope
+        // do this early for recursive functions
+        self.scopes
+            .scope_define(scope_id, lambda_name, entry_link_id);
 
         // add entry to scope, for recursion
         let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
@@ -1665,13 +1642,7 @@ impl Flatten {
         //None
         //};
 
-        // add the name to scope
-        // do this early for recursive functions
-        self.scopes
-            .scope_define(scope_id, lambda_name, entry_link_id);
-
         // flatten function, and switch to next
-        self.switch_blocks(fun_block_id);
         let _ = self.push_node(body, b)?;
 
         // terminate if not already terminated
@@ -1695,16 +1666,10 @@ impl Flatten {
         // What does it even mean that a CPS function never calls it's continuation?
 
         self.drain_diagnostics(b);
-        // all this stuff is just opening things up for anything that follows the goto
-        // this should be dead code, unless it's a label that actually gets jumped to
-        //self.switch_blocks(next_block_id);
 
-        /*
-        // now that we have the arguments calculated, and the lambda baked, jump!
+        // switch back to where it was called
         self.switch_blocks(current_block_id);
-        let link_id = self.push_jump(fun_block_id.into(), call_values, call_span_id);
-        //self.switch_blocks(next_block_id);
-        */
+
         return Ok((
             fun_scope_id,
             fun_block_id,
@@ -1714,6 +1679,7 @@ impl Flatten {
         ));
     }
 
+    /*
     fn push_bake_block(
         &mut self,
         local_name: StringKey,
@@ -1761,9 +1727,9 @@ impl Flatten {
         let block = self.blocks.get_block(self.current_block_id());
         assert!(block.is_term());
 
-        // ASDF
         Ok((variant_id, fun_scope_id, fun_block_id))
     }
+    */
 
     fn push_bake_lambda_inner(
         &mut self,
@@ -1874,7 +1840,6 @@ impl Flatten {
             FlattenResult::statement()
         };
 
-        // ASDF
         Ok((
             variant_id,
             fun_scope_id,
@@ -2368,15 +2333,13 @@ impl Flatten {
                         );
 
                         let (_, fun_block_id, def_func_type, def_arg_type, _) = self
-                            .push_bake_cps_and_jump(
+                            .push_cps_block(
                                 Some(name.into()),
                                 scope_id,
                                 fun_scope_id,
                                 fun_block_id,
                                 def.clone(),
                                 def_span_id,
-                                d.call_span_id,
-                                d.args.clone(),
                                 b,
                             )?;
 
@@ -2391,7 +2354,7 @@ impl Flatten {
                         block.last = Some(d.link_id);
                         block.term = false;
 
-                        let link_id = self.push_bake_cps_jump(
+                        let link_id = self.push_cps_jump(
                             &def,
                             def_func_type,
                             def_arg_type,
