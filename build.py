@@ -32,10 +32,15 @@ def generate_inputs(fp, interp=True, graphs=True):
             if interp:
                 fp.write(f"build {interp_filename}: interpret-{kind} {input_filename} | {compiler}\n")
 
+            graph_targets = []
             if graphs:
+                graph_targets.append(graph_output_filename)
                 fp.write(f"build {graph_output_filename}: dot-png {graph_input_filename}\n")
+                graph_targets.append(blocks_output_filename)
                 fp.write(f"build {blocks_output_filename}: dot-png {blocks_input_filename}\n")
+                graph_targets.append(scopes_output_filename)
                 fp.write(f"build {scopes_output_filename}: dot-png {scopes_input_filename}\n")
+                graph_targets.append(cfg_output_filename)
                 fp.write(f"build {cfg_output_filename}: mermaid-png {cfg_input_filename}\n")
 
             llvm_filename = os.path.join(target, f"{base}.llvm")
@@ -51,7 +56,7 @@ def generate_inputs(fp, interp=True, graphs=True):
             fp.write(f"build {run_filename}: run {exe_filename}\n")
 
             top = f"{base}-{kind}-exe"
-            fp.write(f"build {top}: phony {run_filename} {graph_output_filename} {cfg_output_filename} {blocks_output_filename} {scopes_output_filename}\n")
+            fp.write(f"build {top}: phony {run_filename} {' '.join(graph_targets)}\n")
             outputs.append(top)
 
             top = f"{base}-{kind}-interp"

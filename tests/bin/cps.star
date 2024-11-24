@@ -14,7 +14,7 @@ def main():
     # nothing happens here
     1
 
-  def label_d(x: int):
+  def label_d(x):
     q.print(x)
     # deferred goto
     count = count + 1
