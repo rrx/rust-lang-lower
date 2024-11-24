@@ -5,6 +5,8 @@ def main():
   def unit(x):
     # verify that the function scope here is able to access highler level scopes
     # by jumping to B
+    # deferred goto
+    q.print(x)
     q.goto(label_c, x+1)
     # nothing happens here
     1
@@ -12,6 +14,7 @@ def main():
   def label_d(x: int):
     q.print(x)
     # unable to use x to pass to goto
+    # deferred goto
     q.goto(label_e, 1)
 
   def label_c(x):

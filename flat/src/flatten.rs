@@ -795,7 +795,7 @@ impl Flatten {
         )
     }
 
-    pub fn push_function_args(
+    pub fn push_function_call_args(
         &mut self,
         def: &Lambda,
         args: &[Argument],
@@ -983,7 +983,7 @@ impl Flatten {
             );
         }
 
-        let call_values = self.push_arguments(args, call_span_id, b)?;
+        let call_values = self.push_call_arguments(args, call_span_id, b)?;
 
         let call_ty = AstType::Struct(
             call_values
@@ -995,7 +995,7 @@ impl Flatten {
         Ok((ret.clone(), call_values, call_ty))
     }
 
-    fn push_arguments(
+    fn push_call_arguments(
         &mut self,
         args: Vec<Argument>,
         span_id: SpanId,
@@ -1173,7 +1173,7 @@ impl Flatten {
         // look up the prototype
         // calculate the calling arguments
         let (_ret_ty, call_values, call_ty) =
-            self.push_function_args(&def, &args, def_span_id, call_span_id, b)?;
+            self.push_function_call_args(&def, &args, def_span_id, call_span_id, b)?;
 
         let (def_func_type, _def_arg_ty, def_ret_ty) = self.refresh_func_type(&def, b);
 
@@ -1309,7 +1309,7 @@ impl Flatten {
 
         let def_span_id = b.spans.get_span_unknown();
         let (ret_ty, values, _call_ty) =
-            self.push_function_args(&def, &args, def_span_id, call_span_id, b)?;
+            self.push_function_call_args(&def, &args, def_span_id, call_span_id, b)?;
 
         let current_block_id = self.current_block_id();
 
@@ -1486,7 +1486,7 @@ impl Flatten {
         if let Some(target_block_id) = self.resolve_label(scope_id, label.into()) {
             let target_block = self.blocks.get_block(target_block_id);
             let target_scope_id = target_block.scope_id;
-            let jump_args = self.push_arguments(args, call_span_id, b)?;
+            let jump_args = self.push_call_arguments(args, call_span_id, b)?;
             let link_id = self.push_jump(target_block_id.into(), jump_args, call_span_id);
             println!(
                 "{}: push_goto label: {}:{}=>{}:{}, link: {}",
@@ -1526,6 +1526,40 @@ impl Flatten {
         }
     }
 
+    /*
+    fn push_bake_cps_jump(
+        &mut self,
+        name: Option<StringKey>,
+        scope_id: ScopeId,
+        def: Lambda,
+        def_span_id: SpanId,
+        call_span_id: SpanId,
+        args: Vec<Argument>,
+        b: &mut NB,
+    ) -> Result<(ScopeId, BlockId, LinkId)> {
+        let current_block_id = self.current_block_id();
+        let (_ret_ty, call_values, call_func_type) =
+            self.push_function_call_args(&def, &args, def_span_id, call_span_id, b)?;
+
+        // unify the caller args and the refreshed function args
+        if b.types.u.unify(&call_func_type, &def_arg_type).is_err() {
+            let ty1 = b.types.u.resolve(&call_func_type).unwrap();
+            let ty2 = b.types.u.resolve(&def_func_type).unwrap();
+            b.push_error_labels(vec![
+                b.primary_label(
+                    &format!("Type Mismatch CPS: caller: {}", &ty1),
+                    call_span_id,
+                ),
+                b.secondary_label(&format!("source type: {}", &ty2), def_span_id),
+            ]);
+        }
+
+        // now that we have the arguments calculated, and the lambda baked, jump!
+        self.switch_blocks(current_block_id);
+        let link_id = self.push_jump(fun_block_id.into(), call_values, call_span_id);
+    }
+    */
+
     fn push_bake_cps_and_jump(
         &mut self,
         name: Option<StringKey>,
@@ -1537,13 +1571,31 @@ impl Flatten {
         b: &mut NB,
     ) -> Result<(ScopeId, BlockId, LinkId)> {
         let current_block_id = self.current_block_id();
+
+        // New Func Scope
+        let (fun_block_id, fun_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
+
+        let block = self.blocks.get_block(current_block_id);
+        let scope = self.scopes.get_scope(block.scope_id);
+        // block graph
+        self.blocks.block_succ(
+            scope.entry_block.unwrap(),
+            fun_block_id,
+            Successor::BlockScope,
+        );
+
+        //let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
+        // we might want to handle this later
+        // return in a CPS will return from the scoped function
+        //fun_scope.return_block = Some(next_block_id);
+
         // TODO: handle actual args
         //
+        // This expects to be called in a block that is ready to jump
+        let (def_func_type, def_arg_type, _def_ret_ty) = self.refresh_func_type(&def, b);
 
         let (_ret_ty, call_values, call_func_type) =
-            self.push_function_args(&def, &args, def_span_id, call_span_id, b)?;
-
-        let (def_func_type, def_arg_type, _def_ret_ty) = self.refresh_func_type(&def, b);
+            self.push_function_call_args(&def, &args, def_span_id, call_span_id, b)?;
 
         // unify the caller args and the refreshed function args
         if b.types.u.unify(&call_func_type, &def_arg_type).is_err() {
@@ -1568,11 +1620,6 @@ impl Flatten {
         };
         let lambda_name = b.labels.fresh_key(&s_name);
 
-        //let next_block_id = self.blocks.new_block(scope_id);
-
-        // New Func Scope
-        let (fun_block_id, fun_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
-
         println!(
             "{}: push_bake_cps in {}:{} => {}:{}",
             s_name,
@@ -1583,15 +1630,6 @@ impl Flatten {
         );
 
         let body = *def.body.unwrap();
-
-        //let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
-        // we might want to handle this later
-        // return in a CPS will return from the scoped function
-        //fun_scope.return_block = Some(next_block_id);
-
-        // block graph
-        self.blocks
-            .block_succ(current_block_id, fun_block_id, Successor::BlockScope);
 
         self.switch_blocks(fun_block_id);
         let (entry_link_id, _) = self.push_start_block(
@@ -1622,6 +1660,8 @@ impl Flatten {
         self.switch_blocks(fun_block_id);
         let _ = self.push_node(body, b)?;
 
+        // terminate if not already terminated
+        // this is for dead code
         let block = self.blocks.get_block(self.current_block_id());
         if !block.is_term() {
             self.push_code(
@@ -1632,8 +1672,6 @@ impl Flatten {
                 VarDefinitionSpace::Default,
             );
         }
-
-        //self.maybe_terminate_block(next_block_id, def_span_id);
 
         // if this really is a CPS function, then it should never return
         // TODO: verify that it never returns, could be with the function signature
@@ -2292,6 +2330,7 @@ impl Flatten {
 
                     for d in deferrals {
                         //let new_block_id = self.blocks.new_block(scope_id);
+                        //self.switch_blocks(d.block_id);
                         //self.switch_blocks(new_block_id);
 
                         let (def, def_span_id) = self.get_ast_template(template_id).clone();
@@ -2317,7 +2356,7 @@ impl Flatten {
                         block.last = Some(d.link_id);
                         block.term = false;
 
-                        let jump_args = self.push_arguments(d.args, d.call_span_id, b)?;
+                        let jump_args = self.push_call_arguments(d.args, d.call_span_id, b)?;
                         let link_id =
                             self.push_jump(fun_block_id.into(), jump_args, d.call_span_id);
                         println!("bake deferred goto: link: {}", link_id);
@@ -2629,7 +2668,8 @@ impl Flatten {
                     }
                 }
 
-                // terminate deferred blocks
+                // terminate deferred blocks, with a call to the new block we are instantiating
+                // here
                 for d in deferrals {
                     self.switch_blocks(d.block_id);
 
@@ -2642,7 +2682,7 @@ impl Flatten {
                     block.term = false;
 
                     // delete the dummy jump and replace it
-                    let jump_args = self.push_arguments(d.args.clone(), d.call_span_id, b)?;
+                    let jump_args = self.push_call_arguments(d.args.clone(), d.call_span_id, b)?;
                     let link_id = self.push_jump(new_block_id.into(), jump_args, d.call_span_id);
                     println!("{}: bake deferred: {:?}, link: {}", s_name, d, link_id);
                 }
