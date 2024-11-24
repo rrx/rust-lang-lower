@@ -28,7 +28,6 @@ def main():
 
   1
 
-
   # this is how we call a CPS function, it's just a jump to the identifier
   # and we bake a CPS function
   q.goto(unit, 1)
@@ -52,10 +51,16 @@ def main():
     q.check(x == 2)
     count = count + 1
     q.goto("final")
+    1
+
+  1
 
   q.label("final")
+  1
   q.goto("last")
+  1
   q.label("last")
+  1
   q.check(count == 4)
-
+  1
   return 0
