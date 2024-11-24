@@ -507,7 +507,7 @@ impl<'c> MLIRGenerator<'c> {
             }
 
             LCode::DummyTerminal => {
-                unreachable!()
+                unreachable!("Dummy terminated block")
             }
 
             LCode::Val(lit) => {

@@ -1,6 +1,7 @@
 use anyhow::Result;
 use compile_core::{AstType, LinkOptions, Literal, SpanId, StringKey, VarDefinitionSpace};
 //use petgraph::visit::EdgeRef;
+use petgraph::graph::NodeIndex;
 use std::collections::HashMap;
 
 use std::convert::Into;
@@ -185,7 +186,10 @@ impl FlattenModule {
 
         let mem = self.get_mem(v.into());
         let block_id = entry.block_id;
-        let block = self.blocks.node_weight(block_id.into()).unwrap();
+        let block = self
+            .blocks
+            .node_weight(NodeIndex::new(block_id.index()))
+            .unwrap();
         let entry_id = self.get_entry_id(v);
 
         let r_ty = if let Some(r_ty) = b.types.u.resolve(&entry.ty) {
@@ -268,7 +272,7 @@ impl FlattenModule {
                 &[Config::NodeNoLabel],
                 &|_, _er| String::new(),
                 &|_, (index, _block)| {
-                    let block_id: BlockId = index.into();
+                    let block_id: BlockId = BlockId::new(index.index());
                     let block = self.blocks.get_block(block_id);
                     if block.dead {
                         // block marked dead

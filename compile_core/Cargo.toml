@@ -11,5 +11,5 @@ thiserror = "*"
 serde = "1.0"
 indexmap = "2.1.0"
 codespan-reporting = "*"
-
+petgraph = "0.6.4"
 

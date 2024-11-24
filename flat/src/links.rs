@@ -1,3 +1,5 @@
+use crate::BlockId;
+
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 pub struct ValueId(pub(crate) u32);
 
@@ -16,21 +18,6 @@ impl ValueId {
 impl std::fmt::Display for ValueId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "V{}", self.index())
-    }
-}
-
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
-pub struct BlockId(pub(crate) u32);
-
-impl BlockId {
-    pub fn index(&self) -> usize {
-        self.0 as usize
-    }
-}
-
-impl std::fmt::Display for BlockId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "B{}", self.index())
     }
 }
 

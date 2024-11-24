@@ -1,4 +1,5 @@
 use crate::{AstNode, AstType, BuiltinId, SpanId, StringKey, TypeId};
+use petgraph::graph::NodeIndex;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
@@ -33,6 +34,36 @@ impl VarDefinitionSpace {
     }
 }
 
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
+pub struct BlockId(u32);
+
+impl BlockId {
+    pub fn new(index: usize) -> Self {
+        Self(index as u32)
+    }
+    pub fn index(&self) -> usize {
+        self.0 as usize
+    }
+}
+
+impl std::fmt::Display for BlockId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "B{}", self.index())
+    }
+}
+
+impl Into<NodeIndex> for BlockId {
+    fn into(self) -> NodeIndex {
+        NodeIndex::new(self.index())
+    }
+}
+
+impl From<NodeIndex> for BlockId {
+    fn from(item: NodeIndex) -> Self {
+        Self(item.index() as u32)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Literal {
     Int(i64),
@@ -41,6 +72,7 @@ pub enum Literal {
     String(String),
     Bool(bool),
     Tuple(Vec<Literal>),
+    Block(BlockId),
     Struct(Vec<(Option<StringKey>, Literal)>),
     Array(AstType, Vec<usize>), // Type and dimension, empty dimension is the same as a scalar
 }
@@ -54,6 +86,7 @@ impl From<Literal> for AstType {
 impl From<&Literal> for AstType {
     fn from(item: &Literal) -> Self {
         match item {
+            Literal::Block(_) => AstType::JumpTarget,
             Literal::Int(_) => AstType::Int,
             Literal::Float(_) => AstType::Float,
             Literal::Bool(_) => AstType::Bool,
@@ -218,6 +251,7 @@ pub enum ControlFlowMarker {
     LoopContinue(Option<StringKey>),
     BlockStart(Option<StringKey>, Vec<ParameterNode>),
     BlockEnd,
+    BlockReference(Box<AstNode>),
     Goto(StringKey, Vec<Argument>),
 }
 

@@ -135,7 +135,7 @@ impl Flatten {
             mode: FlattenMode::Function,
             static_scope: None,
             static_block: None,
-            current_block: BlockId(0),
+            current_block: BlockId::new(0),
             scopes: ScopeGraph::new(),
             block_links: HashMap::new(),
             functions: HashMap::new(),
@@ -2632,6 +2632,38 @@ impl Flatten {
                 );
                 self.switch_blocks(v_next);
                 Ok(FlattenResult::link(v))
+            }
+
+            Ast::ControlFlowMarker(ControlFlowMarker::BlockReference(expr)) => {
+                let block_id = match &expr.node {
+                    Ast::Identifier(key) => {
+                        let ty = AstType::func(vec![], AstType::Unit);
+                        if let Some((_variant_id, resolve_type, link_id)) =
+                            self.resolve_function_name(current_block_id, key, &ty, b)
+                        {
+                            let entry = self.get_entry(link_id);
+                            entry.block_id
+                        } else {
+                            let link_id = self.push_node(*expr, b)?.link_id.unwrap();
+                            let entry = self.get_entry(link_id);
+                            if entry.code.is_start() {
+                                entry.block_id
+                            } else {
+                                unimplemented!()
+                            }
+                        }
+                    }
+                    _ => unimplemented!("{:?}", expr),
+                };
+                let code = LCode::Val(Literal::Block(block_id));
+                let link_id = self.push_code(
+                    code,
+                    AstType::JumpTarget,
+                    None,
+                    span_id,
+                    VarDefinitionSpace::Default,
+                );
+                Ok(FlattenResult::link(link_id))
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(name, args)) => {

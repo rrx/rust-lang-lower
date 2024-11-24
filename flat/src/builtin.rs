@@ -1,7 +1,7 @@
 use crate::NodeBuilder;
 use compile_core::{
-    Argument, Ast, AstNode, AstType, BuiltinId, BuiltinPool, ControlFlowMarker, Lambda, Literal,
-    ReturnType, SpanId, StringKey,
+    Argument, Ast, AstNode, AstType, BlockId, BuiltinId, BuiltinPool, ControlFlowMarker, Lambda,
+    Literal, ReturnType, SpanId, StringKey,
 };
 use std::collections::{HashMap, VecDeque};
 
@@ -49,6 +49,12 @@ pub fn builtin_from_name(
             let rem = args.split_off(1);
             Some(ControlFlowMarker::BlockStart(get_string_arg(&args, b), vec![]).node(span_id))
         }
+
+        "resolve_label" => {
+            let node = args.pop().unwrap().expr();
+            Some(ControlFlowMarker::BlockReference(node.into()).node(span_id))
+        }
+
         "array" => {
             let mut args = args.iter().collect::<VecDeque<_>>();
             let ty_node = args.pop_front().unwrap().get_expr();

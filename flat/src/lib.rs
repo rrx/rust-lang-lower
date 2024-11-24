@@ -18,6 +18,7 @@ pub use blockify::{BlockifyError, ICodeModule, LCode, UseIndex, UseIndexList};
 pub use blocks::*;
 pub use builder::*;
 pub use builtin::*;
+pub use compile_core::BlockId;
 pub use flatten::*;
 pub use flatten_module::*;
 pub use flatten_seq::*;
