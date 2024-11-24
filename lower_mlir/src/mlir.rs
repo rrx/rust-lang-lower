@@ -629,6 +629,7 @@ impl<'c> MLIRGenerator<'c> {
 
                 if let AstType::Func(_func_arg_types, ret) = &ty {
                     let ret_ty = match ret.as_ref() {
+                        ReturnType::Never => &AstType::Unit,
                         ReturnType::Single(ty) => ty,
                         ReturnType::Multi(_) => {
                             /*
@@ -1314,6 +1315,7 @@ impl<'c> MLIRGenerator<'c> {
             let region = Region::new();
 
             let ret_type = match ast_ret_type.as_ref() {
+                ReturnType::Never => vec![],
                 ReturnType::Single(ty) => {
                     let ret_type = if let AstType::Unit = ty {
                         vec![]

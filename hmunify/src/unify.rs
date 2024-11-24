@@ -310,6 +310,7 @@ impl TypeUnify {
                 }
 
                 let resolved_ret = match ret.as_ref() {
+                    ReturnType::Never => AstType::Unit,
                     ReturnType::Multi(_) => unimplemented!(),
                     ReturnType::Single(ret) => {
                         if let Some(ret) = self.resolve(ret) {

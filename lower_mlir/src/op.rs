@@ -133,6 +133,7 @@ impl<'c> MLIRGenerator<'c> {
                     .collect::<Vec<_>>();
 
                 let results = match ret.as_ref() {
+                    ReturnType::Never => vec![],
                     ReturnType::Single(ret) => {
                         vec![self.from_type(ret).0]
                     }

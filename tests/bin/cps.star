@@ -1,24 +1,29 @@
 q.use("prelude")
 
 def main():
+  count = 0
+
   # CPS function that never returns
   def unit(x):
     # verify that the function scope here is able to access highler level scopes
     # by jumping to B
     # deferred goto
     q.print(x)
+    count = count + 1
     q.goto(label_c, x+1)
     # nothing happens here
     1
 
   def label_d(x: int):
     q.print(x)
-    # unable to use x to pass to goto
     # deferred goto
-    q.goto(label_e, 1)
+    count = count + 1
+    q.goto(label_e, x+1)
 
   def label_c(x):
     q.print(x)
+    q.check(x == 2)
+    count = count + 1
     q.goto("B")
 
   1
@@ -44,10 +49,13 @@ def main():
 
   def label_e(x):
     q.print(x)
+    q.check(x == 2)
+    count = count + 1
     q.goto("final")
 
   q.label("final")
   q.goto("last")
   q.label("last")
+  q.check(count == 4)
 
   return 0

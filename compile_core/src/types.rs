@@ -19,6 +19,7 @@ pub type TypePool = InternPool<TypeId, AstType>;
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub enum ReturnType {
+    Never,
     Single(AstType),
     Multi(Vec<AstType>),
 }
@@ -26,6 +27,7 @@ pub enum ReturnType {
 impl std::fmt::Display for ReturnType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Never => write!(f, "Never"),
             Self::Single(ty) => {
                 write!(f, "S({})", ty)
             }
@@ -43,12 +45,13 @@ impl std::fmt::Display for ReturnType {
 impl ReturnType {
     pub fn is_unknown(&self) -> bool {
         match self {
-            ReturnType::Single(ty) => {
+            Self::Never => return false,
+            Self::Single(ty) => {
                 if ty.is_unknown() {
                     return true;
                 }
             }
-            ReturnType::Multi(types) => {
+            Self::Multi(types) => {
                 for ty in types {
                     if ty.is_unknown() {
                         return true;
