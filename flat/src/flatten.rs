@@ -1432,17 +1432,17 @@ impl Flatten {
 
             let (def, def_span_id) = self.get_ast_template(template_id).clone();
             // New Func Scope
-            let (fun_block_id, fun_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
-            // block graph
-            self.blocks
-                .block_succ(goto_block_id, fun_block_id, Successor::BlockScope);
+            //let (fun_block_id, fun_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
+            //// block graph
+            //self.blocks
+            //.block_succ(goto_block_id, fun_block_id, Successor::BlockScope);
 
             let (variant_id, fun_scope_id, fun_block_id, def_func_type, def_arg_type, _) = self
                 .push_cps_block(
                     Some(label.into()),
                     scope_id,
-                    fun_scope_id,
-                    fun_block_id,
+                    //fun_scope_id,
+                    //fun_block_id,
                     def.clone(),
                     def_span_id,
                     b,
@@ -1516,7 +1516,7 @@ impl Flatten {
     fn push_cps_jump(
         &mut self,
         def: &Lambda,
-        def_func_type: AstType,
+        _def_func_type: AstType,
         def_arg_type: AstType,
         target_block_id: BlockId,
         def_span_id: SpanId,
@@ -1542,14 +1542,19 @@ impl Flatten {
         &mut self,
         name: Option<StringKey>,
         scope_id: ScopeId,
-        fun_scope_id: ScopeId,
-        fun_block_id: BlockId,
+        //fun_scope_id: ScopeId,
+        //fun_block_id: BlockId,
         def: Lambda,
         def_span_id: SpanId,
         b: &mut NB,
     ) -> Result<(VariantId, ScopeId, BlockId, AstType, AstType, AstType)> {
         // call in the context of the caller, which is a goto
         let current_block_id = self.current_block_id();
+
+        let (fun_block_id, fun_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
+        // block graph
+        self.blocks
+            .block_succ(current_block_id, fun_block_id, Successor::BlockScope);
 
         //let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
         // we might want to handle this later
@@ -1984,16 +1989,12 @@ impl Flatten {
 
         let (def, def_span_id) = self.get_ast_template(template_id).clone();
         // New Func Scope
-        let (fun_block_id, fun_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
-        // block graph
-        self.blocks
-            .block_succ(goto_block_id, fun_block_id, Successor::BlockScope);
 
         let (variant_id, _, fun_block_id, def_func_type, def_arg_type, _) = self.push_cps_block(
             Some(name.into()),
             scope_id,
-            fun_scope_id,
-            fun_block_id,
+            //fun_scope_id,
+            //fun_block_id,
             def.clone(),
             def_span_id,
             b,
