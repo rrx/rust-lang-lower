@@ -227,12 +227,11 @@ impl Flatten {
 
     pub fn resolve_all_function_name(
         &self,
-        block_id: BlockId,
+        start_scope_id: ScopeId,
         name: &StringKey,
     ) -> Vec<(VariantId, AstType, LinkId)> {
         let mut out = vec![];
-        let block = self.blocks.get_block(block_id);
-        for scope_id in self.scopes.walk_scopes(block.scope_id) {
+        for scope_id in self.scopes.walk_scopes(start_scope_id) {
             let scope = self.scopes.get_scope(scope_id);
             if let Some(e) = scope.entries.get(name) {
                 for (index, v) in e.variants.iter().enumerate() {
@@ -246,14 +245,14 @@ impl Flatten {
 
     pub fn resolve_function_name(
         &self,
-        block_id: BlockId,
+        scope_id: ScopeId,
         name: &StringKey,
         ty: &AstType,
         b: &mut NB,
     ) -> Option<(VariantId, AstType, LinkId)> {
         let mut result = None;
         let snapshot = b.types.u.snapshot();
-        for (variant_id, r_ty, link_id) in self.resolve_all_function_name(block_id, &name) {
+        for (variant_id, r_ty, link_id) in self.resolve_all_function_name(scope_id, &name) {
             println!("trying {}, {}<=>{}", variant_id, &ty, &r_ty);
             if let Ok(_) = b.types.u.unify(&ty, &r_ty) {
                 result = Some((variant_id, r_ty, link_id));
@@ -1078,11 +1077,12 @@ impl Flatten {
         //let s_global = b.labels.r(global_key.into());
         let current_block_id = self.current_block_id();
         self.switch_blocks(self.static_block_id());
+        let block = self.blocks.get_block(current_block_id);
 
         // if it's defined in static scope, just call it
         //println!("[{},{}] RX:  {}", s, s_global, &call_func_type);
         let (_variant_id, v_entry) = if let Some((variant_id, r_ty, v_entry)) =
-            self.resolve_function_name(current_block_id, &name, &call_func_type, b)
+            self.resolve_function_name(block.scope_id, &name, &call_func_type, b)
         {
             //println!("[{}] R2: {}, {:?}", s, call_func_type, (v_entry));
             // unify the resolved function with the caller
@@ -1426,7 +1426,6 @@ impl Flatten {
 
         // if a template exists, use it
         if let Some(template_id) = self.resolve_template(scope_id, label.into()) {
-            //let goto_block_id = self.current_block_id();
             let (
                 _variant_id,
                 fun_scope_id,
@@ -1441,31 +1440,13 @@ impl Flatten {
                 template_id,
                 args,
                 call_span_id,
-                //fun_scope_id,
-                //fun_block_id,
-                //def.clone(),
-                //def_span_id,
                 b,
             )?;
-
-            // switch back to goto block
-            //self.switch_blocks(goto_block_id);
-            //let link_id = self.push_cps_jump(
-            //&def,
-            //def_func_type,
-            //def_arg_type,
-            //fun_block_id,
-            //def_span_id,
-            //call_span_id,
-            //args,
-            //b,
-            //)?;
 
             println!(
                 "{}: push_goto lambda: from {}:{}=>{}:{}, link: {}",
                 s_name, scope_id, current_block_id, fun_scope_id, fun_block_id, link_id
             );
-            //self.switch_blocks(current_block_id);
             return Ok(FlattenResult::statement());
         }
 
@@ -1545,10 +1526,6 @@ impl Flatten {
         template_id: TemplateId,
         args: Vec<Argument>,
         call_span_id: SpanId,
-        //fun_scope_id: ScopeId,
-        //fun_block_id: BlockId,
-        //def: Lambda,
-        //def_span_id: SpanId,
         b: &mut NB,
     ) -> Result<(
         VariantId,
@@ -1576,6 +1553,22 @@ impl Flatten {
         // This expects to be called in a block that is ready to jump
         let (def_func_type, def_arg_type, def_ret_type) = self.refresh_func_type(&def, b);
 
+        // switch back to where it was called
+        //self.switch_blocks(current_block_id);
+        // switch back to goto block
+        // write out GOTO with new block as the target
+        let link_id = self.push_cps_jump(
+            &def,
+            def_func_type.clone(),
+            def_arg_type.clone(),
+            fun_block_id,
+            def_span_id,
+            call_span_id,
+            args,
+            b,
+        )?;
+        let jump_block_id = self.current_block_id();
+
         // Start lambda block
         let s_name = if let Some(name) = name {
             b.labels.r(name.into())
@@ -1593,7 +1586,7 @@ impl Flatten {
             fun_block_id
         );
 
-        let body = *def.body.clone().unwrap();
+        let body = *def.body.unwrap();
 
         self.switch_blocks(fun_block_id);
         let (entry_link_id, _) = self.push_start_block(
@@ -1644,20 +1637,8 @@ impl Flatten {
 
         self.drain_diagnostics(b);
 
-        // switch back to where it was called
-        self.switch_blocks(current_block_id);
-
-        // switch back to goto block
-        let link_id = self.push_cps_jump(
-            &def,
-            def_func_type.clone(),
-            def_arg_type.clone(),
-            fun_block_id,
-            def_span_id,
-            call_span_id,
-            args,
-            b,
-        )?;
+        // make sure we return control back to the goto block
+        self.switch_blocks(jump_block_id);
 
         return Ok((
             variant_id,
@@ -1980,7 +1961,7 @@ impl Flatten {
         }
     }
 
-    pub fn push_cps_and_jump(
+    pub fn push_cps_block_with_placeholder_check(
         &mut self,
         name: StringKey,
         template_id: TemplateId,
@@ -2012,7 +1993,6 @@ impl Flatten {
 
         //if let Some((variant_id, resolve_type, link_id)) = self.resolve_function_name(goto_block_id, name, &ty, b)
 
-        //let (def, def_span_id) = self.get_ast_template(template_id).clone();
         let (_variant_id, _, _fun_block_id, _def_func_type, _def_arg_type, _, link_id) = self
             .push_cps_block(
                 Some(name.into()),
@@ -2020,8 +2000,6 @@ impl Flatten {
                 template_id,
                 args,
                 call_span_id,
-                //def.clone(),
-                //def_span_id,
                 b,
             )?;
 
@@ -2294,7 +2272,13 @@ impl Flatten {
                         self.switch_blocks(d.block_id);
                         //let (args, _) = self.calculate_function_arguments(&def, &d.args, def_span_id, d.call_span_id, b)?;
                         let args = d.args;
-                        self.push_cps_and_jump(name, template_id, args, d.call_span_id, b)?;
+                        self.push_cps_block_with_placeholder_check(
+                            name,
+                            template_id,
+                            args,
+                            d.call_span_id,
+                            b,
+                        )?;
                     }
                     self.switch_blocks(current_block_id);
                     return Ok(FlattenResult::statement());
@@ -2559,8 +2543,9 @@ impl Flatten {
                 let block_id = match &expr.node {
                     Ast::Identifier(key) => {
                         let ty = AstType::func(vec![], AstType::Unit);
+                        let scope_id = block.scope_id;
                         if let Some((_variant_id, _resolve_type, link_id)) =
-                            self.resolve_function_name(current_block_id, key, &ty, b)
+                            self.resolve_function_name(scope_id, key, &ty, b)
                         {
                             let entry = self.get_entry(link_id);
                             entry.block_id
