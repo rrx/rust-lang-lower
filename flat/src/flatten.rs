@@ -229,14 +229,14 @@ impl Flatten {
         &self,
         start_scope_id: ScopeId,
         name: &StringKey,
-    ) -> Vec<(VariantId, AstType, LinkId)> {
+    ) -> Vec<(VariantId, AstType, LinkId, ScopeId)> {
         let mut out = vec![];
         for scope_id in self.scopes.walk_scopes(start_scope_id) {
             let scope = self.scopes.get_scope(scope_id);
             if let Some(e) = scope.entries.get(name) {
                 for (index, v) in e.variants.iter().enumerate() {
                     let variant_id = VariantId(index as u32);
-                    out.push((variant_id, v.ty.clone(), v.link_id));
+                    out.push((variant_id, v.ty.clone(), v.link_id, scope_id));
                 }
             }
         }
@@ -245,17 +245,19 @@ impl Flatten {
 
     pub fn resolve_function_name(
         &self,
-        scope_id: ScopeId,
+        start_scope_id: ScopeId,
         name: &StringKey,
-        ty: &AstType,
+        call_func_type: &AstType,
         b: &mut NB,
-    ) -> Option<(VariantId, AstType, LinkId)> {
+    ) -> Option<(VariantId, AstType, LinkId, ScopeId)> {
         let mut result = None;
         let snapshot = b.types.u.snapshot();
-        for (variant_id, r_ty, link_id) in self.resolve_all_function_name(scope_id, &name) {
-            println!("trying {}, {}<=>{}", variant_id, &ty, &r_ty);
-            if let Ok(_) = b.types.u.unify(&ty, &r_ty) {
-                result = Some((variant_id, r_ty, link_id));
+        for (variant_id, r_ty, link_id, scope_id) in
+            self.resolve_all_function_name(start_scope_id, &name)
+        {
+            println!("trying {}, {}<=>{}", variant_id, &call_func_type, &r_ty);
+            if let Ok(_) = b.types.u.unify(&call_func_type, &r_ty) {
+                result = Some((variant_id, r_ty, link_id, scope_id));
                 break;
             }
         }
@@ -1081,7 +1083,7 @@ impl Flatten {
 
         // if it's defined in static scope, just call it
         //println!("[{},{}] RX:  {}", s, s_global, &call_func_type);
-        let (_variant_id, v_entry) = if let Some((variant_id, r_ty, v_entry)) =
+        let (_variant_id, v_entry) = if let Some((variant_id, r_ty, v_entry, _scope_id)) =
             self.resolve_function_name(block.scope_id, &name, &call_func_type, b)
         {
             //println!("[{}] R2: {}, {:?}", s, call_func_type, (v_entry));
@@ -1533,11 +1535,6 @@ impl Flatten {
         let current_block_id = self.current_block_id();
         let (def, def_span_id) = self.get_ast_template(template_id).clone();
 
-        let (fun_block_id, fun_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
-        // block graph
-        self.blocks
-            .block_succ(current_block_id, fun_block_id, Successor::BlockScope);
-
         //let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
         // we might want to handle this later
         // return in a CPS will return from the scoped function
@@ -1546,76 +1543,91 @@ impl Flatten {
         // This expects to be called in a block that is ready to jump
         let (def_func_type, def_arg_type, def_ret_type) = self.refresh_func_type(&def, b);
 
-        // switch back to where it was called
-        //self.switch_blocks(current_block_id);
-        // switch back to goto block
-        // write out GOTO with new block as the target
-        let link_id = self.push_cps_jump(
-            &def,
-            def_func_type.clone(),
-            def_arg_type.clone(),
-            fun_block_id,
-            def_span_id,
-            call_span_id,
-            args,
-            b,
-        )?;
-        let jump_block_id = self.current_block_id();
+        // WRITE GOTO
+        let (args, _) =
+            self.calculate_function_arguments(&def, &args, def_span_id, call_span_id, b)?;
 
-        // Start lambda block
-        let s_name = b.labels.r(name.into());
-        let lambda_name = b.labels.fresh_key(&s_name);
+        let call_values = self.push_call_arguments(args, call_span_id, b)?;
+        let call_func_type = argvec_type(&call_values);
 
-        println!(
-            "{}: push_cps_block in {}:{} => {}:{}",
-            s_name,
-            scope_id,
-            self.current_block_id(),
-            fun_scope_id,
-            fun_block_id
-        );
+        // unify the caller args and the refreshed function args
+        b.unify(&call_func_type, call_span_id, &def_arg_type, def_span_id);
 
-        let body = *def.body.unwrap();
+        let goto_block_id = self.current_block_id();
 
-        self.switch_blocks(fun_block_id);
-        let (entry_link_id, _) = self.push_start_block(
-            fun_scope_id,
-            def_func_type.clone(),
-            Some(lambda_name),
-            def_span_id,
-            VarDefinitionSpace::Default,
-        );
-        // add the name to scope
-        // do this early for recursive functions
-        self.scopes
-            .scope_define(scope_id, lambda_name, entry_link_id);
+        // BAKE CPS IF NEEDED
+        let (variant_id, fun_block_id, fun_scope_id) =
+            if let Some((variant_id, _resolve_type, link_id, fun_scope_id)) =
+                self.resolve_function_name(scope_id, &name, &call_func_type, b)
+            {
+                let entry = self.get_entry(link_id);
+                (variant_id, entry.block_id, fun_scope_id)
+            } else {
+                let (fun_block_id, fun_scope_id) =
+                    self.new_scope_and_block(ScopeType::Block, scope_id);
+                // block graph
+                self.blocks
+                    .block_succ(current_block_id, fun_block_id, Successor::BlockScope);
+                // Start lambda block
+                let s_name = b.labels.r(name.into());
+                let lambda_name = b.labels.fresh_key(&s_name);
+                println!(
+                    "{}: push_cps_block in {}:{} => {}:{}",
+                    s_name,
+                    scope_id,
+                    self.current_block_id(),
+                    fun_scope_id,
+                    fun_block_id
+                );
+                let body = *def.body.unwrap();
 
-        // add entry to scope, for recursion
-        let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
-        // we need to know the link
-        //let variant_id = if let Some(global_name) = global_name {
-        let variant_id = self
-            .scopes
-            .variant_add(scope_id, lambda_name, r_ty1, entry_link_id);
-        //} else {
-        //None
-        //};
+                self.switch_blocks(fun_block_id);
+                let (entry_link_id, _) = self.push_start_block(
+                    fun_scope_id,
+                    def_func_type.clone(),
+                    Some(lambda_name),
+                    def_span_id,
+                    VarDefinitionSpace::Default,
+                );
+                // add the name to scope
+                // do this early for recursive functions
+                // add entry to scope, for recursion
+                self.scopes
+                    .scope_define(scope_id, lambda_name, entry_link_id);
 
-        // flatten function, and switch to next
-        let _ = self.push_node(body, b)?;
+                let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
+                // we need to know the link
+                //let variant_id = if let Some(global_name) = global_name {
+                let variant_id =
+                    self.scopes
+                        .variant_add(scope_id, lambda_name, r_ty1, entry_link_id);
+                //} else {
+                //None
+                //};
 
-        // terminate if not already terminated
-        // this is for dead code
-        let block = self.blocks.get_block(self.current_block_id());
-        if !block.is_term() {
-            self.push_code(
-                LCode::PlaceholderTerminal(block.last().unwrap()),
-                AstType::Unit,
-                None,
-                def_span_id,
-                VarDefinitionSpace::Default,
-            );
-        }
+                // flatten function, and switch to next
+                let _ = self.push_node(body, b)?;
+                // terminate if not already terminated
+                // this is for dead code
+                let block = self.blocks.get_block(self.current_block_id());
+                if !block.is_term() {
+                    self.push_code(
+                        LCode::PlaceholderTerminal(block.last().unwrap()),
+                        AstType::Unit,
+                        None,
+                        def_span_id,
+                        VarDefinitionSpace::Default,
+                    );
+                }
+
+                (variant_id, fun_block_id, fun_scope_id)
+            };
+
+        // NOW JUMP
+        // now that we have the arguments calculated, and the lambda baked, jump!
+        self.switch_blocks(goto_block_id);
+        let link_id = self.push_jump(fun_block_id.into(), call_values, call_span_id);
+        //let jump_block_id = self.current_block_id();
 
         // if this really is a CPS function, then it should never return
         // TODO: verify that it never returns, could be with the function signature
@@ -1627,7 +1639,7 @@ impl Flatten {
         self.drain_diagnostics(b);
 
         // make sure we return control back to the goto block
-        self.switch_blocks(jump_block_id);
+        //self.switch_blocks(jump_block_id);
 
         return Ok((
             variant_id,
@@ -2526,7 +2538,7 @@ impl Flatten {
                     Ast::Identifier(key) => {
                         let ty = AstType::func(vec![], AstType::Unit);
                         let scope_id = block.scope_id;
-                        if let Some((_variant_id, _resolve_type, link_id)) =
+                        if let Some((_variant_id, _resolve_type, link_id, _scope_id)) =
                             self.resolve_function_name(scope_id, key, &ty, b)
                         {
                             let entry = self.get_entry(link_id);
