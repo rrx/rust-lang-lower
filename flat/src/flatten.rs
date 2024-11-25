@@ -2041,6 +2041,62 @@ impl Flatten {
         }
     }
 
+    pub fn push_cps_and_jump(
+        &mut self,
+        name: StringKey,
+        template_id: TemplateId,
+        args: Vec<Argument>,
+        call_span_id: SpanId,
+        b: &mut NB,
+    ) -> Result<LinkId> {
+        let goto_block_id = self.current_block_id();
+
+        let block = self.blocks.get_block(goto_block_id);
+        let scope_id = block.scope_id;
+        let last_link_id = block.last().unwrap();
+        let entry = self.get_entry_mut(last_link_id);
+        if let LCode::PlaceholderTerminal(prev_link_id) = entry.code {
+            // invalidate dummy jump
+            entry.next = prev_link_id;
+            let block = self.blocks.get_block_mut(goto_block_id);
+            // remove last entry in the block
+            block.last = Some(prev_link_id);
+            block.term = false;
+        }
+
+        let (def, def_span_id) = self.get_ast_template(template_id).clone();
+        // New Func Scope
+        let (fun_block_id, fun_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
+        // block graph
+        self.blocks
+            .block_succ(goto_block_id, fun_block_id, Successor::BlockScope);
+
+        let (_, fun_block_id, def_func_type, def_arg_type, _) = self.push_cps_block(
+            Some(name.into()),
+            scope_id,
+            fun_scope_id,
+            fun_block_id,
+            def.clone(),
+            def_span_id,
+            b,
+        )?;
+
+        // switch back to goto block
+        self.switch_blocks(goto_block_id);
+        let link_id = self.push_cps_jump(
+            &def,
+            def_func_type,
+            def_arg_type,
+            fun_block_id,
+            def_span_id,
+            call_span_id,
+            args,
+            b,
+        )?;
+        println!("bake deferred goto: link: {}", link_id);
+        Ok(link_id)
+    }
+
     pub fn push_node(&mut self, node: AstNode, b: &mut NB) -> Result<FlattenResult> {
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block_mut(current_block_id);
@@ -2304,20 +2360,9 @@ impl Flatten {
 
                     // check for deferrals and apply them
                     let scope = self.scopes.get_scope_mut(scope_id);
-                    let mut deferrals = vec![];
-                    loop {
-                        if let Some(d) = scope.deferred_goto.pop(name.into()) {
-                            deferrals.push(d);
-                        } else {
-                            break;
-                        }
-                    }
+                    let deferrals = scope.deferred_goto.pop_all(name.into());
 
                     for d in deferrals {
-                        //let new_block_id = self.blocks.new_block(scope_id);
-                        //self.switch_blocks(d.block_id);
-                        //self.switch_blocks(new_block_id);
-                        //
                         // invalidate dummy jump
                         let entry = self.get_entry_mut(d.link_id);
                         entry.next = d.link_id;
@@ -2325,51 +2370,9 @@ impl Flatten {
                         // remove last entry in the block
                         block.last = Some(d.link_id);
                         block.term = false;
-                        let goto_block_id = d.block_id;
 
-                        let block = self.blocks.get_block(d.block_id);
-                        let scope = self.scopes.get_scope(block.scope_id);
-                        let parent_block_id = scope.entry_block.unwrap();
-
-                        let (def, def_span_id) = self.get_ast_template(template_id).clone();
-                        // New Func Scope
-                        let (fun_block_id, fun_scope_id) =
-                            self.new_scope_and_block(ScopeType::Block, scope_id);
-                        // block graph
-                        self.blocks.block_succ(
-                            parent_block_id,
-                            fun_block_id,
-                            Successor::BlockScope,
-                        );
-
-                        let (_, fun_block_id, def_func_type, def_arg_type, _) = self
-                            .push_cps_block(
-                                Some(name.into()),
-                                scope_id,
-                                fun_scope_id,
-                                fun_block_id,
-                                def.clone(),
-                                def_span_id,
-                                b,
-                            )?;
-
-                        // switch back to goto block
-                        self.switch_blocks(goto_block_id);
-                        let link_id = self.push_cps_jump(
-                            &def,
-                            def_func_type,
-                            def_arg_type,
-                            fun_block_id,
-                            def_span_id,
-                            d.call_span_id,
-                            d.args.clone(),
-                            b,
-                        )?;
-
-                        //let jump_args = self.push_call_arguments(d.args, d.call_span_id, b)?;
-                        //let link_id =
-                        //self.push_jump(fun_block_id.into(), jump_args, d.call_span_id);
-                        println!("bake deferred goto: link: {}", link_id);
+                        self.switch_blocks(d.block_id);
+                        self.push_cps_and_jump(name, template_id, d.args, d.call_span_id, b)?;
                     }
                     self.switch_blocks(current_block_id);
 
