@@ -813,8 +813,8 @@ impl Flatten {
         call_span_id: SpanId,
         b: &mut NB,
     ) -> Result<(
-        AstType, // return type
         Vec<Argument>,
+        AstType, // return type
     )> {
         //println!("args: {:?}", args);
 
@@ -991,7 +991,7 @@ impl Flatten {
                 call_span_id,
             );
         }
-        Ok((ret.clone(), args))
+        Ok((args, ret.clone()))
     }
 
     fn push_call_arguments(
@@ -1162,7 +1162,7 @@ impl Flatten {
 
         // look up the prototype
         // calculate the calling arguments
-        let (_, args) =
+        let (args, _) =
             self.calculate_function_arguments(&def, &args, def_span_id, call_span_id, b)?;
 
         let call_values = self.push_call_arguments(args, call_span_id, b)?;
@@ -1184,12 +1184,7 @@ impl Flatten {
                 self.push_bake_static(name, def, def_span_id, call_func_type, call_span_id, b)?;
             self.drain_diagnostics(b);
             let (fun_link_id, _bake_ty) = r;
-
             self.switch_blocks(current_block_id);
-            //println!(
-            //"call: call_ty: {}, bake_ty:{}, ret_ty: {}",
-            //call_ty, bake_ty, ret_ty
-            //);
             self.push_function_call(fun_link_id, call_values, def_ret_ty, call_span_id)
         } else {
             self.switch_blocks(current_block_id);
@@ -1277,7 +1272,7 @@ impl Flatten {
         println!("push_builtin_call: {:?}, scope: {}", id, block.scope_id);
 
         let def_span_id = b.spans.get_span_unknown();
-        let (ret_ty, args) =
+        let (args, ret_ty) =
             self.calculate_function_arguments(&def, &args, def_span_id, call_span_id, b)?;
 
         let call_values = self.push_call_arguments(args, call_span_id, b)?;
@@ -1440,9 +1435,9 @@ impl Flatten {
             let (fun_block_id, fun_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
             // block graph
             self.blocks
-                .block_succ(parent_block_id, fun_block_id, Successor::BlockScope);
+                .block_succ(goto_block_id, fun_block_id, Successor::BlockScope);
 
-            let (fun_scope_id, fun_block_id, def_func_type, def_arg_type, _) = self
+            let (variant_id, fun_scope_id, fun_block_id, def_func_type, def_arg_type, _) = self
                 .push_cps_block(
                     Some(label.into()),
                     scope_id,
@@ -1529,7 +1524,7 @@ impl Flatten {
         args: Vec<Argument>,
         b: &mut NB,
     ) -> Result<LinkId> {
-        let (_ret_ty, args) =
+        let (args, _) =
             self.calculate_function_arguments(&def, &args, def_span_id, call_span_id, b)?;
 
         let call_values = self.push_call_arguments(args, call_span_id, b)?;
@@ -1552,7 +1547,8 @@ impl Flatten {
         def: Lambda,
         def_span_id: SpanId,
         b: &mut NB,
-    ) -> Result<(ScopeId, BlockId, AstType, AstType, AstType)> {
+    ) -> Result<(VariantId, ScopeId, BlockId, AstType, AstType, AstType)> {
+        // call in the context of the caller, which is a goto
         let current_block_id = self.current_block_id();
 
         //let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
@@ -1599,7 +1595,7 @@ impl Flatten {
         let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
         // we need to know the link
         //let variant_id = if let Some(global_name) = global_name {
-        let _variant_id = self
+        let variant_id = self
             .scopes
             .variant_add(scope_id, lambda_name, r_ty1, entry_link_id);
         //} else {
@@ -1635,6 +1631,7 @@ impl Flatten {
         self.switch_blocks(current_block_id);
 
         return Ok((
+            variant_id,
             fun_scope_id,
             fun_block_id,
             def_func_type,
@@ -1642,58 +1639,6 @@ impl Flatten {
             def_ret_type,
         ));
     }
-
-    /*
-    fn push_bake_block(
-        &mut self,
-        local_name: StringKey,
-        global_name: StringKey,
-        def: Lambda,
-        def_func_type: AstType,
-        def_span_id: SpanId,
-        b: &mut NB,
-    ) -> Result<(VariantId, ScopeId, BlockId)> {
-        let fun_block_id = self.current_block_id();
-        let block = self.blocks.get_block(fun_block_id);
-        assert!(block.len() == 0);
-        let fun_scope_id = block.scope_id;
-
-        let (entry_link_id, _) = self.push_start_block(
-            fun_scope_id,
-            def_func_type.clone(),
-            Some(global_name),
-            def_span_id,
-            VarDefinitionSpace::Default,
-        );
-
-        // block graph
-        // make sure it's not orphaned
-        let scope = self.scopes.get_scope(fun_scope_id);
-        let parent = scope.entry_block.unwrap();
-        self.blocks
-            .block_succ(parent, fun_block_id, Successor::BlockScope);
-
-        // add entry to scope, for recursion
-        let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
-        let variant_id = self
-            .scopes
-            .variant_add(fun_scope_id, local_name, r_ty1, entry_link_id);
-
-        // add the name to scope
-        // do this early for recursive functions
-        self.scopes
-            .scope_define(fun_scope_id, global_name, entry_link_id);
-
-        // flatten function, and switch to next
-        self.switch_blocks(fun_block_id);
-        let body = def.body.unwrap();
-        let _ = self.push_node(*body, b)?;
-        let block = self.blocks.get_block(self.current_block_id());
-        assert!(block.is_term());
-
-        Ok((variant_id, fun_scope_id, fun_block_id))
-    }
-    */
 
     fn push_bake_lambda_inner(
         &mut self,
@@ -2014,14 +1959,6 @@ impl Flatten {
         b: &mut NB,
     ) -> Result<LinkId> {
         // we want to handle monomorphization here.
-        /*
-                        let ty = AstType::func(vec![], AstType::Unit);
-                        if let Some((_variant_id, resolve_type, link_id)) =
-                            self.resolve_function_name(current_block_id, key, &ty, b)
-                        {
-                            let entry = self.get_entry(link_id);
-                            entry.block_id
-        */
         let goto_block_id = self.current_block_id();
 
         let block = self.blocks.get_block(goto_block_id);
@@ -2037,6 +1974,14 @@ impl Flatten {
             block.term = false;
         }
 
+        // construct call function type
+        //let call_func_type = AstType::Func(
+        //AstType::Struct(call_ty.fields()).into(),
+        //ReturnType::Never
+        //);
+
+        //if let Some((variant_id, resolve_type, link_id)) = self.resolve_function_name(goto_block_id, name, &ty, b)
+
         let (def, def_span_id) = self.get_ast_template(template_id).clone();
         // New Func Scope
         let (fun_block_id, fun_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
@@ -2044,7 +1989,7 @@ impl Flatten {
         self.blocks
             .block_succ(goto_block_id, fun_block_id, Successor::BlockScope);
 
-        let (_, fun_block_id, def_func_type, def_arg_type, _) = self.push_cps_block(
+        let (variant_id, _, fun_block_id, def_func_type, def_arg_type, _) = self.push_cps_block(
             Some(name.into()),
             scope_id,
             fun_scope_id,
@@ -2333,7 +2278,9 @@ impl Flatten {
 
                     for d in deferrals {
                         self.switch_blocks(d.block_id);
-                        self.push_cps_and_jump(name, template_id, d.args, d.call_span_id, b)?;
+                        //let (args, _) = self.calculate_function_arguments(&def, &d.args, def_span_id, d.call_span_id, b)?;
+                        let args = d.args;
+                        self.push_cps_and_jump(name, template_id, args, d.call_span_id, b)?;
                     }
                     self.switch_blocks(current_block_id);
                     return Ok(FlattenResult::statement());
