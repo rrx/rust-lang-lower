@@ -688,7 +688,8 @@ impl Flatten {
             LCode::Return => unreachable!(),
             LCode::Yield => unreachable!(),
             LCode::Jump(_) => unreachable!(),
-            LCode::DummyTerminal => unreachable!(),
+            LCode::PlaceholderTerminal(_) => unreachable!(),
+            LCode::PlaceholderCodeReference => unreachable!(),
             LCode::Branch(_, _, _) => unreachable!(),
             LCode::Builtin(_) => unreachable!(),
             LCode::CallValue(_) => unreachable!(),
@@ -1505,6 +1506,8 @@ impl Flatten {
 
         // if a label exists, then jump to it
         if let Some(target_block_id) = self.resolve_label(scope_id, label.into()) {
+            // not possible to pass args to a label, use a CPS function instead
+            assert_eq!(args.len(), 0);
             let target_block = self.blocks.get_block(target_block_id);
             let target_scope_id = target_block.scope_id;
             let jump_args = self.push_call_arguments(args, call_span_id, b)?;
@@ -1523,10 +1526,8 @@ impl Flatten {
             .find_nearest_scope(scope_id, &[ScopeType::Function])
         {
             let link_id = block.last().unwrap();
-            // push dummy jump, which we will drop later
-            //self.push_jump(BlockId(0), vec![], call_span_id);
             self.push_code(
-                LCode::DummyTerminal,
+                LCode::PlaceholderTerminal(link_id),
                 AstType::Unit,
                 None,
                 call_span_id,
@@ -1650,7 +1651,7 @@ impl Flatten {
         let block = self.blocks.get_block(self.current_block_id());
         if !block.is_term() {
             self.push_code(
-                LCode::DummyTerminal,
+                LCode::PlaceholderTerminal(block.last().unwrap()),
                 AstType::Unit,
                 None,
                 def_span_id,

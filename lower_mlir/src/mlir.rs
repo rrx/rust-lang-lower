@@ -506,8 +506,11 @@ impl<'c> MLIRGenerator<'c> {
                 self.lower_jump(v, target_value_id)?;
             }
 
-            LCode::DummyTerminal => {
-                unreachable!("Dummy terminated block")
+            LCode::PlaceholderTerminal(_) => {
+                unreachable!("Placeholder terminated block")
+            }
+            LCode::PlaceholderCodeReference => {
+                unreachable!("Placeholder Code Reference")
             }
 
             LCode::Val(lit) => {

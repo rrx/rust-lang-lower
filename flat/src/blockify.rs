@@ -99,7 +99,8 @@ pub enum LCode {
 
     // jump to block, with num args
     Jump(CodeOffset),
-    DummyTerminal,
+    PlaceholderTerminal(LinkId),
+    PlaceholderCodeReference,
 
     Branch(CodeOffset, BlockId, BlockId),
     Ternary(CodeOffset, BlockId, BlockId), // condition, then_entry, else_entry
@@ -117,7 +118,7 @@ impl LCode {
     pub fn is_term(&self) -> bool {
         match self {
             Self::Jump(_) => true,
-            Self::DummyTerminal => true,
+            Self::PlaceholderTerminal(_) => true,
             Self::Branch(_, _, _) => true,
             Self::Return => true,
             Self::Yield => true,
