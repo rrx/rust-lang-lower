@@ -124,7 +124,6 @@ impl TypeBuilder {
             }
         }
     }
-
     pub fn dump(&mut self) {
         self.u.dump();
     }
@@ -431,6 +430,17 @@ impl NodeBuilder {
         let span = self.spans.lookup(span_id);
         self.spans
             .push_diagnostic(compile_core::diagnostic_warning(msg, span));
+    }
+
+    pub fn unify(&mut self, a: &AstType, a_span_id: SpanId, b: &AstType, b_span_id: SpanId) {
+        if self.types.u.unify(a, b).is_err() {
+            let ty1 = self.types.u.resolve(a).unwrap();
+            let ty2 = self.types.u.resolve(b).unwrap();
+            self.push_error_labels(vec![
+                self.primary_label(&format!("Type Mismatch: {}", &ty1), a_span_id),
+                self.secondary_label(&format!("reference: {}", &ty2), b_span_id),
+            ]);
+        }
     }
 }
 

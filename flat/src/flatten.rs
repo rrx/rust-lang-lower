@@ -33,6 +33,15 @@ use crate::{
 
 type ArgVec = Vec<(Option<StringKey>, LinkId, AstType, SpanId)>;
 
+pub fn argvec_type(values: &ArgVec) -> AstType {
+    AstType::Struct(
+        values
+            .iter()
+            .map(|v| (v.0, v.2.clone()))
+            .collect::<Vec<_>>(),
+    )
+}
+
 #[derive(Debug, Clone)]
 pub struct CodeEntry {
     pub(super) next: LinkId,
@@ -796,7 +805,7 @@ impl Flatten {
         )
     }
 
-    pub fn push_function_call_args(
+    pub fn calculate_function_arguments(
         &mut self,
         def: &Lambda,
         args: &[Argument],
@@ -1162,16 +1171,11 @@ impl Flatten {
 
         // look up the prototype
         // calculate the calling arguments
-        let (_ret_ty, args) =
-            self.push_function_call_args(&def, &args, def_span_id, call_span_id, b)?;
+        let (_, args) =
+            self.calculate_function_arguments(&def, &args, def_span_id, call_span_id, b)?;
 
         let call_values = self.push_call_arguments(args, call_span_id, b)?;
-        let call_ty = AstType::Struct(
-            call_values
-                .iter()
-                .map(|v| (v.0, v.2.clone()))
-                .collect::<Vec<_>>(),
-        );
+        let call_ty = argvec_type(&call_values);
 
         let (def_func_type, _def_arg_ty, def_ret_ty) = self.refresh_func_type(&def, b);
 
@@ -1307,15 +1311,10 @@ impl Flatten {
 
         let def_span_id = b.spans.get_span_unknown();
         let (ret_ty, args) =
-            self.push_function_call_args(&def, &args, def_span_id, call_span_id, b)?;
+            self.calculate_function_arguments(&def, &args, def_span_id, call_span_id, b)?;
 
         let call_values = self.push_call_arguments(args, call_span_id, b)?;
-        let call_ty = AstType::Struct(
-            call_values
-                .iter()
-                .map(|v| (v.0, v.2.clone()))
-                .collect::<Vec<_>>(),
-        );
+        let call_ty = argvec_type(&call_values);
 
         let current_block_id = self.current_block_id();
 
@@ -1564,17 +1563,14 @@ impl Flatten {
         b: &mut NB,
     ) -> Result<LinkId> {
         let (_ret_ty, args) =
-            self.push_function_call_args(&def, &args, def_span_id, call_span_id, b)?;
+            self.calculate_function_arguments(&def, &args, def_span_id, call_span_id, b)?;
 
         let call_values = self.push_call_arguments(args, call_span_id, b)?;
-        let call_func_type = AstType::Struct(
-            call_values
-                .iter()
-                .map(|v| (v.0, v.2.clone()))
-                .collect::<Vec<_>>(),
-        );
+        let call_func_type = argvec_type(&call_values);
 
         // unify the caller args and the refreshed function args
+        b.unify(&call_func_type, call_span_id, &def_arg_type, def_span_id);
+        /*
         if b.types.u.unify(&call_func_type, &def_arg_type).is_err() {
             let ty1 = b.types.u.resolve(&call_func_type).unwrap();
             let ty2 = b.types.u.resolve(&def_func_type).unwrap();
@@ -1586,6 +1582,7 @@ impl Flatten {
                 b.secondary_label(&format!("source type: {}", &ty2), def_span_id),
             ]);
         }
+        */
 
         // now that we have the arguments calculated, and the lambda baked, jump!
         let link_id = self.push_jump(target_block_id.into(), call_values, call_span_id);
@@ -2294,6 +2291,7 @@ impl Flatten {
             Ast::BinaryOp(op, x, y) => {
                 // expression, non-terminal
                 let x_span_id = x.span_id;
+                let y_span_id = y.span_id;
                 self.switch_blocks(current_block_id);
                 let rx = self.push_node(*x, b)?;
                 let ry = self.push_node(*y, b)?;
@@ -2302,12 +2300,15 @@ impl Flatten {
                 let rx_ty = self.get_type(vx).clone();
                 let ry_ty = self.get_type(vy).clone();
 
+                b.unify(&rx_ty, x_span_id, &ry_ty, y_span_id);
+                /*
                 if b.types.u.unify(&rx_ty, &ry_ty).is_err() {
                     b.push_error(
                         &format!("3-Type Mismatch: LHS: {}, RHS: {}", rx_ty, ry_ty),
                         x_span_id,
                     );
                 }
+                */
 
                 let _ = self.push_call_values(&[
                     (None, vx, rx_ty.clone(), node.span_id),
@@ -2395,24 +2396,21 @@ impl Flatten {
                 self.switch_blocks(current_block_id);
                 let r = self.push_node(*expr, b)?;
                 let v_expr = r.link_id.unwrap();
-                let expr_ty = self.get_entry(v_expr).ty.clone();
+                let expr_entry = self.get_entry(v_expr);
+                let expr_ty = expr_entry.ty.clone();
+                let expr_span_id = expr_entry.span_id;
 
                 let offset_decl =
                     if let Some(v_decl) = self.resolve_name(self.current_block_id(), name) {
                         // already declared
-                        let ty = self.get_type(v_decl).clone();
-                        if b.types.u.unify(&ty, &expr_ty).is_err() {
-                            b.push_error(
-                                &format!("Assisgn Type Mismatch: {:?}, {:?}", ty, expr_ty),
-                                node.span_id,
-                            );
-                        }
+                        let decl_entry = self.get_entry(v_decl);
+                        b.unify(&decl_entry.ty, decl_entry.span_id, &expr_ty, expr_span_id);
                         v_decl
                     } else {
                         // need to declare it
                         let block = self.blocks.get_block(self.current_block_id());
                         let scope_id = block.scope_id;
-                        let expr_ty = self.get_entry(v_expr).ty.clone();
+                        //let expr_ty = self.get_entry(v_expr).ty.clone();
                         let link_id = self.push_code(
                             LCode::Declare,
                             expr_ty.clone(),
@@ -2427,7 +2425,7 @@ impl Flatten {
                 let load_link_id = if self.is_load_required(v_expr) {
                     let link_id = self.push_code(
                         LCode::Load(v_expr),
-                        expr_ty,
+                        expr_ty.clone(),
                         None,
                         node.span_id,
                         VarDefinitionSpace::Default,
