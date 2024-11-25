@@ -1400,7 +1400,7 @@ impl Flatten {
 
     pub fn push_goto(
         &mut self,
-        label: StringKey,
+        name: StringKey,
         args: Vec<Argument>,
         call_span_id: SpanId,
         b: &mut NB,
@@ -1422,10 +1422,10 @@ impl Flatten {
         // Goto is terminal
         let scope_id = block.scope_id;
 
-        let s_name = b.labels.r(label.into());
+        let s_name = b.labels.r(name.into());
 
         // if a template exists, use it
-        if let Some(template_id) = self.resolve_template(scope_id, label.into()) {
+        if let Some(template_id) = self.resolve_template(scope_id, name.into()) {
             let (
                 _variant_id,
                 fun_scope_id,
@@ -1434,14 +1434,7 @@ impl Flatten {
                 _def_arg_type,
                 _,
                 link_id,
-            ) = self.push_cps_block(
-                Some(label.into()),
-                scope_id,
-                template_id,
-                args,
-                call_span_id,
-                b,
-            )?;
+            ) = self.push_cps_block(name, scope_id, template_id, args, call_span_id, b)?;
 
             println!(
                 "{}: push_goto lambda: from {}:{}=>{}:{}, link: {}",
@@ -1451,7 +1444,7 @@ impl Flatten {
         }
 
         // if a label exists, then jump to it
-        if let Some(target_block_id) = self.resolve_label(scope_id, label.into()) {
+        if let Some(target_block_id) = self.resolve_label(scope_id, name.into()) {
             // not possible to pass args to a label, use a CPS function instead
             assert_eq!(args.len(), 0);
             let target_block = self.blocks.get_block(target_block_id);
@@ -1481,7 +1474,7 @@ impl Flatten {
             );
 
             let scope = self.scopes.get_scope_mut(fun_scope_id);
-            let d = DeferredGoto::new(label.into(), args, call_span_id, current_block_id, link_id);
+            let d = DeferredGoto::new(name.into(), args, call_span_id, current_block_id, link_id);
             println!(
                 "{}: push_goto, defer goto: {:?} in scope: {}",
                 s_name, d, fun_scope_id
@@ -1521,7 +1514,7 @@ impl Flatten {
 
     fn push_cps_block(
         &mut self,
-        name: Option<StringKey>,
+        name: StringKey,
         scope_id: ScopeId,
         template_id: TemplateId,
         args: Vec<Argument>,
@@ -1570,11 +1563,7 @@ impl Flatten {
         let jump_block_id = self.current_block_id();
 
         // Start lambda block
-        let s_name = if let Some(name) = name {
-            b.labels.r(name.into())
-        } else {
-            "anon".to_string()
-        };
+        let s_name = b.labels.r(name.into());
         let lambda_name = b.labels.fresh_key(&s_name);
 
         println!(
@@ -1993,15 +1982,8 @@ impl Flatten {
 
         //if let Some((variant_id, resolve_type, link_id)) = self.resolve_function_name(goto_block_id, name, &ty, b)
 
-        let (_variant_id, _, _fun_block_id, _def_func_type, _def_arg_type, _, link_id) = self
-            .push_cps_block(
-                Some(name.into()),
-                scope_id,
-                template_id,
-                args,
-                call_span_id,
-                b,
-            )?;
+        let (_variant_id, _, _fun_block_id, _def_func_type, _def_arg_type, _, link_id) =
+            self.push_cps_block(name, scope_id, template_id, args, call_span_id, b)?;
 
         println!("bake deferred goto: link: {}", link_id);
         Ok(link_id)
