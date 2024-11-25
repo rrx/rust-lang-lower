@@ -486,6 +486,7 @@ impl<'c> MLIRGenerator<'c> {
     pub fn lower_code(&mut self, v: ValueId) -> Result<()> {
         let code = self.blockify.get_code(v);
         let location = self.get_location(v);
+        //println!("lower: {:?}", (v, code));
 
         match code {
             LCode::Label => {
@@ -532,7 +533,7 @@ impl<'c> MLIRGenerator<'c> {
                     _ => unimplemented!(),
                 };
 
-                println!("use: {:?}", (base, indicies));
+                //println!("use: {:?}", (base, indicies));
                 //let block_id = self.blockify.get_entry_id(v);
                 //let c = self.blocks.get_mut(&block_id).unwrap();
                 //let index = c.push(op);
@@ -730,7 +731,7 @@ impl<'c> MLIRGenerator<'c> {
                 let block_id = self.blockify.get_entry_id(v).unwrap();
                 let ast_ty = self.blockify.get_type(v.into());
                 let (ty, dims) = self.from_type(&ast_ty);
-                println!("tuple: {:?}", (&ast_ty, ty, &dims));
+                //println!("tuple: {:?}", (&ast_ty, ty, &dims));
 
                 let mut syms = vec![];
                 for link_id in link_ids {
@@ -762,10 +763,10 @@ impl<'c> MLIRGenerator<'c> {
                     let index = c.push(op);
                     //self.index.insert(v, index);
 
-                    println!("tuple copy: {:?}", (index, sym));
+                    //println!("tuple copy: {:?}", (index, sym));
                     let r_value = self.value0(*sym);
                     let r_addr = self.value0(v_alloc);
-                    println!("tuple copy: {:?}", (index, sym, r_value, r_addr));
+                    //println!("tuple copy: {:?}", (index, sym, r_value, r_addr));
 
                     //let op = ods::memref::copy(self.context, r_value, r_addr, location).into();
                     let r_index = self.value0(index);
@@ -947,8 +948,10 @@ impl<'c> MLIRGenerator<'c> {
                 let y_index = self.resolve_value(vy.into()).unwrap();
                 let r_y = self.value0(y_index);
 
-                let (op, _ast_ty) =
-                    self.build_binop(op.clone(), r_x, &x_span_id, r_y, &y_span_id, location)?;
+                let r = self.build_binop(op.clone(), r_x, &x_span_id, r_y, &y_span_id, location);
+                assert!(r.is_ok());
+                // if we throw the error, we get strange behavior from MLIR, so asserting instead
+                let (op, _ast_ty) = r?;
                 let c = self.blocks.get_mut(&block_id).unwrap();
                 let index = c.push(op);
                 self.index.insert(v, index);

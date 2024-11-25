@@ -417,6 +417,13 @@ impl<'a> Interp<'a> {
                 let v = match (op, v1.clone(), v2.clone()) {
                     (BinaryOperation::EQ, Value::Int(i1), Value::Int(i2)) => Value::Bool(i1 == i2),
                     (BinaryOperation::GT, Value::Int(i1), Value::Int(i2)) => Value::Bool(i1 > i2),
+                    (BinaryOperation::GTE, Value::Int(i1), Value::Int(i2)) => Value::Bool(i1 >= i2),
+                    (BinaryOperation::GT, Value::Float(i1), Value::Float(i2)) => {
+                        Value::Bool(i1 > i2)
+                    }
+                    (BinaryOperation::GTE, Value::Float(i1), Value::Float(i2)) => {
+                        Value::Bool(i1 >= i2)
+                    }
                     (BinaryOperation::Add, Value::Int(i1), Value::Int(i2)) => Value::Int(i1 + i2),
                     (BinaryOperation::Add, Value::Float(i1), Value::Float(i2)) => {
                         Value::Float(i1 + i2)

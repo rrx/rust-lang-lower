@@ -378,6 +378,8 @@ impl<'c> MLIRGenerator<'c> {
         let ty = a.r#type();
         assert_eq!(ty, b.r#type());
 
+        let is_float = ty.is_f64() || ty.is_f32() || ty.is_f16();
+
         let (op, ast_ty) = match op {
             BinaryOperation::Divide => {
                 if ty.is_index() {
@@ -386,7 +388,7 @@ impl<'c> MLIRGenerator<'c> {
                 } else if ty.is_integer() {
                     // we assume all integers are signed for now
                     (arith::divsi(a, b, location), AstType::Int)
-                } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
+                } else if is_float {
                     (arith::divf(a, b, location), AstType::Float)
                 } else {
                     return Err(Error::new(LowerError::Op(format!("Invalid Type"), *a_span)));
@@ -397,7 +399,7 @@ impl<'c> MLIRGenerator<'c> {
                     (arith::muli(a, b, location), AstType::Index)
                 } else if ty.is_integer() {
                     (arith::muli(a, b, location), AstType::Int)
-                } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
+                } else if is_float {
                     (arith::mulf(a, b, location), AstType::Float)
                 } else {
                     return Err(Error::new(LowerError::Op(format!("Invalid Type"), *a_span)));
@@ -408,7 +410,7 @@ impl<'c> MLIRGenerator<'c> {
                     (arith::addi(a, b, location), AstType::Index)
                 } else if ty.is_integer() {
                     (arith::addi(a, b, location), AstType::Int)
-                } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
+                } else if is_float {
                     (arith::addf(a, b, location), AstType::Float)
                 } else {
                     return Err(Error::new(LowerError::Op(format!("Invalid Type"), *a_span)));
@@ -419,7 +421,7 @@ impl<'c> MLIRGenerator<'c> {
                     (arith::subi(a, b, location), AstType::Index)
                 } else if ty.is_integer() {
                     (arith::subi(a, b, location), AstType::Int)
-                } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
+                } else if is_float {
                     (arith::subf(a, b, location), AstType::Float)
                 } else {
                     return Err(Error::new(LowerError::Op(format!("Invalid Type"), *a_span)));
@@ -436,6 +438,11 @@ impl<'c> MLIRGenerator<'c> {
                     // signed
                     (
                         arith::cmpi(self.context, arith::CmpiPredicate::Sge, a, b, location),
+                        AstType::Bool,
+                    )
+                } else if is_float {
+                    (
+                        arith::cmpf(self.context, arith::CmpfPredicate::Oge, a, b, location),
                         AstType::Bool,
                     )
                 } else {
@@ -455,6 +462,11 @@ impl<'c> MLIRGenerator<'c> {
                         arith::cmpi(self.context, arith::CmpiPredicate::Sgt, a, b, location),
                         AstType::Bool,
                     )
+                } else if is_float {
+                    (
+                        arith::cmpf(self.context, arith::CmpfPredicate::Ogt, a, b, location),
+                        AstType::Bool,
+                    )
                 } else {
                     return Err(Error::new(LowerError::Op(format!("Invalid Type"), *a_span)));
                 }
@@ -465,7 +477,7 @@ impl<'c> MLIRGenerator<'c> {
                         arith::cmpi(self.context, arith::CmpiPredicate::Ne, a, b, location),
                         AstType::Bool,
                     )
-                } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
+                } else if is_float {
                     // ordered comparison
                     (
                         arith::cmpf(self.context, arith::CmpfPredicate::One, a, b, location),
@@ -481,7 +493,7 @@ impl<'c> MLIRGenerator<'c> {
                         arith::cmpi(self.context, arith::CmpiPredicate::Eq, a, b, location),
                         AstType::Bool,
                     )
-                } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
+                } else if is_float {
                     // ordered comparison
                     (
                         arith::cmpf(self.context, arith::CmpfPredicate::Oeq, a, b, location),
