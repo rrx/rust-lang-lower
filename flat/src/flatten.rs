@@ -1087,16 +1087,7 @@ impl Flatten {
             //println!("[{}] R2: {}, {:?}", s, call_func_type, (v_entry));
             // unify the resolved function with the caller
             // the function should be resolved, this resolves any thing missing in the caller
-            if b.types.u.unify(&call_func_type, &r_ty).is_err() {
-                b.push_error_labels(vec![
-                    b.primary_label(
-                        &format!("Type Mismatch Func: caller: {}", &call_func_type),
-                        call_span_id,
-                    ),
-                    b.secondary_label(&format!("source type: {}", &r_ty), def_span_id),
-                ]);
-            }
-
+            b.unify(&call_func_type, call_span_id, &r_ty, def_span_id);
             (variant_id, v_entry)
         } else {
             // if it's not already baked, we need to do that here
@@ -1185,31 +1176,7 @@ impl Flatten {
             ReturnType::Single(def_ret_ty.clone()).into(),
         );
 
-        /*
-        // match call type with function type
-        if b.types.u.unify(&call_func_type, &def_func_type).is_err() {
-            b.push_error_labels(vec![
-                b.primary_label(
-                    &format!("Type Mismatch: caller: {}", &call_func_type),
-                    def_span_id,
-                ),
-                b.secondary_label(&format!("source type: {}", &def_func_type), def_span_id),
-            ]);
-        }
-        */
-
-        // unify the caller and the refreshed function definition
-        if b.types.u.unify(&call_func_type, &def_func_type).is_err() {
-            let ty1 = b.types.u.resolve(&call_func_type).unwrap();
-            let ty2 = b.types.u.resolve(&def_func_type).unwrap();
-            b.push_error_labels(vec![
-                b.primary_label(
-                    &format!("Type Mismatch Func: caller: {}", &ty1),
-                    call_span_id,
-                ),
-                b.secondary_label(&format!("source type: {}", &ty2), def_span_id),
-            ]);
-        }
+        b.unify(&call_func_type, call_span_id, &def_func_type, def_span_id);
 
         let is_static = self.static_scope_id() == scope_id;
         if is_static {
@@ -1570,19 +1537,6 @@ impl Flatten {
 
         // unify the caller args and the refreshed function args
         b.unify(&call_func_type, call_span_id, &def_arg_type, def_span_id);
-        /*
-        if b.types.u.unify(&call_func_type, &def_arg_type).is_err() {
-            let ty1 = b.types.u.resolve(&call_func_type).unwrap();
-            let ty2 = b.types.u.resolve(&def_func_type).unwrap();
-            b.push_error_labels(vec![
-                b.primary_label(
-                    &format!("Type Mismatch CPS: caller: {}", &ty1),
-                    call_span_id,
-                ),
-                b.secondary_label(&format!("source type: {}", &ty2), def_span_id),
-            ]);
-        }
-        */
 
         // now that we have the arguments calculated, and the lambda baked, jump!
         let link_id = self.push_jump(target_block_id.into(), call_values, call_span_id);
@@ -2301,14 +2255,6 @@ impl Flatten {
                 let ry_ty = self.get_type(vy).clone();
 
                 b.unify(&rx_ty, x_span_id, &ry_ty, y_span_id);
-                /*
-                if b.types.u.unify(&rx_ty, &ry_ty).is_err() {
-                    b.push_error(
-                        &format!("3-Type Mismatch: LHS: {}, RHS: {}", rx_ty, ry_ty),
-                        x_span_id,
-                    );
-                }
-                */
 
                 let _ = self.push_call_values(&[
                     (None, vx, rx_ty.clone(), node.span_id),
@@ -2877,15 +2823,7 @@ impl Flatten {
                 let else_link_id = r.link_id.unwrap();
                 let else_ty = self.get_type(else_link_id).clone();
 
-                if b.types.u.unify(&then_ty, &else_ty).is_err() {
-                    b.push_error(
-                        &format!(
-                            "Ternary Type Mismatch: then: {}, else: {}",
-                            &then_ty, &else_ty
-                        ),
-                        span_id,
-                    );
-                }
+                b.unify(&then_ty, then_span_id, &else_ty, else_span_id);
 
                 // switch back to the original block
                 self.switch_blocks(current_block_id);
