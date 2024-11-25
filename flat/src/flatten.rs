@@ -1554,14 +1554,26 @@ impl Flatten {
         b.unify(&call_func_type, call_span_id, &def_arg_type, def_span_id);
 
         let goto_block_id = self.current_block_id();
+        let s_name = b.labels.r(name.into());
 
         // BAKE CPS IF NEEDED
         let (variant_id, fun_block_id, fun_scope_id) =
-            if let Some((variant_id, _resolve_type, link_id, fun_scope_id)) =
+            if let Some((variant_id, resolve_type, link_id, fun_scope_id)) =
                 self.resolve_function_name(scope_id, &name, &call_func_type, b)
             {
                 let entry = self.get_entry(link_id);
-                (variant_id, entry.block_id, fun_scope_id)
+                let fun_block_id = entry.block_id;
+                println!(
+                    "{}: push_cps_block found {}:{} => {}:{}",
+                    s_name,
+                    scope_id,
+                    self.current_block_id(),
+                    fun_scope_id,
+                    fun_block_id
+                );
+                b.unify(&call_func_type, call_span_id, &resolve_type, def_span_id);
+
+                (variant_id, fun_block_id, fun_scope_id)
             } else {
                 let (fun_block_id, fun_scope_id) =
                     self.new_scope_and_block(ScopeType::Block, scope_id);
@@ -1569,7 +1581,6 @@ impl Flatten {
                 self.blocks
                     .block_succ(current_block_id, fun_block_id, Successor::BlockScope);
                 // Start lambda block
-                let s_name = b.labels.r(name.into());
                 let lambda_name = b.labels.fresh_key(&s_name);
                 println!(
                     "{}: push_cps_block in {}:{} => {}:{}",
@@ -1601,9 +1612,16 @@ impl Flatten {
                 let variant_id =
                     self.scopes
                         .variant_add(scope_id, lambda_name, r_ty1, entry_link_id);
-                //} else {
-                //None
-                //};
+
+                let r_ty2 = b.types.u.resolve(&call_func_type).unwrap();
+                // update the variant with the resolved type
+                self.scopes.variant_update(
+                    scope_id,
+                    lambda_name,
+                    variant_id,
+                    r_ty2.clone(),
+                    entry_link_id,
+                );
 
                 // flatten function, and switch to next
                 let _ = self.push_node(body, b)?;

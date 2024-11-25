@@ -221,7 +221,7 @@ impl ScopeLayer {
         ty: AstType,
         link_id: LinkId,
     ) {
-        let v = self.entries.get_mut(&name).unwrap();
+        let v = self.entries.get_mut(&name).expect("name not found");
         v.update(variant_id, ty, link_id)
     }
 
