@@ -805,8 +805,7 @@ impl Flatten {
         b: &mut NB,
     ) -> Result<(
         AstType, // return type
-        ArgVec,  // argvec
-        AstType, // call type
+        Vec<Argument>,
     )> {
         //println!("args: {:?}", args);
 
@@ -983,17 +982,7 @@ impl Flatten {
                 call_span_id,
             );
         }
-
-        let call_values = self.push_call_arguments(args, call_span_id, b)?;
-
-        let call_ty = AstType::Struct(
-            call_values
-                .iter()
-                .map(|v| (v.0, v.2.clone()))
-                .collect::<Vec<_>>(),
-        );
-
-        Ok((ret.clone(), call_values, call_ty))
+        Ok((ret.clone(), args))
     }
 
     fn push_call_arguments(
@@ -1173,8 +1162,16 @@ impl Flatten {
 
         // look up the prototype
         // calculate the calling arguments
-        let (_ret_ty, call_values, call_ty) =
+        let (_ret_ty, args) =
             self.push_function_call_args(&def, &args, def_span_id, call_span_id, b)?;
+
+        let call_values = self.push_call_arguments(args, call_span_id, b)?;
+        let call_ty = AstType::Struct(
+            call_values
+                .iter()
+                .map(|v| (v.0, v.2.clone()))
+                .collect::<Vec<_>>(),
+        );
 
         let (def_func_type, _def_arg_ty, def_ret_ty) = self.refresh_func_type(&def, b);
 
@@ -1309,13 +1306,21 @@ impl Flatten {
         println!("push_builtin_call: {:?}, scope: {}", id, block.scope_id);
 
         let def_span_id = b.spans.get_span_unknown();
-        let (ret_ty, values, _call_ty) =
+        let (ret_ty, args) =
             self.push_function_call_args(&def, &args, def_span_id, call_span_id, b)?;
+
+        let call_values = self.push_call_arguments(args, call_span_id, b)?;
+        let call_ty = AstType::Struct(
+            call_values
+                .iter()
+                .map(|v| (v.0, v.2.clone()))
+                .collect::<Vec<_>>(),
+        );
 
         let current_block_id = self.current_block_id();
 
         // Add links
-        self.push_call_values(&values);
+        self.push_call_values(&call_values);
 
         let link_id = self.push_code(
             LCode::Builtin(id),
@@ -1558,8 +1563,16 @@ impl Flatten {
         args: Vec<Argument>,
         b: &mut NB,
     ) -> Result<LinkId> {
-        let (_ret_ty, call_values, call_func_type) =
+        let (_ret_ty, args) =
             self.push_function_call_args(&def, &args, def_span_id, call_span_id, b)?;
+
+        let call_values = self.push_call_arguments(args, call_span_id, b)?;
+        let call_func_type = AstType::Struct(
+            call_values
+                .iter()
+                .map(|v| (v.0, v.2.clone()))
+                .collect::<Vec<_>>(),
+        );
 
         // unify the caller args and the refreshed function args
         if b.types.u.unify(&call_func_type, &def_arg_type).is_err() {
@@ -2049,6 +2062,15 @@ impl Flatten {
         call_span_id: SpanId,
         b: &mut NB,
     ) -> Result<LinkId> {
+        // we want to handle monomorphization here.
+        /*
+                        let ty = AstType::func(vec![], AstType::Unit);
+                        if let Some((_variant_id, resolve_type, link_id)) =
+                            self.resolve_function_name(current_block_id, key, &ty, b)
+                        {
+                            let entry = self.get_entry(link_id);
+                            entry.block_id
+        */
         let goto_block_id = self.current_block_id();
 
         let block = self.blocks.get_block(goto_block_id);
@@ -2363,19 +2385,9 @@ impl Flatten {
                     let deferrals = scope.deferred_goto.pop_all(name.into());
 
                     for d in deferrals {
-                        // invalidate dummy jump
-                        let entry = self.get_entry_mut(d.link_id);
-                        entry.next = d.link_id;
-                        let block = self.blocks.get_block_mut(d.block_id);
-                        // remove last entry in the block
-                        block.last = Some(d.link_id);
-                        block.term = false;
-
                         self.switch_blocks(d.block_id);
                         self.push_cps_and_jump(name, template_id, d.args, d.call_span_id, b)?;
                     }
-                    self.switch_blocks(current_block_id);
-
                     self.switch_blocks(current_block_id);
                     return Ok(FlattenResult::statement());
                 }
@@ -2721,6 +2733,8 @@ impl Flatten {
                     block.term = false;
 
                     // delete the dummy jump and replace it
+                    // we are only jumping to a label here, so we don't need to monomorphize
+                    // monomorphization happens at the function level instead
                     let jump_args = self.push_call_arguments(d.args.clone(), d.call_span_id, b)?;
                     let link_id = self.push_jump(new_block_id.into(), jump_args, d.call_span_id);
                     println!("{}: bake deferred: {:?}, link: {}", s_name, d, link_id);
