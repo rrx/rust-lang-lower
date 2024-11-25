@@ -157,6 +157,14 @@ impl DeferredGotoList {
             None
         }
     }
+
+    pub fn pop_all(&mut self, name: StringLabel) -> Vec<DeferredGoto> {
+        if let Some(arr) = self.h.remove(&name) {
+            arr
+        } else {
+            vec![]
+        }
+    }
 }
 
 #[derive(Debug)]

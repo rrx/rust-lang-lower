@@ -1460,17 +1460,16 @@ impl Flatten {
 
         // if a template exists, use it
         if let Some(template_id) = self.resolve_template(scope_id, label.into()) {
+            let scope = self.scopes.get_scope(scope_id);
+            let parent_block_id = scope.entry_block.unwrap();
+            let goto_block_id = self.current_block_id();
+
             let (def, def_span_id) = self.get_ast_template(template_id).clone();
-            //self.switch_blocks(new_block_id);
             // New Func Scope
             let (fun_block_id, fun_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
-            let scope = self.scopes.get_scope(scope_id);
             // block graph
-            self.blocks.block_succ(
-                scope.entry_block.unwrap(),
-                fun_block_id,
-                Successor::BlockScope,
-            );
+            self.blocks
+                .block_succ(parent_block_id, fun_block_id, Successor::BlockScope);
 
             let (fun_scope_id, fun_block_id, def_func_type, def_arg_type, _) = self
                 .push_cps_block(
@@ -1484,7 +1483,7 @@ impl Flatten {
                 )?;
 
             // switch back to goto block
-            self.switch_blocks(current_block_id);
+            self.switch_blocks(goto_block_id);
             let link_id = self.push_cps_jump(
                 &def,
                 def_func_type,
@@ -1500,7 +1499,7 @@ impl Flatten {
                 "{}: push_goto lambda: from {}:{}=>{}:{}, link: {}",
                 s_name, scope_id, current_block_id, fun_scope_id, fun_block_id, link_id
             );
-            self.switch_blocks(current_block_id);
+            //self.switch_blocks(current_block_id);
             return Ok(FlattenResult::statement());
         }
 
@@ -2318,17 +2317,27 @@ impl Flatten {
                         //let new_block_id = self.blocks.new_block(scope_id);
                         //self.switch_blocks(d.block_id);
                         //self.switch_blocks(new_block_id);
+                        //
+                        // invalidate dummy jump
+                        let entry = self.get_entry_mut(d.link_id);
+                        entry.next = d.link_id;
+                        let block = self.blocks.get_block_mut(d.block_id);
+                        // remove last entry in the block
+                        block.last = Some(d.link_id);
+                        block.term = false;
+                        let goto_block_id = d.block_id;
+
+                        let block = self.blocks.get_block(d.block_id);
+                        let scope = self.scopes.get_scope(block.scope_id);
+                        let parent_block_id = scope.entry_block.unwrap();
 
                         let (def, def_span_id) = self.get_ast_template(template_id).clone();
-
                         // New Func Scope
                         let (fun_block_id, fun_scope_id) =
                             self.new_scope_and_block(ScopeType::Block, scope_id);
-                        let block = self.blocks.get_block(d.block_id);
-                        let scope = self.scopes.get_scope(block.scope_id);
                         // block graph
                         self.blocks.block_succ(
-                            scope.entry_block.unwrap(),
+                            parent_block_id,
                             fun_block_id,
                             Successor::BlockScope,
                         );
@@ -2344,17 +2353,8 @@ impl Flatten {
                                 b,
                             )?;
 
-                        // terminate deferred blocks
-                        self.switch_blocks(d.block_id);
-
-                        // invalidate dummy jump
-                        let entry = self.get_entry_mut(d.link_id);
-                        entry.next = d.link_id;
-                        let block = self.blocks.get_block_mut(d.block_id);
-                        // remove last entry in the block
-                        block.last = Some(d.link_id);
-                        block.term = false;
-
+                        // switch back to goto block
+                        self.switch_blocks(goto_block_id);
                         let link_id = self.push_cps_jump(
                             &def,
                             def_func_type,
@@ -2701,17 +2701,11 @@ impl Flatten {
                 // get all deferrals in this scope
                 // and generate jumps to the new block
                 let scope = self.scopes.get_scope_mut(scope_id);
-                let mut deferrals = vec![];
-                loop {
-                    if let Some(d) = scope.deferred_goto.pop(name.into()) {
-                        deferrals.push(d);
-                    } else {
-                        break;
-                    }
-                }
+                let deferrals = scope.deferred_goto.pop_all(name.into());
 
                 // terminate deferred blocks, with a call to the new block we are instantiating
                 // here
+                // TODO: but what we actually want to do is make the CPS for the specific call
                 for d in deferrals {
                     self.switch_blocks(d.block_id);
 
