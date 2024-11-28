@@ -6,7 +6,7 @@ use std::ops::{Deref, DerefMut};
 use std::collections::HashMap;
 
 use crate::{BlockId, LinkId, NodeBuilder, StringLabel, ValueId};
-use compile_core::{Argument, AstType, Lambda, SpanId, StringKey};
+use compile_core::{AbstractionId, Argument, AstType, Lambda, SpanId, StringKey};
 
 #[derive(Debug)]
 pub enum PlacedBlockId {
@@ -48,14 +48,6 @@ pub struct LoopScope {
     pub(crate) name: Option<StringKey>,
     pub(crate) next_block: BlockId,
     pub(crate) start_block: BlockId,
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-pub struct TemplateId(pub(crate) u32);
-impl TemplateId {
-    pub fn index(&self) -> usize {
-        self.0 as usize
-    }
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
@@ -107,9 +99,15 @@ impl FunctionVariantBuilder {
 }
 
 #[derive(Debug)]
+pub enum DeferredType {
+    Goto(LinkId),
+    Ident(LinkId),
+}
+
+#[derive(Debug)]
 pub struct DeferredGoto {
     pub block_id: BlockId,
-    pub link_id: LinkId,
+    pub deferred_type: DeferredType,
     pub name: StringLabel,
     pub call_span_id: SpanId,
     pub args: Vec<Argument>,
@@ -121,14 +119,14 @@ impl DeferredGoto {
         args: Vec<Argument>,
         call_span_id: SpanId,
         block_id: BlockId,
-        link_id: LinkId,
+        deferred_type: DeferredType,
     ) -> Self {
         Self {
             name,
             args,
             call_span_id,
             block_id,
-            link_id,
+            deferred_type,
         }
     }
 }
@@ -142,7 +140,12 @@ impl DeferredGotoList {
         Self { h: HashMap::new() }
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.h.is_empty()
+    }
+
     pub fn add(&mut self, d: DeferredGoto) {
+        println!("add deferred goto: {:?}", (&d, &self));
         if let Some(arr) = self.h.get_mut(&d.name) {
             arr.push(d);
         } else {
@@ -159,6 +162,7 @@ impl DeferredGotoList {
     }
 
     pub fn pop_all(&mut self, name: StringLabel) -> Vec<DeferredGoto> {
+        println!("pop deferred goto: {:?}", (name, &self));
         if let Some(arr) = self.h.remove(&name) {
             arr
         } else {
@@ -179,7 +183,7 @@ pub struct ScopeLayer {
     pub return_block: Option<BlockId>,
     pub(crate) loop_block: Option<LoopScope>,
     pub scope_type: ScopeType,
-    pub lambdas: HashMap<StringLabel, TemplateId>,
+    pub lambdas: HashMap<StringLabel, AbstractionId>,
     pub templates: HashMap<StringKey, LinkId>,
     pub unclaimed_labels: HashMap<StringLabel, BlockId>,
     pub deferred_goto: DeferredGotoList,

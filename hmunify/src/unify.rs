@@ -236,6 +236,21 @@ impl TypeUnify {
                 Ok(())
             }
             (AstType::Func(vs1, r1), AstType::Func(vs2, r2)) => match (r1.as_ref(), r2.as_ref()) {
+                (ReturnType::Never, ReturnType::Never) => Ok(()),
+                (ReturnType::Never, ReturnType::Single(ty)) => {
+                    if ty == &AstType::Unit {
+                        Ok(())
+                    } else {
+                        Err(UError::Bad)
+                    }
+                }
+                (ReturnType::Single(ty), ReturnType::Never) => {
+                    if ty == &AstType::Unit {
+                        Ok(())
+                    } else {
+                        Err(UError::Bad)
+                    }
+                }
                 (ReturnType::Single(ret1), ReturnType::Single(ret2)) => {
                     if self.unify(&ret1, &ret2).is_err() {
                         return Err(UError::Bad);

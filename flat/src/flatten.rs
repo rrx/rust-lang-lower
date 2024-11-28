@@ -2,6 +2,7 @@ use super::resolve_attribute;
 use anyhow::Error;
 use anyhow::Result;
 use compile_core::{
+    AbstractionId,
     Argument,
     AssignTarget,
     Ast,
@@ -27,8 +28,8 @@ use std::collections::{HashMap, HashSet};
 use std::convert::Into;
 
 use crate::{
-    BlockGraph, BlockId, BlockifyError, Builtin, DeferredGoto, LCode, LinkId, NodeBuilder as NB,
-    ScopeGraph, ScopeId, ScopeType, StringLabel, Successor, TemplateId, ValueId, VariantId,
+    BlockGraph, BlockId, BlockifyError, Builtin, DeferredGoto, DeferredType, LCode, LinkId,
+    NodeBuilder as NB, ScopeGraph, ScopeId, ScopeType, StringLabel, Successor, ValueId, VariantId,
 };
 
 type ArgVec = Vec<(Option<StringKey>, LinkId, AstType, SpanId)>;
@@ -129,6 +130,7 @@ pub struct Flatten {
     pub(super) block_links: HashMap<BlockId, LinkId>,
     pub(crate) functions: HashMap<StringKey, LinkId>,
     pub(crate) statics: HashMap<StringKey, Literal>,
+    open_abstractions: Vec<LinkId>,
 }
 
 impl Flatten {
@@ -149,6 +151,7 @@ impl Flatten {
             block_links: HashMap::new(),
             functions: HashMap::new(),
             statics: HashMap::new(),
+            open_abstractions: vec![],
         }
     }
 
@@ -324,7 +327,7 @@ impl Flatten {
         &self,
         start_scope_id: ScopeId,
         name: StringLabel,
-    ) -> Option<TemplateId> {
+    ) -> Option<AbstractionId> {
         // search scopes to find a template
         for scope_id in self.scopes.walk_scopes(start_scope_id) {
             let scope = self.scopes.get_scope(scope_id);
@@ -427,11 +430,57 @@ impl Flatten {
         }
     }
 
-    pub(super) fn finish(mut self, b: &mut NB) -> Result<(Flatten, Vec<LinkId>)> {
-        self.inject_builtin_prototypes(b);
+    pub fn complete_open_abstractions(&mut self, b: &mut NB) -> Result<()> {
+        let link_ids = self.open_abstractions.clone();
+        let mut todo = vec![];
+        for link_id in link_ids {
+            println!("open abstraction: {}", link_id);
+            let entry = self.get_entry(link_id);
+            if let LCode::Val(Literal::Abstraction(abstraction_id)) = entry.code {
+                todo.push((link_id, abstraction_id));
+            } else {
+                unreachable!();
+            }
+        }
 
+        for (link_id, abstraction_id) in todo {
+            let entry = self.get_entry(link_id).clone();
+            let ty = self.get_type(link_id).clone();
+            let span_id = entry.span_id;
+            let name = entry.name.unwrap();
+            let block_id = entry.block_id;
+            let block = self.blocks.get_block(block_id);
+            let scope_id = block.scope_id;
+            self.switch_blocks(block_id);
+            //let r = self.push_cps_block(name, scope_id, abstraction_id, vec![], span_id, b);
+            let (_variant_id, fun_scope_id, fun_block_id) =
+                self.push_cps_block_with_type(name, scope_id, abstraction_id, ty, span_id, b)?;
+
+            // now replace the abstraction code
+            let entry = self.get_entry_mut(link_id);
+            entry.code = LCode::Val(Literal::Block(fun_block_id));
+
+            //if r.is_err() {
+            //let msg = format!("Incomplete Abstraction: {:?}", (&entry, ty));
+            //b.push_error(&msg, span_id);
+            //}
+        }
+        Ok(())
+    }
+
+    pub(super) fn finish(mut self, b: &mut NB) -> Result<(Flatten, Vec<LinkId>)> {
         // make sure all claims have been handled
         self.scopes.ensure_claims(b);
+
+        // ensure types are resolved
+        self.type_inference_enforce(b);
+
+        // add prototypes for builtins
+        self.inject_builtin_prototypes(b);
+
+        self.complete_open_abstractions(b)?;
+
+        self.switch_blocks(self.static_block_id());
 
         // DEAD BLOCKS
         let dead_blocks = self.blocks.find_dead_blocks_from_graph();
@@ -526,8 +575,6 @@ impl Flatten {
             }
         }
 
-        self.type_inference_enforce(b);
-
         Ok((self, values))
     }
 
@@ -609,13 +656,13 @@ impl Flatten {
         self.entries.get_mut(link_id.index()).unwrap()
     }
 
-    pub fn insert_ast_template(&mut self, def: Lambda, span_id: SpanId) -> TemplateId {
+    pub fn insert_ast_template(&mut self, def: Lambda, span_id: SpanId) -> AbstractionId {
         let offset = self.ast_templates.len();
         self.ast_templates.push((def, span_id));
-        TemplateId(offset as u32)
+        AbstractionId::new(offset)
     }
 
-    pub fn get_ast_template(&self, template_id: TemplateId) -> &(Lambda, SpanId) {
+    pub fn get_ast_template(&self, template_id: AbstractionId) -> &(Lambda, SpanId) {
         self.ast_templates.get(template_id.index()).unwrap()
     }
 
@@ -699,7 +746,7 @@ impl Flatten {
             LCode::Yield => unreachable!(),
             LCode::Jump(_) => unreachable!(),
             LCode::PlaceholderTerminal(_) => unreachable!(),
-            LCode::PlaceholderCodeReference => unreachable!(),
+            LCode::PlaceholderCodeReference => false,
             LCode::Branch(_, _, _) => unreachable!(),
             LCode::Builtin(_) => unreachable!(),
             LCode::CallValue(_) => unreachable!(),
@@ -763,6 +810,47 @@ impl Flatten {
                 )
             })
             .collect::<Vec<_>>();
+    }
+
+    pub fn push_cps_jump(
+        &mut self,
+        target_id: LinkId,
+        jump_args: Vec<(Option<StringKey>, LinkId, AstType, SpanId)>,
+        span_id: SpanId,
+    ) -> LinkId {
+        // handle leaving scope here?
+        let current_block_id = self.current_block_id();
+        let block = self.blocks.get_block(current_block_id);
+        let _start_stack = self.scopes.walk_scopes(block.scope_id);
+
+        // Construct the argument type
+        let arg_ty = AstType::Struct(
+            jump_args
+                .iter()
+                .map(|j| (j.0, j.2.clone()))
+                .collect::<Vec<_>>(),
+        );
+
+        let _link_ids = self.push_call_values(
+            &jump_args
+                .into_iter()
+                .map(|(key, v, ty, span_id)| (key, v, ty, span_id))
+                .collect::<Vec<_>>(),
+        );
+
+        println!("jump to: {}=>{}", self.current_block_id(), target_id);
+        //self.blocks
+        //.block_succ(self.current_block_id(), target_id, Successor::Jump);
+        //self.blocks
+        //.block_succ(self.current_block_id(), target_id, Successor::BlockScope);
+
+        self.push_code(
+            LCode::Jump(target_id.into()),
+            AstType::Func(arg_ty.into(), ReturnType::Single(AstType::Unit).into()),
+            None,
+            span_id,
+            VarDefinitionSpace::Reg,
+        )
     }
 
     pub fn push_jump(
@@ -1373,7 +1461,7 @@ impl Flatten {
         name: &StringKey,
         def: &Lambda,
         span_id: SpanId,
-    ) -> Result<TemplateId> {
+    ) -> Result<AbstractionId> {
         let template_id = self.insert_ast_template(def.clone(), span_id);
         let block = self.blocks.get_block(block_id);
         let scope_id = block.scope_id;
@@ -1426,6 +1514,26 @@ impl Flatten {
 
         let s_name = b.labels.r(name.into());
 
+        if let Some(link_id) = self.resolve_name(current_block_id, name.into()) {
+            let goto_values = self.push_call_arguments(args, call_span_id, b)?;
+            let goto_arg_type = argvec_type(&goto_values);
+            let goto_func_type =
+                AstType::Func(goto_arg_type.clone().into(), ReturnType::Never.into());
+
+            let entry = self.get_entry(link_id);
+            let var_ty = entry.ty.clone();
+
+            b.unify(&var_ty, entry.span_id, &goto_func_type, call_span_id);
+
+            println!(
+                "{}: push_goto ident: {}:{}, link: {}",
+                s_name, scope_id, current_block_id, link_id
+            );
+            let link_id = self.push_cps_jump(link_id.into(), goto_values, call_span_id);
+
+            return Ok(FlattenResult::link(link_id));
+        }
+
         // if a template exists, use it
         if let Some(template_id) = self.resolve_template(scope_id, name.into()) {
             let (
@@ -1476,7 +1584,13 @@ impl Flatten {
             );
 
             let scope = self.scopes.get_scope_mut(fun_scope_id);
-            let d = DeferredGoto::new(name.into(), args, call_span_id, current_block_id, link_id);
+            let d = DeferredGoto::new(
+                name.into(),
+                args,
+                call_span_id,
+                current_block_id,
+                DeferredType::Goto(link_id),
+            );
             println!(
                 "{}: push_goto, defer goto: {:?} in scope: {}",
                 s_name, d, fun_scope_id
@@ -1489,6 +1603,7 @@ impl Flatten {
         }
     }
 
+    /*
     fn push_cps_jump(
         &mut self,
         def: &Lambda,
@@ -1513,12 +1628,121 @@ impl Flatten {
         let link_id = self.push_jump(target_block_id.into(), call_values, call_span_id);
         Ok(link_id)
     }
+    */
+
+    fn push_cps_block_with_type(
+        &mut self,
+        name: StringKey,
+        scope_id: ScopeId,
+        template_id: AbstractionId,
+        def_func_type: AstType,
+        origin_span_id: SpanId,
+        b: &mut NB,
+    ) -> Result<(VariantId, ScopeId, BlockId)> {
+        // call in the context of the caller, which is a goto
+        let current_block_id = self.current_block_id();
+        let (def, def_span_id) = self.get_ast_template(template_id).clone();
+        // This expects to be called in a block that is ready to jump
+        let (_def_func_type, def_arg_type, def_ret_type) = self.refresh_func_type(&def, b);
+        let refresh_def_func_type =
+            AstType::Func(def_arg_type.clone().into(), ReturnType::Never.into());
+        let s_name = b.labels.r(name.into());
+
+        b.unify(
+            &refresh_def_func_type,
+            origin_span_id,
+            &def_func_type,
+            def_span_id,
+        );
+
+        // BAKE CPS IF NEEDED
+        let (variant_id, fun_block_id, fun_scope_id) =
+            if let Some((variant_id, resolve_type, link_id, fun_scope_id)) =
+                self.resolve_function_name(scope_id, &name, &def_func_type, b)
+            {
+                let entry = self.get_entry(link_id);
+                let fun_block_id = entry.block_id;
+                println!(
+                    "{}: push_cps_block_with_type found {}:{} => {}:{}",
+                    s_name,
+                    scope_id,
+                    self.current_block_id(),
+                    fun_scope_id,
+                    fun_block_id
+                );
+                b.unify(&def_func_type, origin_span_id, &resolve_type, def_span_id);
+
+                (variant_id, fun_block_id, fun_scope_id)
+            } else {
+                let (fun_block_id, fun_scope_id) =
+                    self.new_scope_and_block(ScopeType::Block, scope_id);
+                // block graph
+                self.blocks
+                    .block_succ(current_block_id, fun_block_id, Successor::BlockScope);
+                // Start lambda block
+                let lambda_name = b.labels.fresh_key(&s_name);
+                println!(
+                    "{}: push_cps_block_with_type in {}:{} => {}:{}",
+                    s_name,
+                    scope_id,
+                    self.current_block_id(),
+                    fun_scope_id,
+                    fun_block_id
+                );
+                let body = *def.body.unwrap();
+
+                self.switch_blocks(fun_block_id);
+                let (entry_link_id, _) = self.push_start_block(
+                    fun_scope_id,
+                    def_func_type.clone(),
+                    Some(lambda_name),
+                    def_span_id,
+                    VarDefinitionSpace::Default,
+                );
+                // add the name to scope
+                // do this early for recursive functions
+                // add entry to scope, for recursion
+                self.scopes
+                    .scope_define(scope_id, lambda_name, entry_link_id);
+
+                let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
+                println!("ty: {:?}", (&r_ty1, &def_func_type));
+
+                let variant_id =
+                    self.scopes
+                        .variant_add(scope_id, lambda_name, r_ty1.clone(), entry_link_id);
+
+                // flatten function, and switch to next
+                // lower first, so we resolve types
+                let _ = self.push_node(body, b)?;
+
+                // update the variant with the resolved type
+                self.scopes
+                    .variant_update(scope_id, lambda_name, variant_id, r_ty1, entry_link_id);
+
+                // terminate if not already terminated
+                // this is for dead code
+                let block = self.blocks.get_block(self.current_block_id());
+                if !block.is_term() {
+                    self.push_code(
+                        LCode::PlaceholderTerminal(block.last().unwrap()),
+                        AstType::Unit,
+                        None,
+                        def_span_id,
+                        VarDefinitionSpace::Default,
+                    );
+                }
+
+                (variant_id, fun_block_id, fun_scope_id)
+            };
+        Ok((variant_id, fun_scope_id, fun_block_id))
+    }
 
     fn push_cps_block(
         &mut self,
         name: StringKey,
         scope_id: ScopeId,
-        template_id: TemplateId,
+        template_id: AbstractionId,
         args: Vec<Argument>,
         call_span_id: SpanId,
         b: &mut NB,
@@ -1541,17 +1765,19 @@ impl Flatten {
         //fun_scope.return_block = Some(next_block_id);
 
         // This expects to be called in a block that is ready to jump
-        let (def_func_type, def_arg_type, def_ret_type) = self.refresh_func_type(&def, b);
+        let (_def_func_type, def_arg_type, def_ret_type) = self.refresh_func_type(&def, b);
+        let def_func_type = AstType::Func(def_arg_type.clone().into(), ReturnType::Never.into());
 
         // WRITE GOTO
         let (args, _) =
             self.calculate_function_arguments(&def, &args, def_span_id, call_span_id, b)?;
 
         let call_values = self.push_call_arguments(args, call_span_id, b)?;
-        let call_func_type = argvec_type(&call_values);
+        let call_arg_type = argvec_type(&call_values);
+        let _call_func_type = AstType::Func(call_arg_type.clone().into(), ReturnType::Never.into());
 
         // unify the caller args and the refreshed function args
-        b.unify(&call_func_type, call_span_id, &def_arg_type, def_span_id);
+        b.unify(&call_arg_type, call_span_id, &def_arg_type, def_span_id);
 
         let goto_block_id = self.current_block_id();
         let s_name = b.labels.r(name.into());
@@ -1559,7 +1785,7 @@ impl Flatten {
         // BAKE CPS IF NEEDED
         let (variant_id, fun_block_id, fun_scope_id) =
             if let Some((variant_id, resolve_type, link_id, fun_scope_id)) =
-                self.resolve_function_name(scope_id, &name, &call_func_type, b)
+                self.resolve_function_name(scope_id, &name, &call_arg_type, b)
             {
                 let entry = self.get_entry(link_id);
                 let fun_block_id = entry.block_id;
@@ -1571,7 +1797,7 @@ impl Flatten {
                     fun_scope_id,
                     fun_block_id
                 );
-                b.unify(&call_func_type, call_span_id, &resolve_type, def_span_id);
+                b.unify(&call_arg_type, call_span_id, &resolve_type, def_span_id);
 
                 (variant_id, fun_block_id, fun_scope_id)
             } else {
@@ -1607,13 +1833,23 @@ impl Flatten {
                     .scope_define(scope_id, lambda_name, entry_link_id);
 
                 let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
+                println!("ty: {:?}", (&r_ty1, &call_arg_type));
+
                 // we need to know the link
                 //let variant_id = if let Some(global_name) = global_name {
                 let variant_id =
                     self.scopes
                         .variant_add(scope_id, lambda_name, r_ty1, entry_link_id);
 
-                let r_ty2 = b.types.u.resolve(&call_func_type).unwrap();
+                // flatten function, and switch to next
+                // lower first, so we resolve types
+                let _ = self.push_node(body, b)?;
+
+                let r_ty2 = b
+                    .types
+                    .u
+                    .resolve(&call_arg_type)
+                    .unwrap_or(call_arg_type.clone());
                 // update the variant with the resolved type
                 self.scopes.variant_update(
                     scope_id,
@@ -1623,8 +1859,6 @@ impl Flatten {
                     entry_link_id,
                 );
 
-                // flatten function, and switch to next
-                let _ = self.push_node(body, b)?;
                 // terminate if not already terminated
                 // this is for dead code
                 let block = self.blocks.get_block(self.current_block_id());
@@ -1644,6 +1878,7 @@ impl Flatten {
         // NOW JUMP
         // now that we have the arguments calculated, and the lambda baked, jump!
         self.switch_blocks(goto_block_id);
+        println!("call_values: {:?}", call_values);
         let link_id = self.push_jump(fun_block_id.into(), call_values, call_span_id);
         //let jump_block_id = self.current_block_id();
 
@@ -1832,6 +2067,11 @@ impl Flatten {
 
         // restore position back to where we started
         self.switch_blocks(current_block_id);
+
+        let scope = self.scopes.get_scope(scope_id);
+        assert!(scope.deferred_goto.is_empty());
+        println!("function end: {}", b.labels.r(name.into()));
+        println!("function end: {:?}", scope.deferred_goto);
         Ok((v_id, FlattenResult::link(entry_link_id)))
     }
 
@@ -1983,7 +2223,7 @@ impl Flatten {
     pub fn push_cps_block_with_placeholder_check(
         &mut self,
         name: StringKey,
-        template_id: TemplateId,
+        template_id: AbstractionId,
         args: Vec<Argument>,
         call_span_id: SpanId,
         b: &mut NB,
@@ -2003,14 +2243,6 @@ impl Flatten {
             block.last = Some(prev_link_id);
             block.term = false;
         }
-
-        // construct call function type
-        //let call_func_type = AstType::Func(
-        //AstType::Struct(call_ty.fields()).into(),
-        //ReturnType::Never
-        //);
-
-        //if let Some((variant_id, resolve_type, link_id)) = self.resolve_function_name(goto_block_id, name, &ty, b)
 
         let (_variant_id, _, _fun_block_id, _def_func_type, _def_arg_type, _, link_id) =
             self.push_cps_block(name, scope_id, template_id, args, call_span_id, b)?;
@@ -2040,8 +2272,9 @@ impl Flatten {
             Ast::Global(name, ref expr) => {
                 match &expr.node {
                     Ast::Lambda(def) => {
-                        let fun_ty = def_to_type(&def, b);
+                        //let fun_ty = def_to_type(&def, b);
 
+                        /*
                         match self.mode {
                             FlattenMode::Function => {}
                             FlattenMode::Template => {
@@ -2062,6 +2295,7 @@ impl Flatten {
                                 }
                             }
                         }
+                        */
 
                         // save template for later use
                         if def.body.is_some() {
@@ -2228,16 +2462,49 @@ impl Flatten {
                 let scope_id = block.scope_id;
                 if let Some(def_link_id) = self.resolve_name(current_block_id, key) {
                     let link_id = def_link_id;
-                    Ok(FlattenResult::link(link_id))
-                } else {
-                    let s = b.labels.r(key.into());
-                    b.push_error(&format!("ident `{}` not found in {}", s, scope_id), span_id);
-                    let backtrace = std::backtrace::Backtrace::capture();
-                    self.messages
-                        .push((format!("ident: not found {}\n{}", s, backtrace), span_id));
-
-                    Err(Error::new(BlockifyError::NotFound(s)))
+                    return Ok(FlattenResult::link(link_id));
                 }
+
+                if let Some(abstraction_id) = self.resolve_template(scope_id, key.into()) {
+                    // how do we resolve this without knowledge of the args?
+                    // we know it's either a function type or a cps type.
+                    // we could just reference the abstraction, and bake later
+                    let code = LCode::Val(Literal::Abstraction(abstraction_id));
+                    let ty = b.types.fresh_unknown();
+                    let link_id = self.push_code(
+                        code,
+                        ty,
+                        Some(key),
+                        node.span_id,
+                        VarDefinitionSpace::Default,
+                    );
+                    self.open_abstractions.push(link_id);
+                    return Ok(FlattenResult::link(link_id));
+                }
+
+                /*
+                    let code = LCode::PlaceholderCodeReference;
+                    let ty = b.types.fresh_unknown();
+                    let link_id = self.push_code(code, ty, Some(key), node.span_id, VarDefinitionSpace::Default);
+
+                    let scope = self.scopes.get_scope_mut(scope_id);
+                    scope.deferred_goto.add(DeferredGoto::new(
+                        key.into(),
+                        vec![],
+                        node.span_id,
+                        current_block_id,
+                        DeferredType::Ident(link_id),
+                    ));
+                    Ok(FlattenResult::link(link_id))
+                */
+
+                let s = b.labels.r(key.into());
+                b.push_error(&format!("ident `{}` not found in {}", s, scope_id), span_id);
+                let backtrace = std::backtrace::Backtrace::capture();
+                self.messages
+                    .push((format!("ident: not found {}\n{}", s, backtrace), span_id));
+
+                Err(Error::new(BlockifyError::NotFound(s)))
             }
 
             Ast::Assign(target, expr) => {
@@ -2281,16 +2548,24 @@ impl Flatten {
                     let deferrals = scope.deferred_goto.pop_all(name.into());
 
                     for d in deferrals {
-                        self.switch_blocks(d.block_id);
-                        //let (args, _) = self.calculate_function_arguments(&def, &d.args, def_span_id, d.call_span_id, b)?;
-                        let args = d.args;
-                        self.push_cps_block_with_placeholder_check(
-                            name,
-                            template_id,
-                            args,
-                            d.call_span_id,
-                            b,
-                        )?;
+                        match d.deferred_type {
+                            DeferredType::Goto(_link_id) => {
+                                self.switch_blocks(d.block_id);
+                                //let (args, _) = self.calculate_function_arguments(&def, &d.args, def_span_id, d.call_span_id, b)?;
+                                let args = d.args;
+                                self.push_cps_block_with_placeholder_check(
+                                    name,
+                                    template_id,
+                                    args,
+                                    d.call_span_id,
+                                    b,
+                                )?;
+                            }
+                            DeferredType::Ident(link_id) => {
+                                self.switch_blocks(d.block_id);
+                                unimplemented!()
+                            }
+                        }
                     }
                     self.switch_blocks(current_block_id);
                     return Ok(FlattenResult::statement());
@@ -2554,20 +2829,26 @@ impl Flatten {
             Ast::ControlFlowMarker(ControlFlowMarker::BlockReference(expr)) => {
                 let block_id = match &expr.node {
                     Ast::Identifier(key) => {
+                        let key = *key;
                         let ty = AstType::func(vec![], AstType::Unit);
                         let scope_id = block.scope_id;
                         if let Some((_variant_id, _resolve_type, link_id, _scope_id)) =
-                            self.resolve_function_name(scope_id, key, &ty, b)
+                            self.resolve_function_name(scope_id, &key, &ty, b)
                         {
                             let entry = self.get_entry(link_id);
                             entry.block_id
                         } else {
                             let link_id = self.push_node(*expr, b)?.link_id.unwrap();
                             let entry = self.get_entry(link_id);
-                            if entry.code.is_start() {
-                                entry.block_id
-                            } else {
-                                unimplemented!()
+                            match &entry.code {
+                                LCode::Label => entry.block_id,
+                                LCode::PlaceholderCodeReference => {
+                                    let s_name = b.labels.r(key.into());
+                                    unimplemented!("{:?}", (s_name, entry));
+                                }
+                                _ => {
+                                    unimplemented!("{:?}", entry);
+                                }
                             }
                         }
                     }
@@ -2626,20 +2907,31 @@ impl Flatten {
                 for d in deferrals {
                     self.switch_blocks(d.block_id);
 
-                    // invalidate dummy jump
-                    let entry = self.get_entry_mut(d.link_id);
-                    entry.next = d.link_id;
-                    let block = self.blocks.get_block_mut(d.block_id);
-                    // remove last entry in the block
-                    block.last = Some(d.link_id);
-                    block.term = false;
+                    match d.deferred_type {
+                        DeferredType::Goto(prev_link_id) => {
+                            // invalidate dummy jump
+                            let entry = self.get_entry_mut(prev_link_id);
+                            entry.next = prev_link_id;
+                            let block = self.blocks.get_block_mut(d.block_id);
+                            // remove last entry in the block
+                            block.last = Some(prev_link_id);
+                            block.term = false;
 
-                    // delete the dummy jump and replace it
-                    // we are only jumping to a label here, so we don't need to monomorphize
-                    // monomorphization happens at the function level instead
-                    let jump_args = self.push_call_arguments(d.args.clone(), d.call_span_id, b)?;
-                    let link_id = self.push_jump(new_block_id.into(), jump_args, d.call_span_id);
-                    println!("{}: bake deferred: {:?}, link: {}", s_name, d, link_id);
+                            // delete the dummy jump and replace it
+                            // we are only jumping to a label here, so we don't need to monomorphize
+                            // monomorphization happens at the function level instead
+                            let jump_args =
+                                self.push_call_arguments(d.args.clone(), d.call_span_id, b)?;
+                            let link_id =
+                                self.push_jump(new_block_id.into(), jump_args, d.call_span_id);
+                            println!("{}: bake deferred: {:?}, link: {}", s_name, d, link_id);
+                        }
+                        DeferredType::Ident(link_id) => {
+                            unimplemented!();
+                            //let entry = self.get_entry_mut(link_id);
+                            //entry.next = new_block_id.into();
+                        }
+                    }
                 }
 
                 self.switch_blocks(current_block_id);

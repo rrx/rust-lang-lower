@@ -18,7 +18,7 @@ pub use blockify::{BlockifyError, ICodeModule, LCode, UseIndex, UseIndexList};
 pub use blocks::*;
 pub use builder::*;
 pub use builtin::*;
-pub use compile_core::BlockId;
+pub use compile_core::{AbstractionId, BlockId};
 pub use flatten::*;
 pub use flatten_module::*;
 pub use flatten_seq::*;
@@ -26,5 +26,6 @@ pub use graph::{Node, CFG};
 pub use interp::*;
 pub use links::*;
 pub use scope::{
-    DeferredGoto, PlacedBlockId, ScopeGraph, ScopeId, ScopeLayer, ScopeType, TemplateId, VariantId,
+    DeferredGoto, DeferredType, PlacedBlockId, ScopeGraph, ScopeId, ScopeLayer, ScopeType,
+    VariantId,
 };

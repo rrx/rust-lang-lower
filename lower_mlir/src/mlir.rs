@@ -415,16 +415,26 @@ impl<'c> MLIRGenerator<'c> {
         }
     }
 
-    pub fn lower_jump(&mut self, v: ValueId, target_value_id: ValueId) -> Result<()> {
+    pub fn lower_jump(&mut self, v: ValueId, target: CodeOffset) -> Result<()> {
         let block_id = self.blockify.get_entry_id(v).unwrap();
         let values = self.take_call_args();
         let arity = values.len();
-        //println!("jump: {:?}", (values));
         let indicies = values
             .into_iter()
             .map(|value_id| self.resolve_value(value_id.into()).unwrap())
             .collect();
         let rs = self.values(indicies);
+
+        let target_value_id = self.blockify.resolve_code_offset(target);
+        //match target {
+        //CodeOffset::Block(block_id) => {
+        //}
+        //CodeOffset::Link(link_id) => {
+        //let index = self.resolve_value(*target)
+        //}
+        //}
+
+        println!("jump: {:?}", (target_value_id, block_id));
 
         let c = self
             .blocks
@@ -502,10 +512,7 @@ impl<'c> MLIRGenerator<'c> {
                 self.index.insert(v, index);
             }
 
-            LCode::Jump(target) => {
-                let target_value_id = self.blockify.resolve_code_offset(*target);
-                self.lower_jump(v, target_value_id)?;
-            }
+            LCode::Jump(target) => self.lower_jump(v, *target)?,
 
             LCode::PlaceholderTerminal(_) => {
                 unreachable!("Placeholder terminated block")

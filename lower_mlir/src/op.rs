@@ -317,6 +317,18 @@ impl<'c> MLIRGenerator<'c> {
             Literal::Index(x) => self.build_index_op(*x as i64, location),
 
             Literal::Bool(x) => self.build_bool_op(*x, location),
+            Literal::String(x) => {
+                // TODO, replace with dummy value
+                self.build_int_op(0, location)
+            }
+            Literal::Block(block_id) => {
+                let ty = llvm::r#type::pointer(self.context, 0);
+                arith::constant(
+                    self.context,
+                    IntegerAttribute::new(ty, block_id.index() as i64).into(),
+                    location,
+                )
+            }
             _ => unimplemented!("{:?}", lit),
         }
     }
