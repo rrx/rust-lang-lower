@@ -28,6 +28,6 @@ pub use graph::{Node, CFG};
 pub use interp::*;
 pub use links::*;
 pub use scope::{
-    DeferredGoto, DeferredType, PlacedBlockId, ScopeGraph, ScopeId, ScopeLayer, ScopeType,
-    VariantId,
+    DeferredGoto, DeferredGotoList, DeferredType, PlacedBlockId, ScopeGraph, ScopeId, ScopeLayer,
+    ScopeType, VariantId,
 };

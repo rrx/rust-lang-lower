@@ -77,31 +77,40 @@ fn ast_unify_values(value1: &AstType, value2: &AstType) -> Result<AstType, UErro
                 Ok(AstType::Ptr(ty.into()))
             }
 
-            (AstType::Func(c1, r1), AstType::Func(c2, r2)) => match (r1.as_ref(), r2.as_ref()) {
-                (ReturnType::Single(ret1), ReturnType::Single(ret2)) => {
-                    let r = ast_unify_values(ret1, ret2)?;
-                    let c1_fields = c1.fields();
-                    let c2_fields = c2.fields();
-                    if c1_fields.len() != c2_fields.len() {
-                        Err(UError::Bad)
-                    } else {
-                        let result = c1_fields
-                            .iter()
-                            .zip(c2_fields.iter())
-                            .map_while(|((_, a), (_, b))| match ast_unify_values(a, b) {
-                                Ok(s) => Some(s),
-                                Err(_) => None,
-                            })
-                            .collect::<Vec<_>>();
-                        if result.len() == c1_fields.len() {
-                            Ok(AstType::func(result, r.into()))
-                        } else {
-                            Err(UError::Bad)
-                        }
-                    }
+            (AstType::Func(c1, r1), AstType::Func(c2, r2)) => {
+                let c1_fields = c1.fields();
+                let c2_fields = c2.fields();
+
+                if c1_fields.len() != c2_fields.len() {
+                    return Err(UError::Bad);
                 }
-                _ => unimplemented!(),
-            },
+
+                let result = c1_fields
+                    .iter()
+                    .zip(c2_fields.iter())
+                    .map_while(|((_, a), (_, b))| match ast_unify_values(a, b) {
+                        Ok(s) => Some(s),
+                        Err(_) => None,
+                    })
+                    .collect::<Vec<_>>();
+
+                if result.len() != c1_fields.len() {
+                    return Err(UError::Bad);
+                }
+
+                match (r1.as_ref(), r2.as_ref()) {
+                    (ReturnType::Single(ret1), ReturnType::Single(ret2)) => {
+                        let r = ast_unify_values(ret1, ret2)?;
+                        let ty = AstType::func(result, r.into());
+                        Ok(ty)
+                    }
+                    (ReturnType::Never, ReturnType::Never) => Ok(AstType::Func(
+                        AstType::build_struct(result).into(),
+                        ReturnType::Never.into(),
+                    )),
+                    _ => unimplemented!("{:?}", (r1, r2)),
+                }
+            }
 
             (AstType::Struct(c1), AstType::Struct(c2)) => {
                 if c1.len() != c2.len() {

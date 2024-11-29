@@ -107,6 +107,7 @@ pub enum DeferredType {
 
 #[derive(Debug)]
 pub struct DeferredGoto {
+    pub scope_id: ScopeId,
     pub block_id: BlockId,
     pub deferred_type: DeferredType,
     pub name: StringKey,
@@ -116,6 +117,7 @@ pub struct DeferredGoto {
 
 impl DeferredGoto {
     pub fn new(
+        scope_id: ScopeId,
         name: StringKey,
         args: Vec<Argument>,
         call_span_id: SpanId,
@@ -123,6 +125,7 @@ impl DeferredGoto {
         deferred_type: DeferredType,
     ) -> Self {
         Self {
+            scope_id,
             name,
             args,
             call_span_id,
@@ -200,7 +203,6 @@ pub struct ScopeLayer {
     pub lambdas: HashMap<StringLabel, AbstractionId>,
     pub templates: HashMap<StringKey, LinkId>,
     pub unclaimed_labels: HashMap<StringLabel, BlockId>,
-    pub deferred_goto: DeferredGotoList,
 }
 
 impl ScopeLayer {
@@ -220,7 +222,6 @@ impl ScopeLayer {
             lambdas: HashMap::new(),
             templates: HashMap::new(),
             unclaimed_labels: HashMap::new(),
-            deferred_goto: DeferredGotoList::new(),
         }
     }
 

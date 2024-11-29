@@ -434,8 +434,8 @@ impl NodeBuilder {
 
     pub fn unify(&mut self, a: &AstType, a_span_id: SpanId, b: &AstType, b_span_id: SpanId) {
         if self.types.u.unify(a, b).is_err() {
-            let ty1 = self.types.u.resolve(a).unwrap();
-            let ty2 = self.types.u.resolve(b).unwrap();
+            let ty1 = self.types.u.resolve(a).unwrap_or(a.clone());
+            let ty2 = self.types.u.resolve(b).unwrap_or(b.clone());
             self.push_error_labels(vec![
                 self.primary_label(&format!("Type Mismatch: {}", &ty1), a_span_id),
                 self.secondary_label(&format!("reference: {}", &ty2), b_span_id),

@@ -64,7 +64,8 @@ def main():
   #We can start by getting cps monomorphization working first.  This will keep us on track, while we implement the trivial case for CPS.
   #"""
 
-  #q.goto(cps, next_x)
+  #t = next_x
+  #q.goto(cps, t)
   q.label("X")
   #q.goto(cps, q.resolve_label(next_y))
   q.label("Y")

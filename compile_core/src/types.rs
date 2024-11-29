@@ -76,6 +76,7 @@ pub enum AstType {
     Error,
     Type,
     JumpTarget,
+    CPSFunc(Box<AstType>),
     Args(Box<AstType>),   // *args type
     KwArgs(Box<AstType>), // **kwargs type
     Array(Box<AstType>, Vec<usize>),
