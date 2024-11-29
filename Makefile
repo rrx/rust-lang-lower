@@ -47,6 +47,9 @@ interp:
 	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/static_var.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/nested_goto.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/cps.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/cps_args.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/cps_mono.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/cps_pass.star -o build/args3
 
 run:
 	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/bare.star -o build/args3
@@ -74,6 +77,8 @@ run:
 	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/nested_goto.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/cps.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/cps_args.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/cps_mono.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/cps_pass.star -o build/args3
 
 	#mmdc -t dark -o test.png -H 5000 -w 50000 -i build/tmp.cfg.mmd
 	#RUST_BACKTRACE=1 cargo run -- --interp -i tests/bin/test_tuple.star -o build/tmp

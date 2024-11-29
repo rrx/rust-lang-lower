@@ -29,7 +29,8 @@ use std::convert::Into;
 
 use crate::{
     BlockGraph, BlockId, BlockifyError, Builtin, DeferredGoto, DeferredType, LCode, LinkId,
-    NodeBuilder as NB, ScopeGraph, ScopeId, ScopeType, StringLabel, Successor, ValueId, VariantId,
+    NodeBuilder as NB, ScopeGraph, ScopeId, ScopeType, ScopedContinuations, StringLabel, Successor,
+    ValueId, VariantId,
 };
 
 type ArgVec = Vec<(Option<StringKey>, LinkId, AstType, SpanId)>;
@@ -131,6 +132,7 @@ pub struct Flatten {
     pub(crate) functions: HashMap<StringKey, LinkId>,
     pub(crate) statics: HashMap<StringKey, Literal>,
     open_abstractions: Vec<LinkId>,
+    scoped_continuations: ScopedContinuations,
 }
 
 impl Flatten {
@@ -152,6 +154,7 @@ impl Flatten {
             functions: HashMap::new(),
             statics: HashMap::new(),
             open_abstractions: vec![],
+            scoped_continuations: ScopedContinuations::new(),
         }
     }
 
@@ -1534,6 +1537,7 @@ impl Flatten {
             return Ok(FlattenResult::link(link_id));
         }
 
+        /*
         // if a template exists, use it
         if let Some(template_id) = self.resolve_template(scope_id, name.into()) {
             let (
@@ -1552,7 +1556,9 @@ impl Flatten {
             );
             return Ok(FlattenResult::statement());
         }
+        */
 
+        /*
         // if a label exists, then jump to it
         if let Some(target_block_id) = self.resolve_label(scope_id, name.into()) {
             // not possible to pass args to a label, use a CPS function instead
@@ -1568,6 +1574,7 @@ impl Flatten {
             self.switch_blocks(current_block_id);
             return Ok(FlattenResult::statement());
         }
+        */
 
         // if we don't have a template or a label already, then we defer
         if let Some(fun_scope_id) = self
@@ -1643,7 +1650,7 @@ impl Flatten {
         let current_block_id = self.current_block_id();
         let (def, def_span_id) = self.get_ast_template(template_id).clone();
         // This expects to be called in a block that is ready to jump
-        let (_def_func_type, def_arg_type, def_ret_type) = self.refresh_func_type(&def, b);
+        let (_def_func_type, def_arg_type, _def_ret_type) = self.refresh_func_type(&def, b);
         let refresh_def_func_type =
             AstType::Func(def_arg_type.clone().into(), ReturnType::Never.into());
         let s_name = b.labels.r(name.into());
@@ -2068,11 +2075,98 @@ impl Flatten {
         // restore position back to where we started
         self.switch_blocks(current_block_id);
 
+        self.resolve_deferred(scope_id, b)?;
         let scope = self.scopes.get_scope(scope_id);
         assert!(scope.deferred_goto.is_empty());
         println!("function end: {}", b.labels.r(name.into()));
         println!("function end: {:?}", scope.deferred_goto);
         Ok((v_id, FlattenResult::link(entry_link_id)))
+    }
+
+    fn resolve_deferred(&mut self, scope_id: ScopeId, b: &mut NB) -> Result<()> {
+        for scope_id in self.scopes.find_scopes(scope_id) {
+            loop {
+                let scope = self.scopes.get_scope_mut(scope_id);
+                if let Some((key, deferrals)) = scope.deferred_goto.pop_any() {
+                    if deferrals.is_empty() {
+                        continue;
+                    }
+
+                    let s_name = b.labels.r(key.into());
+
+                    // is it an abstraction?
+                    if let Some(abstraction_id) = self.resolve_template(scope_id, key.into()) {
+                        for d in deferrals {
+                            self.switch_blocks(d.block_id);
+                            self.remove_placeholder_terminal(d.block_id);
+                            let (
+                                _variant_id,
+                                fun_scope_id,
+                                fun_block_id,
+                                _def_func_type,
+                                _def_arg_type,
+                                _,
+                                link_id,
+                            ) = self.push_cps_block(
+                                key,
+                                scope_id,
+                                abstraction_id,
+                                d.args,
+                                d.call_span_id,
+                                b,
+                            )?;
+                            println!(
+                                "{}: resolved deferred lambda: from {}:{}=>{}:{}, link: {}",
+                                s_name, scope_id, d.block_id, fun_scope_id, fun_block_id, link_id
+                            );
+                        }
+                        continue;
+                    }
+
+                    // is it a label?
+                    if let Some(target_block_id) = self.resolve_label(scope_id, key.into()) {
+                        // not possible to pass args to a label, use a CPS function instead
+                        for d in deferrals {
+                            self.switch_blocks(d.block_id);
+                            self.remove_placeholder_terminal(d.block_id);
+
+                            assert_eq!(d.args.len(), 0);
+                            //let target_block = self.blocks.get_block(target_block_id);
+                            //let target_scope_id = target_block.scope_id;
+                            let jump_args = self.push_call_arguments(d.args, d.call_span_id, b)?;
+                            let link_id =
+                                self.push_jump(target_block_id.into(), jump_args, d.call_span_id);
+                            let block = self.blocks.get_block(target_block_id);
+                            println!(
+                                "{}: resolved deferred label: from {}:{}=>{}:{}, link: {}",
+                                s_name,
+                                scope_id,
+                                d.block_id,
+                                block.scope_id,
+                                target_block_id,
+                                link_id
+                            );
+                        }
+                        continue;
+                    }
+
+                    // otherwise it's not defined, return an error
+                    for d in deferrals {
+                        let s = b.labels.r(key.into());
+                        b.push_error(
+                            &format!("ident `{}` not found in {}", s, scope_id),
+                            d.call_span_id,
+                        );
+                        self.messages
+                            .push((format!("ident: not found {}", s), d.call_span_id));
+                    }
+                    //Err(Error::new(BlockifyError::NotFound(s)))
+                } else {
+                    break;
+                }
+            }
+        }
+        Ok(())
     }
 
     fn resolve_return_type(
@@ -2220,19 +2314,8 @@ impl Flatten {
         }
     }
 
-    pub fn push_cps_block_with_placeholder_check(
-        &mut self,
-        name: StringKey,
-        template_id: AbstractionId,
-        args: Vec<Argument>,
-        call_span_id: SpanId,
-        b: &mut NB,
-    ) -> Result<LinkId> {
-        // we want to handle monomorphization here.
-        let goto_block_id = self.current_block_id();
-
+    pub fn remove_placeholder_terminal(&mut self, goto_block_id: BlockId) {
         let block = self.blocks.get_block(goto_block_id);
-        let scope_id = block.scope_id;
         let last_link_id = block.last().unwrap();
         let entry = self.get_entry_mut(last_link_id);
         if let LCode::PlaceholderTerminal(prev_link_id) = entry.code {
@@ -2243,7 +2326,22 @@ impl Flatten {
             block.last = Some(prev_link_id);
             block.term = false;
         }
+    }
 
+    pub fn push_cps_block_with_placeholder_check(
+        &mut self,
+        name: StringKey,
+        template_id: AbstractionId,
+        args: Vec<Argument>,
+        call_span_id: SpanId,
+        b: &mut NB,
+    ) -> Result<LinkId> {
+        // we want to handle monomorphization here.
+        let goto_block_id = self.current_block_id();
+        self.remove_placeholder_terminal(goto_block_id);
+
+        let block = self.blocks.get_block(goto_block_id);
+        let scope_id = block.scope_id;
         let (_variant_id, _, _fun_block_id, _def_func_type, _def_arg_type, _, link_id) =
             self.push_cps_block(name, scope_id, template_id, args, call_span_id, b)?;
 

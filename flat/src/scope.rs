@@ -1,5 +1,6 @@
 use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
+use petgraph::visit::Bfs;
 
 use std::ops::{Deref, DerefMut};
 
@@ -108,14 +109,14 @@ pub enum DeferredType {
 pub struct DeferredGoto {
     pub block_id: BlockId,
     pub deferred_type: DeferredType,
-    pub name: StringLabel,
+    pub name: StringKey,
     pub call_span_id: SpanId,
     pub args: Vec<Argument>,
 }
 
 impl DeferredGoto {
     pub fn new(
-        name: StringLabel,
+        name: StringKey,
         args: Vec<Argument>,
         call_span_id: SpanId,
         block_id: BlockId,
@@ -133,7 +134,7 @@ impl DeferredGoto {
 
 #[derive(Debug)]
 pub struct DeferredGotoList {
-    h: HashMap<StringLabel, Vec<DeferredGoto>>,
+    h: HashMap<StringKey, Vec<DeferredGoto>>,
 }
 impl DeferredGotoList {
     pub fn new() -> Self {
@@ -142,6 +143,10 @@ impl DeferredGotoList {
 
     pub fn is_empty(&self) -> bool {
         self.h.is_empty()
+    }
+
+    pub fn keys(&self) -> Vec<StringKey> {
+        self.h.keys().cloned().collect()
     }
 
     pub fn add(&mut self, d: DeferredGoto) {
@@ -153,7 +158,7 @@ impl DeferredGotoList {
         }
     }
 
-    pub fn pop(&mut self, name: StringLabel) -> Option<DeferredGoto> {
+    pub fn pop(&mut self, name: StringKey) -> Option<DeferredGoto> {
         if let Some(arr) = self.h.get_mut(&name) {
             arr.pop()
         } else {
@@ -161,7 +166,16 @@ impl DeferredGotoList {
         }
     }
 
-    pub fn pop_all(&mut self, name: StringLabel) -> Vec<DeferredGoto> {
+    pub fn pop_any(&mut self) -> Option<(StringKey, Vec<DeferredGoto>)> {
+        if let Some(k) = self.h.keys().next().cloned() {
+            let arr = self.h.remove(&k).unwrap();
+            Some((k, arr))
+        } else {
+            None
+        }
+    }
+
+    pub fn pop_all(&mut self, name: StringKey) -> Vec<DeferredGoto> {
         println!("pop deferred goto: {:?}", (name, &self));
         if let Some(arr) = self.h.remove(&name) {
             arr
@@ -353,6 +367,15 @@ impl ScopeGraph {
             } else {
                 break;
             }
+        }
+        out
+    }
+
+    pub fn find_scopes(&self, scope_id: ScopeId) -> Vec<ScopeId> {
+        let mut out = vec![];
+        let mut bfs = Bfs::new(&self.0, scope_id.into());
+        while let Some(index) = bfs.next(&self.0) {
+            out.push(index.into());
         }
         out
     }
