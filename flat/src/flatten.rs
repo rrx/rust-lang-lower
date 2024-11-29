@@ -2131,8 +2131,6 @@ impl Flatten {
                             self.remove_placeholder_terminal(d.block_id);
 
                             assert_eq!(d.args.len(), 0);
-                            //let target_block = self.blocks.get_block(target_block_id);
-                            //let target_scope_id = target_block.scope_id;
                             let jump_args = self.push_call_arguments(d.args, d.call_span_id, b)?;
                             let link_id =
                                 self.push_jump(target_block_id.into(), jump_args, d.call_span_id);
@@ -2160,7 +2158,6 @@ impl Flatten {
                         self.messages
                             .push((format!("ident: not found {}", s), d.call_span_id));
                     }
-                    //Err(Error::new(BlockifyError::NotFound(s)))
                 } else {
                     break;
                 }
@@ -2370,31 +2367,6 @@ impl Flatten {
             Ast::Global(name, ref expr) => {
                 match &expr.node {
                     Ast::Lambda(def) => {
-                        //let fun_ty = def_to_type(&def, b);
-
-                        /*
-                        match self.mode {
-                            FlattenMode::Function => {}
-                            FlattenMode::Template => {
-                                if let Some(_) = &def.body {
-                                    let template_link_id = self.push_code(
-                                        LCode::DeclareTemplate(None),
-                                        fun_ty.clone(),
-                                        Some(name),
-                                        span_id,
-                                        VarDefinitionSpace::Static,
-                                    );
-                                    self.switch_blocks(current_block_id);
-                                    self.scopes.scope_define_template(
-                                        self.static_scope_id(),
-                                        name,
-                                        template_link_id,
-                                    );
-                                }
-                            }
-                        }
-                        */
-
                         // save template for later use
                         if def.body.is_some() {
                             self.save_ast_template(current_block_id, &name, &def, span_id)?;
@@ -2613,7 +2585,6 @@ impl Flatten {
 
                 // push the definition into the lambda list
                 if let Ast::Lambda(def) = expr.node {
-                    let scope_id = block.scope_id;
                     self.switch_blocks(current_block_id);
 
                     // push template
@@ -2638,33 +2609,7 @@ impl Flatten {
 
                     // save the template
                     let def_span_id = expr.span_id;
-                    let template_id =
-                        self.save_ast_template(current_block_id, &name, &def, def_span_id)?;
-
-                    // check for deferrals and apply them
-                    let scope = self.scopes.get_scope_mut(scope_id);
-                    let deferrals = scope.deferred_goto.pop_all(name.into());
-
-                    for d in deferrals {
-                        match d.deferred_type {
-                            DeferredType::Goto(_link_id) => {
-                                self.switch_blocks(d.block_id);
-                                //let (args, _) = self.calculate_function_arguments(&def, &d.args, def_span_id, d.call_span_id, b)?;
-                                let args = d.args;
-                                self.push_cps_block_with_placeholder_check(
-                                    name,
-                                    template_id,
-                                    args,
-                                    d.call_span_id,
-                                    b,
-                                )?;
-                            }
-                            DeferredType::Ident(link_id) => {
-                                self.switch_blocks(d.block_id);
-                                unimplemented!()
-                            }
-                        }
-                    }
+                    let _ = self.save_ast_template(current_block_id, &name, &def, def_span_id)?;
                     self.switch_blocks(current_block_id);
                     return Ok(FlattenResult::statement());
                 }
