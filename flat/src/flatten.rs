@@ -1436,7 +1436,7 @@ impl Flatten {
             }
             v_args
         } else {
-            unreachable!()
+            unreachable!("{:?}", block_ty)
         }
     }
 
@@ -1515,7 +1515,7 @@ impl Flatten {
 
         let s_name = b.labels.r(name.into());
 
-        /*
+        // if this is a name, we can resolve now, no need to defer
         if let Some(link_id) = self.resolve_name(current_block_id, name.into()) {
             let goto_values = self.push_call_arguments(args, call_span_id, b)?;
             let goto_arg_type = argvec_type(&goto_values);
@@ -1535,46 +1535,6 @@ impl Flatten {
 
             return Ok(FlattenResult::link(link_id));
         }
-        */
-
-        /*
-        // if a template exists, use it
-        if let Some(template_id) = self.resolve_template(scope_id, name.into()) {
-            let (
-                _variant_id,
-                fun_scope_id,
-                fun_block_id,
-                _def_func_type,
-                _def_arg_type,
-                _,
-                link_id,
-            ) = self.push_cps_block(name, scope_id, template_id, args, call_span_id, b)?;
-
-            println!(
-                "{}: push_goto lambda: from {}:{}=>{}:{}, link: {}",
-                s_name, scope_id, current_block_id, fun_scope_id, fun_block_id, link_id
-            );
-            return Ok(FlattenResult::statement());
-        }
-        */
-
-        /*
-        // if a label exists, then jump to it
-        if let Some(target_block_id) = self.resolve_label(scope_id, name.into()) {
-            // not possible to pass args to a label, use a CPS function instead
-            assert_eq!(args.len(), 0);
-            let target_block = self.blocks.get_block(target_block_id);
-            let target_scope_id = target_block.scope_id;
-            let jump_args = self.push_call_arguments(args, call_span_id, b)?;
-            let link_id = self.push_jump(target_block_id.into(), jump_args, call_span_id);
-            println!(
-                "{}: push_goto label: {}:{}=>{}:{}, link: {}",
-                s_name, scope_id, current_block_id, target_scope_id, target_block_id, link_id
-            );
-            self.switch_blocks(current_block_id);
-            return Ok(FlattenResult::statement());
-        }
-        */
 
         // if we don't have a template or a label already, then we defer
         if let Some(fun_scope_id) = self
@@ -1609,33 +1569,6 @@ impl Flatten {
             unreachable!()
         }
     }
-
-    /*
-    fn push_cps_jump(
-        &mut self,
-        def: &Lambda,
-        _def_func_type: AstType,
-        def_arg_type: AstType,
-        target_block_id: BlockId,
-        def_span_id: SpanId,
-        call_span_id: SpanId,
-        args: Vec<Argument>,
-        b: &mut NB,
-    ) -> Result<LinkId> {
-        let (args, _) =
-            self.calculate_function_arguments(&def, &args, def_span_id, call_span_id, b)?;
-
-        let call_values = self.push_call_arguments(args, call_span_id, b)?;
-        let call_func_type = argvec_type(&call_values);
-
-        // unify the caller args and the refreshed function args
-        b.unify(&call_func_type, call_span_id, &def_arg_type, def_span_id);
-
-        // now that we have the arguments calculated, and the lambda baked, jump!
-        let link_id = self.push_jump(target_block_id.into(), call_values, call_span_id);
-        Ok(link_id)
-    }
-    */
 
     fn push_cps_block_with_type(
         &mut self,
@@ -1699,9 +1632,13 @@ impl Flatten {
                 let body = *def.body.unwrap();
 
                 self.switch_blocks(fun_block_id);
+
+                let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
+                println!("ty: {:?}", (&r_ty1, &def_func_type));
+
                 let (entry_link_id, _) = self.push_start_block(
                     fun_scope_id,
-                    def_func_type.clone(),
+                    r_ty1.clone(),
                     Some(lambda_name),
                     def_span_id,
                     VarDefinitionSpace::Default,
@@ -1711,9 +1648,6 @@ impl Flatten {
                 // add entry to scope, for recursion
                 self.scopes
                     .scope_define(scope_id, lambda_name, entry_link_id);
-
-                let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
-                println!("ty: {:?}", (&r_ty1, &def_func_type));
 
                 let variant_id =
                     self.scopes
@@ -2075,6 +2009,7 @@ impl Flatten {
         // restore position back to where we started
         self.switch_blocks(current_block_id);
 
+        self.complete_open_abstractions(b)?;
         self.resolve_deferred(scope_id, b)?;
         let scope = self.scopes.get_scope(scope_id);
         assert!(scope.deferred_goto.is_empty());
@@ -2094,6 +2029,9 @@ impl Flatten {
 
                     let s_name = b.labels.r(key.into());
 
+                    /*
+                     * name resolution should not be deferred as it can assume lexical scope
+                     *
                     // is it a variable in scope?
                     // This happens if we try to jump to a variable
                     // We have no way of lowering this, so we need to handle this later
@@ -2125,6 +2063,7 @@ impl Flatten {
                         }
                         continue;
                     }
+                    */
 
                     // is it an abstraction?
                     if let Some(abstraction_id) = self.resolve_template(scope_id, key.into()) {
@@ -2187,8 +2126,6 @@ impl Flatten {
                             &format!("ident `{}` not found in {}", s, scope_id),
                             d.call_span_id,
                         );
-                        self.messages
-                            .push((format!("ident: not found {}", s), d.call_span_id));
                     }
                 } else {
                     break;
