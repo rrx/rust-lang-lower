@@ -132,7 +132,7 @@ pub struct Flatten {
     pub(crate) functions: HashMap<StringKey, LinkId>,
     pub(crate) statics: HashMap<StringKey, Literal>,
     open_abstractions: Vec<LinkId>,
-    scoped_continuations: ScopedContinuations,
+    //scoped_continuations: ScopedContinuations,
 }
 
 impl Flatten {
@@ -154,7 +154,7 @@ impl Flatten {
             functions: HashMap::new(),
             statics: HashMap::new(),
             open_abstractions: vec![],
-            scoped_continuations: ScopedContinuations::new(),
+            //scoped_continuations: ScopedContinuations::new(),
         }
     }
 
@@ -271,16 +271,20 @@ impl Flatten {
         result
     }
 
-    pub fn resolve_name(&self, block_id: BlockId, name: StringKey) -> Option<LinkId> {
+    pub fn resolve_name_in_scope(&self, scope_id: ScopeId, name: StringKey) -> Option<LinkId> {
         // resolve scope through the tree, starting at the current scope
-        let block = self.blocks.get_block(block_id);
-        for scope_id in self.scopes.walk_scopes(block.scope_id) {
+        for scope_id in self.scopes.walk_scopes(scope_id) {
             let scope = self.scopes.get_scope(scope_id);
             if let Some(data) = scope.names.get(&name) {
                 return Some(data.clone());
             }
         }
         None
+    }
+    pub fn resolve_name(&self, block_id: BlockId, name: StringKey) -> Option<LinkId> {
+        // resolve scope through the tree, starting at the current scope
+        let block = self.blocks.get_block(block_id);
+        self.resolve_name_in_scope(block.scope_id, name)
     }
 
     pub fn resolve_declaration(&self, block_id: BlockId, name: StringKey) -> Option<LinkId> {
@@ -455,18 +459,12 @@ impl Flatten {
             let block = self.blocks.get_block(block_id);
             let scope_id = block.scope_id;
             self.switch_blocks(block_id);
-            //let r = self.push_cps_block(name, scope_id, abstraction_id, vec![], span_id, b);
-            let (_variant_id, fun_scope_id, fun_block_id) =
+            let (_variant_id, _fun_scope_id, fun_block_id) =
                 self.push_cps_block_with_type(name, scope_id, abstraction_id, ty, span_id, b)?;
 
             // now replace the abstraction code
             let entry = self.get_entry_mut(link_id);
             entry.code = LCode::Val(Literal::Block(fun_block_id));
-
-            //if r.is_err() {
-            //let msg = format!("Incomplete Abstraction: {:?}", (&entry, ty));
-            //b.push_error(&msg, span_id);
-            //}
         }
         Ok(())
     }
@@ -1517,6 +1515,7 @@ impl Flatten {
 
         let s_name = b.labels.r(name.into());
 
+        /*
         if let Some(link_id) = self.resolve_name(current_block_id, name.into()) {
             let goto_values = self.push_call_arguments(args, call_span_id, b)?;
             let goto_arg_type = argvec_type(&goto_values);
@@ -1536,6 +1535,7 @@ impl Flatten {
 
             return Ok(FlattenResult::link(link_id));
         }
+        */
 
         /*
         // if a template exists, use it
@@ -2093,6 +2093,38 @@ impl Flatten {
                     }
 
                     let s_name = b.labels.r(key.into());
+
+                    // is it a variable in scope?
+                    // This happens if we try to jump to a variable
+                    // We have no way of lowering this, so we need to handle this later
+                    if let Some(link_id) = self.resolve_name_in_scope(scope_id, key.into()) {
+                        for d in deferrals {
+                            let goto_values =
+                                self.push_call_arguments(d.args, d.call_span_id, b)?;
+                            let goto_arg_type = argvec_type(&goto_values);
+                            let goto_func_type = AstType::Func(
+                                goto_arg_type.clone().into(),
+                                ReturnType::Never.into(),
+                            );
+
+                            let entry = self.get_entry(link_id);
+                            let var_ty = entry.ty.clone();
+
+                            b.unify(&var_ty, entry.span_id, &goto_func_type, d.call_span_id);
+
+                            println!(
+                                "{}: push_goto ident: {}:{}, link: {}",
+                                s_name, scope_id, d.block_id, link_id
+                            );
+                            let link_id =
+                                self.push_cps_jump(link_id.into(), goto_values, d.call_span_id);
+                            println!(
+                                "{}: resolved deferred name: from {}:{}, link: {}",
+                                s_name, scope_id, d.block_id, link_id
+                            );
+                        }
+                        continue;
+                    }
 
                     // is it an abstraction?
                     if let Some(abstraction_id) = self.resolve_template(scope_id, key.into()) {
@@ -2939,44 +2971,6 @@ impl Flatten {
                 let scope = self.scopes.get_scope_mut(scope_id);
                 scope.block_labels.insert(name.into(), new_block_id);
 
-                // get all deferrals in this scope
-                // and generate jumps to the new block
-                let scope = self.scopes.get_scope_mut(scope_id);
-                let deferrals = scope.deferred_goto.pop_all(name.into());
-
-                // terminate deferred blocks, with a call to the new block we are instantiating
-                // here
-                // TODO: but what we actually want to do is make the CPS for the specific call
-                for d in deferrals {
-                    self.switch_blocks(d.block_id);
-
-                    match d.deferred_type {
-                        DeferredType::Goto(prev_link_id) => {
-                            // invalidate dummy jump
-                            let entry = self.get_entry_mut(prev_link_id);
-                            entry.next = prev_link_id;
-                            let block = self.blocks.get_block_mut(d.block_id);
-                            // remove last entry in the block
-                            block.last = Some(prev_link_id);
-                            block.term = false;
-
-                            // delete the dummy jump and replace it
-                            // we are only jumping to a label here, so we don't need to monomorphize
-                            // monomorphization happens at the function level instead
-                            let jump_args =
-                                self.push_call_arguments(d.args.clone(), d.call_span_id, b)?;
-                            let link_id =
-                                self.push_jump(new_block_id.into(), jump_args, d.call_span_id);
-                            println!("{}: bake deferred: {:?}, link: {}", s_name, d, link_id);
-                        }
-                        DeferredType::Ident(link_id) => {
-                            unimplemented!();
-                            //let entry = self.get_entry_mut(link_id);
-                            //entry.next = new_block_id.into();
-                        }
-                    }
-                }
-
                 self.switch_blocks(current_block_id);
 
                 // start a new block.  If the last block isn't terminated, then we create a new
@@ -3466,9 +3460,11 @@ impl Flatten {
     }
 }
 
+/*
 fn def_to_type(def: &Lambda, b: &mut NB) -> AstType {
     let arg_type = b.types.r(def.arg_type).clone();
     let return_type = b.types.r(def.return_type).clone();
     let fun_ty = AstType::Func(arg_type.into(), ReturnType::Single(return_type).into());
     fun_ty
 }
+*/
