@@ -2072,108 +2072,121 @@ impl Flatten {
         Ok(())
     }
 
+    fn resolve_deferred_single(
+        &mut self,
+        key: StringKey,
+        d: DeferredGoto,
+        b: &mut NB,
+    ) -> Result<bool> {
+        let s_name = b.labels.r(key.into());
+        /*
+         * name resolution should not be deferred as it can assume lexical scope
+         * but since we can't actually lower a jump to a variable, we are going to
+         * do some rewriting here, so CPS functions become static
+         * we replace the variable representing the block with an integer, and use
+         * a switch statement in the jump to route things appropriately.
+         *
+         */
+        // is it a variable in scope?
+        // This happens if we try to jump to a variable
+        // We have no way of lowering this, so we need to handle this later
+        // This will be rewritten in a later step based on the type
+        /*
+           if let Some(link_id) = self.resolve_name_in_scope(d.scope_id, key.into()) {
+           unimplemented!("deferred name");
+        // TODO: we need to rewrite the function to be static.
+        // This should probably be done sooner.  As soon as we know that it's a CPS
+        // function, we should defer and bake it once we know all of the callers
+        // But we also need to resolve types, which the CPS function is able to do.
+        let goto_values = self.push_call_arguments(d.args, d.call_span_id, b)?;
+        let goto_arg_type = argvec_type(&goto_values);
+        let goto_func_type =
+        AstType::Func(goto_arg_type.clone().into(), ReturnType::Never.into());
+
+        let entry = self.get_entry(link_id);
+        let var_ty = entry.ty.clone();
+
+        b.unify(&var_ty, entry.span_id, &goto_func_type, d.call_span_id);
+
+        println!(
+        "{}: push_goto ident: {}:{}, link: {}",
+        s_name, d.scope_id, d.block_id, link_id
+        );
+        let link_id = self.push_cps_jump(link_id.into(), goto_values, d.call_span_id);
+        println!(
+        "{}: resolved deferred name: from {}:{}, link: {}",
+        s_name, d.scope_id, d.block_id, link_id
+        );
+        count += 1;
+        }
+        */
+
+        // is it an abstraction?
+        if let Some(abstraction_id) = self.resolve_template(d.scope_id, key.into()) {
+            self.switch_blocks(d.block_id);
+            self.remove_placeholder_terminal(d.block_id);
+            // push and jump
+            // TODO: this function needs to handle unwind
+            let (
+                _variant_id,
+                fun_scope_id,
+                fun_block_id,
+                _def_func_type,
+                _def_arg_type,
+                _,
+                link_id,
+            ) = self.push_cps_block(
+                key,
+                d.scope_id,
+                abstraction_id,
+                d.args.clone(),
+                d.call_span_id,
+                b,
+            )?;
+            println!(
+                "{}: resolved deferred lambda: from {}:{}=>{}:{}, link: {}",
+                s_name, d.scope_id, d.block_id, fun_scope_id, fun_block_id, link_id
+            );
+            return Ok(true);
+        }
+
+        // is it a label?
+        if let Some(target_block_id) = self.resolve_label(d.scope_id, key.into()) {
+            assert_eq!(d.args.len(), 0);
+            // not possible to pass args to a label, use a CPS function instead
+            self.switch_blocks(d.block_id);
+            self.remove_placeholder_terminal(d.block_id);
+
+            // TODO: we just have a label, so we need to handle unwind here.  We can't jump
+            // directly, we need to jump to the unwind function
+
+            let jump_args = self.push_call_arguments(d.args, d.call_span_id, b)?;
+            let link_id = self.push_jump(target_block_id.into(), jump_args, d.call_span_id);
+            let block = self.blocks.get_block(target_block_id);
+            println!(
+                "{}: resolved deferred label: from {}:{}=>{}:{}, link: {}",
+                s_name, d.scope_id, d.block_id, block.scope_id, target_block_id, link_id
+            );
+            return Ok(true);
+        }
+
+        // otherwise it's not defined, return an error
+        //let s = b.labels.r(key.into());
+        //b.push_error(
+        //&format!("ident `{}` not found in {}", s, d.scope_id),
+        //d.call_span_id,
+        //);
+        Ok(false)
+    }
+
     fn resolve_deferred(&mut self, b: &mut NB) -> Result<usize> {
         let mut count = 0;
         if let Some((key, deferrals)) = self.deferred_goto.pop_any() {
-            //if deferrals.is_empty() {
-            //return Ok(());
-            //}
-            let s_name = b.labels.r(key.into());
             for d in deferrals {
-                /*
-                 * name resolution should not be deferred as it can assume lexical scope
-                 * but since we can't actually lower a jump to a variable, we are going to
-                 * do some rewriting here, so CPS functions become static
-                 * we replace the variable representing the block with an integer, and use
-                 * a switch statement in the jump to route things appropriately.
-                 *
-                 */
-                // is it a variable in scope?
-                // This happens if we try to jump to a variable
-                // We have no way of lowering this, so we need to handle this later
-                if let Some(link_id) = self.resolve_name_in_scope(d.scope_id, key.into()) {
-                    unimplemented!("deferred name");
-                    // TODO: we need to rewrite the function to be static.
-                    // This should probably be done sooner.  As soon as we know that it's a CPS
-                    // function, we should defer and bake it once we know all of the callers
-                    // But we also need to resolve types, which the CPS function is able to do.
-                    let goto_values = self.push_call_arguments(d.args, d.call_span_id, b)?;
-                    let goto_arg_type = argvec_type(&goto_values);
-                    let goto_func_type =
-                        AstType::Func(goto_arg_type.clone().into(), ReturnType::Never.into());
-
-                    let entry = self.get_entry(link_id);
-                    let var_ty = entry.ty.clone();
-
-                    b.unify(&var_ty, entry.span_id, &goto_func_type, d.call_span_id);
-
-                    println!(
-                        "{}: push_goto ident: {}:{}, link: {}",
-                        s_name, d.scope_id, d.block_id, link_id
-                    );
-                    let link_id = self.push_cps_jump(link_id.into(), goto_values, d.call_span_id);
-                    println!(
-                        "{}: resolved deferred name: from {}:{}, link: {}",
-                        s_name, d.scope_id, d.block_id, link_id
-                    );
+                let result = self.resolve_deferred_single(key, d, b)?;
+                if result {
                     count += 1;
                 }
-
-                // is it an abstraction?
-                if let Some(abstraction_id) = self.resolve_template(d.scope_id, key.into()) {
-                    self.switch_blocks(d.block_id);
-                    self.remove_placeholder_terminal(d.block_id);
-                    // push and jump
-                    // TODO: this function needs to handle unwind
-                    let (
-                        _variant_id,
-                        fun_scope_id,
-                        fun_block_id,
-                        _def_func_type,
-                        _def_arg_type,
-                        _,
-                        link_id,
-                    ) = self.push_cps_block(
-                        key,
-                        d.scope_id,
-                        abstraction_id,
-                        d.args.clone(),
-                        d.call_span_id,
-                        b,
-                    )?;
-                    println!(
-                        "{}: resolved deferred lambda: from {}:{}=>{}:{}, link: {}",
-                        s_name, d.scope_id, d.block_id, fun_scope_id, fun_block_id, link_id
-                    );
-                    count += 1;
-                }
-
-                // is it a label?
-                if let Some(target_block_id) = self.resolve_label(d.scope_id, key.into()) {
-                    assert_eq!(d.args.len(), 0);
-                    // not possible to pass args to a label, use a CPS function instead
-                    self.switch_blocks(d.block_id);
-                    self.remove_placeholder_terminal(d.block_id);
-
-                    // TODO: we just have a label, so we need to handle unwind here.  We can't jump
-                    // directly, we need to jump to the unwind function
-
-                    let jump_args = self.push_call_arguments(d.args, d.call_span_id, b)?;
-                    let link_id = self.push_jump(target_block_id.into(), jump_args, d.call_span_id);
-                    let block = self.blocks.get_block(target_block_id);
-                    println!(
-                        "{}: resolved deferred label: from {}:{}=>{}:{}, link: {}",
-                        s_name, d.scope_id, d.block_id, block.scope_id, target_block_id, link_id
-                    );
-                    count += 1;
-                }
-
-                // otherwise it's not defined, return an error
-                let s = b.labels.r(key.into());
-                //b.push_error(
-                //&format!("ident `{}` not found in {}", s, d.scope_id),
-                //d.call_span_id,
-                //);
             }
         }
         Ok(count)
@@ -2571,7 +2584,7 @@ impl Flatten {
                         node.span_id,
                         VarDefinitionSpace::Default,
                     );
-                    //self.open_abstractions.push(link_id);
+                    self.open_abstractions.push(link_id);
                     return Ok(FlattenResult::link(link_id));
                 }
 

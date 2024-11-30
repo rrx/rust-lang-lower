@@ -1,4 +1,4 @@
-use crate::{InternKey, InternPool, InternValue, StringKey};
+use crate::{BlockId, InternKey, InternPool, InternValue, StringKey};
 use serde::Serialize;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
@@ -76,7 +76,7 @@ pub enum AstType {
     Error,
     Type,
     JumpTarget,
-    CPSFunc(Box<AstType>),
+    TargetUnion(Vec<AstType>, Vec<BlockId>),
     Args(Box<AstType>),   // *args type
     KwArgs(Box<AstType>), // **kwargs type
     Array(Box<AstType>, Vec<usize>),

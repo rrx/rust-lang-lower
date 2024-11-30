@@ -1,5 +1,6 @@
 use crate::{AstNode, AstType, BuiltinId, SpanId, StringKey, TypeId};
 use petgraph::graph::NodeIndex;
+use serde::Serialize;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
@@ -34,7 +35,7 @@ impl VarDefinitionSpace {
     }
 }
 
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, PartialOrd, Ord, Serialize)]
 pub struct BlockId(u32);
 
 impl BlockId {
