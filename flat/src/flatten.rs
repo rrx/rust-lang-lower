@@ -142,7 +142,7 @@ pub struct Flatten {
     pub(super) link: LinkOptions,
     pub(super) entries: Vec<CodeEntry>,
     pub blocks: BlockGraph,
-    ast_templates: Vec<(Lambda, SpanId)>,
+    ast_templates: Vec<(Lambda, SpanId, HashSet<BlockId>)>,
     pub(super) messages: Vec<(String, SpanId)>,
     pub mode: FlattenMode,
     pub(crate) static_scope: Option<ScopeId>,
@@ -360,7 +360,7 @@ impl Flatten {
             Some(scope_id) => {
                 let scope = self.scopes.get_scope(scope_id);
                 if let Some(template_id) = scope.lambdas.get(&name.into()).cloned() {
-                    let (def, span_id) = self.get_ast_template(template_id).clone();
+                    let (def, span_id, _) = self.get_ast_template(template_id).clone();
                     Some((scope_id, def, span_id))
                 } else {
                     None
@@ -726,12 +726,19 @@ impl Flatten {
 
     pub fn insert_ast_template(&mut self, def: Lambda, span_id: SpanId) -> AbstractionId {
         let offset = self.ast_templates.len();
-        self.ast_templates.push((def, span_id));
+        self.ast_templates.push((def, span_id, HashSet::new()));
         AbstractionId::new(offset)
     }
 
-    pub fn get_ast_template(&self, template_id: AbstractionId) -> &(Lambda, SpanId) {
+    pub fn get_ast_template(
+        &self,
+        template_id: AbstractionId,
+    ) -> &(Lambda, SpanId, HashSet<BlockId>) {
         self.ast_templates.get(template_id.index()).unwrap()
+        //let (def, span_id, blocks) = self.ast_templates.get(template_id.index()).unwrap();
+        //let mut s = blocks.iter().cloned().collect::<Vec<_>>();
+        //s.sort();
+        //(def, *span_id)
     }
 
     pub fn push_sequence(
@@ -1513,6 +1520,11 @@ impl Flatten {
         (block_link_id, v_args)
     }
 
+    pub fn save_ast_template_caller(&mut self, abs_id: AbstractionId, block_id: BlockId) {
+        let a = self.ast_templates.get_mut(abs_id.index()).unwrap();
+        a.2.insert(block_id);
+    }
+
     pub fn save_ast_template(
         &mut self,
         block_id: BlockId,
@@ -1642,7 +1654,7 @@ impl Flatten {
     ) -> Result<(VariantId, ScopeId, BlockId)> {
         // call in the context of the caller, which is a goto
         let current_block_id = self.current_block_id();
-        let (def, def_span_id) = self.get_ast_template(template_id).clone();
+        let (def, def_span_id, _) = self.get_ast_template(template_id).clone();
         // This expects to be called in a block that is ready to jump
         let (_def_func_type, def_arg_type, _def_ret_type) = self.refresh_func_type(&def, b);
         let refresh_def_func_type =
@@ -1690,7 +1702,7 @@ impl Flatten {
                     fun_scope_id,
                     fun_block_id
                 );
-                let body = *def.body.unwrap();
+                let body = def.body.unwrap();
 
                 self.switch_blocks(fun_block_id);
 
@@ -1716,7 +1728,7 @@ impl Flatten {
 
                 // flatten function, and switch to next
                 // lower first, so we resolve types
-                let _ = self.push_node(body, b)?;
+                let _ = self.push_node(*body, b)?;
 
                 // update the variant with the resolved type
                 self.scopes
@@ -1766,7 +1778,7 @@ impl Flatten {
     )> {
         // call in the context of the caller, which is a goto
         let current_block_id = self.current_block_id();
-        let (def, def_span_id) = self.get_ast_template(abstraction_id).clone();
+        let (def, def_span_id, _) = self.get_ast_template(abstraction_id).clone();
 
         //let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
         // we might want to handle this later
