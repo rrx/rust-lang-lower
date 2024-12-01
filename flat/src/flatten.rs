@@ -503,13 +503,24 @@ impl Flatten {
             let block_id = entry.block_id;
             let block = self.blocks.get_block(block_id);
             let scope_id = block.scope_id;
+            let target_field_types = ty.field_types();
+
             self.switch_blocks(block_id);
-            let (_variant_id, _fun_scope_id, fun_block_id) =
-                self.push_cps_block_with_type(name, scope_id, abstraction_id, ty, span_id, b)?;
+            let (_variant_id, _fun_scope_id, fun_block_id) = self.push_cps_block_with_type(
+                name,
+                scope_id,
+                abstraction_id,
+                ty.clone(),
+                span_id,
+                b,
+            )?;
 
             // now replace the abstraction code
             let entry = self.get_entry_mut(link_id);
             entry.code = LCode::Val(Literal::Block(fun_block_id));
+            entry.ty = AstType::TargetUnion(target_field_types, vec![fun_block_id]);
+
+            b.unify(&entry.ty, entry.span_id, &ty, span_id);
         }
         Ok(())
     }
@@ -521,9 +532,10 @@ impl Flatten {
         // add prototypes for builtins
         self.inject_builtin_prototypes(b);
 
-        //self.resolve_deferred_all(b)?;
-        self.complete_open_abstractions(b)?;
         self.resolve_deferred(b)?;
+        // complete creates more deferrals
+        //self.resolve_deferred(b)?;
+        assert!(self.deferred_goto.is_empty());
 
         // ensure types are resolved
         //self.type_inference(b);
@@ -1533,29 +1545,20 @@ impl Flatten {
         b: &mut NB,
     ) -> Result<FlattenResult> {
         // push a goto
-        // if the label exists, then it's straightforward
-        // if it doesn't exist, then we save a marker to be picked up by a future definition
-        // A definition could be a CPS function, or it could be a label
-        // The problem here is that we can't really define the goto, until we know what function we
-        // are calling, so we need to defer writing out the goto until we have the definition
-        // We need to do the goto and the function definition at the same time, so we can do type
-        // unification, as well as monomorphization.
-        // Also save the caller span, so we can present a good error
-
-        // goto may not get pushed here, it may be deferred
-        // if it exists, then we might handle it here properly.
+        // to keep things simpler, we just defer all resolution of the gotos until the end
+        // Goto is terminal, so we write out placeholders
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
-        // Goto is terminal
         let scope_id = block.scope_id;
 
         let s_name = b.labels.r(name.into());
 
         // if this is a name, we can resolve now, no need to defer
         // this happens in a CPS function, where we try to jump to a variable.
-        // we don't want to defer because we know the target
+        // we don't need to defer because we know the target
         // We will rewrite in a later step, this goto will become a select
-        if let Some(name_link_id) = self.resolve_name(current_block_id, name.into()) {
+        if let Some(name_link_id) = self.resolve_name_in_scope(scope_id, name.into()) {
+            // we resolve the variable, but the actual jump is encoded in the TargetUnion type
             let link_id = block.last().unwrap();
             self.push_code(
                 LCode::PlaceholderTerminal(link_id),
@@ -1565,7 +1568,6 @@ impl Flatten {
                 VarDefinitionSpace::Default,
             );
 
-            //let scope = self.scopes.get_scope_mut(scope_id);
             let d = DeferredGoto::new(
                 scope_id,
                 name.into(),
@@ -1581,28 +1583,6 @@ impl Flatten {
             self.deferred_goto.add_deferred(d);
             return Ok(FlattenResult::statement());
         }
-        //
-        /*
-        if let Some(link_id) = self.resolve_name(current_block_id, name.into()) {
-            let goto_values = self.push_call_arguments(args, call_span_id, b)?;
-            let goto_arg_type = argvec_type(&goto_values);
-            let goto_func_type =
-                AstType::Func(goto_arg_type.clone().into(), ReturnType::Never.into());
-
-            let entry = self.get_entry(link_id);
-            let var_ty = entry.ty.clone();
-
-            b.unify(&var_ty, entry.span_id, &goto_func_type, call_span_id);
-
-            println!(
-                "{}: push_goto ident: {}:{}, link: {}",
-                s_name, scope_id, current_block_id, link_id
-            );
-            let link_id = self.push_cps_jump(link_id.into(), goto_values, call_span_id);
-
-            return Ok(FlattenResult::link(link_id));
-        }
-        */
 
         // if we don't have a template or a label already, then we defer
         if let Some(fun_scope_id) = self
@@ -1618,7 +1598,6 @@ impl Flatten {
                 VarDefinitionSpace::Default,
             );
 
-            //let scope = self.scopes.get_scope_mut(fun_scope_id);
             let d = DeferredGoto::new(
                 fun_scope_id,
                 name.into(),
@@ -2079,11 +2058,6 @@ impl Flatten {
         // restore position back to where we started
         self.switch_blocks(current_block_id);
 
-        //self.complete_open_abstractions(b)?;
-        //self.resolve_deferred_all(b)?;
-
-        //let scope = self.scopes.get_scope(scope_id);
-        //assert!(self.deferred_goto.is_empty());
         println!("function end: {}", b.labels.r(name.into()));
         //println!("function end: {:?}", scope.deferred_goto);
         Ok((v_id, FlattenResult::link(entry_link_id)))
@@ -2100,10 +2074,60 @@ impl Flatten {
          * a switch statement in the jump to route things appropriately.
          *
          */
+
+        match &d.deferred_type {
+            DeferredType::Name(def_link_id) => {
+                self.switch_blocks(d.block_id);
+                self.remove_placeholder_terminal(d.block_id);
+
+                println!(
+                    "{}: resolved deferred name: from {}:{}",
+                    s_name, d.scope_id, d.block_id
+                );
+
+                // push the arguments, and unify the type,
+                // but keep the placeholder, we will replace it in the rewrite step
+                // we do just enough calculation here to resolve the types, and we push it back on the
+                // stack
+
+                // calculate the type, so we can unify
+                let goto_values = self.push_call_arguments(d.args.clone(), d.call_span_id, b)?;
+                let goto_arg_type = argvec_type(&goto_values);
+                let goto_func_type =
+                    AstType::Func(goto_arg_type.clone().into(), ReturnType::Never.into());
+
+                // unify
+                let entry = self.get_entry(*def_link_id);
+                let var_ty = entry.ty.clone();
+                b.unify(&var_ty, entry.span_id, &goto_func_type, d.call_span_id);
+
+                // save the argvec, so we can properly terminate later
+                let mut d = d;
+                d.argvec = goto_values;
+
+                let block = self.blocks.get_block(self.current_block_id());
+                self.push_code(
+                    LCode::PlaceholderTerminal(block.last().unwrap()),
+                    AstType::Unit,
+                    None,
+                    d.call_span_id,
+                    VarDefinitionSpace::Default,
+                );
+
+                self.deferred_goto.add_cps(d);
+                return Ok(true);
+            }
+            DeferredType::Goto(link_id) => {}
+            DeferredType::Ident(_) => {
+                unimplemented!();
+            }
+        }
+
         // is it a variable in scope?
         // This happens if we try to jump to a variable
         // We have no way of lowering this, so we need to handle this later
         // This will be rewritten in a later step based on the type
+        /*
         if let Some(def_link_id) = self.resolve_name_in_scope(d.scope_id, key.into()) {
             self.switch_blocks(d.block_id);
             self.remove_placeholder_terminal(d.block_id);
@@ -2145,6 +2169,7 @@ impl Flatten {
             self.deferred_goto.add_cps(d);
             return Ok(true);
         }
+        */
 
         // is it an abstraction?
         if let Some(abstraction_id) = self.resolve_template(d.scope_id, key.into()) {
@@ -2216,18 +2241,28 @@ impl Flatten {
         self.remove_placeholder_terminal(d.block_id);
 
         if let DeferredType::Name(name_link_id) = d.deferred_type {
-            //unimplemented!("deferred name");
             // TODO: we need to rewrite the function to be static.
-            // This should probably be done sooner.  As soon as we know that it's a CPS
-            // function, we should defer and bake it once we know all of the callers
-            // But we also need to resolve types, which the CPS function is able to do.
-            let link_id = self.push_cps_jump(name_link_id.into(), d.argvec, d.call_span_id);
-            println!(
-                "{}: resolved cps goto: from {}:{}, link: {}=>{}",
-                s_name, d.scope_id, d.block_id, name_link_id, link_id
-            );
+            // We should have all of the information we need in the type
+            // The actual target comes from the type
+            let entry = self.get_entry(name_link_id);
+            let ty = entry.ty.clone();
+            println!("resolve ty: {}", ty);
+            if let AstType::TargetUnion(field_types, targets) = ty {
+                if targets.len() == 1 {
+                    let target_block_id = targets.get(0).unwrap().clone();
+                    let link_id = self.push_jump(target_block_id, d.argvec, d.call_span_id);
+                    println!(
+                        "{}: resolved cps goto: from {}:{}, link: {}=>{}",
+                        s_name, d.scope_id, d.block_id, name_link_id, link_id
+                    );
+                } else {
+                    unimplemented!();
+                }
+            } else {
+                unreachable!();
+            }
         } else {
-            unreachable!();
+            unreachable!("{:?}", d);
         }
 
         Ok(())
@@ -2250,6 +2285,7 @@ impl Flatten {
                 let s_name = b.labels.r(d.name.into());
                 println!("{}: pop deferred goto: {:?}", s_name, &d);
                 let _ = self.resolve_deferred_single(d, b)?;
+                self.complete_open_abstractions(b)?;
             } else {
                 break;
             }

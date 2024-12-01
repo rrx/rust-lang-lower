@@ -3,6 +3,7 @@ use anyhow::Error;
 use anyhow::Result;
 use compile_core::Diagnostic;
 use compile_core::{Ast, AstNode, AstType, BinaryOperation, Literal, ReturnType, SpanId};
+use flat::ValueId;
 use melior::ir::Location;
 use melior::{
     dialect::{
@@ -70,6 +71,7 @@ impl<'c> MLIRGenerator<'c> {
                 )
             }
 
+            AstType::TargetUnion(_, _) => (IntegerType::new(self.context, 64).into(), vec![]),
             AstType::Struct(_args) => {
                 /*
                 let types = args
@@ -308,7 +310,12 @@ impl<'c> MLIRGenerator<'c> {
         )
     }
 
-    pub fn emit_literal_const(&self, lit: &Literal, location: Location<'c>) -> Operation<'c> {
+    pub fn emit_literal_const(
+        &self,
+        v: ValueId,
+        lit: &Literal,
+        location: Location<'c>,
+    ) -> Operation<'c> {
         match lit {
             Literal::Float(f) => self.build_float_op(*f, location),
 
@@ -322,12 +329,24 @@ impl<'c> MLIRGenerator<'c> {
                 self.build_int_op(0, location)
             }
             Literal::Block(block_id) => {
+                // this is a block.  The type should be TargetUnion
+                let ty = self.blockify.get_type(v.into());
+                if let AstType::TargetUnion(_, mut blocks) = ty {
+                    blocks.sort();
+                    let index = blocks.iter().position(|&x| x == *block_id).unwrap();
+                    self.build_int_op(index as i64, location)
+                } else {
+                    unreachable!()
+                }
+
+                /*
                 let ty = llvm::r#type::pointer(self.context, 0);
                 arith::constant(
                     self.context,
                     IntegerAttribute::new(ty, block_id.index() as i64).into(),
                     location,
                 )
+                */
             }
             _ => unimplemented!("{:?}", lit),
         }

@@ -108,18 +108,26 @@ fn ast_unify_values(value1: &AstType, value2: &AstType) -> Result<AstType, UErro
                 Ok(AstType::Ptr(ty.into()))
             }
 
-            (AstType::TargetUnion(c1, r1), AstType::Func(c2, r2)) => {
-                unimplemented!();
+            (AstType::TargetUnion(c2, targets), AstType::Func(c1, r1)) => {
+                match r1.as_ref() {
+                    ReturnType::Never => (),
+                    ReturnType::Single(AstType::Unit) => (),
+                    _ => unimplemented!(),
+                }
+                let c1_field_types = c1.field_types();
+                let result = unify_fields(&c1_field_types, &c2)?;
+                Ok(AstType::TargetUnion(result, targets.clone()))
             }
 
             (AstType::Func(c1, r1), AstType::TargetUnion(c2, targets)) => {
-                unimplemented!();
+                match r1.as_ref() {
+                    ReturnType::Never => (),
+                    ReturnType::Single(AstType::Unit) => (),
+                    _ => unimplemented!(),
+                }
                 let c1_field_types = c1.field_types();
                 let result = unify_fields(&c1_field_types, &c2)?;
-                Ok(AstType::Func(
-                    AstType::build_struct(result).into(),
-                    ReturnType::Never.into(),
-                ))
+                Ok(AstType::TargetUnion(result, targets.clone()))
             }
 
             (AstType::Func(c1, r1), AstType::Func(c2, r2)) => {

@@ -270,7 +270,7 @@ impl<'c> LowerIR<'c> for MLIRGenerator<'c> {
             //Ok(index)
             self.index.insert(v, index);
         } else {
-            let op = self.emit_literal_const(lit, location);
+            let op = self.emit_literal_const(v, lit, location);
             let c = self
                 .blocks
                 .get_mut(&block_id)
@@ -335,6 +335,9 @@ impl<'c> MLIRGenerator<'c> {
                 //current = indicies.clone().offset();
                 continue;
             }
+
+            //if let LCode::Val(Literal::Block(block_id)) = code {
+            //}
 
             /*
                 if let LCode::ValueIndex(link_id, index) = code {
@@ -423,6 +426,7 @@ impl<'c> MLIRGenerator<'c> {
             .into_iter()
             .map(|value_id| self.resolve_value(value_id.into()).unwrap())
             .collect();
+        println!("jump1: {:?}", (v, &indicies));
         let rs = self.values(indicies);
 
         let target_value_id = self.blockify.resolve_code_offset(target);
@@ -434,7 +438,7 @@ impl<'c> MLIRGenerator<'c> {
         //}
         //}
 
-        println!("jump: {:?}", (target_value_id, block_id));
+        println!("jump2: {:?}", (target_value_id, block_id));
 
         let c = self
             .blocks
@@ -742,8 +746,9 @@ impl<'c> MLIRGenerator<'c> {
 
                 let mut syms = vec![];
                 for link_id in link_ids {
+                    let v = self.blockify.resolve_code_offset(link_id.into());
                     let sym = self.resolve_value(link_id.into()).unwrap();
-                    syms.push(sym);
+                    syms.push((v, sym));
                 }
 
                 // we receive a list of uses of values, which is in a graph
@@ -764,8 +769,8 @@ impl<'c> MLIRGenerator<'c> {
                 let v_alloc = c.push(op);
                 self.index.insert(v, v_alloc);
 
-                for (i, sym) in syms.iter().enumerate() {
-                    let op = self.emit_literal_const(&Literal::Index(i), location);
+                for (i, (v, sym)) in syms.iter().enumerate() {
+                    let op = self.emit_literal_const(*v, &Literal::Index(i), location);
                     let c = self.blocks.get_mut(&block_id).unwrap();
                     let index = c.push(op);
                     //self.index.insert(v, index);

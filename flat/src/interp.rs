@@ -22,6 +22,10 @@ impl Value {
             Literal::Float(f) => Value::Float(*f),
             Literal::Bool(v) => Value::Bool(*v),
             Literal::Index(v) => Value::Index(*v),
+            Literal::Block(v) => {
+                // TODO: map block to integer
+                Value::Int(0)
+            }
             _ => unimplemented!("{:?}", lit),
         }
     }

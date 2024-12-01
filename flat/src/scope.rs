@@ -155,26 +155,21 @@ impl DeferredGotoList {
         self.h.is_empty()
     }
 
-    /*
-    pub fn keys(&self) -> Vec<StringKey> {
-        self.h.keys().cloned().collect()
-    }
-    */
-
     pub fn add_cps(&mut self, d: DeferredGoto) {
         println!("add cps deferred goto: {:?}", (&d, &self));
         self.cps.push(d);
     }
+
+    pub fn pop_cps(&mut self) -> Option<DeferredGoto> {
+        self.cps.pop()
+    }
+
     pub fn add_deferred(&mut self, d: DeferredGoto) {
         println!("add deferred goto: {:?}", (&d, &self));
         self.h.push(d);
     }
 
     pub fn pop_deferred(&mut self) -> Option<DeferredGoto> {
-        self.h.pop()
-    }
-
-    pub fn pop_cps(&mut self) -> Option<DeferredGoto> {
         self.h.pop()
     }
 }
