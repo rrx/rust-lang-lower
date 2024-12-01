@@ -13,10 +13,10 @@ def main():
 
   # next is only called dynamically
   def next_x():
-    q.goto("X")
+    q.goto("A")
 
   def next_y():
-    q.goto("Y")
+    q.goto("B")
 
   #return 0
 
@@ -66,8 +66,9 @@ def main():
 
   #t = next_x
   #q.goto(cps, t)
-  q.label("X")
+  #q.goto(cps, next_x)
+  q.label("A")
   #q.goto(cps, q.resolve_label(next_y))
-  q.label("Y")
+  q.label("B")
 
   return 0

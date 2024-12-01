@@ -3,7 +3,7 @@ use ena::unify::*;
 use std::convert::Into;
 use thiserror::Error;
 
-use compile_core::{AstType, ReturnType};
+use compile_core::{AstType, ReturnType, StringKey};
 
 #[derive(Debug, Error)]
 pub enum UError {
@@ -64,6 +64,37 @@ impl UnifyKey for IntKey {
     }
 }
 
+fn unify_fields(c1_fields: &[AstType], c2_fields: &[AstType]) -> Result<Vec<AstType>, UError> {
+    if c1_fields.len() != c2_fields.len() {
+        return Err(UError::Bad);
+    }
+
+    let result = c1_fields
+        .iter()
+        .zip(c2_fields.iter())
+        .map_while(|(a, b)| match ast_unify_values(a, b) {
+            Ok(s) => Some(s),
+            Err(_) => None,
+        })
+        .collect::<Vec<_>>();
+
+    if result.len() != c1_fields.len() {
+        return Err(UError::Bad);
+    }
+    Ok(result)
+}
+
+fn unify_return_type(r1: &ReturnType, r2: &ReturnType) -> Result<ReturnType, UError> {
+    match (r1, r2) {
+        (ReturnType::Single(ret1), ReturnType::Single(ret2)) => {
+            let r = ast_unify_values(ret1, ret2)?;
+            Ok(ReturnType::Single(r.into()))
+        }
+        (ReturnType::Never, ReturnType::Never) => Ok(ReturnType::Never.into()),
+        _ => unimplemented!("{:?}", (r1, r2)),
+    }
+}
+
 fn ast_unify_values(value1: &AstType, value2: &AstType) -> Result<AstType, UError> {
     let id1 = value1.try_unknown();
     let id2 = value2.try_unknown();
@@ -77,39 +108,31 @@ fn ast_unify_values(value1: &AstType, value2: &AstType) -> Result<AstType, UErro
                 Ok(AstType::Ptr(ty.into()))
             }
 
+            (AstType::TargetUnion(c1, r1), AstType::Func(c2, r2)) => {
+                unimplemented!();
+            }
+
+            (AstType::Func(c1, r1), AstType::TargetUnion(c2, targets)) => {
+                unimplemented!();
+                let c1_field_types = c1.field_types();
+                let result = unify_fields(&c1_field_types, &c2)?;
+                Ok(AstType::Func(
+                    AstType::build_struct(result).into(),
+                    ReturnType::Never.into(),
+                ))
+            }
+
             (AstType::Func(c1, r1), AstType::Func(c2, r2)) => {
-                let c1_fields = c1.fields();
-                let c2_fields = c2.fields();
+                let c1_field_types = c1.field_types();
+                let c2_field_types = c2.field_types();
 
-                if c1_fields.len() != c2_fields.len() {
-                    return Err(UError::Bad);
-                }
+                let result = unify_fields(&c1_field_types, &c2_field_types)?;
 
-                let result = c1_fields
-                    .iter()
-                    .zip(c2_fields.iter())
-                    .map_while(|((_, a), (_, b))| match ast_unify_values(a, b) {
-                        Ok(s) => Some(s),
-                        Err(_) => None,
-                    })
-                    .collect::<Vec<_>>();
-
-                if result.len() != c1_fields.len() {
-                    return Err(UError::Bad);
-                }
-
-                match (r1.as_ref(), r2.as_ref()) {
-                    (ReturnType::Single(ret1), ReturnType::Single(ret2)) => {
-                        let r = ast_unify_values(ret1, ret2)?;
-                        let ty = AstType::func(result, r.into());
-                        Ok(ty)
-                    }
-                    (ReturnType::Never, ReturnType::Never) => Ok(AstType::Func(
-                        AstType::build_struct(result).into(),
-                        ReturnType::Never.into(),
-                    )),
-                    _ => unimplemented!("{:?}", (r1, r2)),
-                }
+                let ret_ty = unify_return_type(r1.as_ref(), r2.as_ref())?;
+                Ok(AstType::Func(
+                    AstType::build_struct(result).into(),
+                    ret_ty.into(),
+                ))
             }
 
             (AstType::Struct(c1), AstType::Struct(c2)) => {
@@ -215,6 +238,18 @@ impl TypeUnify {
         r
     }
 
+    fn _unify_list(&mut self, a: &[AstType], b: &[AstType]) -> Result<(), UError> {
+        if a.len() != b.len() {
+            return Err(UError::Bad);
+        }
+        for (x, y) in a.iter().zip(b.iter()) {
+            if self.unify(x, y).is_err() {
+                return Err(UError::Bad);
+            }
+        }
+        Ok(())
+    }
+
     fn _unify(&mut self, a: &AstType, b: &AstType) -> Result<(), UError> {
         match (a, b) {
             (AstType::Args(v1), AstType::Args(v2)) => self.unify(&*v1, &*v2),
@@ -236,14 +271,19 @@ impl TypeUnify {
                 self.ut.unify_var_var(k1, k2)
             }
             (AstType::Ptr(v1), AstType::Ptr(v2)) => self.unify(&*v1, &*v2),
-            (AstType::Struct(vs1), AstType::Struct(vs2)) => {
-                for ((_, x), (_, y)) in vs1.iter().zip(vs2.iter()) {
-                    if self.unify(x, y).is_err() {
-                        return Err(UError::Bad);
-                    }
-                }
-                Ok(())
+            (AstType::Struct(_), AstType::Struct(_)) => {
+                self._unify_list(&a.field_types(), &b.field_types())
             }
+            (AstType::TargetUnion(_, _), AstType::TargetUnion(_, _)) => unimplemented!(),
+
+            (AstType::TargetUnion(args1, _), AstType::Struct(_)) => {
+                self._unify_list(args1, &b.field_types())
+            }
+
+            (AstType::Struct(_), AstType::TargetUnion(args1, _)) => {
+                self._unify_list(&b.field_types(), args1)
+            }
+
             (AstType::Func(vs1, r1), AstType::Func(vs2, r2)) => match (r1.as_ref(), r2.as_ref()) {
                 (ReturnType::Never, ReturnType::Never) => Ok(()),
                 (ReturnType::Never, ReturnType::Single(ty)) => {
@@ -312,6 +352,14 @@ impl TypeUnify {
                 } else {
                     None
                 }
+            }
+            AstType::TargetUnion(args, ret) => {
+                let resolved_args = args
+                    .clone()
+                    .into_iter()
+                    .map(|v| self.resolve(&v).map(|x| x).unwrap_or(v))
+                    .collect::<Vec<_>>();
+                Some(AstType::TargetUnion(resolved_args, ret.clone()))
             }
             AstType::Func(args, ret) => {
                 assert!(args.is_composite());

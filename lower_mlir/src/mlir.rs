@@ -441,7 +441,7 @@ impl<'c> MLIRGenerator<'c> {
             .get(&target_value_id)
             .expect(&format!("missing block at {}", target_value_id));
         let arg_count = c.block.as_ref().unwrap().argument_count();
-        assert_eq!(arg_count, arity, "mismatch arity on jump");
+        assert_eq!(arg_count, arity, "mismatch arity on jump @ {}", v);
 
         let location = self.get_location(v);
         let op = cf::br(&c.block.as_ref().unwrap(), &rs, location);

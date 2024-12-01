@@ -6,7 +6,7 @@ use std::ops::{Deref, DerefMut};
 
 use std::collections::HashMap;
 
-use crate::{BlockId, LinkId, NodeBuilder, StringLabel, ValueId};
+use crate::{ArgVec, BlockId, LinkId, NodeBuilder, StringLabel, ValueId};
 use compile_core::{AbstractionId, Argument, AstType, Lambda, SpanId, StringKey};
 
 #[derive(Debug)]
@@ -99,13 +99,14 @@ impl FunctionVariantBuilder {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum DeferredType {
     Goto(LinkId),
+    Name(LinkId),
     Ident(LinkId),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DeferredGoto {
     pub scope_id: ScopeId,
     pub block_id: BlockId,
@@ -113,6 +114,7 @@ pub struct DeferredGoto {
     pub name: StringKey,
     pub call_span_id: SpanId,
     pub args: Vec<Argument>,
+    pub argvec: ArgVec,
 }
 
 impl DeferredGoto {
@@ -131,60 +133,49 @@ impl DeferredGoto {
             call_span_id,
             block_id,
             deferred_type,
+            argvec: vec![],
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DeferredGotoList {
-    h: HashMap<StringKey, Vec<DeferredGoto>>,
+    h: Vec<DeferredGoto>,
+    cps: Vec<DeferredGoto>,
 }
 impl DeferredGotoList {
     pub fn new() -> Self {
-        Self { h: HashMap::new() }
+        Self {
+            h: vec![],
+            cps: vec![],
+        }
     }
 
     pub fn is_empty(&self) -> bool {
         self.h.is_empty()
     }
 
+    /*
     pub fn keys(&self) -> Vec<StringKey> {
         self.h.keys().cloned().collect()
     }
+    */
 
-    pub fn add(&mut self, d: DeferredGoto) {
+    pub fn add_cps(&mut self, d: DeferredGoto) {
+        println!("add cps deferred goto: {:?}", (&d, &self));
+        self.cps.push(d);
+    }
+    pub fn add_deferred(&mut self, d: DeferredGoto) {
         println!("add deferred goto: {:?}", (&d, &self));
-        if let Some(arr) = self.h.get_mut(&d.name) {
-            arr.push(d);
-        } else {
-            self.h.insert(d.name, vec![d]);
-        }
+        self.h.push(d);
     }
 
-    pub fn pop(&mut self, name: StringKey) -> Option<DeferredGoto> {
-        if let Some(arr) = self.h.get_mut(&name) {
-            arr.pop()
-        } else {
-            None
-        }
+    pub fn pop_deferred(&mut self) -> Option<DeferredGoto> {
+        self.h.pop()
     }
 
-    pub fn pop_any(&mut self) -> Option<(StringKey, Vec<DeferredGoto>)> {
-        if let Some(k) = self.h.keys().next().cloned() {
-            let arr = self.h.remove(&k).unwrap();
-            Some((k, arr))
-        } else {
-            None
-        }
-    }
-
-    pub fn pop_all(&mut self, name: StringKey) -> Vec<DeferredGoto> {
-        println!("pop deferred goto: {:?}", (name, &self));
-        if let Some(arr) = self.h.remove(&name) {
-            arr
-        } else {
-            vec![]
-        }
+    pub fn pop_cps(&mut self) -> Option<DeferredGoto> {
+        self.h.pop()
     }
 }
 

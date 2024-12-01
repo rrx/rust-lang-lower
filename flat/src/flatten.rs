@@ -28,12 +28,26 @@ use std::collections::{HashMap, HashSet};
 use std::convert::Into;
 
 use crate::{
-    BlockGraph, BlockId, BlockifyError, Builtin, DeferredGoto, DeferredGotoList, DeferredType,
-    LCode, LinkId, NodeBuilder as NB, ScopeGraph, ScopeId, ScopeType, ScopedContinuations,
-    StringLabel, Successor, ValueId, VariantId,
+    BlockGraph,
+    BlockId,
+    BlockifyError,
+    Builtin,
+    DeferredGoto,
+    DeferredGotoList,
+    DeferredType,
+    LCode,
+    LinkId,
+    NodeBuilder as NB,
+    ScopeGraph,
+    ScopeId,
+    ScopeType, //ScopedContinuations,
+    StringLabel,
+    Successor,
+    ValueId,
+    VariantId,
 };
 
-type ArgVec = Vec<(Option<StringKey>, LinkId, AstType, SpanId)>;
+pub type ArgVec = Vec<(Option<StringKey>, LinkId, AstType, SpanId)>;
 
 pub fn argvec_type(values: &ArgVec) -> AstType {
     AstType::Struct(
@@ -41,6 +55,13 @@ pub fn argvec_type(values: &ArgVec) -> AstType {
             .iter()
             .map(|v| (v.0, v.2.clone()))
             .collect::<Vec<_>>(),
+    )
+}
+
+pub fn target_union_type(values: &ArgVec) -> AstType {
+    AstType::TargetUnion(
+        values.iter().map(|v| (v.2.clone())).collect::<Vec<_>>(),
+        vec![],
     )
 }
 
@@ -160,6 +181,15 @@ impl Flatten {
         }
     }
 
+    pub fn type_inference(&mut self, b: &mut NB) {
+        for entry in self.entries.iter_mut() {
+            if !entry.ty.is_unknown() {
+                continue;
+            }
+            b.types.u.resolve(&entry.ty);
+        }
+    }
+
     pub fn type_inference_enforce(&mut self, b: &mut NB) {
         b.types.dump();
         for entry in self.entries.iter_mut() {
@@ -168,15 +198,21 @@ impl Flatten {
             }
 
             if let Some(ty) = b.types.u.resolve(&entry.ty) {
-                /*
                 b.push_warning(
-                    &format!("Late Unresolved Type: {}=>{}", &entry.ty, &ty),
+                    &format!(
+                        "Late Unresolved Type: {}=>{} @ {}",
+                        &entry.ty,
+                        &ty,
+                        entry.link.unwrap()
+                    ),
                     entry.span_id,
                 );
-                */
                 entry.ty = ty;
             } else {
-                b.push_error(&format!("Unresolved Type: {}", &entry.ty), entry.span_id);
+                b.push_error(
+                    &format!("Unresolved Type: {} @ {}", &entry.ty, entry.link.unwrap()),
+                    entry.span_id,
+                );
             }
         }
     }
@@ -482,13 +518,18 @@ impl Flatten {
         // make sure all claims have been handled
         self.scopes.ensure_claims(b);
 
-        // ensure types are resolved
-        self.type_inference_enforce(b);
-
         // add prototypes for builtins
         self.inject_builtin_prototypes(b);
 
+        //self.resolve_deferred_all(b)?;
         self.complete_open_abstractions(b)?;
+        self.resolve_deferred(b)?;
+
+        // ensure types are resolved
+        //self.type_inference(b);
+        self.type_inference_enforce(b);
+
+        self.resolve_cps(b)?;
 
         self.switch_blocks(self.static_block_id());
 
@@ -531,7 +572,7 @@ impl Flatten {
         let mut values = vec![];
 
         for block_id in blocks.into_iter() {
-            println!("X: {}", block_id);
+            //println!("X: {}", block_id);
             let block = self.blocks.get_block(block_id);
             let size = block.len();
             let scope_id = block.scope_id;
@@ -685,12 +726,13 @@ impl Flatten {
         let block = self.blocks.get_block(self.current_block_id());
         let start_stack = self.scopes.walk_scopes(block.scope_id);
 
-        for (i, expr) in seq.into_iter().enumerate() {
-            let block = self.blocks.get_block(self.current_block_id());
-            let scope_id = block.scope_id;
-            println!("push: {} - {}:{}", i, scope_id, self.current_block_id());
+        for (_i, expr) in seq.into_iter().enumerate() {
+            //let block = self.blocks.get_block(self.current_block_id());
+            //let scope_id = block.scope_id;
+            //println!("push: {} - {}:{}", i, scope_id, self.current_block_id());
             //b.dump_ast(&expr);
-            let r = self.push_node(expr, b)?;
+            let _r = self.push_node(expr, b)?;
+            /*
             let block = self.blocks.get_block(self.current_block_id());
             let scope_id = block.scope_id;
             println!(
@@ -700,6 +742,7 @@ impl Flatten {
                 self.current_block_id(),
                 r
             );
+            */
         }
 
         // ensure that we close any blocks that were opened
@@ -829,50 +872,25 @@ impl Flatten {
         span_id: SpanId,
     ) -> LinkId {
         // handle leaving scope here?
-        let current_block_id = self.current_block_id();
-        let block = self.blocks.get_block(current_block_id);
-        let _start_stack = self.scopes.walk_scopes(block.scope_id);
-
-        // Construct the argument type
-        let arg_ty = AstType::Struct(
-            jump_args
-                .iter()
-                .map(|j| (j.0, j.2.clone()))
-                .collect::<Vec<_>>(),
-        );
-
-        let _link_ids = self.push_call_values(
-            &jump_args
-                .into_iter()
-                .map(|(key, v, ty, span_id)| (key, v, ty, span_id))
-                .collect::<Vec<_>>(),
-        );
-
-        println!("jump to: {}=>{}", self.current_block_id(), target_id);
-        //self.blocks
-        //.block_succ(self.current_block_id(), target_id, Successor::Jump);
-        //self.blocks
-        //.block_succ(self.current_block_id(), target_id, Successor::BlockScope);
-
-        self.push_code(
-            LCode::Jump(target_id.into()),
-            AstType::Func(arg_ty.into(), ReturnType::Single(AstType::Unit).into()),
-            None,
-            span_id,
-            VarDefinitionSpace::Reg,
-        )
+        let entry = self.get_entry(target_id);
+        let target_block_id: BlockId = entry.block_id;
+        self.push_jump(target_block_id, jump_args, span_id)
     }
 
     pub fn push_jump(
         &mut self,
-        target_id: BlockId,
+        target_block_id: BlockId,
         jump_args: Vec<(Option<StringKey>, LinkId, AstType, SpanId)>,
         span_id: SpanId,
     ) -> LinkId {
         // handle leaving scope here?
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
+        let current_scope_id = block.scope_id;
         let _start_stack = self.scopes.walk_scopes(block.scope_id);
+
+        let target_block = self.blocks.get_block(target_block_id);
+        let target_scope_id = target_block.scope_id;
 
         // Construct the argument type
         let arg_ty = AstType::Struct(
@@ -889,14 +907,23 @@ impl Flatten {
                 .collect::<Vec<_>>(),
         );
 
-        println!("jump to: {}=>{}", self.current_block_id(), target_id);
+        println!(
+            "jump to: {}{}=>{}{}",
+            current_scope_id,
+            self.current_block_id(),
+            target_scope_id,
+            target_block_id
+        );
         self.blocks
-            .block_succ(self.current_block_id(), target_id, Successor::Jump);
-        self.blocks
-            .block_succ(self.current_block_id(), target_id, Successor::BlockScope);
+            .block_succ(self.current_block_id(), target_block_id, Successor::Jump);
+        self.blocks.block_succ(
+            self.current_block_id(),
+            target_block_id,
+            Successor::BlockScope,
+        );
 
         self.push_code(
-            LCode::Jump(target_id.into()),
+            LCode::Jump(target_block_id.into()),
             AstType::Func(arg_ty.into(), ReturnType::Single(AstType::Unit).into()),
             None,
             span_id,
@@ -1525,9 +1552,10 @@ impl Flatten {
         let s_name = b.labels.r(name.into());
 
         // if this is a name, we can resolve now, no need to defer
-        // this happens in a CPS function, where we try to jump to a variable.. This isn't possible
-        // to lower, so we actually want to defer here, so we can rewrite later.
-        if let Some(link_id) = self.resolve_name(current_block_id, name.into()) {
+        // this happens in a CPS function, where we try to jump to a variable.
+        // we don't want to defer because we know the target
+        // We will rewrite in a later step, this goto will become a select
+        if let Some(name_link_id) = self.resolve_name(current_block_id, name.into()) {
             let link_id = block.last().unwrap();
             self.push_code(
                 LCode::PlaceholderTerminal(link_id),
@@ -1537,20 +1565,20 @@ impl Flatten {
                 VarDefinitionSpace::Default,
             );
 
-            let scope = self.scopes.get_scope_mut(scope_id);
+            //let scope = self.scopes.get_scope_mut(scope_id);
             let d = DeferredGoto::new(
                 scope_id,
                 name.into(),
                 args,
                 call_span_id,
                 current_block_id,
-                DeferredType::Goto(link_id),
+                DeferredType::Name(name_link_id),
             );
             println!(
                 "{}: push_goto name, defer goto: {:?} in scope: {}",
                 s_name, d, scope_id
             );
-            self.deferred_goto.add(d);
+            self.deferred_goto.add_deferred(d);
             return Ok(FlattenResult::statement());
         }
         //
@@ -1590,7 +1618,7 @@ impl Flatten {
                 VarDefinitionSpace::Default,
             );
 
-            let scope = self.scopes.get_scope_mut(fun_scope_id);
+            //let scope = self.scopes.get_scope_mut(fun_scope_id);
             let d = DeferredGoto::new(
                 fun_scope_id,
                 name.into(),
@@ -1603,7 +1631,7 @@ impl Flatten {
                 "{}: push_goto, defer goto: {:?} in scope: {}",
                 s_name, d, fun_scope_id
             );
-            self.deferred_goto.add(d);
+            self.deferred_goto.add_deferred(d);
             return Ok(FlattenResult::statement());
         } else {
             // goto without function scope
@@ -1675,7 +1703,7 @@ impl Flatten {
                 self.switch_blocks(fun_block_id);
 
                 let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
-                println!("ty: {:?}", (&r_ty1, &def_func_type));
+                //println!("ty: {:?}", (&r_ty1, &def_func_type));
 
                 let (entry_link_id, _) = self.push_start_block(
                     fun_scope_id,
@@ -1755,7 +1783,8 @@ impl Flatten {
             self.calculate_function_arguments(&def, &args, def_span_id, call_span_id, b)?;
 
         let call_values = self.push_call_arguments(args, call_span_id, b)?;
-        let call_arg_type = argvec_type(&call_values);
+
+        let call_arg_type = target_union_type(&call_values);
         let _call_func_type = AstType::Func(call_arg_type.clone().into(), ReturnType::Never.into());
 
         // unify the caller args and the refreshed function args
@@ -1815,7 +1844,7 @@ impl Flatten {
                     .scope_define(scope_id, lambda_name, entry_link_id);
 
                 let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
-                println!("ty: {:?}", (&r_ty1, &call_arg_type));
+                //println!("ty: {:?}", (&r_ty1, &call_arg_type));
 
                 // we need to know the link
                 //let variant_id = if let Some(global_name) = global_name {
@@ -2050,8 +2079,8 @@ impl Flatten {
         // restore position back to where we started
         self.switch_blocks(current_block_id);
 
-        self.complete_open_abstractions(b)?;
-        self.resolve_deferred_all(b)?;
+        //self.complete_open_abstractions(b)?;
+        //self.resolve_deferred_all(b)?;
 
         //let scope = self.scopes.get_scope(scope_id);
         //assert!(self.deferred_goto.is_empty());
@@ -2060,24 +2089,8 @@ impl Flatten {
         Ok((v_id, FlattenResult::link(entry_link_id)))
     }
 
-    fn resolve_deferred_all(&mut self, b: &mut NB) -> Result<()> {
-        loop {
-            if self.deferred_goto.is_empty() {
-                break;
-            }
-            if self.resolve_deferred(b)? == 0 {
-                break;
-            }
-        }
-        Ok(())
-    }
-
-    fn resolve_deferred_single(
-        &mut self,
-        key: StringKey,
-        d: DeferredGoto,
-        b: &mut NB,
-    ) -> Result<bool> {
+    fn resolve_deferred_single(&mut self, d: DeferredGoto, b: &mut NB) -> Result<bool> {
+        let key = d.name;
         let s_name = b.labels.r(key.into());
         /*
          * name resolution should not be deferred as it can assume lexical scope
@@ -2091,35 +2104,47 @@ impl Flatten {
         // This happens if we try to jump to a variable
         // We have no way of lowering this, so we need to handle this later
         // This will be rewritten in a later step based on the type
-        /*
-           if let Some(link_id) = self.resolve_name_in_scope(d.scope_id, key.into()) {
-           unimplemented!("deferred name");
-        // TODO: we need to rewrite the function to be static.
-        // This should probably be done sooner.  As soon as we know that it's a CPS
-        // function, we should defer and bake it once we know all of the callers
-        // But we also need to resolve types, which the CPS function is able to do.
-        let goto_values = self.push_call_arguments(d.args, d.call_span_id, b)?;
-        let goto_arg_type = argvec_type(&goto_values);
-        let goto_func_type =
-        AstType::Func(goto_arg_type.clone().into(), ReturnType::Never.into());
+        if let Some(def_link_id) = self.resolve_name_in_scope(d.scope_id, key.into()) {
+            self.switch_blocks(d.block_id);
+            self.remove_placeholder_terminal(d.block_id);
 
-        let entry = self.get_entry(link_id);
-        let var_ty = entry.ty.clone();
+            println!(
+                "{}: resolved deferred name: from {}:{}",
+                s_name, d.scope_id, d.block_id
+            );
 
-        b.unify(&var_ty, entry.span_id, &goto_func_type, d.call_span_id);
+            // push the arguments, and unify the type,
+            // but keep the placeholder, we will replace it in the rewrite step
+            // we do just enough calculation here to resolve the types, and we push it back on the
+            // stack
 
-        println!(
-        "{}: push_goto ident: {}:{}, link: {}",
-        s_name, d.scope_id, d.block_id, link_id
-        );
-        let link_id = self.push_cps_jump(link_id.into(), goto_values, d.call_span_id);
-        println!(
-        "{}: resolved deferred name: from {}:{}, link: {}",
-        s_name, d.scope_id, d.block_id, link_id
-        );
-        count += 1;
+            // calculate the type, so we can unify
+            let goto_values = self.push_call_arguments(d.args.clone(), d.call_span_id, b)?;
+            let goto_arg_type = argvec_type(&goto_values);
+            let goto_func_type =
+                AstType::Func(goto_arg_type.clone().into(), ReturnType::Never.into());
+
+            // unify
+            let entry = self.get_entry(def_link_id);
+            let var_ty = entry.ty.clone();
+            b.unify(&var_ty, entry.span_id, &goto_func_type, d.call_span_id);
+
+            // save the argvec, so we can properly terminate later
+            let mut d = d;
+            d.argvec = goto_values;
+
+            let block = self.blocks.get_block(self.current_block_id());
+            self.push_code(
+                LCode::PlaceholderTerminal(block.last().unwrap()),
+                AstType::Unit,
+                None,
+                d.call_span_id,
+                VarDefinitionSpace::Default,
+            );
+
+            self.deferred_goto.add_cps(d);
+            return Ok(true);
         }
-        */
 
         // is it an abstraction?
         if let Some(abstraction_id) = self.resolve_template(d.scope_id, key.into()) {
@@ -2160,7 +2185,7 @@ impl Flatten {
             // TODO: we just have a label, so we need to handle unwind here.  We can't jump
             // directly, we need to jump to the unwind function
 
-            let jump_args = self.push_call_arguments(d.args, d.call_span_id, b)?;
+            let jump_args = self.push_call_arguments(d.args.clone(), d.call_span_id, b)?;
             let link_id = self.push_jump(target_block_id.into(), jump_args, d.call_span_id);
             let block = self.blocks.get_block(target_block_id);
             println!(
@@ -2171,25 +2196,65 @@ impl Flatten {
         }
 
         // otherwise it's not defined, return an error
-        //let s = b.labels.r(key.into());
-        //b.push_error(
-        //&format!("ident `{}` not found in {}", s, d.scope_id),
-        //d.call_span_id,
-        //);
+        let s = b.labels.r(key.into());
+        b.push_error(
+            &format!("ident `{}` not found in {}", s, d.scope_id),
+            d.call_span_id,
+        );
+
         Ok(false)
     }
 
-    fn resolve_deferred(&mut self, b: &mut NB) -> Result<usize> {
-        let mut count = 0;
-        if let Some((key, deferrals)) = self.deferred_goto.pop_any() {
-            for d in deferrals {
-                let result = self.resolve_deferred_single(key, d, b)?;
-                if result {
-                    count += 1;
-                }
+    fn resolve_cps_single(&mut self, d: DeferredGoto, b: &mut NB) -> Result<()> {
+        let key = d.name;
+        let s_name = b.labels.r(key.into());
+
+        // this is where we actually do the rewrite
+
+        // remove placeholder
+        self.switch_blocks(d.block_id);
+        self.remove_placeholder_terminal(d.block_id);
+
+        if let DeferredType::Name(name_link_id) = d.deferred_type {
+            //unimplemented!("deferred name");
+            // TODO: we need to rewrite the function to be static.
+            // This should probably be done sooner.  As soon as we know that it's a CPS
+            // function, we should defer and bake it once we know all of the callers
+            // But we also need to resolve types, which the CPS function is able to do.
+            let link_id = self.push_cps_jump(name_link_id.into(), d.argvec, d.call_span_id);
+            println!(
+                "{}: resolved cps goto: from {}:{}, link: {}=>{}",
+                s_name, d.scope_id, d.block_id, name_link_id, link_id
+            );
+        } else {
+            unreachable!();
+        }
+
+        Ok(())
+    }
+
+    fn resolve_cps(&mut self, b: &mut NB) -> Result<()> {
+        loop {
+            if let Some(d) = self.deferred_goto.pop_cps() {
+                self.resolve_cps_single(d, b)?;
+            } else {
+                break;
             }
         }
-        Ok(count)
+        Ok(())
+    }
+
+    fn resolve_deferred(&mut self, b: &mut NB) -> Result<()> {
+        loop {
+            if let Some(d) = self.deferred_goto.pop_deferred() {
+                let s_name = b.labels.r(d.name.into());
+                println!("{}: pop deferred goto: {:?}", s_name, &d);
+                let _ = self.resolve_deferred_single(d, b)?;
+            } else {
+                break;
+            }
+        }
+        Ok(())
     }
 
     fn resolve_return_type(

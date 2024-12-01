@@ -156,6 +156,15 @@ impl AstType {
         }
     }
 
+    pub fn field_types(&self) -> Vec<AstType> {
+        match self {
+            Self::Args(ty) => ty.field_types(),
+            Self::Struct(fields) => fields.iter().map(|f| f.1.clone()).collect(),
+            Self::Tuple(fields) => fields.clone(),
+            _ => vec![],
+        }
+    }
+
     pub fn is_composite(&self) -> bool {
         match self {
             Self::Union(_) => true,
@@ -177,6 +186,14 @@ impl AstType {
                 false
             }
             Self::Array(element, _) => element.is_unknown(),
+            Self::TargetUnion(args, _) => {
+                for a in args {
+                    if a.is_unknown() {
+                        return true;
+                    }
+                }
+                false
+            }
             Self::Func(args, ret) => {
                 if ret.is_unknown() {
                     return true;
