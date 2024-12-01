@@ -23,8 +23,7 @@ impl Value {
             Literal::Bool(v) => Value::Bool(*v),
             Literal::Index(v) => Value::Index(*v),
             Literal::Block(v) => {
-                // TODO: map block to integer
-                Value::Int(0)
+                unreachable!()
             }
             _ => unimplemented!("{:?}", lit),
         }
@@ -448,6 +447,15 @@ impl<'a> Interp<'a> {
                 };
                 self.stack.last_mut().unwrap().values.insert(self.pos, v);
                 //self.call_args.push_back(v);
+                self.advance();
+                true
+            }
+
+            LCode::Val(Literal::Block(block_id)) => {
+                let ty = self.m.get_type(pos.into());
+                let index = ty.target_union_block_index(block_id);
+                let value = Value::Int(index);
+                self.save_value(value);
                 self.advance();
                 true
             }

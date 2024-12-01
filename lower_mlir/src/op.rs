@@ -331,13 +331,8 @@ impl<'c> MLIRGenerator<'c> {
             Literal::Block(block_id) => {
                 // this is a block.  The type should be TargetUnion
                 let ty = self.blockify.get_type(v.into());
-                if let AstType::TargetUnion(_, mut blocks) = ty {
-                    blocks.sort();
-                    let index = blocks.iter().position(|&x| x == *block_id).unwrap();
-                    self.build_int_op(index as i64, location)
-                } else {
-                    unreachable!()
-                }
+                let index = ty.target_union_block_index(block_id);
+                self.build_int_op(index as i64, location)
 
                 /*
                 let ty = llvm::r#type::pointer(self.context, 0);
