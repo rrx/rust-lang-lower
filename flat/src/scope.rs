@@ -4,7 +4,7 @@ use petgraph::visit::Bfs;
 
 use std::ops::{Deref, DerefMut};
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::{ArgVec, BlockId, LinkId, NodeBuilder, StringLabel, ValueId};
 use compile_core::{AbstractionId, Argument, AstType, Lambda, SpanId, StringKey};
@@ -69,6 +69,7 @@ impl VariantId {
 pub struct FunctionVariant {
     pub ty: AstType,
     pub link_id: LinkId,
+    pub caller_blocks: HashSet<BlockId>,
 }
 
 #[derive(Debug)]
@@ -83,7 +84,11 @@ impl FunctionVariantBuilder {
 
     pub fn add(&mut self, ty: AstType, link_id: LinkId) -> VariantId {
         let index = self.variants.len();
-        self.variants.push(FunctionVariant { ty, link_id });
+        self.variants.push(FunctionVariant {
+            ty,
+            link_id,
+            caller_blocks: HashSet::new(),
+        });
         VariantId(index as u32)
     }
 
@@ -92,7 +97,13 @@ impl FunctionVariantBuilder {
         v.ty = ty;
     }
 
-    pub fn update(&mut self, variant_id: VariantId, ty: AstType, link_id: LinkId) {
+    pub fn update(
+        &mut self,
+        variant_id: VariantId,
+        ty: AstType,
+        link_id: LinkId,
+        caller_blocks: HashSet<BlockId>,
+    ) {
         let v = self.variants.get_mut(variant_id.index()).unwrap();
         v.ty = ty;
         v.link_id = link_id;
@@ -102,6 +113,7 @@ impl FunctionVariantBuilder {
 #[derive(Debug, Clone)]
 pub enum DeferredType {
     Goto(LinkId),
+    Variant(VariantId),
     Name(LinkId),
     Ident(LinkId),
 }
@@ -225,9 +237,10 @@ impl ScopeLayer {
         variant_id: VariantId,
         ty: AstType,
         link_id: LinkId,
+        caller_blocks: HashSet<BlockId>,
     ) {
         let v = self.entries.get_mut(&name).expect("name not found");
-        v.update(variant_id, ty, link_id)
+        v.update(variant_id, ty, link_id, caller_blocks)
     }
 
     pub fn lookup(&self, name: StringKey) -> Option<LinkId> {
@@ -415,6 +428,24 @@ impl ScopeGraph {
         scope.variant_add(name, ty, link_id)
     }
 
+    pub fn variant_get(
+        &self,
+        scope_id: ScopeId,
+        name: StringKey,
+        variant_id: VariantId,
+    ) -> Option<&FunctionVariant> {
+        let scope = self.get_scope(scope_id);
+        println!(
+            "variant_get: {}, {:?}, {:?}",
+            variant_id, name, &scope.entries
+        );
+        if let Some(b) = scope.entries.get(&name) {
+            b.variants.get(variant_id.index())
+        } else {
+            None
+        }
+    }
+
     pub fn variant_update(
         &mut self,
         scope_id: ScopeId,
@@ -422,9 +453,10 @@ impl ScopeGraph {
         variant_id: VariantId,
         ty: AstType,
         link_id: LinkId,
+        caller_blocks: HashSet<BlockId>,
     ) {
         let scope = self.get_scope_mut(scope_id);
-        scope.variant_update(name, variant_id, ty, link_id);
+        scope.variant_update(name, variant_id, ty, link_id, caller_blocks);
     }
 
     pub fn dump_scope(&self, scope_id: ScopeId, b: &NodeBuilder) {
