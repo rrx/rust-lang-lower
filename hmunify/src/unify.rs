@@ -91,6 +91,9 @@ fn unify_return_type(r1: &ReturnType, r2: &ReturnType) -> Result<ReturnType, UEr
             let r = ast_unify_values(ret1, ret2)?;
             Ok(ReturnType::Single(r.into()))
         }
+
+        (ReturnType::Never, ReturnType::Single(AstType::Unit)) => Ok(ReturnType::Never.into()),
+        (ReturnType::Single(AstType::Unit), ReturnType::Never) => Ok(ReturnType::Never.into()),
         (ReturnType::Never, ReturnType::Never) => Ok(ReturnType::Never.into()),
         _ => unimplemented!("{:?}", (r1, r2)),
     }

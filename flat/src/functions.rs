@@ -23,17 +23,22 @@ impl VariantId {
 pub struct FunctionVariant {
     pub ty: AstType,
     pub link_id: LinkId,
+    pub block_id: BlockId,
     pub caller_blocks: HashSet<BlockId>,
 }
 
 #[derive(Debug)]
 pub struct FunctionVariantBuilder {
     pub variants: Vec<FunctionVariant>,
+    pub block_lookup: HashMap<BlockId, VariantId>,
 }
 
 impl FunctionVariantBuilder {
     pub fn new() -> Self {
-        Self { variants: vec![] }
+        Self {
+            variants: vec![],
+            block_lookup: HashMap::new(),
+        }
     }
 
     pub fn get(&self, variant_id: VariantId) -> &FunctionVariant {
@@ -44,14 +49,17 @@ impl FunctionVariantBuilder {
         self.variants.get_mut(variant_id.index()).unwrap()
     }
 
-    pub fn add(&mut self, ty: AstType, link_id: LinkId) -> VariantId {
+    pub fn add(&mut self, ty: AstType, link_id: LinkId, block_id: BlockId) -> VariantId {
         let index = self.variants.len();
         self.variants.push(FunctionVariant {
             ty,
             link_id,
+            block_id,
             caller_blocks: HashSet::new(),
         });
-        VariantId(index as u32)
+        let variant_id = VariantId(index as u32);
+        self.block_lookup.insert(block_id, variant_id);
+        variant_id
     }
 
     pub fn update_type(&mut self, variant_id: VariantId, ty: AstType) {

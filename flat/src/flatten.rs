@@ -300,8 +300,9 @@ impl Flatten {
         name: StringKey,
         ty: AstType,
         link_id: LinkId,
+        block_id: BlockId,
     ) -> VariantId {
-        let variant_id = self.variants.add(ty, link_id);
+        let variant_id = self.variants.add(ty, link_id, block_id);
         let scope = self.scopes.get_scope_mut(scope_id);
         scope.variant_link(name, variant_id);
         variant_id
@@ -1750,8 +1751,13 @@ impl Flatten {
                 self.scopes
                     .scope_define(scope_id, lambda_name, entry_link_id);
 
-                let variant_id =
-                    self.variant_add(scope_id, lambda_name, r_ty1.clone(), entry_link_id);
+                let variant_id = self.variant_add(
+                    scope_id,
+                    lambda_name,
+                    r_ty1.clone(),
+                    entry_link_id,
+                    fun_block_id,
+                );
 
                 // flatten function, and switch to next
                 // lower first, so we resolve types
@@ -1832,6 +1838,7 @@ impl Flatten {
         self.dump_position();
 
         let call_arg_type = target_union_type(&call_values);
+        //let call_arg_type = argvec_type(&call_values);
         let _call_func_type = AstType::Func(call_arg_type.clone().into(), ReturnType::Never.into());
 
         // unify the caller args and the refreshed function args
@@ -1917,8 +1924,13 @@ impl Flatten {
                 let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
                 //println!("ty: {:?}", (&r_ty1, &call_arg_type));
 
-                let variant_id =
-                    self.variant_add(scope_id, lambda_name, r_ty1.clone(), entry_link_id);
+                let variant_id = self.variant_add(
+                    scope_id,
+                    lambda_name,
+                    r_ty1.clone(),
+                    entry_link_id,
+                    fun_block_id,
+                );
 
                 // flatten function, and switch to next
                 // lower first, so we resolve types
@@ -2040,7 +2052,7 @@ impl Flatten {
         let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
         // we need to know the link
         //let variant_id = if let Some(global_name) = global_name {
-        let variant_id = self.variant_add(scope_id, local_name, r_ty1, entry_link_id);
+        let variant_id = self.variant_add(scope_id, local_name, r_ty1, entry_link_id, fun_block_id);
 
         // add the name to scope
         // do this early for recursive functions
@@ -2299,7 +2311,10 @@ impl Flatten {
                 // The actual target comes from the type
                 let entry = self.get_entry(name_link_id);
                 let ty = entry.ty.clone();
-                println!("resolve ty: {}", ty);
+                println!("resolve ty: {}, {:?}", ty, entry);
+                let block_id = entry.block_id;
+
+                //let variant = self.variants.get
                 if let AstType::TargetUnion(_field_types, targets) = ty {
                     if targets.len() == 1 {
                         let target_block_id = targets.get(0).unwrap().clone();
