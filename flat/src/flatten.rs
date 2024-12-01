@@ -323,14 +323,9 @@ impl Flatten {
         name: &StringKey,
     ) -> Vec<(VariantId, AstType, LinkId, ScopeId)> {
         let mut out = vec![];
-        for scope_id in self.scopes.walk_scopes(start_scope_id) {
-            let scope = self.scopes.get_scope(scope_id);
-            if let Some(e) = scope.entries.get(name) {
-                for variant_id in e.iter() {
-                    let v = self.variants.get(*variant_id);
-                    out.push((*variant_id, v.ty.clone(), v.link_id, scope_id));
-                }
-            }
+        for variant_id in self.list_variants_by_name(start_scope_id, name) {
+            let v = self.variants.get(variant_id);
+            out.push((variant_id, v.ty.clone(), v.link_id, start_scope_id));
         }
         out
     }
@@ -797,22 +792,7 @@ impl Flatten {
         let start_stack = self.scopes.walk_scopes(block.scope_id);
 
         for (_i, expr) in seq.into_iter().enumerate() {
-            //let block = self.blocks.get_block(self.current_block_id());
-            //let scope_id = block.scope_id;
-            //println!("push: {} - {}:{}", i, scope_id, self.current_block_id());
-            //b.dump_ast(&expr);
             let _r = self.push_node(expr, b)?;
-            /*
-            let block = self.blocks.get_block(self.current_block_id());
-            let scope_id = block.scope_id;
-            println!(
-                "push: {} - {}:{} - {:?}",
-                i,
-                scope_id,
-                self.current_block_id(),
-                r
-            );
-            */
         }
 
         // ensure that we close any blocks that were opened
@@ -1314,16 +1294,6 @@ impl Flatten {
 
             // update the variant with the resolved type
             self.variant_update(variant_id, r_ty2.clone(), v_entry, HashSet::new());
-            /*
-            self.scopes.variant_update(
-                self.static_scope_id(),
-                name,
-                variant_id,
-                r_ty2.clone(),
-                v_entry,
-                HashSet::new(),
-            );
-            */
             (variant_id, v_entry)
         };
 
@@ -1773,11 +1743,6 @@ impl Flatten {
                 self.scopes
                     .scope_define(scope_id, lambda_name, entry_link_id);
 
-                /*
-                let variant_id =
-                    self.scopes
-                        .variant_add(scope_id, lambda_name, r_ty1.clone(), entry_link_id);
-                */
                 let variant_id =
                     self.variant_add(scope_id, lambda_name, r_ty1.clone(), entry_link_id);
 
@@ -1787,16 +1752,6 @@ impl Flatten {
 
                 // update the variant with the resolved type
                 self.variant_update(variant_id, r_ty1, entry_link_id, HashSet::new());
-                /*
-                self.scopes.variant_update(
-                    scope_id,
-                    lambda_name,
-                    variant_id,
-                    r_ty1,
-                    entry_link_id,
-                    HashSet::new(),
-                );
-                */
 
                 // terminate if not already terminated
                 // this is for dead code
@@ -1952,11 +1907,6 @@ impl Flatten {
                 let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
                 //println!("ty: {:?}", (&r_ty1, &call_arg_type));
 
-                // we need to know the link
-                //let variant_id = if let Some(global_name) = global_name {
-                //let variant_id =
-                //self.scopes
-                //.variant_add(scope_id, lambda_name, r_ty1, entry_link_id);
                 let variant_id =
                     self.variant_add(scope_id, lambda_name, r_ty1.clone(), entry_link_id);
 
@@ -1970,18 +1920,7 @@ impl Flatten {
                     .resolve(&call_arg_type)
                     .unwrap_or(call_arg_type.clone());
                 // update the variant with the resolved type
-                //
                 self.variant_update(variant_id, r_ty2.clone(), entry_link_id, caller_blocks);
-                /*
-                self.scopes.variant_update(
-                    scope_id,
-                    lambda_name,
-                    variant_id,
-                    r_ty2.clone(),
-                    entry_link_id,
-                    caller_blocks,
-                );
-                */
 
                 // terminate if not already terminated
                 // this is for dead code
@@ -2091,13 +2030,7 @@ impl Flatten {
         let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
         // we need to know the link
         //let variant_id = if let Some(global_name) = global_name {
-        //let variant_id = self
-        //.scopes
-        //.variant_add(scope_id, local_name, r_ty1, entry_link_id);
         let variant_id = self.variant_add(scope_id, local_name, r_ty1, entry_link_id);
-        //} else {
-        //None
-        //};
 
         // add the name to scope
         // do this early for recursive functions
@@ -2382,7 +2315,6 @@ impl Flatten {
                     unimplemented!();
                 }
 
-                //let variant = self.scopes.variant_get(d.scope_id, d.name, variant_id);
                 let variant = self.variants.get(variant_id);
                 println!("variant: {:?}", variant);
             }
@@ -3698,12 +3630,3 @@ impl Flatten {
         link_id
     }
 }
-
-/*
-fn def_to_type(def: &Lambda, b: &mut NB) -> AstType {
-    let arg_type = b.types.r(def.arg_type).clone();
-    let return_type = b.types.r(def.return_type).clone();
-    let fun_ty = AstType::Func(arg_type.into(), ReturnType::Single(return_type).into());
-    fun_ty
-}
-*/

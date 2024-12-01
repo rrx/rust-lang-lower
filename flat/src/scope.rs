@@ -177,28 +177,6 @@ impl ScopeLayer {
         }
     }
 
-    /*
-    pub fn variant_add(&mut self, name: StringKey, ty: AstType, link_id: LinkId) -> VariantId {
-        if !self.entries.contains_key(&name) {
-            self.entries.insert(name, FunctionVariantBuilder::new());
-        }
-        let v = self.entries.get_mut(&name).unwrap();
-        v.add(ty, link_id)
-    }
-
-    pub fn variant_update(
-        &mut self,
-        name: StringKey,
-        variant_id: VariantId,
-        ty: AstType,
-        link_id: LinkId,
-        caller_blocks: HashSet<BlockId>,
-    ) {
-        let v = self.entries.get_mut(&name).expect("name not found");
-        v.update(variant_id, ty, link_id, caller_blocks)
-    }
-    */
-
     pub fn lookup(&self, name: StringKey) -> Option<LinkId> {
         self.names.get(&name).cloned()
     }
@@ -372,50 +350,6 @@ impl ScopeGraph {
         }
         None
     }
-
-    /*
-    pub fn variant_add(
-        &mut self,
-        scope_id: ScopeId,
-        name: StringKey,
-        ty: AstType,
-        link_id: LinkId,
-    ) -> VariantId {
-        let scope = self.get_scope_mut(scope_id);
-        scope.variant_add(name, ty, link_id)
-    }
-
-    pub fn variant_get(
-        &self,
-        scope_id: ScopeId,
-        name: StringKey,
-        variant_id: VariantId,
-    ) -> Option<&FunctionVariant> {
-        let scope = self.get_scope(scope_id);
-        println!(
-            "variant_get: {}, {:?}, {:?}",
-            variant_id, name, &scope.entries
-        );
-        if let Some(b) = scope.entries.get(&name) {
-            b.variants.get(variant_id.index())
-        } else {
-            None
-        }
-    }
-
-    pub fn variant_update(
-        &mut self,
-        scope_id: ScopeId,
-        name: StringKey,
-        variant_id: VariantId,
-        ty: AstType,
-        link_id: LinkId,
-        caller_blocks: HashSet<BlockId>,
-    ) {
-        let scope = self.get_scope_mut(scope_id);
-        scope.variant_update(name, variant_id, ty, link_id, caller_blocks);
-    }
-    */
 
     pub fn dump_scope(&self, scope_id: ScopeId, b: &NodeBuilder) {
         println!("DumpScope: {}, {:?}", scope_id, self.walk_scopes(scope_id));
