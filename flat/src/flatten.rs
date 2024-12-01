@@ -28,6 +28,7 @@ use std::collections::{HashMap, HashSet};
 use std::convert::Into;
 
 use crate::{
+    AbstractionsBuilder,
     BlockGraph,
     BlockId,
     BlockifyError,
@@ -143,7 +144,7 @@ pub struct Flatten {
     pub(super) link: LinkOptions,
     pub(super) entries: Vec<CodeEntry>,
     pub blocks: BlockGraph,
-    ast_templates: Vec<(Lambda, SpanId, HashSet<BlockId>)>,
+    //ast_templates: Vec<(Lambda, SpanId, HashSet<BlockId>)>,
     pub(super) messages: Vec<(String, SpanId)>,
     pub mode: FlattenMode,
     pub(crate) static_scope: Option<ScopeId>,
@@ -157,6 +158,7 @@ pub struct Flatten {
     //scoped_continuations: ScopedContinuations,
     pub deferred_goto: DeferredGotoList,
     pub variants: FunctionVariantBuilder,
+    pub abstractions: AbstractionsBuilder,
 }
 
 impl Flatten {
@@ -167,7 +169,7 @@ impl Flatten {
             entries: vec![],
             blocks,
             link: LinkOptions::new(),
-            ast_templates: vec![],
+            //ast_templates: vec![],
             messages: vec![],
             mode: FlattenMode::Function,
             static_scope: None,
@@ -181,6 +183,7 @@ impl Flatten {
             //scoped_continuations: ScopedContinuations::new(),
             deferred_goto: DeferredGotoList::new(),
             variants: FunctionVariantBuilder::new(),
+            abstractions: AbstractionsBuilder::new(),
         }
     }
 
@@ -401,8 +404,9 @@ impl Flatten {
             Some(scope_id) => {
                 let scope = self.scopes.get_scope(scope_id);
                 if let Some(template_id) = scope.lambdas.get(&name.into()).cloned() {
-                    let (def, span_id, _) = self.get_ast_template(template_id).clone();
-                    Some((scope_id, def, span_id))
+                    let a = self.abstractions.get(template_id);
+                    //let (def, span_id, _) = self.get_ast_template(template_id).clone();
+                    Some((scope_id, a.def.clone(), a.def_span_id))
                 } else {
                     None
                 }
@@ -766,11 +770,10 @@ impl Flatten {
     }
 
     pub fn insert_ast_template(&mut self, def: Lambda, span_id: SpanId) -> AbstractionId {
-        let offset = self.ast_templates.len();
-        self.ast_templates.push((def, span_id, HashSet::new()));
-        AbstractionId::new(offset)
+        self.abstractions.add(def, span_id)
     }
 
+    /*
     pub fn get_ast_template(
         &self,
         template_id: AbstractionId,
@@ -781,6 +784,7 @@ impl Flatten {
         //s.sort();
         //(def, *span_id)
     }
+    */
 
     pub fn push_sequence(
         &mut self,
@@ -1541,8 +1545,10 @@ impl Flatten {
     }
 
     pub fn save_ast_template_caller(&mut self, abs_id: AbstractionId, block_id: BlockId) {
-        let a = self.ast_templates.get_mut(abs_id.index()).unwrap();
-        a.2.insert(block_id);
+        //let a = self.ast_templates.get_mut(abs_id.index()).unwrap();
+        //a.2.insert(block_id);
+        let a = self.abstractions.get_mut(abs_id);
+        a.caller_blocks.insert(block_id);
     }
 
     pub fn save_ast_template(
@@ -1675,9 +1681,11 @@ impl Flatten {
     ) -> Result<(VariantId, ScopeId, BlockId)> {
         // call in the context of the caller, which is a goto
         let current_block_id = self.current_block_id();
-        let (def, def_span_id, _) = self.get_ast_template(abstraction_id).clone();
+        //let (def, def_span_id, _) = self.get_ast_template(abstraction_id).clone();
+        let a = self.abstractions.get(abstraction_id);
+        let def_span_id = a.def_span_id;
         // This expects to be called in a block that is ready to jump
-        let (_def_func_type, def_arg_type, _def_ret_type) = self.refresh_func_type(&def, b);
+        let (_def_func_type, def_arg_type, _def_ret_type) = self.refresh_func_type(&a.def, b);
         let refresh_def_func_type =
             AstType::Func(def_arg_type.clone().into(), ReturnType::Never.into());
         let s_name = b.labels.r(name.into());
@@ -1686,7 +1694,7 @@ impl Flatten {
             &refresh_def_func_type,
             origin_span_id,
             &def_func_type,
-            def_span_id,
+            a.def_span_id,
         );
 
         // BAKE CPS IF NEEDED
@@ -1704,7 +1712,7 @@ impl Flatten {
                     fun_scope_id,
                     fun_block_id
                 );
-                b.unify(&def_func_type, origin_span_id, &resolve_type, def_span_id);
+                b.unify(&def_func_type, origin_span_id, &resolve_type, a.def_span_id);
 
                 (variant_id, fun_block_id, fun_scope_id)
             } else {
@@ -1723,7 +1731,8 @@ impl Flatten {
                     fun_scope_id,
                     fun_block_id
                 );
-                let body = def.body.unwrap();
+                let a = self.abstractions.get(abstraction_id);
+                let body = a.def.body.clone().unwrap();
 
                 self.switch_blocks(fun_block_id);
 
@@ -1797,7 +1806,9 @@ impl Flatten {
     )> {
         // call in the context of the caller, which is a goto
         let current_block_id = self.current_block_id();
-        let (def, def_span_id, _) = self.get_ast_template(abstraction_id).clone();
+        //let (def, def_span_id, _) = self.get_ast_template(abstraction_id).clone();
+        let a = self.abstractions.get(abstraction_id);
+        let def_span_id = a.def_span_id;
 
         //let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
         // we might want to handle this later
@@ -1805,10 +1816,12 @@ impl Flatten {
         //fun_scope.return_block = Some(next_block_id);
 
         // This expects to be called in a block that is ready to jump
-        let (_def_func_type, def_arg_type, def_ret_type) = self.refresh_func_type(&def, b);
+        let (_def_func_type, def_arg_type, def_ret_type) = self.refresh_func_type(&a.def, b);
         let def_func_type = AstType::Func(def_arg_type.clone().into(), ReturnType::Never.into());
 
         // WRITE GOTO
+        let a = self.abstractions.get(abstraction_id);
+        let def = a.def.clone();
         let (args, _) =
             self.calculate_function_arguments(&def, &args, def_span_id, call_span_id, b)?;
 
@@ -1888,7 +1901,8 @@ impl Flatten {
                     fun_scope_id,
                     fun_block_id
                 );
-                let body = *def.body.unwrap();
+                let a = self.abstractions.get(abstraction_id);
+                let body = *a.def.body.clone().unwrap();
 
                 self.switch_blocks(fun_block_id);
                 let (entry_link_id, _) = self.push_start_block(
@@ -2201,8 +2215,9 @@ impl Flatten {
                     self.switch_blocks(d.block_id);
                     self.remove_placeholder_terminal(d.block_id);
 
-                    let (_, _, blocks) = self.get_ast_template(abstraction_id);
-                    println!("blocks: {:?}", blocks);
+                    //let (_, _, blocks) = self.get_ast_template(abstraction_id);
+                    let a = self.abstractions.get_mut(abstraction_id);
+                    println!("blocks: {:?}", a.caller_blocks);
                     // push and jump
                     // TODO: this function needs to handle unwind
                     let (
@@ -2309,8 +2324,9 @@ impl Flatten {
                 // we have all of the callers for this abstraction now, so we can go ahead and
                 // rewrite
                 if let Some(abstraction_id) = self.resolve_template(d.scope_id, d.name.into()) {
-                    let (_, _, blocks) = self.get_ast_template(abstraction_id);
-                    println!("blocks2: {:?}", blocks);
+                    //let (_, _, blocks) = self.get_ast_template(abstraction_id);
+                    let a = self.abstractions.get(abstraction_id);
+                    println!("blocks2: {:?}", a.caller_blocks);
                 } else {
                     unimplemented!();
                 }

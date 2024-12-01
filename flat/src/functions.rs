@@ -69,5 +69,40 @@ impl FunctionVariantBuilder {
         let v = self.variants.get_mut(variant_id.index()).unwrap();
         v.ty = ty;
         v.link_id = link_id;
+        v.caller_blocks = caller_blocks;
+    }
+}
+
+#[derive(Debug)]
+pub struct Abstraction {
+    pub def: Lambda,
+    pub def_span_id: SpanId,
+    pub caller_blocks: HashSet<BlockId>,
+}
+
+#[derive(Debug)]
+pub struct AbstractionsBuilder(Vec<Abstraction>);
+
+impl AbstractionsBuilder {
+    pub fn new() -> Self {
+        Self(vec![])
+    }
+
+    pub fn get(&self, abstraction_id: AbstractionId) -> &Abstraction {
+        self.0.get(abstraction_id.index()).unwrap()
+    }
+
+    pub fn get_mut(&mut self, abstraction_id: AbstractionId) -> &mut Abstraction {
+        self.0.get_mut(abstraction_id.index()).unwrap()
+    }
+
+    pub fn add(&mut self, def: Lambda, def_span_id: SpanId) -> AbstractionId {
+        let index = self.0.len();
+        self.0.push(Abstraction {
+            def,
+            def_span_id,
+            caller_blocks: HashSet::new(),
+        });
+        AbstractionId::new(index)
     }
 }
