@@ -9,6 +9,7 @@ pub mod flatten;
 pub mod flatten_graph;
 pub mod flatten_module;
 pub mod flatten_seq;
+pub mod functions;
 pub mod graph;
 pub mod interp;
 pub mod links;
@@ -24,10 +25,11 @@ pub use continuations::*;
 pub use flatten::*;
 pub use flatten_module::*;
 pub use flatten_seq::*;
+pub use functions::*;
 pub use graph::{Node, CFG};
 pub use interp::*;
 pub use links::*;
 pub use scope::{
     DeferredGoto, DeferredGotoList, DeferredType, PlacedBlockId, ScopeGraph, ScopeId, ScopeLayer,
-    ScopeType, VariantId,
+    ScopeType,
 };

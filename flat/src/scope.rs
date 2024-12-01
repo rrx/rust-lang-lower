@@ -6,7 +6,10 @@ use std::ops::{Deref, DerefMut};
 
 use std::collections::{HashMap, HashSet};
 
-use crate::{ArgVec, BlockId, LinkId, NodeBuilder, StringLabel, ValueId};
+use crate::{
+    ArgVec, BlockId, FunctionVariant, FunctionVariantBuilder, LinkId, NodeBuilder, StringLabel,
+    ValueId, VariantId,
+};
 use compile_core::{AbstractionId, Argument, AstType, Lambda, SpanId, StringKey};
 
 #[derive(Debug)]
@@ -49,65 +52,6 @@ pub struct LoopScope {
     pub(crate) name: Option<StringKey>,
     pub(crate) next_block: BlockId,
     pub(crate) start_block: BlockId,
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-pub struct VariantId(pub(crate) u32);
-impl std::fmt::Display for VariantId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "V{}", self.0)
-    }
-}
-
-impl VariantId {
-    pub fn index(&self) -> usize {
-        self.0 as usize
-    }
-}
-
-#[derive(Debug)]
-pub struct FunctionVariant {
-    pub ty: AstType,
-    pub link_id: LinkId,
-    pub caller_blocks: HashSet<BlockId>,
-}
-
-#[derive(Debug)]
-pub struct FunctionVariantBuilder {
-    pub variants: Vec<FunctionVariant>,
-}
-
-impl FunctionVariantBuilder {
-    pub fn new() -> Self {
-        Self { variants: vec![] }
-    }
-
-    pub fn add(&mut self, ty: AstType, link_id: LinkId) -> VariantId {
-        let index = self.variants.len();
-        self.variants.push(FunctionVariant {
-            ty,
-            link_id,
-            caller_blocks: HashSet::new(),
-        });
-        VariantId(index as u32)
-    }
-
-    pub fn update_type(&mut self, variant_id: VariantId, ty: AstType) {
-        let v = self.variants.get_mut(variant_id.index()).unwrap();
-        v.ty = ty;
-    }
-
-    pub fn update(
-        &mut self,
-        variant_id: VariantId,
-        ty: AstType,
-        link_id: LinkId,
-        caller_blocks: HashSet<BlockId>,
-    ) {
-        let v = self.variants.get_mut(variant_id.index()).unwrap();
-        v.ty = ty;
-        v.link_id = link_id;
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -189,7 +133,7 @@ impl DeferredGotoList {
 #[derive(Debug)]
 pub struct ScopeLayer {
     pub names: HashMap<StringKey, LinkId>,
-    pub entries: HashMap<StringKey, FunctionVariantBuilder>,
+    pub entries: HashMap<StringKey, HashSet<VariantId>>,
     pub declarations: HashMap<StringKey, LinkId>,
     pub labels: HashMap<StringLabel, ValueId>,
     pub(crate) block_labels: HashMap<StringLabel, BlockId>,
@@ -223,6 +167,17 @@ impl ScopeLayer {
         }
     }
 
+    pub fn variant_link(&mut self, name: StringKey, variant_id: VariantId) {
+        if let Some(m) = self.entries.get_mut(&name) {
+            m.insert(variant_id);
+        } else {
+            let mut m = HashSet::new();
+            m.insert(variant_id);
+            self.entries.insert(name, m);
+        }
+    }
+
+    /*
     pub fn variant_add(&mut self, name: StringKey, ty: AstType, link_id: LinkId) -> VariantId {
         if !self.entries.contains_key(&name) {
             self.entries.insert(name, FunctionVariantBuilder::new());
@@ -242,6 +197,7 @@ impl ScopeLayer {
         let v = self.entries.get_mut(&name).expect("name not found");
         v.update(variant_id, ty, link_id, caller_blocks)
     }
+    */
 
     pub fn lookup(&self, name: StringKey) -> Option<LinkId> {
         self.names.get(&name).cloned()
@@ -255,8 +211,8 @@ impl ScopeLayer {
         }
         for (k, v) in self.entries.iter() {
             let name = b.labels.r((*k).into());
-            for v in v.variants.iter() {
-                println!("Entry: {}:{}:{}", name, v.ty, v.link_id);
+            for variant_id in v.iter() {
+                println!("Entry: {}:{}", name, variant_id);
             }
         }
     }
@@ -417,6 +373,7 @@ impl ScopeGraph {
         None
     }
 
+    /*
     pub fn variant_add(
         &mut self,
         scope_id: ScopeId,
@@ -458,6 +415,7 @@ impl ScopeGraph {
         let scope = self.get_scope_mut(scope_id);
         scope.variant_update(name, variant_id, ty, link_id, caller_blocks);
     }
+    */
 
     pub fn dump_scope(&self, scope_id: ScopeId, b: &NodeBuilder) {
         println!("DumpScope: {}, {:?}", scope_id, self.walk_scopes(scope_id));
