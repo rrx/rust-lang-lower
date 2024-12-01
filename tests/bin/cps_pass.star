@@ -68,7 +68,7 @@ def main():
   #q.goto(cps, t)
   q.goto(cps, next_x)
   q.label("A")
-  #q.goto(cps, q.resolve_label(next_y))
+  q.goto(cps, next_y)
   q.label("B")
 
   return 0

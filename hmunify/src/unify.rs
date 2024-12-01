@@ -4,6 +4,7 @@ use std::convert::Into;
 use thiserror::Error;
 
 use compile_core::{AstType, ReturnType, StringKey};
+use std::collections::HashSet;
 
 #[derive(Debug, Error)]
 pub enum UError {
@@ -117,6 +118,12 @@ fn ast_unify_values(value1: &AstType, value2: &AstType) -> Result<AstType, UErro
                 let c1_field_types = c1.field_types();
                 let result = unify_fields(&c1_field_types, &c2)?;
                 Ok(AstType::TargetUnion(result, targets.clone()))
+            }
+
+            (AstType::TargetUnion(c1, blocks1), AstType::TargetUnion(c2, blocks2)) => {
+                let result = unify_fields(&c1, &c2)?;
+                unreachable!();
+                Ok(AstType::TargetUnion(result, blocks1.clone()))
             }
 
             (AstType::Func(c1, r1), AstType::TargetUnion(c2, targets)) => {
@@ -282,7 +289,19 @@ impl TypeUnify {
             (AstType::Struct(_), AstType::Struct(_)) => {
                 self._unify_list(&a.field_types(), &b.field_types())
             }
-            (AstType::TargetUnion(_, _), AstType::TargetUnion(_, _)) => unimplemented!(),
+
+            (AstType::TargetUnion(f1, b1), AstType::TargetUnion(f2, b2)) => {
+                self._unify_list(f1, &f2)?;
+                /*
+                let mut s = HashSet::new();
+                for block_id in b1.iter().chain(b2.iter()) {
+                    s.insert(block_id);
+                }
+                let mut blocks = s.into_iter().cloned().collect::<Vec<_>>();
+                blocks.sort();
+                */
+                Ok(())
+            }
 
             (AstType::TargetUnion(args1, _), AstType::Struct(_)) => {
                 self._unify_list(args1, &b.field_types())
