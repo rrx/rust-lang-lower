@@ -1545,8 +1545,6 @@ impl Flatten {
     }
 
     pub fn save_ast_template_caller(&mut self, abs_id: AbstractionId, block_id: BlockId) {
-        //let a = self.ast_templates.get_mut(abs_id.index()).unwrap();
-        //a.2.insert(block_id);
         let a = self.abstractions.get_mut(abs_id);
         a.caller_blocks.insert(block_id);
     }
@@ -1809,6 +1807,7 @@ impl Flatten {
         //let (def, def_span_id, _) = self.get_ast_template(abstraction_id).clone();
         let a = self.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
+        let def = a.def.clone();
 
         //let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
         // we might want to handle this later
@@ -1816,12 +1815,10 @@ impl Flatten {
         //fun_scope.return_block = Some(next_block_id);
 
         // This expects to be called in a block that is ready to jump
-        let (_def_func_type, def_arg_type, def_ret_type) = self.refresh_func_type(&a.def, b);
+        let (_def_func_type, def_arg_type, def_ret_type) = self.refresh_func_type(&def, b);
         let def_func_type = AstType::Func(def_arg_type.clone().into(), ReturnType::Never.into());
 
         // WRITE GOTO
-        let a = self.abstractions.get(abstraction_id);
-        let def = a.def.clone();
         let (args, _) =
             self.calculate_function_arguments(&def, &args, def_span_id, call_span_id, b)?;
 
@@ -1901,8 +1898,7 @@ impl Flatten {
                     fun_scope_id,
                     fun_block_id
                 );
-                let a = self.abstractions.get(abstraction_id);
-                let body = *a.def.body.clone().unwrap();
+                let body = *def.body.clone().unwrap();
 
                 self.switch_blocks(fun_block_id);
                 let (entry_link_id, _) = self.push_start_block(
@@ -2215,7 +2211,6 @@ impl Flatten {
                     self.switch_blocks(d.block_id);
                     self.remove_placeholder_terminal(d.block_id);
 
-                    //let (_, _, blocks) = self.get_ast_template(abstraction_id);
                     let a = self.abstractions.get_mut(abstraction_id);
                     println!("blocks: {:?}", a.caller_blocks);
                     // push and jump
