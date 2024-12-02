@@ -1706,7 +1706,6 @@ impl Flatten {
                     variant_id,
                 );
                 b.unify(&def_func_type, origin_span_id, &resolve_type, a.def_span_id);
-                //self.variants.add_caller(variant_id, current_block_id);
 
                 (variant_id, fun_block_id, fun_scope_id)
             } else {
@@ -1762,7 +1761,6 @@ impl Flatten {
 
                 // update the variant with the resolved type
                 self.variant_update(variant_id, r_ty1, entry_link_id);
-                //self.variants.add_caller(variant_id, current_block_id);
 
                 // terminate if not already terminated
                 // this is for dead code
@@ -1936,7 +1934,6 @@ impl Flatten {
                     .unwrap_or(call_arg_type.clone());
                 // update the variant with the resolved type
                 self.variant_update(variant_id, r_ty2.clone(), entry_link_id); // caller_blocks);
-                self.variants.add_caller(variant_id, current_block_id);
 
                 // terminate if not already terminated
                 // this is for dead code
@@ -1967,8 +1964,14 @@ impl Flatten {
             "call_values: {:?}",
             (block.scope_id, goto_block_id, &call_values, &entry)
         );
+
+        let call_links = call_values
+            .iter()
+            .map(|(_, link_id, _, _)| *link_id)
+            .collect();
         let link_id = self.push_jump(fun_block_id.into(), call_values, call_span_id);
-        //self.variants.add_caller(variant_id, fun_block_id);
+        self.variants
+            .add_caller(variant_id, current_block_id, link_id, call_links);
 
         // if this really is a CPS function, then it should never return
         // TODO: verify that it never returns, could be with the function signature
@@ -2242,7 +2245,6 @@ impl Flatten {
                         link_id,
                         &d.args
                     );
-                    //self.variants.add_caller(variant_id, d.block_id);
 
                     let dt = DeferredType::Variant(*goto_link_id, d.block_id, variant_id);
                     let mut d = d;
@@ -2307,6 +2309,15 @@ impl Flatten {
                 println!("resolve ty: {}, {:?}", ty, entry);
                 let block_id = entry.block_id;
 
+                let arg_num = if let LCode::Arg(arg_num) = entry.code {
+                    arg_num
+                } else {
+                    unreachable!();
+                };
+                // TODO: the targets can be found in the caller_block.args[arg_num]
+                // This should be a Val Block, which includes the target
+                // we can then remove the usage of The TargetUnion, which doesn't fully work
+
                 let variant_id = self.variants.get_by_block(d.block_id).unwrap();
                 let variant = self.variants.get(variant_id);
                 println!("v: {}, {:?}", variant_id, variant);
@@ -2317,11 +2328,21 @@ impl Flatten {
                 //targets.sort();
                 let name = b.labels.r(variant.name.into());
 
+                /*
+                for block_id in &variant.caller_blocks {
+                    let block = self.blocks.get_block(*block_id);
+                    let last = block.last().unwrap();
+                    let entry = self.get_entry(last);
+
+                    println!("caller: {}:{}=>{}", name, block_id, block.last().unwrap());
+                }
+                */
+
                 if let AstType::TargetUnion(_field_types, targets) = &ty {
                     println!(
                         "{}: variant name: {:?}",
                         name,
-                        (variant_id, variant, &targets, &ty)
+                        (variant_id, &variant.caller_blocks, &targets, &ty)
                     );
                     if targets.len() == 1 {
                         let target_block_id = targets.get(0).unwrap().clone();
@@ -2329,7 +2350,20 @@ impl Flatten {
                             self.variants.get_by_block(target_block_id).unwrap();
                         let target_variant = self.variants.get(target_variant_id);
                         println!("v2: {}, {:?}", target_variant_id, target_variant);
-                        self.variants.add_caller(target_variant_id, d.block_id);
+                        println!(
+                            "v3: {}, {:?}",
+                            target_variant_id, target_variant.caller_blocks
+                        );
+                        let target_block = self.blocks.get_block(target_block_id);
+                        let entry = self.get_entry(target_block.last().unwrap());
+                        assert!(entry.code.is_term());
+                        let call_args = d.argvec.iter().map(|(_, l, _, _)| *l).collect();
+                        self.variants.add_caller(
+                            target_variant_id,
+                            d.block_id,
+                            target_block.last().unwrap(),
+                            call_args,
+                        );
                         let jump_link_id =
                             self.push_jump(target_block_id, d.argvec, d.call_span_id);
                         println!(
