@@ -1706,7 +1706,7 @@ impl Flatten {
                     variant_id,
                 );
                 b.unify(&def_func_type, origin_span_id, &resolve_type, a.def_span_id);
-                self.variants.add_caller(variant_id, current_block_id);
+                //self.variants.add_caller(variant_id, current_block_id);
 
                 (variant_id, fun_block_id, fun_scope_id)
             } else {
@@ -1762,7 +1762,7 @@ impl Flatten {
 
                 // update the variant with the resolved type
                 self.variant_update(variant_id, r_ty1, entry_link_id);
-                self.variants.add_caller(variant_id, current_block_id);
+                //self.variants.add_caller(variant_id, current_block_id);
 
                 // terminate if not already terminated
                 // this is for dead code
@@ -2180,11 +2180,6 @@ impl Flatten {
                 self.switch_blocks(d.block_id);
                 self.remove_placeholder_terminal(d.block_id);
 
-                println!(
-                    "{}: resolved deferred name: from {}:{}",
-                    s_name, d.scope_id, d.block_id
-                );
-
                 // push the arguments, and unify the type,
                 // but keep the placeholder, we will replace it in the rewrite step
                 // we do just enough calculation here to resolve the types, and we push it back on the
@@ -2200,6 +2195,11 @@ impl Flatten {
                 let entry = self.get_entry(*def_link_id);
                 let var_ty = entry.ty.clone();
                 b.unify(&var_ty, entry.span_id, &goto_func_type, d.call_span_id);
+
+                println!(
+                    "{}: resolved deferred name: from {}:{}, ty: {}",
+                    s_name, d.scope_id, d.block_id, var_ty
+                );
 
                 // save the argvec, so we can properly terminate later
                 let mut d = d;
@@ -2247,7 +2247,7 @@ impl Flatten {
                         link_id,
                         &d.args
                     );
-                    self.variants.add_caller(variant_id, d.block_id);
+                    //self.variants.add_caller(variant_id, d.block_id);
 
                     let dt = DeferredType::Variant(*goto_link_id, d.block_id, variant_id);
                     let mut d = d;
@@ -2312,6 +2312,10 @@ impl Flatten {
                 println!("resolve ty: {}, {:?}", ty, entry);
                 let block_id = entry.block_id;
 
+                let variant_id = self.variants.get_by_block(d.block_id).unwrap();
+                let variant = self.variants.get(variant_id);
+                println!("v: {}, {:?}", variant_id, variant);
+
                 let variant_id = self.variants.get_by_block(block_id).unwrap();
                 let variant = self.variants.get(variant_id);
                 //let mut targets = variant.caller_blocks.iter().cloned().collect::<Vec<_>>();
@@ -2326,6 +2330,11 @@ impl Flatten {
                     );
                     if targets.len() == 1 {
                         let target_block_id = targets.get(0).unwrap().clone();
+                        let target_variant_id =
+                            self.variants.get_by_block(target_block_id).unwrap();
+                        let target_variant = self.variants.get(target_variant_id);
+                        println!("v2: {}, {:?}", target_variant_id, target_variant);
+                        self.variants.add_caller(target_variant_id, d.block_id);
                         let jump_link_id =
                             self.push_jump(target_block_id, d.argvec, d.call_span_id);
                         println!(

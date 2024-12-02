@@ -329,6 +329,7 @@ impl<'c> MLIRGenerator<'c> {
                 self.build_int_op(0, location)
             }
             Literal::Variant(index) => {
+                unimplemented!();
                 //let entry_id = self.blockify.get_entry_id(v.into()).unwrap();
                 let variant_id = VariantId::new(*index as usize);
                 let variant = self.blockify.get_variant(variant_id);
@@ -344,6 +345,7 @@ impl<'c> MLIRGenerator<'c> {
                 self.build_int_op(ty_index as i64, location)
 
                 /*
+                     * This is all wrong
                 let variant_id = VariantId::new(*index as usize);
                 let variant = self.blockify.get_variant(variant_id);
                 println!("variant1: {:?}", (variant_id, variant));
@@ -354,7 +356,7 @@ impl<'c> MLIRGenerator<'c> {
                 let index = variant.block_index(block_id);
                 //let index = ty.target_union_block_index(block_id);
                 self.build_int_op(index as i64, location)
-                    */
+                */
 
                 /*
                 let ty = llvm::r#type::pointer(self.context, 0);
