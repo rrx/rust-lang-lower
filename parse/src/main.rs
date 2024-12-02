@@ -126,6 +126,7 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
     let table_path = make_path(&output_filename, "table.txt");
     m.dump_code_table(&table_path, b);
     m.dump_scopes();
+    m.dump_variants(b);
 
     if b.spans.has_errors {
         return Err(anyhow::Error::new(BlockifyError::Invalid).into());

@@ -6,7 +6,10 @@ use compile_core::{
     VarDefinitionSpace,
 };
 
-use crate::{BlockId, CodeOffset, LinkId, Node, NodeBuilder, StringLabel, Successor, ValueId, CFG};
+use crate::{
+    BlockId, CodeOffset, FunctionVariant, LinkId, Node, NodeBuilder, StringLabel, Successor,
+    ValueId, VariantId, CFG,
+};
 
 #[derive(Error, Debug)]
 pub enum BlockifyError {
@@ -138,6 +141,9 @@ pub trait ICodeModule {
     fn get_next(&self, value_id: ValueId) -> Option<ValueId>;
     //fn get_prev(&self, value_id: ValueId) -> Option<ValueId>;
     //
+
+    fn get_variant_by_block(&self, block_id: BlockId) -> Option<VariantId>;
+    fn get_variant(&self, variant_id: VariantId) -> &FunctionVariant;
 
     fn get_links(&self, mut value_id: ValueId) -> Vec<ValueId> {
         let mut out = vec![];

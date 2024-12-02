@@ -302,23 +302,16 @@ impl Flatten {
         link_id: LinkId,
         block_id: BlockId,
     ) -> VariantId {
-        let variant_id = self.variants.add(ty, link_id, block_id);
+        let variant_id = self.variants.add(ty, link_id, block_id, name);
         let scope = self.scopes.get_scope_mut(scope_id);
         scope.variant_link(name, variant_id);
         variant_id
     }
 
-    pub fn variant_update(
-        &mut self,
-        variant_id: VariantId,
-        ty: AstType,
-        link_id: LinkId,
-        caller_blocks: HashSet<BlockId>,
-    ) {
+    pub fn variant_update(&mut self, variant_id: VariantId, ty: AstType, link_id: LinkId) {
         let v = self.variants.get_mut(variant_id);
         v.link_id = link_id;
         v.ty = ty;
-        v.caller_blocks = caller_blocks;
     }
 
     pub fn resolve_all_function_name(
@@ -555,7 +548,7 @@ impl Flatten {
             let target_field_types = ty.field_types();
 
             self.switch_blocks(block_id);
-            let (_variant_id, _fun_scope_id, fun_block_id) = self.push_cps_block_with_type(
+            let (variant_id, _fun_scope_id, fun_block_id) = self.push_cps_block_with_type(
                 name,
                 scope_id,
                 abstraction_id,
@@ -566,7 +559,7 @@ impl Flatten {
 
             // now replace the abstraction code
             let entry = self.get_entry_mut(link_id);
-            entry.code = LCode::Val(Literal::Block(fun_block_id));
+            entry.code = LCode::Val(Literal::Block(variant_id.index() as u32, fun_block_id));
             entry.ty = AstType::TargetUnion(target_field_types, vec![fun_block_id]);
 
             println!("unify: {}=>{}", &ty, &entry.ty);
@@ -1298,7 +1291,7 @@ impl Flatten {
             let r_ty2 = b.types.u.resolve(&call_func_type).unwrap();
 
             // update the variant with the resolved type
-            self.variant_update(variant_id, r_ty2.clone(), v_entry, HashSet::new());
+            self.variant_update(variant_id, r_ty2.clone(), v_entry);
             (variant_id, v_entry)
         };
 
@@ -1704,14 +1697,16 @@ impl Flatten {
                 let entry = self.get_entry(link_id);
                 let fun_block_id = entry.block_id;
                 println!(
-                    "{}: push_cps_block_with_type found {}:{} => {}:{}",
+                    "{}: push_cps_block_with_type found {}:{} => {}:{}, variant: {}",
                     s_name,
                     scope_id,
                     self.current_block_id(),
                     fun_scope_id,
-                    fun_block_id
+                    fun_block_id,
+                    variant_id,
                 );
                 b.unify(&def_func_type, origin_span_id, &resolve_type, a.def_span_id);
+                self.variants.add_caller(variant_id, current_block_id);
 
                 (variant_id, fun_block_id, fun_scope_id)
             } else {
@@ -1722,14 +1717,6 @@ impl Flatten {
                     .block_succ(current_block_id, fun_block_id, Successor::BlockScope);
                 // Start lambda block
                 let lambda_name = b.labels.fresh_key(&s_name);
-                println!(
-                    "{}: push_cps_block_with_type in {}:{} => {}:{}",
-                    s_name,
-                    scope_id,
-                    self.current_block_id(),
-                    fun_scope_id,
-                    fun_block_id
-                );
                 let a = self.abstractions.get(abstraction_id);
                 let body = a.def.body.clone().unwrap();
 
@@ -1759,12 +1746,23 @@ impl Flatten {
                     fun_block_id,
                 );
 
+                println!(
+                    "{}: push_cps_block_with_type in {}:{} => {}:{}, variant: {}",
+                    s_name,
+                    scope_id,
+                    self.current_block_id(),
+                    fun_scope_id,
+                    fun_block_id,
+                    variant_id
+                );
+
                 // flatten function, and switch to next
                 // lower first, so we resolve types
                 let _ = self.push_node(*body, b)?;
 
                 // update the variant with the resolved type
-                self.variant_update(variant_id, r_ty1, entry_link_id, HashSet::new());
+                self.variant_update(variant_id, r_ty1, entry_link_id);
+                self.variants.add_caller(variant_id, current_block_id);
 
                 // terminate if not already terminated
                 // this is for dead code
@@ -1852,18 +1850,18 @@ impl Flatten {
         let r3 = b.types.u.resolve(&def_arg_type);
         //assert!(!call_arg_type.is_unknown());
 
-        let mut caller_blocks = HashSet::new();
-        for (_, _, ty, _) in &call_values {
-            if let AstType::TargetUnion(_, blocks) = ty {
-                for block_id in blocks {
-                    caller_blocks.insert(*block_id);
-                }
-            }
-        }
+        //let mut caller_blocks = HashSet::new();
+        //for (_, _, ty, _) in &call_values {
+        //if let AstType::TargetUnion(_, blocks) = ty {
+        //for block_id in blocks {
+        //caller_blocks.insert(*block_id);
+        //}
+        //}
+        //}
 
-        for block_id in &caller_blocks {
-            self.save_ast_template_caller(abstraction_id, *block_id);
-        }
+        //for block_id in &caller_blocks {
+        //self.save_ast_template_caller(abstraction_id, *block_id);
+        //}
 
         println!(
             "{}: variant lookup: {}, {:?}",
@@ -1942,7 +1940,8 @@ impl Flatten {
                     .resolve(&call_arg_type)
                     .unwrap_or(call_arg_type.clone());
                 // update the variant with the resolved type
-                self.variant_update(variant_id, r_ty2.clone(), entry_link_id, caller_blocks);
+                self.variant_update(variant_id, r_ty2.clone(), entry_link_id); // caller_blocks);
+                self.variants.add_caller(variant_id, current_block_id);
 
                 // terminate if not already terminated
                 // this is for dead code
@@ -1974,6 +1973,7 @@ impl Flatten {
             (block.scope_id, goto_block_id, &call_values, &entry)
         );
         let link_id = self.push_jump(fun_block_id.into(), call_values, call_span_id);
+        //self.variants.add_caller(variant_id, fun_block_id);
 
         // if this really is a CPS function, then it should never return
         // TODO: verify that it never returns, could be with the function signature
@@ -2217,7 +2217,8 @@ impl Flatten {
                 self.deferred_goto.add_cps(d);
                 return Ok(true);
             }
-            DeferredType::Goto(_) => {
+
+            DeferredType::Goto(goto_link_id) => {
                 // are we jumping to an abstraction?
                 if let Some(abstraction_id) = self.resolve_template(d.scope_id, d.name.into()) {
                     self.switch_blocks(d.block_id);
@@ -2227,22 +2228,15 @@ impl Flatten {
                     println!("blocks: {:?}", a.caller_blocks);
                     // push and jump
                     // TODO: this function needs to handle unwind
-                    let (
-                        variant_id,
-                        fun_scope_id,
-                        fun_block_id,
-                        _def_func_type,
-                        _def_arg_type,
-                        _,
-                        link_id,
-                    ) = self.push_cps_block(
-                        d.name,
-                        d.scope_id,
-                        abstraction_id,
-                        d.args.clone(),
-                        d.call_span_id,
-                        b,
-                    )?;
+                    let (variant_id, fun_scope_id, fun_block_id, _, _, _, link_id) = self
+                        .push_cps_block(
+                            d.name,
+                            d.scope_id,
+                            abstraction_id,
+                            d.args.clone(),
+                            d.call_span_id,
+                            b,
+                        )?;
                     println!(
                         "{}: resolved deferred lambda: from {}:{}=>{}:{}, link: {}, {:?}",
                         s_name,
@@ -2253,8 +2247,11 @@ impl Flatten {
                         link_id,
                         &d.args
                     );
+                    self.variants.add_caller(variant_id, d.block_id);
+
+                    let dt = DeferredType::Variant(*goto_link_id, d.block_id, variant_id);
                     let mut d = d;
-                    d.deferred_type = DeferredType::Variant(variant_id);
+                    d.deferred_type = dt;
                     self.deferred_goto.add_cps(d);
                     return Ok(true);
                 }
@@ -2296,32 +2293,49 @@ impl Flatten {
     fn resolve_cps_single(&mut self, d: DeferredGoto, b: &mut NB) -> Result<()> {
         let key = d.name;
         let s_name = b.labels.r(key.into());
+        println!("{}: resolve cps: {:?}", s_name, &d);
 
         // this is where we actually do the rewrite
 
         // remove placeholder
 
         match d.deferred_type {
-            DeferredType::Name(name_link_id) => {
+            DeferredType::Name(arg_link_id) => {
                 // we replace the placeholder here
                 self.switch_blocks(d.block_id);
                 self.remove_placeholder_terminal(d.block_id);
                 // TODO: we need to rewrite the function to be static.
                 // We should have all of the information we need in the type
                 // The actual target comes from the type
-                let entry = self.get_entry(name_link_id);
+                let entry = self.get_entry(arg_link_id);
                 let ty = entry.ty.clone();
                 println!("resolve ty: {}, {:?}", ty, entry);
                 let block_id = entry.block_id;
 
-                //let variant = self.variants.get
-                if let AstType::TargetUnion(_field_types, targets) = ty {
+                let variant_id = self.variants.get_by_block(block_id).unwrap();
+                let variant = self.variants.get(variant_id);
+                //let mut targets = variant.caller_blocks.iter().cloned().collect::<Vec<_>>();
+                //targets.sort();
+                let name = b.labels.r(variant.name.into());
+
+                if let AstType::TargetUnion(_field_types, targets) = &ty {
+                    println!(
+                        "{}: variant name: {:?}",
+                        name,
+                        (variant_id, variant, &targets, &ty)
+                    );
                     if targets.len() == 1 {
                         let target_block_id = targets.get(0).unwrap().clone();
-                        let link_id = self.push_jump(target_block_id, d.argvec, d.call_span_id);
+                        let jump_link_id =
+                            self.push_jump(target_block_id, d.argvec, d.call_span_id);
                         println!(
-                            "{}: resolved cps goto: from {}:{}, link: {}=>{}",
-                            s_name, d.scope_id, d.block_id, name_link_id, link_id
+                            "{}: resolved cps goto: from {}:{} to {}, link: {}=>{}",
+                            s_name,
+                            d.scope_id,
+                            d.block_id,
+                            target_block_id,
+                            arg_link_id,
+                            jump_link_id
                         );
                     } else {
                         unimplemented!();
@@ -2330,9 +2344,10 @@ impl Flatten {
                     unreachable!();
                 }
             }
-            DeferredType::Variant(variant_id) => {
+            DeferredType::Variant(goto_link_id, source_block_id, variant_id) => {
                 // we have all of the callers for this abstraction now, so we can go ahead and
                 // rewrite
+                /*
                 if let Some(abstraction_id) = self.resolve_template(d.scope_id, d.name.into()) {
                     //let (_, _, blocks) = self.get_ast_template(abstraction_id);
                     let a = self.abstractions.get(abstraction_id);
@@ -2340,9 +2355,17 @@ impl Flatten {
                 } else {
                     unimplemented!();
                 }
+                */
+
+                let block = self.blocks.get_block(source_block_id);
 
                 let variant = self.variants.get(variant_id);
-                println!("variant: {:?}", variant);
+                let name = b.labels.r(variant.name.into());
+                println!(
+                    "{}: variant X: {:?}",
+                    name,
+                    (variant_id, variant.block_id, variant, block)
+                );
             }
             _ => {
                 unreachable!("{:?}", d);
@@ -2359,6 +2382,7 @@ impl Flatten {
                 break;
             }
         }
+        println!("resolve_cps done");
         Ok(())
     }
 
@@ -3099,21 +3123,26 @@ impl Flatten {
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::BlockReference(expr)) => {
-                let block_id = match &expr.node {
+                let (variant_id, block_id) = match &expr.node {
                     Ast::Identifier(key) => {
                         let key = *key;
                         let ty = AstType::func(vec![], AstType::Unit);
                         let scope_id = block.scope_id;
-                        if let Some((_variant_id, _resolve_type, link_id, _scope_id)) =
+                        if let Some((variant_id, _resolve_type, link_id, _scope_id)) =
                             self.resolve_function_name(scope_id, &key, &ty, b)
                         {
                             let entry = self.get_entry(link_id);
-                            entry.block_id
+                            (variant_id, entry.block_id)
                         } else {
                             let link_id = self.push_node(*expr, b)?.link_id.unwrap();
                             let entry = self.get_entry(link_id);
                             match &entry.code {
-                                LCode::Label => entry.block_id,
+                                LCode::Label => {
+                                    let variant_id =
+                                        self.variants.block_lookup.get(&entry.block_id).unwrap();
+                                    let v = self.variants.get_by_block(entry.block_id).unwrap();
+                                    (*variant_id, entry.block_id)
+                                }
                                 LCode::PlaceholderCodeReference => {
                                     let s_name = b.labels.r(key.into());
                                     unimplemented!("{:?}", (s_name, entry));
@@ -3126,7 +3155,7 @@ impl Flatten {
                     }
                     _ => unimplemented!("{:?}", expr),
                 };
-                let code = LCode::Val(Literal::Block(block_id));
+                let code = LCode::Val(Literal::Block(variant_id.index() as u32, block_id));
                 let link_id = self.push_code(
                     code,
                     AstType::JumpTarget,

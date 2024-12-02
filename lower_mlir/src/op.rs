@@ -3,7 +3,7 @@ use anyhow::Error;
 use anyhow::Result;
 use compile_core::Diagnostic;
 use compile_core::{Ast, AstNode, AstType, BinaryOperation, Literal, ReturnType, SpanId};
-use flat::ValueId;
+use flat::{ValueId, VariantId};
 use melior::ir::Location;
 use melior::{
     dialect::{
@@ -328,11 +328,33 @@ impl<'c> MLIRGenerator<'c> {
                 // TODO, replace with dummy value
                 self.build_int_op(0, location)
             }
-            Literal::Block(block_id) => {
+            Literal::Variant(index) => {
+                //let entry_id = self.blockify.get_entry_id(v.into()).unwrap();
+                let variant_id = VariantId::new(*index as usize);
+                let variant = self.blockify.get_variant(variant_id);
+                let index = variant.block_index(&variant.block_id);
+                //let index = ty.target_union_block_index(block_id);
+                self.build_int_op(index as i64, location)
+            }
+            Literal::Block(index, block_id) => {
                 // this is a block.  The type should be TargetUnion
                 let ty = self.blockify.get_type(v.into());
-                let index = ty.target_union_block_index(block_id);
+                let ty_index = ty.target_union_block_index(block_id);
+                println!("variant0: {:?}", (ty, ty_index));
+                self.build_int_op(ty_index as i64, location)
+
+                /*
+                let variant_id = VariantId::new(*index as usize);
+                let variant = self.blockify.get_variant(variant_id);
+                println!("variant1: {:?}", (variant_id, variant));
+                let variant_id = self.blockify.get_variant_by_block(*block_id).unwrap();
+                let variant = self.blockify.get_variant(variant_id);
+                println!("variant2: {:?}", (variant_id, variant));
+                println!("variant3: {:?}", (v, variant_id, block_id));
+                let index = variant.block_index(block_id);
+                //let index = ty.target_union_block_index(block_id);
                 self.build_int_op(index as i64, location)
+                    */
 
                 /*
                 let ty = llvm::r#type::pointer(self.context, 0);

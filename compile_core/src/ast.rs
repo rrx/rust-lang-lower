@@ -84,7 +84,8 @@ pub enum Literal {
     String(String),
     Bool(bool),
     Tuple(Vec<Literal>),
-    Block(BlockId),
+    Block(u32, BlockId),
+    Variant(u32),
     Abstraction(AbstractionId),
     Struct(Vec<(Option<StringKey>, Literal)>),
     Array(AstType, Vec<usize>), // Type and dimension, empty dimension is the same as a scalar
@@ -99,7 +100,8 @@ impl From<Literal> for AstType {
 impl From<&Literal> for AstType {
     fn from(item: &Literal) -> Self {
         match item {
-            Literal::Block(_) => AstType::JumpTarget,
+            Literal::Block(_, _) => AstType::JumpTarget,
+            Literal::Variant(_) => AstType::JumpTarget,
             Literal::Abstraction(_) => AstType::JumpTarget,
             Literal::Int(_) => AstType::Int,
             Literal::Float(_) => AstType::Float,

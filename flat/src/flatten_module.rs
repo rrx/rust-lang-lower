@@ -7,8 +7,9 @@ use std::collections::HashMap;
 use std::convert::Into;
 
 use crate::{
-    BlockGraph, BlockId, CodeEntry, CodeOffset, CodeRow, Flatten, ICodeModule, LCode, LinkId,
-    NodeBuilder as NB, ScopeGraph, ScopeType, StringLabel, Successor, ValueId,
+    BlockGraph, BlockId, CodeEntry, CodeOffset, CodeRow, Flatten, FunctionVariant,
+    FunctionVariantBuilder, ICodeModule, LCode, LinkId, NodeBuilder as NB, ScopeGraph, ScopeType,
+    StringLabel, Successor, ValueId, VariantId,
 };
 
 use tabled::{settings::Style, Table};
@@ -25,9 +26,18 @@ pub struct FlattenModule {
     pub block_links: HashMap<BlockId, LinkId>,
     pub(crate) functions: HashMap<StringKey, LinkId>,
     pub statics: HashMap<StringKey, Literal>,
+    pub variants: FunctionVariantBuilder,
 }
 
 impl ICodeModule for FlattenModule {
+    fn get_variant_by_block(&self, block_id: BlockId) -> Option<VariantId> {
+        self.variants.get_by_block(block_id)
+    }
+
+    fn get_variant(&self, variant_id: VariantId) -> &FunctionVariant {
+        self.variants.get(variant_id)
+    }
+
     fn shared_libraries(&self) -> Vec<String> {
         self.link.shared_libraries()
     }
@@ -172,6 +182,7 @@ impl FlattenModule {
             block_links: f.block_links,
             functions: f.functions,
             statics: f.statics,
+            variants: f.variants,
         })
     }
 
@@ -247,6 +258,14 @@ impl FlattenModule {
 
     pub fn dump_scopes(&self) {
         petgraph::dot::Dot::with_config(&self.scopes.0, &[petgraph::dot::Config::EdgeNoLabel]);
+    }
+
+    pub fn dump_variants(&self, b: &NB) {
+        for (index, v) in self.variants.variants.iter().enumerate() {
+            let variant_id = VariantId::new(index);
+            let name = b.labels.r(v.name.into());
+            println!("[{}] Variant: {:?}", variant_id, (name, v));
+        }
     }
 
     pub fn block_graph(&self, filename: &str, _b: &NB) {

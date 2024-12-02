@@ -24,7 +24,17 @@ pub struct FunctionVariant {
     pub ty: AstType,
     pub link_id: LinkId,
     pub block_id: BlockId,
+    pub name: StringKey,
     pub caller_blocks: HashSet<BlockId>,
+}
+
+impl FunctionVariant {
+    pub fn block_index(&self, block_id: &BlockId) -> i64 {
+        let mut blocks = self.caller_blocks.clone().into_iter().collect::<Vec<_>>();
+        blocks.sort();
+        let index = blocks.iter().position(|&x| x == *block_id).unwrap();
+        index as i64
+    }
 }
 
 #[derive(Debug)]
@@ -41,6 +51,14 @@ impl FunctionVariantBuilder {
         }
     }
 
+    pub fn get_by_block(&self, block_id: BlockId) -> Option<VariantId> {
+        if let Some(variant_id) = self.block_lookup.get(&block_id) {
+            Some(*variant_id)
+        } else {
+            None
+        }
+    }
+
     pub fn get(&self, variant_id: VariantId) -> &FunctionVariant {
         self.variants.get(variant_id.index()).unwrap()
     }
@@ -49,12 +67,24 @@ impl FunctionVariantBuilder {
         self.variants.get_mut(variant_id.index()).unwrap()
     }
 
-    pub fn add(&mut self, ty: AstType, link_id: LinkId, block_id: BlockId) -> VariantId {
+    pub fn add_caller(&mut self, variant_id: VariantId, block_id: BlockId) {
+        let v = self.get_mut(variant_id);
+        v.caller_blocks.insert(block_id);
+    }
+
+    pub fn add(
+        &mut self,
+        ty: AstType,
+        link_id: LinkId,
+        block_id: BlockId,
+        name: StringKey,
+    ) -> VariantId {
         let index = self.variants.len();
         self.variants.push(FunctionVariant {
             ty,
             link_id,
             block_id,
+            name,
             caller_blocks: HashSet::new(),
         });
         let variant_id = VariantId(index as u32);

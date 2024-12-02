@@ -57,7 +57,7 @@ pub struct LoopScope {
 #[derive(Debug, Clone)]
 pub enum DeferredType {
     Goto(LinkId),
-    Variant(VariantId),
+    Variant(LinkId, BlockId, VariantId),
     Name(LinkId),
     Ident(LinkId),
 }
