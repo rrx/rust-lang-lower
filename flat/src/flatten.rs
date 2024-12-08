@@ -546,10 +546,11 @@ impl Flatten {
             //link_id, abstraction_id, fun_block_id
             //);
 
-            //self.scoped_continuations.connect(
-            //ContinuationFlow::Variable(*link_id),
-            //ContinuationFlow::Block(target_block_id, i as u8 + 1),
-            //);
+            self.scoped_continuations.connect(
+                ContinuationFlow::Block(fun_block_id),
+                ContinuationFlow::Variable(link_id),
+                FlowEdge::A,
+            );
 
             // now replace the abstraction code
             let entry = self.get_entry_mut(link_id);
@@ -1891,7 +1892,7 @@ impl Flatten {
                 let _ = self.push_node(*body, b)?;
 
                 // update the variant with the resolved type
-                self.variant_update(variant_id, r_ty1, entry_link_id);
+                //self.variant_update(variant_id, r_ty1, entry_link_id);
 
                 // terminate if not already terminated
                 // this is for dead code
@@ -2104,30 +2105,30 @@ impl Flatten {
 
         let goto_link_id = self.push_jump(fun_block_id.into(), call_values.clone(), call_span_id);
 
-        for (i, (_, var_link_id, ty, _)) in call_values.iter().enumerate() {
-            if let AstType::TargetUnion(_, blocks) = ty {
-                for block_id in blocks {
-                    self.scoped_continuations.connect(
-                        ContinuationFlow::Block(*block_id),
-                        ContinuationFlow::Variable(*var_link_id),
-                        FlowEdge::C,
-                    );
-                    self.scoped_continuations.connect(
-                        ContinuationFlow::Variable(*var_link_id),
-                        ContinuationFlow::JumpArg(goto_link_id, i as u8),
-                        FlowEdge::D,
-                    );
-                    self.scoped_continuations.connect(
-                        ContinuationFlow::JumpArg(goto_link_id, i as u8),
-                        ContinuationFlow::BlockArg(fun_block_id, i as u8),
-                        FlowEdge::E,
-                    );
-                    //self.scoped_continuations.connect(
-                    //ContinuationFlow::Variable(*var_link_id),
-                    //ContinuationFlow::Block(fun_block_id, i as u8 + 1),
-                    //);
-                }
-            }
+        for (i, (_, var_link_id, _ty, _)) in call_values.iter().enumerate() {
+            //if let A
+            //for block_id in blocks {
+            //self.scoped_continuations.connect(
+            //ContinuationFlow::Block(*block_id),
+            //ContinuationFlow::Variable(*var_link_id),
+            //FlowEdge::C,
+            //);
+            self.scoped_continuations.connect(
+                ContinuationFlow::Variable(*var_link_id),
+                ContinuationFlow::JumpArg(goto_link_id, i as u8),
+                FlowEdge::D,
+            );
+            self.scoped_continuations.connect(
+                ContinuationFlow::JumpArg(goto_link_id, i as u8),
+                ContinuationFlow::BlockArg(fun_block_id, i as u8),
+                FlowEdge::E,
+            );
+            //self.scoped_continuations.connect(
+            //ContinuationFlow::Variable(*var_link_id),
+            //ContinuationFlow::Block(fun_block_id, i as u8 + 1),
+            //);
+            //}
+            //}
         }
 
         self.scoped_continuations.connect(
@@ -2484,7 +2485,7 @@ impl Flatten {
                 // We should have all of the information we need in the type
                 // The actual target comes from the type
                 let entry = self.get_entry(arg_link_id);
-                let ty = entry.ty.clone();
+                //let ty = entry.ty.clone();
                 let arg_block_id = entry.block_id;
 
                 let arg_num = if let LCode::Arg(arg_num) = entry.code {
@@ -2492,191 +2493,36 @@ impl Flatten {
                 } else {
                     unreachable!();
                 };
-                //println!(
-                //"resolve name: {}, {:?}, {}, {:?}",
-                //ty, entry, arg_num, d.argvec
-                //);
-
-                // TODO: the targets can be found in the caller_block.args[arg_num]
-                // This should be a Val Block, which includes the target
-                // we can then remove the usage of The TargetUnion, which doesn't fully work
 
                 //let mut targets = variant.caller_blocks.iter().cloned().collect::<Vec<_>>();
                 //targets.sort();
 
-                /*
-                for block_id in &variant.caller_blocks {
-                    let block = self.blocks.get_block(*block_id);
-                    let last = block.last().unwrap();
-                    let entry = self.get_entry(last);
+                let flows = self
+                    .scoped_continuations
+                    .find(ContinuationFlow::BlockArg(arg_block_id, arg_num));
 
-                    println!("caller: {}:{}=>{}", name, block_id, block.last().unwrap());
-                }
-                */
+                if let ContinuationFlow::Block(target_block_id) = flows.last().unwrap().clone() {
+                    let target_variant_id = self.variants.get_by_block(target_block_id).unwrap();
 
-                //if let Some(variant_id) = self.variants.get_by_block(arg_block_id) {
+                    let target_block = self.blocks.get_block(target_block_id);
+                    let entry = self.get_entry(target_block.last().unwrap());
+                    assert!(entry.code.is_term());
+                    let call_args = d.argvec.iter().map(|(_, l, _, _)| *l).collect();
+                    self.variants.add_caller(
+                        target_variant_id,
+                        d.block_id,
+                        target_block.last().unwrap(),
+                        call_args,
+                    );
 
-                if let AstType::TargetUnion(_field_types, targets) = &ty {
-                    //let variant_id = self.variants.get_by_block(d.block_id).unwrap();
-                    //let variant = self.variants.get(variant_id);
-                    //println!("v: {}, {:?}", variant_id, variant);
-
-                    let variant_id = self.variants.get_by_block(arg_block_id).unwrap();
-                    let variant = self.variants.get(variant_id);
-                    //let name = b.labels.r(variant.name.into());
-
-                    //println!(
-                    //"@{}, {}: variant name: {:?}",
-                    //arg_link_id,
-                    //name,
-                    //(variant_id, &variant.caller_blocks, &targets, &ty, &d.args)
-                    //);
-
-                    for (_, _caller) in &variant.caller_blocks {
-                        /*
-                            let caller_arg_link_id = caller.args.get(arg_num as usize).unwrap();
-                            //for (i, arg ) in caller.args.iter().enumerate() {
-                            let entry = self.get_entry(*caller_arg_link_id);
-                            match &entry.code {
-                                LCode::Arg(n) => {
-                                    assert_eq!(*n, arg_num);
-                                    //println!("@{}: {}, arg:{}", arg_link_id, name, arg_num);
-                                    /*
-                                    self.scoped_continuations.connect(
-                                        ContinuationFlow::Jump(caller.link_id, arg_num + 1),
-                                        ContinuationFlow::Block(arg_block_id, *n),
-                                    );
-                                    */
-                                }
-                                _ => {
-                                    println!(
-                                        "@{}: {}: arg:{}, {:?}",
-                                        arg_link_id, name, arg_num, &entry.code
-                                    );
-                                }
-                            }
-                        */
-
-                        /*
-                        match &entry.code {
-                            LCode::Val(Literal::Block(_, arg_block_id)) => {
-                                self.scoped_continuations.connect(
-                                    ContinuationFlow::Jump(caller.link_id, i as u8 + 1),
-                                    ContinuationFlow::Block(*arg_block_id, arg_num as u8 + 1),
-                                );
-                                //self.scoped_continuations.connect(
-                                //ContinuationFlow::Jump(caller.link_id, i as u8+1),
-                                //ContinuationFlow::Block(*arg_block_id, 0),
-                                //);
-                            }
-                            _ => (),
-                        }
-                        */
-                        //}
-                    }
-                    let flows = self
-                        .scoped_continuations
-                        .find(ContinuationFlow::BlockArg(arg_block_id, arg_num));
-
-                    if let ContinuationFlow::Block(target_block_id) = flows.last().unwrap().clone()
-                    {
-                        //{
-                        //assert_eq!(target_num, 0);
-                        //}
-
-                        //if targets.len() == 1 {
-                        //let target_block_id = targets.get(0).unwrap().clone();
-
-                        let target_variant_id =
-                            self.variants.get_by_block(target_block_id).unwrap();
-                        //let target_variant = self.variants.get(target_variant_id);
-                        //println!("v2: {}, {:?}", target_variant_id, target_variant);
-                        //println!(
-                        //"v3: {}, {:?}",
-                        //target_variant_id, target_variant.caller_blocks
-                        //);
-                        let target_block = self.blocks.get_block(target_block_id);
-                        let entry = self.get_entry(target_block.last().unwrap());
-                        assert!(entry.code.is_term());
-                        let call_args = d.argvec.iter().map(|(_, l, _, _)| *l).collect();
-                        self.variants.add_caller(
-                            target_variant_id,
-                            d.block_id,
-                            target_block.last().unwrap(),
-                            call_args,
-                        );
-
-                        //let jump_link_id =
-                        //self.push_jump(target_block_id, d.argvec, d.call_span_id);
-                        let jump_link_id =
-                            self.replace_placeholder_terminal(d.block_id, target_block_id);
-                        println!(
-                            "flows: {:?}",
-                            (arg_block_id, arg_num, flows, targets, jump_link_id)
-                        );
-
-                        //self.scoped_continuations.connect(
-                        //ContinuationFlow::Block(arg_block_id, arg_num + 1),
-                        //ContinuationFlow::Jump(jump_link_id, 0),
-                        //FlowEdge::B
-                        //);
-
-                        //self.scoped_continuations.connect(
-                        //ContinuationFlow::Block(arg_block_id, 0),
-                        //ContinuationFlow::Jump(jump_link_id, 0),
-                        //);
-
-                        //self.scoped_continuations.connect(
-                        //ContinuationFlow::Jump(jump_link_id, 0),
-                        //ContinuationFlow::Block(target_block_id, 0),
-                        //FlowEdge::A
-                        //);
-
-                        //self.scoped_continuations.connect(
-                        //ContinuationFlow::Block(arg_block_id, arg_num + 1),
-                        //ContinuationFlow::Jump(jump_link_id, arg_num + 1),
-                        //);
-
-                        //println!(
-                        //"{}: resolved cps goto: from {}:{} to {}, link: {}=>{}",
-                        //s_name,
-                        //d.scope_id,
-                        //d.block_id,
-                        //target_block_id,
-                        //arg_link_id,
-                        //jump_link_id
-                        //);
-                    } else {
-                        unimplemented!();
-                    }
+                    let jump_link_id =
+                        self.replace_placeholder_terminal(d.block_id, target_block_id);
+                    println!("flows: {:?}", (arg_block_id, arg_num, flows, jump_link_id));
                 } else {
-                    unreachable!();
+                    unimplemented!();
                 }
             }
-            DeferredType::Variant(_goto_link_id, _source_block_id, _variant_id) => {
-                /*
-                    // we have all of the callers for this abstraction now, so we can go ahead and
-                    // rewrite
-                    /*
-                    if let Some(abstraction_id) = self.resolve_template(d.scope_id, d.name.into()) {
-                        //let (_, _, blocks) = self.get_ast_template(abstraction_id);
-                        let a = self.abstractions.get(abstraction_id);
-                        println!("blocks2: {:?}", a.caller_blocks);
-                    } else {
-                        unimplemented!();
-                    }
-                    */
-
-                    //let block = self.blocks.get_block(source_block_id);
-                    //let variant = self.variants.get(variant_id);
-                    //let name = b.labels.r(variant.name.into());
-                    //println!(
-                    //"{}: variant X: {:?}",
-                    //name,
-                    //(variant_id, variant.block_id, variant, block)
-                    //);
-                */
-            }
+            DeferredType::Variant(_goto_link_id, _source_block_id, _variant_id) => {}
             _ => {
                 unreachable!("{:?}", d);
             }
@@ -2692,17 +2538,6 @@ impl Flatten {
                 break;
             }
         }
-
-        //for variant_id in self.variants.iter() {
-        //let v = self.variants.get(variant_id);
-        //for (block_id, caller) in v.caller_blocks.iter() {
-        //let s_name = b.labels.r(v.name.into());
-        //println!("variant: {}:{}=>{:?}", s_name, block_id, &caller.args);
-        //let caller.args.get(0).unwrap();
-        //}
-        //}
-
-        //println!("resolve_cps done");
         Ok(())
     }
 
@@ -3172,6 +3007,8 @@ impl Flatten {
                 self.messages
                     .push((format!("ident: not found {}\n{}", s, backtrace), span_id));
 
+                assert!(false);
+                //return Ok(FlattenResult::statement());
                 Err(Error::new(BlockifyError::NotFound(s)))
             }
 
