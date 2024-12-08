@@ -6,9 +6,11 @@ use std::collections::HashMap;
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
 pub enum ContinuationFlow {
-    Block(BlockId, u8), // Block Argument, 0 is the block
+    Block(BlockId),        // Block
+    BlockArg(BlockId, u8), // Block Argument
     Variable(LinkId),
-    Jump(LinkId, u8), // Jump Argument, 0 is the target
+    Jump(LinkId),        // Jump
+    JumpArg(LinkId, u8), // Jump Argument
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
@@ -79,7 +81,7 @@ impl ScopedContinuations {
             .neighbors_directed(*index.unwrap(), petgraph::Direction::Incoming)
             .map(|index| self.g[index])
         {
-            if let ContinuationFlow::Block(_, _) = x {
+            if let ContinuationFlow::Block(_) = x {
                 out.push(x);
             } else {
                 out.extend(self.find(x));

@@ -80,13 +80,13 @@ impl ICodeModule for FlattenModule {
 
     /*
     fn get_prev(&self, value_id: ValueId) -> Option<ValueId> {
-        let value_id = LinkId(value_id.index() as u32);
-        let entry = self.get_entry(value_id);
-        if entry.prev != value_id {
-            Some(ValueId(entry.prev.index() as u32))
-        } else {
-            None
-        }
+    let value_id = LinkId(value_id.index() as u32);
+    let entry = self.get_entry(value_id);
+    if entry.prev != value_id {
+    Some(ValueId(entry.prev.index() as u32))
+    } else {
+    None
+    }
     }
     */
 
@@ -269,15 +269,27 @@ impl FlattenModule {
                 },
                 &|_, (_, c)| {
                     match c {
-                        ContinuationFlow::Block(block_id, arg) => {
+                        ContinuationFlow::Block(block_id) => {
                             let s_name = if let Some(name) = self.get_name(block_id.into()) {
                                 b.labels.r(name)
                             } else {
                                 "?".to_string()
                             };
-                            format!("label = \"B.{}:{}:{}\"", s_name, block_id, arg)
+                            format!("label = \"B.{}:{}\"", s_name, block_id)
                         }
-                        ContinuationFlow::Jump(link_id, arg) => {
+                        ContinuationFlow::BlockArg(block_id, arg) => {
+                            let s_name = if let Some(name) = self.get_name(block_id.into()) {
+                                b.labels.r(name)
+                            } else {
+                                "?".to_string()
+                            };
+                            format!("label = \"BA.{}:{}:{}\"", s_name, block_id, arg)
+                        }
+                        ContinuationFlow::Jump(link_id) => {
+                            let v = self.maybe_resolve_code_offset(link_id.into());
+                            format!("label = \"JUMP:{:?}\"", v)
+                        }
+                        ContinuationFlow::JumpArg(link_id, arg) => {
                             let v = self.maybe_resolve_code_offset(link_id.into());
                             format!("label = \"JUMP:{:?}:{}\"", v, arg)
                         }

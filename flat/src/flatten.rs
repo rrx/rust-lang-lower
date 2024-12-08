@@ -2108,18 +2108,18 @@ impl Flatten {
             if let AstType::TargetUnion(_, blocks) = ty {
                 for block_id in blocks {
                     self.scoped_continuations.connect(
-                        ContinuationFlow::Block(*block_id, 0),
+                        ContinuationFlow::Block(*block_id),
                         ContinuationFlow::Variable(*var_link_id),
                         FlowEdge::C,
                     );
                     self.scoped_continuations.connect(
                         ContinuationFlow::Variable(*var_link_id),
-                        ContinuationFlow::Jump(goto_link_id, i as u8 + 1),
+                        ContinuationFlow::JumpArg(goto_link_id, i as u8),
                         FlowEdge::D,
                     );
                     self.scoped_continuations.connect(
-                        ContinuationFlow::Jump(goto_link_id, i as u8 + 1),
-                        ContinuationFlow::Block(fun_block_id, i as u8 + 1),
+                        ContinuationFlow::JumpArg(goto_link_id, i as u8),
+                        ContinuationFlow::BlockArg(fun_block_id, i as u8),
                         FlowEdge::E,
                     );
                     //self.scoped_continuations.connect(
@@ -2131,8 +2131,8 @@ impl Flatten {
         }
 
         self.scoped_continuations.connect(
-            ContinuationFlow::Jump(goto_link_id, 0),
-            ContinuationFlow::Block(fun_block_id, 0),
+            ContinuationFlow::Jump(goto_link_id),
+            ContinuationFlow::Block(fun_block_id),
             FlowEdge::F,
         );
 
@@ -2444,8 +2444,8 @@ impl Flatten {
                     //s_name, d.scope_id, d.block_id, block.scope_id, target_block_id, link_id
                     //);
                     self.scoped_continuations.connect(
-                        ContinuationFlow::Jump(link_id, 0),
-                        ContinuationFlow::Block(target_block_id, 0),
+                        ContinuationFlow::Jump(link_id),
+                        ContinuationFlow::Block(target_block_id),
                         FlowEdge::G,
                     );
 
@@ -2576,16 +2576,16 @@ impl Flatten {
                     }
                     let flows = self
                         .scoped_continuations
-                        .find(ContinuationFlow::Block(arg_block_id, arg_num + 1));
-                    println!("flows: {:?}", flows);
-                    //if let ContinuationFlow::Block(target_block_id, target_num) =
-                    //flows.get(0).unwrap().clone()
-                    //{
-                    //assert_eq!(target_num, 0);
-                    //}
+                        .find(ContinuationFlow::BlockArg(arg_block_id, arg_num));
 
-                    if targets.len() == 1 {
-                        let target_block_id = targets.get(0).unwrap().clone();
+                    if let ContinuationFlow::Block(target_block_id) = flows.last().unwrap().clone()
+                    {
+                        //{
+                        //assert_eq!(target_num, 0);
+                        //}
+
+                        //if targets.len() == 1 {
+                        //let target_block_id = targets.get(0).unwrap().clone();
 
                         let target_variant_id =
                             self.variants.get_by_block(target_block_id).unwrap();
@@ -2608,8 +2608,12 @@ impl Flatten {
 
                         //let jump_link_id =
                         //self.push_jump(target_block_id, d.argvec, d.call_span_id);
-                        let _jump_link_id =
+                        let jump_link_id =
                             self.replace_placeholder_terminal(d.block_id, target_block_id);
+                        println!(
+                            "flows: {:?}",
+                            (arg_block_id, arg_num, flows, targets, jump_link_id)
+                        );
 
                         //self.scoped_continuations.connect(
                         //ContinuationFlow::Block(arg_block_id, arg_num + 1),
@@ -3460,13 +3464,13 @@ impl Flatten {
                     VarDefinitionSpace::Reg,
                 );
                 self.scoped_continuations.connect(
-                    ContinuationFlow::Jump(v, 0),
-                    ContinuationFlow::Block(then_block_id, 0),
+                    ContinuationFlow::Jump(v),
+                    ContinuationFlow::Block(then_block_id),
                     FlowEdge::H,
                 );
                 self.scoped_continuations.connect(
-                    ContinuationFlow::Jump(v, 1),
-                    ContinuationFlow::Block(else_block_id, 0),
+                    ContinuationFlow::Jump(v),
+                    ContinuationFlow::Block(else_block_id),
                     FlowEdge::I,
                 );
                 self.switch_blocks(v_next);
