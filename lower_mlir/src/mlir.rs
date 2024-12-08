@@ -1,5 +1,7 @@
 use anyhow::Result;
-use flat::{Builtin, CodeOffset, ICodeModule, LCode, NodeBuilder, StringLabel, UseIndex, ValueId};
+use flat::{
+    Builtin, CodeOffset, ICodeModule, LCode, LinkId, NodeBuilder, StringLabel, UseIndex, ValueId,
+};
 use indexmap::IndexMap;
 use melior::ir::Location;
 use melior::{
@@ -22,7 +24,7 @@ use melior::{
 };
 use std::collections::VecDeque;
 
-use compile_core::{AstType, Literal, NaryOperation, ReturnType, Span, UnaryOperation};
+use compile_core::{AstType, BlockId, Literal, NaryOperation, ReturnType, Span, UnaryOperation};
 
 use std::collections::HashMap;
 
@@ -430,14 +432,6 @@ impl<'c> MLIRGenerator<'c> {
         let rs = self.values(indicies);
 
         let target_value_id = self.blockify.resolve_code_offset(target);
-        //match target {
-        //CodeOffset::Block(block_id) => {
-        //}
-        //CodeOffset::Link(link_id) => {
-        //let index = self.resolve_value(*target)
-        //}
-        //}
-
         println!("jump2: {:?}", (target_value_id, block_id));
 
         let c = self
@@ -451,6 +445,66 @@ impl<'c> MLIRGenerator<'c> {
         let op = cf::br(&c.block.as_ref().unwrap(), &rs, location);
         let c = self.blocks.get_mut(&block_id).unwrap();
 
+        let index = c.push(op);
+        self.index.insert(v, index);
+        Ok(())
+    }
+
+    pub fn lower_switch(
+        &mut self,
+        v: ValueId,
+        arg: LinkId,
+        m: &HashMap<i64, BlockId>,
+    ) -> Result<()> {
+        let block_id = self.blockify.get_entry_id(v).unwrap();
+        let values = self.take_call_args();
+        let arity = values.len();
+        let indicies = values
+            .into_iter()
+            .map(|value_id| self.resolve_value(value_id.into()).unwrap())
+            .collect();
+        println!("jump1: {:?}", (v, &indicies));
+        let rs = self.values(indicies);
+
+        let arg_value_id = self.blockify.resolve_code_offset(arg.into());
+        let i_arg = self.resolve_value(arg_value_id.into()).unwrap();
+        let v_arg = self.value0(i_arg);
+        let flag_type = IntegerType::new(self.context, 64).into();
+
+        let mut case_values = m.keys().cloned().collect::<Vec<i64>>();
+        case_values.sort();
+
+        let case_destinations = case_values
+            .iter()
+            .map(|i| {
+                let block_id = m.get(i).unwrap();
+                let target_value_id = self.blockify.resolve_code_offset(block_id.into());
+                let c = self
+                    .blocks
+                    .get(&target_value_id)
+                    .expect(&format!("missing block at {}", target_value_id));
+                let arg_count = c.block.as_ref().unwrap().argument_count();
+                assert_eq!(arg_count, arity, "mismatch arity on jump @ {}", v);
+                (c.block.as_ref().unwrap(), rs.as_slice())
+            })
+            .collect::<Vec<_>>();
+
+        let default_destination = case_destinations.last().unwrap();
+        //let target_value_id = self.blockify.resolve_code_offset(target);
+        //println!("jump2: {:?}", (target_value_id, block_id));
+
+        let location = self.get_location(v);
+        let op = cf::switch(
+            &self.context,
+            &case_values,
+            v_arg,
+            flag_type,
+            *default_destination,
+            &case_destinations,
+            location,
+        )?;
+
+        let c = self.blocks.get_mut(&block_id).unwrap();
         let index = c.push(op);
         self.index.insert(v, index);
         Ok(())
@@ -517,6 +571,7 @@ impl<'c> MLIRGenerator<'c> {
             }
 
             LCode::Jump(target) => self.lower_jump(v, *target)?,
+            LCode::Switch(arg, m) => self.lower_switch(v, *arg, m)?,
 
             LCode::PlaceholderTerminal(_) => {
                 unreachable!("Placeholder terminated block")

@@ -504,6 +504,21 @@ impl<'a> Interp<'a> {
                 true
             }
 
+            LCode::Switch(link_id, h) => {
+                // push args
+                let base = self.m.resolve_code_offset((*link_id).into());
+                //let v = self.m.resolve_code_offset(inds.clone().offset());
+                let value = self.resolve_value(base)?;
+                match value {
+                    Value::Int(i) => {
+                        let target = self.m.resolve_code_offset(h[&i].clone().into());
+                        self.jump(target);
+                    }
+                    _ => unreachable!(),
+                }
+                true
+            }
+
             LCode::Ternary(condition, then_target, else_target) => {
                 let v = self.m.resolve_code_offset(*condition);
                 let c = self.resolve_value(v)?;

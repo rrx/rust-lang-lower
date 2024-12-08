@@ -11,6 +11,8 @@ use crate::{
     StringLabel, Successor, ValueId, VariantId, CFG,
 };
 
+use std::collections::HashMap;
+
 #[derive(Error, Debug)]
 pub enum BlockifyError {
     #[error("BlockifyError: Unimplemented")]
@@ -104,6 +106,7 @@ pub enum LCode {
 
     // jump to block, with num args
     Jump(CodeOffset),
+    Switch(LinkId, HashMap<i64, BlockId>),
     PlaceholderTerminal(LinkId),
     PlaceholderCodeReference,
 

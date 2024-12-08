@@ -638,6 +638,13 @@ impl Flatten {
                         let ty = self.get_type(last_link_id).clone();
                         (ty, vec![])
                     }
+                    LCode::Switch(_, ref m) => {
+                        let ty = self.get_type(last_link_id).clone();
+                        let mut targets =
+                            m.iter().map(|(_, block_id)| *block_id).collect::<Vec<_>>();
+                        targets.sort();
+                        (ty, targets)
+                    }
                     LCode::Jump(offset) => {
                         let ty = self.get_type(last_link_id).clone();
                         let targets = match offset {
@@ -894,6 +901,7 @@ impl Flatten {
             LCode::Return => unreachable!(),
             LCode::Yield => unreachable!(),
             LCode::Jump(_) => unreachable!(),
+            LCode::Switch(_, _) => unreachable!(),
             LCode::PlaceholderTerminal(_) => unreachable!(),
             LCode::PlaceholderCodeReference => false,
             LCode::Branch(_, _, _) => unreachable!(),
@@ -2407,27 +2415,9 @@ impl Flatten {
                     unreachable!();
                 };
 
-                //let mut targets = variant.caller_blocks.iter().cloned().collect::<Vec<_>>();
-                //targets.sort();
-
                 let mut sources = self
                     .scoped_continuations
                     .find_source_blocks(ContinuationFlow::BlockArg(arg_block_id, arg_num));
-                //sources.sort();
-
-                //if let Some(target_block_id) = sources.last().cloned() {
-                //let target_variant_id = self.variants.get_by_block(target_block_id).unwrap();
-
-                //let target_block = self.blocks.get_block(target_block_id);
-                //let entry = self.get_entry(target_block.last().unwrap());
-                //assert!(entry.code.is_term());
-                //let call_args = d.argvec.iter().map(|(_, l, _, _)| *l).collect();
-                //self.variants.add_caller(
-                //target_variant_id,
-                //d.block_id,
-                //target_block.last().unwrap(),
-                //call_args,
-                //);
 
                 let jump_link_id =
                     self.replace_placeholder_terminal(d.block_id, arg_link_id, sources.clone());
@@ -2435,9 +2425,6 @@ impl Flatten {
                     "flows: {:?}",
                     (arg_block_id, arg_num, sources, jump_link_id)
                 );
-                //} else {
-                //unimplemented!();
-                //}
             }
             DeferredType::Variant(_goto_link_id, _source_block_id, _variant_id) => {}
             _ => {
@@ -2636,7 +2623,7 @@ impl Flatten {
         &mut self,
         goto_block_id: BlockId,
         arg_link_id: LinkId,
-        target_block_ids: Vec<BlockId>,
+        mut target_block_ids: Vec<BlockId>,
     ) -> LinkId {
         let block = self.blocks.get_block(goto_block_id);
         let last_link_id = block.last().unwrap();
@@ -2654,8 +2641,12 @@ impl Flatten {
                 entry.code = LCode::Jump(target_block_ids.last().unwrap().into());
                 last_link_id
             } else if target_block_ids.len() > 1 {
-                //assert!(false);
-                entry.code = LCode::Jump(target_block_ids.last().unwrap().into());
+                target_block_ids.sort();
+                let mut m = HashMap::new();
+                for (i, block_id) in target_block_ids.iter().enumerate() {
+                    m.insert(i as i64, *block_id);
+                }
+                entry.code = LCode::Switch(arg_link_id, m);
                 //entry.code = LCode::Switch(target_block_ids.into());
                 last_link_id
             } else {
