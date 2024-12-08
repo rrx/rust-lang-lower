@@ -553,6 +553,7 @@ impl StarlarkParser {
         Ok(())
     }
 
+    /*
     pub fn interp<'c>(&self, m: &dyn ICodeModule, libpath: &str, b: &mut NodeBuilder) -> i32 {
         flat::interp::interp(&self.link.shared_libraries(), m, libpath, b)
     }
@@ -560,6 +561,7 @@ impl StarlarkParser {
     pub fn exec_main<'c>(&self, module: &mut Module, libpath: &str) -> i32 {
         lower_mlir::compile::exec_main(&self.link.shared_libraries(), module, libpath)
     }
+    */
 }
 
 #[cfg(test)]

@@ -70,11 +70,11 @@ pub fn default_pass_manager<'c>(context: &Context, optimize: bool) -> pass::Pass
     pass_manager.add_pass(pass::conversion::create_math_to_llvm());
     pass_manager.add_pass(pass::conversion::create_finalize_mem_ref_to_llvm());
     pass_manager.add_pass(pass::conversion::create_reconcile_unrealized_casts());
+    pass_manager.add_pass(pass::transform::create_canonicalizer());
 
     if optimize {
         // some optimization passes
         //pass_manager.add_pass(pass::transform::create_inliner());
-        pass_manager.add_pass(pass::transform::create_canonicalizer());
         pass_manager.add_pass(pass::transform::create_cse());
         pass_manager.add_pass(pass::transform::create_sccp());
         pass_manager.add_pass(pass::transform::create_control_flow_sink());

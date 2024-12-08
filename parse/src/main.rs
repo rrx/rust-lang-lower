@@ -21,10 +21,6 @@ struct Config {
     #[argh(switch)]
     interp: bool,
 
-    /// template
-    #[argh(switch, short = 't')]
-    template: bool,
-
     /// exec flag
     #[argh(switch, short = 'x')]
     exec: bool,
@@ -90,13 +86,7 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
 
     let ast = p.parse(&config.input, b, config.verbose)?;
 
-    let mode = if config.template {
-        FlattenMode::Template
-    } else {
-        FlattenMode::Function
-    };
-
-    let mut f = Flatten::flatten_module(ast, mode, b)?;
+    let mut f = Flatten::flatten_module(ast, b)?;
 
     f.push_bake_main(b)?;
 
@@ -136,24 +126,21 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
         return Err(anyhow::Error::new(BlockifyError::Invalid).into());
     }
 
-    if config.template {
-    } else {
-        p.codegen(&m, ValueId::new(0), &context, &mut module, b)?;
+    p.codegen(&m, ValueId::new(0), &context, &mut module, b)?;
 
-        //b.types.dump();
-        if config.verbose {
-            module.as_operation().dump();
-        }
-        assert!(module.as_operation().verify());
-
-        // run passes
-        let pass_manager = lower_mlir::default_pass_manager(&context, config.optimize);
-        pass_manager.run(&mut module).unwrap();
-        if config.verbose {
-            module.as_operation().dump();
-        }
-        assert!(module.as_operation().verify());
+    //b.types.dump();
+    if config.verbose {
+        module.as_operation().dump();
     }
+    assert!(module.as_operation().verify());
+
+    // run passes
+    let pass_manager = lower_mlir::default_pass_manager(&context, config.optimize);
+    pass_manager.run(&mut module).unwrap();
+    if config.verbose {
+        module.as_operation().dump();
+    }
+    assert!(module.as_operation().verify());
 
     if config.compile {
         let mut path = path.clone();
@@ -170,10 +157,14 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
     }
 
     let exit_code = if config.interp {
-        let exit_code = p.interp(&m, "target/debug", b);
+        //let exit_code = p.interp(&m, "target/debug", b);
+        let exit_code = flat::interp::interp(&m.shared_libraries(), &m, "target/debug", b);
         exit_code
     } else if config.exec {
-        let exit_code = p.exec_main(&mut module, "target/debug");
+        println!("exec");
+        let exit_code =
+            lower_mlir::compile::exec_main(&m.shared_libraries(), &module, "target/debug");
+        //let exit_code = p.exec_main(&mut module, "target/debug");
         exit_code
     } else {
         let mut path = path.clone();

@@ -420,7 +420,7 @@ impl Flatten {
         None
     }
 
-    pub fn flatten_module(node: AstNode, mode: FlattenMode, b: &mut NB) -> Result<Self> {
+    pub fn flatten_module(node: AstNode, b: &mut NB) -> Result<Self> {
         // setup environment with static scope and block
         // blocks will be moved into environment eventually
         // FlattenEnvironment represents the module level structures
@@ -435,7 +435,7 @@ impl Flatten {
         f.static_block = Some(block_id);
 
         if let Ast::Module(key, body) = node.node {
-            f.mode = mode;
+            //f.mode = mode;
             let static_block_id = f.current_block_id();
 
             let block = f.blocks.get_block(static_block_id);
@@ -2415,29 +2415,29 @@ impl Flatten {
                     .find_source_blocks(ContinuationFlow::BlockArg(arg_block_id, arg_num));
                 //sources.sort();
 
-                if let Some(target_block_id) = sources.last().cloned() {
-                    let target_variant_id = self.variants.get_by_block(target_block_id).unwrap();
+                //if let Some(target_block_id) = sources.last().cloned() {
+                //let target_variant_id = self.variants.get_by_block(target_block_id).unwrap();
 
-                    let target_block = self.blocks.get_block(target_block_id);
-                    let entry = self.get_entry(target_block.last().unwrap());
-                    assert!(entry.code.is_term());
-                    let call_args = d.argvec.iter().map(|(_, l, _, _)| *l).collect();
-                    self.variants.add_caller(
-                        target_variant_id,
-                        d.block_id,
-                        target_block.last().unwrap(),
-                        call_args,
-                    );
+                //let target_block = self.blocks.get_block(target_block_id);
+                //let entry = self.get_entry(target_block.last().unwrap());
+                //assert!(entry.code.is_term());
+                //let call_args = d.argvec.iter().map(|(_, l, _, _)| *l).collect();
+                //self.variants.add_caller(
+                //target_variant_id,
+                //d.block_id,
+                //target_block.last().unwrap(),
+                //call_args,
+                //);
 
-                    let jump_link_id =
-                        self.replace_placeholder_terminal(d.block_id, target_block_id);
-                    println!(
-                        "flows: {:?}",
-                        (arg_block_id, arg_num, sources, jump_link_id)
-                    );
-                } else {
-                    unimplemented!();
-                }
+                let jump_link_id =
+                    self.replace_placeholder_terminal(d.block_id, arg_link_id, sources.clone());
+                println!(
+                    "flows: {:?}",
+                    (arg_block_id, arg_num, sources, jump_link_id)
+                );
+                //} else {
+                //unimplemented!();
+                //}
             }
             DeferredType::Variant(_goto_link_id, _source_block_id, _variant_id) => {}
             _ => {
@@ -2635,23 +2635,32 @@ impl Flatten {
     pub fn replace_placeholder_terminal(
         &mut self,
         goto_block_id: BlockId,
-        target_block_id: BlockId,
+        arg_link_id: LinkId,
+        target_block_ids: Vec<BlockId>,
     ) -> LinkId {
         let block = self.blocks.get_block(goto_block_id);
         let last_link_id = block.last().unwrap();
 
-        self.blocks
-            .block_succ(self.current_block_id(), target_block_id, Successor::Jump);
-        self.blocks.block_succ(
-            self.current_block_id(),
-            target_block_id,
-            Successor::BlockScope,
-        );
+        for block_id in &target_block_ids {
+            self.blocks
+                .block_succ(self.current_block_id(), *block_id, Successor::Jump);
+            self.blocks
+                .block_succ(self.current_block_id(), *block_id, Successor::BlockScope);
+        }
 
         let entry = self.get_entry_mut(last_link_id);
         if let LCode::PlaceholderTerminal(_) = entry.code {
-            entry.code = LCode::Jump(target_block_id.into());
-            last_link_id
+            if target_block_ids.len() == 1 {
+                entry.code = LCode::Jump(target_block_ids.last().unwrap().into());
+                last_link_id
+            } else if target_block_ids.len() > 1 {
+                //assert!(false);
+                entry.code = LCode::Jump(target_block_ids.last().unwrap().into());
+                //entry.code = LCode::Switch(target_block_ids.into());
+                last_link_id
+            } else {
+                unreachable!();
+            }
         } else {
             unreachable!();
         }
