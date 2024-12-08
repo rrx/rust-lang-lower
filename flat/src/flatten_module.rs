@@ -31,6 +31,19 @@ pub struct FlattenModule {
 }
 
 impl ICodeModule for FlattenModule {
+    fn get_entry(&self, value_id: ValueId) -> &CodeEntry {
+        let link_id = self.values[value_id.index()];
+        self.entries.get(link_id.index()).unwrap()
+    }
+
+    fn find_source_blocks(&self, flow: ContinuationFlow) -> Vec<BlockId> {
+        self.scoped_continuations.find_source_blocks(flow)
+    }
+
+    fn find_sink_block(&self, flow: ContinuationFlow) -> Option<ContinuationFlow> {
+        self.scoped_continuations.find_sink_block(flow)
+    }
+
     fn get_variant_by_block(&self, block_id: BlockId) -> Option<VariantId> {
         self.variants.get_by_block(block_id)
     }
@@ -49,14 +62,14 @@ impl ICodeModule for FlattenModule {
 
     fn get_span_id(&self, value_id: ValueId) -> SpanId {
         let link_id = self.values[value_id.index()];
-        let entry = self.get_entry(link_id);
+        let entry = self.get_link_entry(link_id);
         entry.span_id
     }
 
     fn get_name(&self, offset: CodeOffset) -> Option<StringLabel> {
         if let Some(value_id) = self.maybe_resolve_code_offset(offset) {
             let link_id = self.values[value_id.index()];
-            self.get_entry(link_id).name.map(|n| n.into())
+            self.get_link_entry(link_id).name.map(|n| n.into())
         } else {
             None
         }
@@ -64,14 +77,14 @@ impl ICodeModule for FlattenModule {
 
     fn get_code(&self, value_id: ValueId) -> &LCode {
         let link_id = self.values[value_id.index()];
-        &self.get_entry(link_id).code
+        &self.get_link_entry(link_id).code
     }
 
     fn get_next(&self, value_id: ValueId) -> Option<ValueId> {
         let link_id = self.values[value_id.index()];
-        let entry = self.get_entry(link_id);
+        let entry = self.get_link_entry(link_id);
         if entry.next != link_id {
-            let next_entry = self.get_entry(entry.next);
+            let next_entry = self.get_link_entry(entry.next);
             next_entry.value_id
         } else {
             None
@@ -92,7 +105,7 @@ impl ICodeModule for FlattenModule {
 
     fn get_block_successors(&self, entry_id: ValueId) -> Vec<(Successor, CodeOffset)> {
         let link_id = self.values[entry_id.index()];
-        let entry = self.get_entry(link_id);
+        let entry = self.get_link_entry(link_id);
         let block_id = entry.block_id;
         self.blocks.get_block_successors(block_id)
     }
@@ -100,20 +113,20 @@ impl ICodeModule for FlattenModule {
     fn get_type(&self, v: CodeOffset) -> AstType {
         let value_id = self.resolve_code_offset(v);
         let link_id = self.values[value_id.index()];
-        let entry = self.get_entry(link_id);
+        let entry = self.get_link_entry(link_id);
         entry.clone().ty
     }
 
     fn get_entry_id(&self, value_id: ValueId) -> Option<ValueId> {
         let link_id = self.values[value_id.index()];
-        let block_id = self.get_entry(link_id).block_id;
+        let block_id = self.get_link_entry(link_id).block_id;
         self.maybe_resolve_code_offset(block_id.into())
     }
 
     fn is_in_static_scope(&self, offset: CodeOffset) -> bool {
         let value_id = self.resolve_code_offset(offset);
         let link_id = self.values[value_id.index()];
-        let entry = self.get_entry(link_id);
+        let entry = self.get_link_entry(link_id);
         let block = self.blocks.get_block(entry.block_id);
         let scope = self.scopes.get_scope(block.scope_id);
         scope.scope_type == ScopeType::Static
@@ -122,7 +135,7 @@ impl ICodeModule for FlattenModule {
     fn get_mem(&self, offset: CodeOffset) -> &VarDefinitionSpace {
         let value_id = self.resolve_code_offset(offset);
         let link_id = self.values[value_id.index()];
-        &self.get_entry(link_id).mem
+        &self.get_link_entry(link_id).mem
     }
 
     fn resolve_code_offset(&self, code_offset: CodeOffset) -> ValueId {
@@ -134,12 +147,12 @@ impl ICodeModule for FlattenModule {
         match code_offset {
             CodeOffset::Value(v) => Some(v),
             CodeOffset::Link(link_id) => {
-                let entry = self.get_entry(link_id);
+                let entry = self.get_link_entry(link_id);
                 entry.value_id
             }
             CodeOffset::Block(block_id) => {
                 if let Some(link_id) = self.block_links.get(&block_id) {
-                    let entry = self.get_entry(*link_id);
+                    let entry = self.get_link_entry(*link_id);
                     entry.value_id
                 } else {
                     None
@@ -188,13 +201,13 @@ impl FlattenModule {
         })
     }
 
-    pub fn get_entry(&self, link_id: LinkId) -> &CodeEntry {
+    fn get_link_entry(&self, link_id: LinkId) -> &CodeEntry {
         self.entries.get(link_id.index()).unwrap()
     }
 
     pub fn get_code_row(&self, v: ValueId, b: &mut NB) -> Option<CodeRow> {
         let link_id = self.values[v.index()];
-        let entry = self.get_entry(link_id);
+        let entry = self.get_link_entry(link_id);
         let code = self.get_code(v);
 
         let mem = self.get_mem(v.into());
@@ -351,7 +364,7 @@ impl FlattenModule {
                         format!("label = \"B{:?}:dead\"", index.index(),)
                     } else {
                         if let Some(link_id) = self.block_links.get(&block_id) {
-                            let entry = self.get_entry(*link_id);
+                            let entry = self.get_link_entry(*link_id);
                             if entry.value_id.is_some() {
                                 let v = self.resolve_code_offset(block_id.into());
                                 // block found

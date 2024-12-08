@@ -90,7 +90,7 @@ pub enum Literal {
     String(String),
     Bool(bool),
     Tuple(Vec<Literal>),
-    Block(u32, BlockId),
+    Block(BlockId),
     Variant(u32),
     Abstraction(AbstractionId),
     Struct(Vec<(Option<StringKey>, Literal)>),
@@ -106,7 +106,7 @@ impl From<Literal> for AstType {
 impl From<&Literal> for AstType {
     fn from(item: &Literal) -> Self {
         match item {
-            Literal::Block(_, _) => AstType::JumpTarget,
+            Literal::Block(_) => AstType::JumpTarget,
             Literal::Variant(_) => AstType::JumpTarget,
             Literal::Abstraction(_) => AstType::JumpTarget,
             Literal::Int(_) => AstType::Int,

@@ -58,7 +58,7 @@ pub struct CodeEntry {
     prev: LinkId,
     pub(super) code: LCode,
     pub(super) name: Option<StringKey>,
-    pub(super) link: Option<LinkId>,
+    pub link: Option<LinkId>,
     pub(super) value_id: Option<ValueId>,
     pub(super) block_id: BlockId,
     pub(super) ty: AstType,
@@ -533,7 +533,7 @@ impl Flatten {
             let target_field_types = ty.field_types();
 
             self.switch_blocks(block_id);
-            let (variant_id, _fun_scope_id, fun_block_id) = self.push_cps_block_with_type(
+            let (_variant_id, _fun_scope_id, fun_block_id) = self.push_cps_block_with_type(
                 name,
                 scope_id,
                 abstraction_id,
@@ -554,7 +554,7 @@ impl Flatten {
 
             // now replace the abstraction code
             let entry = self.get_entry_mut(link_id);
-            entry.code = LCode::Val(Literal::Block(variant_id.index() as u32, fun_block_id));
+            entry.code = LCode::Val(Literal::Block(fun_block_id));
             entry.ty = AstType::TargetUnion(target_field_types, vec![fun_block_id]);
 
             //println!("unify: {}=>{}", &ty, &entry.ty);
@@ -665,27 +665,6 @@ impl Flatten {
                     }
                     _ => unreachable!("{:?}", entry.code),
                 };
-
-                /*
-                let field_types = ty.field_types();
-                for (i, ty) in field_types.iter().enumerate() {
-                    if let AstType::TargetUnion(_, callers) = ty {
-                        for caller in callers.iter() {
-                            //println!(
-                                //"@{} ty: {:?}",
-                                //last_link_id,
-                                //(&entry.code, &targets, callers, &ty, i, caller)
-                            //);
-                        }
-                    }
-                }
-                if field_types.is_empty() {
-                    println!(
-                        "ty0: {:?}",
-                        (last_link_id, &entry.code, targets, &ty, field_types)
-                    );
-                }
-                */
             } else {
                 unreachable!()
             }
@@ -1006,9 +985,6 @@ impl Flatten {
         //let current_scope_id = block.scope_id;
         let _start_stack = self.scopes.walk_scopes(block.scope_id);
 
-        //let target_block = self.blocks.get_block(target_block_id);
-        //let target_scope_id = target_block.scope_id;
-
         // Construct the argument type
         let arg_ty = AstType::Struct(
             jump_args
@@ -1041,10 +1017,6 @@ impl Flatten {
             Successor::BlockScope,
         );
 
-        //let block = self.blocks.get_block(self.current_block_id());
-        //let entry = self.get_entry(block.last().unwrap());
-        //println!("E: {}, {:?}", block.scope_id, (entry, target_block_id));
-        //assert!(target_block_id != BlockId::new(6));
         let jump_link_id = self.push_code(
             LCode::Jump(target_block_id.into()),
             AstType::Func(arg_ty.into(), ReturnType::Single(AstType::Unit).into()),
@@ -1053,44 +1025,6 @@ impl Flatten {
             VarDefinitionSpace::Reg,
         );
 
-        //for (i, link_id) in link_ids.iter().enumerate() {
-        //let next_link_id = self.resolve_value(*link_id);
-        //let entry = self.get_entry(next_link_id);
-        //let ty = entry.ty.clone();
-        //println!("{}: jump: {:?}", jump_link_id, (i, &link_id, &entry));
-
-        /*
-        match ty {
-            AstType::TargetUnion(_, callers) => {
-                for caller in callers.iter() {
-                    //println!("ty: {:?}", caller);
-                    //self.scoped_continuations.connect(
-                    //ContinuationFlow::Variable(*link_id),
-                    //ContinuationFlow::Block(target_block_id, i as u8 + 1),
-                    //);
-                }
-            }
-            _ => println!("jump: {:?}", ty),
-        }
-        */
-        //}
-        /*
-        for (i, ty) in field_types.iter().enumerate() {
-            println!("{}: jump: {:?}", jump_link_id, (i, ty));
-            match ty {
-                AstType::TargetUnion(_, callers) => {
-                    for caller in callers.iter() {
-                        println!("ty: {:?}", caller);
-                        self.scoped_continuations.connect(
-                            ContinuationFlow::Block(*block_id, 0),
-                            ContinuationFlow::Variable(*var_link_id),
-                        );
-                    }
-                }
-                _ => println!("jump: {:?}", ty)
-            }
-        }
-        */
         jump_link_id
     }
 
@@ -1734,7 +1668,6 @@ impl Flatten {
         // We will rewrite in a later step, this goto will become a select
 
         if let Some(name_link_id) = self.resolve_name_in_scope(scope_id, name.into()) {
-            // we resolve the variable, but the actual jump is encoded in the TargetUnion type
             let link_id = block.last().unwrap();
             self.push_code(
                 LCode::PlaceholderTerminal(link_id),
@@ -1980,26 +1913,6 @@ impl Flatten {
         let _r2 = b.types.u.resolve(&call_arg_type).unwrap();
         let _r3 = b.types.u.resolve(&def_arg_type);
         //assert!(!call_arg_type.is_unknown());
-
-        //let mut caller_blocks = HashSet::new();
-        //for (_, _, ty, _) in &call_values {
-        //if let AstType::TargetUnion(_, blocks) = ty {
-        //for block_id in blocks {
-        //caller_blocks.insert(*block_id);
-        //}
-        //}
-        //}
-
-        //for block_id in &caller_blocks {
-        //self.save_ast_template_caller(abstraction_id, *block_id);
-        //}
-
-        //println!(
-        //"{}: variant lookup: {}, {:?}",
-        //s_name,
-        //scope_id,
-        //(&call_arg_type, r2, &def_arg_type, r3, &call_values)
-        //);
 
         let (variant_id, fun_block_id, fun_scope_id, r_ty) =
             if let Some((variant_id, resolve_type, link_id, fun_scope_id)) =
@@ -2497,11 +2410,12 @@ impl Flatten {
                 //let mut targets = variant.caller_blocks.iter().cloned().collect::<Vec<_>>();
                 //targets.sort();
 
-                let flows = self
+                let mut sources = self
                     .scoped_continuations
-                    .find(ContinuationFlow::BlockArg(arg_block_id, arg_num));
+                    .find_source_blocks(ContinuationFlow::BlockArg(arg_block_id, arg_num));
+                //sources.sort();
 
-                if let ContinuationFlow::Block(target_block_id) = flows.last().unwrap().clone() {
+                if let Some(target_block_id) = sources.last().cloned() {
                     let target_variant_id = self.variants.get_by_block(target_block_id).unwrap();
 
                     let target_block = self.blocks.get_block(target_block_id);
@@ -2517,7 +2431,10 @@ impl Flatten {
 
                     let jump_link_id =
                         self.replace_placeholder_terminal(d.block_id, target_block_id);
-                    println!("flows: {:?}", (arg_block_id, arg_num, flows, jump_link_id));
+                    println!(
+                        "flows: {:?}",
+                        (arg_block_id, arg_num, sources, jump_link_id)
+                    );
                 } else {
                     unimplemented!();
                 }
@@ -3315,7 +3232,7 @@ impl Flatten {
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::BlockReference(expr)) => {
-                let (variant_id, block_id) = match &expr.node {
+                let (_variant_id, block_id) = match &expr.node {
                     Ast::Identifier(key) => {
                         let key = *key;
                         let ty = AstType::func(vec![], AstType::Unit);
@@ -3347,7 +3264,7 @@ impl Flatten {
                     }
                     _ => unimplemented!("{:?}", expr),
                 };
-                let code = LCode::Val(Literal::Block(variant_id.index() as u32, block_id));
+                let code = LCode::Val(Literal::Block(block_id));
                 let link_id = self.push_code(
                     code,
                     AstType::JumpTarget,

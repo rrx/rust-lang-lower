@@ -7,8 +7,8 @@ use compile_core::{
 };
 
 use crate::{
-    BlockId, CodeOffset, FunctionVariant, LinkId, Node, NodeBuilder, StringLabel, Successor,
-    ValueId, VariantId, CFG,
+    BlockId, CodeEntry, CodeOffset, ContinuationFlow, FunctionVariant, LinkId, Node, NodeBuilder,
+    StringLabel, Successor, ValueId, VariantId, CFG,
 };
 
 #[derive(Error, Debug)]
@@ -141,6 +141,9 @@ pub trait ICodeModule {
     fn get_next(&self, value_id: ValueId) -> Option<ValueId>;
     //fn get_prev(&self, value_id: ValueId) -> Option<ValueId>;
     //
+    //
+    fn find_source_blocks(&self, flow: ContinuationFlow) -> Vec<BlockId>;
+    fn find_sink_block(&self, flow: ContinuationFlow) -> Option<ContinuationFlow>;
 
     fn get_variant_by_block(&self, block_id: BlockId) -> Option<VariantId>;
     fn get_variant(&self, variant_id: VariantId) -> &FunctionVariant;
@@ -279,6 +282,7 @@ pub trait ICodeModule {
 
     fn get_type(&self, v: CodeOffset) -> AstType;
     fn get_entry_id(&self, value_id: ValueId) -> Option<ValueId>;
+    fn get_entry(&self, value_id: ValueId) -> &CodeEntry;
     fn is_in_static_scope(&self, v: CodeOffset) -> bool;
     fn get_mem(&self, offset: CodeOffset) -> &VarDefinitionSpace;
     fn resolve_code_offset(&self, code_offset: CodeOffset) -> ValueId;

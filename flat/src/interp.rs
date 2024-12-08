@@ -22,7 +22,7 @@ impl Value {
             Literal::Float(f) => Value::Float(*f),
             Literal::Bool(v) => Value::Bool(*v),
             Literal::Index(v) => Value::Index(*v),
-            Literal::Block(_, _) => {
+            Literal::Block(_) => {
                 unreachable!()
             }
             _ => unimplemented!("{:?}", lit),
@@ -451,7 +451,7 @@ impl<'a> Interp<'a> {
                 true
             }
 
-            LCode::Val(Literal::Block(_index, block_id)) => {
+            LCode::Val(Literal::Block(block_id)) => {
                 let ty = self.m.get_type(pos.into());
                 let index = ty.target_union_block_index(block_id);
 

@@ -3,7 +3,7 @@ use anyhow::Error;
 use anyhow::Result;
 use compile_core::Diagnostic;
 use compile_core::{Ast, AstNode, AstType, BinaryOperation, Literal, ReturnType, SpanId};
-use flat::ValueId;
+use flat::{ContinuationFlow, ValueId};
 use melior::ir::Location;
 use melior::{
     dialect::{
@@ -328,6 +328,7 @@ impl<'c> MLIRGenerator<'c> {
                 // TODO, replace with dummy value
                 self.build_int_op(0, location)
             }
+            /*
             Literal::Variant(_index) => {
                 unimplemented!();
                 //let entry_id = self.blockify.get_entry_id(v.into()).unwrap();
@@ -337,27 +338,34 @@ impl<'c> MLIRGenerator<'c> {
                 //let index = ty.target_union_block_index(block_id);
                 //self.build_int_op(index as i64, location)
             }
-            Literal::Block(_index, block_id) => {
-                // this is a block.  The type should be TargetUnion
+            */
+            Literal::Block(block_id) => {
+                // this is a variable passed into a jump statement
+                // we find the sink, which is the block arg this variable flows to
+                // from the sink, we find all of the block sources for this variable
+                // we then find the index of the desired block in the list of sources
+                // This is the int parameter we pass in
+                // TODO: We should probably move this logic into the cfg code, rather than doing it when
+                // we lower
                 let ty = self.blockify.get_type(v.into());
                 let ty_index = ty.target_union_block_index(block_id);
-                println!("variant0: {:?}", (ty, ty_index));
-                self.build_int_op(ty_index as i64, location)
-
-                /*
-                     * This is all wrong
-                let variant_id = VariantId::new(*index as usize);
-                let variant = self.blockify.get_variant(variant_id);
-                println!("variant1: {:?}", (variant_id, variant));
-                let variant_id = self.blockify.get_variant_by_block(*block_id).unwrap();
-                let variant = self.blockify.get_variant(variant_id);
-                println!("variant2: {:?}", (variant_id, variant));
-                println!("variant3: {:?}", (v, variant_id, block_id));
-                let index = variant.block_index(block_id);
-                //let index = ty.target_union_block_index(block_id);
+                let entry = self.blockify.get_entry(v);
+                let link_id = entry.link.unwrap();
+                let sources = self
+                    .blockify
+                    .find_source_blocks(ContinuationFlow::Variable(link_id));
+                let sink = self
+                    .blockify
+                    .find_sink_block(ContinuationFlow::Variable(link_id))
+                    .unwrap();
+                let mut all_sources = self.blockify.find_source_blocks(sink);
+                all_sources.sort();
+                let index = all_sources.iter().position(|x| x == block_id).unwrap();
+                println!(
+                    "variant0: {:?}",
+                    (v, block_id, ty, ty_index, sources, sink, all_sources, index)
+                );
                 self.build_int_op(index as i64, location)
-                */
-
                 /*
                 let ty = llvm::r#type::pointer(self.context, 0);
                 arith::constant(
