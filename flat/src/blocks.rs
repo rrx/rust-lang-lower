@@ -3,7 +3,6 @@ use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
 use std::collections::HashSet;
-use std::convert::From;
 
 use crate::{BlockId, CodeOffset, LinkId, ScopeId};
 use std::ops::{Deref, DerefMut};

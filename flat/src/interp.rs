@@ -1,4 +1,4 @@
-use crate::{Builtin, ICodeModule, LCode, NodeBuilder, UseIndex, ValueId, VariantId};
+use crate::{Builtin, ICodeModule, LCode, NodeBuilder, UseIndex, ValueId};
 use anyhow::Result;
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -22,7 +22,7 @@ impl Value {
             Literal::Float(f) => Value::Float(*f),
             Literal::Bool(v) => Value::Bool(*v),
             Literal::Index(v) => Value::Index(*v),
-            Literal::Block(_, v) => {
+            Literal::Block(_, _) => {
                 unreachable!()
             }
             _ => unimplemented!("{:?}", lit),
@@ -451,7 +451,7 @@ impl<'a> Interp<'a> {
                 true
             }
 
-            LCode::Val(Literal::Block(index, block_id)) => {
+            LCode::Val(Literal::Block(_index, block_id)) => {
                 let ty = self.m.get_type(pos.into());
                 let index = ty.target_union_block_index(block_id);
 

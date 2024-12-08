@@ -6,11 +6,8 @@ use std::ops::{Deref, DerefMut};
 
 use std::collections::{HashMap, HashSet};
 
-use crate::{
-    ArgVec, BlockId, FunctionVariant, FunctionVariantBuilder, LinkId, NodeBuilder, StringLabel,
-    ValueId, VariantId,
-};
-use compile_core::{AbstractionId, Argument, AstType, Lambda, SpanId, StringKey};
+use crate::{ArgVec, BlockId, LinkId, NodeBuilder, StringLabel, ValueId, VariantId};
+use compile_core::{AbstractionId, Argument, Lambda, SpanId, StringKey};
 
 #[derive(Debug)]
 pub enum PlacedBlockId {
@@ -112,7 +109,6 @@ impl DeferredGotoList {
     }
 
     pub fn add_cps(&mut self, d: DeferredGoto) {
-        println!("add cps deferred goto: {:?}", (&d, &self));
         self.cps.push(d);
     }
 
@@ -121,7 +117,6 @@ impl DeferredGotoList {
     }
 
     pub fn add_deferred(&mut self, d: DeferredGoto) {
-        println!("add deferred goto: {:?}", (&d, &self));
         self.h.push(d);
     }
 
@@ -266,7 +261,7 @@ impl ScopeGraph {
                     span_id,
                 );
                 //assert!(false);
-                println!("unclaimed:{:?}", (s, block_id, scope_id))
+                //println!("unclaimed:{:?}", (s, block_id, scope_id))
             }
         }
     }

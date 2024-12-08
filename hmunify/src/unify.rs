@@ -3,8 +3,7 @@ use ena::unify::*;
 use std::convert::Into;
 use thiserror::Error;
 
-use compile_core::{AstType, ReturnType, StringKey};
-use std::collections::HashSet;
+use compile_core::{AstType, ReturnType};
 
 #[derive(Debug, Error)]
 pub enum UError {
@@ -123,7 +122,7 @@ fn ast_unify_values(value1: &AstType, value2: &AstType) -> Result<AstType, UErro
                 Ok(AstType::TargetUnion(result, targets.clone()))
             }
 
-            (AstType::TargetUnion(c1, blocks1), AstType::TargetUnion(c2, blocks2)) => {
+            (AstType::TargetUnion(c1, blocks1), AstType::TargetUnion(c2, _blocks2)) => {
                 let result = unify_fields(&c1, &c2)?;
                 //unreachable!();
                 Ok(AstType::TargetUnion(result, blocks1.clone()))
@@ -293,7 +292,7 @@ impl TypeUnify {
                 self._unify_list(&a.field_types(), &b.field_types())
             }
 
-            (AstType::TargetUnion(f1, b1), AstType::TargetUnion(f2, b2)) => {
+            (AstType::TargetUnion(f1, _b1), AstType::TargetUnion(f2, _b2)) => {
                 self._unify_list(f1, &f2)?;
                 /*
                 let mut s = HashSet::new();

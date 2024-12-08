@@ -182,7 +182,7 @@ impl Flatten {
     }
 
     pub fn type_inference_enforce(&mut self, b: &mut NB) {
-        b.types.dump();
+        //b.types.dump();
         for entry in self.entries.iter_mut() {
             if !entry.ty.is_unknown() {
                 continue;
@@ -632,7 +632,7 @@ impl Flatten {
         if block_id != self.static_block_id() {
             if let Some(last_link_id) = block.last() {
                 let entry = self.get_entry(last_link_id);
-                let (ty, targets) = match entry.code {
+                let (_ty, _targets) = match entry.code {
                     LCode::PlaceholderTerminal(_link_id) => {
                         let ty = self.get_type(last_link_id).clone();
                         (ty, vec![])
@@ -1002,11 +1002,11 @@ impl Flatten {
         // handle leaving scope here?
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
-        let current_scope_id = block.scope_id;
+        //let current_scope_id = block.scope_id;
         let _start_stack = self.scopes.walk_scopes(block.scope_id);
 
-        let target_block = self.blocks.get_block(target_block_id);
-        let target_scope_id = target_block.scope_id;
+        //let target_block = self.blocks.get_block(target_block_id);
+        //let target_scope_id = target_block.scope_id;
 
         // Construct the argument type
         let arg_ty = AstType::Struct(
@@ -1018,7 +1018,7 @@ impl Flatten {
 
         let _field_types = arg_ty.field_types();
 
-        let link_ids = self.push_call_values(
+        let _link_ids = self.push_call_values(
             &jump_args
                 .into_iter()
                 .map(|(key, v, ty, span_id)| (key, v, ty, span_id))
@@ -1040,9 +1040,9 @@ impl Flatten {
             Successor::BlockScope,
         );
 
-        let block = self.blocks.get_block(self.current_block_id());
-        let entry = self.get_entry(block.last().unwrap());
-        println!("E: {}, {:?}", block.scope_id, (entry, target_block_id));
+        //let block = self.blocks.get_block(self.current_block_id());
+        //let entry = self.get_entry(block.last().unwrap());
+        //println!("E: {}, {:?}", block.scope_id, (entry, target_block_id));
         //assert!(target_block_id != BlockId::new(6));
         let jump_link_id = self.push_code(
             LCode::Jump(target_block_id.into()),
@@ -1052,27 +1052,27 @@ impl Flatten {
             VarDefinitionSpace::Reg,
         );
 
-        for (i, link_id) in link_ids.iter().enumerate() {
-            let next_link_id = self.resolve_value(*link_id);
-            let entry = self.get_entry(next_link_id);
-            let ty = entry.ty.clone();
-            //println!("{}: jump: {:?}", jump_link_id, (i, &link_id, &entry));
+        //for (i, link_id) in link_ids.iter().enumerate() {
+        //let next_link_id = self.resolve_value(*link_id);
+        //let entry = self.get_entry(next_link_id);
+        //let ty = entry.ty.clone();
+        //println!("{}: jump: {:?}", jump_link_id, (i, &link_id, &entry));
 
-            /*
-            match ty {
-                AstType::TargetUnion(_, callers) => {
-                    for caller in callers.iter() {
-                        //println!("ty: {:?}", caller);
-                        //self.scoped_continuations.connect(
-                        //ContinuationFlow::Variable(*link_id),
-                        //ContinuationFlow::Block(target_block_id, i as u8 + 1),
-                        //);
-                    }
+        /*
+        match ty {
+            AstType::TargetUnion(_, callers) => {
+                for caller in callers.iter() {
+                    //println!("ty: {:?}", caller);
+                    //self.scoped_continuations.connect(
+                    //ContinuationFlow::Variable(*link_id),
+                    //ContinuationFlow::Block(target_block_id, i as u8 + 1),
+                    //);
                 }
-                _ => println!("jump: {:?}", ty),
             }
-            */
+            _ => println!("jump: {:?}", ty),
         }
+        */
+        //}
         /*
         for (i, ty) in field_types.iter().enumerate() {
             println!("{}: jump: {:?}", jump_link_id, (i, ty));
@@ -1457,7 +1457,7 @@ impl Flatten {
         // - for lambdas and inline, it's easier, because we just write out the entire function
         // anyways
 
-        let s_name = b.labels.r(name.into());
+        //let s_name = b.labels.r(name.into());
         //println!(
         //"{}: push_call: {:?}",
         //s_name,
@@ -1571,8 +1571,8 @@ impl Flatten {
         call_span_id: SpanId,
         b: &mut NB,
     ) -> Result<FlattenResult> {
-        let block_id = self.current_block_id();
-        let block = self.blocks.get_block(block_id);
+        //let block_id = self.current_block_id();
+        //let block = self.blocks.get_block(block_id);
         //println!("push_builtin_call: {:?}, scope: {}", id, block.scope_id);
 
         let def_span_id = b.spans.get_span_unknown();
@@ -1712,7 +1712,7 @@ impl Flatten {
         name: StringKey,
         args: Vec<Argument>,
         call_span_id: SpanId,
-        b: &mut NB,
+        _b: &mut NB,
     ) -> Result<FlattenResult> {
         // push a goto
         // to keep things simpler, we just defer all resolution of the gotos until the end
@@ -1721,7 +1721,7 @@ impl Flatten {
         let block = self.blocks.get_block(current_block_id);
         let scope_id = block.scope_id;
 
-        let s_name = b.labels.r(name.into());
+        //let s_name = b.labels.r(name.into());
         //println!(
         //"{}: push_goto args: {:?} in scope: {}",
         //s_name, &args, scope_id
@@ -1911,7 +1911,7 @@ impl Flatten {
         Ok((variant_id, fun_scope_id, fun_block_id))
     }
 
-    fn dump_position(&self) {
+    pub fn dump_position(&self) {
         let block_id = self.current_block_id();
         let block = self.blocks.get_block(block_id);
         let scope_id = block.scope_id;
@@ -1961,9 +1961,9 @@ impl Flatten {
         //(scope_id, self.current_block_id(), &args)
         //);
 
-        self.dump_position();
+        //self.dump_position();
         let call_values = self.push_call_arguments(args, call_span_id, b)?;
-        self.dump_position();
+        //self.dump_position();
 
         let call_arg_type = target_union_type(&call_values);
         //let call_arg_type = argvec_type(&call_values);
@@ -1976,8 +1976,8 @@ impl Flatten {
         let s_name = b.labels.r(name.into());
 
         // BAKE CPS IF NEEDED
-        let r2 = b.types.u.resolve(&call_arg_type).unwrap();
-        let r3 = b.types.u.resolve(&def_arg_type);
+        let _r2 = b.types.u.resolve(&call_arg_type).unwrap();
+        let _r3 = b.types.u.resolve(&def_arg_type);
         //assert!(!call_arg_type.is_unknown());
 
         //let mut caller_blocks = HashSet::new();
@@ -2090,8 +2090,8 @@ impl Flatten {
         // now that we have the arguments calculated, and the lambda baked, jump!
         self.switch_blocks(goto_block_id);
         self.remove_placeholder_terminal(goto_block_id);
-        let block = self.blocks.get_block(goto_block_id);
-        let entry = self.get_entry(block.last().unwrap());
+        //let block = self.blocks.get_block(goto_block_id);
+        //let entry = self.get_entry(block.last().unwrap());
         //println!(
         //"call_values: {:?}",
         //(block.scope_id, goto_block_id, &call_values, &entry)
@@ -2326,7 +2326,7 @@ impl Flatten {
     }
 
     fn resolve_deferred_single(&mut self, d: DeferredGoto, b: &mut NB) -> Result<bool> {
-        let s_name = b.labels.r(d.name.into());
+        //let s_name = b.labels.r(d.name.into());
         /*
          * name resolution should not be deferred as it can assume lexical scope
          * but since we can't actually lower a jump to a variable, we are going to
@@ -2390,7 +2390,7 @@ impl Flatten {
                     self.switch_blocks(d.block_id);
                     self.remove_placeholder_terminal(d.block_id);
 
-                    let a = self.abstractions.get_mut(abstraction_id);
+                    let _a = self.abstractions.get_mut(abstraction_id);
                     //println!("blocks: {:?}", a.caller_blocks);
 
                     //for arg in &d.args {
@@ -2399,7 +2399,7 @@ impl Flatten {
 
                     // push and jump
                     // TODO: this function needs to handle unwind
-                    let (variant_id, fun_scope_id, fun_block_id, _, _, _, _, link_id) = self
+                    let (variant_id, _fun_scope_id, _fun_block_id, _, _, _, _, _link_id) = self
                         .push_cps_block(
                             d.name,
                             d.scope_id,
@@ -2438,7 +2438,7 @@ impl Flatten {
 
                     let jump_args = self.push_call_arguments(d.args.clone(), d.call_span_id, b)?;
                     let link_id = self.push_jump(target_block_id.into(), jump_args, d.call_span_id);
-                    let block = self.blocks.get_block(target_block_id);
+                    //let block = self.blocks.get_block(target_block_id);
                     //println!(
                     //"{}: resolved deferred label: from {}:{}=>{}:{}, link: {}",
                     //s_name, d.scope_id, d.block_id, block.scope_id, target_block_id, link_id
@@ -2466,9 +2466,9 @@ impl Flatten {
         Ok(false)
     }
 
-    fn resolve_cps_single(&mut self, d: DeferredGoto, b: &mut NB) -> Result<()> {
-        let key = d.name;
-        let s_name = b.labels.r(key.into());
+    fn resolve_cps_single(&mut self, d: DeferredGoto, _b: &mut NB) -> Result<()> {
+        //let key = d.name;
+        //let s_name = b.labels.r(key.into());
         //println!("{}: resolve cps: {:?}", s_name, &d);
 
         // this is where we actually do the rewrite
@@ -2523,7 +2523,7 @@ impl Flatten {
 
                     let variant_id = self.variants.get_by_block(arg_block_id).unwrap();
                     let variant = self.variants.get(variant_id);
-                    let name = b.labels.r(variant.name.into());
+                    //let name = b.labels.r(variant.name.into());
 
                     //println!(
                     //"@{}, {}: variant name: {:?}",
@@ -2532,7 +2532,7 @@ impl Flatten {
                     //(variant_id, &variant.caller_blocks, &targets, &ty, &d.args)
                     //);
 
-                    for (_, caller) in &variant.caller_blocks {
+                    for (_, _caller) in &variant.caller_blocks {
                         /*
                             let caller_arg_link_id = caller.args.get(arg_num as usize).unwrap();
                             //for (i, arg ) in caller.args.iter().enumerate() {
@@ -2608,7 +2608,7 @@ impl Flatten {
 
                         //let jump_link_id =
                         //self.push_jump(target_block_id, d.argvec, d.call_span_id);
-                        let jump_link_id =
+                        let _jump_link_id =
                             self.replace_placeholder_terminal(d.block_id, target_block_id);
 
                         //self.scoped_continuations.connect(
@@ -2649,28 +2649,29 @@ impl Flatten {
                     unreachable!();
                 }
             }
-            DeferredType::Variant(_goto_link_id, source_block_id, variant_id) => {
-                // we have all of the callers for this abstraction now, so we can go ahead and
-                // rewrite
+            DeferredType::Variant(_goto_link_id, _source_block_id, _variant_id) => {
                 /*
-                if let Some(abstraction_id) = self.resolve_template(d.scope_id, d.name.into()) {
-                    //let (_, _, blocks) = self.get_ast_template(abstraction_id);
-                    let a = self.abstractions.get(abstraction_id);
-                    println!("blocks2: {:?}", a.caller_blocks);
-                } else {
-                    unimplemented!();
-                }
+                    // we have all of the callers for this abstraction now, so we can go ahead and
+                    // rewrite
+                    /*
+                    if let Some(abstraction_id) = self.resolve_template(d.scope_id, d.name.into()) {
+                        //let (_, _, blocks) = self.get_ast_template(abstraction_id);
+                        let a = self.abstractions.get(abstraction_id);
+                        println!("blocks2: {:?}", a.caller_blocks);
+                    } else {
+                        unimplemented!();
+                    }
+                    */
+
+                    //let block = self.blocks.get_block(source_block_id);
+                    //let variant = self.variants.get(variant_id);
+                    //let name = b.labels.r(variant.name.into());
+                    //println!(
+                    //"{}: variant X: {:?}",
+                    //name,
+                    //(variant_id, variant.block_id, variant, block)
+                    //);
                 */
-
-                let block = self.blocks.get_block(source_block_id);
-
-                let variant = self.variants.get(variant_id);
-                let name = b.labels.r(variant.name.into());
-                //println!(
-                //"{}: variant X: {:?}",
-                //name,
-                //(variant_id, variant.block_id, variant, block)
-                //);
             }
             _ => {
                 unreachable!("{:?}", d);
@@ -2688,14 +2689,14 @@ impl Flatten {
             }
         }
 
-        for variant_id in self.variants.iter() {
-            let v = self.variants.get(variant_id);
-            for (block_id, caller) in v.caller_blocks.iter() {
-                let s_name = b.labels.r(v.name.into());
-                //println!("variant: {}:{}=>{:?}", s_name, block_id, &caller.args);
-                //let caller.args.get(0).unwrap();
-            }
-        }
+        //for variant_id in self.variants.iter() {
+        //let v = self.variants.get(variant_id);
+        //for (block_id, caller) in v.caller_blocks.iter() {
+        //let s_name = b.labels.r(v.name.into());
+        //println!("variant: {}:{}=>{:?}", s_name, block_id, &caller.args);
+        //let caller.args.get(0).unwrap();
+        //}
+        //}
 
         //println!("resolve_cps done");
         Ok(())
@@ -2704,7 +2705,7 @@ impl Flatten {
     fn resolve_deferred(&mut self, b: &mut NB) -> Result<()> {
         loop {
             if let Some(d) = self.deferred_goto.pop_deferred() {
-                let s_name = b.labels.r(d.name.into());
+                //let s_name = b.labels.r(d.name.into());
                 //println!("{}: pop deferred goto: {:?}", s_name, &d);
                 //self.complete_open_abstractions(b)?;
                 let _ = self.resolve_deferred_single(d, b)?;
@@ -2795,7 +2796,7 @@ impl Flatten {
         } else if let Some(ty) = b.types.u.resolve(&ret_arg_type) {
             ty
         } else {
-            b.types.dump();
+            //b.types.dump();
             b.push_error(
                 &format!(
                     "Return Type Must Resolve: {}, arity: {}",
@@ -3105,7 +3106,7 @@ impl Flatten {
             Ast::Identifier(key) => {
                 // identifier is expression, non-terminal
                 let scope_id = block.scope_id;
-                let s_name = b.labels.r(key.into());
+                //let s_name = b.labels.r(key.into());
 
                 // resolve identifier lexically
                 if let Some(def_link_id) = self.resolve_name(current_block_id, key) {
@@ -3521,7 +3522,7 @@ impl Flatten {
 
                 let name = name.unwrap();
                 //let s_name = name.map(|key| b.labels.r(key)).unwrap_or(String::new());
-                let s_name = b.labels.r(name.into());
+                //let _s_name = b.labels.r(name.into());
 
                 // push a new block.  But check to make sure the previous block was closed
                 let scope_id = block.scope_id;
@@ -3557,7 +3558,7 @@ impl Flatten {
                     let entry = self.get_entry(last_link_id);
                     if !entry.code.is_term() {
                         assert_eq!(args.len(), 0);
-                        let link_id = self.push_jump(new_block_id, vec![], span_id);
+                        let _link_id = self.push_jump(new_block_id, vec![], span_id);
                         //println!("block start 1: {}, link: {}", new_block_id, link_id);
                     }
                 }
@@ -3853,7 +3854,7 @@ impl Flatten {
                 // loop up loop blocks by name
                 if let Some(loop_scope) = self.scopes.get_loop_scope(scope_id, maybe_key) {
                     self.switch_blocks(current_block_id);
-                    let link_id =
+                    let _link_id =
                         self.push_jump(loop_scope.next_block.into(), vec![], node.span_id);
                     //println!(
                     //"loop break jump: {}, link: {}",
@@ -3990,7 +3991,7 @@ impl Flatten {
     }
 
     pub fn ensure_open(&mut self, span_id: SpanId, b: &mut NB) {
-        let current_block_id = self.current_block_id();
+        //let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(self.current_block_id());
         let scope_id = block.scope_id;
         if block.term {

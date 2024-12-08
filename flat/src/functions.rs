@@ -1,5 +1,5 @@
-use crate::{ArgVec, BlockId, LinkId, NodeBuilder, StringLabel, ValueId};
-use compile_core::{AbstractionId, Argument, AstType, Lambda, SpanId, StringKey};
+use crate::{BlockId, LinkId};
+use compile_core::{AbstractionId, AstType, Lambda, SpanId, StringKey};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
