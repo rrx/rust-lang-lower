@@ -85,7 +85,6 @@ def main():
   #"""
 
   #t = next_x
-  #q.goto(cps, t)
   q.goto(cps, next_x, next_y, True)
   q.label("A")
   q.goto(cps, next_y, next_x, True)

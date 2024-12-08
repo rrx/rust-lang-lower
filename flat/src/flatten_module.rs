@@ -1,6 +1,5 @@
 use anyhow::Result;
 use compile_core::{AstType, LinkOptions, Literal, SpanId, StringKey, VarDefinitionSpace};
-//use petgraph::visit::EdgeRef;
 use petgraph::graph::NodeIndex;
 use std::collections::HashMap;
 
@@ -20,8 +19,6 @@ pub struct FlattenModule {
     pub values: Vec<LinkId>,
     pub blocks: BlockGraph,
     pub messages: Vec<(String, SpanId)>,
-    //pub(crate) static_scope: Option<ScopeId>,
-    //pub(crate) static_block: Option<BlockId>,
     pub scopes: ScopeGraph,
     pub block_links: HashMap<BlockId, LinkId>,
     pub(crate) functions: HashMap<StringKey, LinkId>,
@@ -190,8 +187,6 @@ impl FlattenModule {
             values,
             blocks: f.blocks,
             messages: f.messages,
-            //static_scope: f.static_scope,
-            //static_block: f.static_block,
             scopes: f.scopes,
             block_links: f.block_links,
             functions: f.functions,

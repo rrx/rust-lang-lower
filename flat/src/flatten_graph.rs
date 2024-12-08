@@ -1,4 +1,3 @@
-use super::FlattenModule;
 use crate::{BlockGraph, BlockId, ICodeModule, LCode, NodeBuilder as NB, Successor, ValueId};
 use anyhow::Result;
 use petgraph::visit::EdgeRef;
@@ -105,62 +104,6 @@ graph TD\n\
     }
 }
 
-impl FlattenModule {
-    /*
-    pub fn flow_graph(&self, filename: &str, b: &NB) -> Result<()> {
-        flow_graph(self, &self.gblocks, filename, b)
-    }
-    */
-
-    /*
-    pub fn block_graph(&self, filename: &str, b: &NB) {
-        use petgraph::dot::{Config, Dot};
-        let g = self.gblocks.0.filter_map(
-            |_n_index, n| Some(n.clone()),
-            |_e_index, e| {
-                if let Successor::Jump = e {
-                    Some(e.clone())
-                } else {
-                    None
-                }
-            },
-        );
-        let num = petgraph::algo::connected_components(&g);
-        println!("components: {}", num);
-
-        let s = format!(
-            "{:?}",
-            Dot::with_attr_getters(
-                &g,
-                &[Config::NodeNoLabel],
-                &|_, _er| String::new(),
-                &|_, (index, _block)| {
-                    let block_id: BlockId = index.into();
-                    if self.block_map.contains_key(&block_id) {
-                        let key = self
-                            .get_name(block_id.into())
-                            .expect(&format!("missing name for block {}", block_id));
-                        let name = b.labels.r(key);
-                        format!(
-                            //"label = \"B{:?}:{}\" shape=\"{:?}\"",
-                            "label = \"B{:?}:{}\"",
-                            index.index(),
-                            name,
-                            //&block.scope_id,
-                        )
-                    } else {
-                        format!("label = \"B{:?}:?\"", index.index(),)
-                    }
-                }
-            )
-        );
-        println!("saved graph {:?}", filename);
-        //println!("{}", s);
-        std::fs::write(filename, s).unwrap();
-    }
-    */
-}
-
 pub fn flow_graph(m: &dyn ICodeModule, gblocks: &BlockGraph, filename: &str, b: &NB) -> Result<()> {
     let entries = gblocks.graph_get_entries();
     let mut ng = NestedGraph::new();
@@ -238,6 +181,8 @@ pub fn flow_graph(m: &dyn ICodeModule, gblocks: &BlockGraph, filename: &str, b: 
                                     }
                                 }
                                 LCode::Switch(link_id, cases) => {
+                                    let v_link = m.resolve_code_offset(link_id.into());
+                                    ng.edges.push((v, v_link));
                                     for block_id in cases.values() {
                                         let v_target = m.resolve_code_offset(block_id.into());
                                         ng.edges.push((v, v_target));

@@ -2,25 +2,8 @@ use super::resolve_attribute;
 use anyhow::Error;
 use anyhow::Result;
 use compile_core::{
-    AbstractionId,
-    Argument,
-    AssignTarget,
-    Ast,
-    AstNode,
-    AstType,
-    BuiltinId,
-    ControlFlowMarker,
-    //BinaryOperation, BuiltinId, ControlFlowMarker,
-    Lambda,
-    LinkOptions,
-    Literal,
-    NaryOperation,
-    ReturnType,
-    //ParameterNode,
-    SpanId,
-    StringKey,
-    //UnaryOperation,
-    VarDefinitionSpace,
+    AbstractionId, Argument, AssignTarget, Ast, AstNode, AstType, BuiltinId, ControlFlowMarker,
+    Lambda, LinkOptions, Literal, NaryOperation, ReturnType, SpanId, StringKey, VarDefinitionSpace,
 };
 
 use std::collections::{HashMap, HashSet};
@@ -129,9 +112,7 @@ pub struct Flatten {
     pub(super) link: LinkOptions,
     pub(super) entries: Vec<CodeEntry>,
     pub blocks: BlockGraph,
-    //ast_templates: Vec<(Lambda, SpanId, HashSet<BlockId>)>,
     pub(super) messages: Vec<(String, SpanId)>,
-    pub mode: FlattenMode,
     pub(crate) static_scope: Option<ScopeId>,
     pub(crate) static_block: Option<BlockId>,
     pub(crate) current_block: BlockId,
@@ -154,9 +135,7 @@ impl Flatten {
             entries: vec![],
             blocks,
             link: LinkOptions::new(),
-            //ast_templates: vec![],
             messages: vec![],
-            mode: FlattenMode::Function,
             static_scope: None,
             static_block: None,
             current_block: BlockId::new(0),
@@ -435,7 +414,6 @@ impl Flatten {
         f.static_block = Some(block_id);
 
         if let Ast::Module(key, body) = node.node {
-            //f.mode = mode;
             let static_block_id = f.current_block_id();
 
             let block = f.blocks.get_block(static_block_id);
@@ -2389,22 +2367,11 @@ impl Flatten {
     }
 
     fn resolve_cps_single(&mut self, d: DeferredGoto, _b: &mut NB) -> Result<()> {
-        //let key = d.name;
-        //let s_name = b.labels.r(key.into());
-        //println!("{}: resolve cps: {:?}", s_name, &d);
-
         // this is where we actually do the rewrite
-
-        // remove placeholder
-
         match d.deferred_type {
             DeferredType::Name(arg_link_id) => {
                 // we replace the placeholder here
                 self.switch_blocks(d.block_id);
-                //self.remove_placeholder_terminal(d.block_id);
-                // TODO: we need to rewrite the function to be static.
-                // We should have all of the information we need in the type
-                // The actual target comes from the type
                 let entry = self.get_entry(arg_link_id);
                 //let ty = entry.ty.clone();
                 let arg_block_id = entry.block_id;
@@ -2415,7 +2382,7 @@ impl Flatten {
                     unreachable!();
                 };
 
-                let mut sources = self
+                let sources = self
                     .scoped_continuations
                     .find_source_blocks(ContinuationFlow::BlockArg(arg_block_id, arg_num));
 
@@ -2534,7 +2501,9 @@ impl Flatten {
             AstType::Struct(vec![(None, single_ty.clone())])
         };
 
-        let resolved_ret_ty = if self.mode == FlattenMode::Template || true {
+        let resolved_ret_ty = ret_arg_type.clone();
+        /*
+        if self.mode == FlattenMode::Template || true {
             ret_arg_type.clone()
         } else if let Some(ty) = b.types.u.resolve(&ret_arg_type) {
             ty
@@ -2549,6 +2518,7 @@ impl Flatten {
             );
             ret_arg_type.clone()
         };
+        */
 
         if b.types.u.unify(&func_ret_ty, &single_ty).is_err() {
             b.push_error(
@@ -2559,9 +2529,6 @@ impl Flatten {
                 span_id,
             );
         }
-        //if func_ret_ty != resolved_ret_ty {
-        //println!("ret res: {}=>{}", func_ret_ty, resolved_ret_ty);
-        //}
         resolved_ret_ty
     }
 
@@ -2647,7 +2614,6 @@ impl Flatten {
                     m.insert(i as i64, *block_id);
                 }
                 entry.code = LCode::Switch(arg_link_id, m);
-                //entry.code = LCode::Switch(target_block_ids.into());
                 last_link_id
             } else {
                 unreachable!();
@@ -2673,8 +2639,6 @@ impl Flatten {
         let scope_id = block.scope_id;
         let (_variant_id, _, _fun_block_id, _def_func_type, _def_arg_type, _, _, link_id) =
             self.push_cps_block(name, scope_id, template_id, args, call_span_id, b)?;
-
-        //println!("bake deferred goto: link: {}", link_id);
         Ok(link_id)
     }
 
@@ -2767,7 +2731,6 @@ impl Flatten {
                         let args_size = args.len();
                         assert_eq!(args_size, bi.arity());
 
-                        //let ret_type_id = b.types.s(&ty);
                         let def = bi.get_lambda(b);
                         self.switch_blocks(current_block_id);
                         self.push_builtin_call(&def, id, args, span_id, b)
@@ -2777,7 +2740,6 @@ impl Flatten {
 
             Ast::Return(maybe_expr) => {
                 let block = self.blocks.get_block(current_block_id);
-                //println!("return: {:?}", (block_id, block.scope_id));
                 let fun_scope_id = self
                     .scopes
                     .find_nearest_scope(block.scope_id, &[ScopeType::Template, ScopeType::Function])
@@ -2855,14 +2817,12 @@ impl Flatten {
                     VarDefinitionSpace::Default,
                 );
 
-                //self.switch_blocks(current_block_id);
                 Ok(FlattenResult::link(link_id))
             }
 
             Ast::Identifier(key) => {
                 // identifier is expression, non-terminal
                 let scope_id = block.scope_id;
-                //let s_name = b.labels.r(key.into());
 
                 // resolve identifier lexically
                 if let Some(def_link_id) = self.resolve_name(current_block_id, key) {
@@ -2955,10 +2915,6 @@ impl Flatten {
                     // The 3rd method is easiest, as we insert the code at the caller.
                     // It's simpler, and get's us most of the way there.
 
-                    //if self.mode == FlattenMode::Template {
-                    //self.push_bake_template2(name, &def, span_id, b)?;
-                    //}
-
                     // save the template
                     let def_span_id = expr.span_id;
                     let _ = self.save_ast_template(current_block_id, &name, &def, def_span_id)?;
@@ -3015,7 +2971,6 @@ impl Flatten {
                     node.span_id,
                     VarDefinitionSpace::Default,
                 );
-                //self.switch_blocks(current_block_id);
                 Ok(FlattenResult::link(link_id))
             }
 
@@ -3104,7 +3059,6 @@ impl Flatten {
                     node.span_id,
                     VarDefinitionSpace::Reg,
                 );
-                //self.switch_blocks(current_block_id);
                 Ok(FlattenResult::link(link_id))
             }
 
@@ -3129,10 +3083,6 @@ impl Flatten {
                 let (then_block_id, then_scope_id) =
                     self.new_scope_and_block(ScopeType::Block, parent_scope_id);
                 let then_span_id = then_expr.span_id;
-                //println!(
-                //"cond jump to: {}=>{}, {:?}",
-                //current_block_id, then_block_id, term
-                //);
                 // only jump if we are in an open block
                 if !term {
                     self.blocks
@@ -3165,7 +3115,6 @@ impl Flatten {
                     let (else_block_id, else_scope_id) =
                         self.new_scope_and_block(ScopeType::Block, parent_scope_id);
                     let else_span_id = else_expr.span_id;
-                    //println!("else jump to: {}=>{}", current_block_id, else_block_id);
                     if !term {
                         self.blocks.block_succ(
                             current_block_id,
@@ -3192,7 +3141,6 @@ impl Flatten {
                     self.maybe_terminate_block(v_next, span_id);
                     else_block_id
                 } else {
-                    //println!("else default jump to: {}=>{}", current_block_id, v_next);
                     if !term {
                         self.blocks
                             .block_succ(current_block_id, v_next, Successor::BlockScope);
@@ -3460,7 +3408,6 @@ impl Flatten {
                     span_id,
                     VarDefinitionSpace::Reg,
                 );
-                //self.switch_blocks(rc.block_id);
                 Ok(FlattenResult::link(v))
             }
 
@@ -3471,7 +3418,6 @@ impl Flatten {
                     self.switch_blocks(current_block_id);
                     let r = self.push_node(*expr, b)?;
                     if let Some(v) = r.link_id {
-                        //v_block = self.block_id;
                         ty = self.get_type(v).clone();
                         // push single arg
                         self.push_call_values(&[(None, v.into(), ty.clone(), node.span_id)]);
@@ -3712,7 +3658,6 @@ impl Flatten {
                 entry.code = LCode::Val(Literal::Index(index));
 
                 let ty = self.get_type(r_node.link_id.unwrap());
-                //println!("index: {:?}", (ty, index));
                 let (_, ty_field) = ty.fields().get(index as usize).unwrap().clone();
 
                 let code = LCode::Use(r_node.link_id.unwrap().into(), indicies);
