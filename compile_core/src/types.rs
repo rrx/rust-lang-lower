@@ -172,6 +172,7 @@ impl AstType {
             Self::Args(ty) => ty.field_types(),
             Self::Struct(fields) => fields.iter().map(|f| f.1.clone()).collect(),
             Self::Tuple(fields) => fields.clone(),
+            Self::Func(args, _) => args.field_types(),
             _ => vec![],
         }
     }

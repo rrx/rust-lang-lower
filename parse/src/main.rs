@@ -119,6 +119,10 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
     scopes_path.set_extension("scopes.dot");
     m.scopes.scope_graph(scopes_path.clone().to_str().unwrap());
 
+    let mut cont_path = path.clone();
+    cont_path.set_extension("cont.dot");
+    m.cont_graph(cont_path.clone().to_str().unwrap(), b);
+
     let mut cfg_path = path.clone();
     cfg_path.set_extension("cfg.mmd");
     m.flow_graph(cfg_path.clone().to_str().unwrap(), &b)?;

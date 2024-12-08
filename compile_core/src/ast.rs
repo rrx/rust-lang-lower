@@ -76,6 +76,12 @@ impl AbstractionId {
     }
 }
 
+impl std::fmt::Display for AbstractionId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "A{}", self.index())
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Literal {
     Int(i64),

@@ -7,9 +7,9 @@ use std::collections::HashMap;
 use std::convert::Into;
 
 use crate::{
-    BlockGraph, BlockId, CodeEntry, CodeOffset, CodeRow, Flatten, FunctionVariant,
-    FunctionVariantBuilder, ICodeModule, LCode, LinkId, NodeBuilder as NB, ScopeGraph, ScopeType,
-    StringLabel, Successor, ValueId, VariantId,
+    BlockGraph, BlockId, CodeEntry, CodeOffset, CodeRow, ContinuationFlow, Flatten,
+    FunctionVariant, FunctionVariantBuilder, ICodeModule, LCode, LinkId, NodeBuilder as NB,
+    ScopeGraph, ScopeType, ScopedContinuations, StringLabel, Successor, ValueId, VariantId,
 };
 
 use tabled::{settings::Style, Table};
@@ -27,6 +27,7 @@ pub struct FlattenModule {
     pub(crate) functions: HashMap<StringKey, LinkId>,
     pub statics: HashMap<StringKey, Literal>,
     pub variants: FunctionVariantBuilder,
+    pub scoped_continuations: ScopedContinuations,
 }
 
 impl ICodeModule for FlattenModule {
@@ -183,6 +184,7 @@ impl FlattenModule {
             functions: f.functions,
             statics: f.statics,
             variants: f.variants,
+            scoped_continuations: f.scoped_continuations,
         })
     }
 
@@ -249,6 +251,45 @@ impl FlattenModule {
         }
         let s = Table::new(rows).with(Style::sharp()).to_string();
         println!("{}", s);
+        std::fs::write(filename, s).unwrap();
+    }
+
+    pub fn cont_graph(&self, filename: &str, b: &NB) {
+        let s = format!(
+            "{:?}",
+            petgraph::dot::Dot::with_attr_getters(
+                &self.scoped_continuations.g,
+                &[
+                    petgraph::dot::Config::EdgeNoLabel,
+                    petgraph::dot::Config::NodeNoLabel
+                ],
+                &|_, edge| {
+                    let w = edge.weight();
+                    format!("label = \"{:?}\"", w,)
+                },
+                &|_, (_, c)| {
+                    match c {
+                        ContinuationFlow::Block(block_id, arg) => {
+                            let s_name = if let Some(name) = self.get_name(block_id.into()) {
+                                b.labels.r(name)
+                            } else {
+                                "?".to_string()
+                            };
+                            format!("label = \"B.{}:{}:{}\"", s_name, block_id, arg)
+                        }
+                        ContinuationFlow::Jump(link_id, arg) => {
+                            let v = self.maybe_resolve_code_offset(link_id.into());
+                            format!("label = \"JUMP:{:?}:{}\"", v, arg)
+                        }
+                        ContinuationFlow::Variable(link_id) => {
+                            let v = self.resolve_code_offset(link_id.into());
+                            format!("label = \"VAR:{}\"", v)
+                        }
+                    }
+                }
+            )
+        );
+        println!("saved graph {:?}", filename);
         std::fs::write(filename, s).unwrap();
     }
 

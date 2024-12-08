@@ -1,5 +1,5 @@
 def main():
-  def cps(x):
+  def cps(x, y, c):
     # we don't bake until we get to the goto
     # we may know the value of x statically
     # but we also may not
@@ -9,7 +9,20 @@ def main():
     # being passed in, and we can ignore possible args, forcing the function
     # to rely on scoped variables.
     # we might be able to do this as long as it's not polymorphic
-    q.goto(x)
+    if c:
+      q.goto(x)
+    else:
+      q.goto(y)
+
+  def cps1(x, c):
+    if c:
+      q.goto(x)
+    q.goto(cps, next_x, next_y, True)
+
+  def cps2(x, count):
+    if count == 0:
+      q.goto(x)
+    q.goto(cps2, x, count - 1)
 
   # next is only called dynamically
   def next_x():
@@ -17,6 +30,13 @@ def main():
 
   def next_y():
     q.goto("B")
+
+  def next_z():
+    q.goto("C")
+
+  def next_w():
+    q.goto("D")
+
 
   #return 0
 
@@ -66,9 +86,13 @@ def main():
 
   #t = next_x
   #q.goto(cps, t)
-  q.goto(cps, next_x)
+  q.goto(cps, next_x, next_y, True)
   q.label("A")
-  q.goto(cps, next_y)
+  q.goto(cps, next_y, next_x, False)
   q.label("B")
+  q.goto(cps, next_z, next_z, False)
+  q.label("C")
 
+  #q.goto(cps2, next_w, 10)
+  #q.label("D")
   return 0

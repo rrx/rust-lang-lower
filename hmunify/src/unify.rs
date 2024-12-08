@@ -125,7 +125,7 @@ fn ast_unify_values(value1: &AstType, value2: &AstType) -> Result<AstType, UErro
 
             (AstType::TargetUnion(c1, blocks1), AstType::TargetUnion(c2, blocks2)) => {
                 let result = unify_fields(&c1, &c2)?;
-                unreachable!();
+                //unreachable!();
                 Ok(AstType::TargetUnion(result, blocks1.clone()))
             }
 

@@ -50,6 +50,32 @@ impl FunctionVariant {
 }
 
 #[derive(Debug)]
+pub struct VariantIterator {
+    index: usize,
+    len: usize,
+}
+
+impl VariantIterator {
+    pub fn new(len: usize) -> Self {
+        Self { index: 0, len }
+    }
+}
+
+impl Iterator for VariantIterator {
+    type Item = VariantId;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index < self.len {
+            let index = self.index;
+            self.index += 1;
+            Some(VariantId::new(index))
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct FunctionVariantBuilder {
     pub variants: Vec<FunctionVariant>,
     pub block_lookup: HashMap<BlockId, VariantId>,
@@ -61,6 +87,10 @@ impl FunctionVariantBuilder {
             variants: vec![],
             block_lookup: HashMap::new(),
         }
+    }
+
+    pub fn iter(&self) -> VariantIterator {
+        VariantIterator::new(self.variants.len())
     }
 
     pub fn get_by_block(&self, block_id: BlockId) -> Option<VariantId> {
