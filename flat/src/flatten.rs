@@ -120,7 +120,7 @@ pub struct Flatten {
     pub(super) block_links: HashMap<BlockId, LinkId>,
     pub(crate) functions: HashMap<StringKey, LinkId>,
     pub(crate) statics: HashMap<StringKey, Literal>,
-    open_abstractions: Vec<LinkId>,
+    //open_abstractions: Vec<LinkId>,
     pub(crate) scoped_continuations: ScopedContinuations,
     pub deferred_goto: DeferredGotoList,
     pub variants: FunctionVariantBuilder,
@@ -143,7 +143,7 @@ impl Flatten {
             block_links: HashMap::new(),
             functions: HashMap::new(),
             statics: HashMap::new(),
-            open_abstractions: vec![],
+            //open_abstractions: vec![],
             scoped_continuations: ScopedContinuations::new(),
             deferred_goto: DeferredGotoList::new(),
             variants: FunctionVariantBuilder::new(),
@@ -506,7 +506,7 @@ impl Flatten {
         self.scoped_continuations.connect(
             ContinuationFlow::Block(fun_block_id),
             ContinuationFlow::Variable(link_id),
-            FlowEdge::A,
+            FlowEdge::BlockRef,
         );
 
         // now replace the abstraction code
@@ -520,6 +520,7 @@ impl Flatten {
         Ok(())
     }
 
+    /*
     pub fn complete_open_abstractions(&mut self, b: &mut NB) -> Result<()> {
         // here we get all of the open abstractions and complete them, by
         // rewriting them as concrete blocks.  We still want to do this, but somewhere else.
@@ -547,6 +548,7 @@ impl Flatten {
         self.switch_blocks(current_block_id);
         Ok(())
     }
+    */
 
     pub(super) fn finish_values(&mut self, b: &mut NB) -> Vec<LinkId> {
         let blocks = self.blocks.post_order_blocks();
@@ -1630,7 +1632,7 @@ impl Flatten {
                 self.scoped_continuations.connect(
                     ContinuationFlow::BlockArg(self.current_block_id(), i as u8),
                     ContinuationFlow::Variable(link_id),
-                    FlowEdge::J,
+                    FlowEdge::BlockArg,
                 );
             }
             v_args
@@ -2056,35 +2058,22 @@ impl Flatten {
         let goto_link_id = self.push_jump(fun_block_id.into(), call_values.clone(), call_span_id);
 
         for (i, (_, var_link_id, _ty, _)) in call_values.iter().enumerate() {
-            //if let A
-            //for block_id in blocks {
-            //self.scoped_continuations.connect(
-            //ContinuationFlow::Block(*block_id),
-            //ContinuationFlow::Variable(*var_link_id),
-            //FlowEdge::C,
-            //);
             self.scoped_continuations.connect(
                 ContinuationFlow::Variable(*var_link_id),
                 ContinuationFlow::JumpArg(goto_link_id, i as u8),
-                FlowEdge::D,
+                FlowEdge::VarJumpArg,
             );
             self.scoped_continuations.connect(
                 ContinuationFlow::JumpArg(goto_link_id, i as u8),
                 ContinuationFlow::BlockArg(fun_block_id, i as u8),
-                FlowEdge::E,
+                FlowEdge::JumpArg,
             );
-            //self.scoped_continuations.connect(
-            //ContinuationFlow::Variable(*var_link_id),
-            //ContinuationFlow::Block(fun_block_id, i as u8 + 1),
-            //);
-            //}
-            //}
         }
 
         self.scoped_continuations.connect(
             ContinuationFlow::Jump(goto_link_id),
             ContinuationFlow::Block(fun_block_id),
-            FlowEdge::F,
+            FlowEdge::Jump,
         );
 
         self.variants
@@ -2303,6 +2292,8 @@ impl Flatten {
                 //
                 //
 
+                // Push load if required.  This is needed if the argument is stored in memory,
+                // rather than a register
                 let load_link_id = if self.is_load_required(*def_link_id) {
                     let entry = self.get_entry(*def_link_id).clone();
                     let link_id = self.push_code(
@@ -2315,7 +2306,7 @@ impl Flatten {
                     self.scoped_continuations.connect(
                         ContinuationFlow::Variable(*def_link_id),
                         ContinuationFlow::Variable(link_id),
-                        FlowEdge::LOAD,
+                        FlowEdge::LoadBlockArg,
                     );
                     link_id
                 } else {
@@ -2415,7 +2406,7 @@ impl Flatten {
                     self.scoped_continuations.connect(
                         ContinuationFlow::Jump(link_id),
                         ContinuationFlow::Block(target_block_id),
-                        FlowEdge::G,
+                        FlowEdge::JumpLabel,
                     );
 
                     return Ok(true);
@@ -2648,6 +2639,7 @@ impl Flatten {
         let block = self.blocks.get_block(goto_block_id);
         let last_link_id = block.last().unwrap();
         let entry = self.get_entry_mut(last_link_id);
+        println!("remove_placeholder_terminal: {:?}", &last_link_id);
         if let LCode::PlaceholderTerminal(prev_link_id) = entry.code {
             // invalidate dummy jump
             entry.next = prev_link_id;
@@ -2675,10 +2667,12 @@ impl Flatten {
                 .block_succ(self.current_block_id(), *block_id, Successor::BlockScope);
         }
 
-        let entry = self.get_entry_mut(last_link_id);
-        if let LCode::PlaceholderTerminal(_) = entry.code {
+        let entry = self.get_entry(last_link_id);
+        let code = entry.code.clone();
+        if let LCode::PlaceholderTerminal(_) = code {
             if target_block_ids.len() == 1 {
                 let block_id = target_block_ids.last().unwrap();
+                let entry = self.get_entry_mut(last_link_id);
                 entry.code = LCode::Jump(block_id.into());
             } else if target_block_ids.len() > 1 {
                 target_block_ids.sort();
@@ -2686,12 +2680,30 @@ impl Flatten {
                 for (i, block_id) in target_block_ids.iter().enumerate() {
                     m.insert(i as i64, *block_id);
                 }
+
+                // connects here aren't actually used to calculate the flows
+                // This function is called when we have calculated the static flow and we update
+                // the graph.
+                /*
+                for block_id in m.values() {
+                    self.scoped_continuations.connect(
+                        ContinuationFlow::Jump(last_link_id),
+                        ContinuationFlow::Block(*block_id),
+                        FlowEdge::SwitchBlock,
+                    );
+                }
+                */
+
+                let entry = self.get_entry_mut(last_link_id);
                 entry.code = LCode::Switch(arg_link_id, m);
+
+                /*
                 self.scoped_continuations.connect(
                     ContinuationFlow::Variable(arg_link_id),
                     ContinuationFlow::Jump(last_link_id),
-                    FlowEdge::K,
+                    FlowEdge::Switch,
                 );
+                */
             } else {
                 b.push_error("Missing Targets", entry.span_id);
                 //unreachable!();
@@ -3047,7 +3059,7 @@ impl Flatten {
                 self.scoped_continuations.connect(
                     ContinuationFlow::Variable(load_link_id),
                     ContinuationFlow::Variable(offset_decl),
-                    FlowEdge::B,
+                    FlowEdge::Store,
                 );
 
                 let link_id = self.push_code(
@@ -3254,12 +3266,12 @@ impl Flatten {
                 self.scoped_continuations.connect(
                     ContinuationFlow::Jump(v),
                     ContinuationFlow::Block(then_block_id),
-                    FlowEdge::H,
+                    FlowEdge::CondThen,
                 );
                 self.scoped_continuations.connect(
                     ContinuationFlow::Jump(v),
                     ContinuationFlow::Block(else_block_id),
-                    FlowEdge::I,
+                    FlowEdge::CondElse,
                 );
                 self.switch_blocks(v_next);
                 Ok(FlattenResult::link(v))

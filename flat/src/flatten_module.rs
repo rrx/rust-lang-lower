@@ -294,12 +294,15 @@ impl FlattenModule {
                             format!("label = \"BA.{}:{}:{}\"", s_name, block_id, arg)
                         }
                         ContinuationFlow::Jump(link_id) => {
-                            let v = self.maybe_resolve_code_offset(link_id.into());
-                            format!("label = \"JUMP:{:?}\"", v)
+                            if let Some(v) = self.maybe_resolve_code_offset(link_id.into()) {
+                                format!("label = \"JUMP:{}\"", v)
+                            } else {
+                                format!("label = \"JUMP:?{}\"", link_id)
+                            }
                         }
                         ContinuationFlow::JumpArg(link_id, arg) => {
-                            let v = self.maybe_resolve_code_offset(link_id.into());
-                            format!("label = \"JUMP:{:?}:{}\"", v, arg)
+                            let v = self.resolve_code_offset(link_id.into());
+                            format!("label = \"JUMP:{}:{}\"", v, arg)
                         }
                         ContinuationFlow::Variable(link_id) => {
                             let v = self.resolve_code_offset(link_id.into());
