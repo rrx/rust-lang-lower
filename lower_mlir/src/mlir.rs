@@ -272,7 +272,7 @@ impl<'c> LowerIR<'c> for MLIRGenerator<'c> {
             //Ok(index)
             self.index.insert(v, index);
         } else {
-            let op = self.emit_literal_const(v, lit, location);
+            let op = self.emit_literal_const(lit, location);
             let c = self
                 .blocks
                 .get_mut(&block_id)
@@ -471,13 +471,14 @@ impl<'c> MLIRGenerator<'c> {
         let v_arg = self.value0(i_arg);
         let flag_type = IntegerType::new(self.context, 64).into();
 
-        let mut case_values = m.keys().cloned().collect::<Vec<i64>>();
+        let mut case_values = m.values().map(|v| v.index() as i64).collect::<Vec<i64>>();
         case_values.sort();
 
         let case_destinations = case_values
             .iter()
             .map(|i| {
-                let block_id = m.get(i).unwrap();
+                //let block_id = m.get(i).unwrap();
+                let block_id = BlockId::new(*i as usize);
                 let target_value_id = self.blockify.resolve_code_offset(block_id.into());
                 let c = self
                     .blocks
@@ -824,8 +825,8 @@ impl<'c> MLIRGenerator<'c> {
                 let v_alloc = c.push(op);
                 self.index.insert(v, v_alloc);
 
-                for (i, (v, sym)) in syms.iter().enumerate() {
-                    let op = self.emit_literal_const(*v, &Literal::Index(i), location);
+                for (i, (_v, sym)) in syms.iter().enumerate() {
+                    let op = self.emit_literal_const(&Literal::Index(i), location);
                     let c = self.blocks.get_mut(&block_id).unwrap();
                     let index = c.push(op);
                     //self.index.insert(v, index);

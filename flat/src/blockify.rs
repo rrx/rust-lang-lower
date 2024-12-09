@@ -148,6 +148,25 @@ pub trait ICodeModule {
     fn find_source_blocks(&self, flow: ContinuationFlow) -> Vec<BlockId>;
     fn find_sink_block(&self, flow: ContinuationFlow) -> Option<ContinuationFlow>;
 
+    /*
+        fn block_source_index(&self, v: ValueId, block_id: BlockId) -> i64 {
+            block_id.index() as i64
+            /*
+            let entry = self.get_entry(v);
+            let link_id = entry.link.unwrap();
+            let sink = self
+                .find_sink_block(ContinuationFlow::Variable(link_id))
+                .unwrap();
+            let mut all_sources = self.find_source_blocks(sink);
+            all_sources.sort();
+            let index = all_sources.iter().position(|x| x == &block_id).unwrap();
+            println!("all_sources: {:?}", (v, block_id, all_sources, index));
+
+            index as i64
+                */
+        }
+    */
+
     fn get_variant_by_block(&self, block_id: BlockId) -> Option<VariantId>;
     fn get_variant(&self, variant_id: VariantId) -> &FunctionVariant;
 

@@ -479,6 +479,47 @@ impl Flatten {
         }
     }
 
+    pub fn resolve_open_abstractions(
+        &mut self,
+        link_id: LinkId,
+        abstraction_id: AbstractionId,
+        b: &mut NB,
+    ) -> Result<()> {
+        let current_block_id = self.current_block_id();
+        let entry = self.get_entry(link_id).clone();
+        let ty = self.get_type(link_id).clone();
+        let span_id = entry.span_id;
+        let name = entry.name.unwrap();
+        let block_id = entry.block_id;
+        let block = self.blocks.get_block(block_id);
+        let scope_id = block.scope_id;
+        let target_field_types = ty.field_types();
+
+        self.switch_blocks(block_id);
+        let (_variant_id, _fun_scope_id, fun_block_id) =
+            self.push_cps_block_with_type(name, scope_id, abstraction_id, ty.clone(), span_id, b)?;
+        //println!(
+        //"complete: @{}, {}->{}",
+        //link_id, abstraction_id, fun_block_id
+        //);
+
+        self.scoped_continuations.connect(
+            ContinuationFlow::Block(fun_block_id),
+            ContinuationFlow::Variable(link_id),
+            FlowEdge::A,
+        );
+
+        // now replace the abstraction code
+        let entry = self.get_entry_mut(link_id);
+        entry.code = LCode::Val(Literal::Block(fun_block_id));
+        entry.ty = AstType::TargetUnion(target_field_types, vec![fun_block_id]);
+
+        //println!("unify: {}=>{}", &ty, &entry.ty);
+        b.unify(&entry.ty, entry.span_id, &ty, span_id);
+        self.switch_blocks(current_block_id);
+        Ok(())
+    }
+
     pub fn complete_open_abstractions(&mut self, b: &mut NB) -> Result<()> {
         // here we get all of the open abstractions and complete them, by
         // rewriting them as concrete blocks.  We still want to do this, but somewhere else.
@@ -501,42 +542,7 @@ impl Flatten {
         }
 
         for (link_id, abstraction_id) in todo {
-            let entry = self.get_entry(link_id).clone();
-            let ty = self.get_type(link_id).clone();
-            let span_id = entry.span_id;
-            let name = entry.name.unwrap();
-            let block_id = entry.block_id;
-            let block = self.blocks.get_block(block_id);
-            let scope_id = block.scope_id;
-            let target_field_types = ty.field_types();
-
-            self.switch_blocks(block_id);
-            let (_variant_id, _fun_scope_id, fun_block_id) = self.push_cps_block_with_type(
-                name,
-                scope_id,
-                abstraction_id,
-                ty.clone(),
-                span_id,
-                b,
-            )?;
-            //println!(
-            //"complete: @{}, {}->{}",
-            //link_id, abstraction_id, fun_block_id
-            //);
-
-            self.scoped_continuations.connect(
-                ContinuationFlow::Block(fun_block_id),
-                ContinuationFlow::Variable(link_id),
-                FlowEdge::A,
-            );
-
-            // now replace the abstraction code
-            let entry = self.get_entry_mut(link_id);
-            entry.code = LCode::Val(Literal::Block(fun_block_id));
-            entry.ty = AstType::TargetUnion(target_field_types, vec![fun_block_id]);
-
-            //println!("unify: {}=>{}", &ty, &entry.ty);
-            b.unify(&entry.ty, entry.span_id, &ty, span_id);
+            self.resolve_open_abstractions(link_id, abstraction_id, b)?;
         }
         self.switch_blocks(current_block_id);
         Ok(())
@@ -656,6 +662,58 @@ impl Flatten {
         }
     }
 
+    pub fn cont_graph(&self, filename: &str, b: &NB) {
+        let s = format!(
+            "{:?}",
+            petgraph::dot::Dot::with_attr_getters(
+                &self.scoped_continuations.g,
+                &[
+                    petgraph::dot::Config::EdgeNoLabel,
+                    petgraph::dot::Config::NodeNoLabel
+                ],
+                &|_, edge| {
+                    let w = edge.weight();
+                    format!("label = \"{:?}\"", w,)
+                },
+                &|_, (_, c)| {
+                    match c {
+                        ContinuationFlow::Block(block_id) => {
+                            let entry =
+                                self.get_entry(self.block_links.get(block_id).unwrap().clone());
+                            let s_name = if let Some(name) = entry.name {
+                                b.labels.r(name.into())
+                            } else {
+                                "?".to_string()
+                            };
+                            format!("label = \"B.{}:{}\"", s_name, block_id)
+                        }
+                        ContinuationFlow::BlockArg(block_id, arg) => {
+                            let entry =
+                                self.get_entry(self.block_links.get(block_id).unwrap().clone());
+                            let s_name = if let Some(name) = entry.name {
+                                b.labels.r(name.into())
+                            } else {
+                                "?".to_string()
+                            };
+                            format!("label = \"BA.{}:{}:{}\"", s_name, block_id, arg)
+                        }
+                        ContinuationFlow::Jump(link_id) => {
+                            format!("label = \"JUMP:{}\"", link_id)
+                        }
+                        ContinuationFlow::JumpArg(link_id, arg) => {
+                            format!("label = \"JUMP:{}:{}\"", link_id, arg)
+                        }
+                        ContinuationFlow::Variable(link_id) => {
+                            format!("label = \"VAR:{}\"", link_id)
+                        }
+                    }
+                }
+            )
+        );
+        println!("saved graph {:?}", filename);
+        std::fs::write(filename, s).unwrap();
+    }
+
     pub(super) fn finish(mut self, b: &mut NB) -> Result<(Flatten, Vec<LinkId>)> {
         // make sure all claims have been handled
         self.scopes.ensure_claims(b);
@@ -669,6 +727,8 @@ impl Flatten {
         // ensure types are resolved
         //self.type_inference(b);
         self.type_inference_enforce(b);
+
+        self.cont_graph("cont.dot", b);
 
         self.resolve_cps(b)?;
 
@@ -1567,6 +1627,11 @@ impl Flatten {
                 if let Some(name) = name {
                     self.scopes.scope_define(scope_id, *name, link_id.into());
                 }
+                self.scoped_continuations.connect(
+                    ContinuationFlow::BlockArg(self.current_block_id(), i as u8),
+                    ContinuationFlow::Variable(link_id),
+                    FlowEdge::J,
+                );
             }
             v_args
         } else {
@@ -1773,7 +1838,6 @@ impl Flatten {
                 self.switch_blocks(fun_block_id);
 
                 let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
-                //println!("ty: {:?}", (&r_ty1, &def_func_type));
 
                 let (entry_link_id, _) = self.push_start_block(
                     fun_scope_id,
@@ -1796,22 +1860,9 @@ impl Flatten {
                     fun_block_id,
                 );
 
-                //println!(
-                //"{}: push_cps_block_with_type in {}:{} => {}:{}, variant: {}",
-                //s_name,
-                //scope_id,
-                //self.current_block_id(),
-                //fun_scope_id,
-                //fun_block_id,
-                //variant_id
-                //);
-
                 // flatten function, and switch to next
                 // lower first, so we resolve types
                 let _ = self.push_node(*body, b)?;
-
-                // update the variant with the resolved type
-                //self.variant_update(variant_id, r_ty1, entry_link_id);
 
                 // terminate if not already terminated
                 // this is for dead code
@@ -2249,6 +2300,27 @@ impl Flatten {
                 // but keep the placeholder, we will replace it in the rewrite step
                 // we do just enough calculation here to resolve the types, and we push it back on the
                 // stack
+                //
+                //
+
+                let load_link_id = if self.is_load_required(*def_link_id) {
+                    let entry = self.get_entry(*def_link_id).clone();
+                    let link_id = self.push_code(
+                        LCode::Load(*def_link_id),
+                        entry.ty,
+                        entry.name,
+                        entry.span_id,
+                        VarDefinitionSpace::Default,
+                    );
+                    self.scoped_continuations.connect(
+                        ContinuationFlow::Variable(*def_link_id),
+                        ContinuationFlow::Variable(link_id),
+                        FlowEdge::LOAD,
+                    );
+                    link_id
+                } else {
+                    *def_link_id
+                };
 
                 // calculate the type, so we can unify
                 let goto_values = self.push_call_arguments(d.args.clone(), d.call_span_id, b)?;
@@ -2269,6 +2341,7 @@ impl Flatten {
 
                 // save the argvec, so we can properly terminate later
                 let mut d = d;
+                d.deferred_type = DeferredType::Name(load_link_id);
                 d.argvec = goto_values;
 
                 let block = self.blocks.get_block(self.current_block_id());
@@ -2290,12 +2363,8 @@ impl Flatten {
                     self.switch_blocks(d.block_id);
                     self.remove_placeholder_terminal(d.block_id);
 
-                    let _a = self.abstractions.get_mut(abstraction_id);
+                    //let _a = self.abstractions.get_mut(abstraction_id);
                     //println!("blocks: {:?}", a.caller_blocks);
-
-                    //for arg in &d.args {
-                    //if let Argument::Positional(
-                    //}
 
                     // push and jump
                     // TODO: this function needs to handle unwind
@@ -2366,31 +2435,34 @@ impl Flatten {
         Ok(false)
     }
 
-    fn resolve_cps_single(&mut self, d: DeferredGoto, _b: &mut NB) -> Result<()> {
+    fn resolve_cps_single(&mut self, d: DeferredGoto, b: &mut NB) -> Result<()> {
         // this is where we actually do the rewrite
         match d.deferred_type {
             DeferredType::Name(arg_link_id) => {
                 // we replace the placeholder here
                 self.switch_blocks(d.block_id);
-                let entry = self.get_entry(arg_link_id);
-                //let ty = entry.ty.clone();
+                let entry = self.get_entry(arg_link_id).clone();
+                let code = entry.code;
                 let arg_block_id = entry.block_id;
 
-                let arg_num = if let LCode::Arg(arg_num) = entry.code {
-                    arg_num
-                } else {
-                    unreachable!();
+                let sources = match &code {
+                    LCode::Arg(arg_num) => self
+                        .scoped_continuations
+                        .find_source_blocks(ContinuationFlow::BlockArg(arg_block_id, *arg_num)),
+
+                    LCode::Declare | LCode::Load(_) => self
+                        .scoped_continuations
+                        .find_source_blocks(ContinuationFlow::Variable(arg_link_id)),
+                    _ => {
+                        unreachable!("{:?}", code);
+                    }
                 };
 
-                let sources = self
-                    .scoped_continuations
-                    .find_source_blocks(ContinuationFlow::BlockArg(arg_block_id, arg_num));
-
                 let jump_link_id =
-                    self.replace_placeholder_terminal(d.block_id, arg_link_id, sources.clone());
+                    self.replace_placeholder_terminal(d.block_id, arg_link_id, sources.clone(), b);
                 println!(
                     "flows: {:?}",
-                    (arg_block_id, arg_num, sources, jump_link_id)
+                    (arg_block_id, arg_link_id, &code, sources, jump_link_id)
                 );
             }
             DeferredType::Variant(_goto_link_id, _source_block_id, _variant_id) => {}
@@ -2591,6 +2663,7 @@ impl Flatten {
         goto_block_id: BlockId,
         arg_link_id: LinkId,
         mut target_block_ids: Vec<BlockId>,
+        b: &mut NB,
     ) -> LinkId {
         let block = self.blocks.get_block(goto_block_id);
         let last_link_id = block.last().unwrap();
@@ -2605,8 +2678,8 @@ impl Flatten {
         let entry = self.get_entry_mut(last_link_id);
         if let LCode::PlaceholderTerminal(_) = entry.code {
             if target_block_ids.len() == 1 {
-                entry.code = LCode::Jump(target_block_ids.last().unwrap().into());
-                last_link_id
+                let block_id = target_block_ids.last().unwrap();
+                entry.code = LCode::Jump(block_id.into());
             } else if target_block_ids.len() > 1 {
                 target_block_ids.sort();
                 let mut m = HashMap::new();
@@ -2614,13 +2687,19 @@ impl Flatten {
                     m.insert(i as i64, *block_id);
                 }
                 entry.code = LCode::Switch(arg_link_id, m);
-                last_link_id
+                self.scoped_continuations.connect(
+                    ContinuationFlow::Variable(arg_link_id),
+                    ContinuationFlow::Jump(last_link_id),
+                    FlowEdge::K,
+                );
             } else {
-                unreachable!();
+                b.push_error("Missing Targets", entry.span_id);
+                //unreachable!();
             }
         } else {
             unreachable!();
         }
+        last_link_id
     }
 
     pub fn push_cps_block_with_placeholder_check(
@@ -2853,8 +2932,9 @@ impl Flatten {
                         node.span_id,
                         VarDefinitionSpace::Default,
                     );
-                    self.open_abstractions.push(link_id);
-                    self.complete_open_abstractions(b)?;
+                    self.resolve_open_abstractions(link_id, abstraction_id, b)?;
+                    //self.open_abstractions.push(link_id);
+                    //self.complete_open_abstractions(b)?;
                     return Ok(FlattenResult::link(link_id));
                 }
 
@@ -2963,6 +3043,12 @@ impl Flatten {
                 } else {
                     v_expr
                 };
+
+                self.scoped_continuations.connect(
+                    ContinuationFlow::Variable(load_link_id),
+                    ContinuationFlow::Variable(offset_decl),
+                    FlowEdge::B,
+                );
 
                 let link_id = self.push_code(
                     LCode::Store(offset_decl, load_link_id),

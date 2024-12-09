@@ -2,7 +2,7 @@ use crate::{Builtin, ICodeModule, LCode, NodeBuilder, UseIndex, ValueId};
 use anyhow::Result;
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use compile_core::{BinaryOperation, Literal, NaryOperation, StringKey, UnaryOperation};
+use compile_core::{BinaryOperation, BlockId, Literal, NaryOperation, StringKey, UnaryOperation};
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -419,6 +419,7 @@ impl<'a> Interp<'a> {
                 let v2 = self.call_args.pop_front().unwrap();
                 let v = match (op, v1.clone(), v2.clone()) {
                     (BinaryOperation::EQ, Value::Int(i1), Value::Int(i2)) => Value::Bool(i1 == i2),
+                    (BinaryOperation::NE, Value::Int(i1), Value::Int(i2)) => Value::Bool(i1 != i2),
                     (BinaryOperation::GT, Value::Int(i1), Value::Int(i2)) => Value::Bool(i1 > i2),
                     (BinaryOperation::GTE, Value::Int(i1), Value::Int(i2)) => Value::Bool(i1 >= i2),
                     (BinaryOperation::GT, Value::Float(i1), Value::Float(i2)) => {
@@ -439,9 +440,10 @@ impl<'a> Interp<'a> {
                     }
                     _ => {
                         let span_id = self.m.get_span_id(pos);
-                        self.b.push_error_labels(vec![self
-                            .b
-                            .primary_label(&format!("Not implemented"), span_id)]);
+                        self.b.push_error_labels(vec![self.b.primary_label(
+                            &format!("Not implemented: {:?}", (op, v1, v2)),
+                            span_id,
+                        )]);
                         return Ok(false);
                     }
                 };
@@ -452,15 +454,10 @@ impl<'a> Interp<'a> {
             }
 
             LCode::Val(Literal::Block(block_id)) => {
-                let ty = self.m.get_type(pos.into());
-                let index = ty.target_union_block_index(block_id);
+                // the index is actually the block_id
+                //let index = self.m.block_source_index(pos, *block_id);
+                let index = block_id.index() as i64;
 
-                /*
-                let variant = self.m.get_variant_by_block(*block_id).unwrap();
-                let variant_id = VariantId::new(*index as usize);
-                let variant = self.m.get_variant(variant_id);
-                let index = variant.block_index(block_id);
-                */
                 let value = Value::Int(index);
                 self.save_value(value);
                 self.advance();
@@ -499,6 +496,7 @@ impl<'a> Interp<'a> {
 
             LCode::Jump(target) => {
                 // push args
+                println!("jump: {:?}", target);
                 let v = self.m.resolve_code_offset(*target);
                 self.jump(v);
                 true
@@ -507,11 +505,14 @@ impl<'a> Interp<'a> {
             LCode::Switch(link_id, h) => {
                 // push args
                 let base = self.m.resolve_code_offset((*link_id).into());
-                //let v = self.m.resolve_code_offset(inds.clone().offset());
                 let value = self.resolve_value(base)?;
+                println!("switch: {:?}", (&value, h));
+
                 match value {
                     Value::Int(i) => {
-                        let target = self.m.resolve_code_offset(h[&i].clone().into());
+                        // The switch index is actually the block_id
+                        let block_id = BlockId::new(i as usize);
+                        let target = self.m.resolve_code_offset(block_id.into());
                         self.jump(target);
                     }
                     _ => unreachable!(),

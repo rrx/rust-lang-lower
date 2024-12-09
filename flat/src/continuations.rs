@@ -2,7 +2,7 @@ use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
 //use petgraph::visit::EdgeRef;
 use crate::{BlockId, LinkId};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
 pub enum ContinuationFlow {
@@ -15,6 +15,7 @@ pub enum ContinuationFlow {
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
 pub enum FlowEdge {
+    LOAD,
     A,
     B,
     C,
@@ -26,6 +27,7 @@ pub enum FlowEdge {
     I,
     J,
     K,
+
     L,
     M,
     N,
@@ -74,23 +76,39 @@ impl ScopedContinuations {
     }
 
     pub fn find_source_blocks(&self, flow: ContinuationFlow) -> Vec<BlockId> {
-        let index = self.h.get(&flow);
+        println!("find_source_blocks: {:?}", flow);
         let mut out = vec![];
-        for x in self
-            .g
-            .neighbors_directed(*index.unwrap(), petgraph::Direction::Incoming)
-            .map(|index| self.g[index])
-        {
-            if let ContinuationFlow::Block(block_id) = x {
-                out.push(block_id);
+        let mut stack = vec![flow];
+        let mut visited = HashSet::new();
+        loop {
+            if let Some(flow) = stack.pop() {
+                visited.insert(flow);
+                if let Some(index) = self.h.get(&flow) {
+                    for x in self
+                        .g
+                        .neighbors_directed(*index, petgraph::Direction::Incoming)
+                        .map(|index| self.g[index])
+                    {
+                        if let ContinuationFlow::Block(block_id) = x {
+                            out.push(block_id);
+                        } else {
+                            if visited.contains(&x) {
+                                continue;
+                            } else {
+                                stack.push(x)
+                            }
+                        }
+                    }
+                }
             } else {
-                out.extend(self.find_source_blocks(x));
+                break;
             }
         }
         out
     }
 
     pub fn find_sink_block(&self, flow: ContinuationFlow) -> Option<ContinuationFlow> {
+        println!("find_sink_block: {:?}", flow);
         let index = self.h.get(&flow).unwrap();
         for x in self
             .g
