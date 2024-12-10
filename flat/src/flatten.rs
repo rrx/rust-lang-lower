@@ -6,7 +6,7 @@ use compile_core::{
     Lambda, LinkOptions, Literal, NaryOperation, ReturnType, SpanId, StringKey, VarDefinitionSpace,
 };
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use std::convert::Into;
 
@@ -1024,7 +1024,7 @@ impl Flatten {
     pub fn push_jump(
         &mut self,
         target_block_id: BlockId,
-        jump_args: Vec<(Option<StringKey>, LinkId, AstType, SpanId)>,
+        jump_args: ArgVec,
         span_id: SpanId,
     ) -> LinkId {
         // handle leaving scope here?
@@ -1197,7 +1197,7 @@ impl Flatten {
                         } else {
                             b.push_error(
                                 &format!("Extra positional field: {}", index),
-                                call_span_id,
+                                expr.span_id,
                             );
                         }
                     }
@@ -1298,15 +1298,13 @@ impl Flatten {
         for a in args.into_iter() {
             match a {
                 Argument::Positional(expr) => {
-                    //self.switch_blocks(current_block_id);
                     let r = self.push_node(*expr, b)?;
                     let link_id = r.link_id.unwrap();
-                    let ty = self.get_type(link_id).clone();
-                    values.push((None, link_id, ty, span_id));
+                    let entry = self.get_entry(link_id);
+                    values.push((entry.name, link_id, entry.ty.clone(), span_id));
                     link_ids.push(link_id);
                 }
                 Argument::Named(key, expr) => {
-                    //self.switch_blocks(current_block_id);
                     let r = self.push_node(*expr, b)?;
                     let link_id = r.link_id.unwrap();
                     let ty = self.get_type(link_id).clone();
@@ -1344,7 +1342,6 @@ impl Flatten {
                 }
                 Argument::KwArgs(key, _expr) => {
                     let node: AstNode = 1.into();
-                    //self.switch_blocks(current_block_id);
                     let r = self.push_node(node, b)?;
                     let link_id = r.link_id.unwrap();
                     let ty = self.get_type(link_id).clone();
@@ -1791,7 +1788,6 @@ impl Flatten {
     ) -> Result<(VariantId, ScopeId, BlockId)> {
         // call in the context of the caller, which is a goto
         let current_block_id = self.current_block_id();
-        //let (def, def_span_id, _) = self.get_ast_template(abstraction_id).clone();
         let a = self.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
         // This expects to be called in a block that is ready to jump
@@ -1814,15 +1810,6 @@ impl Flatten {
             {
                 let entry = self.get_entry(link_id);
                 let fun_block_id = entry.block_id;
-                //println!(
-                //"{}: push_cps_block_with_type found {}:{} => {}:{}, variant: {}",
-                //s_name,
-                //scope_id,
-                //self.current_block_id(),
-                //fun_scope_id,
-                //fun_block_id,
-                //variant_id,
-                //);
                 b.unify(&def_func_type, origin_span_id, &resolve_type, a.def_span_id);
 
                 (variant_id, fun_block_id, fun_scope_id)
@@ -3605,6 +3592,72 @@ impl Flatten {
 
             Ast::ControlFlowMarker(ControlFlowMarker::Goto(label, args)) => {
                 self.push_goto(label, args, span_id, b)
+            }
+
+            Ast::ControlFlowMarker(ControlFlowMarker::GotoChain(args)) => {
+                println!("GotoChain: {:?}", args);
+                let argvec = self.push_call_arguments(args, span_id, b)?;
+                let mut argvec = VecDeque::from(argvec);
+                let mut acc = VecDeque::new();
+                let block = self.blocks.get_block(current_block_id);
+                let parent_scope_id = block.scope_id;
+                let current_block_id = self.current_block_id();
+                let mut out_link_id = None;
+                if argvec.is_empty() {
+                    unreachable!();
+                }
+
+                loop {
+                    let (key, link_id, ty, span_id) = argvec.pop_back().unwrap();
+                    let entry = self.get_entry(link_id);
+                    let code = entry.code.clone();
+                    println!("code: {:?}", (&code, &ty));
+                    match &code {
+                        LCode::Val(Literal::Block(block_id)) => {
+                            let block_id = *block_id;
+                            let arg_types = ty.fields();
+                            // lengths should match
+                            println!("arg_types: {:?}, acc: {:?}", arg_types, acc);
+                            assert!(arg_types.len() == acc.len());
+
+                            let mut acc_types = vec![];
+                            for ((_, ty1), (_, _, ty2, span_id2)) in
+                                arg_types.iter().zip(acc.iter())
+                            {
+                                b.unify(&ty1, span_id, &ty2, *span_id2);
+                                acc_types.push(ty2.clone());
+                            }
+
+                            let label = b.labels.fresh_key("chain");
+                            let v_next = self.blocks.new_block(parent_scope_id);
+                            self.switch_blocks(v_next);
+                            self.push_start_block(
+                                parent_scope_id,
+                                AstType::func(acc_types, AstType::Unit),
+                                Some(label),
+                                span_id,
+                                VarDefinitionSpace::Default,
+                            );
+                            let jump_args = acc.drain(..).collect::<Vec<_>>();
+                            let link_id = self.push_jump(block_id.into(), jump_args, node.span_id);
+                            acc.clear();
+                            out_link_id = Some(link_id);
+                        }
+                        LCode::PlaceholderCodeReference => {
+                            acc.push_front((None, link_id, ty, span_id));
+                        }
+                        _ => {
+                            b.push_error(&format!("Invalid goto: {:?}", code), span_id);
+                            return Err(Error::new(BlockifyError::Invalid));
+                        }
+                    }
+
+                    if argvec.is_empty() {
+                        break;
+                    }
+                }
+                self.switch_blocks(current_block_id);
+                Ok(FlattenResult::link(out_link_id.unwrap()))
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::BlockEnd) | Ast::CloseBlock => {

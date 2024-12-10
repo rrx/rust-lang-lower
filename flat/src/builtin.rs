@@ -45,6 +45,7 @@ pub fn builtin_from_name(
             let rem = args.split_off(1);
             Some(ControlFlowMarker::Goto(get_string_arg(&args, b).unwrap(), rem).node(span_id))
         }
+        "goto_chain" => Some(ControlFlowMarker::GotoChain(args).node(span_id)),
         "label" => {
             let _rem = args.split_off(1);
             Some(ControlFlowMarker::BlockStart(get_string_arg(&args, b), vec![]).node(span_id))

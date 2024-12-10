@@ -273,6 +273,7 @@ pub enum ControlFlowMarker {
     BlockEnd,
     BlockReference(Box<AstNode>),
     Goto(StringKey, Vec<Argument>),
+    GotoChain(Vec<Argument>),
 }
 
 impl From<ControlFlowMarker> for AstNode {
