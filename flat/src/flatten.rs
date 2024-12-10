@@ -120,7 +120,7 @@ pub struct Flatten {
     pub(super) block_links: HashMap<BlockId, LinkId>,
     pub(crate) functions: HashMap<StringKey, LinkId>,
     pub(crate) statics: HashMap<StringKey, Literal>,
-    //open_abstractions: Vec<LinkId>,
+    open_identifiers: Vec<LinkId>,
     pub(crate) scoped_continuations: ScopedContinuations,
     pub deferred_goto: DeferredGotoList,
     pub variants: FunctionVariantBuilder,
@@ -143,7 +143,7 @@ impl Flatten {
             block_links: HashMap::new(),
             functions: HashMap::new(),
             statics: HashMap::new(),
-            //open_abstractions: vec![],
+            open_identifiers: vec![],
             scoped_continuations: ScopedContinuations::new(),
             deferred_goto: DeferredGotoList::new(),
             variants: FunctionVariantBuilder::new(),
@@ -498,10 +498,10 @@ impl Flatten {
         self.switch_blocks(block_id);
         let (_variant_id, _fun_scope_id, fun_block_id) =
             self.push_cps_block_with_type(name, scope_id, abstraction_id, ty.clone(), span_id, b)?;
-        //println!(
-        //"complete: @{}, {}->{}",
-        //link_id, abstraction_id, fun_block_id
-        //);
+        println!(
+            "complete: @{}, {}->{}",
+            link_id, abstraction_id, fun_block_id
+        );
 
         self.scoped_continuations.connect(
             ContinuationFlow::Block(fun_block_id),
@@ -2465,6 +2465,60 @@ impl Flatten {
     }
 
     fn resolve_cps(&mut self, b: &mut NB) -> Result<()> {
+        let mut abstractions = vec![];
+        let mut blocks = vec![];
+        let mut errors = vec![];
+        println!("open_identifiers: {:?}", &self.open_identifiers);
+        for link_id in &self.open_identifiers {
+            let entry = self.get_entry(*link_id);
+            let block_id = entry.block_id;
+            let block = self.blocks.get_block(block_id);
+            let scope_id = block.scope_id;
+            let key = entry.name.unwrap();
+            if let Some(label_block_id) = self.resolve_label(scope_id, key.into()) {
+                blocks.push((*link_id, label_block_id));
+            } else if let Some(abstraction_id) = self.resolve_template(scope_id, key.into()) {
+                abstractions.push((*link_id, abstraction_id));
+            } else {
+                errors.push(*link_id);
+            }
+        }
+
+        for (link_id, block_id) in blocks {
+            let block = self.blocks.get_block(block_id);
+            let block_entry_id = block.entry.unwrap();
+            let block_entry = self.get_entry(block_entry_id);
+            let block_ty = block_entry.ty.clone();
+            let block_span_id = block_entry.span_id;
+            let target_field_types = block_ty.field_types();
+
+            self.switch_blocks(block_id);
+            self.scoped_continuations.connect(
+                ContinuationFlow::Block(block_id),
+                ContinuationFlow::Variable(link_id),
+                FlowEdge::BlockRef,
+            );
+
+            // now replace the abstraction code
+            let entry = self.get_entry_mut(link_id);
+            entry.code = LCode::Val(Literal::Block(block_id));
+            entry.ty = AstType::TargetUnion(target_field_types, vec![block_id]);
+
+            //println!("unify: {}=>{}", &ty, &entry.ty);
+            b.unify(&entry.ty, entry.span_id, &block_ty, block_span_id);
+        }
+
+        for (link_id, abstraction_id) in abstractions {
+            self.resolve_open_abstractions(link_id, abstraction_id, b)?;
+        }
+
+        for link_id in errors {
+            let entry = self.get_entry(link_id);
+            let name = entry.name.unwrap();
+            let s_name = b.labels.r(name.into());
+            b.push_error(&format!("Identifier not found: {}", s_name), entry.span_id);
+        }
+
         loop {
             if let Some(d) = self.deferred_goto.pop_cps() {
                 self.resolve_cps_single(d, b)?;
@@ -2954,21 +3008,37 @@ impl Flatten {
                  * TODO: The ident could possible be resolved later.  So we could defer here
                  * Otherwise the CPS needs to be in lexical scope
                  */
-                /*
-                    let code = LCode::PlaceholderCodeReference;
-                    let ty = b.types.fresh_unknown();
-                    let link_id = self.push_code(code, ty, Some(key), node.span_id, VarDefinitionSpace::Default);
+                let code = LCode::PlaceholderCodeReference;
+                let ty = b.types.fresh_unknown();
+                let link_id = self.push_code(
+                    code,
+                    ty,
+                    Some(key),
+                    node.span_id,
+                    VarDefinitionSpace::Default,
+                );
+                self.open_identifiers.push(link_id);
+                Ok(FlattenResult::link(link_id))
 
-                    let scope = self.scopes.get_scope_mut(scope_id);
-                    scope.deferred_goto.add(DeferredGoto::new(
+                /*
+                let scope = self.scopes.get_scope_mut(scope_id);
+                scope.deferred_goto.add(DeferredGoto::new(
+                        scope_id,
                         key.into(),
-                        vec![],
-                        node.span_id,
-                        current_block_id,
-                        DeferredType::Ident(link_id),
-                    ));
-                    Ok(FlattenResult::link(link_id))
+                        args,
+                call_span_id,
+                current_block_id,
+                DeferredType::Name(name_link_id),
+
+                    key.into(),
+                    vec![],
+                    node.span_id,
+                    current_block_id,
+                    DeferredType::Ident(link_id),
+                ));
+                Ok(FlattenResult::link(link_id))
                 */
+                /*
 
                 let s = b.labels.r(key.into());
                 b.push_error(&format!("ident `{}` not found in {}", s, scope_id), span_id);
@@ -2979,6 +3049,7 @@ impl Flatten {
                 assert!(false);
                 //return Ok(FlattenResult::statement());
                 Err(Error::new(BlockifyError::NotFound(s)))
+                    */
             }
 
             Ast::Assign(target, expr) => {

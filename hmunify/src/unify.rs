@@ -313,6 +313,13 @@ impl TypeUnify {
                 self._unify_list(&b.field_types(), args1)
             }
 
+            (AstType::Func(_, _), AstType::TargetUnion(_, _)) => {
+                self._unify_list(&a.field_types(), &b.field_types())
+            }
+            (AstType::TargetUnion(_, _), AstType::Func(_, _)) => {
+                self._unify_list(&a.field_types(), &b.field_types())
+            }
+
             (AstType::Func(vs1, r1), AstType::Func(vs2, r2)) => match (r1.as_ref(), r2.as_ref()) {
                 (ReturnType::Never, ReturnType::Never) => Ok(()),
                 (ReturnType::Never, ReturnType::Single(ty)) => {

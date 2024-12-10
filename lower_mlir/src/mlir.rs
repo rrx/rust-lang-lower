@@ -272,6 +272,7 @@ impl<'c> LowerIR<'c> for MLIRGenerator<'c> {
             //Ok(index)
             self.index.insert(v, index);
         } else {
+            println!("literal: {:?}", lit);
             let op = self.emit_literal_const(lit, location);
             let c = self
                 .blocks
@@ -378,9 +379,21 @@ impl<'c> MLIRGenerator<'c> {
             types
                 .into_iter()
                 .map(|ty| {
-                    let (ty, dims) = self.from_type(&ty);
-                    assert_eq!(dims.len(), 0);
-                    (ty, location)
+                    match &ty {
+                        // handle function types being passed in here
+                        // TODO: cleanup
+                        AstType::Func(s, _ret) => {
+                            let ty = AstType::TargetUnion(s.field_types(), vec![]);
+                            let (ty, dims) = self.from_type(&ty);
+                            assert_eq!(dims.len(), 0);
+                            (ty, location)
+                        }
+                        _ => {
+                            let (ty, dims) = self.from_type(&ty);
+                            assert_eq!(dims.len(), 0);
+                            (ty, location)
+                        }
+                    }
                 })
                 .collect()
         }
@@ -412,6 +425,7 @@ impl<'c> MLIRGenerator<'c> {
         let code = self.blockify.get_code(entry_id);
         if let LCode::Label = code {
             let args = self.get_label_args(entry_id);
+            println!("create block: {:?}", (code, &args));
             let block = Block::new(&args);
             let c = OpCollection::new(entry_id, block);
             self.blocks.insert(entry_id, c);
@@ -423,6 +437,7 @@ impl<'c> MLIRGenerator<'c> {
     pub fn lower_jump(&mut self, v: ValueId, target: CodeOffset) -> Result<()> {
         let block_id = self.blockify.get_entry_id(v).unwrap();
         let values = self.take_call_args();
+        println!("values: {:?}", values);
         let arity = values.len();
         let indicies = values
             .into_iter()
@@ -645,6 +660,7 @@ impl<'c> MLIRGenerator<'c> {
                     "private"
                 };
 
+                println!("declare function: {:?}", (v, key, &ty, visibility));
                 let op = self.build_declare_function(key, ty, location, visibility)?;
                 let c = self.blocks.get_mut(&static_block_id).unwrap();
                 let index = c.push(op);
