@@ -408,16 +408,16 @@ impl TypeUnify {
                 let fields = args
                     .fields()
                     .into_iter()
-                    .map(|(_, ty)| ty)
+                    .map(|(key, ty)| (key, ty))
                     .collect::<Vec<_>>();
 
                 let resolved_args = fields
                     .clone()
                     .into_iter()
-                    .map(|v| self.resolve(&v).map(|x| x).unwrap_or(v))
+                    .map(|(key, v)| self.resolve(&v).map(|x| (key, x)).unwrap_or((key, v)))
                     .collect::<Vec<_>>();
 
-                if resolved_args.clone() == vec![AstType::Unit] {
+                if resolved_args.len() == 1 && resolved_args.get(0).unwrap().1 == AstType::Unit {
                     println!("vec of unit should not be possible: {:?}", &resolved_args);
                     return None;
                 }
@@ -435,7 +435,10 @@ impl TypeUnify {
                     }
                 };
 
-                Some(AstType::func(resolved_args, resolved_ret.into()))
+                Some(AstType::Func(
+                    AstType::Struct(resolved_args).into(),
+                    ReturnType::Single(resolved_ret).into(),
+                ))
             }
             AstType::Variable(offset) => {
                 let k = self.variables[*offset as usize];

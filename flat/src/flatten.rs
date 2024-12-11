@@ -1632,6 +1632,11 @@ impl Flatten {
         mem: VarDefinitionSpace,
     ) -> (LinkId, Vec<(Option<StringKey>, LinkId, AstType, SpanId)>) {
         let block_link_id = self.push_empty_label(span_id);
+        println!(
+            "push_start_block: {:?} in {}",
+            (block_link_id, &block_ty),
+            scope_id
+        );
         let v_args = self.push_start_block_args(scope_id, block_ty.clone(), span_id);
         self.replace_label(block_link_id, block_ty, name, span_id, mem);
         self.block_links
@@ -1704,13 +1709,14 @@ impl Flatten {
 
         if let Some(name_link_id) = self.resolve_name_in_scope(scope_id, name.into()) {
             let link_id = block.last().unwrap();
-            self.push_code(
+            let p_link_id = self.push_code(
                 LCode::PlaceholderTerminal(link_id),
                 AstType::Unit,
                 Some(name),
                 call_span_id,
                 VarDefinitionSpace::Default,
             );
+            println!("placeholder2: {}", p_link_id);
 
             let d = DeferredGoto::new(
                 scope_id,
@@ -1729,18 +1735,19 @@ impl Flatten {
         }
 
         // if we don't have a template or a label already, then we defer
-        if let Some(fun_scope_id) = self
+        if let Some(_fun_scope_id) = self
             .scopes
             .find_nearest_scope(scope_id, &[ScopeType::Function])
         {
             let link_id = block.last().unwrap();
-            self.push_code(
+            let p_link_id = self.push_code(
                 LCode::PlaceholderTerminal(link_id),
                 AstType::Unit,
                 None,
                 call_span_id,
                 VarDefinitionSpace::Default,
             );
+            println!("placeholder3: {}", p_link_id);
 
             let d = DeferredGoto::new(
                 scope_id,
@@ -1758,7 +1765,7 @@ impl Flatten {
             return Ok(FlattenResult::statement());
         } else {
             // goto without function scope
-            unreachable!()
+            unreachable!("goto without function scope")
         }
     }
 
@@ -1813,6 +1820,7 @@ impl Flatten {
 
                 let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
 
+                println!("push start block5: {}{}", fun_scope_id, fun_block_id);
                 let (entry_link_id, _) = self.push_start_block(
                     fun_scope_id,
                     r_ty1.clone(),
@@ -1842,13 +1850,14 @@ impl Flatten {
                 // this is for dead code
                 let block = self.blocks.get_block(self.current_block_id());
                 if !block.is_term() {
-                    self.push_code(
+                    let p_link_id = self.push_code(
                         LCode::PlaceholderTerminal(block.last().unwrap()),
                         AstType::Unit,
                         None,
                         def_span_id,
                         VarDefinitionSpace::Default,
                     );
+                    println!("placeholder4: {}", p_link_id);
                 }
 
                 (variant_id, fun_block_id, fun_scope_id)
@@ -1961,6 +1970,7 @@ impl Flatten {
                 let body = *def.body.clone().unwrap();
 
                 self.switch_blocks(fun_block_id);
+                println!("push start block1: {}{}", fun_scope_id, fun_block_id);
                 let (entry_link_id, _) = self.push_start_block(
                     fun_scope_id,
                     def_func_type.clone(),
@@ -1996,13 +2006,14 @@ impl Flatten {
                 // this is for dead code
                 let block = self.blocks.get_block(self.current_block_id());
                 if !block.is_term() {
-                    self.push_code(
+                    let p_link_id = self.push_code(
                         LCode::PlaceholderTerminal(block.last().unwrap()),
                         AstType::Unit,
                         None,
                         def_span_id,
                         VarDefinitionSpace::Default,
                     );
+                    println!("placeholder5: {}", p_link_id);
                 }
 
                 (variant_id, fun_block_id, fun_scope_id, r_ty2)
@@ -2117,6 +2128,7 @@ impl Flatten {
             .block_succ(current_block_id, fun_block_id, succ_type);
 
         self.switch_blocks(fun_block_id);
+        println!("push start block2: {}{}", fun_scope_id, fun_block_id);
         let (entry_link_id, _) = self.push_start_block(
             fun_scope_id,
             def_func_type.clone(),
@@ -2308,13 +2320,14 @@ impl Flatten {
                 d.argvec = goto_values;
 
                 let block = self.blocks.get_block(self.current_block_id());
-                self.push_code(
+                let link_id = self.push_code(
                     LCode::PlaceholderTerminal(block.last().unwrap()),
                     AstType::Unit,
                     None,
                     d.call_span_id,
                     VarDefinitionSpace::Default,
                 );
+                println!("placeholder1: {}", link_id);
 
                 self.deferred_goto.add_cps(d);
                 return Ok(true);
@@ -2623,6 +2636,7 @@ impl Flatten {
 
     fn refresh_func_type(&self, def: &Lambda, b: &mut NB) -> (AstType, AstType, AstType) {
         let def_func_type = b.types.r(def.fun_type).clone();
+        println!("ty1: {:?}", &def_func_type);
 
         // refresh variables
         let (def_arg_ty, ret_ty) = if let AstType::Func(arg, ret) = def_func_type {
@@ -2638,6 +2652,8 @@ impl Flatten {
             def_arg_ty.clone().into(),
             ReturnType::Single(ret_ty.clone()).into(),
         );
+        println!("ty2: {:?}", &def_func_type);
+        println!("ty3: {:?}", &def_arg_ty);
         (def_func_type, def_arg_ty, ret_ty)
     }
 
@@ -3399,6 +3415,7 @@ impl Flatten {
 
                 //println!("block start: {}", new_block_id);
                 self.switch_blocks(new_block_id);
+                println!("push start block3: {}{}", new_scope_id, new_block_id);
                 let (link_id, _) = self.push_start_block(
                     new_scope_id,
                     AstType::Func(
@@ -3573,6 +3590,7 @@ impl Flatten {
                             let label = b.labels.fresh_key("chain");
                             let v_next = self.blocks.new_block(parent_scope_id);
                             self.switch_blocks(v_next);
+                            println!("push start block4: {}{}", parent_scope_id, v_next);
                             self.push_start_block(
                                 parent_scope_id,
                                 AstType::func(acc_types, AstType::Unit),

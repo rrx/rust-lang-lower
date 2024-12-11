@@ -121,6 +121,7 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
     m.dump_code_table(&table_path, b);
     m.dump_scopes();
     m.dump_variants(b);
+    m.scopes.dump(b);
 
     if b.spans.has_errors {
         return Err(anyhow::Error::new(BlockifyError::Invalid).into());

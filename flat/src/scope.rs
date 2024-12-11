@@ -180,13 +180,17 @@ impl ScopeLayer {
         println!("Scope: {:?}", self.scope_type);
         for (k, v) in self.labels.iter() {
             let s = b.labels.r(*k);
-            println!("Label: {}:{:?}", s, v);
+            println!("\tLabel: {}:{:?}", s, v);
         }
         for (k, v) in self.entries.iter() {
             let name = b.labels.r((*k).into());
             for variant_id in v.iter() {
-                println!("Entry: {}:{}", name, variant_id);
+                println!("\tEntry: {}:{}", name, variant_id);
             }
+        }
+        for (k, v) in self.names.iter() {
+            let name = b.labels.r((*k).into());
+            println!("\tName: {}:{}", name, v);
         }
     }
 }
@@ -352,6 +356,15 @@ impl ScopeGraph {
             let scope = self.get_scope(scope_id);
             scope.dump(b);
         }
+    }
+
+    pub fn dump(&self, b: &NodeBuilder) {
+        self.0.node_indices().for_each(|index| {
+            let scope_id: ScopeId = index.into();
+            let scope = self.get_scope(scope_id);
+            println!("DumpScope: {}", scope_id);
+            scope.dump(b);
+        });
     }
 
     pub fn scope_graph(&self, filename: &str) {
