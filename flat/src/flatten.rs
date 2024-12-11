@@ -860,23 +860,6 @@ impl Flatten {
         self.entries.get_mut(link_id.index()).unwrap()
     }
 
-    pub fn insert_ast_template(&mut self, def: Lambda, span_id: SpanId) -> AbstractionId {
-        self.abstractions.add(def, span_id)
-    }
-
-    /*
-    pub fn get_ast_template(
-        &self,
-        template_id: AbstractionId,
-    ) -> &(Lambda, SpanId, HashSet<BlockId>) {
-        self.ast_templates.get(template_id.index()).unwrap()
-        //let (def, span_id, blocks) = self.ast_templates.get(template_id.index()).unwrap();
-        //let mut s = blocks.iter().cloned().collect::<Vec<_>>();
-        //s.sort();
-        //(def, *span_id)
-    }
-    */
-
     pub fn push_sequence(
         &mut self,
         seq: Vec<AstNode>,
@@ -1668,7 +1651,7 @@ impl Flatten {
         def: &Lambda,
         span_id: SpanId,
     ) -> Result<AbstractionId> {
-        let template_id = self.insert_ast_template(def.clone(), span_id);
+        let template_id = self.abstractions.add(def.clone(), span_id);
         let block = self.blocks.get_block(block_id);
         let scope_id = block.scope_id;
         let scope = self.scopes.get_scope_mut(scope_id);
@@ -1699,7 +1682,7 @@ impl Flatten {
         name: StringKey,
         args: Vec<Argument>,
         call_span_id: SpanId,
-        _b: &mut NB,
+        b: &mut NB,
     ) -> Result<FlattenResult> {
         // push a goto
         // to keep things simpler, we just defer all resolution of the gotos until the end
@@ -1708,11 +1691,11 @@ impl Flatten {
         let block = self.blocks.get_block(current_block_id);
         let scope_id = block.scope_id;
 
-        //let s_name = b.labels.r(name.into());
-        //println!(
-        //"{}: push_goto args: {:?} in scope: {}",
-        //s_name, &args, scope_id
-        //);
+        let s_name = b.labels.r(name.into());
+        println!(
+            "{}: push_goto args: {:?} in {}{}",
+            s_name, &args, scope_id, current_block_id,
+        );
 
         // if this is a name, we can resolve now, no need to defer
         // this happens in a CPS function, where we try to jump to a variable.
@@ -1760,7 +1743,7 @@ impl Flatten {
             );
 
             let d = DeferredGoto::new(
-                fun_scope_id,
+                scope_id,
                 name.into(),
                 args,
                 call_span_id,
@@ -2404,7 +2387,7 @@ impl Flatten {
                 // otherwise it's not defined, return an error
                 let s = b.labels.r(d.name.into());
                 b.push_error(
-                    &format!("ident `{}` not found in {}", s, d.scope_id),
+                    &format!("ident `{}` not found in {}{}", s, d.scope_id, d.block_id),
                     d.call_span_id,
                 );
             }
@@ -2960,7 +2943,6 @@ impl Flatten {
 
                 // resolve identifier lexically
                 if let Some(def_link_id) = self.resolve_name(current_block_id, key) {
-                    //println!("{}: resolve name: {:?}", s_name, key);
                     let link_id = def_link_id;
                     return Ok(FlattenResult::link(link_id));
                 }
@@ -2969,15 +2951,6 @@ impl Flatten {
                 // later.  TODO: if we don't find it, it might be defined later, so we should defer
                 // and throw the error later if it's not found.
                 if let Some(abstraction_id) = self.resolve_template(scope_id, key.into()) {
-                    //println!("{}: resolve abstraction: {:?}", s_name, abstraction_id);
-                    // how do we resolve this without knowledge of the args?
-                    // we know it's either a function type or a cps type.
-                    // we could just reference the abstraction, and bake later
-                    // we can just pass this along, and eventually it will reach a goto or call
-                    // for a call, it's illegal.  But for a goto, it tells us that we need to
-                    // make the references static.
-                    // so rether than completeing the abstraction, we just use it to type check
-                    // things
                     let code = LCode::Val(Literal::Abstraction(abstraction_id));
                     let ty = b.types.fresh_unknown();
                     let link_id = self.push_code(
@@ -2988,14 +2961,12 @@ impl Flatten {
                         VarDefinitionSpace::Default,
                     );
                     self.resolve_open_abstractions(link_id, abstraction_id, b)?;
-                    //self.open_abstractions.push(link_id);
-                    //self.complete_open_abstractions(b)?;
                     return Ok(FlattenResult::link(link_id));
                 }
 
                 /*
-                 * TODO: The ident could possible be resolved later.  So we could defer here
-                 * Otherwise the CPS needs to be in lexical scope
+                 * The ident may not yet be defined if it's a label.
+                 * If we don't find it immediately in lexical scope, then defer.
                  */
                 let code = LCode::PlaceholderCodeReference;
                 let ty = b.types.fresh_unknown();
@@ -3008,37 +2979,6 @@ impl Flatten {
                 );
                 self.open_identifiers.push(link_id);
                 Ok(FlattenResult::link(link_id))
-
-                /*
-                let scope = self.scopes.get_scope_mut(scope_id);
-                scope.deferred_goto.add(DeferredGoto::new(
-                        scope_id,
-                        key.into(),
-                        args,
-                call_span_id,
-                current_block_id,
-                DeferredType::Name(name_link_id),
-
-                    key.into(),
-                    vec![],
-                    node.span_id,
-                    current_block_id,
-                    DeferredType::Ident(link_id),
-                ));
-                Ok(FlattenResult::link(link_id))
-                */
-                /*
-
-                let s = b.labels.r(key.into());
-                b.push_error(&format!("ident `{}` not found in {}", s, scope_id), span_id);
-                let backtrace = std::backtrace::Backtrace::capture();
-                self.messages
-                    .push((format!("ident: not found {}\n{}", s, backtrace), span_id));
-
-                assert!(false);
-                //return Ok(FlattenResult::statement());
-                Err(Error::new(BlockifyError::NotFound(s)))
-                    */
             }
 
             Ast::Assign(target, expr) => {
