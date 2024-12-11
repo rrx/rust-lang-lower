@@ -379,21 +379,23 @@ impl<'c> MLIRGenerator<'c> {
             types
                 .into_iter()
                 .map(|ty| {
-                    match &ty {
-                        // handle function types being passed in here
-                        // TODO: cleanup
-                        AstType::Func(s, _ret) => {
-                            let ty = AstType::TargetUnion(s.field_types(), vec![]);
-                            let (ty, dims) = self.from_type(&ty);
-                            assert_eq!(dims.len(), 0);
-                            (ty, location)
-                        }
-                        _ => {
-                            let (ty, dims) = self.from_type(&ty);
-                            assert_eq!(dims.len(), 0);
-                            (ty, location)
-                        }
+                    //match &ty {
+                    // handle function types being passed in here
+                    // TODO: cleanup
+                    //AstType::Func(s, _ret) => {
+                    //let ty = AstType::TargetUnion(s.field_types(), vec![]);
+                    let (ty, dims) = self.from_type(&ty);
+                    assert_eq!(dims.len(), 0);
+                    (ty, location)
+                    //}
+                    /*
+                    _ => {
+                        let (ty, dims) = self.from_type(&ty);
+                        assert_eq!(dims.len(), 0);
+                        (ty, location)
                     }
+                    */
+                    //}
                 })
                 .collect()
         }
@@ -1305,7 +1307,7 @@ impl<'c> MLIRGenerator<'c> {
                         } else if ty.is_f64() {
                             "print_float"
                         } else {
-                            unimplemented!("{:?}", (&ty, ty))
+                            unimplemented!("{:?}", (v, &ty))
                         };
 
                         let f = FlatSymbolRefAttribute::new(self.context, ident);

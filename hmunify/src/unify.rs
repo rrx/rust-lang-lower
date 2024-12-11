@@ -111,6 +111,7 @@ fn ast_unify_values(value1: &AstType, value2: &AstType) -> Result<AstType, UErro
                 Ok(AstType::Ptr(ty.into()))
             }
 
+            /*
             (AstType::TargetUnion(c2, targets), AstType::Func(c1, r1)) => {
                 match r1.as_ref() {
                     ReturnType::Never => (),
@@ -128,6 +129,7 @@ fn ast_unify_values(value1: &AstType, value2: &AstType) -> Result<AstType, UErro
                 Ok(AstType::TargetUnion(result, blocks1.clone()))
             }
 
+
             (AstType::Func(c1, r1), AstType::TargetUnion(c2, targets)) => {
                 match r1.as_ref() {
                     ReturnType::Never => (),
@@ -138,7 +140,7 @@ fn ast_unify_values(value1: &AstType, value2: &AstType) -> Result<AstType, UErro
                 let result = unify_fields(&c1_field_types, &c2)?;
                 Ok(AstType::TargetUnion(result, targets.clone()))
             }
-
+            */
             (AstType::Func(c1, r1), AstType::Func(c2, r2)) => {
                 let c1_field_types = c1.field_types();
                 let c2_field_types = c2.field_types();
@@ -292,6 +294,7 @@ impl TypeUnify {
                 self._unify_list(&a.field_types(), &b.field_types())
             }
 
+            /*
             (AstType::TargetUnion(f1, _b1), AstType::TargetUnion(f2, _b2)) => {
                 self._unify_list(f1, &f2)?;
                 /*
@@ -319,7 +322,7 @@ impl TypeUnify {
             (AstType::TargetUnion(_, _), AstType::Func(_, _)) => {
                 self._unify_list(&a.field_types(), &b.field_types())
             }
-
+            */
             (AstType::Func(vs1, r1), AstType::Func(vs2, r2)) => match (r1.as_ref(), r2.as_ref()) {
                 (ReturnType::Never, ReturnType::Never) => Ok(()),
                 (ReturnType::Never, ReturnType::Single(ty)) => {
@@ -389,6 +392,7 @@ impl TypeUnify {
                     None
                 }
             }
+            /*
             AstType::TargetUnion(args, ret) => {
                 let resolved_args = args
                     .clone()
@@ -397,6 +401,7 @@ impl TypeUnify {
                     .collect::<Vec<_>>();
                 Some(AstType::TargetUnion(resolved_args, ret.clone()))
             }
+            */
             AstType::Func(args, ret) => {
                 assert!(args.is_composite());
 

@@ -28,12 +28,14 @@ pub fn argvec_type(values: &ArgVec) -> AstType {
     )
 }
 
+/*
 pub fn target_union_type(values: &ArgVec) -> AstType {
     AstType::TargetUnion(
         values.iter().map(|v| (v.2.clone())).collect::<Vec<_>>(),
         vec![],
     )
 }
+*/
 
 #[derive(Debug, Clone)]
 pub struct CodeEntry {
@@ -493,7 +495,7 @@ impl Flatten {
         let block_id = entry.block_id;
         let block = self.blocks.get_block(block_id);
         let scope_id = block.scope_id;
-        let target_field_types = ty.field_types();
+        //let target_field_types = ty.field_types();
 
         self.switch_blocks(block_id);
         let (_variant_id, _fun_scope_id, fun_block_id) =
@@ -512,7 +514,7 @@ impl Flatten {
         // now replace the abstraction code
         let entry = self.get_entry_mut(link_id);
         entry.code = LCode::Val(Literal::Block(fun_block_id));
-        entry.ty = AstType::TargetUnion(target_field_types, vec![fun_block_id]);
+        //entry.ty = AstType::TargetUnion(target_field_types, vec![fun_block_id]);
 
         //println!("unify: {}=>{}", &ty, &entry.ty);
         b.unify(&entry.ty, entry.span_id, &ty, span_id);
@@ -1925,8 +1927,8 @@ impl Flatten {
         let call_values = self.push_call_arguments(args, call_span_id, b)?;
         //self.dump_position();
 
-        let call_arg_type = target_union_type(&call_values);
-        //let call_arg_type = argvec_type(&call_values);
+        //let call_arg_type = target_union_type(&call_values);
+        let call_arg_type = argvec_type(&call_values);
         let _call_func_type = AstType::Func(call_arg_type.clone().into(), ReturnType::Never.into());
 
         // unify the caller args and the refreshed function args
@@ -1936,8 +1938,8 @@ impl Flatten {
         let s_name = b.labels.r(name.into());
 
         // BAKE CPS IF NEEDED
-        let _r2 = b.types.u.resolve(&call_arg_type).unwrap();
-        let _r3 = b.types.u.resolve(&def_arg_type);
+        //let _r2 = b.types.u.resolve(&call_arg_type).unwrap();
+        //let _r3 = b.types.u.resolve(&def_arg_type);
         //assert!(!call_arg_type.is_unknown());
 
         let (variant_id, fun_block_id, fun_scope_id, r_ty) =
@@ -2477,7 +2479,7 @@ impl Flatten {
             let block_entry = self.get_entry(block_entry_id);
             let block_ty = block_entry.ty.clone();
             let block_span_id = block_entry.span_id;
-            let target_field_types = block_ty.field_types();
+            //let target_field_types = block_ty.field_types();
 
             self.switch_blocks(block_id);
             self.scoped_continuations.connect(
@@ -2489,7 +2491,7 @@ impl Flatten {
             // now replace the abstraction code
             let entry = self.get_entry_mut(link_id);
             entry.code = LCode::Val(Literal::Block(block_id));
-            entry.ty = AstType::TargetUnion(target_field_types, vec![block_id]);
+            //entry.ty = AstType::TargetUnion(target_field_types, vec![block_id]);
 
             //println!("unify: {}=>{}", &ty, &entry.ty);
             b.unify(&entry.ty, entry.span_id, &block_ty, block_span_id);
@@ -3608,7 +3610,7 @@ impl Flatten {
                 }
 
                 loop {
-                    let (key, link_id, ty, span_id) = argvec.pop_back().unwrap();
+                    let (_key, link_id, ty, span_id) = argvec.pop_back().unwrap();
                     let entry = self.get_entry(link_id);
                     let code = entry.code.clone();
                     println!("code: {:?}", (&code, &ty));

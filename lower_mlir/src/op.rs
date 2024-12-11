@@ -2,7 +2,7 @@ use crate::MLIRGenerator;
 use anyhow::Error;
 use anyhow::Result;
 use compile_core::Diagnostic;
-use compile_core::{Ast, AstNode, AstType, BinaryOperation, Literal, ReturnType, SpanId};
+use compile_core::{Ast, AstNode, AstType, BinaryOperation, Literal, SpanId};
 use melior::ir::Location;
 use melior::{
     dialect::{
@@ -70,7 +70,8 @@ impl<'c> MLIRGenerator<'c> {
                 )
             }
 
-            AstType::TargetUnion(_, _) => (IntegerType::new(self.context, 64).into(), vec![]),
+            //AstType::TargetUnion(_, _) => (IntegerType::new(self.context, 64).into(), vec![]),
+            AstType::Func(_, _) => (IntegerType::new(self.context, 64).into(), vec![]),
             AstType::Struct(_args) => {
                 /*
                 let types = args
@@ -126,6 +127,7 @@ impl<'c> MLIRGenerator<'c> {
                     vec![],
                 )
             }
+            /*
             AstType::Func(args, ret) => {
                 let inputs = args
                     .fields()
@@ -147,6 +149,7 @@ impl<'c> MLIRGenerator<'c> {
                     vec![],
                 )
             }
+            */
             AstType::Array(ast_ty, dims) => {
                 let ty = self.from_type(ast_ty).0;
                 (ty, dims.iter().map(|i| *i as i64).collect())

@@ -1,4 +1,4 @@
-use crate::{BlockId, InternKey, InternPool, InternValue, StringKey};
+use crate::{InternKey, InternPool, InternValue, StringKey};
 use serde::Serialize;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
@@ -76,7 +76,7 @@ pub enum AstType {
     Error,
     Type,
     JumpTarget,
-    TargetUnion(Vec<AstType>, Vec<BlockId>),
+    //TargetUnion(Vec<AstType>, Vec<BlockId>),
     Args(Box<AstType>),   // *args type
     KwArgs(Box<AstType>), // **kwargs type
     Array(Box<AstType>, Vec<usize>),
@@ -123,6 +123,7 @@ impl std::fmt::Display for AstType {
 }
 
 impl AstType {
+    /*
     pub fn target_union_block_index(&self, block_id: &BlockId) -> i64 {
         if let AstType::TargetUnion(_, blocks) = self {
             let mut blocks = blocks.clone();
@@ -133,6 +134,7 @@ impl AstType {
             unreachable!()
         }
     }
+    */
 
     pub fn build_struct(fields: Vec<Self>) -> Self {
         Self::Struct(fields.into_iter().map(|f| (None, f)).collect())
@@ -198,6 +200,7 @@ impl AstType {
                 false
             }
             Self::Array(element, _) => element.is_unknown(),
+            /*
             Self::TargetUnion(args, _) => {
                 for a in args {
                     if a.is_unknown() {
@@ -206,6 +209,7 @@ impl AstType {
                 }
                 false
             }
+            */
             Self::Func(args, ret) => {
                 if ret.is_unknown() {
                     return true;
