@@ -25,6 +25,8 @@ pub enum BlockifyError {
     NotFound(String),
     #[error("BlockifyError: Template Not Found")]
     TemplateNotFound(String),
+    #[error("BlockifyError: Unwind scopes: path not found")]
+    UnwindNotFound(String),
 }
 
 #[derive(Debug, Clone)]

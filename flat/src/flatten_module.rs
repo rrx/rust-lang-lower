@@ -247,7 +247,7 @@ impl FlattenModule {
         })
     }
 
-    pub fn dump_code_table(&self, filename: &str, b: &mut NB) {
+    pub fn dump_code_table(&self, filename: &str, b: &mut NB) -> String {
         let mut rows = vec![];
         for index in 0..self.values.len() {
             let value_id = ValueId::new(index as u32);
@@ -258,8 +258,8 @@ impl FlattenModule {
             }
         }
         let s = Table::new(rows).with(Style::sharp()).to_string();
-        println!("{}", s);
-        std::fs::write(filename, s).unwrap();
+        std::fs::write(filename, s.clone()).unwrap();
+        s
     }
 
     pub fn cont_graph(&self, filename: &str, b: &NB) {

@@ -28,15 +28,6 @@ pub fn argvec_type(values: &ArgVec) -> AstType {
     )
 }
 
-/*
-pub fn target_union_type(values: &ArgVec) -> AstType {
-    AstType::TargetUnion(
-        values.iter().map(|v| (v.2.clone())).collect::<Vec<_>>(),
-        vec![],
-    )
-}
-*/
-
 #[derive(Debug, Clone)]
 pub struct CodeEntry {
     pub(super) next: LinkId,
@@ -500,10 +491,10 @@ impl Flatten {
         self.switch_blocks(block_id);
         let (_variant_id, _fun_scope_id, fun_block_id) =
             self.push_cps_block_with_type(name, scope_id, abstraction_id, ty.clone(), span_id, b)?;
-        println!(
-            "complete: @{}, {}->{}",
-            link_id, abstraction_id, fun_block_id
-        );
+        //println!(
+        //"complete: @{}, {}->{}",
+        //link_id, abstraction_id, fun_block_id
+        //);
 
         self.scoped_continuations.connect(
             ContinuationFlow::Block(fun_block_id),
@@ -1632,11 +1623,11 @@ impl Flatten {
         mem: VarDefinitionSpace,
     ) -> (LinkId, Vec<(Option<StringKey>, LinkId, AstType, SpanId)>) {
         let block_link_id = self.push_empty_label(span_id);
-        println!(
-            "push_start_block: {:?} in {}",
-            (block_link_id, &block_ty),
-            scope_id
-        );
+        //println!(
+        //"push_start_block: {:?} in {}",
+        //(block_link_id, &block_ty),
+        //scope_id
+        //);
         let v_args = self.push_start_block_args(scope_id, block_ty.clone(), span_id);
         self.replace_label(block_link_id, block_ty, name, span_id, mem);
         self.block_links
@@ -1697,10 +1688,10 @@ impl Flatten {
         let scope_id = block.scope_id;
 
         let s_name = b.labels.r(name.into());
-        println!(
-            "{}: push_goto args: {:?} in {}{}",
-            s_name, &args, scope_id, current_block_id,
-        );
+        //println!(
+        //"{}: push_goto args: {:?} in {}{}",
+        //s_name, &args, scope_id, current_block_id,
+        //);
 
         // if this is a name, we can resolve now, no need to defer
         // this happens in a CPS function, where we try to jump to a variable.
@@ -1716,7 +1707,7 @@ impl Flatten {
                 call_span_id,
                 VarDefinitionSpace::Default,
             );
-            println!("placeholder2: {}", p_link_id);
+            //println!("placeholder2: {}", p_link_id);
 
             let d = DeferredGoto::new(
                 scope_id,
@@ -1747,7 +1738,7 @@ impl Flatten {
                 call_span_id,
                 VarDefinitionSpace::Default,
             );
-            println!("placeholder3: {}", p_link_id);
+            //println!("placeholder3: {}", p_link_id);
 
             let d = DeferredGoto::new(
                 scope_id,
@@ -1820,7 +1811,7 @@ impl Flatten {
 
                 let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
 
-                println!("push start block5: {}{}", fun_scope_id, fun_block_id);
+                //println!("push start block5: {}{}", fun_scope_id, fun_block_id);
                 let (entry_link_id, _) = self.push_start_block(
                     fun_scope_id,
                     r_ty1.clone(),
@@ -1857,7 +1848,7 @@ impl Flatten {
                         def_span_id,
                         VarDefinitionSpace::Default,
                     );
-                    println!("placeholder4: {}", p_link_id);
+                    //println!("placeholder4: {}", p_link_id);
                 }
 
                 (variant_id, fun_block_id, fun_scope_id)
@@ -1892,7 +1883,6 @@ impl Flatten {
     )> {
         // call in the context of the caller, which is a goto
         let current_block_id = self.current_block_id();
-        //let (def, def_span_id, _) = self.get_ast_template(abstraction_id).clone();
         let a = self.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
         let def = a.def.clone();
@@ -1927,6 +1917,9 @@ impl Flatten {
         b.unify(&call_arg_type, call_span_id, &def_arg_type, def_span_id);
 
         let goto_block_id = self.current_block_id();
+        let block = self.blocks.get_block(goto_block_id);
+        let goto_scope_id = block.scope_id;
+
         let s_name = b.labels.r(name.into());
 
         // BAKE CPS IF NEEDED
@@ -1970,7 +1963,7 @@ impl Flatten {
                 let body = *def.body.clone().unwrap();
 
                 self.switch_blocks(fun_block_id);
-                println!("push start block1: {}{}", fun_scope_id, fun_block_id);
+                //println!("push start block1: {}{}", fun_scope_id, fun_block_id);
                 let (entry_link_id, _) = self.push_start_block(
                     fun_scope_id,
                     def_func_type.clone(),
@@ -2013,7 +2006,7 @@ impl Flatten {
                         def_span_id,
                         VarDefinitionSpace::Default,
                     );
-                    println!("placeholder5: {}", p_link_id);
+                    //println!("placeholder5: {}", p_link_id);
                 }
 
                 (variant_id, fun_block_id, fun_scope_id, r_ty2)
@@ -2037,6 +2030,11 @@ impl Flatten {
             .iter()
             .map(|(_, link_id, _, _)| *link_id)
             .collect::<Vec<_>>();
+
+        // TODO: now that we know the target, we need to replace any call values with unwind
+        // functions. We also need to do this for the goto_block_id.
+        let unwind_scopes = self.scopes.unwind_scopes(fun_scope_id, goto_scope_id)?;
+        println!("unwind scopes: {:?}", unwind_scopes);
 
         let goto_link_id = self.push_jump(fun_block_id.into(), call_values.clone(), call_span_id);
 
@@ -2128,7 +2126,7 @@ impl Flatten {
             .block_succ(current_block_id, fun_block_id, succ_type);
 
         self.switch_blocks(fun_block_id);
-        println!("push start block2: {}{}", fun_scope_id, fun_block_id);
+        //println!("push start block2: {}{}", fun_scope_id, fun_block_id);
         let (entry_link_id, _) = self.push_start_block(
             fun_scope_id,
             def_func_type.clone(),
@@ -2327,7 +2325,7 @@ impl Flatten {
                     d.call_span_id,
                     VarDefinitionSpace::Default,
                 );
-                println!("placeholder1: {}", link_id);
+                //println!("placeholder1: {}", link_id);
 
                 self.deferred_goto.add_cps(d);
                 return Ok(true);
@@ -2344,7 +2342,7 @@ impl Flatten {
 
                     // push and jump
                     // TODO: this function needs to handle unwind
-                    let (variant_id, _fun_scope_id, _fun_block_id, _, _, _, _, _link_id) = self
+                    let (variant_id, fun_scope_id, _fun_block_id, _, _, _, _, _link_id) = self
                         .push_cps_block(
                             d.name,
                             d.scope_id,
@@ -2381,6 +2379,8 @@ impl Flatten {
                     // TODO: we just have a label, so we need to handle unwind here.  We can't jump
                     // directly, we need to jump to the unwind function
 
+                    // TODO: args should be unwound before jumping
+                    // by replacing jumps out of scope to the unwind function
                     let jump_args = self.push_call_arguments(d.args.clone(), d.call_span_id, b)?;
                     let link_id = self.push_jump(target_block_id.into(), jump_args, d.call_span_id);
                     //let block = self.blocks.get_block(target_block_id);
@@ -2436,10 +2436,10 @@ impl Flatten {
 
                 let jump_link_id =
                     self.replace_placeholder_terminal(d.block_id, arg_link_id, sources.clone(), b);
-                println!(
-                    "flows: {:?}",
-                    (arg_block_id, arg_link_id, &code, sources, jump_link_id)
-                );
+                //println!(
+                //"flows: {:?}",
+                //(arg_block_id, arg_link_id, &code, sources, jump_link_id)
+                //);
             }
             DeferredType::Variant(_goto_link_id, _source_block_id, _variant_id) => {}
             _ => {
@@ -2453,7 +2453,7 @@ impl Flatten {
         let mut abstractions = vec![];
         let mut blocks = vec![];
         let mut errors = vec![];
-        println!("open_identifiers: {:?}", &self.open_identifiers);
+        //println!("open_identifiers: {:?}", &self.open_identifiers);
         for link_id in &self.open_identifiers {
             let entry = self.get_entry(*link_id);
             let block_id = entry.block_id;
@@ -2636,7 +2636,7 @@ impl Flatten {
 
     fn refresh_func_type(&self, def: &Lambda, b: &mut NB) -> (AstType, AstType, AstType) {
         let def_func_type = b.types.r(def.fun_type).clone();
-        println!("ty1: {:?}", &def_func_type);
+        //println!("ty1: {:?}", &def_func_type);
 
         // refresh variables
         let (def_arg_ty, ret_ty) = if let AstType::Func(arg, ret) = def_func_type {
@@ -2652,8 +2652,8 @@ impl Flatten {
             def_arg_ty.clone().into(),
             ReturnType::Single(ret_ty.clone()).into(),
         );
-        println!("ty2: {:?}", &def_func_type);
-        println!("ty3: {:?}", &def_arg_ty);
+        //println!("ty2: {:?}", &def_func_type);
+        //println!("ty3: {:?}", &def_arg_ty);
         (def_func_type, def_arg_ty, ret_ty)
     }
 
@@ -2681,7 +2681,7 @@ impl Flatten {
         let block = self.blocks.get_block(goto_block_id);
         let last_link_id = block.last().unwrap();
         let entry = self.get_entry_mut(last_link_id);
-        println!("remove_placeholder_terminal: {:?}", &last_link_id);
+        //println!("remove_placeholder_terminal: {:?}", &last_link_id);
         if let LCode::PlaceholderTerminal(prev_link_id) = entry.code {
             // invalidate dummy jump
             entry.next = prev_link_id;
@@ -3415,7 +3415,7 @@ impl Flatten {
 
                 //println!("block start: {}", new_block_id);
                 self.switch_blocks(new_block_id);
-                println!("push start block3: {}{}", new_scope_id, new_block_id);
+                //println!("push start block3: {}{}", new_scope_id, new_block_id);
                 let (link_id, _) = self.push_start_block(
                     new_scope_id,
                     AstType::Func(
@@ -3554,7 +3554,7 @@ impl Flatten {
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::GotoChain(args)) => {
-                println!("GotoChain: {:?}", args);
+                //println!("GotoChain: {:?}", args);
                 let argvec = self.push_call_arguments(args, span_id, b)?;
                 let mut argvec = VecDeque::from(argvec);
                 let mut acc = VecDeque::new();
@@ -3570,13 +3570,13 @@ impl Flatten {
                     let (_key, link_id, ty, span_id) = argvec.pop_back().unwrap();
                     let entry = self.get_entry(link_id);
                     let code = entry.code.clone();
-                    println!("code: {:?}", (&code, &ty));
+                    //println!("code: {:?}", (&code, &ty));
                     match &code {
                         LCode::Val(Literal::Block(block_id)) => {
                             let block_id = *block_id;
                             let arg_types = ty.fields();
                             // lengths should match
-                            println!("arg_types: {:?}, acc: {:?}", arg_types, acc);
+                            //println!("arg_types: {:?}, acc: {:?}", arg_types, acc);
                             assert!(arg_types.len() == acc.len());
 
                             let mut acc_types = vec![];
@@ -3590,7 +3590,7 @@ impl Flatten {
                             let label = b.labels.fresh_key("chain");
                             let v_next = self.blocks.new_block(parent_scope_id);
                             self.switch_blocks(v_next);
-                            println!("push start block4: {}{}", parent_scope_id, v_next);
+                            //println!("push start block4: {}{}", parent_scope_id, v_next);
                             self.push_start_block(
                                 parent_scope_id,
                                 AstType::func(acc_types, AstType::Unit),

@@ -1,3 +1,5 @@
+use anyhow::Error;
+use anyhow::Result;
 use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::Bfs;
@@ -6,7 +8,7 @@ use std::ops::{Deref, DerefMut};
 
 use std::collections::{HashMap, HashSet};
 
-use crate::{ArgVec, BlockId, LinkId, NodeBuilder, StringLabel, ValueId, VariantId};
+use crate::{ArgVec, BlockId, BlockifyError, LinkId, NodeBuilder, StringLabel, ValueId, VariantId};
 use compile_core::{AbstractionId, Argument, Lambda, SpanId, StringKey};
 
 #[derive(Debug)]
@@ -282,6 +284,34 @@ impl ScopeGraph {
             }
         }
         None
+    }
+
+    pub fn unwind_scopes(
+        &self,
+        start_scope_id: ScopeId,
+        end_scope_id: ScopeId,
+    ) -> Result<Vec<ScopeId>> {
+        let mut out = vec![];
+        let mut current = start_scope_id;
+        loop {
+            if current == end_scope_id {
+                break;
+            }
+
+            if let Some(next_scope_id) = self.step_up(current) {
+                out.push(current);
+                current = next_scope_id;
+            } else {
+                let msg = format!("{}=>{}", start_scope_id, end_scope_id);
+                println!("msg:{}", msg);
+                return Err(Error::new(BlockifyError::UnwindNotFound(msg)));
+            }
+        }
+        println!(
+            "unwind scopes: {}=>{}, {:?}",
+            start_scope_id, end_scope_id, out
+        );
+        Ok(out)
     }
 
     pub fn step_up(&self, scope_id: ScopeId) -> Option<ScopeId> {

@@ -85,6 +85,9 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
     let mut p: StarlarkParser = StarlarkParser::new();
 
     let ast = p.parse(&config.input, b, config.verbose)?;
+    if config.verbose {
+        b.dump_ast(&ast);
+    }
 
     let mut f = Flatten::flatten_module(ast, b)?;
 
@@ -116,12 +119,16 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
     let mut cfg_path = path.clone();
     cfg_path.set_extension("cfg.mmd");
     m.flow_graph(cfg_path.clone().to_str().unwrap(), &b)?;
-
     let table_path = make_path(&output_filename, "table.txt");
-    m.dump_code_table(&table_path, b);
-    m.dump_scopes();
-    m.dump_variants(b);
-    m.scopes.dump(b);
+    let s = m.dump_code_table(&table_path, b);
+
+    if config.verbose {
+        // dump table
+        println!("{}", s);
+        m.dump_scopes();
+        m.dump_variants(b);
+        m.scopes.dump(b);
+    }
 
     if b.spans.has_errors {
         return Err(anyhow::Error::new(BlockifyError::Invalid).into());

@@ -272,7 +272,7 @@ impl<'c> LowerIR<'c> for MLIRGenerator<'c> {
             //Ok(index)
             self.index.insert(v, index);
         } else {
-            println!("literal: {:?}", lit);
+            //println!("literal: {:?}", lit);
             let op = self.emit_literal_const(lit, location);
             let c = self
                 .blocks
@@ -427,7 +427,7 @@ impl<'c> MLIRGenerator<'c> {
         let code = self.blockify.get_code(entry_id);
         if let LCode::Label = code {
             let args = self.get_label_args(entry_id);
-            println!("create block: {:?}", (code, &args));
+            //println!("create block: {:?}", (code, &args));
             let block = Block::new(&args);
             let c = OpCollection::new(entry_id, block);
             self.blocks.insert(entry_id, c);
@@ -439,17 +439,14 @@ impl<'c> MLIRGenerator<'c> {
     pub fn lower_jump(&mut self, v: ValueId, target: CodeOffset) -> Result<()> {
         let block_id = self.blockify.get_entry_id(v).unwrap();
         let values = self.take_call_args();
-        println!("values: {:?}", values);
         let arity = values.len();
         let indicies = values
             .into_iter()
             .map(|value_id| self.resolve_value(value_id.into()).unwrap())
             .collect();
-        println!("jump1: {:?}", (v, &indicies));
         let rs = self.values(indicies);
 
         let target_value_id = self.blockify.resolve_code_offset(target);
-        println!("jump2: {:?}", (target_value_id, block_id));
 
         let c = self
             .blocks
@@ -480,7 +477,6 @@ impl<'c> MLIRGenerator<'c> {
             .into_iter()
             .map(|value_id| self.resolve_value(value_id.into()).unwrap())
             .collect();
-        println!("jump1: {:?}", (v, &indicies));
         let rs = self.values(indicies);
 
         let arg_value_id = self.blockify.resolve_code_offset(arg.into());
@@ -508,8 +504,6 @@ impl<'c> MLIRGenerator<'c> {
             .collect::<Vec<_>>();
 
         let default_destination = case_destinations.last().unwrap();
-        //let target_value_id = self.blockify.resolve_code_offset(target);
-        //println!("jump2: {:?}", (target_value_id, block_id));
 
         let location = self.get_location(v);
         let op = cf::switch(
@@ -662,7 +656,6 @@ impl<'c> MLIRGenerator<'c> {
                     "private"
                 };
 
-                println!("declare function: {:?}", (v, key, &ty, visibility));
                 let op = self.build_declare_function(key, ty, location, visibility)?;
                 let c = self.blocks.get_mut(&static_block_id).unwrap();
                 let index = c.push(op);
@@ -765,13 +758,10 @@ impl<'c> MLIRGenerator<'c> {
                 self.ensure_call_args_empty();
                 //if let Some(name) = self.blockify.get_name(v.into()) {
                 //let s = self.b.labels.r(name);
-                //println!("declare: {:?}", (s));
-                //}
                 let block_id = self.blockify.get_entry_id(v).unwrap();
                 let ast_ty = self.blockify.get_type(v.into());
                 let (ty, dims) = self.from_type(&ast_ty);
                 let memref_ty = MemRefType::new(ty.into(), &dims, None, None);
-                //println!("declare: {:?}", (ty, dims, memref_ty));
                 let op = memref::alloca(self.context, memref_ty, &[], &[], None, location);
 
                 /*

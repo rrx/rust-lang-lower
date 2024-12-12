@@ -13,8 +13,15 @@ def main():
   def next():
     q.goto("A")
 
+  def U3U2U1(x):
+    q.goto(U1, N1)
+    q.label("N1")
+    q.goto(U2, N2)
+    q.label("N2")
+    q.goto(U3, x)
+
   #q.goto_chain(U3, U2, U1, next)
-  q.goto(U3, A)
+  q.goto(U3U2U1, A)
   q.label("A")
   return 0
 

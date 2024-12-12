@@ -60,7 +60,7 @@ impl ScopedContinuations {
     }
 
     pub fn find_source_blocks(&self, flow: ContinuationFlow) -> Vec<BlockId> {
-        println!("find_source_blocks: {:?}", flow);
+        //println!("find_source_blocks: {:?}", flow);
         let mut out = vec![];
         let mut stack = vec![flow];
         let mut visited = HashSet::new();
@@ -92,14 +92,13 @@ impl ScopedContinuations {
     }
 
     pub fn find_sink_block(&self, flow: ContinuationFlow) -> Option<ContinuationFlow> {
-        println!("find_sink_block: {:?}", flow);
+        //println!("find_sink_block: {:?}", flow);
         let index = self.h.get(&flow).unwrap();
         for x in self
             .g
             .neighbors_directed(*index, petgraph::Direction::Outgoing)
             .map(|index| self.g[index])
         {
-            println!("x: {:?}", x);
             if let ContinuationFlow::Block(_) = x {
                 return Some(x);
             } else if let ContinuationFlow::BlockArg(_, _) = x {
