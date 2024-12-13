@@ -151,10 +151,19 @@ impl Flatten {
         let call_func_type = AstType::Func(call_arg_type.clone().into(), ReturnType::Never.into());
 
         /*
-        let (variant_id, fun_scope_id, fun_block_id, def_arg_type) = self.push_cps_block_with_type(name, scope_id, abstraction_id, &call_func_type, call_span_id, b)?;
         b.unify(&call_arg_type, call_span_id, &def_arg_type, def_span_id);
          */
+        let (variant_id, fun_scope_id, fun_block_id, def_arg_type) = self
+            .push_cps_block_with_type(
+                name,
+                scope_id,
+                abstraction_id,
+                &call_func_type,
+                call_span_id,
+                b,
+            )?;
 
+        /*
         let a = self.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
         let (_, def_arg_type, _) = self.refresh_func_type(&a.def, b);
@@ -234,6 +243,7 @@ impl Flatten {
 
                 (variant_id, fun_block_id, fun_scope_id, r_ty2)
             };
+        */
 
         self.switch_blocks(goto_block_id);
         // NOW JUMP
