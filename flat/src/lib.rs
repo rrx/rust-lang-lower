@@ -4,6 +4,7 @@ pub mod blocks;
 pub mod builder;
 pub mod builtin;
 pub mod continuations;
+pub mod cps;
 mod dump;
 pub mod flatten;
 pub mod flatten_graph;
