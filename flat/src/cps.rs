@@ -90,10 +90,9 @@ impl Flatten {
                 self.scopes
                     .scope_define(scope_id, lambda_name, entry_link_id);
 
-                let r_ty1 = b.types.u.resolve(&def_arg_type).unwrap();
                 //let r_ty1 = b.types.u.resolve(&call_func_type).unwrap();
 
-                println!("call_arg_type: {:?}", (call_arg_type, &r_ty1));
+                //println!("call_arg_type: {:?}", (call_arg_type, &r_ty1));
 
                 //let r_ty2 = b.types.u.resolve(&def_arg_type).unwrap();
 
@@ -108,6 +107,7 @@ impl Flatten {
                 // flatten function, and switch to next
                 // lower first, so we resolve types
                 let _ = self.push_node(*body, b)?;
+                let r_ty2 = b.types.u.resolve(&def_arg_type).unwrap();
 
                 //let r_ty2 = b
                 //.types
@@ -131,7 +131,7 @@ impl Flatten {
                     //println!("placeholder4: {}", p_link_id);
                 }
 
-                (variant_id, fun_block_id, fun_scope_id, r_ty1)
+                (variant_id, fun_block_id, fun_scope_id, r_ty2)
             };
 
         self.switch_blocks(current_block_id);
