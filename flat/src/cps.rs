@@ -90,12 +90,6 @@ impl Flatten {
                 self.scopes
                     .scope_define(scope_id, lambda_name, entry_link_id);
 
-                //let r_ty1 = b.types.u.resolve(&call_func_type).unwrap();
-
-                //println!("call_arg_type: {:?}", (call_arg_type, &r_ty1));
-
-                //let r_ty2 = b.types.u.resolve(&def_arg_type).unwrap();
-
                 let variant_id = self.variant_add(
                     scope_id,
                     lambda_name,
@@ -107,15 +101,7 @@ impl Flatten {
                 // flatten function, and switch to next
                 // lower first, so we resolve types
                 let _ = self.push_node(*body, b)?;
-                //let r_ty2 = b.types.u.resolve(&def_arg_type).unwrap();
 
-                //let r_ty2 = b
-                //.types
-                //.u
-                //.resolve(&def_arg_type)
-                //.unwrap_or(def_arg_type.clone());
-                //// update the variant with the resolved type
-                //
                 let r_ty2 = b
                     .types
                     .u
@@ -194,7 +180,7 @@ impl Flatten {
          */
 
         // This expects to be called in a block that is ready to jump
-        let (refresh_def_func_type, refresh_def_arg_type, def_ret_type) =
+        let (_refresh_def_func_type, refresh_def_arg_type, _def_ret_type) =
             self.refresh_func_type(&def, b);
         let def_func_type = AstType::Func(
             refresh_def_arg_type.clone().into(),
@@ -230,7 +216,10 @@ impl Flatten {
                     .block_succ(current_block_id, fun_block_id, Successor::BlockScope);
                 // Start lambda block
                 let lambda_name = b.labels.fresh_key(&s_name);
-                let body = *def.body.clone().unwrap();
+
+                // make a copy of the body
+                let a = self.abstractions.get(abstraction_id);
+                let body = a.def.body.clone().unwrap();
 
                 let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
 
@@ -254,15 +243,13 @@ impl Flatten {
 
                 // flatten function, and switch to next
                 // lower first, so we resolve types
-                let _ = self.push_node(body, b)?;
-                //let r_ty2 = b.types.u.resolve(&call_arg_type).unwrap();
+                let _ = self.push_node(*body, b)?;
 
                 let r_ty2 = b
                     .types
                     .u
                     .resolve(&call_arg_type)
                     .unwrap_or(call_arg_type.clone());
-                ////// update the variant with the resolved type
                 self.variant_update(variant_id, r_ty2.clone(), entry_link_id); // caller_blocks);
 
                 // terminate if not already terminated
