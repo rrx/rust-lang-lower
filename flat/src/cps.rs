@@ -17,7 +17,7 @@ impl Flatten {
         scope_id: ScopeId,
         abstraction_id: AbstractionId,
         call_func_type: &AstType,
-        origin_span_id: SpanId,
+        call_span_id: SpanId,
         b: &mut NB,
     ) -> Result<(VariantId, ScopeId, BlockId, AstType)> {
         let s_name = b.labels.r(name.into());
@@ -26,24 +26,12 @@ impl Flatten {
         let a = self.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
         // This expects to be called in a block that is ready to jump
+
         let (_def_func_type, def_arg_type, _def_ret_type) = self.refresh_func_type(&a.def, b);
         let def_func_type = AstType::Func(def_arg_type.clone().into(), ReturnType::Never.into());
-
         let call_arg_type = AstType::Struct(call_func_type.fields());
-
-        println!(
-            "push_cps_block_with_type: {}, {}, {}, {}, {}, {}",
-            call_func_type, &call_arg_type, &def_func_type, &def_arg_type, abstraction_id, &s_name
-        );
-
-        b.unify(&def_arg_type, origin_span_id, &call_arg_type, a.def_span_id);
-
-        b.unify(
-            &def_func_type,
-            origin_span_id,
-            &call_func_type,
-            a.def_span_id,
-        );
+        b.unify(&call_arg_type, call_span_id, &def_arg_type, def_span_id);
+        b.unify(&def_func_type, call_span_id, &call_func_type, def_span_id);
 
         // BAKE CPS IF NEEDED
         let (variant_id, fun_block_id, fun_scope_id, ty) =
@@ -52,7 +40,7 @@ impl Flatten {
             {
                 let entry = self.get_entry(link_id);
                 let fun_block_id = entry.block_id;
-                b.unify(&call_arg_type, origin_span_id, &resolve_type, a.def_span_id);
+                b.unify(&call_arg_type, call_span_id, &resolve_type, a.def_span_id);
 
                 (variant_id, fun_block_id, fun_scope_id, resolve_type)
             } else {
@@ -180,20 +168,9 @@ impl Flatten {
          */
 
         // This expects to be called in a block that is ready to jump
-        let (_refresh_def_func_type, refresh_def_arg_type, _def_ret_type) =
-            self.refresh_func_type(&def, b);
-        let def_func_type = AstType::Func(
-            refresh_def_arg_type.clone().into(),
-            ReturnType::Never.into(),
-        );
-
-        b.unify(
-            &call_arg_type,
-            call_span_id,
-            &refresh_def_arg_type,
-            def_span_id,
-        );
-
+        let (_refresh_def_func_type, def_arg_type, _def_ret_type) = self.refresh_func_type(&def, b);
+        let def_func_type = AstType::Func(def_arg_type.clone().into(), ReturnType::Never.into());
+        b.unify(&call_arg_type, call_span_id, &def_arg_type, def_span_id);
         b.unify(&def_func_type, call_span_id, &call_func_type, def_span_id);
 
         //let r = b.types.u.resolve(&call_arg_type).unwrap();
