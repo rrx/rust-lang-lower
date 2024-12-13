@@ -128,8 +128,6 @@ impl Flatten {
         LinkId, // return goto link
     )> {
         // call in the context of the caller, which is a goto
-        //let current_block_id = self.current_block_id();
-        let s_name = b.labels.r(name.into());
         let a = self.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
         let def = a.def.clone();
@@ -150,9 +148,6 @@ impl Flatten {
         let call_arg_type = argvec_type(&call_values);
         let call_func_type = AstType::Func(call_arg_type.clone().into(), ReturnType::Never.into());
 
-        /*
-        b.unify(&call_arg_type, call_span_id, &def_arg_type, def_span_id);
-         */
         let (variant_id, fun_scope_id, fun_block_id, def_arg_type) = self
             .push_cps_block_with_type(
                 name,
@@ -163,98 +158,10 @@ impl Flatten {
                 b,
             )?;
 
-        /*
-        let a = self.abstractions.get(abstraction_id);
-        let def_span_id = a.def_span_id;
-        let (_, def_arg_type, _) = self.refresh_func_type(&a.def, b);
-        let def_func_type = AstType::Func(def_arg_type.clone().into(), ReturnType::Never.into());
-        let call_arg_type = AstType::Struct(call_func_type.fields());
-        b.unify(&call_arg_type, call_span_id, &def_arg_type, def_span_id);
-        b.unify(&def_func_type, call_span_id, &call_func_type, def_span_id);
-
-        let (variant_id, fun_block_id, fun_scope_id, def_arg_type) =
-            if let Some((variant_id, resolve_type, link_id, fun_scope_id)) =
-                self.resolve_function_name(scope_id, &name, &call_arg_type, b)
-            {
-                let entry = self.get_entry(link_id);
-                let fun_block_id = entry.block_id;
-                b.unify(&call_arg_type, call_span_id, &resolve_type, def_span_id);
-                (variant_id, fun_block_id, fun_scope_id, resolve_type)
-            } else {
-                let (fun_block_id, fun_scope_id) =
-                    self.new_scope_and_block(ScopeType::Block, scope_id);
-                // block graph
-                self.blocks.block_succ(
-                    self.current_block_id(),
-                    fun_block_id,
-                    Successor::BlockScope,
-                );
-                // Start lambda block
-                let lambda_name = b.labels.fresh_key(&s_name);
-
-                // make a copy of the body
-                let a = self.abstractions.get(abstraction_id);
-                let body = a.def.body.clone().unwrap();
-
-                self.switch_blocks(fun_block_id);
-
-                let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
-
-                let (entry_link_id, _) = self.push_start_block(
-                    fun_scope_id,
-                    r_ty1.clone(),
-                    Some(lambda_name),
-                    def_span_id,
-                    VarDefinitionSpace::Default,
-                );
-                // add the name to scope
-                // do this early for recursive functions
-                // add entry to scope, for recursion
-                self.scopes
-                    .scope_define(scope_id, lambda_name, entry_link_id);
-
-                let variant_id =
-                    self.variant_add(scope_id, name, r_ty1.clone(), entry_link_id, fun_block_id);
-
-                // flatten function, and switch to next
-                // lower first, so we resolve types
-                let _ = self.push_node(*body, b)?;
-
-                let r_ty2 = b
-                    .types
-                    .u
-                    .resolve(&call_arg_type)
-                    .unwrap_or(call_arg_type.clone());
-                self.variant_update(variant_id, r_ty2.clone(), entry_link_id);
-
-                // terminate if not already terminated
-                // this is for dead code
-                let block = self.blocks.get_block(self.current_block_id());
-                if !block.is_term() {
-                    let _p_link_id = self.push_code(
-                        LCode::PlaceholderTerminal(block.last().unwrap()),
-                        AstType::Unit,
-                        None,
-                        def_span_id,
-                        VarDefinitionSpace::Default,
-                    );
-                    //println!("placeholder5: {}", p_link_id);
-                }
-
-                (variant_id, fun_block_id, fun_scope_id, r_ty2)
-            };
-        */
-
         self.switch_blocks(goto_block_id);
         // NOW JUMP
         // now that we have the arguments calculated, and the lambda baked, jump!
         self.remove_placeholder_terminal(goto_block_id);
-        //let block = self.blocks.get_block(goto_block_id);
-        //let entry = self.get_entry(block.last().unwrap());
-        //println!(
-        //"call_values: {:?}",
-        //(block.scope_id, goto_block_id, &call_values, &entry)
-        //);
 
         let _call_links = call_values
             .iter()
@@ -299,7 +206,6 @@ impl Flatten {
         // control is returned to the goto
 
         let def_func_type = AstType::Func(def_arg_type.clone().into(), ReturnType::Never.into());
-        //let def_arg_type = AstType::Struct(def_func_type.fields());
         let def_ret_type = AstType::Unit;
 
         return Ok((
