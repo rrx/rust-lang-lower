@@ -28,10 +28,6 @@ impl Flatten {
         b: &mut NB,
     ) -> Result<(VariantId, ScopeId, BlockId, AstType)> {
         let s_name = b.labels.r(name.into());
-        println!(
-            "push_cps_block_with_type: {}, {}, {}",
-            call_func_type, abstraction_id, &s_name
-        );
         // call in the context of the caller, which is a goto
         let current_block_id = self.current_block_id();
         let a = self.abstractions.get(abstraction_id);
@@ -44,6 +40,11 @@ impl Flatten {
 
         let call_arg_type = AstType::Struct(call_func_type.fields());
 
+        println!(
+            "push_cps_block_with_type: {}, {}, {}, {}, {}, {}",
+            call_func_type, &call_arg_type, &def_func_type, &def_arg_type, abstraction_id, &s_name
+        );
+
         b.unify(&def_arg_type, origin_span_id, &call_arg_type, a.def_span_id);
 
         b.unify(
@@ -52,11 +53,12 @@ impl Flatten {
             &call_func_type,
             a.def_span_id,
         );
+        let r = b.types.u.resolve(&call_arg_type).unwrap();
 
         // BAKE CPS IF NEEDED
         let (variant_id, fun_block_id, fun_scope_id, ty) =
             if let Some((variant_id, resolve_type, link_id, fun_scope_id)) =
-                self.resolve_function_name(scope_id, &name, &call_arg_type, b)
+                self.resolve_function_name(scope_id, &name, &r, b)
             {
                 let entry = self.get_entry(link_id);
                 let fun_block_id = entry.block_id;
@@ -78,9 +80,6 @@ impl Flatten {
 
                 self.switch_blocks(fun_block_id);
 
-                let r_ty1 = b.types.u.resolve(&call_arg_type).unwrap();
-
-                //println!("call_arg_type: {:?}", (call_func_type, &def_func_type));
                 //let r_ty1 = b.types.u.resolve(&call_arg_type).unwrap_or(call_arg_type.clone());
                 //let r_ty1 = call_arg_type;
 
@@ -100,6 +99,11 @@ impl Flatten {
                     .scope_define(scope_id, lambda_name, entry_link_id);
 
                 let r_ty1 = b.types.u.resolve(&def_arg_type).unwrap();
+                //let r_ty1 = b.types.u.resolve(&call_func_type).unwrap();
+
+                println!("call_arg_type: {:?}", (call_arg_type, &r_ty1));
+
+                //let r_ty2 = b.types.u.resolve(&def_arg_type).unwrap();
 
                 let variant_id = self.variant_add(
                     scope_id,
@@ -116,8 +120,8 @@ impl Flatten {
                 //let r_ty2 = b
                 //.types
                 //.u
-                //.resolve(&def_func_type)
-                //.unwrap_or(def_func_type.clone());
+                //.resolve(&def_arg_type)
+                //.unwrap_or(def_arg_type.clone());
                 //// update the variant with the resolved type
                 //self.variant_update(variant_id, r_ty2.clone(), entry_link_id);
 
@@ -185,12 +189,11 @@ impl Flatten {
 
         /*
         // unify the caller args and the refreshed function args
-         */
-        //let call_func_type = AstType::Func(call_arg_type.clone().into(), ReturnType::Never.into());
 
-        /*
-        let (variant_id, fun_scope_id, fun_block_id, def_func_type) = self.push_cps_block_with_type(name, scope_id, abstraction_id, &call_func_type, call_span_id, b)?;
-        */
+        let call_func_type = AstType::Func(call_arg_type.clone().into(), ReturnType::Never.into());
+        let (variant_id, fun_scope_id, fun_block_id, def_arg_type) = self.push_cps_block_with_type(name, scope_id, abstraction_id, &call_func_type, call_span_id, b)?;
+        b.unify(&call_arg_type, call_span_id, &def_arg_type, def_span_id);
+         */
 
         // This expects to be called in a block that is ready to jump
         let (refresh_def_func_type, refresh_def_arg_type, def_ret_type) =
@@ -200,7 +203,6 @@ impl Flatten {
             ReturnType::Never.into(),
         );
 
-        //b.unify(&call_func_type, call_span_id, &refresh_def_func_type, def_span_id);
         b.unify(
             &call_arg_type,
             call_span_id,
@@ -274,15 +276,10 @@ impl Flatten {
                     //println!("placeholder5: {}", p_link_id);
                 }
 
-                (variant_id, fun_block_id, fun_scope_id, r_ty1)
+                (variant_id, fun_block_id, fun_scope_id, r_ty2)
             };
 
-        b.unify(
-            &call_arg_type,
-            call_span_id,
-            &refresh_def_arg_type,
-            def_span_id,
-        );
+        b.unify(&call_arg_type, call_span_id, &def_arg_type, def_span_id);
         //b.unify(&call_func_type, call_span_id, &def_func_type, def_span_id);
 
         // NOW JUMP
@@ -338,11 +335,8 @@ impl Flatten {
 
         // control is returned to the goto
 
-        //let def_func_type = AstType::Func(
-        //def_arg_type.clone().into(),
-        //ReturnType::Never.into(),
-        //);
-        let def_arg_type = AstType::Struct(def_func_type.fields());
+        let def_func_type = AstType::Func(def_arg_type.clone().into(), ReturnType::Never.into());
+        //let def_arg_type = AstType::Struct(def_func_type.fields());
         let def_ret_type = AstType::Unit;
 
         return Ok((
