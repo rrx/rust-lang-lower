@@ -246,7 +246,7 @@ impl Flatten {
                 (variant_id, fun_block_id, fun_scope_id, r_ty2)
             };
 
-        b.unify(&call_arg_type, call_span_id, &def_arg_type, def_span_id);
+        //b.unify(&call_arg_type, call_span_id, &def_arg_type, def_span_id);
         //b.unify(&call_func_type, call_span_id, &def_func_type, def_span_id);
 
         // NOW JUMP
