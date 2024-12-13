@@ -53,12 +53,12 @@ impl Flatten {
             &call_func_type,
             a.def_span_id,
         );
-        let r = b.types.u.resolve(&call_arg_type).unwrap();
+        //let r = b.types.u.resolve(&call_arg_type).unwrap();
 
         // BAKE CPS IF NEEDED
         let (variant_id, fun_block_id, fun_scope_id, ty) =
             if let Some((variant_id, resolve_type, link_id, fun_scope_id)) =
-                self.resolve_function_name(scope_id, &name, &r, b)
+                self.resolve_function_name(scope_id, &name, &call_arg_type, b)
             {
                 let entry = self.get_entry(link_id);
                 let fun_block_id = entry.block_id;
@@ -186,11 +186,11 @@ impl Flatten {
         let goto_scope_id = block.scope_id;
         //let s_name = b.labels.r(name.into());
         let call_arg_type = argvec_type(&call_values);
+        let call_func_type = AstType::Func(call_arg_type.clone().into(), ReturnType::Never.into());
 
         /*
         // unify the caller args and the refreshed function args
 
-        let call_func_type = AstType::Func(call_arg_type.clone().into(), ReturnType::Never.into());
         let (variant_id, fun_scope_id, fun_block_id, def_arg_type) = self.push_cps_block_with_type(name, scope_id, abstraction_id, &call_func_type, call_span_id, b)?;
         b.unify(&call_arg_type, call_span_id, &def_arg_type, def_span_id);
          */
@@ -209,6 +209,10 @@ impl Flatten {
             &refresh_def_arg_type,
             def_span_id,
         );
+
+        b.unify(&def_func_type, call_span_id, &call_func_type, def_span_id);
+
+        //let r = b.types.u.resolve(&call_arg_type).unwrap();
 
         let (variant_id, fun_block_id, fun_scope_id, def_arg_type) =
             if let Some((variant_id, resolve_type, link_id, fun_scope_id)) =
