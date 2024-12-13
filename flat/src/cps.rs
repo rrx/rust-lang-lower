@@ -38,13 +38,16 @@ impl Flatten {
         let def_span_id = a.def_span_id;
         // This expects to be called in a block that is ready to jump
         let (_def_func_type, def_arg_type, _def_ret_type) = self.refresh_func_type(&a.def, b);
-        let refresh_def_func_type =
-            AstType::Func(def_arg_type.clone().into(), ReturnType::Never.into());
+        let def_func_type = AstType::Func(def_arg_type.clone().into(), ReturnType::Never.into());
 
         //b.unify(&def_func_type, origin_span_id, &refresh_def_arg_type, def_span_id);
 
+        let call_arg_type = AstType::Struct(call_func_type.fields());
+
+        b.unify(&def_arg_type, origin_span_id, &call_arg_type, a.def_span_id);
+
         b.unify(
-            &refresh_def_func_type,
+            &def_func_type,
             origin_span_id,
             &call_func_type,
             a.def_span_id,
@@ -53,16 +56,11 @@ impl Flatten {
         // BAKE CPS IF NEEDED
         let (variant_id, fun_block_id, fun_scope_id, ty) =
             if let Some((variant_id, resolve_type, link_id, fun_scope_id)) =
-                self.resolve_function_name(scope_id, &name, &call_func_type, b)
+                self.resolve_function_name(scope_id, &name, &call_arg_type, b)
             {
                 let entry = self.get_entry(link_id);
                 let fun_block_id = entry.block_id;
-                b.unify(
-                    &call_func_type,
-                    origin_span_id,
-                    &resolve_type,
-                    a.def_span_id,
-                );
+                b.unify(&call_arg_type, origin_span_id, &resolve_type, a.def_span_id);
 
                 (variant_id, fun_block_id, fun_scope_id, resolve_type)
             } else {
@@ -80,7 +78,7 @@ impl Flatten {
 
                 self.switch_blocks(fun_block_id);
 
-                let r_ty1 = b.types.u.resolve(&call_func_type).unwrap();
+                let r_ty1 = b.types.u.resolve(&call_arg_type).unwrap();
 
                 //println!("call_arg_type: {:?}", (call_func_type, &def_func_type));
                 //let r_ty1 = b.types.u.resolve(&call_arg_type).unwrap_or(call_arg_type.clone());
@@ -89,8 +87,8 @@ impl Flatten {
                 //println!("push start block5: {}{}", fun_scope_id, fun_block_id);
                 let (entry_link_id, _) = self.push_start_block(
                     fun_scope_id,
-                    //def_func_type.clone(),
-                    r_ty1.clone(),
+                    def_func_type.clone(),
+                    //r_ty1.clone(),
                     Some(lambda_name),
                     def_span_id,
                     VarDefinitionSpace::Default,
@@ -101,7 +99,7 @@ impl Flatten {
                 self.scopes
                     .scope_define(scope_id, lambda_name, entry_link_id);
 
-                //let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
+                let r_ty1 = b.types.u.resolve(&def_arg_type).unwrap();
 
                 let variant_id = self.variant_add(
                     scope_id,
