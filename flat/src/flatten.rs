@@ -725,6 +725,7 @@ impl Flatten {
 
         self.cont_graph("cont.dot", b);
 
+        self.resolve_open_identifiers(b)?;
         self.resolve_cps(b)?;
 
         self.switch_blocks(self.static_block_id());
@@ -985,6 +986,7 @@ impl Flatten {
             .collect::<Vec<_>>();
     }
 
+    /*
     pub fn push_cps_jump(
         &mut self,
         target_id: LinkId,
@@ -996,6 +998,7 @@ impl Flatten {
         let target_block_id: BlockId = entry.block_id;
         self.push_jump(target_block_id, jump_args, span_id)
     }
+    */
 
     pub fn push_jump(
         &mut self,
@@ -2133,11 +2136,10 @@ impl Flatten {
         Ok(())
     }
 
-    fn resolve_cps(&mut self, b: &mut NB) -> Result<()> {
+    fn resolve_open_identifiers(&mut self, b: &mut NB) -> Result<()> {
         let mut abstractions = vec![];
         let mut blocks = vec![];
         let mut errors = vec![];
-        //println!("open_identifiers: {:?}", &self.open_identifiers);
         for link_id in &self.open_identifiers {
             let entry = self.get_entry(*link_id);
             let block_id = entry.block_id;
@@ -2159,7 +2161,6 @@ impl Flatten {
             let block_entry = self.get_entry(block_entry_id);
             let block_ty = block_entry.ty.clone();
             let block_span_id = block_entry.span_id;
-            //let target_field_types = block_ty.field_types();
 
             self.switch_blocks(block_id);
             self.scoped_continuations.connect(
@@ -2171,9 +2172,6 @@ impl Flatten {
             // now replace the abstraction code
             let entry = self.get_entry_mut(link_id);
             entry.code = LCode::Val(Literal::Block(block_id));
-            //entry.ty = AstType::TargetUnion(target_field_types, vec![block_id]);
-
-            //println!("unify: {}=>{}", &ty, &entry.ty);
             b.unify(&entry.ty, entry.span_id, &block_ty, block_span_id);
         }
 
@@ -2187,7 +2185,10 @@ impl Flatten {
             let s_name = b.labels.r(name.into());
             b.push_error(&format!("Identifier not found: {}", s_name), entry.span_id);
         }
+        Ok(())
+    }
 
+    fn resolve_cps(&mut self, b: &mut NB) -> Result<()> {
         loop {
             if let Some(d) = self.deferred_goto.pop_cps() {
                 self.resolve_cps_single(d, b)?;
@@ -2201,11 +2202,7 @@ impl Flatten {
     fn resolve_deferred(&mut self, b: &mut NB) -> Result<()> {
         loop {
             if let Some(d) = self.deferred_goto.pop_deferred() {
-                //let s_name = b.labels.r(d.name.into());
-                //println!("{}: pop deferred goto: {:?}", s_name, &d);
-                //self.complete_open_abstractions(b)?;
                 let _ = self.resolve_deferred_single(d, b)?;
-                //self.complete_open_abstractions(b)?;
             } else {
                 break;
             }
