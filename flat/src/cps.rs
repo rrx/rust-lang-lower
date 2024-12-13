@@ -38,7 +38,7 @@ impl Flatten {
             {
                 let entry = self.get_entry(link_id);
                 let fun_block_id = entry.block_id;
-                b.unify(&call_arg_type, call_span_id, &resolve_type, a.def_span_id);
+                b.unify(&call_arg_type, call_span_id, &resolve_type, def_span_id);
                 (variant_id, fun_block_id, fun_scope_id, resolve_type)
             } else {
                 let (fun_block_id, fun_scope_id) =
@@ -60,11 +60,9 @@ impl Flatten {
 
                 let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
 
-                //println!("push start block5: {}{}", fun_scope_id, fun_block_id);
                 let (entry_link_id, _) = self.push_start_block(
                     fun_scope_id,
                     r_ty1.clone(),
-                    //r_ty1.clone(),
                     Some(lambda_name),
                     def_span_id,
                     VarDefinitionSpace::Default,
@@ -219,7 +217,7 @@ impl Flatten {
                     .u
                     .resolve(&call_arg_type)
                     .unwrap_or(call_arg_type.clone());
-                self.variant_update(variant_id, r_ty2.clone(), entry_link_id); // caller_blocks);
+                self.variant_update(variant_id, r_ty2.clone(), entry_link_id);
 
                 // terminate if not already terminated
                 // this is for dead code
@@ -238,12 +236,9 @@ impl Flatten {
                 (variant_id, fun_block_id, fun_scope_id, r_ty2)
             };
 
-        //b.unify(&call_arg_type, call_span_id, &def_arg_type, def_span_id);
-        //b.unify(&call_func_type, call_span_id, &def_func_type, def_span_id);
-
+        self.switch_blocks(goto_block_id);
         // NOW JUMP
         // now that we have the arguments calculated, and the lambda baked, jump!
-        self.switch_blocks(goto_block_id);
         self.remove_placeholder_terminal(goto_block_id);
         //let block = self.blocks.get_block(goto_block_id);
         //let entry = self.get_entry(block.last().unwrap());
