@@ -305,7 +305,7 @@ impl Flatten {
         b.types.u.rollback_to(snapshot);
         println!(
             "resolve_function_name: {:?}",
-            (start_scope_id, call_func_type, &result)
+            (name, start_scope_id, call_func_type, &result)
         );
         result
     }
@@ -623,8 +623,7 @@ impl Flatten {
                     }
                     LCode::Switch(_, ref m) => {
                         let ty = self.get_type(last_link_id).clone();
-                        let mut targets =
-                            m.iter().map(|(_, block_id)| *block_id).collect::<Vec<_>>();
+                        let mut targets = m.iter().map(|block_id| *block_id).collect::<Vec<_>>();
                         targets.sort();
                         (ty, targets)
                     }
@@ -1694,7 +1693,7 @@ impl Flatten {
         let block = self.blocks.get_block(current_block_id);
         let scope_id = block.scope_id;
 
-        let s_name = b.labels.r(name.into());
+        let _s_name = b.labels.r(name.into());
         //println!(
         //"{}: push_goto args: {:?} in {}{}",
         //s_name, &args, scope_id, current_block_id,
@@ -1707,7 +1706,7 @@ impl Flatten {
 
         if let Some(name_link_id) = self.resolve_name_in_scope(scope_id, name.into()) {
             let link_id = block.last().unwrap();
-            let p_link_id = self.push_code(
+            let _p_link_id = self.push_code(
                 LCode::PlaceholderTerminal(link_id),
                 AstType::Unit,
                 Some(name),
@@ -1738,7 +1737,7 @@ impl Flatten {
             .find_nearest_scope(scope_id, &[ScopeType::Function])
         {
             let link_id = block.last().unwrap();
-            let p_link_id = self.push_code(
+            let _p_link_id = self.push_code(
                 LCode::PlaceholderTerminal(link_id),
                 AstType::Unit,
                 None,
@@ -2009,7 +2008,7 @@ impl Flatten {
                 d.argvec = goto_values;
 
                 let block = self.blocks.get_block(self.current_block_id());
-                let link_id = self.push_code(
+                let _link_id = self.push_code(
                     LCode::PlaceholderTerminal(block.last().unwrap()),
                     AstType::Unit,
                     None,
@@ -2033,7 +2032,7 @@ impl Flatten {
 
                     // push and jump
                     // TODO: this function needs to handle unwind
-                    let (variant_id, fun_scope_id, _fun_block_id, _, _, _, _, _link_id) = self
+                    let (variant_id, _fun_scope_id, _fun_block_id, _, _, _, _, _link_id) = self
                         .push_cps_block(
                             d.name,
                             d.scope_id,
@@ -2125,7 +2124,7 @@ impl Flatten {
                     }
                 };
 
-                let jump_link_id =
+                let _jump_link_id =
                     self.replace_placeholder_terminal(d.block_id, arg_link_id, sources.clone(), b);
                 //println!(
                 //"flows: {:?}",
@@ -2407,9 +2406,9 @@ impl Flatten {
                 entry.code = LCode::Jump(block_id.into());
             } else if target_block_ids.len() > 1 {
                 target_block_ids.sort();
-                let mut m = HashMap::new();
-                for (i, block_id) in target_block_ids.iter().enumerate() {
-                    m.insert(i as i64, *block_id);
+                let mut m = HashSet::new();
+                for block_id in target_block_ids.iter() {
+                    m.insert(*block_id);
                 }
 
                 // connects here aren't actually used to calculate the flows

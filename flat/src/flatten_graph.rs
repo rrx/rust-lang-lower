@@ -183,7 +183,7 @@ pub fn flow_graph(m: &dyn ICodeModule, gblocks: &BlockGraph, filename: &str, b: 
                                 LCode::Switch(link_id, cases) => {
                                     let v_link = m.resolve_code_offset(link_id.into());
                                     ng.edges.push((v, v_link));
-                                    for block_id in cases.values() {
+                                    for block_id in cases.iter() {
                                         let v_target = m.resolve_code_offset(block_id.into());
                                         ng.edges.push((v, v_target));
                                     }

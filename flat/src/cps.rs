@@ -32,7 +32,6 @@ impl Flatten {
         b.unify(&call_arg_type, call_span_id, &def_arg_type, def_span_id);
         b.unify(&def_func_type, call_span_id, &call_func_type, def_span_id);
 
-        // BAKE CPS IF NEEDED
         let (variant_id, fun_block_id, fun_scope_id, ty) =
             if let Some((variant_id, resolve_type, link_id, fun_scope_id)) =
                 self.resolve_function_name(scope_id, &name, &call_arg_type, b)
@@ -40,14 +39,16 @@ impl Flatten {
                 let entry = self.get_entry(link_id);
                 let fun_block_id = entry.block_id;
                 b.unify(&call_arg_type, call_span_id, &resolve_type, a.def_span_id);
-
                 (variant_id, fun_block_id, fun_scope_id, resolve_type)
             } else {
                 let (fun_block_id, fun_scope_id) =
                     self.new_scope_and_block(ScopeType::Block, scope_id);
                 // block graph
-                self.blocks
-                    .block_succ(current_block_id, fun_block_id, Successor::BlockScope);
+                self.blocks.block_succ(
+                    self.current_block_id(),
+                    fun_block_id,
+                    Successor::BlockScope,
+                );
                 // Start lambda block
                 let lambda_name = b.labels.fresh_key(&s_name);
 
@@ -56,9 +57,6 @@ impl Flatten {
                 let body = a.def.body.clone().unwrap();
 
                 self.switch_blocks(fun_block_id);
-
-                //let r_ty1 = b.types.u.resolve(&call_arg_type).unwrap_or(call_arg_type.clone());
-                //let r_ty1 = call_arg_type;
 
                 let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
 
@@ -77,13 +75,8 @@ impl Flatten {
                 self.scopes
                     .scope_define(scope_id, lambda_name, entry_link_id);
 
-                let variant_id = self.variant_add(
-                    scope_id,
-                    lambda_name,
-                    r_ty1.clone(),
-                    entry_link_id,
-                    fun_block_id,
-                );
+                let variant_id =
+                    self.variant_add(scope_id, name, r_ty1.clone(), entry_link_id, fun_block_id);
 
                 // flatten function, and switch to next
                 // lower first, so we resolve types
@@ -173,8 +166,6 @@ impl Flatten {
         b.unify(&call_arg_type, call_span_id, &def_arg_type, def_span_id);
         b.unify(&def_func_type, call_span_id, &call_func_type, def_span_id);
 
-        //let r = b.types.u.resolve(&call_arg_type).unwrap();
-
         let (variant_id, fun_block_id, fun_scope_id, def_arg_type) =
             if let Some((variant_id, resolve_type, link_id, fun_scope_id)) =
                 self.resolve_function_name(scope_id, &name, &call_arg_type, b)
@@ -182,15 +173,16 @@ impl Flatten {
                 let entry = self.get_entry(link_id);
                 let fun_block_id = entry.block_id;
                 b.unify(&call_arg_type, call_span_id, &resolve_type, def_span_id);
-                //b.unify(&call_func_type, call_span_id, &resolve_type, def_span_id);
-
                 (variant_id, fun_block_id, fun_scope_id, resolve_type)
             } else {
                 let (fun_block_id, fun_scope_id) =
                     self.new_scope_and_block(ScopeType::Block, scope_id);
                 // block graph
-                self.blocks
-                    .block_succ(current_block_id, fun_block_id, Successor::BlockScope);
+                self.blocks.block_succ(
+                    self.current_block_id(),
+                    fun_block_id,
+                    Successor::BlockScope,
+                );
                 // Start lambda block
                 let lambda_name = b.labels.fresh_key(&s_name);
 
@@ -198,10 +190,10 @@ impl Flatten {
                 let a = self.abstractions.get(abstraction_id);
                 let body = a.def.body.clone().unwrap();
 
+                self.switch_blocks(fun_block_id);
+
                 let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
 
-                self.switch_blocks(fun_block_id);
-                //println!("push start block1: {}{}", fun_scope_id, fun_block_id);
                 let (entry_link_id, _) = self.push_start_block(
                     fun_scope_id,
                     r_ty1.clone(),
