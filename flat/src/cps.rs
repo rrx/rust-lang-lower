@@ -1,20 +1,13 @@
-use super::resolve_attribute;
-use anyhow::Error;
 use anyhow::Result;
 use compile_core::{
-    AbstractionId, Argument, AssignTarget, Ast, AstNode, AstType, BuiltinId, ControlFlowMarker,
-    Lambda, LinkOptions, Literal, NaryOperation, ReturnType, SpanId, StringKey, VarDefinitionSpace,
+    AbstractionId, Argument, AstType, ReturnType, SpanId, StringKey, VarDefinitionSpace,
 };
-
-use std::collections::{HashMap, HashSet, VecDeque};
 
 use std::convert::Into;
 
 use crate::{
-    argvec_type, AbstractionsBuilder, ArgVec, BlockGraph, BlockId, BlockifyError, Builtin,
-    CodeOffset, ContinuationFlow, DeferredGoto, DeferredGotoList, DeferredType, Flatten, FlowEdge,
-    FunctionVariantBuilder, LCode, LinkId, NodeBuilder as NB, ScopeGraph, ScopeId, ScopeType,
-    ScopedContinuations, StringLabel, Successor, ValueId, VariantId,
+    argvec_type, ArgVec, BlockId, ContinuationFlow, Flatten, FlowEdge, LCode, LinkId,
+    NodeBuilder as NB, ScopeId, ScopeType, Successor, VariantId,
 };
 
 impl Flatten {
@@ -36,8 +29,6 @@ impl Flatten {
         let (_def_func_type, def_arg_type, _def_ret_type) = self.refresh_func_type(&a.def, b);
         let def_func_type = AstType::Func(def_arg_type.clone().into(), ReturnType::Never.into());
 
-        //b.unify(&def_func_type, origin_span_id, &refresh_def_arg_type, def_span_id);
-
         let call_arg_type = AstType::Struct(call_func_type.fields());
 
         println!(
@@ -53,7 +44,6 @@ impl Flatten {
             &call_func_type,
             a.def_span_id,
         );
-        //let r = b.types.u.resolve(&call_arg_type).unwrap();
 
         // BAKE CPS IF NEEDED
         let (variant_id, fun_block_id, fun_scope_id, ty) =
