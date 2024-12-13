@@ -107,7 +107,7 @@ impl Flatten {
                 // flatten function, and switch to next
                 // lower first, so we resolve types
                 let _ = self.push_node(*body, b)?;
-                let r_ty2 = b.types.u.resolve(&def_arg_type).unwrap();
+                //let r_ty2 = b.types.u.resolve(&def_arg_type).unwrap();
 
                 //let r_ty2 = b
                 //.types
@@ -115,7 +115,13 @@ impl Flatten {
                 //.resolve(&def_arg_type)
                 //.unwrap_or(def_arg_type.clone());
                 //// update the variant with the resolved type
-                //self.variant_update(variant_id, r_ty2.clone(), entry_link_id);
+                //
+                let r_ty2 = b
+                    .types
+                    .u
+                    .resolve(&call_arg_type)
+                    .unwrap_or(call_arg_type.clone());
+                self.variant_update(variant_id, r_ty2.clone(), entry_link_id);
 
                 // terminate if not already terminated
                 // this is for dead code
@@ -249,13 +255,14 @@ impl Flatten {
                 // flatten function, and switch to next
                 // lower first, so we resolve types
                 let _ = self.push_node(body, b)?;
+                //let r_ty2 = b.types.u.resolve(&call_arg_type).unwrap();
 
                 let r_ty2 = b
                     .types
                     .u
                     .resolve(&call_arg_type)
                     .unwrap_or(call_arg_type.clone());
-                // update the variant with the resolved type
+                ////// update the variant with the resolved type
                 self.variant_update(variant_id, r_ty2.clone(), entry_link_id); // caller_blocks);
 
                 // terminate if not already terminated
