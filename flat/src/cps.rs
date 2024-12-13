@@ -23,14 +23,14 @@ impl Flatten {
         name: StringKey,
         scope_id: ScopeId,
         abstraction_id: AbstractionId,
-        def_func_type: &AstType,
+        call_func_type: &AstType,
         origin_span_id: SpanId,
         b: &mut NB,
     ) -> Result<(VariantId, ScopeId, BlockId, AstType)> {
         let s_name = b.labels.r(name.into());
         println!(
             "push_cps_block_with_type: {}, {}, {}",
-            def_func_type, abstraction_id, &s_name
+            call_func_type, abstraction_id, &s_name
         );
         // call in the context of the caller, which is a goto
         let current_block_id = self.current_block_id();
@@ -46,18 +46,23 @@ impl Flatten {
         b.unify(
             &refresh_def_func_type,
             origin_span_id,
-            &def_func_type,
+            &call_func_type,
             a.def_span_id,
         );
 
         // BAKE CPS IF NEEDED
         let (variant_id, fun_block_id, fun_scope_id, ty) =
             if let Some((variant_id, resolve_type, link_id, fun_scope_id)) =
-                self.resolve_function_name(scope_id, &name, &def_func_type, b)
+                self.resolve_function_name(scope_id, &name, &call_func_type, b)
             {
                 let entry = self.get_entry(link_id);
                 let fun_block_id = entry.block_id;
-                b.unify(&def_func_type, origin_span_id, &resolve_type, a.def_span_id);
+                b.unify(
+                    &call_func_type,
+                    origin_span_id,
+                    &resolve_type,
+                    a.def_span_id,
+                );
 
                 (variant_id, fun_block_id, fun_scope_id, resolve_type)
             } else {
@@ -75,9 +80,9 @@ impl Flatten {
 
                 self.switch_blocks(fun_block_id);
 
-                let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
+                let r_ty1 = b.types.u.resolve(&call_func_type).unwrap();
 
-                println!("call_arg_type: {:?}", (def_func_type, &def_func_type));
+                //println!("call_arg_type: {:?}", (call_func_type, &def_func_type));
                 //let r_ty1 = b.types.u.resolve(&call_arg_type).unwrap_or(call_arg_type.clone());
                 //let r_ty1 = call_arg_type;
 
