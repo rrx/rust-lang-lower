@@ -23,11 +23,10 @@ impl Flatten {
         let s_name = b.labels.r(name.into());
         // call in the context of the caller, which is a goto
         let current_block_id = self.current_block_id();
+
         let a = self.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
-        // This expects to be called in a block that is ready to jump
-
-        let (_def_func_type, def_arg_type, _def_ret_type) = self.refresh_func_type(&a.def, b);
+        let (_, def_arg_type, _) = self.refresh_func_type(&a.def, b);
         let def_func_type = AstType::Func(def_arg_type.clone().into(), ReturnType::Never.into());
         let call_arg_type = AstType::Struct(call_func_type.fields());
         b.unify(&call_arg_type, call_span_id, &def_arg_type, def_span_id);
@@ -168,8 +167,7 @@ impl Flatten {
         // This expects to be called in a block that is ready to jump
         let a = self.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
-        let (_refresh_def_func_type, def_arg_type, _def_ret_type) =
-            self.refresh_func_type(&a.def, b);
+        let (_, def_arg_type, _) = self.refresh_func_type(&a.def, b);
         let def_func_type = AstType::Func(def_arg_type.clone().into(), ReturnType::Never.into());
         let call_arg_type = AstType::Struct(call_func_type.fields());
         b.unify(&call_arg_type, call_span_id, &def_arg_type, def_span_id);
