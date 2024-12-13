@@ -32,9 +32,9 @@ pub struct FunctionVariant {
     pub link_id: LinkId,
     pub block_id: BlockId,
     pub name: StringKey,
-    pub caller_blocks: HashMap<BlockId, Caller>,
 }
 
+/*
 impl FunctionVariant {
     pub fn block_index(&self, block_id: &BlockId) -> i64 {
         let mut blocks = self
@@ -48,6 +48,7 @@ impl FunctionVariant {
         index as i64
     }
 }
+*/
 
 #[derive(Debug)]
 pub struct VariantIterator {
@@ -109,24 +110,6 @@ impl FunctionVariantBuilder {
         self.variants.get_mut(variant_id.index()).unwrap()
     }
 
-    pub fn add_caller(
-        &mut self,
-        variant_id: VariantId,
-        block_id: BlockId,
-        goto_link_id: LinkId,
-        args: Vec<LinkId>,
-    ) {
-        let v = self.get_mut(variant_id);
-        v.caller_blocks.insert(
-            block_id,
-            Caller {
-                block_id,
-                link_id: goto_link_id,
-                args,
-            },
-        );
-    }
-
     pub fn add(
         &mut self,
         ty: AstType,
@@ -140,7 +123,6 @@ impl FunctionVariantBuilder {
             link_id,
             block_id,
             name,
-            caller_blocks: HashMap::new(),
         });
         let variant_id = VariantId(index as u32);
         self.block_lookup.insert(block_id, variant_id);
@@ -152,18 +134,18 @@ impl FunctionVariantBuilder {
         v.ty = ty;
     }
 
+    /*
     pub fn update(
         &mut self,
         variant_id: VariantId,
         ty: AstType,
         link_id: LinkId,
-        caller_blocks: HashMap<BlockId, Caller>,
     ) {
         let v = self.variants.get_mut(variant_id.index()).unwrap();
         v.ty = ty;
         v.link_id = link_id;
-        v.caller_blocks = caller_blocks;
     }
+    */
 }
 
 #[derive(Debug)]

@@ -23,10 +23,15 @@ impl Flatten {
         name: StringKey,
         scope_id: ScopeId,
         abstraction_id: AbstractionId,
-        def_func_type: AstType,
+        def_func_type: &AstType,
         origin_span_id: SpanId,
         b: &mut NB,
-    ) -> Result<(VariantId, ScopeId, BlockId)> {
+    ) -> Result<(VariantId, ScopeId, BlockId, AstType)> {
+        let s_name = b.labels.r(name.into());
+        println!(
+            "push_cps_block_with_type: {}, {}, {}",
+            def_func_type, abstraction_id, &s_name
+        );
         // call in the context of the caller, which is a goto
         let current_block_id = self.current_block_id();
         let a = self.abstractions.get(abstraction_id);
@@ -35,7 +40,8 @@ impl Flatten {
         let (_def_func_type, def_arg_type, _def_ret_type) = self.refresh_func_type(&a.def, b);
         let refresh_def_func_type =
             AstType::Func(def_arg_type.clone().into(), ReturnType::Never.into());
-        let s_name = b.labels.r(name.into());
+
+        //b.unify(&def_func_type, origin_span_id, &refresh_def_arg_type, def_span_id);
 
         b.unify(
             &refresh_def_func_type,
@@ -45,7 +51,7 @@ impl Flatten {
         );
 
         // BAKE CPS IF NEEDED
-        let (variant_id, fun_block_id, fun_scope_id) =
+        let (variant_id, fun_block_id, fun_scope_id, ty) =
             if let Some((variant_id, resolve_type, link_id, fun_scope_id)) =
                 self.resolve_function_name(scope_id, &name, &def_func_type, b)
             {
@@ -53,7 +59,7 @@ impl Flatten {
                 let fun_block_id = entry.block_id;
                 b.unify(&def_func_type, origin_span_id, &resolve_type, a.def_span_id);
 
-                (variant_id, fun_block_id, fun_scope_id)
+                (variant_id, fun_block_id, fun_scope_id, resolve_type)
             } else {
                 let (fun_block_id, fun_scope_id) =
                     self.new_scope_and_block(ScopeType::Block, scope_id);
@@ -62,6 +68,8 @@ impl Flatten {
                     .block_succ(current_block_id, fun_block_id, Successor::BlockScope);
                 // Start lambda block
                 let lambda_name = b.labels.fresh_key(&s_name);
+
+                // make a copy of the body
                 let a = self.abstractions.get(abstraction_id);
                 let body = a.def.body.clone().unwrap();
 
@@ -69,9 +77,14 @@ impl Flatten {
 
                 let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
 
+                println!("call_arg_type: {:?}", (def_func_type, &def_func_type));
+                //let r_ty1 = b.types.u.resolve(&call_arg_type).unwrap_or(call_arg_type.clone());
+                //let r_ty1 = call_arg_type;
+
                 //println!("push start block5: {}{}", fun_scope_id, fun_block_id);
                 let (entry_link_id, _) = self.push_start_block(
                     fun_scope_id,
+                    //def_func_type.clone(),
                     r_ty1.clone(),
                     Some(lambda_name),
                     def_span_id,
@@ -82,6 +95,8 @@ impl Flatten {
                 // add entry to scope, for recursion
                 self.scopes
                     .scope_define(scope_id, lambda_name, entry_link_id);
+
+                //let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
 
                 let variant_id = self.variant_add(
                     scope_id,
@@ -95,11 +110,19 @@ impl Flatten {
                 // lower first, so we resolve types
                 let _ = self.push_node(*body, b)?;
 
+                //let r_ty2 = b
+                //.types
+                //.u
+                //.resolve(&def_func_type)
+                //.unwrap_or(def_func_type.clone());
+                //// update the variant with the resolved type
+                //self.variant_update(variant_id, r_ty2.clone(), entry_link_id);
+
                 // terminate if not already terminated
                 // this is for dead code
                 let block = self.blocks.get_block(self.current_block_id());
                 if !block.is_term() {
-                    let p_link_id = self.push_code(
+                    let _p_link_id = self.push_code(
                         LCode::PlaceholderTerminal(block.last().unwrap()),
                         AstType::Unit,
                         None,
@@ -109,9 +132,12 @@ impl Flatten {
                     //println!("placeholder4: {}", p_link_id);
                 }
 
-                (variant_id, fun_block_id, fun_scope_id)
+                (variant_id, fun_block_id, fun_scope_id, r_ty1)
             };
-        Ok((variant_id, fun_scope_id, fun_block_id))
+
+        self.switch_blocks(current_block_id);
+
+        Ok((variant_id, fun_scope_id, fun_block_id, ty))
     }
 
     pub(super) fn push_cps_block(
@@ -134,6 +160,7 @@ impl Flatten {
     )> {
         // call in the context of the caller, which is a goto
         let current_block_id = self.current_block_id();
+        let s_name = b.labels.r(name.into());
         let a = self.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
         let def = a.def.clone();
@@ -142,57 +169,50 @@ impl Flatten {
         // we might want to handle this later
         // return in a CPS will return from the scoped function
         //fun_scope.return_block = Some(next_block_id);
-
-        // This expects to be called in a block that is ready to jump
-        let (_def_func_type, def_arg_type, def_ret_type) = self.refresh_func_type(&def, b);
-        let def_func_type = AstType::Func(def_arg_type.clone().into(), ReturnType::Never.into());
-
+        //
         // WRITE GOTO
         let (args, _) =
             self.calculate_function_arguments(&def, &args, def_span_id, call_span_id, b)?;
-
-        //println!(
-        //"push call values1: {:?}",
-        //(scope_id, self.current_block_id(), &args)
-        //);
-
-        //self.dump_position();
         let call_values = self.push_call_arguments(args, call_span_id, b)?;
-        //self.dump_position();
-
-        //let call_arg_type = target_union_type(&call_values);
-        let call_arg_type = argvec_type(&call_values);
-        let _call_func_type = AstType::Func(call_arg_type.clone().into(), ReturnType::Never.into());
-
-        // unify the caller args and the refreshed function args
-        b.unify(&call_arg_type, call_span_id, &def_arg_type, def_span_id);
-
         let goto_block_id = self.current_block_id();
         let block = self.blocks.get_block(goto_block_id);
         let goto_scope_id = block.scope_id;
+        //let s_name = b.labels.r(name.into());
+        let call_arg_type = argvec_type(&call_values);
 
-        let s_name = b.labels.r(name.into());
+        /*
+        // unify the caller args and the refreshed function args
+         */
+        //let call_func_type = AstType::Func(call_arg_type.clone().into(), ReturnType::Never.into());
 
-        // BAKE CPS IF NEEDED
-        //let _r2 = b.types.u.resolve(&call_arg_type).unwrap();
-        //let _r3 = b.types.u.resolve(&def_arg_type);
-        //assert!(!call_arg_type.is_unknown());
+        /*
+        let (variant_id, fun_scope_id, fun_block_id, def_func_type) = self.push_cps_block_with_type(name, scope_id, abstraction_id, &call_func_type, call_span_id, b)?;
+        */
 
-        let (variant_id, fun_block_id, fun_scope_id, r_ty) =
+        // This expects to be called in a block that is ready to jump
+        let (refresh_def_func_type, refresh_def_arg_type, def_ret_type) =
+            self.refresh_func_type(&def, b);
+        let def_func_type = AstType::Func(
+            refresh_def_arg_type.clone().into(),
+            ReturnType::Never.into(),
+        );
+
+        //b.unify(&call_func_type, call_span_id, &refresh_def_func_type, def_span_id);
+        b.unify(
+            &call_arg_type,
+            call_span_id,
+            &refresh_def_arg_type,
+            def_span_id,
+        );
+
+        let (variant_id, fun_block_id, fun_scope_id, def_arg_type) =
             if let Some((variant_id, resolve_type, link_id, fun_scope_id)) =
                 self.resolve_function_name(scope_id, &name, &call_arg_type, b)
             {
                 let entry = self.get_entry(link_id);
                 let fun_block_id = entry.block_id;
-                //println!(
-                //"{}: push_cps_block found {}:{} => {}:{}",
-                //s_name,
-                //scope_id,
-                //self.current_block_id(),
-                //fun_scope_id,
-                //fun_block_id
-                //);
                 b.unify(&call_arg_type, call_span_id, &resolve_type, def_span_id);
+                //b.unify(&call_func_type, call_span_id, &resolve_type, def_span_id);
 
                 (variant_id, fun_block_id, fun_scope_id, resolve_type)
             } else {
@@ -203,14 +223,6 @@ impl Flatten {
                     .block_succ(current_block_id, fun_block_id, Successor::BlockScope);
                 // Start lambda block
                 let lambda_name = b.labels.fresh_key(&s_name);
-                //println!(
-                //"{}: push_cps_block bake {}:{} => {}:{}",
-                //s_name,
-                //scope_id,
-                //self.current_block_id(),
-                //fun_scope_id,
-                //fun_block_id
-                //);
                 let body = *def.body.clone().unwrap();
 
                 self.switch_blocks(fun_block_id);
@@ -229,7 +241,6 @@ impl Flatten {
                     .scope_define(scope_id, lambda_name, entry_link_id);
 
                 let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
-                //println!("ty: {:?}", (&r_ty1, &call_arg_type));
 
                 let variant_id =
                     self.variant_add(scope_id, name, r_ty1.clone(), entry_link_id, fun_block_id);
@@ -250,7 +261,7 @@ impl Flatten {
                 // this is for dead code
                 let block = self.blocks.get_block(self.current_block_id());
                 if !block.is_term() {
-                    let p_link_id = self.push_code(
+                    let _p_link_id = self.push_code(
                         LCode::PlaceholderTerminal(block.last().unwrap()),
                         AstType::Unit,
                         None,
@@ -260,11 +271,16 @@ impl Flatten {
                     //println!("placeholder5: {}", p_link_id);
                 }
 
-                (variant_id, fun_block_id, fun_scope_id, r_ty2)
+                (variant_id, fun_block_id, fun_scope_id, r_ty1)
             };
 
-        b.unify(&call_arg_type, call_span_id, &r_ty, def_span_id);
-        //println!("r: {:?}", &r_ty);
+        b.unify(
+            &call_arg_type,
+            call_span_id,
+            &refresh_def_arg_type,
+            def_span_id,
+        );
+        //b.unify(&call_func_type, call_span_id, &def_func_type, def_span_id);
 
         // NOW JUMP
         // now that we have the arguments calculated, and the lambda baked, jump!
@@ -277,7 +293,7 @@ impl Flatten {
         //(block.scope_id, goto_block_id, &call_values, &entry)
         //);
 
-        let call_links = call_values
+        let _call_links = call_values
             .iter()
             .map(|(_, link_id, _, _)| *link_id)
             .collect::<Vec<_>>();
@@ -308,9 +324,6 @@ impl Flatten {
             FlowEdge::Jump,
         );
 
-        self.variants
-            .add_caller(variant_id, current_block_id, goto_link_id, call_links);
-
         // if this really is a CPS function, then it should never return
         // TODO: verify that it never returns, could be with the function signature
         // If the function returns, it has no meaning, because a goto must be terminal,
@@ -321,6 +334,13 @@ impl Flatten {
         self.drain_diagnostics(b);
 
         // control is returned to the goto
+
+        //let def_func_type = AstType::Func(
+        //def_arg_type.clone().into(),
+        //ReturnType::Never.into(),
+        //);
+        let def_arg_type = AstType::Struct(def_func_type.fields());
+        let def_ret_type = AstType::Unit;
 
         return Ok((
             variant_id,

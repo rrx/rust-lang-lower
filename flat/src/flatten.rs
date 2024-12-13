@@ -303,6 +303,10 @@ impl Flatten {
             }
         }
         b.types.u.rollback_to(snapshot);
+        println!(
+            "resolve_function_name: {:?}",
+            (start_scope_id, call_func_type, &result)
+        );
         result
     }
 
@@ -489,8 +493,8 @@ impl Flatten {
         //let target_field_types = ty.field_types();
 
         self.switch_blocks(block_id);
-        let (_variant_id, _fun_scope_id, fun_block_id) =
-            self.push_cps_block_with_type(name, scope_id, abstraction_id, ty.clone(), span_id, b)?;
+        let (_variant_id, _fun_scope_id, fun_block_id, _) =
+            self.push_cps_block_with_type(name, scope_id, abstraction_id, &ty, span_id, b)?;
         //println!(
         //"complete: @{}, {}->{}",
         //link_id, abstraction_id, fun_block_id
