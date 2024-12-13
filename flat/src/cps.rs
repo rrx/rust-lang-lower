@@ -73,10 +73,12 @@ impl Flatten {
                 //let r_ty1 = b.types.u.resolve(&call_arg_type).unwrap_or(call_arg_type.clone());
                 //let r_ty1 = call_arg_type;
 
+                let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
+
                 //println!("push start block5: {}{}", fun_scope_id, fun_block_id);
                 let (entry_link_id, _) = self.push_start_block(
                     fun_scope_id,
-                    def_func_type.clone(),
+                    r_ty1.clone(),
                     //r_ty1.clone(),
                     Some(lambda_name),
                     def_span_id,
@@ -224,11 +226,13 @@ impl Flatten {
                 let lambda_name = b.labels.fresh_key(&s_name);
                 let body = *def.body.clone().unwrap();
 
+                let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
+
                 self.switch_blocks(fun_block_id);
                 //println!("push start block1: {}{}", fun_scope_id, fun_block_id);
                 let (entry_link_id, _) = self.push_start_block(
                     fun_scope_id,
-                    def_func_type.clone(),
+                    r_ty1.clone(),
                     Some(lambda_name),
                     def_span_id,
                     VarDefinitionSpace::Default,
@@ -238,8 +242,6 @@ impl Flatten {
                 // add entry to scope, for recursion
                 self.scopes
                     .scope_define(scope_id, lambda_name, entry_link_id);
-
-                let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
 
                 let variant_id =
                     self.variant_add(scope_id, name, r_ty1.clone(), entry_link_id, fun_block_id);
