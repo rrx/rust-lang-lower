@@ -32,7 +32,7 @@ impl Flatten {
         b.unify(&call_arg_type, call_span_id, &def_arg_type, def_span_id);
         b.unify(&def_func_type, call_span_id, &call_func_type, def_span_id);
 
-        let (variant_id, fun_block_id, fun_scope_id, ty) =
+        let (variant_id, fun_block_id, fun_scope_id, def_arg_type) =
             if let Some((variant_id, resolve_type, link_id, fun_scope_id)) =
                 self.resolve_function_name(scope_id, &name, &call_arg_type, b)
             {
@@ -106,7 +106,7 @@ impl Flatten {
 
         self.switch_blocks(current_block_id);
 
-        Ok((variant_id, fun_scope_id, fun_block_id, ty))
+        Ok((variant_id, fun_scope_id, fun_block_id, def_arg_type))
     }
 
     pub(super) fn push_cps_block(
@@ -128,7 +128,7 @@ impl Flatten {
         LinkId, // return goto link
     )> {
         // call in the context of the caller, which is a goto
-        let current_block_id = self.current_block_id();
+        //let current_block_id = self.current_block_id();
         let s_name = b.labels.r(name.into());
         let a = self.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
@@ -155,7 +155,6 @@ impl Flatten {
         b.unify(&call_arg_type, call_span_id, &def_arg_type, def_span_id);
          */
 
-        // This expects to be called in a block that is ready to jump
         let a = self.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
         let (_, def_arg_type, _) = self.refresh_func_type(&a.def, b);
