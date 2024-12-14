@@ -28,11 +28,22 @@ impl Flatten {
 
         let a = self.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
-        let (_, def_arg_type, _) = self.refresh_func_type(&a.def, b);
-        let def_func_type = AstFuncType::new(def_arg_type.clone(), ReturnType::Never.into()).into();
+        let def_func_type = b.types.r(a.def.fun_type).get_func().clone();
+        let mut def_func_type = self.refresh_func_type(&def_func_type, b);
+        def_func_type.ret = ReturnType::Never;
         let call_arg_type = AstType::Struct(call_func_type.fields());
-        b.unify(&call_arg_type, call_span_id, &def_arg_type, def_span_id);
-        b.unify(&def_func_type, call_span_id, &call_func_type, def_span_id);
+        b.unify(
+            &call_arg_type,
+            call_span_id,
+            &def_func_type.args,
+            def_span_id,
+        );
+        b.unify(
+            &def_func_type.args,
+            call_span_id,
+            &call_func_type,
+            def_span_id,
+        );
 
         let (variant_id, fun_block_id, fun_scope_id, def_arg_type) =
             if let Some((variant_id, resolve_type, link_id, fun_scope_id)) =
@@ -60,7 +71,7 @@ impl Flatten {
 
                 self.switch_blocks(fun_block_id);
 
-                let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
+                let r_ty1 = b.types.u.resolve(&def_func_type.into()).unwrap();
 
                 let (entry_link_id, _) = self.push_start_block(
                     fun_scope_id,

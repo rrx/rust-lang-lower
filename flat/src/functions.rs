@@ -5,8 +5,8 @@ use crate::{
 use anyhow::Error;
 use anyhow::Result;
 use compile_core::{
-    AbstractionId, Argument, Ast, AstFuncType, AstNode, AstType, Lambda, Literal, NaryOperation,
-    ReturnType, SpanId, StringKey, VarDefinitionSpace,
+    AbstractionId, Argument, AstFuncType, AstNode, AstType, Lambda, NaryOperation, ReturnType,
+    SpanId, StringKey, VarDefinitionSpace,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -703,33 +703,38 @@ impl Flatten {
         let a = self.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
         let def = a.def.clone();
+        let def_func_type = b.types.r(a.def.fun_type).get_func().clone();
+
+        // look up the prototype
+        // calculate the calling arguments
+        let (args, _) =
+            Self::calculate_function_arguments(&def, &args, def_span_id, call_span_id, b)?;
+        let call_values = self.push_call_arguments(args.clone(), call_span_id, b)?;
+        let call_ty = crate::argvec_type(&call_values);
+        let def_func_type = self.refresh_func_type(&def_func_type, b);
+
+        // construct call function type
+        let call_func_type =
+            AstFuncType::new(AstType::Struct(call_ty.fields()), def_func_type.ret.clone()).into();
+
+        b.unify(
+            &call_func_type,
+            call_span_id,
+            &def_func_type.clone().into(),
+            def_span_id,
+        );
 
         let is_static = self.static_scope_id() == scope_id;
         if is_static {
-            // look up the prototype
-            // calculate the calling arguments
-            let (args, _) =
-                Self::calculate_function_arguments(&def, &args, def_span_id, call_span_id, b)?;
-            let call_values = self.push_call_arguments(args, call_span_id, b)?;
-            let call_ty = crate::argvec_type(&call_values);
-
-            let (def_func_type, _def_arg_ty, def_ret_ty) = self.refresh_func_type(&def, b);
-
-            // construct call function type
-            let call_func_type = AstType::Func(
-                AstFuncType {
-                    args: AstType::Struct(call_ty.fields()).into(),
-                    ret: ReturnType::Single(def_ret_ty.clone()).into(),
-                }
-                .into(),
-            );
-
-            b.unify(&call_func_type, call_span_id, &def_func_type, def_span_id);
-
             let r = self.push_bake_static(name, abstraction_id, call_func_type, call_span_id, b)?;
             let (fun_link_id, _bake_ty) = r;
             self.switch_blocks(current_block_id);
-            self.push_function_call(fun_link_id, call_values, def_ret_ty, call_span_id)
+            self.push_function_call(
+                fun_link_id,
+                call_values,
+                def_func_type.ret.clone(),
+                call_span_id,
+            )
         } else {
             // we inline here for nested functions
             // we bake the lambda, and then jump to it
@@ -738,32 +743,15 @@ impl Flatten {
             // push an extra arg into the arglist, so we can jump to the next block
 
             let next_block_id = self.blocks.new_block(scope_id);
-            let callback_arg = Argument::Positional(
-                Ast::Literal(Literal::Block(next_block_id))
-                    .node(call_span_id)
-                    .into(),
-            );
+            //let callback_arg = Argument::Positional(
+            //Ast::Literal(Literal::Block(next_block_id))
+            //.node(call_span_id)
+            //.into(),
+            //);
             let mut new_args = vec![]; //callback_arg];
             for arg in args {
                 new_args.push(arg);
             }
-
-            // look up the prototype
-            // calculate the calling arguments
-            let (args, _) =
-                Self::calculate_function_arguments(&def, &new_args, def_span_id, call_span_id, b)?;
-            let call_values = self.push_call_arguments(args, call_span_id, b)?;
-            let call_ty = crate::argvec_type(&call_values);
-            let (def_func_type, _def_arg_ty, def_ret_ty) = self.refresh_func_type(&def, b);
-            // construct call function type
-            let call_func_type = AstType::Func(
-                AstFuncType {
-                    args: AstType::Struct(call_ty.fields()).into(),
-                    ret: ReturnType::Single(def_ret_ty.clone()).into(),
-                }
-                .into(),
-            );
-            b.unify(&call_func_type, call_span_id, &def_func_type, def_span_id);
 
             self.switch_blocks(current_block_id);
 
@@ -773,7 +761,7 @@ impl Flatten {
                 scope_id,
                 next_block_id,
                 def,
-                def_func_type.clone(),
+                def_func_type.clone().into(),
                 def_span_id,
                 call_span_id,
                 ScopeType::Function,
@@ -781,7 +769,7 @@ impl Flatten {
                 VarDefinitionSpace::Reg,
                 b,
             )?;
-            let (variant_id, _, fun_block_id, _, _, _, r) = result;
+            let (_variant_id, _, fun_block_id, _, _, _, r) = result;
 
             // now that we have the arguments calculated, and the lambda baked, jump!
             self.switch_blocks(current_block_id);

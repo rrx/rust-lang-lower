@@ -161,6 +161,14 @@ impl AstType {
     }
     */
 
+    pub fn get_func(&self) -> &AstFuncType {
+        if let Self::Func(f) = self {
+            f
+        } else {
+            unreachable!()
+        }
+    }
+
     pub fn build_struct(fields: Vec<Self>) -> Self {
         Self::Struct(fields.into_iter().map(|f| (None, f)).collect())
     }

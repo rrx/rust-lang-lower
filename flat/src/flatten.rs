@@ -972,22 +972,24 @@ impl Flatten {
         &mut self,
         v_fun: LinkId,
         values: Vec<(Option<StringKey>, LinkId, AstType, SpanId)>,
-        ret_ty: AstType,
+        ret_ty: ReturnType,
         span_id: SpanId,
     ) -> Result<FlattenResult> {
         // Add links
         self.push_call_values(&values);
 
-        // Make call
-        let link_id = self.push_code(
-            LCode::Call(v_fun.into()),
-            ret_ty.clone(),
-            None,
-            span_id,
-            VarDefinitionSpace::Default,
-        );
-
-        Ok(FlattenResult::link(link_id))
+        if let ReturnType::Single(ty) = &ret_ty {
+            let link_id = self.push_code(
+                LCode::Call(v_fun.into()),
+                ty.clone(),
+                None,
+                span_id,
+                VarDefinitionSpace::Default,
+            );
+            Ok(FlattenResult::link(link_id))
+        } else {
+            unimplemented!()
+        }
     }
 
     pub fn push_builtin_call(
@@ -1227,31 +1229,16 @@ impl Flatten {
         resolved_ret_ty
     }
 
-    pub(super) fn refresh_func_type(
-        &self,
-        def: &Lambda,
-        b: &mut NB,
-    ) -> (AstType, AstType, AstType) {
-        let def_func_type = b.types.r(def.fun_type).clone();
-
+    pub(super) fn refresh_func_type(&self, def_func_type: &AstFuncType, b: &mut NB) -> AstFuncType {
         // refresh variables
-        let (def_arg_ty, ret_ty) = if let AstType::Func(f) = def_func_type {
-            if let ReturnType::Single(ret_ty) = f.ret {
-                (b.types.refresh(f.args.clone()), b.types.refresh(ret_ty))
-            } else {
-                unreachable!()
-            }
+        if let ReturnType::Single(ret_ty) = &def_func_type.ret {
+            AstFuncType::new(
+                b.types.refresh(def_func_type.args.clone()),
+                ReturnType::Single(b.types.refresh(ret_ty.clone())),
+            )
         } else {
             unreachable!()
-        };
-        let def_func_type = AstType::Func(
-            AstFuncType {
-                args: def_arg_ty.clone().into(),
-                ret: ReturnType::Single(ret_ty.clone()).into(),
-            }
-            .into(),
-        );
-        (def_func_type, def_arg_ty, ret_ty)
+        }
     }
 
     pub fn remove_placeholder_terminal(&mut self, goto_block_id: BlockId) {
