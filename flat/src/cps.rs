@@ -92,13 +92,7 @@ impl Flatten {
                 // this is for dead code
                 let block = self.blocks.get_block(self.current_block_id());
                 if !block.is_term() {
-                    let _p_link_id = self.push_code(
-                        LCode::PlaceholderTerminal(block.last().unwrap()),
-                        AstType::Unit,
-                        None,
-                        def_span_id,
-                        VarDefinitionSpace::Default,
-                    );
+                    self.push_placeholder_terminal(block.last().unwrap(), def_span_id);
                     //println!("placeholder4: {}", p_link_id);
                 }
 
@@ -143,7 +137,7 @@ impl Flatten {
         BlockId,
         AstType,
         AstType,
-        AstType,
+        ReturnType,
         ArgVec,
         LinkId, // return goto link
     )> {
@@ -226,7 +220,7 @@ impl Flatten {
         // control is returned to the goto
 
         let def_func_type = AstType::Func(def_arg_type.clone().into(), ReturnType::Never.into());
-        let def_ret_type = AstType::Unit;
+        let def_ret_type = ReturnType::Never;
 
         return Ok((
             variant_id,
@@ -238,6 +232,16 @@ impl Flatten {
             call_values,
             goto_link_id,
         ));
+    }
+
+    pub fn push_placeholder_terminal(&mut self, link_id: LinkId, call_span_id: SpanId) -> LinkId {
+        self.push_code(
+            LCode::PlaceholderTerminal(link_id),
+            AstType::Unit,
+            None,
+            call_span_id,
+            VarDefinitionSpace::Default,
+        )
     }
 
     pub fn push_goto(
@@ -267,13 +271,7 @@ impl Flatten {
 
         if let Some(name_link_id) = self.resolve_name_in_scope(scope_id, name.into()) {
             let link_id = block.last().unwrap();
-            let _p_link_id = self.push_code(
-                LCode::PlaceholderTerminal(link_id),
-                AstType::Unit,
-                Some(name),
-                call_span_id,
-                VarDefinitionSpace::Default,
-            );
+            self.push_placeholder_terminal(link_id, call_span_id);
             //println!("placeholder2: {}", p_link_id);
 
             let d = DeferredGoto::new(
@@ -298,13 +296,7 @@ impl Flatten {
             .find_nearest_scope(scope_id, &[ScopeType::Function])
         {
             let link_id = block.last().unwrap();
-            let _p_link_id = self.push_code(
-                LCode::PlaceholderTerminal(link_id),
-                AstType::Unit,
-                None,
-                call_span_id,
-                VarDefinitionSpace::Default,
-            );
+            self.push_placeholder_terminal(link_id, call_span_id);
             //println!("placeholder3: {}", p_link_id);
 
             let d = DeferredGoto::new(
@@ -398,13 +390,7 @@ impl Flatten {
                 d.argvec = goto_values;
 
                 let block = self.blocks.get_block(self.current_block_id());
-                let _link_id = self.push_code(
-                    LCode::PlaceholderTerminal(block.last().unwrap()),
-                    AstType::Unit,
-                    None,
-                    d.call_span_id,
-                    VarDefinitionSpace::Default,
-                );
+                self.push_placeholder_terminal(block.last().unwrap(), d.call_span_id);
                 //println!("placeholder1: {}", link_id);
 
                 self.deferred_goto.add_cps(d);

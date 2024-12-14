@@ -138,7 +138,6 @@ impl Builtin {
 
     pub fn get_return_type(&self) -> AstType {
         AstType::Unit
-        //AstType::Struct(vec![])
     }
 
     pub fn get_lambda(&self, b: &mut NodeBuilder) -> Lambda {
