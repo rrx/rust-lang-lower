@@ -1,13 +1,14 @@
 use anyhow::Result;
 use compile_core::{
-    AbstractionId, Argument, AstType, ReturnType, SpanId, StringKey, VarDefinitionSpace,
+    AbstractionId, Argument, AstType, Literal, ReturnType, SpanId, StringKey, VarDefinitionSpace,
 };
 
 use std::convert::Into;
 
 use crate::{
-    argvec_type, ArgVec, BlockId, ContinuationFlow, Flatten, FlowEdge, LCode, LinkId,
-    NodeBuilder as NB, ScopeId, ScopeType, Successor, VariantId,
+    argvec_type, ArgVec, BlockId, ContinuationFlow, DeferredGoto, DeferredType, Flatten,
+    FlattenResult, FlowEdge, LCode, LinkId, NodeBuilder as NB, ScopeId, ScopeType, Successor,
+    VariantId,
 };
 
 impl Flatten {
@@ -109,6 +110,25 @@ impl Flatten {
         Ok((variant_id, fun_scope_id, fun_block_id, def_arg_type))
     }
 
+    pub fn push_cps_block_with_placeholder_check(
+        &mut self,
+        name: StringKey,
+        template_id: AbstractionId,
+        args: Vec<Argument>,
+        call_span_id: SpanId,
+        b: &mut NB,
+    ) -> Result<LinkId> {
+        // we want to handle monomorphization here.
+        let goto_block_id = self.current_block_id();
+        self.remove_placeholder_terminal(goto_block_id);
+
+        let block = self.blocks.get_block(goto_block_id);
+        let scope_id = block.scope_id;
+        let (_variant_id, _, _fun_block_id, _def_func_type, _def_arg_type, _, _, link_id) =
+            self.push_cps_block(name, scope_id, template_id, args, call_span_id, b)?;
+        Ok(link_id)
+    }
+
     pub(super) fn push_cps_block(
         &mut self,
         name: StringKey,
@@ -139,7 +159,7 @@ impl Flatten {
         //
         // WRITE GOTO
         let (args, _) =
-            self.calculate_function_arguments(&def, &args, def_span_id, call_span_id, b)?;
+            Self::calculate_function_arguments(&def, &args, def_span_id, call_span_id, b)?;
         let call_values = self.push_call_arguments(args, call_span_id, b)?;
         let goto_block_id = self.current_block_id();
         let block = self.blocks.get_block(goto_block_id);
@@ -218,5 +238,368 @@ impl Flatten {
             call_values,
             goto_link_id,
         ));
+    }
+
+    pub fn push_goto(
+        &mut self,
+        name: StringKey,
+        args: Vec<Argument>,
+        call_span_id: SpanId,
+        b: &mut NB,
+    ) -> Result<FlattenResult> {
+        // push a goto
+        // to keep things simpler, we just defer all resolution of the gotos until the end
+        // Goto is terminal, so we write out placeholders
+        let current_block_id = self.current_block_id();
+        let block = self.blocks.get_block(current_block_id);
+        let scope_id = block.scope_id;
+
+        let _s_name = b.labels.r(name.into());
+        //println!(
+        //"{}: push_goto args: {:?} in {}{}",
+        //s_name, &args, scope_id, current_block_id,
+        //);
+
+        // if this is a name, we can resolve now, no need to defer
+        // this happens in a CPS function, where we try to jump to a variable.
+        // we don't need to defer because we know the target
+        // We will rewrite in a later step, this goto will become a select
+
+        if let Some(name_link_id) = self.resolve_name_in_scope(scope_id, name.into()) {
+            let link_id = block.last().unwrap();
+            let _p_link_id = self.push_code(
+                LCode::PlaceholderTerminal(link_id),
+                AstType::Unit,
+                Some(name),
+                call_span_id,
+                VarDefinitionSpace::Default,
+            );
+            //println!("placeholder2: {}", p_link_id);
+
+            let d = DeferredGoto::new(
+                scope_id,
+                name.into(),
+                args,
+                call_span_id,
+                current_block_id,
+                DeferredType::Name(name_link_id),
+            );
+            //println!(
+            //"{}: push_goto name, defer goto: {:?} in scope: {}",
+            //s_name, d, scope_id
+            //);
+            self.deferred_goto.add_deferred(d);
+            return Ok(FlattenResult::statement());
+        }
+
+        // if we don't have a template or a label already, then we defer
+        if let Some(_fun_scope_id) = self
+            .scopes
+            .find_nearest_scope(scope_id, &[ScopeType::Function])
+        {
+            let link_id = block.last().unwrap();
+            let _p_link_id = self.push_code(
+                LCode::PlaceholderTerminal(link_id),
+                AstType::Unit,
+                None,
+                call_span_id,
+                VarDefinitionSpace::Default,
+            );
+            //println!("placeholder3: {}", p_link_id);
+
+            let d = DeferredGoto::new(
+                scope_id,
+                name.into(),
+                args,
+                call_span_id,
+                current_block_id,
+                DeferredType::Goto(link_id),
+            );
+            //println!(
+            //"{}: push_goto, defer goto: {:?} in scope: {}",
+            //s_name, d, fun_scope_id
+            //);
+            self.deferred_goto.add_deferred(d);
+            return Ok(FlattenResult::statement());
+        } else {
+            // goto without function scope
+            unreachable!("goto without function scope")
+        }
+    }
+
+    fn resolve_deferred_single(&mut self, d: DeferredGoto, b: &mut NB) -> Result<bool> {
+        //let s_name = b.labels.r(d.name.into());
+        /*
+         * name resolution should not be deferred as it can assume lexical scope
+         * but since we can't actually lower a jump to a variable, we are going to
+         * do some rewriting here, so CPS functions become static
+         * we replace the variable representing the block with an integer, and use
+         * a switch statement in the jump to route things appropriately.
+         *
+         */
+
+        match &d.deferred_type {
+            DeferredType::Name(def_link_id) => {
+                // is it a variable in scope?
+                // This happens if we try to jump to a variable
+                // We have no way of lowering this, so we need to handle this later
+                // This will be rewritten in a later step based on the type
+                self.switch_blocks(d.block_id);
+                self.remove_placeholder_terminal(d.block_id);
+
+                // push the arguments, and unify the type,
+                // but keep the placeholder, we will replace it in the rewrite step
+                // we do just enough calculation here to resolve the types, and we push it back on the
+                // stack
+                //
+                //
+
+                // Push load if required.  This is needed if the argument is stored in memory,
+                // rather than a register
+                let load_link_id = if self.is_load_required(*def_link_id) {
+                    let entry = self.get_entry(*def_link_id).clone();
+                    let link_id = self.push_code(
+                        LCode::Load(*def_link_id),
+                        entry.ty,
+                        entry.name,
+                        entry.span_id,
+                        VarDefinitionSpace::Default,
+                    );
+                    self.scoped_continuations.connect(
+                        ContinuationFlow::Variable(*def_link_id),
+                        ContinuationFlow::Variable(link_id),
+                        FlowEdge::LoadBlockArg,
+                    );
+                    link_id
+                } else {
+                    *def_link_id
+                };
+
+                // calculate the type, so we can unify
+                let goto_values = self.push_call_arguments(d.args.clone(), d.call_span_id, b)?;
+                //println!("goto_values: {:?}", &goto_values);
+                let goto_arg_type = argvec_type(&goto_values);
+                let goto_func_type =
+                    AstType::Func(goto_arg_type.clone().into(), ReturnType::Never.into());
+
+                // unify
+                let entry = self.get_entry(*def_link_id);
+                let var_ty = entry.ty.clone();
+                b.unify(&var_ty, entry.span_id, &goto_func_type, d.call_span_id);
+
+                //println!(
+                //"{}: resolved deferred name: from {}:{}, ty: {}",
+                //s_name, d.scope_id, d.block_id, var_ty
+                //);
+
+                // save the argvec, so we can properly terminate later
+                let mut d = d;
+                d.deferred_type = DeferredType::Name(load_link_id);
+                d.argvec = goto_values;
+
+                let block = self.blocks.get_block(self.current_block_id());
+                let _link_id = self.push_code(
+                    LCode::PlaceholderTerminal(block.last().unwrap()),
+                    AstType::Unit,
+                    None,
+                    d.call_span_id,
+                    VarDefinitionSpace::Default,
+                );
+                //println!("placeholder1: {}", link_id);
+
+                self.deferred_goto.add_cps(d);
+                return Ok(true);
+            }
+
+            DeferredType::Goto(goto_link_id) => {
+                // are we jumping to an abstraction?
+                if let Some(abstraction_id) = self.resolve_template(d.scope_id, d.name.into()) {
+                    self.switch_blocks(d.block_id);
+                    self.remove_placeholder_terminal(d.block_id);
+
+                    //let _a = self.abstractions.get_mut(abstraction_id);
+                    //println!("blocks: {:?}", a.caller_blocks);
+
+                    // push and jump
+                    // TODO: this function needs to handle unwind
+                    let (variant_id, _fun_scope_id, _fun_block_id, _, _, _, _, _link_id) = self
+                        .push_cps_block(
+                            d.name,
+                            d.scope_id,
+                            abstraction_id,
+                            d.args.clone(),
+                            d.call_span_id,
+                            b,
+                        )?;
+                    //println!(
+                    //"{}: resolved deferred lambda: from {}:{}=>{}:{}, link: {}, {:?}",
+                    //s_name,
+                    //d.scope_id,
+                    //d.block_id,
+                    //fun_scope_id,
+                    //fun_block_id,
+                    //link_id,
+                    //&d.args
+                    //);
+
+                    let dt = DeferredType::Variant(*goto_link_id, d.block_id, variant_id);
+                    let mut d = d;
+                    d.deferred_type = dt;
+                    self.deferred_goto.add_cps(d);
+                    return Ok(true);
+                }
+
+                // is it a label?
+                if let Some(target_block_id) = self.resolve_label(d.scope_id, d.name.into()) {
+                    assert_eq!(d.args.len(), 0);
+                    // not possible to pass args to a label, use a CPS function instead
+                    self.switch_blocks(d.block_id);
+                    self.remove_placeholder_terminal(d.block_id);
+
+                    // TODO: we just have a label, so we need to handle unwind here.  We can't jump
+                    // directly, we need to jump to the unwind function
+
+                    // TODO: args should be unwound before jumping
+                    // by replacing jumps out of scope to the unwind function
+                    let jump_args = self.push_call_arguments(d.args.clone(), d.call_span_id, b)?;
+                    let link_id = self.push_jump(target_block_id.into(), jump_args, d.call_span_id);
+                    //let block = self.blocks.get_block(target_block_id);
+                    //println!(
+                    //"{}: resolved deferred label: from {}:{}=>{}:{}, link: {}",
+                    //s_name, d.scope_id, d.block_id, block.scope_id, target_block_id, link_id
+                    //);
+                    self.scoped_continuations.connect(
+                        ContinuationFlow::Jump(link_id),
+                        ContinuationFlow::Block(target_block_id),
+                        FlowEdge::JumpLabel,
+                    );
+
+                    return Ok(true);
+                }
+
+                // otherwise it's not defined, return an error
+                let s = b.labels.r(d.name.into());
+                b.push_error(
+                    &format!("ident `{}` not found in {}{}", s, d.scope_id, d.block_id),
+                    d.call_span_id,
+                );
+            }
+            _ => {
+                unimplemented!();
+            }
+        }
+        Ok(false)
+    }
+
+    fn resolve_cps_single(&mut self, d: DeferredGoto, b: &mut NB) -> Result<()> {
+        // this is where we actually do the rewrite
+        match d.deferred_type {
+            DeferredType::Name(arg_link_id) => {
+                // we replace the placeholder here
+                self.switch_blocks(d.block_id);
+                let entry = self.get_entry(arg_link_id).clone();
+                let code = entry.code;
+                let arg_block_id = entry.block_id;
+
+                let sources = match &code {
+                    LCode::Arg(arg_num) => self
+                        .scoped_continuations
+                        .find_source_blocks(ContinuationFlow::BlockArg(arg_block_id, *arg_num)),
+
+                    LCode::Declare | LCode::Load(_) => self
+                        .scoped_continuations
+                        .find_source_blocks(ContinuationFlow::Variable(arg_link_id)),
+                    _ => {
+                        unreachable!("{:?}", code);
+                    }
+                };
+
+                let _jump_link_id =
+                    self.replace_placeholder_terminal(d.block_id, arg_link_id, sources.clone(), b);
+                //println!(
+                //"flows: {:?}",
+                //(arg_block_id, arg_link_id, &code, sources, jump_link_id)
+                //);
+            }
+            DeferredType::Variant(_goto_link_id, _source_block_id, _variant_id) => {}
+            _ => {
+                unreachable!("{:?}", d);
+            }
+        }
+        Ok(())
+    }
+
+    pub(super) fn resolve_open_identifiers(&mut self, b: &mut NB) -> Result<()> {
+        let mut abstractions = vec![];
+        let mut blocks = vec![];
+        let mut errors = vec![];
+        for link_id in &self.open_identifiers {
+            let entry = self.get_entry(*link_id);
+            let block_id = entry.block_id;
+            let block = self.blocks.get_block(block_id);
+            let scope_id = block.scope_id;
+            let key = entry.name.unwrap();
+            if let Some(label_block_id) = self.resolve_label(scope_id, key.into()) {
+                blocks.push((*link_id, label_block_id));
+            } else if let Some(abstraction_id) = self.resolve_template(scope_id, key.into()) {
+                abstractions.push((*link_id, abstraction_id));
+            } else {
+                errors.push(*link_id);
+            }
+        }
+
+        for (link_id, block_id) in blocks {
+            let block = self.blocks.get_block(block_id);
+            let block_entry_id = block.entry.unwrap();
+            let block_entry = self.get_entry(block_entry_id);
+            let block_ty = block_entry.ty.clone();
+            let block_span_id = block_entry.span_id;
+
+            self.switch_blocks(block_id);
+            self.scoped_continuations.connect(
+                ContinuationFlow::Block(block_id),
+                ContinuationFlow::Variable(link_id),
+                FlowEdge::BlockRef,
+            );
+
+            // now replace the abstraction code
+            let entry = self.get_entry_mut(link_id);
+            entry.code = LCode::Val(Literal::Block(block_id));
+            b.unify(&entry.ty, entry.span_id, &block_ty, block_span_id);
+        }
+
+        for (link_id, abstraction_id) in abstractions {
+            self.resolve_open_abstractions(link_id, abstraction_id, b)?;
+        }
+
+        for link_id in errors {
+            let entry = self.get_entry(link_id);
+            let name = entry.name.unwrap();
+            let s_name = b.labels.r(name.into());
+            b.push_error(&format!("Identifier not found: {}", s_name), entry.span_id);
+        }
+        Ok(())
+    }
+
+    pub(super) fn resolve_cps(&mut self, b: &mut NB) -> Result<()> {
+        loop {
+            if let Some(d) = self.deferred_goto.pop_cps() {
+                self.resolve_cps_single(d, b)?;
+            } else {
+                break;
+            }
+        }
+        Ok(())
+    }
+
+    pub(super) fn resolve_deferred(&mut self, b: &mut NB) -> Result<()> {
+        loop {
+            if let Some(d) = self.deferred_goto.pop_deferred() {
+                let _ = self.resolve_deferred_single(d, b)?;
+            } else {
+                break;
+            }
+        }
+        Ok(())
     }
 }

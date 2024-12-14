@@ -1,4 +1,7 @@
-use crate::{BlockGraph, BlockId, ICodeModule, LCode, NodeBuilder as NB, Successor, ValueId};
+use crate::{
+    BlockGraph, BlockId, ContinuationFlow, Flatten, ICodeModule, LCode, NodeBuilder as NB,
+    Successor, ValueId,
+};
 use anyhow::Result;
 use petgraph::visit::EdgeRef;
 use std::collections::{HashMap, HashSet};
@@ -228,4 +231,58 @@ pub fn flow_graph(m: &dyn ICodeModule, gblocks: &BlockGraph, filename: &str, b: 
     println!("saved graph {:?}", filename);
     ng.write(&mut f)?;
     Ok(())
+}
+
+impl Flatten {
+    pub fn cont_graph(&self, filename: &str, b: &NB) {
+        let s = format!(
+            "{:?}",
+            petgraph::dot::Dot::with_attr_getters(
+                &self.scoped_continuations.g,
+                &[
+                    petgraph::dot::Config::EdgeNoLabel,
+                    petgraph::dot::Config::NodeNoLabel
+                ],
+                &|_, edge| {
+                    let w = edge.weight();
+                    format!("label = \"{:?}\"", w,)
+                },
+                &|_, (_, c)| {
+                    match c {
+                        ContinuationFlow::Block(block_id) => {
+                            let entry =
+                                self.get_entry(self.block_links.get(block_id).unwrap().clone());
+                            let s_name = if let Some(name) = entry.name {
+                                b.labels.r(name.into())
+                            } else {
+                                "?".to_string()
+                            };
+                            format!("label = \"B.{}:{}\"", s_name, block_id)
+                        }
+                        ContinuationFlow::BlockArg(block_id, arg) => {
+                            let entry =
+                                self.get_entry(self.block_links.get(block_id).unwrap().clone());
+                            let s_name = if let Some(name) = entry.name {
+                                b.labels.r(name.into())
+                            } else {
+                                "?".to_string()
+                            };
+                            format!("label = \"BA.{}:{}:{}\"", s_name, block_id, arg)
+                        }
+                        ContinuationFlow::Jump(link_id) => {
+                            format!("label = \"JUMP:{}\"", link_id)
+                        }
+                        ContinuationFlow::JumpArg(link_id, arg) => {
+                            format!("label = \"JUMP:{}:{}\"", link_id, arg)
+                        }
+                        ContinuationFlow::Variable(link_id) => {
+                            format!("label = \"VAR:{}\"", link_id)
+                        }
+                    }
+                }
+            )
+        );
+        println!("saved graph {:?}", filename);
+        std::fs::write(filename, s).unwrap();
+    }
 }

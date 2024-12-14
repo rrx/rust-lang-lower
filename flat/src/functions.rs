@@ -1,5 +1,13 @@
-use crate::{BlockId, LinkId};
-use compile_core::{AbstractionId, AstType, Lambda, SpanId, StringKey};
+use crate::{
+    ArgVec, BlockId, BlockifyError, Flatten, FlattenResult, LCode, LinkId, NodeBuilder as NB,
+    ScopeId, ScopeType, Successor,
+};
+use anyhow::Error;
+use anyhow::Result;
+use compile_core::{
+    AbstractionId, Argument, AstNode, AstType, Lambda, NaryOperation, ReturnType, SpanId,
+    StringKey, VarDefinitionSpace,
+};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
@@ -33,22 +41,6 @@ pub struct FunctionVariant {
     pub block_id: BlockId,
     pub name: StringKey,
 }
-
-/*
-impl FunctionVariant {
-    pub fn block_index(&self, block_id: &BlockId) -> i64 {
-        let mut blocks = self
-            .caller_blocks
-            .clone()
-            .into_iter()
-            .map(|(block_id, _)| block_id)
-            .collect::<Vec<_>>();
-        blocks.sort();
-        let index = blocks.iter().position(|&x| x == *block_id).unwrap();
-        index as i64
-    }
-}
-*/
 
 #[derive(Debug)]
 pub struct VariantIterator {
@@ -128,24 +120,6 @@ impl FunctionVariantBuilder {
         self.block_lookup.insert(block_id, variant_id);
         variant_id
     }
-
-    pub fn update_type(&mut self, variant_id: VariantId, ty: AstType) {
-        let v = self.variants.get_mut(variant_id.index()).unwrap();
-        v.ty = ty;
-    }
-
-    /*
-    pub fn update(
-        &mut self,
-        variant_id: VariantId,
-        ty: AstType,
-        link_id: LinkId,
-    ) {
-        let v = self.variants.get_mut(variant_id.index()).unwrap();
-        v.ty = ty;
-        v.link_id = link_id;
-    }
-    */
 }
 
 #[derive(Debug)]
@@ -179,5 +153,614 @@ impl AbstractionsBuilder {
             caller_blocks: HashSet::new(),
         });
         AbstractionId::new(index)
+    }
+}
+
+impl Flatten {
+    pub fn push_bake_main(&mut self, b: &mut NB) -> Result<LinkId> {
+        let current_block_id = self.current_block_id();
+        let name = b.labels.s("main");
+        // reset the block position before each function
+        // main is always static context
+        self.switch_blocks(self.static_block_id());
+        let ty = AstType::func(vec![], AstType::Int);
+        let r = self.push_bake(name, ty, b);
+        // switch back after bake
+        self.switch_blocks(current_block_id);
+        r
+    }
+
+    pub fn calculate_function_arguments(
+        def: &Lambda,
+        args: &[Argument],
+        def_span_id: SpanId,
+        call_span_id: SpanId,
+        b: &mut NB,
+    ) -> Result<(
+        Vec<Argument>,
+        AstType, // return type
+    )> {
+        //println!("args: {:?}", args);
+
+        let func_arg = b.types.r(def.arg_type).clone();
+
+        let ret = b.types.r(def.return_type).clone();
+
+        // A rough outline of this large function
+        // - We need to take in a list of calling args, and the function definition,
+        //   and merge them together to create the actual args that will call the function
+        // - There are a number of transformations that need to happen here.
+        // - We populate defaults before calling the function.  Removing defaults is an
+        //   optimization that can happen elsewhere.
+        // - We handle *args, and **kwargs here, to make sure those variables are typed
+        //   correctly.
+        //
+        // 1. Create value map, with capacity = to the number of fields
+        // 2. Copy defaults into the map
+        // 3. Keep a list of fields that have been populated_set
+        // 4. Iterate over the argument list
+        // 4a. For each positional, lookup the associated field in the definition
+        //    for normal types, add the value to the value map
+        //    add the field name to the populated_set
+        // 4b. For args type, we start an args sequence.  Any positionals after this get added
+        //    to the args sequence
+        // 4c. For named args, we add them to the value map
+        //    Check to make sure it hasn't already been added by checking the populated_set
+        // 4d. For kwargs type, this is the final one in the list
+        //    If the value is known, we can populate the value map
+        //    Remaining values go into the kwargs map
+        //    If the value is only known at runtime, then we iterate over the fields in kwargs
+        //    - add them to the value map, ensure we aren't double adding with the
+        //    populated_set
+        //    If the item isn't in the field list, then it gets added to the kwargs map
+        // 5. Add the args sequence, and the kwargs map to the values map
+        // 6. Iterate over the field list, and create an ordered arguments list
+        // 7. Pass that to the function
+
+        let fields_list = func_arg.fields();
+
+        let mut value_map = HashMap::with_capacity(fields_list.len());
+        let mut populated_set = HashSet::with_capacity(fields_list.len());
+        let mut args_seq = vec![];
+        let kwargs_map = HashMap::new();
+        let mut def_has_args = false;
+        let mut args_seq_started = false;
+        //let mut def_has_kwargs = false;
+
+        // copy defaults into value map
+        for (key, value) in def.defaults.iter() {
+            value_map.insert(*key, value.clone());
+        }
+
+        for (index, arg) in args.iter().enumerate() {
+            let is_last_arg = index == args.len() - 1;
+            match arg {
+                // these are the first args, and they don't have associated names
+                // so we look them up in the field list
+                // We only need to look until we reach the args type
+                // If we reach the kwargs type before we reach the args type,
+                // then that means we don't have an open_args function
+                // we just handle it by copying it to the kwargs_map
+                Argument::Positional(expr) => {
+                    if args_seq_started {
+                        args_seq.push(*(*expr).clone());
+                    } else {
+                        if let Some((key, ty)) = fields_list.get(index) {
+                            let key = key.unwrap(); // field names should exist?
+                                                    // we have the field, it can either be a regular type, Args, or
+                                                    // Kwargs type
+                            match ty {
+                                AstType::Args(_) => {
+                                    args_seq_started = true;
+                                    // push arg into sequence
+                                    args_seq.push(*(*expr).clone());
+                                }
+                                AstType::KwArgs(_) => {
+                                    // not sure how to copy this to the kwargs map, we are
+                                    // missing some types
+                                    unimplemented!()
+                                }
+                                _ => {
+                                    // just add to the value map
+                                    value_map.insert(key, *(*expr).clone());
+                                    populated_set.insert(key);
+                                }
+                            }
+                        } else {
+                            b.push_error(
+                                &format!("Extra positional field: {}", index),
+                                expr.span_id,
+                            );
+                        }
+                    }
+                }
+
+                // named arguments follow positional args
+                Argument::Named(key, expr) => {
+                    // make sure we don't double add
+                    if populated_set.contains(key) {
+                        let name = b.labels.r(key.into());
+                        b.push_error(
+                            &format!("Keyword argument duplicate: {}", name),
+                            call_span_id,
+                        );
+                    }
+                    //assert!(!populated_set.contains(key));
+                    value_map.insert(*key, *(*expr).clone());
+                    populated_set.insert(*key);
+                }
+                Argument::Args(_key, expr) => {
+                    // just extend the args sequence
+                    // this probably needs to be done at run time, not compile time
+                    args_seq.extend(
+                        expr.clone()
+                            .to_vec()
+                            .into_iter()
+                            .map(|x| x)
+                            .collect::<Vec<_>>(),
+                    );
+                    def_has_args = true;
+                }
+                Argument::KwArgs(_key, _expr) => {
+                    assert!(is_last_arg); //kwargs should be last in the args
+                                          // not quite sure how to proceed here.
+                                          //def_has_kwargs = true;
+                    unimplemented!()
+                }
+            }
+        }
+
+        //if let Some(key) = def.open_args {
+        //value_map.insert(key, Ast::Sequence(args_seq).into());
+        //}
+        // Do the same with kwargs eventually
+        //println!("field_list: {:?}", fields_list);
+
+        let args: Vec<Argument> = fields_list
+            .iter()
+            .filter_map(|(field_key, field_ty)| {
+                let field_key = field_key.unwrap();
+                match field_ty {
+                    AstType::Args(_) => Some(Argument::Args(field_key, args_seq.clone())),
+                    AstType::KwArgs(_) => Some(Argument::KwArgs(field_key, kwargs_map.clone())),
+                    _ => {
+                        if let Some(v) = value_map.remove(&field_key) {
+                            Some(Argument::Named(field_key, v.into()))
+                        } else {
+                            let s_name = b.labels.r(field_key.into());
+                            b.push_error(
+                                &format!("caller missing named field: {}", s_name),
+                                call_span_id,
+                            );
+                            None
+                        }
+                    }
+                }
+            })
+            .collect();
+
+        if fields_list.len() != args.len() {
+            b.push_error_labels(vec![
+                b.primary_label(&format!("Call arity mismatch: call"), call_span_id),
+                b.secondary_label(&format!("function"), def_span_id),
+            ]);
+            //assert!(false);
+            //return Err(Error::new(BlockifyError::Invalid));
+        }
+
+        if args_seq.len() > 0 && def_has_args {
+            // extra fields
+            b.push_error(
+                &format!("extra fields, no args field: {:?}", args_seq),
+                call_span_id,
+            );
+        }
+        Ok((args, ret.clone()))
+    }
+
+    fn push_bake_static(
+        &mut self,
+        name: StringKey,
+        def: Lambda,
+        def_span_id: SpanId,
+        call_func_type: AstType,
+        call_span_id: SpanId,
+        b: &mut NB,
+    ) -> Result<(LinkId, AstType)> {
+        let s = b.labels.r(name.into());
+        let global_key = b.labels.fresh_key(&s);
+        //let s_global = b.labels.r(global_key.into());
+        let current_block_id = self.current_block_id();
+        self.switch_blocks(self.static_block_id());
+        let block = self.blocks.get_block(current_block_id);
+
+        // if it's defined in static scope, just call it
+        //println!("[{},{}] RX:  {}", s, s_global, &call_func_type);
+        let (_variant_id, v_entry) = if let Some((variant_id, r_ty, v_entry, _scope_id)) =
+            self.resolve_function_name(block.scope_id, &name, &call_func_type, b)
+        {
+            //println!("[{}] R2: {}, {:?}", s, call_func_type, (v_entry));
+            // unify the resolved function with the caller
+            // the function should be resolved, this resolves any thing missing in the caller
+            b.unify(&call_func_type, call_span_id, &r_ty, def_span_id);
+            (variant_id, v_entry)
+        } else {
+            // if it's not already baked, we need to do that here
+            self.switch_blocks(self.static_block_id());
+
+            let result = self.push_bake_function(
+                def,
+                call_func_type.clone(),
+                def_span_id,
+                name,
+                global_key,
+                b,
+            );
+            if result.is_err() {
+                self.drain_diagnostics(b);
+            }
+            let (variant_id, r) = result?;
+            let v_entry = r.link_id.unwrap();
+
+            self.drain_diagnostics(b);
+            self.switch_blocks(current_block_id);
+            let r_ty2 = b.types.u.resolve(&call_func_type).unwrap();
+
+            // update the variant with the resolved type
+            self.variant_update(variant_id, r_ty2.clone(), v_entry);
+            (variant_id, v_entry)
+        };
+
+        // we are keeping a list of function names so we can look them up later
+        // there's a better way to do this.  A function only makes sense in the context of a call
+        // so our lookups should actually be resolved by the caller
+        self.functions.insert(name, v_entry);
+
+        Ok((v_entry, call_func_type))
+    }
+
+    pub fn push_bake(&mut self, name: StringKey, func_type: AstType, b: &mut NB) -> Result<LinkId> {
+        let current_block_id = self.current_block_id();
+        if let Some((__scope_id, def, def_span_id)) = self.resolve_lambda(current_block_id, name) {
+            let result = self.push_bake_function(def, func_type, def_span_id, name, name, b);
+            if result.is_err() {
+                self.drain_diagnostics(b);
+            }
+            let (_variant_id, r) = result?;
+
+            self.drain_diagnostics(b);
+            self.switch_blocks(current_block_id);
+            Ok(r.link_id.unwrap())
+        } else {
+            let s = b.labels.r(name.into());
+            let u = b.spans.get_span_unknown();
+            b.push_error(&format!("push_bake: not found: {}", s), u);
+            Err(Error::new(BlockifyError::NotFound(s)))
+        }
+    }
+
+    fn push_bake_function(
+        &mut self,
+        def: Lambda,
+        def_func_ty: AstType,
+        def_span_id: SpanId,
+        name: StringKey,
+        global_name: StringKey,
+        b: &mut NB,
+    ) -> Result<(VariantId, FlattenResult)> {
+        let current_block_id = self.current_block_id();
+        let block = self.blocks.get_block(current_block_id);
+        let scope_id = block.scope_id;
+
+        // create a next scope, that includes the function
+        // when the function returns it jumps to the return block, which is the next function
+        // which is out of scope for the function.  This requires that the function cleanup the
+        // stack before jumping to the return block
+        // This scope is empty, and isn't used for anything other than including the function scope
+        // This behavior is slightly different than inline functions that jump back into the same
+        // scope from which they were called.
+
+        let (next_block_id, next_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
+
+        let (v_id, _scope, _block, entry_link_id, _, v_args, _r) = self.push_bake_lambda_inner(
+            name,
+            global_name,
+            next_scope_id,
+            next_block_id,
+            def,
+            def_func_ty,
+            def_span_id,
+            def_span_id,
+            ScopeType::Function,
+            Successor::FunctionDeclaration,
+            VarDefinitionSpace::Static,
+            b,
+        )?;
+
+        self.push_return(v_args, def_span_id);
+
+        // restore position back to where we started
+        self.switch_blocks(current_block_id);
+
+        //println!("function end: {}", b.labels.r(name.into()));
+        //println!("function end: {:?}", scope.deferred_goto);
+        Ok((v_id, FlattenResult::link(entry_link_id)))
+    }
+
+    fn push_bake_lambda_inner(
+        &mut self,
+        local_name: StringKey,
+        global_name: StringKey,
+        next_scope_id: ScopeId,
+        next_block_id: BlockId,
+        def: Lambda,
+        def_func_type: AstType,
+        def_span_id: SpanId,
+        call_span_id: SpanId,
+        scope_type: ScopeType,
+        succ_type: Successor,
+        mem: VarDefinitionSpace,
+        b: &mut NB,
+    ) -> Result<(
+        VariantId,
+        ScopeId,
+        BlockId,
+        LinkId,
+        AstType,
+        ArgVec,
+        FlattenResult,
+    )> {
+        // create a new scope and block
+        // build the function body in that scope and block
+        // allow for recursion
+        //
+        let current_block_id = self.current_block_id();
+        let block = self.blocks.get_block(current_block_id);
+        let scope_id = block.scope_id;
+
+        // New Func Scope
+        let (fun_block_id, fun_scope_id) = self.new_scope_and_block(scope_type, next_scope_id);
+        let body = *def.body.unwrap();
+
+        let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
+        fun_scope.return_block = Some(next_block_id);
+
+        // block graph
+        self.blocks
+            .block_succ(current_block_id, fun_block_id, succ_type);
+
+        self.switch_blocks(fun_block_id);
+        //println!("push start block2: {}{}", fun_scope_id, fun_block_id);
+        let (entry_link_id, _) = self.push_start_block(
+            fun_scope_id,
+            def_func_type.clone(),
+            Some(global_name),
+            def_span_id,
+            mem,
+        );
+
+        // add entry to scope, for recursion
+        let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
+        // we need to know the link
+        //let variant_id = if let Some(global_name) = global_name {
+        let variant_id = self.variant_add(scope_id, local_name, r_ty1, entry_link_id, fun_block_id);
+
+        // add the name to scope
+        // do this early for recursive functions
+        self.scopes
+            .scope_define(scope_id, global_name, entry_link_id);
+
+        // flatten function, and switch to next
+        self.switch_blocks(fun_block_id);
+        let _ = self.push_node(body, b)?;
+        self.maybe_terminate_block(next_block_id, def_span_id);
+
+        let next_arg_ty =
+            self.resolve_return_type(fun_block_id, def_func_type.clone(), call_span_id, b);
+
+        assert!(next_arg_ty.is_composite());
+        let block_ty = AstType::Func(
+            next_arg_ty.clone().into(),
+            ReturnType::Single(AstType::Unit).into(),
+        );
+        let s_name = b.labels.r(local_name.into());
+        let cont_name = format!("{}.cont", s_name);
+
+        self.switch_blocks(next_block_id);
+        let (_v_block, v_args) = self.push_start_block(
+            next_scope_id,
+            block_ty.clone(),
+            Some(b.labels.s(&cont_name)),
+            call_span_id,
+            VarDefinitionSpace::Reg,
+        );
+
+        let next_link_id = match &next_arg_ty {
+            AstType::Unit => None,
+            _ => {
+                if v_args.len() == 0 {
+                    None
+                } else {
+                    Some(v_args.first().unwrap().1)
+                }
+            }
+        };
+
+        let r = if let Some(link_id) = next_link_id {
+            FlattenResult::link(link_id)
+        } else {
+            FlattenResult::statement()
+        };
+
+        Ok((
+            variant_id,
+            fun_scope_id,
+            fun_block_id,
+            entry_link_id,
+            next_arg_ty,
+            v_args,
+            r,
+        ))
+    }
+
+    pub(super) fn push_call_arguments(
+        &mut self,
+        args: Vec<Argument>,
+        span_id: SpanId,
+        b: &mut NB,
+    ) -> Result<ArgVec> {
+        //let mut current_block_id = self.block_id;
+        let mut link_ids = vec![];
+        let mut values = vec![];
+        for a in args.into_iter() {
+            match a {
+                Argument::Positional(expr) => {
+                    let r = self.push_node(*expr, b)?;
+                    let link_id = r.link_id.unwrap();
+                    let entry = self.get_entry(link_id);
+                    values.push((entry.name, link_id, entry.ty.clone(), span_id));
+                    link_ids.push(link_id);
+                }
+                Argument::Named(key, expr) => {
+                    let r = self.push_node(*expr, b)?;
+                    let link_id = r.link_id.unwrap();
+                    let ty = self.get_type(link_id).clone();
+                    values.push((Some(key), link_id, ty, span_id));
+                    link_ids.push(link_id);
+                }
+                Argument::Args(key, exprs) => {
+                    let mut args_values = vec![];
+                    for expr in exprs {
+                        let span_id = expr.span_id;
+                        //self.switch_blocks(current_block_id);
+                        let r = self.push_node(expr, b)?;
+                        let link_id = r.link_id.unwrap();
+                        let ty = self.get_type(link_id).clone();
+                        args_values.push((Some(key), link_id, ty, span_id));
+                    }
+
+                    self.push_call_values(&args_values);
+
+                    let struct_ty = AstType::Struct(
+                        args_values
+                            .iter()
+                            .map(|(key, _, ty, _)| (*key, ty.clone()))
+                            .collect::<Vec<_>>(),
+                    );
+                    let link_id = self.push_code(
+                        LCode::NaryOp(NaryOperation::Struct),
+                        struct_ty.clone(),
+                        None,
+                        span_id,
+                        VarDefinitionSpace::Stack,
+                    );
+                    values.push((Some(key), link_id, struct_ty.clone(), span_id));
+                    link_ids.push(link_id);
+                }
+                Argument::KwArgs(key, _expr) => {
+                    let node: AstNode = 1.into();
+                    let r = self.push_node(node, b)?;
+                    let link_id = r.link_id.unwrap();
+                    let ty = self.get_type(link_id).clone();
+                    values.push((Some(key), link_id, ty, span_id));
+                    link_ids.push(link_id);
+                }
+            }
+        }
+        Ok(values)
+    }
+
+    pub(super) fn push_call(
+        &mut self,
+        name: StringKey,
+        scope_id: ScopeId,
+        def: Lambda,
+        def_span_id: SpanId,
+        call_span_id: SpanId,
+        args: Vec<Argument>,
+        b: &mut NB,
+    ) -> Result<FlattenResult> {
+        let current_block_id = self.current_block_id();
+        // look up the lambda
+        // If the lambda is in the static scope, we do a normal call
+        // If it's in a non-static scope, then we bake a lambda and jump to it
+        // If we wanted to so some inlining, we just have to switch to doing lambdas instead
+
+        // 1. look up the def
+        // 2. find an already baked function if it exists
+        // 3. if no function exists, bake it
+        // - for static, we just write the function to the static scope
+        // - for lambdas and inline, it's easier, because we just write out the entire function
+        // anyways
+
+        //let s_name = b.labels.r(name.into());
+        //println!(
+        //"{}: push_call: {:?}",
+        //s_name,
+        //(scope_id, self.current_block_id())
+        //);
+
+        // look up the prototype
+        // calculate the calling arguments
+        let (args, _) =
+            Self::calculate_function_arguments(&def, &args, def_span_id, call_span_id, b)?;
+
+        let call_values = self.push_call_arguments(args, call_span_id, b)?;
+        let call_ty = crate::argvec_type(&call_values);
+
+        let (def_func_type, _def_arg_ty, def_ret_ty) = self.refresh_func_type(&def, b);
+
+        // construct call function type
+        let call_func_type = AstType::Func(
+            AstType::Struct(call_ty.fields()).into(),
+            ReturnType::Single(def_ret_ty.clone()).into(),
+        );
+
+        b.unify(&call_func_type, call_span_id, &def_func_type, def_span_id);
+
+        let is_static = self.static_scope_id() == scope_id;
+        if is_static {
+            let r =
+                self.push_bake_static(name, def, def_span_id, call_func_type, call_span_id, b)?;
+            self.drain_diagnostics(b);
+            let (fun_link_id, _bake_ty) = r;
+            self.switch_blocks(current_block_id);
+            self.push_function_call(fun_link_id, call_values, def_ret_ty, call_span_id)
+        } else {
+            self.switch_blocks(current_block_id);
+
+            //println!(
+            //"bake lambda: {:?}",
+            //(scope_id, current_block_id, b.labels.r(name.into()))
+            //);
+
+            let next_block_id = self.blocks.new_block(scope_id);
+
+            let result = self.push_bake_lambda_inner(
+                name,
+                name,
+                scope_id,
+                next_block_id,
+                def,
+                def_func_type.clone(),
+                def_span_id,
+                call_span_id,
+                ScopeType::Function,
+                Successor::BlockScope,
+                VarDefinitionSpace::Reg,
+                b,
+            )?;
+
+            self.drain_diagnostics(b);
+            let (_variant_id, _, fun_block_id, _, _, _, r) = result;
+
+            self.switch_blocks(next_block_id);
+
+            // now that we have the arguments calculated, and the lambda baked, jump!
+            self.switch_blocks(current_block_id);
+            self.push_jump(fun_block_id.into(), call_values, call_span_id);
+            self.switch_blocks(next_block_id);
+            Ok(r)
+        }
     }
 }

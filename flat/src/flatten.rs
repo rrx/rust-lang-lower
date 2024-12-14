@@ -3,7 +3,7 @@ use anyhow::Error;
 use anyhow::Result;
 use compile_core::{
     AbstractionId, Argument, AssignTarget, Ast, AstNode, AstType, BuiltinId, ControlFlowMarker,
-    Lambda, LinkOptions, Literal, NaryOperation, ReturnType, SpanId, StringKey, VarDefinitionSpace,
+    Lambda, LinkOptions, Literal, ReturnType, SpanId, StringKey, VarDefinitionSpace,
 };
 
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -12,9 +12,9 @@ use std::convert::Into;
 
 use crate::{
     AbstractionsBuilder, BlockGraph, BlockId, BlockifyError, Builtin, CodeOffset, ContinuationFlow,
-    DeferredGoto, DeferredGotoList, DeferredType, FlowEdge, FunctionVariantBuilder, LCode, LinkId,
-    NodeBuilder as NB, ScopeGraph, ScopeId, ScopeType, ScopedContinuations, StringLabel, Successor,
-    ValueId, VariantId,
+    DeferredGotoList, FlowEdge, FunctionVariantBuilder, LCode, LinkId, NodeBuilder as NB,
+    ScopeGraph, ScopeId, ScopeType, ScopedContinuations, StringLabel, Successor, ValueId,
+    VariantId,
 };
 
 pub type ArgVec = Vec<(Option<StringKey>, LinkId, AstType, SpanId)>;
@@ -81,7 +81,7 @@ impl CodeEntry {
 
 #[derive(Debug)]
 pub struct FlattenResult {
-    link_id: Option<LinkId>,
+    pub link_id: Option<LinkId>,
 }
 
 impl FlattenResult {
@@ -113,7 +113,7 @@ pub struct Flatten {
     pub(super) block_links: HashMap<BlockId, LinkId>,
     pub(crate) functions: HashMap<StringKey, LinkId>,
     pub(crate) statics: HashMap<StringKey, Literal>,
-    open_identifiers: Vec<LinkId>,
+    pub(crate) open_identifiers: Vec<LinkId>,
     pub(crate) scoped_continuations: ScopedContinuations,
     pub deferred_goto: DeferredGotoList,
     pub variants: FunctionVariantBuilder,
@@ -435,9 +435,6 @@ impl Flatten {
             f.switch_blocks(static_block_id);
             let _ = f.push_node(*body, b)?;
             assert_eq!(static_block_id, f.current_block_id());
-
-            //let result = f.push_bake_templates(static_block_id, b);
-            //let result = f.push_bake_main_template(b);
             f.drain_diagnostics(b);
             Ok(f)
         } else {
@@ -509,43 +506,11 @@ impl Flatten {
         // now replace the abstraction code
         let entry = self.get_entry_mut(link_id);
         entry.code = LCode::Val(Literal::Block(fun_block_id));
-        //entry.ty = AstType::TargetUnion(target_field_types, vec![fun_block_id]);
 
-        //println!("unify: {}=>{}", &ty, &entry.ty);
         b.unify(&entry.ty, entry.span_id, &ty, span_id);
         self.switch_blocks(current_block_id);
         Ok(())
     }
-
-    /*
-    pub fn complete_open_abstractions(&mut self, b: &mut NB) -> Result<()> {
-        // here we get all of the open abstractions and complete them, by
-        // rewriting them as concrete blocks.  We still want to do this, but somewhere else.
-        // once we know all of the CPS functions and their callers, we can then construct
-        // the static graph, and the unwind chains.  Once we know this information, we know enough
-        // to finally write out all of these functions as concrete blocks.
-        // The abstraction field will get replaced with an integer field that we use to branch
-        // to the correct block.
-        let current_block_id = self.current_block_id();
-        let link_ids = self.open_abstractions.drain(..).collect::<Vec<_>>();
-        let mut todo = vec![];
-        for link_id in link_ids {
-            //println!("open abstraction: {}", link_id);
-            let entry = self.get_entry(link_id);
-            if let LCode::Val(Literal::Abstraction(abstraction_id)) = entry.code {
-                todo.push((link_id, abstraction_id));
-            } else {
-                unreachable!("{:?}", entry.code);
-            }
-        }
-
-        for (link_id, abstraction_id) in todo {
-            self.resolve_open_abstractions(link_id, abstraction_id, b)?;
-        }
-        self.switch_blocks(current_block_id);
-        Ok(())
-    }
-    */
 
     pub(super) fn finish_values(&mut self, b: &mut NB) -> Vec<LinkId> {
         let blocks = self.blocks.post_order_blocks();
@@ -660,58 +625,6 @@ impl Flatten {
         }
     }
 
-    pub fn cont_graph(&self, filename: &str, b: &NB) {
-        let s = format!(
-            "{:?}",
-            petgraph::dot::Dot::with_attr_getters(
-                &self.scoped_continuations.g,
-                &[
-                    petgraph::dot::Config::EdgeNoLabel,
-                    petgraph::dot::Config::NodeNoLabel
-                ],
-                &|_, edge| {
-                    let w = edge.weight();
-                    format!("label = \"{:?}\"", w,)
-                },
-                &|_, (_, c)| {
-                    match c {
-                        ContinuationFlow::Block(block_id) => {
-                            let entry =
-                                self.get_entry(self.block_links.get(block_id).unwrap().clone());
-                            let s_name = if let Some(name) = entry.name {
-                                b.labels.r(name.into())
-                            } else {
-                                "?".to_string()
-                            };
-                            format!("label = \"B.{}:{}\"", s_name, block_id)
-                        }
-                        ContinuationFlow::BlockArg(block_id, arg) => {
-                            let entry =
-                                self.get_entry(self.block_links.get(block_id).unwrap().clone());
-                            let s_name = if let Some(name) = entry.name {
-                                b.labels.r(name.into())
-                            } else {
-                                "?".to_string()
-                            };
-                            format!("label = \"BA.{}:{}:{}\"", s_name, block_id, arg)
-                        }
-                        ContinuationFlow::Jump(link_id) => {
-                            format!("label = \"JUMP:{}\"", link_id)
-                        }
-                        ContinuationFlow::JumpArg(link_id, arg) => {
-                            format!("label = \"JUMP:{}:{}\"", link_id, arg)
-                        }
-                        ContinuationFlow::Variable(link_id) => {
-                            format!("label = \"VAR:{}\"", link_id)
-                        }
-                    }
-                }
-            )
-        );
-        println!("saved graph {:?}", filename);
-        std::fs::write(filename, s).unwrap();
-    }
-
     pub(super) fn finish(mut self, b: &mut NB) -> Result<(Flatten, Vec<LinkId>)> {
         // make sure all claims have been handled
         self.scopes.ensure_claims(b);
@@ -775,19 +688,6 @@ impl Flatten {
         let values = self.finish_values(b);
 
         Ok((self, values))
-    }
-
-    pub fn push_bake_main(&mut self, b: &mut NB) -> Result<LinkId> {
-        let current_block_id = self.current_block_id();
-        let name = b.labels.s("main");
-        // reset the block position before each function
-        // main is always static context
-        self.switch_blocks(self.static_block_id());
-        let ty = AstType::func(vec![], AstType::Int);
-        let r = self.push_bake(name, ty, b);
-        // switch back after bake
-        self.switch_blocks(current_block_id);
-        r
     }
 
     fn _insert_entry(&mut self, mut entry: CodeEntry, prev: Option<LinkId>) -> LinkId {
@@ -989,20 +889,6 @@ impl Flatten {
             .collect::<Vec<_>>();
     }
 
-    /*
-    pub fn push_cps_jump(
-        &mut self,
-        target_id: LinkId,
-        jump_args: Vec<(Option<StringKey>, LinkId, AstType, SpanId)>,
-        span_id: SpanId,
-    ) -> LinkId {
-        // handle leaving scope here?
-        let entry = self.get_entry(target_id);
-        let target_block_id: BlockId = entry.block_id;
-        self.push_jump(target_block_id, jump_args, span_id)
-    }
-    */
-
     pub fn push_jump(
         &mut self,
         target_block_id: BlockId,
@@ -1079,417 +965,6 @@ impl Flatten {
         current
     }
 
-    pub fn calculate_function_arguments(
-        &mut self,
-        def: &Lambda,
-        args: &[Argument],
-        def_span_id: SpanId,
-        call_span_id: SpanId,
-        b: &mut NB,
-    ) -> Result<(
-        Vec<Argument>,
-        AstType, // return type
-    )> {
-        //println!("args: {:?}", args);
-
-        let func_arg = b.types.r(def.arg_type).clone();
-
-        let ret = b.types.r(def.return_type).clone();
-
-        // A rough outline of this large function
-        // - We need to take in a list of calling args, and the function definition,
-        //   and merge them together to create the actual args that will call the function
-        // - There are a number of transformations that need to happen here.
-        // - We populate defaults before calling the function.  Removing defaults is an
-        //   optimization that can happen elsewhere.
-        // - We handle *args, and **kwargs here, to make sure those variables are typed
-        //   correctly.
-        //
-        // 1. Create value map, with capacity = to the number of fields
-        // 2. Copy defaults into the map
-        // 3. Keep a list of fields that have been populated_set
-        // 4. Iterate over the argument list
-        // 4a. For each positional, lookup the associated field in the definition
-        //    for normal types, add the value to the value map
-        //    add the field name to the populated_set
-        // 4b. For args type, we start an args sequence.  Any positionals after this get added
-        //    to the args sequence
-        // 4c. For named args, we add them to the value map
-        //    Check to make sure it hasn't already been added by checking the populated_set
-        // 4d. For kwargs type, this is the final one in the list
-        //    If the value is known, we can populate the value map
-        //    Remaining values go into the kwargs map
-        //    If the value is only known at runtime, then we iterate over the fields in kwargs
-        //    - add them to the value map, ensure we aren't double adding with the
-        //    populated_set
-        //    If the item isn't in the field list, then it gets added to the kwargs map
-        // 5. Add the args sequence, and the kwargs map to the values map
-        // 6. Iterate over the field list, and create an ordered arguments list
-        // 7. Pass that to the function
-
-        let fields_list = func_arg.fields();
-
-        let mut value_map = HashMap::with_capacity(fields_list.len());
-        let mut populated_set = HashSet::with_capacity(fields_list.len());
-        let mut args_seq = vec![];
-        let kwargs_map = HashMap::new();
-        let mut def_has_args = false;
-        let mut args_seq_started = false;
-        //let mut def_has_kwargs = false;
-
-        // copy defaults into value map
-        for (key, value) in def.defaults.iter() {
-            value_map.insert(*key, value.clone());
-        }
-
-        for (index, arg) in args.iter().enumerate() {
-            let is_last_arg = index == args.len() - 1;
-            match arg {
-                // these are the first args, and they don't have associated names
-                // so we look them up in the field list
-                // We only need to look until we reach the args type
-                // If we reach the kwargs type before we reach the args type,
-                // then that means we don't have an open_args function
-                // we just handle it by copying it to the kwargs_map
-                Argument::Positional(expr) => {
-                    if args_seq_started {
-                        args_seq.push(*(*expr).clone());
-                    } else {
-                        if let Some((key, ty)) = fields_list.get(index) {
-                            let key = key.unwrap(); // field names should exist?
-                                                    // we have the field, it can either be a regular type, Args, or
-                                                    // Kwargs type
-                            match ty {
-                                AstType::Args(_) => {
-                                    args_seq_started = true;
-                                    // push arg into sequence
-                                    args_seq.push(*(*expr).clone());
-                                }
-                                AstType::KwArgs(_) => {
-                                    // not sure how to copy this to the kwargs map, we are
-                                    // missing some types
-                                    unimplemented!()
-                                }
-                                _ => {
-                                    // just add to the value map
-                                    value_map.insert(key, *(*expr).clone());
-                                    populated_set.insert(key);
-                                }
-                            }
-                        } else {
-                            b.push_error(
-                                &format!("Extra positional field: {}", index),
-                                expr.span_id,
-                            );
-                        }
-                    }
-                }
-
-                // named arguments follow positional args
-                Argument::Named(key, expr) => {
-                    // make sure we don't double add
-                    if populated_set.contains(key) {
-                        let name = b.labels.r(key.into());
-                        b.push_error(
-                            &format!("Keyword argument duplicate: {}", name),
-                            call_span_id,
-                        );
-                    }
-                    //assert!(!populated_set.contains(key));
-                    value_map.insert(*key, *(*expr).clone());
-                    populated_set.insert(*key);
-                }
-                Argument::Args(_key, expr) => {
-                    // just extend the args sequence
-                    // this probably needs to be done at run time, not compile time
-                    args_seq.extend(
-                        expr.clone()
-                            .to_vec()
-                            .into_iter()
-                            .map(|x| x)
-                            .collect::<Vec<_>>(),
-                    );
-                    def_has_args = true;
-                }
-                Argument::KwArgs(_key, _expr) => {
-                    assert!(is_last_arg); //kwargs should be last in the args
-                                          // not quite sure how to proceed here.
-                                          //def_has_kwargs = true;
-                    unimplemented!()
-                }
-            }
-        }
-
-        //if let Some(key) = def.open_args {
-        //value_map.insert(key, Ast::Sequence(args_seq).into());
-        //}
-        // Do the same with kwargs eventually
-        //println!("field_list: {:?}", fields_list);
-
-        let args: Vec<Argument> = fields_list
-            .iter()
-            .filter_map(|(field_key, field_ty)| {
-                let field_key = field_key.unwrap();
-                match field_ty {
-                    AstType::Args(_) => Some(Argument::Args(field_key, args_seq.clone())),
-                    AstType::KwArgs(_) => Some(Argument::KwArgs(field_key, kwargs_map.clone())),
-                    _ => {
-                        if let Some(v) = value_map.remove(&field_key) {
-                            Some(Argument::Named(field_key, v.into()))
-                        } else {
-                            let s_name = b.labels.r(field_key.into());
-                            b.push_error(
-                                &format!("caller missing named field: {}", s_name),
-                                call_span_id,
-                            );
-                            None
-                        }
-                    }
-                }
-            })
-            .collect();
-
-        if fields_list.len() != args.len() {
-            b.push_error_labels(vec![
-                b.primary_label(&format!("Call arity mismatch: call"), call_span_id),
-                b.secondary_label(&format!("function"), def_span_id),
-            ]);
-            //assert!(false);
-            //return Err(Error::new(BlockifyError::Invalid));
-        }
-
-        if args_seq.len() > 0 && def_has_args {
-            // extra fields
-            b.push_error(
-                &format!("extra fields, no args field: {:?}", args_seq),
-                call_span_id,
-            );
-        }
-        Ok((args, ret.clone()))
-    }
-
-    pub(super) fn push_call_arguments(
-        &mut self,
-        args: Vec<Argument>,
-        span_id: SpanId,
-        b: &mut NB,
-    ) -> Result<ArgVec> {
-        //let mut current_block_id = self.block_id;
-        let mut link_ids = vec![];
-        let mut values = vec![];
-        for a in args.into_iter() {
-            match a {
-                Argument::Positional(expr) => {
-                    let r = self.push_node(*expr, b)?;
-                    let link_id = r.link_id.unwrap();
-                    let entry = self.get_entry(link_id);
-                    values.push((entry.name, link_id, entry.ty.clone(), span_id));
-                    link_ids.push(link_id);
-                }
-                Argument::Named(key, expr) => {
-                    let r = self.push_node(*expr, b)?;
-                    let link_id = r.link_id.unwrap();
-                    let ty = self.get_type(link_id).clone();
-                    values.push((Some(key), link_id, ty, span_id));
-                    link_ids.push(link_id);
-                }
-                Argument::Args(key, exprs) => {
-                    let mut args_values = vec![];
-                    for expr in exprs {
-                        let span_id = expr.span_id;
-                        //self.switch_blocks(current_block_id);
-                        let r = self.push_node(expr, b)?;
-                        let link_id = r.link_id.unwrap();
-                        let ty = self.get_type(link_id).clone();
-                        args_values.push((Some(key), link_id, ty, span_id));
-                    }
-
-                    self.push_call_values(&args_values);
-
-                    let struct_ty = AstType::Struct(
-                        args_values
-                            .iter()
-                            .map(|(key, _, ty, _)| (*key, ty.clone()))
-                            .collect::<Vec<_>>(),
-                    );
-                    let link_id = self.push_code(
-                        LCode::NaryOp(NaryOperation::Struct),
-                        struct_ty.clone(),
-                        None,
-                        span_id,
-                        VarDefinitionSpace::Stack,
-                    );
-                    values.push((Some(key), link_id, struct_ty.clone(), span_id));
-                    link_ids.push(link_id);
-                }
-                Argument::KwArgs(key, _expr) => {
-                    let node: AstNode = 1.into();
-                    let r = self.push_node(node, b)?;
-                    let link_id = r.link_id.unwrap();
-                    let ty = self.get_type(link_id).clone();
-                    values.push((Some(key), link_id, ty, span_id));
-                    link_ids.push(link_id);
-                }
-            }
-        }
-        Ok(values)
-    }
-
-    fn push_bake_static(
-        &mut self,
-        name: StringKey,
-        def: Lambda,
-        def_span_id: SpanId,
-        call_func_type: AstType,
-        call_span_id: SpanId,
-        b: &mut NB,
-    ) -> Result<(LinkId, AstType)> {
-        let s = b.labels.r(name.into());
-        let global_key = b.labels.fresh_key(&s);
-        //let s_global = b.labels.r(global_key.into());
-        let current_block_id = self.current_block_id();
-        self.switch_blocks(self.static_block_id());
-        let block = self.blocks.get_block(current_block_id);
-
-        // if it's defined in static scope, just call it
-        //println!("[{},{}] RX:  {}", s, s_global, &call_func_type);
-        let (_variant_id, v_entry) = if let Some((variant_id, r_ty, v_entry, _scope_id)) =
-            self.resolve_function_name(block.scope_id, &name, &call_func_type, b)
-        {
-            //println!("[{}] R2: {}, {:?}", s, call_func_type, (v_entry));
-            // unify the resolved function with the caller
-            // the function should be resolved, this resolves any thing missing in the caller
-            b.unify(&call_func_type, call_span_id, &r_ty, def_span_id);
-            (variant_id, v_entry)
-        } else {
-            // if it's not already baked, we need to do that here
-            self.switch_blocks(self.static_block_id());
-
-            let result = self.push_bake_function(
-                def,
-                call_func_type.clone(),
-                def_span_id,
-                name,
-                global_key,
-                b,
-            );
-            if result.is_err() {
-                self.drain_diagnostics(b);
-            }
-            let (variant_id, r) = result?;
-            let v_entry = r.link_id.unwrap();
-
-            self.drain_diagnostics(b);
-            self.switch_blocks(current_block_id);
-            let r_ty2 = b.types.u.resolve(&call_func_type).unwrap();
-
-            // update the variant with the resolved type
-            self.variant_update(variant_id, r_ty2.clone(), v_entry);
-            (variant_id, v_entry)
-        };
-
-        // we are keeping a list of function names so we can look them up later
-        // there's a better way to do this.  A function only makes sense in the context of a call
-        // so our lookups should actually be resolved by the caller
-        self.functions.insert(name, v_entry);
-
-        Ok((v_entry, call_func_type))
-    }
-
-    fn push_call(
-        &mut self,
-        name: StringKey,
-        scope_id: ScopeId,
-        def: Lambda,
-        def_span_id: SpanId,
-        call_span_id: SpanId,
-        args: Vec<Argument>,
-        b: &mut NB,
-    ) -> Result<FlattenResult> {
-        let current_block_id = self.current_block_id();
-        // look up the lambda
-        // If the lambda is in the static scope, we do a normal call
-        // If it's in a non-static scope, then we bake a lambda and jump to it
-        // If we wanted to so some inlining, we just have to switch to doing lambdas instead
-
-        // 1. look up the def
-        // 2. find an already baked function if it exists
-        // 3. if no function exists, bake it
-        // - for static, we just write the function to the static scope
-        // - for lambdas and inline, it's easier, because we just write out the entire function
-        // anyways
-
-        //let s_name = b.labels.r(name.into());
-        //println!(
-        //"{}: push_call: {:?}",
-        //s_name,
-        //(scope_id, self.current_block_id())
-        //);
-
-        // look up the prototype
-        // calculate the calling arguments
-        let (args, _) =
-            self.calculate_function_arguments(&def, &args, def_span_id, call_span_id, b)?;
-
-        let call_values = self.push_call_arguments(args, call_span_id, b)?;
-        let call_ty = argvec_type(&call_values);
-
-        let (def_func_type, _def_arg_ty, def_ret_ty) = self.refresh_func_type(&def, b);
-
-        // construct call function type
-        let call_func_type = AstType::Func(
-            AstType::Struct(call_ty.fields()).into(),
-            ReturnType::Single(def_ret_ty.clone()).into(),
-        );
-
-        b.unify(&call_func_type, call_span_id, &def_func_type, def_span_id);
-
-        let is_static = self.static_scope_id() == scope_id;
-        if is_static {
-            let r =
-                self.push_bake_static(name, def, def_span_id, call_func_type, call_span_id, b)?;
-            self.drain_diagnostics(b);
-            let (fun_link_id, _bake_ty) = r;
-            self.switch_blocks(current_block_id);
-            self.push_function_call(fun_link_id, call_values, def_ret_ty, call_span_id)
-        } else {
-            self.switch_blocks(current_block_id);
-
-            //println!(
-            //"bake lambda: {:?}",
-            //(scope_id, current_block_id, b.labels.r(name.into()))
-            //);
-
-            let next_block_id = self.blocks.new_block(scope_id);
-
-            let result = self.push_bake_lambda_inner(
-                name,
-                name,
-                scope_id,
-                next_block_id,
-                def,
-                def_func_type.clone(),
-                def_span_id,
-                call_span_id,
-                ScopeType::Function,
-                Successor::BlockScope,
-                VarDefinitionSpace::Reg,
-                b,
-            )?;
-
-            self.drain_diagnostics(b);
-            let (_variant_id, _, fun_block_id, _, _, _, r) = result;
-
-            self.switch_blocks(next_block_id);
-
-            // now that we have the arguments calculated, and the lambda baked, jump!
-            self.switch_blocks(current_block_id);
-            self.push_jump(fun_block_id.into(), call_values, call_span_id);
-            self.switch_blocks(next_block_id);
-            Ok(r)
-        }
-    }
-
     pub fn push_code(
         &mut self,
         code: LCode,
@@ -1539,7 +1014,7 @@ impl Flatten {
 
         let def_span_id = b.spans.get_span_unknown();
         let (args, ret_ty) =
-            self.calculate_function_arguments(&def, &args, def_span_id, call_span_id, b)?;
+            Self::calculate_function_arguments(&def, &args, def_span_id, call_span_id, b)?;
 
         let call_values = self.push_call_arguments(args, call_span_id, b)?;
         let _call_ty = argvec_type(&call_values);
@@ -1679,93 +1154,6 @@ impl Flatten {
         }
     }
 
-    pub fn push_goto(
-        &mut self,
-        name: StringKey,
-        args: Vec<Argument>,
-        call_span_id: SpanId,
-        b: &mut NB,
-    ) -> Result<FlattenResult> {
-        // push a goto
-        // to keep things simpler, we just defer all resolution of the gotos until the end
-        // Goto is terminal, so we write out placeholders
-        let current_block_id = self.current_block_id();
-        let block = self.blocks.get_block(current_block_id);
-        let scope_id = block.scope_id;
-
-        let _s_name = b.labels.r(name.into());
-        //println!(
-        //"{}: push_goto args: {:?} in {}{}",
-        //s_name, &args, scope_id, current_block_id,
-        //);
-
-        // if this is a name, we can resolve now, no need to defer
-        // this happens in a CPS function, where we try to jump to a variable.
-        // we don't need to defer because we know the target
-        // We will rewrite in a later step, this goto will become a select
-
-        if let Some(name_link_id) = self.resolve_name_in_scope(scope_id, name.into()) {
-            let link_id = block.last().unwrap();
-            let _p_link_id = self.push_code(
-                LCode::PlaceholderTerminal(link_id),
-                AstType::Unit,
-                Some(name),
-                call_span_id,
-                VarDefinitionSpace::Default,
-            );
-            //println!("placeholder2: {}", p_link_id);
-
-            let d = DeferredGoto::new(
-                scope_id,
-                name.into(),
-                args,
-                call_span_id,
-                current_block_id,
-                DeferredType::Name(name_link_id),
-            );
-            //println!(
-            //"{}: push_goto name, defer goto: {:?} in scope: {}",
-            //s_name, d, scope_id
-            //);
-            self.deferred_goto.add_deferred(d);
-            return Ok(FlattenResult::statement());
-        }
-
-        // if we don't have a template or a label already, then we defer
-        if let Some(_fun_scope_id) = self
-            .scopes
-            .find_nearest_scope(scope_id, &[ScopeType::Function])
-        {
-            let link_id = block.last().unwrap();
-            let _p_link_id = self.push_code(
-                LCode::PlaceholderTerminal(link_id),
-                AstType::Unit,
-                None,
-                call_span_id,
-                VarDefinitionSpace::Default,
-            );
-            //println!("placeholder3: {}", p_link_id);
-
-            let d = DeferredGoto::new(
-                scope_id,
-                name.into(),
-                args,
-                call_span_id,
-                current_block_id,
-                DeferredType::Goto(link_id),
-            );
-            //println!(
-            //"{}: push_goto, defer goto: {:?} in scope: {}",
-            //s_name, d, fun_scope_id
-            //);
-            self.deferred_goto.add_deferred(d);
-            return Ok(FlattenResult::statement());
-        } else {
-            // goto without function scope
-            unreachable!("goto without function scope")
-        }
-    }
-
     pub fn dump_position(&self) {
         let block_id = self.current_block_id();
         let block = self.blocks.get_block(block_id);
@@ -1773,447 +1161,7 @@ impl Flatten {
         println!("pos: {}{}", scope_id, block_id);
     }
 
-    fn push_bake_lambda_inner(
-        &mut self,
-        local_name: StringKey,
-        global_name: StringKey,
-        next_scope_id: ScopeId,
-        next_block_id: BlockId,
-        def: Lambda,
-        def_func_type: AstType,
-        def_span_id: SpanId,
-        call_span_id: SpanId,
-        scope_type: ScopeType,
-        succ_type: Successor,
-        mem: VarDefinitionSpace,
-        b: &mut NB,
-    ) -> Result<(
-        VariantId,
-        ScopeId,
-        BlockId,
-        LinkId,
-        AstType,
-        ArgVec,
-        FlattenResult,
-    )> {
-        // create a new scope and block
-        // build the function body in that scope and block
-        // allow for recursion
-        //
-        let current_block_id = self.current_block_id();
-        let block = self.blocks.get_block(current_block_id);
-        let scope_id = block.scope_id;
-
-        // New Func Scope
-        let (fun_block_id, fun_scope_id) = self.new_scope_and_block(scope_type, next_scope_id);
-        let body = *def.body.unwrap();
-
-        let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
-        fun_scope.return_block = Some(next_block_id);
-
-        // block graph
-        self.blocks
-            .block_succ(current_block_id, fun_block_id, succ_type);
-
-        self.switch_blocks(fun_block_id);
-        //println!("push start block2: {}{}", fun_scope_id, fun_block_id);
-        let (entry_link_id, _) = self.push_start_block(
-            fun_scope_id,
-            def_func_type.clone(),
-            Some(global_name),
-            def_span_id,
-            mem,
-        );
-
-        // add entry to scope, for recursion
-        let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
-        // we need to know the link
-        //let variant_id = if let Some(global_name) = global_name {
-        let variant_id = self.variant_add(scope_id, local_name, r_ty1, entry_link_id, fun_block_id);
-
-        // add the name to scope
-        // do this early for recursive functions
-        self.scopes
-            .scope_define(scope_id, global_name, entry_link_id);
-
-        // flatten function, and switch to next
-        self.switch_blocks(fun_block_id);
-        let _ = self.push_node(body, b)?;
-        self.maybe_terminate_block(next_block_id, def_span_id);
-
-        let next_arg_ty =
-            self.resolve_return_type(fun_block_id, def_func_type.clone(), call_span_id, b);
-
-        assert!(next_arg_ty.is_composite());
-        let block_ty = AstType::Func(
-            next_arg_ty.clone().into(),
-            ReturnType::Single(AstType::Unit).into(),
-        );
-        let s_name = b.labels.r(local_name.into());
-        let cont_name = format!("{}.cont", s_name);
-
-        self.switch_blocks(next_block_id);
-        let (_v_block, v_args) = self.push_start_block(
-            next_scope_id,
-            block_ty.clone(),
-            Some(b.labels.s(&cont_name)),
-            call_span_id,
-            VarDefinitionSpace::Reg,
-        );
-
-        let next_link_id = match &next_arg_ty {
-            AstType::Unit => None,
-            _ => {
-                if v_args.len() == 0 {
-                    None
-                } else {
-                    Some(v_args.first().unwrap().1)
-                }
-            }
-        };
-
-        let r = if let Some(link_id) = next_link_id {
-            FlattenResult::link(link_id)
-        } else {
-            FlattenResult::statement()
-        };
-
-        Ok((
-            variant_id,
-            fun_scope_id,
-            fun_block_id,
-            entry_link_id,
-            next_arg_ty,
-            v_args,
-            r,
-        ))
-    }
-
-    fn push_bake_function(
-        &mut self,
-        def: Lambda,
-        def_func_ty: AstType,
-        def_span_id: SpanId,
-        name: StringKey,
-        global_name: StringKey,
-        b: &mut NB,
-    ) -> Result<(VariantId, FlattenResult)> {
-        let current_block_id = self.current_block_id();
-        let block = self.blocks.get_block(current_block_id);
-        let scope_id = block.scope_id;
-
-        // create a next scope, that includes the function
-        // when the function returns it jumps to the return block, which is the next function
-        // which is out of scope for the function.  This requires that the function cleanup the
-        // stack before jumping to the return block
-        // This scope is empty, and isn't used for anything other than including the function scope
-        // This behavior is slightly different than inline functions that jump back into the same
-        // scope from which they were called.
-
-        let (next_block_id, next_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
-
-        let (v_id, _scope, _block, entry_link_id, _, v_args, _r) = self.push_bake_lambda_inner(
-            name,
-            global_name,
-            next_scope_id,
-            next_block_id,
-            def,
-            def_func_ty,
-            def_span_id,
-            def_span_id,
-            ScopeType::Function,
-            Successor::FunctionDeclaration,
-            VarDefinitionSpace::Static,
-            b,
-        )?;
-
-        self.push_return(v_args, def_span_id);
-
-        // restore position back to where we started
-        self.switch_blocks(current_block_id);
-
-        //println!("function end: {}", b.labels.r(name.into()));
-        //println!("function end: {:?}", scope.deferred_goto);
-        Ok((v_id, FlattenResult::link(entry_link_id)))
-    }
-
-    fn resolve_deferred_single(&mut self, d: DeferredGoto, b: &mut NB) -> Result<bool> {
-        //let s_name = b.labels.r(d.name.into());
-        /*
-         * name resolution should not be deferred as it can assume lexical scope
-         * but since we can't actually lower a jump to a variable, we are going to
-         * do some rewriting here, so CPS functions become static
-         * we replace the variable representing the block with an integer, and use
-         * a switch statement in the jump to route things appropriately.
-         *
-         */
-
-        match &d.deferred_type {
-            DeferredType::Name(def_link_id) => {
-                // is it a variable in scope?
-                // This happens if we try to jump to a variable
-                // We have no way of lowering this, so we need to handle this later
-                // This will be rewritten in a later step based on the type
-                self.switch_blocks(d.block_id);
-                self.remove_placeholder_terminal(d.block_id);
-
-                // push the arguments, and unify the type,
-                // but keep the placeholder, we will replace it in the rewrite step
-                // we do just enough calculation here to resolve the types, and we push it back on the
-                // stack
-                //
-                //
-
-                // Push load if required.  This is needed if the argument is stored in memory,
-                // rather than a register
-                let load_link_id = if self.is_load_required(*def_link_id) {
-                    let entry = self.get_entry(*def_link_id).clone();
-                    let link_id = self.push_code(
-                        LCode::Load(*def_link_id),
-                        entry.ty,
-                        entry.name,
-                        entry.span_id,
-                        VarDefinitionSpace::Default,
-                    );
-                    self.scoped_continuations.connect(
-                        ContinuationFlow::Variable(*def_link_id),
-                        ContinuationFlow::Variable(link_id),
-                        FlowEdge::LoadBlockArg,
-                    );
-                    link_id
-                } else {
-                    *def_link_id
-                };
-
-                // calculate the type, so we can unify
-                let goto_values = self.push_call_arguments(d.args.clone(), d.call_span_id, b)?;
-                //println!("goto_values: {:?}", &goto_values);
-                let goto_arg_type = argvec_type(&goto_values);
-                let goto_func_type =
-                    AstType::Func(goto_arg_type.clone().into(), ReturnType::Never.into());
-
-                // unify
-                let entry = self.get_entry(*def_link_id);
-                let var_ty = entry.ty.clone();
-                b.unify(&var_ty, entry.span_id, &goto_func_type, d.call_span_id);
-
-                //println!(
-                //"{}: resolved deferred name: from {}:{}, ty: {}",
-                //s_name, d.scope_id, d.block_id, var_ty
-                //);
-
-                // save the argvec, so we can properly terminate later
-                let mut d = d;
-                d.deferred_type = DeferredType::Name(load_link_id);
-                d.argvec = goto_values;
-
-                let block = self.blocks.get_block(self.current_block_id());
-                let _link_id = self.push_code(
-                    LCode::PlaceholderTerminal(block.last().unwrap()),
-                    AstType::Unit,
-                    None,
-                    d.call_span_id,
-                    VarDefinitionSpace::Default,
-                );
-                //println!("placeholder1: {}", link_id);
-
-                self.deferred_goto.add_cps(d);
-                return Ok(true);
-            }
-
-            DeferredType::Goto(goto_link_id) => {
-                // are we jumping to an abstraction?
-                if let Some(abstraction_id) = self.resolve_template(d.scope_id, d.name.into()) {
-                    self.switch_blocks(d.block_id);
-                    self.remove_placeholder_terminal(d.block_id);
-
-                    //let _a = self.abstractions.get_mut(abstraction_id);
-                    //println!("blocks: {:?}", a.caller_blocks);
-
-                    // push and jump
-                    // TODO: this function needs to handle unwind
-                    let (variant_id, _fun_scope_id, _fun_block_id, _, _, _, _, _link_id) = self
-                        .push_cps_block(
-                            d.name,
-                            d.scope_id,
-                            abstraction_id,
-                            d.args.clone(),
-                            d.call_span_id,
-                            b,
-                        )?;
-                    //println!(
-                    //"{}: resolved deferred lambda: from {}:{}=>{}:{}, link: {}, {:?}",
-                    //s_name,
-                    //d.scope_id,
-                    //d.block_id,
-                    //fun_scope_id,
-                    //fun_block_id,
-                    //link_id,
-                    //&d.args
-                    //);
-
-                    let dt = DeferredType::Variant(*goto_link_id, d.block_id, variant_id);
-                    let mut d = d;
-                    d.deferred_type = dt;
-                    self.deferred_goto.add_cps(d);
-                    return Ok(true);
-                }
-
-                // is it a label?
-                if let Some(target_block_id) = self.resolve_label(d.scope_id, d.name.into()) {
-                    assert_eq!(d.args.len(), 0);
-                    // not possible to pass args to a label, use a CPS function instead
-                    self.switch_blocks(d.block_id);
-                    self.remove_placeholder_terminal(d.block_id);
-
-                    // TODO: we just have a label, so we need to handle unwind here.  We can't jump
-                    // directly, we need to jump to the unwind function
-
-                    // TODO: args should be unwound before jumping
-                    // by replacing jumps out of scope to the unwind function
-                    let jump_args = self.push_call_arguments(d.args.clone(), d.call_span_id, b)?;
-                    let link_id = self.push_jump(target_block_id.into(), jump_args, d.call_span_id);
-                    //let block = self.blocks.get_block(target_block_id);
-                    //println!(
-                    //"{}: resolved deferred label: from {}:{}=>{}:{}, link: {}",
-                    //s_name, d.scope_id, d.block_id, block.scope_id, target_block_id, link_id
-                    //);
-                    self.scoped_continuations.connect(
-                        ContinuationFlow::Jump(link_id),
-                        ContinuationFlow::Block(target_block_id),
-                        FlowEdge::JumpLabel,
-                    );
-
-                    return Ok(true);
-                }
-
-                // otherwise it's not defined, return an error
-                let s = b.labels.r(d.name.into());
-                b.push_error(
-                    &format!("ident `{}` not found in {}{}", s, d.scope_id, d.block_id),
-                    d.call_span_id,
-                );
-            }
-            _ => {
-                unimplemented!();
-            }
-        }
-        Ok(false)
-    }
-
-    fn resolve_cps_single(&mut self, d: DeferredGoto, b: &mut NB) -> Result<()> {
-        // this is where we actually do the rewrite
-        match d.deferred_type {
-            DeferredType::Name(arg_link_id) => {
-                // we replace the placeholder here
-                self.switch_blocks(d.block_id);
-                let entry = self.get_entry(arg_link_id).clone();
-                let code = entry.code;
-                let arg_block_id = entry.block_id;
-
-                let sources = match &code {
-                    LCode::Arg(arg_num) => self
-                        .scoped_continuations
-                        .find_source_blocks(ContinuationFlow::BlockArg(arg_block_id, *arg_num)),
-
-                    LCode::Declare | LCode::Load(_) => self
-                        .scoped_continuations
-                        .find_source_blocks(ContinuationFlow::Variable(arg_link_id)),
-                    _ => {
-                        unreachable!("{:?}", code);
-                    }
-                };
-
-                let _jump_link_id =
-                    self.replace_placeholder_terminal(d.block_id, arg_link_id, sources.clone(), b);
-                //println!(
-                //"flows: {:?}",
-                //(arg_block_id, arg_link_id, &code, sources, jump_link_id)
-                //);
-            }
-            DeferredType::Variant(_goto_link_id, _source_block_id, _variant_id) => {}
-            _ => {
-                unreachable!("{:?}", d);
-            }
-        }
-        Ok(())
-    }
-
-    fn resolve_open_identifiers(&mut self, b: &mut NB) -> Result<()> {
-        let mut abstractions = vec![];
-        let mut blocks = vec![];
-        let mut errors = vec![];
-        for link_id in &self.open_identifiers {
-            let entry = self.get_entry(*link_id);
-            let block_id = entry.block_id;
-            let block = self.blocks.get_block(block_id);
-            let scope_id = block.scope_id;
-            let key = entry.name.unwrap();
-            if let Some(label_block_id) = self.resolve_label(scope_id, key.into()) {
-                blocks.push((*link_id, label_block_id));
-            } else if let Some(abstraction_id) = self.resolve_template(scope_id, key.into()) {
-                abstractions.push((*link_id, abstraction_id));
-            } else {
-                errors.push(*link_id);
-            }
-        }
-
-        for (link_id, block_id) in blocks {
-            let block = self.blocks.get_block(block_id);
-            let block_entry_id = block.entry.unwrap();
-            let block_entry = self.get_entry(block_entry_id);
-            let block_ty = block_entry.ty.clone();
-            let block_span_id = block_entry.span_id;
-
-            self.switch_blocks(block_id);
-            self.scoped_continuations.connect(
-                ContinuationFlow::Block(block_id),
-                ContinuationFlow::Variable(link_id),
-                FlowEdge::BlockRef,
-            );
-
-            // now replace the abstraction code
-            let entry = self.get_entry_mut(link_id);
-            entry.code = LCode::Val(Literal::Block(block_id));
-            b.unify(&entry.ty, entry.span_id, &block_ty, block_span_id);
-        }
-
-        for (link_id, abstraction_id) in abstractions {
-            self.resolve_open_abstractions(link_id, abstraction_id, b)?;
-        }
-
-        for link_id in errors {
-            let entry = self.get_entry(link_id);
-            let name = entry.name.unwrap();
-            let s_name = b.labels.r(name.into());
-            b.push_error(&format!("Identifier not found: {}", s_name), entry.span_id);
-        }
-        Ok(())
-    }
-
-    fn resolve_cps(&mut self, b: &mut NB) -> Result<()> {
-        loop {
-            if let Some(d) = self.deferred_goto.pop_cps() {
-                self.resolve_cps_single(d, b)?;
-            } else {
-                break;
-            }
-        }
-        Ok(())
-    }
-
-    fn resolve_deferred(&mut self, b: &mut NB) -> Result<()> {
-        loop {
-            if let Some(d) = self.deferred_goto.pop_deferred() {
-                let _ = self.resolve_deferred_single(d, b)?;
-            } else {
-                break;
-            }
-        }
-        Ok(())
-    }
-
-    fn resolve_return_type(
+    pub(super) fn resolve_return_type(
         &self,
         fun_block_id: BlockId,
         def_func_ty: AstType,
@@ -2288,23 +1236,6 @@ impl Flatten {
         };
 
         let resolved_ret_ty = ret_arg_type.clone();
-        /*
-        if self.mode == FlattenMode::Template || true {
-            ret_arg_type.clone()
-        } else if let Some(ty) = b.types.u.resolve(&ret_arg_type) {
-            ty
-        } else {
-            //b.types.dump();
-            b.push_error(
-                &format!(
-                    "Return Type Must Resolve: {}, arity: {}",
-                    &func_ret_ty, arity
-                ),
-                span_id,
-            );
-            ret_arg_type.clone()
-        };
-        */
 
         if b.types.u.unify(&func_ret_ty, &single_ty).is_err() {
             b.push_error(
@@ -2343,26 +1274,6 @@ impl Flatten {
         //println!("ty2: {:?}", &def_func_type);
         //println!("ty3: {:?}", &def_arg_ty);
         (def_func_type, def_arg_ty, ret_ty)
-    }
-
-    pub fn push_bake(&mut self, name: StringKey, func_type: AstType, b: &mut NB) -> Result<LinkId> {
-        let current_block_id = self.current_block_id();
-        if let Some((__scope_id, def, def_span_id)) = self.resolve_lambda(current_block_id, name) {
-            let result = self.push_bake_function(def, func_type, def_span_id, name, name, b);
-            if result.is_err() {
-                self.drain_diagnostics(b);
-            }
-            let (_variant_id, r) = result?;
-
-            self.drain_diagnostics(b);
-            self.switch_blocks(current_block_id);
-            Ok(r.link_id.unwrap())
-        } else {
-            let s = b.labels.r(name.into());
-            let u = b.spans.get_span_unknown();
-            b.push_error(&format!("push_bake: not found: {}", s), u);
-            Err(Error::new(BlockifyError::NotFound(s)))
-        }
     }
 
     pub fn remove_placeholder_terminal(&mut self, goto_block_id: BlockId) {
@@ -2442,25 +1353,6 @@ impl Flatten {
             unreachable!();
         }
         last_link_id
-    }
-
-    pub fn push_cps_block_with_placeholder_check(
-        &mut self,
-        name: StringKey,
-        template_id: AbstractionId,
-        args: Vec<Argument>,
-        call_span_id: SpanId,
-        b: &mut NB,
-    ) -> Result<LinkId> {
-        // we want to handle monomorphization here.
-        let goto_block_id = self.current_block_id();
-        self.remove_placeholder_terminal(goto_block_id);
-
-        let block = self.blocks.get_block(goto_block_id);
-        let scope_id = block.scope_id;
-        let (_variant_id, _, _fun_block_id, _def_func_type, _def_arg_type, _, _, link_id) =
-            self.push_cps_block(name, scope_id, template_id, args, call_span_id, b)?;
-        Ok(link_id)
     }
 
     pub fn push_node(&mut self, node: AstNode, b: &mut NB) -> Result<FlattenResult> {
