@@ -104,6 +104,7 @@ impl Flatten {
         Ok((variant_id, fun_scope_id, fun_block_id, def_arg_type))
     }
 
+    /*
     pub fn push_cps_block_with_placeholder_check(
         &mut self,
         name: StringKey,
@@ -122,6 +123,7 @@ impl Flatten {
             self.push_cps_block(name, scope_id, template_id, args, call_span_id, b)?;
         Ok(link_id)
     }
+    */
 
     pub(super) fn push_cps_block(
         &mut self,
@@ -215,8 +217,6 @@ impl Flatten {
         // to just error out
         // What does it even mean that a CPS function never calls it's continuation?
 
-        self.drain_diagnostics(b);
-
         // control is returned to the goto
 
         let def_func_type = AstType::Func(def_arg_type.clone().into(), ReturnType::Never.into());
@@ -291,10 +291,8 @@ impl Flatten {
         }
 
         // if we don't have a template or a label already, then we defer
-        if let Some(_fun_scope_id) = self
-            .scopes
-            .find_nearest_scope(scope_id, &[ScopeType::Function])
-        {
+        // ensure we are in function scope
+        if self.scopes.in_function_scope(scope_id) {
             let link_id = block.last().unwrap();
             self.push_placeholder_terminal(link_id, call_span_id);
             //println!("placeholder3: {}", p_link_id);

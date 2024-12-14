@@ -272,6 +272,14 @@ impl ScopeGraph {
         }
     }
 
+    pub fn in_function_scope(&self, scope_id: ScopeId) -> bool {
+        if let Some(_fun_scope_id) = self.find_nearest_scope(scope_id, &[ScopeType::Function]) {
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn find_nearest_scope(
         &self,
         scope_id: ScopeId,

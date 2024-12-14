@@ -396,13 +396,8 @@ impl Flatten {
                 global_key,
                 b,
             );
-            if result.is_err() {
-                self.drain_diagnostics(b);
-            }
             let (variant_id, r) = result?;
             let v_entry = r.link_id.unwrap();
-
-            self.drain_diagnostics(b);
             self.switch_blocks(current_block_id);
             let r_ty2 = b.types.u.resolve(&call_func_type).unwrap();
 
@@ -423,12 +418,7 @@ impl Flatten {
         let current_block_id = self.current_block_id();
         if let Some((__scope_id, def, def_span_id)) = self.resolve_lambda(current_block_id, name) {
             let result = self.push_bake_function(def, func_type, def_span_id, name, name, b);
-            if result.is_err() {
-                self.drain_diagnostics(b);
-            }
             let (_variant_id, r) = result?;
-
-            self.drain_diagnostics(b);
             self.switch_blocks(current_block_id);
             Ok(r.link_id.unwrap())
         } else {
@@ -462,7 +452,7 @@ impl Flatten {
 
         let (next_block_id, next_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
 
-        let (v_id, _scope, _block, entry_link_id, _, v_args, _r) = self.push_bake_lambda_inner(
+        let (v_id, _scope, block_id, entry_link_id, _, v_args, _r) = self.push_bake_lambda_inner(
             name,
             global_name,
             next_scope_id,
@@ -478,6 +468,15 @@ impl Flatten {
         )?;
 
         self.push_return(v_args, def_span_id);
+
+        //self.switch_blocks(self.static_block_id());
+        //self.push_code(
+        //LCode::DeclareFunction(Some(block_id)),
+        //entry.ty.clone(),
+        //entry.name,
+        //entry.span_id,
+        //entry.mem,
+        //);
 
         // restore position back to where we started
         self.switch_blocks(current_block_id);
@@ -722,12 +721,13 @@ impl Flatten {
         if is_static {
             let r =
                 self.push_bake_static(name, def, def_span_id, call_func_type, call_span_id, b)?;
-            self.drain_diagnostics(b);
             let (fun_link_id, _bake_ty) = r;
             self.switch_blocks(current_block_id);
             self.push_function_call(fun_link_id, call_values, def_ret_ty, call_span_id)
         } else {
             self.switch_blocks(current_block_id);
+            // we inline here for nested functions
+            // we bake the lambda, and then jump to it
 
             //println!(
             //"bake lambda: {:?}",
@@ -751,7 +751,6 @@ impl Flatten {
                 b,
             )?;
 
-            self.drain_diagnostics(b);
             let (_variant_id, _, fun_block_id, _, _, _, r) = result;
 
             self.switch_blocks(next_block_id);

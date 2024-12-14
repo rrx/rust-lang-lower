@@ -105,7 +105,7 @@ pub struct Flatten {
     pub(super) link: LinkOptions,
     pub(super) entries: Vec<CodeEntry>,
     pub blocks: BlockGraph,
-    pub(super) messages: Vec<(String, SpanId)>,
+    //pub(super) messages: Vec<(String, SpanId)>,
     pub(crate) static_scope: Option<ScopeId>,
     pub(crate) static_block: Option<BlockId>,
     pub(crate) current_block: BlockId,
@@ -128,7 +128,7 @@ impl Flatten {
             entries: vec![],
             blocks,
             link: LinkOptions::new(),
-            messages: vec![],
+            //messages: vec![],
             static_scope: None,
             static_block: None,
             current_block: BlockId::new(0),
@@ -435,7 +435,7 @@ impl Flatten {
             f.switch_blocks(static_block_id);
             let _ = f.push_node(*body, b)?;
             assert_eq!(static_block_id, f.current_block_id());
-            f.drain_diagnostics(b);
+            //f.drain_diagnostics(b);
             Ok(f)
         } else {
             b.push_error("Not a module", node.span_id);
@@ -443,12 +443,14 @@ impl Flatten {
         }
     }
 
+    /*
     pub(super) fn drain_diagnostics(&mut self, b: &mut NB) {
         // XXX: This needs to be run before any errors kick in, there must be a better way.
         for (msg, span_id) in self.messages.drain(..) {
             b.push_error(&msg, span_id);
         }
     }
+    */
 
     pub fn inject_builtin_prototypes(&mut self, b: &mut NB) {
         // inject builtin prototypes
@@ -572,7 +574,14 @@ impl Flatten {
         values
     }
 
+    /*
     pub(super) fn finish_block(&mut self, block_id: BlockId, _b: &mut NB) {
+        // trying to walk the graph, this is a bit awkward
+        // get block ordering
+        //let blocks = self.blocks.post_order_blocks();
+        //for block_id in blocks.into_iter() {
+            //self.finish_block(block_id, b);
+        //}
         let block = self.blocks.get_block(block_id);
         if block.entry.is_none() {
             return;
@@ -624,6 +633,7 @@ impl Flatten {
             }
         }
     }
+    */
 
     pub(super) fn finish(mut self, b: &mut NB) -> Result<(Flatten, Vec<LinkId>)> {
         // make sure all claims have been handled
@@ -680,11 +690,8 @@ impl Flatten {
             );
         }
 
-        // get block ordering
-        let blocks = self.blocks.post_order_blocks();
-        for block_id in blocks.into_iter() {
-            self.finish_block(block_id, b);
-        }
+        // the last thing we do is calculate the values, which is the post order traversal of the
+        // blocks.
         let values = self.finish_values(b);
 
         Ok((self, values))
@@ -707,7 +714,6 @@ impl Flatten {
     pub fn push_entry_with_link(&mut self, entry: CodeEntry) -> LinkId {
         let entry_is_term = entry.code.is_term();
         let block_id = entry.block_id;
-        let span_id = entry.span_id;
         let block = self.blocks.get_block(block_id);
         let link_id = self._insert_entry(entry, block.last());
         let block = self.blocks.get_block(block_id);
@@ -716,11 +722,7 @@ impl Flatten {
             last_entry.next = link_id;
             let is_term = last_entry.code.is_term();
             if is_term {
-                let backtrace = std::backtrace::Backtrace::capture();
-                self.messages.push((
-                    format!("appending to term block={}\n{}", block_id, backtrace),
-                    span_id,
-                ));
+                unreachable!("appending to term block={}", block_id);
             }
         }
         self.blocks
