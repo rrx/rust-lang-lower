@@ -354,14 +354,14 @@ impl Flatten {
         &self,
         block_id: BlockId,
         name: StringKey,
-    ) -> Option<(ScopeId, Lambda, SpanId)> {
+    ) -> Option<(ScopeId, AbstractionId)> {
         match self.resolve_lambda_scope(block_id, name.into()) {
             Some(scope_id) => {
                 let scope = self.scopes.get_scope(scope_id);
-                if let Some(template_id) = scope.lambdas.get(&name.into()).cloned() {
-                    let a = self.abstractions.get(template_id);
+                if let Some(abstraction_id) = scope.lambdas.get(&name.into()).cloned() {
+                    //let a = self.abstractions.get(template_id);
                     //let (def, span_id, _) = self.get_ast_template(template_id).clone();
-                    Some((scope_id, a.def.clone(), a.def_span_id))
+                    Some((scope_id, abstraction_id))
                 } else {
                     None
                 }
@@ -1720,10 +1720,10 @@ impl Flatten {
                     // call is an expression, it's non-terminal
                     // lambdas should also be non-terminal
                     Ast::Identifier(ident) => {
-                        if let Some((scope_id, def, def_span_id)) =
+                        if let Some((scope_id, abstraction_id)) =
                             self.resolve_lambda(current_block_id, *ident)
                         {
-                            self.push_call(*ident, scope_id, def, def_span_id, span_id, args, b)
+                            self.push_call(*ident, scope_id, abstraction_id, span_id, args, b)
                         } else {
                             let name = b.labels.r(ident.into());
                             b.push_error(&format!("Call name not found: {}", name), span_id);

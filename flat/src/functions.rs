@@ -361,8 +361,9 @@ impl Flatten {
     fn push_bake_static(
         &mut self,
         name: StringKey,
-        def: Lambda,
-        def_span_id: SpanId,
+        abstraction_id: AbstractionId,
+        //def: Lambda,
+        //def_span_id: SpanId,
         call_func_type: AstType,
         call_span_id: SpanId,
         b: &mut NB,
@@ -373,6 +374,10 @@ impl Flatten {
         let current_block_id = self.current_block_id();
         self.switch_blocks(self.static_block_id());
         let block = self.blocks.get_block(current_block_id);
+
+        let a = self.abstractions.get(abstraction_id);
+        //let def = a.def.clone();
+        let def_span_id = a.def_span_id;
 
         // if it's defined in static scope, just call it
         //println!("[{},{}] RX:  {}", s, s_global, &call_func_type);
@@ -389,9 +394,8 @@ impl Flatten {
             self.switch_blocks(self.static_block_id());
 
             let result = self.push_bake_function(
-                def,
+                abstraction_id,
                 call_func_type.clone(),
-                def_span_id,
                 name,
                 global_key,
                 b,
@@ -416,8 +420,8 @@ impl Flatten {
 
     pub fn push_bake(&mut self, name: StringKey, func_type: AstType, b: &mut NB) -> Result<LinkId> {
         let current_block_id = self.current_block_id();
-        if let Some((__scope_id, def, def_span_id)) = self.resolve_lambda(current_block_id, name) {
-            let result = self.push_bake_function(def, func_type, def_span_id, name, name, b);
+        if let Some((_, abstraction_id)) = self.resolve_lambda(current_block_id, name) {
+            let result = self.push_bake_function(abstraction_id, func_type, name, name, b);
             let (_variant_id, r) = result?;
             self.switch_blocks(current_block_id);
             Ok(r.link_id.unwrap())
@@ -431,9 +435,10 @@ impl Flatten {
 
     fn push_bake_function(
         &mut self,
-        def: Lambda,
+        abstraction_id: AbstractionId,
+        //def: Lambda,
         def_func_ty: AstType,
-        def_span_id: SpanId,
+        //def_span_id: SpanId,
         name: StringKey,
         global_name: StringKey,
         b: &mut NB,
@@ -441,6 +446,10 @@ impl Flatten {
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
         let scope_id = block.scope_id;
+
+        let a = self.abstractions.get(abstraction_id);
+        let def = a.def.clone();
+        let def_span_id = a.def_span_id;
 
         // create a next scope, that includes the function
         // when the function returns it jumps to the return block, which is the next function
@@ -452,7 +461,7 @@ impl Flatten {
 
         let (next_block_id, next_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
 
-        let (v_id, _scope, block_id, entry_link_id, _, v_args, _r) = self.push_bake_lambda_inner(
+        let (v_id, _scope, _block_id, entry_link_id, _, v_args, _r) = self.push_bake_lambda_inner(
             name,
             global_name,
             next_scope_id,
@@ -673,8 +682,7 @@ impl Flatten {
         &mut self,
         name: StringKey,
         scope_id: ScopeId,
-        def: Lambda,
-        def_span_id: SpanId,
+        abstraction_id: AbstractionId,
         call_span_id: SpanId,
         args: Vec<Argument>,
         b: &mut NB,
@@ -699,6 +707,10 @@ impl Flatten {
         //(scope_id, self.current_block_id())
         //);
 
+        let a = self.abstractions.get(abstraction_id);
+        let def_span_id = a.def_span_id;
+        let def = a.def.clone();
+
         // look up the prototype
         // calculate the calling arguments
         let (args, _) =
@@ -719,8 +731,7 @@ impl Flatten {
 
         let is_static = self.static_scope_id() == scope_id;
         if is_static {
-            let r =
-                self.push_bake_static(name, def, def_span_id, call_func_type, call_span_id, b)?;
+            let r = self.push_bake_static(name, abstraction_id, call_func_type, call_span_id, b)?;
             let (fun_link_id, _bake_ty) = r;
             self.switch_blocks(current_block_id);
             self.push_function_call(fun_link_id, call_values, def_ret_ty, call_span_id)
@@ -733,6 +744,7 @@ impl Flatten {
             //"bake lambda: {:?}",
             //(scope_id, current_block_id, b.labels.r(name.into()))
             //);
+            //self.push_cps_block(name, scope_id
 
             let next_block_id = self.blocks.new_block(scope_id);
 
