@@ -12,6 +12,6 @@ pub use intern::*;
 pub use link::*;
 pub use node::*;
 pub use span::*;
-pub use types::{AstType, ReturnType, TypeId, TypePool};
+pub use types::{AstFuncType, AstType, ReturnType, TypeId, TypePool};
 
 pub use codespan_reporting::diagnostic::{Diagnostic, Label};

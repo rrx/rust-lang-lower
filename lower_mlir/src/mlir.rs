@@ -704,8 +704,8 @@ impl<'c> MLIRGenerator<'c> {
                 let ty = self.blockify.get_type((*v_f).into());
                 let f = FlatSymbolRefAttribute::new(self.context, &name);
 
-                if let AstType::Func(_func_arg_types, ret) = &ty {
-                    let ret_ty = match ret.as_ref() {
+                if let AstType::Func(func_ty) = &ty {
+                    let ret_ty = match &func_ty.ret {
                         ReturnType::Never => &AstType::Unit,
                         ReturnType::Single(ty) => ty,
                         ReturnType::Multi(_) => {
@@ -1373,7 +1373,7 @@ impl<'c> MLIRGenerator<'c> {
         location: Location<'c>,
         visibility: &str,
     ) -> Result<Operation<'c>> {
-        if let AstType::Func(params, ast_ret_type) = ast_ty.clone() {
+        if let AstType::Func(func_ty) = ast_ty.clone() {
             let mut type_list = vec![];
             let mut ast_types = vec![];
 
@@ -1382,7 +1382,7 @@ impl<'c> MLIRGenerator<'c> {
                 StringAttribute::new(self.context, visibility).into(),
             )];
 
-            for (_, ty) in params.fields() {
+            for (_, ty) in func_ty.args.fields() {
                 let (p_ty, dims) = self.from_type(&ty);
                 assert_eq!(dims.len(), 0);
                 type_list.push(p_ty);
@@ -1391,7 +1391,7 @@ impl<'c> MLIRGenerator<'c> {
 
             let region = Region::new();
 
-            let ret_type = match ast_ret_type.as_ref() {
+            let ret_type = match func_ty.ret {
                 ReturnType::Never => vec![],
                 ReturnType::Single(ty) => {
                     let ret_type = if let AstType::Unit = ty {

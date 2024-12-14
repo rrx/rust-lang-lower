@@ -1,5 +1,6 @@
 use crate::{InternKey, InternPool, InternValue, StringKey};
 use serde::Serialize;
+use std::convert::From;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub struct TypeId(u32);
@@ -90,17 +91,41 @@ pub enum AstType {
     Union(Vec<(Option<StringKey>, AstType)>),
     Ptr(Box<AstType>),
     // Func(parameters, return type)
-    Func(Box<AstType>, Box<ReturnType>),
+    Func(Box<AstFuncType>), //Box<AstType>, Box<ReturnType>),
     TypeArg(u32),
     Variable(u32),
+}
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+pub struct AstFuncType {
+    pub args: AstType,
+    pub ret: ReturnType,
+}
+
+impl AstFuncType {
+    pub fn new(args: AstType, ret: ReturnType) -> Self {
+        Self { args, ret }
+    }
+}
+
+impl From<AstFuncType> for AstType {
+    fn from(ty: AstFuncType) -> Self {
+        Self::Func(Box::new(ty))
+    }
+}
+
+impl std::fmt::Display for AstFuncType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        assert!(self.args.is_composite());
+        write!(f, "fn({})->{}", self.args, self.ret)
+    }
 }
 
 impl std::fmt::Display for AstType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Func(arg_ty, ret_ty) => {
-                assert!(arg_ty.is_composite());
-                write!(f, "fn({})->{}", arg_ty, ret_ty)
+            Self::Func(func_ty) => {
+                write!(f, "{}", func_ty)
             }
             Self::Struct(fields) => {
                 //let mut t = f.debug_struct("Struct");
@@ -146,7 +171,13 @@ impl AstType {
 
     pub fn func(args: Vec<Self>, ret_type: Self) -> Self {
         let t = Self::build_struct(args);
-        AstType::Func(t.into(), ReturnType::Single(ret_type).into())
+        AstType::Func(
+            AstFuncType {
+                args: t.into(),
+                ret: ReturnType::Single(ret_type).into(),
+            }
+            .into(),
+        )
     }
 
     pub fn from_str(s: &str) -> Option<AstType> {
@@ -165,7 +196,7 @@ impl AstType {
             Self::Args(ty) => ty.fields(),
             Self::Struct(fields) => fields.clone(),
             Self::Tuple(fields) => fields.iter().map(|f| (None, f.clone())).collect(),
-            Self::Func(args, _) => args.fields(),
+            Self::Func(f) => f.args.fields(),
             _ => vec![],
         }
     }
@@ -175,7 +206,7 @@ impl AstType {
             Self::Args(ty) => ty.field_types(),
             Self::Struct(fields) => fields.iter().map(|f| f.1.clone()).collect(),
             Self::Tuple(fields) => fields.clone(),
-            Self::Func(args, _) => args.field_types(),
+            Self::Func(f) => f.args.field_types(),
             _ => vec![],
         }
     }
@@ -211,12 +242,12 @@ impl AstType {
                 false
             }
             */
-            Self::Func(args, ret) => {
-                if ret.is_unknown() {
+            Self::Func(f) => {
+                if f.ret.is_unknown() {
                     return true;
                 }
 
-                if args.is_unknown() {
+                if f.args.is_unknown() {
                     return true;
                 }
                 /*

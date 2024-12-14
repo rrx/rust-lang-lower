@@ -3,7 +3,7 @@ use ena::unify::*;
 use std::convert::Into;
 use thiserror::Error;
 
-use compile_core::{AstType, ReturnType};
+use compile_core::{AstFuncType, AstType, ReturnType};
 
 #[derive(Debug, Error)]
 pub enum UError {
@@ -141,16 +141,19 @@ fn ast_unify_values(value1: &AstType, value2: &AstType) -> Result<AstType, UErro
                 Ok(AstType::TargetUnion(result, targets.clone()))
             }
             */
-            (AstType::Func(c1, r1), AstType::Func(c2, r2)) => {
-                let c1_field_types = c1.field_types();
-                let c2_field_types = c2.field_types();
+            (AstType::Func(f1), AstType::Func(f2)) => {
+                let c1_field_types = value1.field_types();
+                let c2_field_types = value2.field_types();
 
                 let result = unify_fields(&c1_field_types, &c2_field_types)?;
 
-                let ret_ty = unify_return_type(r1.as_ref(), r2.as_ref())?;
+                let ret_ty = unify_return_type(&f1.ret, &f2.ret)?;
                 Ok(AstType::Func(
-                    AstType::build_struct(result).into(),
-                    ret_ty.into(),
+                    AstFuncType {
+                        args: AstType::build_struct(result).into(),
+                        ret: ret_ty.into(),
+                    }
+                    .into(),
                 ))
             }
 
@@ -323,7 +326,7 @@ impl TypeUnify {
                 self._unify_list(&a.field_types(), &b.field_types())
             }
             */
-            (AstType::Func(vs1, r1), AstType::Func(vs2, r2)) => match (r1.as_ref(), r2.as_ref()) {
+            (AstType::Func(f1), AstType::Func(f2)) => match (&f1.ret, &f2.ret) {
                 (ReturnType::Never, ReturnType::Never) => Ok(()),
                 (ReturnType::Never, ReturnType::Single(ty)) => {
                     if ty == &AstType::Unit {
@@ -343,7 +346,7 @@ impl TypeUnify {
                     if self.unify(&ret1, &ret2).is_err() {
                         return Err(UError::Bad);
                     }
-                    for ((_, x), (_, y)) in vs1.fields().iter().zip(vs2.fields().iter()) {
+                    for ((_, x), (_, y)) in f1.args.fields().iter().zip(f2.args.fields().iter()) {
                         if self.unify(x, y).is_err() {
                             return Err(UError::Bad);
                         }
@@ -402,10 +405,11 @@ impl TypeUnify {
                 Some(AstType::TargetUnion(resolved_args, ret.clone()))
             }
             */
-            AstType::Func(args, ret) => {
-                assert!(args.is_composite());
+            AstType::Func(f) => {
+                assert!(f.args.is_composite());
 
-                let fields = args
+                let fields = f
+                    .args
                     .fields()
                     .into_iter()
                     .map(|(key, ty)| (key, ty))
@@ -422,7 +426,7 @@ impl TypeUnify {
                     return None;
                 }
 
-                let resolved_ret = match ret.as_ref() {
+                let resolved_ret = match &f.ret {
                     ReturnType::Never => AstType::Unit,
                     ReturnType::Multi(_) => unimplemented!(),
                     ReturnType::Single(ret) => {
@@ -436,8 +440,11 @@ impl TypeUnify {
                 };
 
                 Some(AstType::Func(
-                    AstType::Struct(resolved_args).into(),
-                    ReturnType::Single(resolved_ret).into(),
+                    AstFuncType {
+                        args: AstType::Struct(resolved_args).into(),
+                        ret: ReturnType::Single(resolved_ret).into(),
+                    }
+                    .into(),
                 ))
             }
             AstType::Variable(offset) => {

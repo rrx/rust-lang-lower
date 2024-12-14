@@ -9,8 +9,8 @@ use starlark_syntax::syntax;
 use starlark_syntax::syntax::module::AstModuleFields;
 
 use compile_core::{
-    ast, AssignTarget, Ast, AstNode, AstType, BinOpNode, CodeLocation, Diagnostic, Label,
-    LinkOptions, Parameter, ReturnType, SpanId, StringKey,
+    ast, AssignTarget, Ast, AstFuncType, AstNode, AstType, BinOpNode, CodeLocation, Diagnostic,
+    Label, LinkOptions, Parameter, ReturnType, SpanId, StringKey,
 };
 
 use flat::{ICodeModule, NodeBuilder, NodeBuilder as NB, ValueId};
@@ -308,10 +308,8 @@ impl Parser {
                 );
 
                 let arg_type_id = b.types.s(&arg_type);
-                let fun_type = AstType::Func(
-                    arg_type.into(),
-                    ReturnType::Single(return_type.clone()).into(),
-                );
+                let fun_type =
+                    AstFuncType::new(arg_type, ReturnType::Single(return_type.clone())).into();
                 let fun_type_id = b.types.s(&fun_type);
 
                 let def_ast = Ast::Lambda(ast::Lambda {

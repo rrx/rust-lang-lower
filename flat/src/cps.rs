@@ -1,6 +1,7 @@
 use anyhow::Result;
 use compile_core::{
-    AbstractionId, Argument, AstType, Literal, ReturnType, SpanId, StringKey, VarDefinitionSpace,
+    AbstractionId, Argument, AstFuncType, AstType, Literal, ReturnType, SpanId, StringKey,
+    VarDefinitionSpace,
 };
 
 use std::convert::Into;
@@ -28,7 +29,7 @@ impl Flatten {
         let a = self.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
         let (_, def_arg_type, _) = self.refresh_func_type(&a.def, b);
-        let def_func_type = AstType::Func(def_arg_type.clone().into(), ReturnType::Never.into());
+        let def_func_type = AstFuncType::new(def_arg_type.clone(), ReturnType::Never.into()).into();
         let call_arg_type = AstType::Struct(call_func_type.fields());
         b.unify(&call_arg_type, call_span_id, &def_arg_type, def_span_id);
         b.unify(&def_func_type, call_span_id, &call_func_type, def_span_id);
@@ -141,7 +142,8 @@ impl Flatten {
         let goto_scope_id = block.scope_id;
         //let s_name = b.labels.r(name.into());
         let call_arg_type = argvec_type(&call_values);
-        let call_func_type = AstType::Func(call_arg_type.clone().into(), ReturnType::Never.into());
+        let call_func_type =
+            AstFuncType::new(call_arg_type.clone().into(), ReturnType::Never.into()).into();
 
         let (variant_id, fun_scope_id, fun_block_id, def_arg_type) = self
             .push_cps_block_with_type(
@@ -198,7 +200,7 @@ impl Flatten {
 
         // control is returned to the goto
 
-        let def_func_type = AstType::Func(def_arg_type.clone().into(), ReturnType::Never.into());
+        let def_func_type = AstFuncType::new(def_arg_type.clone(), ReturnType::Never).into();
         let def_ret_type = ReturnType::Never;
 
         return Ok((
@@ -333,7 +335,7 @@ impl Flatten {
                 let goto_values = self.push_call_arguments(d.args.clone(), d.call_span_id, b)?;
                 let goto_arg_type = argvec_type(&goto_values);
                 let goto_func_type =
-                    AstType::Func(goto_arg_type.clone().into(), ReturnType::Never.into());
+                    AstFuncType::new(goto_arg_type.clone(), ReturnType::Never).into();
 
                 // unify
                 let entry = self.get_entry(*def_link_id);

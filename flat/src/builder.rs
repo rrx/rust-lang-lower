@@ -1,7 +1,7 @@
 use compile_core::ast::*;
 use compile_core::{
-    Argument, Ast, AstNode, AstType, Lambda, Literal, Parameter, ParameterNode, ReturnType, Span,
-    SpanBuilder, SpanId, StringKey, StringPool, TypeId, TypePool,
+    Argument, Ast, AstFuncType, AstNode, AstType, Lambda, Literal, Parameter, ParameterNode,
+    ReturnType, Span, SpanBuilder, SpanId, StringKey, StringPool, TypeId, TypePool,
 };
 use hmunify::TypeUnify;
 
@@ -99,13 +99,13 @@ impl TypeBuilder {
     pub fn refresh(&mut self, ty: AstType) -> AstType {
         match ty {
             AstType::Variable(_) => self.fresh_unknown(),
-            AstType::Func(arg, ret) => {
-                let arg = self.refresh(*arg);
-                let ret = match *ret {
+            AstType::Func(f) => {
+                let arg = self.refresh(f.args);
+                let ret = match f.ret {
                     ReturnType::Single(ret) => ReturnType::Single(self.refresh(ret)),
                     _ => unimplemented!(),
                 };
-                AstType::Func(arg.into(), ret.into())
+                AstFuncType::new(arg, ret).into()
             }
             AstType::Struct(fields) => {
                 let fields = fields
@@ -140,10 +140,7 @@ impl TypeBuilder {
         //let spans = def.params.iter().map(|p| p.span_id).collect::<Vec<_>>();
         let arg_type = self.r(lambda.arg_type).clone();
         let return_type = self.r(lambda.return_type).clone();
-        let ty = AstType::Func(
-            arg_type.into(),
-            ReturnType::Single(return_type.clone()).into(),
-        );
+        let ty = AstFuncType::new(arg_type, ReturnType::Single(return_type.clone())).into();
         ty
     }
 }
@@ -231,10 +228,7 @@ impl NodeBuilder {
                 .collect::<Vec<_>>(),
         );
         let arg_type_id = self.types.s(&arg_type);
-        let fun_type = AstType::Func(
-            arg_type.into(),
-            ReturnType::Single(return_type.clone()).into(),
-        );
+        let fun_type = AstFuncType::new(arg_type, ReturnType::Single(return_type.clone())).into();
         let return_type = self.types.s(&return_type);
         let fun_type_id = self.types.s(&fun_type);
         Self::global(
@@ -440,6 +434,8 @@ impl NodeBuilder {
                 self.primary_label(&format!("Type Mismatch: {}", &ty1), a_span_id),
                 self.secondary_label(&format!("reference: {}", &ty2), b_span_id),
             ]);
+            println!("Type Mismatch: {} reference: {}", &ty1, &ty2);
+            //assert!(false);
         }
     }
 }

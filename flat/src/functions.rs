@@ -5,8 +5,8 @@ use crate::{
 use anyhow::Error;
 use anyhow::Result;
 use compile_core::{
-    AbstractionId, Argument, Ast, AstNode, AstType, Lambda, Literal, NaryOperation, ReturnType,
-    SpanId, StringKey, VarDefinitionSpace,
+    AbstractionId, Argument, Ast, AstFuncType, AstNode, AstType, Lambda, Literal, NaryOperation,
+    ReturnType, SpanId, StringKey, VarDefinitionSpace,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -555,8 +555,11 @@ impl Flatten {
 
         assert!(next_arg_ty.is_composite());
         let block_ty = AstType::Func(
-            next_arg_ty.clone().into(),
-            ReturnType::Single(AstType::Unit).into(),
+            AstFuncType {
+                args: next_arg_ty.clone().into(),
+                ret: ReturnType::Single(AstType::Unit).into(),
+            }
+            .into(),
         );
 
         // push the continuation block to which the function returns control
@@ -714,8 +717,11 @@ impl Flatten {
 
             // construct call function type
             let call_func_type = AstType::Func(
-                AstType::Struct(call_ty.fields()).into(),
-                ReturnType::Single(def_ret_ty.clone()).into(),
+                AstFuncType {
+                    args: AstType::Struct(call_ty.fields()).into(),
+                    ret: ReturnType::Single(def_ret_ty.clone()).into(),
+                }
+                .into(),
             );
 
             b.unify(&call_func_type, call_span_id, &def_func_type, def_span_id);
@@ -748,35 +754,18 @@ impl Flatten {
                 Self::calculate_function_arguments(&def, &new_args, def_span_id, call_span_id, b)?;
             let call_values = self.push_call_arguments(args, call_span_id, b)?;
             let call_ty = crate::argvec_type(&call_values);
-
             let (def_func_type, _def_arg_ty, def_ret_ty) = self.refresh_func_type(&def, b);
-
             // construct call function type
             let call_func_type = AstType::Func(
-                AstType::Struct(call_ty.fields()).into(),
-                ReturnType::Single(def_ret_ty.clone()).into(),
+                AstFuncType {
+                    args: AstType::Struct(call_ty.fields()).into(),
+                    ret: ReturnType::Single(def_ret_ty.clone()).into(),
+                }
+                .into(),
             );
-
             b.unify(&call_func_type, call_span_id, &def_func_type, def_span_id);
 
             self.switch_blocks(current_block_id);
-
-            /*
-            let (variant_id, fun_block_id, fun_scope_id, def_arg_type) =
-                if let Some((variant_id, resolve_type, link_id, fun_scope_id)) =
-                    self.resolve_function_name(scope_id, &name, &call_func_type, b)
-                {
-                    let entry = self.get_entry(link_id);
-                    let fun_block_id = entry.block_id;
-                    b.unify(&call_func_type, call_span_id, &resolve_type, def_span_id);
-                    (variant_id, fun_block_id, fun_scope_id, resolve_type)
-                } else {
-                    //let (_, __, _, _, _, _, _, goto_link_id) = self.push_cps_block(name, scope_id, abstraction_id, args, call_span_id, b)?;
-                    let next_block_id = self.blocks.new_block(scope_id);
-                    (variant_id, fun_block_id, scope_id, def_func_type.clone())
-
-                };
-            */
 
             let result = self.push_bake_lambda(
                 name,
@@ -794,16 +783,11 @@ impl Flatten {
             )?;
             let (variant_id, _, fun_block_id, _, _, _, r) = result;
 
-            //self.switch_blocks(next_block_id);
-
             // now that we have the arguments calculated, and the lambda baked, jump!
             self.switch_blocks(current_block_id);
             self.push_jump(fun_block_id.into(), call_values, call_span_id);
             self.switch_blocks(next_block_id);
-
             Ok(r)
-            //self.switch_blocks(current_block_id);
-            //Ok(FlattenResult::link(goto_link_id))
         }
     }
 }

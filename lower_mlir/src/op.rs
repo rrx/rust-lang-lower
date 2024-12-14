@@ -71,7 +71,7 @@ impl<'c> MLIRGenerator<'c> {
             }
 
             //AstType::TargetUnion(_, _) => (IntegerType::new(self.context, 64).into(), vec![]),
-            AstType::Func(_, _) => (IntegerType::new(self.context, 64).into(), vec![]),
+            AstType::Func(_) => (IntegerType::new(self.context, 64).into(), vec![]),
             AstType::Struct(_args) => {
                 /*
                 let types = args
