@@ -104,27 +104,6 @@ impl Flatten {
         Ok((variant_id, fun_scope_id, fun_block_id, def_arg_type))
     }
 
-    /*
-    pub fn push_cps_block_with_placeholder_check(
-        &mut self,
-        name: StringKey,
-        template_id: AbstractionId,
-        args: Vec<Argument>,
-        call_span_id: SpanId,
-        b: &mut NB,
-    ) -> Result<LinkId> {
-        // we want to handle monomorphization here.
-        let goto_block_id = self.current_block_id();
-        self.remove_placeholder_terminal(goto_block_id);
-
-        let block = self.blocks.get_block(goto_block_id);
-        let scope_id = block.scope_id;
-        let (_variant_id, _, _fun_block_id, _def_func_type, _def_arg_type, _, _, link_id) =
-            self.push_cps_block(name, scope_id, template_id, args, call_span_id, b)?;
-        Ok(link_id)
-    }
-    */
-
     pub(super) fn push_cps_block(
         &mut self,
         name: StringKey,
@@ -259,10 +238,6 @@ impl Flatten {
         let scope_id = block.scope_id;
 
         let _s_name = b.labels.r(name.into());
-        //println!(
-        //"{}: push_goto args: {:?} in {}{}",
-        //s_name, &args, scope_id, current_block_id,
-        //);
 
         // if this is a name, we can resolve now, no need to defer
         // this happens in a CPS function, where we try to jump to a variable.
@@ -272,7 +247,6 @@ impl Flatten {
         if let Some(name_link_id) = self.resolve_name_in_scope(scope_id, name.into()) {
             let link_id = block.last().unwrap();
             self.push_placeholder_terminal(link_id, call_span_id);
-            //println!("placeholder2: {}", p_link_id);
 
             let d = DeferredGoto::new(
                 scope_id,
@@ -282,10 +256,6 @@ impl Flatten {
                 current_block_id,
                 DeferredType::Name(name_link_id),
             );
-            //println!(
-            //"{}: push_goto name, defer goto: {:?} in scope: {}",
-            //s_name, d, scope_id
-            //);
             self.deferred_goto.add_deferred(d);
             return Ok(FlattenResult::statement());
         }
@@ -295,7 +265,6 @@ impl Flatten {
         if self.scopes.in_function_scope(scope_id) {
             let link_id = block.last().unwrap();
             self.push_placeholder_terminal(link_id, call_span_id);
-            //println!("placeholder3: {}", p_link_id);
 
             let d = DeferredGoto::new(
                 scope_id,
@@ -305,10 +274,6 @@ impl Flatten {
                 current_block_id,
                 DeferredType::Goto(link_id),
             );
-            //println!(
-            //"{}: push_goto, defer goto: {:?} in scope: {}",
-            //s_name, d, fun_scope_id
-            //);
             self.deferred_goto.add_deferred(d);
             return Ok(FlattenResult::statement());
         } else {
@@ -318,7 +283,6 @@ impl Flatten {
     }
 
     fn resolve_deferred_single(&mut self, d: DeferredGoto, b: &mut NB) -> Result<bool> {
-        //let s_name = b.labels.r(d.name.into());
         /*
          * name resolution should not be deferred as it can assume lexical scope
          * but since we can't actually lower a jump to a variable, we are going to
@@ -367,7 +331,6 @@ impl Flatten {
 
                 // calculate the type, so we can unify
                 let goto_values = self.push_call_arguments(d.args.clone(), d.call_span_id, b)?;
-                //println!("goto_values: {:?}", &goto_values);
                 let goto_arg_type = argvec_type(&goto_values);
                 let goto_func_type =
                     AstType::Func(goto_arg_type.clone().into(), ReturnType::Never.into());
@@ -377,11 +340,6 @@ impl Flatten {
                 let var_ty = entry.ty.clone();
                 b.unify(&var_ty, entry.span_id, &goto_func_type, d.call_span_id);
 
-                //println!(
-                //"{}: resolved deferred name: from {}:{}, ty: {}",
-                //s_name, d.scope_id, d.block_id, var_ty
-                //);
-
                 // save the argvec, so we can properly terminate later
                 let mut d = d;
                 d.deferred_type = DeferredType::Name(load_link_id);
@@ -389,7 +347,6 @@ impl Flatten {
 
                 let block = self.blocks.get_block(self.current_block_id());
                 self.push_placeholder_terminal(block.last().unwrap(), d.call_span_id);
-                //println!("placeholder1: {}", link_id);
 
                 self.deferred_goto.add_cps(d);
                 return Ok(true);
@@ -400,9 +357,6 @@ impl Flatten {
                 if let Some(abstraction_id) = self.resolve_template(d.scope_id, d.name.into()) {
                     self.switch_blocks(d.block_id);
                     self.remove_placeholder_terminal(d.block_id);
-
-                    //let _a = self.abstractions.get_mut(abstraction_id);
-                    //println!("blocks: {:?}", a.caller_blocks);
 
                     // push and jump
                     // TODO: this function needs to handle unwind
@@ -415,16 +369,6 @@ impl Flatten {
                             d.call_span_id,
                             b,
                         )?;
-                    //println!(
-                    //"{}: resolved deferred lambda: from {}:{}=>{}:{}, link: {}, {:?}",
-                    //s_name,
-                    //d.scope_id,
-                    //d.block_id,
-                    //fun_scope_id,
-                    //fun_block_id,
-                    //link_id,
-                    //&d.args
-                    //);
 
                     let dt = DeferredType::Variant(*goto_link_id, d.block_id, variant_id);
                     let mut d = d;
@@ -447,11 +391,6 @@ impl Flatten {
                     // by replacing jumps out of scope to the unwind function
                     let jump_args = self.push_call_arguments(d.args.clone(), d.call_span_id, b)?;
                     let link_id = self.push_jump(target_block_id.into(), jump_args, d.call_span_id);
-                    //let block = self.blocks.get_block(target_block_id);
-                    //println!(
-                    //"{}: resolved deferred label: from {}:{}=>{}:{}, link: {}",
-                    //s_name, d.scope_id, d.block_id, block.scope_id, target_block_id, link_id
-                    //);
                     self.scoped_continuations.connect(
                         ContinuationFlow::Jump(link_id),
                         ContinuationFlow::Block(target_block_id),
@@ -500,10 +439,6 @@ impl Flatten {
 
                 let _jump_link_id =
                     self.replace_placeholder_terminal(d.block_id, arg_link_id, sources.clone(), b);
-                //println!(
-                //"flows: {:?}",
-                //(arg_block_id, arg_link_id, &code, sources, jump_link_id)
-                //);
             }
             DeferredType::Variant(_goto_link_id, _source_block_id, _variant_id) => {}
             _ => {

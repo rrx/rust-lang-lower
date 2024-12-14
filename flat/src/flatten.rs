@@ -105,7 +105,6 @@ pub struct Flatten {
     pub(super) link: LinkOptions,
     pub(super) entries: Vec<CodeEntry>,
     pub blocks: BlockGraph,
-    //pub(super) messages: Vec<(String, SpanId)>,
     pub(crate) static_scope: Option<ScopeId>,
     pub(crate) static_block: Option<BlockId>,
     pub(crate) current_block: BlockId,
@@ -646,7 +645,6 @@ impl Flatten {
         assert!(self.deferred_goto.is_empty());
 
         // ensure types are resolved
-        //self.type_inference(b);
         self.type_inference_enforce(b);
 
         self.cont_graph("cont.dot", b);
@@ -741,7 +739,6 @@ impl Flatten {
         let block_id = self.blocks.new_block(scope_id);
         scope.entry_block = Some(block_id);
         self.scopes.scope_succ(parent_scope_id, scope_id);
-        //println!("new block and scope: {:?}", (block_id, scope_id));
         (block_id, scope_id)
     }
 
@@ -900,7 +897,6 @@ impl Flatten {
         // handle leaving scope here?
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
-        //let current_scope_id = block.scope_id;
         let _start_stack = self.scopes.walk_scopes(block.scope_id);
 
         // Construct the argument type
@@ -947,7 +943,6 @@ impl Flatten {
     }
 
     pub fn resolve_value(&self, link_id: LinkId) -> LinkId {
-        //if let Some(offset_decl) = self.blockify.resolve_declaration(offset) {
         let mut current = link_id;
         loop {
             let entry = self.get_entry(current);
@@ -976,7 +971,6 @@ impl Flatten {
         mem: VarDefinitionSpace,
     ) -> LinkId {
         let entry = CodeEntry::new(self.current_block_id(), code, ty, name, span_id, mem);
-        //println!("push code: {:?}", entry.dump());
         self.push_entry_with_link(entry)
     }
 
@@ -1010,10 +1004,6 @@ impl Flatten {
         call_span_id: SpanId,
         b: &mut NB,
     ) -> Result<FlattenResult> {
-        //let block_id = self.current_block_id();
-        //let block = self.blocks.get_block(block_id);
-        //println!("push_builtin_call: {:?}, scope: {}", id, block.scope_id);
-
         let def_span_id = b.spans.get_span_unknown();
         let (args, ret_ty) =
             Self::calculate_function_arguments(&def, &args, def_span_id, call_span_id, b)?;
@@ -1104,13 +1094,8 @@ impl Flatten {
         name: Option<StringKey>,
         span_id: SpanId,
         mem: VarDefinitionSpace,
-    ) -> (LinkId, Vec<(Option<StringKey>, LinkId, AstType, SpanId)>) {
+    ) -> (LinkId, ArgVec) {
         let block_link_id = self.push_empty_label(span_id);
-        //println!(
-        //"push_start_block: {:?} in {}",
-        //(block_link_id, &block_ty),
-        //scope_id
-        //);
         let v_args = self.push_start_block_args(scope_id, block_ty.clone(), span_id);
         self.replace_label(block_link_id, block_ty, name, span_id, mem);
         self.block_links
@@ -1145,13 +1130,11 @@ impl Flatten {
         let scope = self.scopes.get_scope(scope_id);
         if let Some(loop_block) = scope.loop_block {
             let link_id = self.maybe_terminate_block(loop_block.start_block, span_id);
-            //println!("block loop end: {}, {}", loop_block.next_block, link_id);
             self.switch_blocks(loop_block.next_block);
             Ok(FlattenResult::link(link_id))
         } else {
             let block_id = scope.entry_block.unwrap();
             let block = self.blocks.get_block(block_id);
-            //unimplemented!("{:?}", (scope_id, scope, block_id, block))
             Ok(FlattenResult::link(block.last().unwrap()))
         }
     }
@@ -1232,7 +1215,6 @@ impl Flatten {
         let ret_arg_type = if arity == 0 || AstType::Unit == single_ty {
             AstType::Struct(vec![])
         } else {
-            //println!("ret_types: {:?}", &ret_types);
             assert!(ret_types.len() == 1);
             AstType::Struct(vec![(None, single_ty.clone())])
         };
@@ -1257,7 +1239,6 @@ impl Flatten {
         b: &mut NB,
     ) -> (AstType, AstType, AstType) {
         let def_func_type = b.types.r(def.fun_type).clone();
-        //println!("ty1: {:?}", &def_func_type);
 
         // refresh variables
         let (def_arg_ty, ret_ty) = if let AstType::Func(arg, ret) = def_func_type {
@@ -1273,8 +1254,6 @@ impl Flatten {
             def_arg_ty.clone().into(),
             ReturnType::Single(ret_ty.clone()).into(),
         );
-        //println!("ty2: {:?}", &def_func_type);
-        //println!("ty3: {:?}", &def_arg_ty);
         (def_func_type, def_arg_ty, ret_ty)
     }
 
@@ -1282,7 +1261,6 @@ impl Flatten {
         let block = self.blocks.get_block(goto_block_id);
         let last_link_id = block.last().unwrap();
         let entry = self.get_entry_mut(last_link_id);
-        //println!("remove_placeholder_terminal: {:?}", &last_link_id);
         if let LCode::PlaceholderTerminal(prev_link_id) = entry.code {
             // invalidate dummy jump
             entry.next = prev_link_id;
@@ -1430,7 +1408,6 @@ impl Flatten {
 
             Ast::Builtin(id, mut args) => {
                 let bi = b.builtins.get_enum(id);
-                //println!("bi: {:?}", bi);
                 match bi {
                     Builtin::Import => {
                         let arg = args.pop().unwrap();
@@ -1629,7 +1606,6 @@ impl Flatten {
                         // need to declare it
                         let block = self.blocks.get_block(self.current_block_id());
                         let scope_id = block.scope_id;
-                        //let expr_ty = self.get_entry(v_expr).ty.clone();
                         let link_id = self.push_code(
                             LCode::Declare,
                             expr_ty.clone(),
@@ -1921,27 +1897,18 @@ impl Flatten {
 
             Ast::ControlFlowMarker(ControlFlowMarker::BlockStart(name, args)) => {
                 // LABEL
-
                 let name = name.unwrap();
-                //let s_name = name.map(|key| b.labels.r(key)).unwrap_or(String::new());
-                //let _s_name = b.labels.r(name.into());
-
                 // push a new block.  But check to make sure the previous block was closed
                 let scope_id = block.scope_id;
 
                 // check for duplicates
                 if let Some(block_id) = self.resolve_label(scope_id, name.into()) {
-                    //block_id
                     unimplemented!("duplicate label: {}", block_id);
                 }
 
                 // create a new block
                 assert_eq!(0, args.len());
                 let new_block_id = self.blocks.new_block(scope_id);
-                //println!(
-                //"{}: block start new: {}, in scope: {}",
-                //s_name, new_block_id, scope_id
-                //);
                 self.blocks.block_succ(
                     self.current_block_id(),
                     new_block_id,
@@ -1961,7 +1928,6 @@ impl Flatten {
                     if !entry.code.is_term() {
                         assert_eq!(args.len(), 0);
                         let _link_id = self.push_jump(new_block_id, vec![], span_id);
-                        //println!("block start 1: {}, link: {}", new_block_id, link_id);
                     }
                 }
 
@@ -1995,9 +1961,7 @@ impl Flatten {
                         .collect::<Vec<_>>(),
                 );
 
-                //println!("block start: {}", new_block_id);
                 self.switch_blocks(new_block_id);
-                //println!("push start block3: {}{}", new_scope_id, new_block_id);
                 let (link_id, _) = self.push_start_block(
                     new_scope_id,
                     AstType::Func(
@@ -2031,7 +1995,6 @@ impl Flatten {
                 // Condition
                 self.switch_blocks(current_block_id);
                 let rc = self.push_node(*c, b)?;
-                //assert_eq!(self.block_id, rc.block_id);
                 let current_block_id = self.current_block_id();
 
                 let branch_block_type = AstType::Func(
@@ -2064,7 +2027,6 @@ impl Flatten {
                 let r = self.push_node(then_ast, b)?;
                 let then_link_id = r.link_id.unwrap();
                 let then_ty = self.get_type(then_link_id).clone();
-                //let then_ty = r.ty;
 
                 // ELSE
                 let else_span_id = y.span_id;
@@ -2136,7 +2098,6 @@ impl Flatten {
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::GotoChain(args)) => {
-                //println!("GotoChain: {:?}", args);
                 let argvec = self.push_call_arguments(args, span_id, b)?;
                 let mut argvec = VecDeque::from(argvec);
                 let mut acc = VecDeque::new();
@@ -2152,13 +2113,11 @@ impl Flatten {
                     let (_key, link_id, ty, span_id) = argvec.pop_back().unwrap();
                     let entry = self.get_entry(link_id);
                     let code = entry.code.clone();
-                    //println!("code: {:?}", (&code, &ty));
                     match &code {
                         LCode::Val(Literal::Block(block_id)) => {
                             let block_id = *block_id;
                             let arg_types = ty.fields();
                             // lengths should match
-                            //println!("arg_types: {:?}, acc: {:?}", arg_types, acc);
                             assert!(arg_types.len() == acc.len());
 
                             let mut acc_types = vec![];
@@ -2172,7 +2131,6 @@ impl Flatten {
                             let label = b.labels.fresh_key("chain");
                             let v_next = self.blocks.new_block(parent_scope_id);
                             self.switch_blocks(v_next);
-                            //println!("push start block4: {}{}", parent_scope_id, v_next);
                             self.push_start_block(
                                 parent_scope_id,
                                 AstType::func(acc_types, AstType::Unit),
@@ -2324,10 +2282,6 @@ impl Flatten {
                     self.switch_blocks(current_block_id);
                     let _link_id =
                         self.push_jump(loop_scope.next_block.into(), vec![], node.span_id);
-                    //println!(
-                    //"loop break jump: {}, link: {}",
-                    //loop_scope.next_block, link_id
-                    //);
 
                     let v_next = self.blocks.new_block(scope_id);
                     self.switch_blocks(v_next);
@@ -2465,10 +2419,6 @@ impl Flatten {
             let new_block_id = self.blocks.new_block(scope_id);
             let name = b.labels.fresh_key("dead");
             let scope = self.scopes.get_scope(scope_id);
-            //println!(
-            //"ensure open: {}:{} => {}:{}",
-            //scope_id, current_block_id, scope_id, new_block_id
-            //);
             self.blocks.block_succ(
                 scope.entry_block.unwrap(),
                 new_block_id,
@@ -2496,7 +2446,6 @@ impl Flatten {
         let entry = self.get_entry(link_id);
         if !entry.code.is_term() {
             link_id = self.push_jump(v_next, vec![], span_id);
-            //println!("maybe term jump: {}, link: {}", v_next, link_id);
             self.blocks
                 .block_succ(self.current_block_id(), v_next, Successor::BlockScope);
         }
