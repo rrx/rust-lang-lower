@@ -453,12 +453,13 @@ impl Flatten {
 
         let (next_block_id, next_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
 
+        let body = *def.body.unwrap();
         let (v_id, _scope, _block_id, entry_link_id, _, argvec, _r) = self.push_bake_lambda(
             name,
             global_name,
             next_scope_id,
             next_block_id,
-            def,
+            body,
             def_func_ty,
             def_span_id,
             def_span_id,
@@ -480,7 +481,7 @@ impl Flatten {
         global_name: StringKey,
         next_scope_id: ScopeId,
         next_block_id: BlockId,
-        def: Lambda,
+        body: AstNode,
         def_func_type: AstType,
         def_span_id: SpanId,
         call_span_id: SpanId,
@@ -510,7 +511,6 @@ impl Flatten {
 
         // New Func Scope
         let (fun_block_id, fun_scope_id) = self.new_scope_and_block(scope_type, next_scope_id);
-        let body = *def.body.unwrap();
 
         let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
         fun_scope.return_block = Some(next_block_id);
@@ -731,11 +731,6 @@ impl Flatten {
             )
         } else {
             self.switch_blocks(current_block_id);
-            // we inline here for nested functions
-            // we bake the lambda, and then jump to it
-            //
-            // create a new block
-            // push an extra arg into the arglist, so we can jump to the next block
             self.push_call_inline(
                 name,
                 scope_id,
@@ -760,6 +755,11 @@ impl Flatten {
         call_span_id: SpanId,
         b: &mut NB,
     ) -> Result<FlattenResult> {
+        // we inline here for nested functions
+        // we bake the lambda, and then jump to it
+        // create a new block
+        // push an extra arg into the arglist, so we can jump to the next block
+        //
         let current_block_id = self.current_block_id();
         let next_block_id = self.blocks.new_block(scope_id);
         //let callback_arg = Argument::Positional(
@@ -772,12 +772,13 @@ impl Flatten {
         //new_args.push(arg);
         //}
 
+        let body = *def.body.unwrap();
         let result = self.push_bake_lambda(
             name,
             name,
             scope_id,
             next_block_id,
-            def,
+            body,
             def_func_type.clone().into(),
             def_span_id,
             call_span_id,
