@@ -481,7 +481,6 @@ impl Flatten {
         // this is where we actually do the rewrite
         match d.deferred_type {
             DeferredType::Name(arg_link_id) => {
-                //println!("deferred: {:?}", d);
                 // we replace the placeholder here
                 self.switch_blocks(d.block_id);
                 let entry = self.get_entry(arg_link_id).clone();
@@ -489,20 +488,32 @@ impl Flatten {
                 let arg_block_id = entry.block_id;
 
                 let sources = match &code {
-                    LCode::Arg(arg_num) => self
-                        .scoped_continuations
-                        .find_source_blocks(ContinuationFlow::BlockArg(arg_block_id, *arg_num)),
+                    LCode::Arg(arg_num) => {
+                        println!("arg: {}:{}", arg_link_id, arg_num);
+                        self.scoped_continuations
+                            .find_source_blocks(ContinuationFlow::BlockArg(arg_block_id, *arg_num))
+                    }
 
-                    LCode::Declare | LCode::Load(_) => self
-                        .scoped_continuations
-                        .find_source_blocks(ContinuationFlow::Variable(arg_link_id)),
+                    LCode::Declare | LCode::Load(_) => {
+                        println!("decl: {}", arg_link_id);
+                        self.scoped_continuations
+                            .find_source_blocks(ContinuationFlow::Variable(arg_link_id))
+                    }
 
                     LCode::Val(Literal::Block(block_id)) => {
-                        vec![*block_id]
+                        let sink = self
+                            .scoped_continuations
+                            .find_sink_block(ContinuationFlow::Variable(arg_link_id))
+                            .unwrap();
+                        let sources = self.scoped_continuations.find_source_blocks(sink);
+                        println!(
+                            "block: {} => {}, sink: {:?}",
+                            arg_link_id,
+                            block_id,
+                            (sink, &sources)
+                        );
+                        sources
                     }
-                    //LCode::Val(_) => {
-                    //vec![]
-                    //}
                     _ => {
                         unreachable!("{:?}", code);
                     }

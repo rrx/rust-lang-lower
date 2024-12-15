@@ -1,6 +1,6 @@
 use crate::{
-    ArgVec, BlockId, BlockifyError, Flatten, FlattenResult, LCode, LinkId, NodeBuilder as NB,
-    ScopeId, ScopeType, Successor,
+    ArgVec, BlockId, BlockifyError, ContinuationFlow, Flatten, FlattenResult, FlowEdge, LCode,
+    LinkId, NodeBuilder as NB, ScopeId, ScopeType, Successor,
 };
 use anyhow::Error;
 use anyhow::Result;
@@ -850,7 +850,7 @@ impl Flatten {
             // call the inline function
             // returns a link, which points to the result, which should be a single value
             // if it's void, then it's a statement
-            if false {
+            if true {
                 self.push_call_inline(abstraction_id, name, scope_id, args, call_span_id, b)
             } else {
                 self.push_call_inline_cps(abstraction_id, name, scope_id, args, call_span_id, b)
@@ -942,8 +942,15 @@ impl Flatten {
             self.push_function_call_arguments(abstraction_id, args, system, call_span_id, b)?;
 
         let arg = call_values.last().unwrap();
-        let next_link_id = arg.1;
+        let arg_index = call_values.len() - 1;
+        let call_link_id = arg.1;
         let next_ty = arg.2.clone();
+
+        self.scoped_continuations.connect(
+            ContinuationFlow::Block(exit_block_id),
+            ContinuationFlow::Variable(call_link_id),
+            FlowEdge::VarJumpArgInline,
+        );
 
         // bookmark position
         let current_block_id = self.current_block_id();
@@ -958,13 +965,13 @@ impl Flatten {
             abstraction_id,
             name,
             scope_id,
-            next_link_id,
+            call_link_id,
             call_span_id,
-            &call_values,
             top_def_func_type.clone(),
             b,
         )?;
         let (fun_block_id, ret_block_ty, next_arg_ty) = result;
+        println!("fun_block_id: {}", fun_block_id);
 
         b.unify(
             &next_ty,
@@ -982,6 +989,7 @@ impl Flatten {
         // this might just be the return block
         let s_name = b.labels.r(name.into());
         let cont_name = format!("{}.exit", s_name);
+        let cont_key = b.labels.fresh_key(&cont_name);
 
         // block graph
         self.blocks
@@ -993,7 +1001,7 @@ impl Flatten {
         let (_v_block, v_args) = self.push_start_block(
             scope_id,
             ret_block_ty.clone().into(),
-            Some(b.labels.s(&cont_name)),
+            Some(cont_key),
             call_span_id,
             VarDefinitionSpace::Reg,
         );
@@ -1019,7 +1027,31 @@ impl Flatten {
         // now that we have the arguments calculated, and the lambda baked, jump!
         self.switch_blocks(current_block_id);
         // jump into the the lambda
-        self.push_jump(fun_block_id.into(), call_values, call_span_id);
+        let goto_link_id = self.push_jump(fun_block_id.into(), call_values.clone(), call_span_id);
+
+        for (i, (_, var_link_id, _ty, _)) in call_values.iter().enumerate() {
+            self.scoped_continuations.connect(
+                ContinuationFlow::Variable(*var_link_id),
+                ContinuationFlow::JumpArg(goto_link_id, i as u8),
+                FlowEdge::VarJumpArgInline,
+            );
+            self.scoped_continuations.connect(
+                ContinuationFlow::JumpArg(goto_link_id, i as u8),
+                ContinuationFlow::BlockArg(fun_block_id, i as u8),
+                FlowEdge::JumpArgInline,
+            );
+        }
+
+        //self.scoped_continuations.connect(
+        //ContinuationFlow::Variable(call_link_id),
+        //ContinuationFlow::Jump(goto_link_id),
+        //FlowEdge::JumpArg,
+        //);
+        self.scoped_continuations.connect(
+            ContinuationFlow::Jump(goto_link_id),
+            ContinuationFlow::Block(fun_block_id),
+            FlowEdge::JumpInline,
+        );
 
         self.switch_blocks(exit_block_id);
         // in the next block
@@ -1035,13 +1067,9 @@ impl Flatten {
         scope_id: ScopeId,
         call_link_id: LinkId,
         call_span_id: SpanId,
-        call_values: &ArgVec,
         def_func_type: AstFuncType,
         b: &mut NB,
     ) -> Result<(BlockId, AstFuncType, AstType)> {
-        // bookmark this position, to continue later
-        //let current_block_id = self.current_block_id();
-
         // create the new empty block
         let next_block_id = self.blocks.new_block(scope_id);
         println!("next_block_id2: {}", next_block_id);
@@ -1055,7 +1083,7 @@ impl Flatten {
         let mem = VarDefinitionSpace::Reg;
 
         let call_func_type = def_func_type.clone().into();
-        let (variant_id, fun_block_id, fun_scope_id, def_func_type, ret_block_ty, next_arg_ty) =
+        let (_variant_id, fun_block_id, _fun_scope_id, _def_func_type, ret_block_ty, next_arg_ty) =
             if let Some((variant_id, variant_ty, link_id, fun_scope_id)) =
                 self.resolve_function_name(scope_id, &name, &call_func_type, b)
             {
@@ -1081,18 +1109,7 @@ impl Flatten {
                 println!("next_arg_ty2: {}", next_arg_ty);
 
                 /*
-                let next_arg_ty = resolve_type.clone();
-                let ret_block_ty = resolve_type.get_func().clone();
-
-                let argvec = vec![];
-                let _ = self.push_call_values(&argvec);
-                self.push_goto_link(call_link_id, argvec, call_span_id)?;
-                //(variant_id, fun_block_id, fun_scope_id, resolve_type, ret_block_ty, next_arg_ty)
-                //
-                */
-
                 let body = a.def.body.clone().unwrap();
-
                 let result = self.push_bake_lambda(
                     name,
                     name,
@@ -1109,13 +1126,13 @@ impl Flatten {
                 )?;
 
                 let (
-                    variant_id,
-                    fun_scope_id,
-                    fun_block_id,
+                    variant_id1,
+                    fun_scope_id1,
+                    fun_block_id1,
                     _entry_link_id,
-                    next_arg_ty,
-                    ret_func_type,
-                    variant_ty,
+                    next_arg_ty1,
+                    ret_func_type1,
+                    variant_ty1,
                 ) = result;
 
                 // push the continuation block to which the function returns control
@@ -1132,8 +1149,12 @@ impl Flatten {
                     call_span_id,
                     VarDefinitionSpace::Reg,
                 );
-                let _ = self.push_call_values(&v_args);
-                self.push_goto_link(call_link_id, v_args.clone(), call_span_id)?;
+                */
+
+                //let _ = self.push_call_values(&v_args);
+                // complete the lambda bake with a jump to the continuation, this is the exit of
+                // the lambda
+                //self.push_goto_link(call_link_id, v_args.clone(), call_span_id)?;
 
                 // goto the variant, passing the continuation.  This passes control to the exit.
                 //self.push_goto_link(call_link_id, call_values.clone(), call_span_id)?;
@@ -1147,7 +1168,6 @@ impl Flatten {
                     next_arg_ty,
                 )
             } else {
-                //let current_block_id = self.current_block_id();
                 let body = a.def.body.clone().unwrap();
                 let result = self.push_bake_lambda_and_update_next(
                     name,
@@ -1180,12 +1200,11 @@ impl Flatten {
                 println!("next_arg_ty1: {}", next_arg_ty);
 
                 let _ = self.push_call_values(&v_args);
-                self.push_goto_link(call_link_id, v_args.clone(), call_span_id)?;
-                //self.switch_blocks(current_block_id);
+                // complete the lambda bake with a jump to the continuation, this is the exit of
+                // the lambda.  The continuation is part of the signature, so we can call it again
+                let goto_link_id =
+                    self.push_goto_link(call_link_id, v_args.clone(), call_span_id)?;
 
-                // we have control here.  Finish the block by jumping to the CPS function
-                //let _ = self.push_call_values(&argvec);
-                //self.push_goto_link(call_link_id, argvec, call_span_id)?;
                 (
                     variant_id,
                     fun_block_id,

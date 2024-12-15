@@ -176,20 +176,23 @@ pub fn flow_graph(m: &dyn ICodeModule, gblocks: &BlockGraph, filename: &str, b: 
                         let mut v = maybe_v.unwrap();
 
                         loop {
-                            let code = m.get_code(v);
-                            match code {
+                            let entry = m.get_entry(v);
+                            let code = &entry.code;
+                            let s = match code {
                                 LCode::Jump(offset) => {
                                     if let Some(v_target) = m.maybe_resolve_code_offset(*offset) {
                                         ng.edges.push((v, v_target));
                                     }
+                                    format!("{}:{}", v, m.code_to_string(v, b))
                                 }
                                 LCode::Switch(link_id, cases) => {
                                     let v_link = m.resolve_code_offset(link_id.into());
-                                    ng.edges.push((v, v_link));
+                                    //ng.edges.push((v, v_link));
                                     for block_id in cases.iter() {
                                         let v_target = m.resolve_code_offset(block_id.into());
                                         ng.edges.push((v, v_target));
                                     }
+                                    format!("{}:switch({},{:?})", v, v_link, cases)
                                 }
                                 LCode::Branch(c, b1, b2) => {
                                     let v_target = m.resolve_code_offset(*c);
@@ -198,18 +201,30 @@ pub fn flow_graph(m: &dyn ICodeModule, gblocks: &BlockGraph, filename: &str, b: 
                                     ng.edges.push((v, v_target));
                                     let v_target = m.resolve_code_offset(b2.into());
                                     ng.edges.push((v, v_target));
+                                    format!("{}:{}", v, m.code_to_string(v, b))
                                 }
                                 LCode::CallValue(offset) => {
                                     let v_target = m.resolve_code_offset(*offset);
-                                    ng.edges.push((v, v_target));
+                                    //ng.edges.push((v, v_target));
+                                    format!("{}:callvalue({})", v, v_target)
                                 }
                                 LCode::Call(offset) => {
                                     let v_target = m.resolve_code_offset(*offset);
                                     ng.edges.push((v, v_target));
+                                    format!("{}:{}", v, m.code_to_string(v, b))
                                 }
-                                _ => (),
-                            }
-                            let s = format!("{}:{}", v, m.code_to_string(v, b));
+                                LCode::Label => {
+                                    let s_name = if let Some(name) = entry.name {
+                                        b.labels.r(name.into())
+                                    } else {
+                                        "?".to_string()
+                                    };
+                                    format!("{}:{}:label({})", v, entry.block_id, s_name)
+                                }
+                                _ => {
+                                    format!("{}:{}", v, m.code_to_string(v, b))
+                                }
+                            };
                             block_group.push_value(GroupValue::new(format!("{}", v), s));
                             if let Some(v_next) = m.get_next(v) {
                                 ng.edges.push((v, v_next));

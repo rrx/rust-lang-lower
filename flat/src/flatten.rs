@@ -1278,6 +1278,7 @@ impl Flatten {
                 .block_succ(self.current_block_id(), *block_id, Successor::BlockScope);
         }
 
+        println!("replace: {}=>{:?}", last_link_id, target_block_ids);
         let entry = self.get_entry(last_link_id);
 
         let code = if let LCode::PlaceholderTerminal(_) = entry.code {
@@ -1294,25 +1295,8 @@ impl Flatten {
                 // connects here aren't actually used to calculate the flows
                 // This function is called when we have calculated the static flow and we update
                 // the graph.
-                /*
-                for block_id in m.values() {
-                    self.scoped_continuations.connect(
-                        ContinuationFlow::Jump(last_link_id),
-                        ContinuationFlow::Block(*block_id),
-                        FlowEdge::SwitchBlock,
-                    );
-                }
-                */
 
                 Some(LCode::Switch(arg_link_id, m))
-
-                /*
-                self.scoped_continuations.connect(
-                    ContinuationFlow::Variable(arg_link_id),
-                    ContinuationFlow::Jump(last_link_id),
-                    FlowEdge::Switch,
-                );
-                */
             } else {
                 b.push_error("Missing Targets", entry.span_id);
                 None
