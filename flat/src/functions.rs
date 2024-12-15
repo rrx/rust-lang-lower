@@ -376,11 +376,9 @@ impl Flatten {
         let def_span_id = a.def_span_id;
 
         // if it's defined in static scope, just call it
-        //println!("[{},{}] RX:  {}", s, s_global, &call_func_type);
         let (_variant_id, v_entry) = if let Some((variant_id, r_ty, v_entry, _scope_id)) =
             self.resolve_function_name(block.scope_id, &name, &call_func_type, b)
         {
-            //println!("[{}] R2: {}, {:?}", s, call_func_type, (v_entry));
             // unify the resolved function with the caller
             // the function should be resolved, this resolves any thing missing in the caller
             b.unify(&call_func_type, call_span_id, &r_ty, def_span_id);
@@ -471,12 +469,8 @@ impl Flatten {
         )?;
 
         self.push_return(argvec, def_span_id);
-
         // restore position back to where we started
         self.switch_blocks(current_block_id);
-
-        //println!("function end: {}", b.labels.r(name.into()));
-        //println!("function end: {:?}", scope.deferred_goto);
         Ok((v_id, FlattenResult::link(entry_link_id)))
     }
 
@@ -736,46 +730,68 @@ impl Flatten {
                 call_span_id,
             )
         } else {
+            self.switch_blocks(current_block_id);
             // we inline here for nested functions
             // we bake the lambda, and then jump to it
             //
             // create a new block
             // push an extra arg into the arglist, so we can jump to the next block
-
-            let next_block_id = self.blocks.new_block(scope_id);
-            //let callback_arg = Argument::Positional(
-            //Ast::Literal(Literal::Block(next_block_id))
-            //.node(call_span_id)
-            //.into(),
-            //);
-            let mut new_args = vec![]; //callback_arg];
-            for arg in args {
-                new_args.push(arg);
-            }
-
-            self.switch_blocks(current_block_id);
-
-            let result = self.push_bake_lambda(
-                name,
+            self.push_call_inline(
                 name,
                 scope_id,
-                next_block_id,
+                call_values,
                 def,
-                def_func_type.clone().into(),
+                def_func_type.into(),
                 def_span_id,
                 call_span_id,
-                ScopeType::Function,
-                Successor::BlockScope,
-                VarDefinitionSpace::Reg,
                 b,
-            )?;
-            let (_variant_id, _, fun_block_id, _, _, _, r) = result;
-
-            // now that we have the arguments calculated, and the lambda baked, jump!
-            self.switch_blocks(current_block_id);
-            self.push_jump(fun_block_id.into(), call_values, call_span_id);
-            self.switch_blocks(next_block_id);
-            Ok(r)
+            )
         }
+    }
+
+    fn push_call_inline(
+        &mut self,
+        name: StringKey,
+        scope_id: ScopeId,
+        call_values: ArgVec,
+        def: Lambda,
+        def_func_type: AstType,
+        def_span_id: SpanId,
+        call_span_id: SpanId,
+        b: &mut NB,
+    ) -> Result<FlattenResult> {
+        let current_block_id = self.current_block_id();
+        let next_block_id = self.blocks.new_block(scope_id);
+        //let callback_arg = Argument::Positional(
+        //Ast::Literal(Literal::Block(next_block_id))
+        //.node(call_span_id)
+        //.into(),
+        //);
+        //let mut new_args = vec![]; //callback_arg];
+        //for arg in args {
+        //new_args.push(arg);
+        //}
+
+        let result = self.push_bake_lambda(
+            name,
+            name,
+            scope_id,
+            next_block_id,
+            def,
+            def_func_type.clone().into(),
+            def_span_id,
+            call_span_id,
+            ScopeType::Function,
+            Successor::BlockScope,
+            VarDefinitionSpace::Reg,
+            b,
+        )?;
+        let (_variant_id, _, fun_block_id, _, _, _, r) = result;
+
+        // now that we have the arguments calculated, and the lambda baked, jump!
+        self.switch_blocks(current_block_id);
+        self.push_jump(fun_block_id.into(), call_values, call_span_id);
+        self.switch_blocks(next_block_id);
+        Ok(r)
     }
 }

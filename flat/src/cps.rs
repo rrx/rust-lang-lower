@@ -28,22 +28,14 @@ impl Flatten {
 
         let a = self.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
-        let def_func_type = b.types.r(a.def.fun_type).get_func().clone();
-        let mut def_func_type = self.refresh_func_type(&def_func_type, b);
-        def_func_type.ret = ReturnType::Never;
+        let func_type = b.types.r(a.def.fun_type).get_func().clone();
+        let mut func_type = self.refresh_func_type(&func_type, b);
+        func_type.ret = ReturnType::Never;
         let call_arg_type = AstType::Struct(call_func_type.fields());
-        b.unify(
-            &call_arg_type,
-            call_span_id,
-            &def_func_type.args,
-            def_span_id,
-        );
-        b.unify(
-            &def_func_type.args,
-            call_span_id,
-            &call_func_type,
-            def_span_id,
-        );
+        b.unify(&call_arg_type, call_span_id, &func_type.args, def_span_id);
+
+        let def_func_type = func_type.into();
+        b.unify(&def_func_type, call_span_id, &call_func_type, def_span_id);
 
         let (variant_id, fun_block_id, fun_scope_id, def_arg_type) =
             if let Some((variant_id, resolve_type, link_id, fun_scope_id)) =
