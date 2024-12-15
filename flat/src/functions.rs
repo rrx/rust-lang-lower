@@ -677,6 +677,7 @@ impl Flatten {
         &mut self,
         abstraction_id: AbstractionId,
         args: Vec<Argument>,
+        blocks: &[BlockId],
         call_span_id: SpanId,
         b: &mut NB,
     ) -> Result<(Vec<Argument>, ArgVec, AstFuncType, AstFuncType)> {
@@ -729,7 +730,7 @@ impl Flatten {
         let is_static = self.static_scope_id() == scope_id;
         if is_static {
             let (_args, call_values, call_func_type, def_func_type) =
-                self.push_function_call_arguments(abstraction_id, args, call_span_id, b)?;
+                self.push_function_call_arguments(abstraction_id, args, &[], call_span_id, b)?;
             let r = self.push_bake_static(name, abstraction_id, call_func_type, call_span_id, b)?;
             let (fun_link_id, _bake_ty) = r;
             self.switch_blocks(current_block_id);
@@ -764,19 +765,22 @@ impl Flatten {
         let next_block_id = self.blocks.new_block(scope_id);
 
         // insert the new cps argument
-        let callback_arg = Argument::Positional(
-            Ast::Literal(Literal::Block(next_block_id))
-                .node(call_span_id)
-                .into(),
-        );
-        let mut new_args = vec![]; //callback_arg];
-        for arg in args {
-            new_args.push(arg);
-        }
+        //let callback_arg = Argument::Positional(
+        //Ast::Literal(Literal::Block(next_block_id))
+        //.node(call_span_id)
+        //.into(),
+        //);
+        //args.push(callback_arg);
+        //let mut new_args = vec![callback_arg];
+        //for arg in args {
+        //new_args.push(arg);
+        //}
+
+        let blocks = vec![next_block_id];
 
         // calculate the arguments
         let (_calc_args, call_values, _call_func_type, def_func_type) =
-            self.push_function_call_arguments(abstraction_id, new_args, call_span_id, b)?;
+            self.push_function_call_arguments(abstraction_id, args, &blocks, call_span_id, b)?;
 
         // bookmark this position, to continue later
         let current_block_id = self.current_block_id();
