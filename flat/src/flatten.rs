@@ -1002,8 +1002,9 @@ impl Flatten {
         b: &mut NB,
     ) -> Result<FlattenResult> {
         let def_span_id = b.spans.get_span_unknown();
-        let (args, ret_ty) =
-            Self::calculate_function_arguments(&def, &args, def_span_id, call_span_id, b)?;
+        let ret_ty = b.types.r(def.return_type).clone();
+        let (args, _) =
+            Self::calculate_function_arguments(&def, &args, &[], def_span_id, call_span_id, b)?;
 
         let call_values = self.push_call_arguments(args, call_span_id, b)?;
         let _call_ty = argvec_type(&call_values);

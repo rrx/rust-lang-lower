@@ -138,7 +138,7 @@ impl Flatten {
         //
         // WRITE GOTO
         let (args, _) =
-            Self::calculate_function_arguments(&def, &args, def_span_id, call_span_id, b)?;
+            Self::calculate_function_arguments(&def, &args, &[], def_span_id, call_span_id, b)?;
         let call_values = self.push_call_arguments(args, call_span_id, b)?;
         let goto_block_id = self.current_block_id();
         let block = self.blocks.get_block(goto_block_id);

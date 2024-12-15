@@ -173,18 +173,14 @@ impl Flatten {
     pub fn calculate_function_arguments(
         def: &Lambda,
         args: &[Argument],
+        blocks: &[BlockId],
         def_span_id: SpanId,
         call_span_id: SpanId,
         b: &mut NB,
-    ) -> Result<(
-        Vec<Argument>,
-        AstType, // return type
-    )> {
+    ) -> Result<(Vec<Argument>, Vec<(Option<StringKey>, AstType)>)> {
         //println!("args: {:?}", args);
 
         let func_arg = b.types.r(def.arg_type).clone();
-
-        let ret = b.types.r(def.return_type).clone();
 
         // A rough outline of this large function
         // - We need to take in a list of calling args, and the function definition,
@@ -217,10 +213,11 @@ impl Flatten {
         // 6. Iterate over the field list, and create an ordered arguments list
         // 7. Pass that to the function
 
-        let fields_list = func_arg.fields();
+        let mut fields_list = func_arg.fields();
+        let size = fields_list.len() + blocks.len();
 
-        let mut value_map = HashMap::with_capacity(fields_list.len());
-        let mut populated_set = HashSet::with_capacity(fields_list.len());
+        let mut value_map = HashMap::with_capacity(size);
+        let mut populated_set = HashSet::with_capacity(size);
         let mut args_seq = vec![];
         let kwargs_map = HashMap::new();
         let mut def_has_args = false;
@@ -232,6 +229,23 @@ impl Flatten {
             value_map.insert(*key, value.clone());
         }
 
+        for (index, block_id) in blocks.iter().enumerate() {
+            let key = b.labels.fresh_key(".b");
+            // insert the new cps argument
+            let callback_arg = Argument::Positional(
+                Ast::Literal(Literal::Block(*block_id))
+                    .node(call_span_id)
+                    .into(),
+            );
+            value_map.insert(key, callback_arg.into());
+            populated_set.insert(key);
+            fields_list.push((Some(key), AstType::JumpTarget));
+            //args.push(callback_arg);
+            //let mut new_args = vec![callback_arg];
+            //for arg in args {
+            //new_args.push(arg);
+            //}
+        }
         for (index, arg) in args.iter().enumerate() {
             let is_last_arg = index == args.len() - 1;
             match arg {
@@ -353,7 +367,7 @@ impl Flatten {
                 call_span_id,
             );
         }
-        Ok((args, ret.clone()))
+        Ok((args, fields_list))
     }
 
     fn push_bake_static(
@@ -683,11 +697,23 @@ impl Flatten {
     ) -> Result<(Vec<Argument>, ArgVec, AstFuncType, AstFuncType)> {
         let a = self.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
-        let def_func_type = b.types.r(a.def.fun_type).get_func().clone();
+        //let def_func_type = b.types.r(a.def.fun_type).get_func().clone();
+        let def_ret_type = b.types.r(a.def.return_type).clone();
+
         // look up the prototype
         // calculate the calling arguments
-        let (args, _) =
-            Self::calculate_function_arguments(&a.def, &args, def_span_id, call_span_id, b)?;
+        let (args, call_fields) = Self::calculate_function_arguments(
+            &a.def,
+            &args,
+            blocks,
+            def_span_id,
+            call_span_id,
+            b,
+        )?;
+        let def_func_type = AstFuncType::new(
+            AstType::Struct(call_fields),
+            ReturnType::Single(def_ret_type),
+        );
         let call_values = self.push_call_arguments(args.clone(), call_span_id, b)?;
         let call_ty = crate::argvec_type(&call_values);
         let def_func_type = self.refresh_func_type(&def_func_type, b);
@@ -763,19 +789,6 @@ impl Flatten {
 
         // create a new block
         let next_block_id = self.blocks.new_block(scope_id);
-
-        // insert the new cps argument
-        //let callback_arg = Argument::Positional(
-        //Ast::Literal(Literal::Block(next_block_id))
-        //.node(call_span_id)
-        //.into(),
-        //);
-        //args.push(callback_arg);
-        //let mut new_args = vec![callback_arg];
-        //for arg in args {
-        //new_args.push(arg);
-        //}
-
         let blocks = vec![next_block_id];
 
         // calculate the arguments
