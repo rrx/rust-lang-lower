@@ -756,15 +756,14 @@ impl Flatten {
     ) -> Result<FlattenResult> {
         // we inline here for nested functions
         // we bake the lambda, and then jump to it
-        // create a new block
         // push an extra arg into the arglist, so we can jump to the next block
         //
         //
 
+        // create a new block
         let next_block_id = self.blocks.new_block(scope_id);
-        let (args, call_values, _call_func_type, def_func_type) =
-            self.push_function_call_arguments(abstraction_id, args, call_span_id, b)?;
 
+        // insert the new cps argument
         let callback_arg = Argument::Positional(
             Ast::Literal(Literal::Block(next_block_id))
                 .node(call_span_id)
@@ -775,10 +774,15 @@ impl Flatten {
             new_args.push(arg);
         }
 
-        //
+        // calculate the arguments
+        let (_calc_args, call_values, _call_func_type, def_func_type) =
+            self.push_function_call_arguments(abstraction_id, new_args, call_span_id, b)?;
+
+        // bookmark this position, to continue later
+        let current_block_id = self.current_block_id();
+
         let a = self.abstractions.get(abstraction_id);
         let body = a.def.body.clone().unwrap();
-        let current_block_id = self.current_block_id();
         let def_span_id = a.def_span_id;
 
         let result = self.push_bake_lambda(
