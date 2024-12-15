@@ -19,6 +19,7 @@ use crate::{
 };
 
 pub type ArgVec = Vec<(Option<StringKey>, LinkId, AstType, SpanId)>;
+pub type ArgVecRef<'a> = &'a ArgVec;
 
 pub fn argvec_type(values: &ArgVec) -> AstType {
     AstType::Struct(
@@ -1003,8 +1004,9 @@ impl Flatten {
     ) -> Result<FlattenResult> {
         let def_span_id = b.spans.get_span_unknown();
         let ret_ty = b.types.r(def.return_type).clone();
+        let blocks = vec![];
         let (args, _) =
-            Self::calculate_function_arguments(&def, &args, &[], def_span_id, call_span_id, b)?;
+            Self::calculate_function_arguments(&def, &args, &blocks, def_span_id, call_span_id, b)?;
 
         let call_values = self.push_call_arguments(args, call_span_id, b)?;
         let _call_ty = argvec_type(&call_values);
@@ -1463,24 +1465,11 @@ impl Flatten {
                 self.ensure_open(span_id, b);
                 // literal is expression, non-terminal
                 let ty: AstType = match &lit {
-                    //Literal::Block(block_id, ty) => {
-                    //let link_id = self.block_links.get(&block_id).unwrap();
-                    //let entry = self.get_entry(*link_id);
-                    //println!("entry: {:?}", entry);
-
-                    //let y = b.types.fresh_unknown();
-                    //y
-                    //ty.clone()
-                    //}
-                    Literal::Link(link_id) => {
-                        let _link_id = LinkId::new(*link_id);
-                        //let entry = self.get_entry(link_id);
-                        //println!("entry: {:?}", entry);
-                        //let x = entry.ty.clone();
-                        //println!("X: {:?}", x);
-                        let y = b.types.fresh_unknown();
-                        //b.unify(&x, span_id, &y, span_id);
-                        y
+                    Literal::Block(_block_id) => {
+                        b.types.fresh_unknown()
+                    }
+                    Literal::Link(_link_id) => {
+                        b.types.fresh_unknown()
                     }
                     _ => lit.clone().into(),
                 };

@@ -106,8 +106,8 @@ impl From<Literal> for AstType {
 impl From<&Literal> for AstType {
     fn from(item: &Literal) -> Self {
         match item {
-            Literal::Block(_) => AstType::JumpTarget,
-            Literal::Link(_) => unreachable!(), //AstType::JumpTarget,
+            Literal::Block(_) => unreachable!(),       //AstType::JumpTarget,
+            Literal::Link(_) => unreachable!(),        //AstType::JumpTarget,
             Literal::Abstraction(_) => unreachable!(), //AstType::JumpTarget,
             Literal::Int(_) => AstType::Int,
             Literal::Float(_) => AstType::Float,
@@ -188,6 +188,7 @@ pub enum Argument {
     Named(StringKey, Box<AstNode>),
     Args(StringKey, Vec<AstNode>),
     KwArgs(StringKey, HashMap<StringKey, AstNode>),
+    System(StringKey, Box<AstNode>),
 }
 
 impl From<AstNode> for Argument {
@@ -214,6 +215,7 @@ impl Argument {
     pub fn get_name(&self) -> Option<StringKey> {
         match &self {
             Argument::Positional(_) => None,
+            Argument::System(key, _) => Some(*key),
             Argument::Named(key, _) => Some(*key),
             Argument::Args(key, _) => Some(*key),
             Argument::KwArgs(key, _) => Some(*key),

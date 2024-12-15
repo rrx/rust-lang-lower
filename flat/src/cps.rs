@@ -368,6 +368,7 @@ impl Flatten {
                 };
 
                 // calculate the type, so we can unify
+                //let blocks = vec![];
                 let goto_values = self.push_call_arguments(d.args.clone(), d.call_span_id, b)?;
                 let goto_arg_type = argvec_type(&goto_values);
                 let goto_func_type =
@@ -464,7 +465,7 @@ impl Flatten {
         // this is where we actually do the rewrite
         match d.deferred_type {
             DeferredType::Name(arg_link_id) => {
-                println!("deferred: {:?}", d);
+                //println!("deferred: {:?}", d);
                 // we replace the placeholder here
                 self.switch_blocks(d.block_id);
                 let entry = self.get_entry(arg_link_id).clone();
@@ -483,6 +484,9 @@ impl Flatten {
                     LCode::Val(Literal::Block(block_id)) => {
                         vec![*block_id]
                     }
+                    //LCode::Val(_) => {
+                    //vec![]
+                    //}
                     _ => {
                         unreachable!("{:?}", code);
                     }

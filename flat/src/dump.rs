@@ -36,7 +36,7 @@ impl NodeBuilder {
             Argument::Positional(expr) => {
                 (format!("arg({})", index), vec![*expr.clone()], expr.span_id)
             }
-            Argument::Named(key, expr) => {
+            Argument::Named(key, expr) | Argument::System(key, expr) => {
                 let name = self.labels.r((*key).into());
                 (
                     format!("arg({},{})", index, name),

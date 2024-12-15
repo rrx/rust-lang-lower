@@ -173,11 +173,11 @@ impl Flatten {
     pub fn calculate_function_arguments(
         def: &Lambda,
         args: &[Argument],
-        blocks: &[(LinkId, BlockId, AstType)],
+        system: &[Argument],
         def_span_id: SpanId,
         call_span_id: SpanId,
         b: &mut NB,
-    ) -> Result<(Vec<Argument>, Vec<(Option<StringKey>, AstType)>)> {
+    ) -> Result<(Vec<Argument>, AstFuncType)> {
         //println!("args: {:?}", args);
 
         let func_arg = b.types.r(def.arg_type).clone();
@@ -214,7 +214,7 @@ impl Flatten {
         // 7. Pass that to the function
 
         let mut fields_list = func_arg.fields();
-        let size = fields_list.len() + blocks.len();
+        let size = fields_list.len() + system.len();
 
         let mut value_map = HashMap::with_capacity(size);
         let mut populated_set = HashSet::with_capacity(size);
@@ -229,22 +229,14 @@ impl Flatten {
             value_map.insert(*key, value.clone());
         }
 
-        for (_index, (_link_id, block_id, ty)) in blocks.iter().enumerate() {
-            let key = b.labels.fresh_key(".b");
-            let callback_arg = Argument::Positional(
-                //Ast::Literal(Literal::Link(link_id.index()))
-                //.node(call_span_id)
-                //.into(),
-                Ast::Literal(Literal::Block(*block_id))
-                    .node(call_span_id)
-                    .into(),
-            );
-            value_map.insert(key, callback_arg.into());
-            populated_set.insert(key);
-            fields_list.push((Some(key), ty.clone()));
+        for arg in system.iter() {
+            if let Argument::System(key, _) = arg {
+                let ty = b.types.fresh_unknown();
+                fields_list.push((Some(*key), ty.clone()));
+            }
         }
 
-        for (index, arg) in args.iter().enumerate() {
+        for (index, arg) in args.iter().chain(system.iter()).enumerate() {
             let is_last_arg = index == args.len() - 1;
             match arg {
                 // these are the first args, and they don't have associated names
@@ -288,7 +280,7 @@ impl Flatten {
                 }
 
                 // named arguments follow positional args
-                Argument::Named(key, expr) => {
+                Argument::Named(key, expr) | Argument::System(key, expr) => {
                     // make sure we don't double add
                     if populated_set.contains(key) {
                         let name = b.labels.r(key.into());
@@ -365,7 +357,14 @@ impl Flatten {
                 call_span_id,
             );
         }
-        Ok((args, fields_list))
+
+        let def_ret_type = b.types.r(def.return_type).clone();
+        let def_func_type = AstFuncType::new(
+            AstType::Struct(fields_list),
+            ReturnType::Single(def_ret_type),
+        );
+
+        Ok((args, def_func_type))
     }
 
     fn push_bake_static(
@@ -674,6 +673,7 @@ impl Flatten {
     pub(super) fn push_call_arguments(
         &mut self,
         args: Vec<Argument>,
+        //blocks: ArgVecRef,
         span_id: SpanId,
         b: &mut NB,
     ) -> Result<ArgVec> {
@@ -682,13 +682,17 @@ impl Flatten {
         for a in args.into_iter() {
             match a {
                 Argument::Positional(expr) => {
+                    //if let AstNode::Literal(Literal::Block(block_id)) = expr {
+                    //} else {
                     let r = self.push_node(*expr, b)?;
                     let link_id = r.link_id.unwrap();
                     let entry = self.get_entry(link_id);
                     values.push((entry.name, link_id, entry.ty.clone(), span_id));
                     link_ids.push(link_id);
+                    //}
                 }
-                Argument::Named(key, expr) => {
+
+                Argument::Named(key, expr) | Argument::System(key, expr) => {
                     let r = self.push_node(*expr, b)?;
                     let link_id = r.link_id.unwrap();
                     let ty = self.get_type(link_id).clone();
@@ -733,6 +737,10 @@ impl Flatten {
                 }
             }
         }
+        //for (key, link_id, ty, span_id) in blocks.iter() {
+        //values.push((*key, *link_id, ty.clone(), *span_id));
+        //link_ids.push(*link_id);
+        //}
         Ok(values)
     }
 
@@ -740,35 +748,29 @@ impl Flatten {
         &mut self,
         abstraction_id: AbstractionId,
         args: Vec<Argument>,
-        blocks: &[(LinkId, BlockId, AstType)],
+        system: Vec<Argument>,
         call_span_id: SpanId,
         b: &mut NB,
     ) -> Result<(
-        Vec<Argument>,
         ArgVec,
         AstFuncType, // call_func_type
         AstFuncType, // def_func_type
     )> {
         let a = self.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
-        //let def_func_type = b.types.r(a.def.fun_type).get_func().clone();
-        let def_ret_type = b.types.r(a.def.return_type).clone();
 
         // look up the prototype
         // calculate the calling arguments
-        let (args, call_fields) = Self::calculate_function_arguments(
+        println!("args1: {:?}", args);
+        let (args, def_func_type) = Self::calculate_function_arguments(
             &a.def,
             &args,
-            blocks,
+            &system,
             def_span_id,
             call_span_id,
             b,
         )?;
-        println!("call_fields: {:?}", call_fields);
-        let def_func_type = AstFuncType::new(
-            AstType::Struct(call_fields),
-            ReturnType::Single(def_ret_type),
-        );
+        println!("args2: {:?}", args);
         let call_values = self.push_call_arguments(args.clone(), call_span_id, b)?;
         let call_ty = crate::argvec_type(&call_values);
         let def_func_type = self.refresh_func_type(&def_func_type, b);
@@ -783,7 +785,7 @@ impl Flatten {
             &def_func_type.clone().into(),
             def_span_id,
         );
-        Ok((args, call_values, call_func_type, def_func_type))
+        Ok((call_values, call_func_type, def_func_type))
     }
 
     pub(super) fn push_call(
@@ -809,9 +811,10 @@ impl Flatten {
         // anyways
 
         let is_static = self.static_scope_id() == scope_id;
+        //let blocks = vec![];
         if is_static {
-            let (_args, call_values, call_func_type, def_func_type) =
-                self.push_function_call_arguments(abstraction_id, args, &[], call_span_id, b)?;
+            let (call_values, call_func_type, def_func_type) =
+                self.push_function_call_arguments(abstraction_id, args, vec![], call_span_id, b)?;
             let r = self.push_bake_static(name, abstraction_id, call_func_type, call_span_id, b)?;
             let (fun_link_id, _bake_ty) = r;
             self.switch_blocks(current_block_id);
@@ -851,11 +854,11 @@ impl Flatten {
         // create a new block static block
         let next_block_id = self.blocks.new_block(scope_id);
 
-        let blocks = vec![];
+        //let blocks = vec![];
 
         // calculate the arguments
-        let (_calc_args, call_values, _call_func_type, def_func_type) =
-            self.push_function_call_arguments(abstraction_id, args, &blocks, call_span_id, b)?;
+        let (call_values, _call_func_type, def_func_type) =
+            self.push_function_call_arguments(abstraction_id, args, vec![], call_span_id, b)?;
 
         // bookmark this position, to continue later
         let current_block_id = self.current_block_id();
@@ -901,36 +904,32 @@ impl Flatten {
     ) -> Result<FlattenResult> {
         // create a new block static blocks, which is the final destination
         let next_block_id = self.blocks.new_block(scope_id);
-        println!("next_block_id: {}", next_block_id);
 
-        let ty = b.types.fresh_unknown();
-        // create a variable to point to the final destination
-        let code = LCode::Val(Literal::Block(next_block_id));
-        let next_link_id = self.push_code(
-            code,
-            ty.clone(),
-            None,
-            call_span_id,
-            VarDefinitionSpace::Reg,
+        let key = b.labels.fresh_key("b");
+        let mut system = vec![];
+        let arg = Argument::System(
+            key,
+            Ast::Literal(Literal::Block(next_block_id))
+                .node(call_span_id)
+                .into(),
         );
+        system.push(arg);
 
-        // pass the link along with the call arguments
-        let blocks = vec![(next_link_id, next_block_id, ty.clone())];
         // calculate the arguments for the CPS function
-        let (_calc_args, call_values, _call_func_type, def_func_type) =
-            self.push_function_call_arguments(abstraction_id, args, &blocks, call_span_id, b)?;
+        let (call_values, _call_func_type, top_def_func_type) =
+            self.push_function_call_arguments(abstraction_id, args, system, call_span_id, b)?;
 
-        println!("def_func_type: {}", def_func_type);
+        let arg = call_values.last().unwrap();
+        let next_link_id = arg.1;
+        let next_ty = arg.2.clone();
 
-        b.unify(
-            &ty,
-            call_span_id,
-            &def_func_type.clone().into(),
-            call_span_id,
-        );
-
-        let t = b.types.u.resolve(&def_func_type.clone().into()).unwrap();
-        println!("t: {}", t);
+        /*
+        let t = b
+            .types
+            .u
+            .resolve(&top_def_func_type.clone().into())
+            .unwrap();
+        */
 
         // bookmark position
         let current_block_id = self.current_block_id();
@@ -942,10 +941,17 @@ impl Flatten {
             scope_id,
             next_link_id,
             call_span_id,
-            def_func_type,
+            top_def_func_type,
             b,
         )?;
         let (fun_block_id, ret_block_ty, next_arg_ty) = result;
+
+        b.unify(
+            &next_ty,
+            call_span_id,
+            &ret_block_ty.clone().into(),
+            call_span_id,
+        );
 
         // push the continuation block to which the function returns control
         // this might just be the return block
@@ -966,9 +972,6 @@ impl Flatten {
             call_span_id,
             VarDefinitionSpace::Reg,
         );
-        println!("v_args: {:?}", v_args);
-        println!("ret_block_ty: {:?}", ret_block_ty);
-        println!("next_arg_ty: {:?}", next_arg_ty);
 
         let next_link_id = match &next_arg_ty {
             AstType::Unit => None,

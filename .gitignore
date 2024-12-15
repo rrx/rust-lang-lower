@@ -4,3 +4,4 @@ old
 build
 .ninja_log
 build.ninja
+*.log
