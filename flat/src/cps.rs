@@ -331,11 +331,14 @@ impl Flatten {
          */
 
         match &d.deferred_type {
-            DeferredType::Name(def_link_id) => {
+            DeferredType::Name(def_target_link_id) => {
                 // is it a variable in scope?
                 // This happens if we try to jump to a variable
                 // We have no way of lowering this, so we need to handle this later
                 // This will be rewritten in a later step based on the type
+                // we type check and then add a placeholder jump, that will be replaced later
+                // based on the graph.
+                //
                 self.switch_blocks(d.block_id);
                 self.remove_placeholder_terminal(d.block_id);
 
@@ -346,36 +349,49 @@ impl Flatten {
                 //
                 //
 
-                // Push load if required.  This is needed if the argument is stored in memory,
+                // Push load if required.  This is needed if the target is stored in memory,
                 // rather than a register
-                let load_link_id = if self.is_load_required(*def_link_id) {
-                    let entry = self.get_entry(*def_link_id).clone();
+                let load_link_id = if self.is_load_required(*def_target_link_id) {
+                    let entry = self.get_entry(*def_target_link_id).clone();
                     let link_id = self.push_code(
-                        LCode::Load(*def_link_id),
+                        LCode::Load(*def_target_link_id),
                         entry.ty,
                         entry.name,
                         entry.span_id,
                         VarDefinitionSpace::Default,
                     );
                     self.scoped_continuations.connect(
-                        ContinuationFlow::Variable(*def_link_id),
+                        ContinuationFlow::Variable(*def_target_link_id),
                         ContinuationFlow::Variable(link_id),
                         FlowEdge::LoadBlockArg,
                     );
                     link_id
                 } else {
-                    *def_link_id
+                    *def_target_link_id
                 };
 
+                // we don't know the function yet, so we can't calculate the args
+                // For this reason we should consider moving the args calculation to the function
+                // side, rather than the call side
+                /*
+                let (args, def_func_type) = Self::calculate_function_arguments(
+                    &a.def,
+                    &d.args,
+                    &[],
+                    def_span_id,
+                    d.call_span_id,
+                    b,
+                )?;
+                */
+
                 // calculate the type, so we can unify
-                //let blocks = vec![];
                 let goto_values = self.push_call_arguments(d.args.clone(), d.call_span_id, b)?;
                 let goto_arg_type = argvec_type(&goto_values);
                 let goto_func_type =
                     AstFuncType::new(goto_arg_type.clone(), ReturnType::Never).into();
 
                 // unify
-                let entry = self.get_entry(*def_link_id);
+                let entry = self.get_entry(*def_target_link_id);
                 let var_ty = entry.ty.clone();
                 b.unify(&var_ty, entry.span_id, &goto_func_type, d.call_span_id);
 
@@ -507,6 +523,7 @@ impl Flatten {
         let mut abstractions = vec![];
         let mut blocks = vec![];
         let mut errors = vec![];
+
         for link_id in &self.open_identifiers {
             let entry = self.get_entry(*link_id);
             let block_id = entry.block_id;

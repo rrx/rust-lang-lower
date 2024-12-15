@@ -1465,12 +1465,8 @@ impl Flatten {
                 self.ensure_open(span_id, b);
                 // literal is expression, non-terminal
                 let ty: AstType = match &lit {
-                    Literal::Block(_block_id) => {
-                        b.types.fresh_unknown()
-                    }
-                    Literal::Link(_link_id) => {
-                        b.types.fresh_unknown()
-                    }
+                    Literal::Block(_block_id) => b.types.fresh_unknown(),
+                    Literal::Link(_link_id) => b.types.fresh_unknown(),
                     _ => lit.clone().into(),
                 };
                 //let mem = if block.scope_id == fenv.static_scope_id() {

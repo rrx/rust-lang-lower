@@ -474,7 +474,7 @@ impl Flatten {
 
         let (next_block_id, next_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
 
-        let (v_id, _scope, _block_id, entry_link_id, _, argvec, _, _) = self
+        let (v_id, _scope, _block_id, entry_link_id, _, argvec, _, _, _) = self
             .push_bake_lambda_and_update_next(
                 name,
                 global_name,
@@ -518,6 +518,7 @@ impl Flatten {
         AstType,     // next block arg type
         ArgVec,      // return the argvec for the next block, which depends on the function
         AstFuncType, // next block return type
+        AstType,     // variant type
         FlattenResult,
     )> {
         let result = self.push_bake_lambda(
@@ -535,8 +536,15 @@ impl Flatten {
             b,
         )?;
 
-        let (variant_id, fun_scope_id, fun_block_id, entry_link_id, next_arg_ty, ret_block_ty) =
-            result;
+        let (
+            variant_id,
+            fun_scope_id,
+            fun_block_id,
+            entry_link_id,
+            next_arg_ty,
+            ret_block_ty,
+            variant_ty,
+        ) = result;
 
         // push the continuation block to which the function returns control
         // this might just be the return block
@@ -578,6 +586,7 @@ impl Flatten {
             next_arg_ty,
             v_args,
             ret_block_ty,
+            variant_ty,
             r,
         ))
     }
@@ -603,6 +612,7 @@ impl Flatten {
         LinkId,
         AstType,
         AstFuncType, // next block return type
+        AstType,     // variant type
     )> {
         // lower a function as an inline block
         // returning from the function passes control the next block which is static
@@ -637,9 +647,15 @@ impl Flatten {
         );
 
         // add entry to scope, for recursion
-        let r_ty1 = b.types.u.resolve(&block_ty).unwrap();
+        let variant_ty = b.types.u.resolve(&block_ty).unwrap();
         // we need to know the link
-        let variant_id = self.variant_add(scope_id, local_name, r_ty1, entry_link_id, fun_block_id);
+        let variant_id = self.variant_add(
+            scope_id,
+            local_name,
+            variant_ty.clone(),
+            entry_link_id,
+            fun_block_id,
+        );
 
         // add the name to scope
         // do this early for recursive functions
@@ -650,6 +666,9 @@ impl Flatten {
         self.switch_blocks(fun_block_id);
         let _ = self.push_node(body, b)?;
         self.maybe_terminate_block(next_block_id, def_span_id);
+
+        let variant_ty = b.types.u.resolve(&variant_ty).unwrap();
+        self.variant_update(variant_id, variant_ty.clone(), entry_link_id);
 
         let next_arg_ty = self.resolve_return_type(fun_block_id, block_ty.into(), call_span_id, b);
         println!("next_arg_ty: {}", next_arg_ty);
@@ -667,6 +686,7 @@ impl Flatten {
             entry_link_id,
             next_arg_ty,
             ret_block_ty,
+            variant_ty,
         ))
     }
 
@@ -849,12 +869,12 @@ impl Flatten {
     ) -> Result<FlattenResult> {
         // we inline here for nested functions
         // we bake the lambda, and then jump to it
-        // push an extra arg into the arglist, so we can jump to the next block
+        // This is a very simple inliner, that doesn't rewrite the function signature
+        // We make a new function each time we call it, which is inefficient if we
+        // call it multiple times.
 
         // create a new block static block
         let next_block_id = self.blocks.new_block(scope_id);
-
-        //let blocks = vec![];
 
         // calculate the arguments
         let (call_values, _call_func_type, def_func_type) =
@@ -881,10 +901,11 @@ impl Flatten {
             VarDefinitionSpace::Reg,
             b,
         )?;
-        let (_variant_id, _, fun_block_id, _, _next_arg_ty, _, _, r) = result;
+        let (_variant_id, _, fun_block_id, _, _next_arg_ty, _, _, _, r) = result;
 
         // now that we have the arguments calculated, and the lambda baked, jump!
         self.switch_blocks(current_block_id);
+
         // jump into the the lambda
         self.push_jump(fun_block_id.into(), call_values, call_span_id);
         self.switch_blocks(next_block_id);
@@ -903,13 +924,13 @@ impl Flatten {
         b: &mut NB,
     ) -> Result<FlattenResult> {
         // create a new block static blocks, which is the final destination
-        let next_block_id = self.blocks.new_block(scope_id);
+        let exit_block_id = self.blocks.new_block(scope_id);
 
         let key = b.labels.fresh_key("b");
         let mut system = vec![];
         let arg = Argument::System(
             key,
-            Ast::Literal(Literal::Block(next_block_id))
+            Ast::Literal(Literal::Block(exit_block_id))
                 .node(call_span_id)
                 .into(),
         );
@@ -923,17 +944,12 @@ impl Flatten {
         let next_link_id = arg.1;
         let next_ty = arg.2.clone();
 
-        /*
-        let t = b
-            .types
-            .u
-            .resolve(&top_def_func_type.clone().into())
-            .unwrap();
-        */
-
         // bookmark position
         let current_block_id = self.current_block_id();
 
+        let s_name = b.labels.r(name.into());
+        println!("s_name: {}", s_name);
+        println!("top_def_func_type: {:?}", top_def_func_type);
         // generate the CPS function, that's it
         let result = self.push_call_inline_cps_inner(
             abstraction_id,
@@ -941,11 +957,10 @@ impl Flatten {
             scope_id,
             next_link_id,
             call_span_id,
-            top_def_func_type,
+            top_def_func_type.clone(),
             b,
         )?;
-        let (fun_block_id, ret_block_ty, next_arg_ty) = result;
-
+        let (fun_block_id, ret_block_ty, next_arg_ty, argvec) = result;
         b.unify(
             &next_ty,
             call_span_id,
@@ -953,18 +968,26 @@ impl Flatten {
             call_span_id,
         );
 
+        let _ = self.push_call_values(&argvec);
+        self.push_goto_link(next_link_id, argvec, call_span_id)?;
+
+        self.switch_blocks(current_block_id);
+        println!("top_def_func_type: {}", top_def_func_type);
+        let r_ty = b.types.u.resolve(&top_def_func_type.into()).unwrap();
+        println!("r_ty: {}", r_ty);
+
         // push the continuation block to which the function returns control
         // this might just be the return block
         let s_name = b.labels.r(name.into());
-        let cont_name = format!("{}.cpsnext", s_name);
+        let cont_name = format!("{}.exit", s_name);
 
         // block graph
         self.blocks
             .block_succ(current_block_id, fun_block_id, Successor::BlockScope);
         self.blocks
-            .block_succ(fun_block_id, next_block_id, Successor::BlockScope);
+            .block_succ(fun_block_id, exit_block_id, Successor::BlockScope);
 
-        self.switch_blocks(next_block_id);
+        self.switch_blocks(exit_block_id);
         let (_v_block, v_args) = self.push_start_block(
             scope_id,
             ret_block_ty.clone().into(),
@@ -996,7 +1019,7 @@ impl Flatten {
         // jump into the the lambda
         self.push_jump(fun_block_id.into(), call_values, call_span_id);
 
-        self.switch_blocks(next_block_id);
+        self.switch_blocks(exit_block_id);
         // in the next block
 
         // r contains the link to the return value
@@ -1012,9 +1035,9 @@ impl Flatten {
         call_span_id: SpanId,
         def_func_type: AstFuncType,
         b: &mut NB,
-    ) -> Result<(BlockId, AstFuncType, AstType)> {
+    ) -> Result<(BlockId, AstFuncType, AstType, ArgVec)> {
         // bookmark this position, to continue later
-        let current_block_id = self.current_block_id();
+        //let current_block_id = self.current_block_id();
 
         // create the new empty block
         let next_block_id = self.blocks.new_block(scope_id);
@@ -1022,41 +1045,121 @@ impl Flatten {
 
         let a = self.abstractions.get(abstraction_id);
         println!("a: {:?}", a);
-        let body = a.def.body.clone().unwrap();
         let def_span_id = a.def_span_id;
 
-        // bake the function, jump to it, and return control to the next block
-        let result = self.push_bake_lambda_and_update_next(
-            name,
-            name,
-            scope_id,
-            next_block_id,
-            *body,
-            def_func_type.clone(),
-            def_span_id,
-            call_span_id,
-            ScopeType::Function,
-            Successor::BlockScope,
-            VarDefinitionSpace::Reg,
-            b,
-        )?;
+        let call_func_type = def_func_type.clone().into();
         let (
-            _variant_id,
-            _fun_scope_id,
+            variant_id,
             fun_block_id,
-            _entry_link_id,
-            next_arg_ty,
-            v_args,
+            fun_scope_id,
+            def_func_type,
             ret_block_ty,
-            _,
-        ) = result;
+            next_arg_ty,
+            argvec,
+        ) = if let Some((variant_id, resolve_type, link_id, fun_scope_id)) =
+            self.resolve_function_name(scope_id, &name, &call_func_type, b)
+        {
+            let entry = self.get_entry(link_id);
+            let fun_block_id = entry.block_id;
 
-        // we have control here.  Finish the block by jumping to the CPS function
-        let _ = self.push_call_values(&v_args);
-        self.push_goto_link(call_link_id, v_args, call_span_id)?;
+            let ty = resolve_type.clone().into();
+            b.unify(&ty, call_span_id, &resolve_type, def_span_id);
+            let resolve_type = b.types.u.resolve(&resolve_type).unwrap();
+            println!("fun_block_id: {}", fun_block_id);
+            println!("resolve_type: {}", resolve_type);
+
+            /*
+            let next_arg_ty = resolve_type.clone();
+            let ret_block_ty = resolve_type.get_func().clone();
+
+            let argvec = vec![];
+            let _ = self.push_call_values(&argvec);
+            self.push_goto_link(call_link_id, argvec, call_span_id)?;
+            //(variant_id, fun_block_id, fun_scope_id, resolve_type, ret_block_ty, next_arg_ty)
+            //
+            */
+
+            let body = a.def.body.clone().unwrap();
+            let result = self.push_bake_lambda_and_update_next(
+                name,
+                name,
+                scope_id,
+                next_block_id,
+                *body,
+                def_func_type,
+                def_span_id,
+                call_span_id,
+                ScopeType::Function,
+                Successor::BlockScope,
+                VarDefinitionSpace::Reg,
+                b,
+            )?;
+            let (
+                variant_id,
+                fun_scope_id,
+                fun_block_id,
+                _,
+                next_arg_ty,
+                argvec,
+                ret_func_ty,
+                variant_ty,
+                _,
+            ) = result;
+            // we have control here.  Finish the block by jumping to the CPS function
+            //let _ = self.push_call_values(&argvec);
+            //self.push_goto_link(call_link_id, argvec, call_span_id)?;
+            (
+                variant_id,
+                fun_block_id,
+                fun_scope_id,
+                variant_ty,
+                ret_func_ty,
+                next_arg_ty,
+                argvec,
+            )
+        } else {
+            let body = a.def.body.clone().unwrap();
+            let result = self.push_bake_lambda_and_update_next(
+                name,
+                name,
+                scope_id,
+                next_block_id,
+                *body,
+                def_func_type,
+                def_span_id,
+                call_span_id,
+                ScopeType::Function,
+                Successor::BlockScope,
+                VarDefinitionSpace::Reg,
+                b,
+            )?;
+            let (
+                variant_id,
+                fun_scope_id,
+                fun_block_id,
+                _,
+                next_arg_ty,
+                argvec,
+                ret_func_ty,
+                variant_ty,
+                _,
+            ) = result;
+            // we have control here.  Finish the block by jumping to the CPS function
+            //let _ = self.push_call_values(&argvec);
+            //self.push_goto_link(call_link_id, argvec, call_span_id)?;
+            (
+                variant_id,
+                fun_block_id,
+                fun_scope_id,
+                variant_ty,
+                ret_func_ty,
+                next_arg_ty,
+                argvec,
+            )
+        };
 
         // restore position back to where we started
-        self.switch_blocks(current_block_id);
-        Ok((fun_block_id, ret_block_ty, next_arg_ty))
+        //self.switch_blocks(current_block_id);
+        Ok((fun_block_id, ret_block_ty, next_arg_ty, argvec))
     }
 }
