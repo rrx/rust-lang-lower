@@ -628,7 +628,6 @@ impl Flatten {
         let (entry_link_id, _) = self.push_start_block(
             fun_scope_id,
             block_ty.clone(),
-            //def_func_type.clone().into(),
             Some(global_name),
             def_span_id,
             mem,
@@ -880,6 +879,8 @@ impl Flatten {
         // jump into the the lambda
         self.push_jump(fun_block_id.into(), call_values, call_span_id);
         self.switch_blocks(next_block_id);
+
+        // r contains the link to the return value
         Ok(r)
     }
 
@@ -924,7 +925,7 @@ impl Flatten {
             def_func_type,
             b,
         )?;
-        let (fun_block_id, ret_block_ty, r) = result;
+        let (fun_block_id, ret_block_ty) = result;
 
         // push the continuation block to which the function returns control
         // this might just be the return block
@@ -940,6 +941,23 @@ impl Flatten {
             VarDefinitionSpace::Reg,
         );
 
+        let next_link_id = match &ret_block_ty.ret {
+            ReturnType::Single(AstType::Unit) => None,
+            _ => {
+                if v_args.len() == 0 {
+                    None
+                } else {
+                    Some(v_args.first().unwrap().1)
+                }
+            }
+        };
+
+        let r = if let Some(link_id) = next_link_id {
+            FlattenResult::link(link_id)
+        } else {
+            FlattenResult::statement()
+        };
+
         // Call the lambda that we just created
         // now that we have the arguments calculated, and the lambda baked, jump!
         self.switch_blocks(current_block_id);
@@ -949,6 +967,7 @@ impl Flatten {
         self.switch_blocks(next_block_id);
         // in the next block
 
+        // r contains the link to the return value
         Ok(r)
     }
 
@@ -961,7 +980,7 @@ impl Flatten {
         call_span_id: SpanId,
         def_func_type: AstFuncType,
         b: &mut NB,
-    ) -> Result<(BlockId, AstFuncType, FlattenResult)> {
+    ) -> Result<(BlockId, AstFuncType)> {
         // bookmark this position, to continue later
         let current_block_id = self.current_block_id();
 
@@ -1004,6 +1023,6 @@ impl Flatten {
 
         // restore position back to where we started
         self.switch_blocks(current_block_id);
-        Ok((fun_block_id, ret_block_ty, FlattenResult::link(link_id)))
+        Ok((fun_block_id, ret_block_ty))
     }
 }
