@@ -164,7 +164,7 @@ impl Flatten {
         // main is always static context
         self.switch_blocks(self.static_block_id());
         let ty = AstType::func(vec![], AstType::Int);
-        let r = self.push_bake(name, ty, b);
+        let r = self.push_bake(name, ty.get_func().clone(), b);
         // switch back after bake
         self.switch_blocks(current_block_id);
         r
@@ -360,7 +360,7 @@ impl Flatten {
         &mut self,
         name: StringKey,
         abstraction_id: AbstractionId,
-        call_func_type: AstType,
+        call_func_type: AstFuncType,
         call_span_id: SpanId,
         b: &mut NB,
     ) -> Result<(LinkId, AstType)> {
@@ -377,11 +377,16 @@ impl Flatten {
 
         // if it's defined in static scope, just call it
         let (_variant_id, v_entry) = if let Some((variant_id, r_ty, v_entry, _scope_id)) =
-            self.resolve_function_name(block.scope_id, &name, &call_func_type, b)
+            self.resolve_function_name(block.scope_id, &name, &call_func_type.clone().into(), b)
         {
             // unify the resolved function with the caller
             // the function should be resolved, this resolves any thing missing in the caller
-            b.unify(&call_func_type, call_span_id, &r_ty, def_span_id);
+            b.unify(
+                &call_func_type.clone().into(),
+                call_span_id,
+                &r_ty,
+                def_span_id,
+            );
             (variant_id, v_entry)
         } else {
             // if it's not already baked, we need to do that here
@@ -389,7 +394,7 @@ impl Flatten {
 
             let result = self.push_bake_function(
                 abstraction_id,
-                call_func_type.get_func().clone(),
+                call_func_type.clone(),
                 name,
                 global_key,
                 b,
@@ -397,7 +402,7 @@ impl Flatten {
             let (variant_id, r) = result?;
             let v_entry = r.link_id.unwrap();
             self.switch_blocks(current_block_id);
-            let r_ty2 = b.types.u.resolve(&call_func_type).unwrap();
+            let r_ty2 = b.types.u.resolve(&call_func_type.clone().into()).unwrap();
 
             // update the variant with the resolved type
             self.variant_update(variant_id, r_ty2.clone(), v_entry);
@@ -409,19 +414,18 @@ impl Flatten {
         // so our lookups should actually be resolved by the caller
         self.functions.insert(name, v_entry);
 
-        Ok((v_entry, call_func_type))
+        Ok((v_entry, call_func_type.into()))
     }
 
-    pub fn push_bake(&mut self, name: StringKey, func_type: AstType, b: &mut NB) -> Result<LinkId> {
+    pub fn push_bake(
+        &mut self,
+        name: StringKey,
+        func_type: AstFuncType,
+        b: &mut NB,
+    ) -> Result<LinkId> {
         let current_block_id = self.current_block_id();
         if let Some((_, abstraction_id)) = self.resolve_lambda(current_block_id, name) {
-            let result = self.push_bake_function(
-                abstraction_id,
-                func_type.get_func().clone(),
-                name,
-                name,
-                b,
-            );
+            let result = self.push_bake_function(abstraction_id, func_type, name, name, b);
             let (_variant_id, r) = result?;
             self.switch_blocks(current_block_id);
             Ok(r.link_id.unwrap())
@@ -716,10 +720,10 @@ impl Flatten {
 
         // construct call function type
         let call_func_type =
-            AstFuncType::new(AstType::Struct(call_ty.fields()), def_func_type.ret.clone()).into();
+            AstFuncType::new(AstType::Struct(call_ty.fields()), def_func_type.ret.clone());
 
         b.unify(
-            &call_func_type,
+            &call_func_type.clone().into(),
             call_span_id,
             &def_func_type.clone().into(),
             def_span_id,

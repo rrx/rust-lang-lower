@@ -293,11 +293,12 @@ impl Flatten {
     ) -> Option<(VariantId, AstType, LinkId, ScopeId)> {
         let mut result = None;
         let snapshot = b.types.u.snapshot();
+        let ty = call_func_type.clone().into();
         for (variant_id, r_ty, link_id, scope_id) in
             self.resolve_all_function_name(start_scope_id, &name)
         {
             //println!("trying {}, {}<=>{}", variant_id, &call_func_type, &r_ty);
-            if let Ok(_) = b.types.u.unify(&call_func_type, &r_ty) {
+            if let Ok(_) = b.types.u.unify(&ty, &r_ty) {
                 result = Some((variant_id, r_ty, link_id, scope_id));
                 break;
             }
@@ -1840,6 +1841,7 @@ impl Flatten {
                     Ast::Identifier(key) => {
                         let key = *key;
                         let ty = AstType::func(vec![], AstType::Unit);
+                        //let func_ty = ty.get_func();
                         let scope_id = block.scope_id;
                         if let Some((variant_id, _resolve_type, link_id, _scope_id)) =
                             self.resolve_function_name(scope_id, &key, &ty, b)
