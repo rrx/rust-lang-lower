@@ -229,7 +229,7 @@ impl Flatten {
             value_map.insert(*key, value.clone());
         }
 
-        for (index, link_id) in blocks.iter().enumerate() {
+        for (_index, link_id) in blocks.iter().enumerate() {
             let key = b.labels.fresh_key(".b");
             // insert the new cps argument
             let callback_arg = Argument::Positional(
@@ -472,7 +472,7 @@ impl Flatten {
 
         let (next_block_id, next_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
 
-        let (v_id, _scope, _block_id, entry_link_id, _, argvec, _, _) = self.push_bake_lambda(
+        let (v_id, _scope, _block_id, entry_link_id, _, argvec, _, _) = self.push_bake_lambda_and_next(
             name,
             global_name,
             next_scope_id,
@@ -493,7 +493,7 @@ impl Flatten {
         Ok((v_id, FlattenResult::link(entry_link_id)))
     }
 
-    fn push_bake_lambda(
+    fn push_bake_lambda_and_next(
         &mut self,
         local_name: StringKey,
         global_name: StringKey,
@@ -517,7 +517,7 @@ impl Flatten {
         AstFuncType, // next block return type
         FlattenResult,
     )> {
-        let result = self.push_bake_lambda_inner(
+        let result = self.push_bake_lambda(
             local_name,
             global_name,
             next_scope_id,
@@ -578,7 +578,7 @@ impl Flatten {
         ))
     }
 
-    fn push_bake_lambda_inner(
+    fn push_bake_lambda(
         &mut self,
         local_name: StringKey,
         global_name: StringKey,
@@ -601,7 +601,7 @@ impl Flatten {
         AstFuncType, // next block return type
     )> {
         // lower a function as an inline block
-        // returning from the function passes control the enxt block
+        // returning from the function passes control the next block which is static
         //
         // create a new scope and block
         // build the function body in that scope and block
@@ -868,7 +868,7 @@ impl Flatten {
         let body = a.def.body.clone().unwrap();
         let def_span_id = a.def_span_id;
 
-        let result = self.push_bake_lambda(
+        let result = self.push_bake_lambda_and_next(
             name,
             name,
             scope_id,
@@ -883,6 +883,7 @@ impl Flatten {
             b,
         )?;
         let (_variant_id, _, fun_block_id, _, _, _, _, r) = result;
+
         // now that we have the arguments calculated, and the lambda baked, jump!
         self.switch_blocks(current_block_id);
         // jump into the the lambda
@@ -900,10 +901,6 @@ impl Flatten {
         call_span_id: SpanId,
         b: &mut NB,
     ) -> Result<FlattenResult> {
-        // we inline here for nested functions
-        // we bake the lambda, and then jump to it
-        // push an extra arg into the arglist, so we can jump to the next block
-
         // create a new block static block
         let next_block_id = self.blocks.new_block(scope_id);
 
@@ -917,6 +914,35 @@ impl Flatten {
         );
         let blocks = vec![next_link_id];
 
+        self.push_call_inline_cps_inner(
+            abstraction_id,
+            name,
+            scope_id,
+            args,
+            &blocks,
+            next_link_id,
+            call_span_id,
+            b,
+        )
+    }
+
+    fn push_call_inline_cps_inner(
+        &mut self,
+        abstraction_id: AbstractionId,
+        name: StringKey,
+        scope_id: ScopeId,
+        args: Vec<Argument>,
+        blocks: &[LinkId],
+        call_link_id: LinkId,
+        call_span_id: SpanId,
+        b: &mut NB,
+    ) -> Result<FlattenResult> {
+        // we inline here for nested functions
+        // we bake the lambda, and then jump to it
+        // push an extra arg into the arglist, so we can jump to the next block
+        //
+        let next_block_id = self.blocks.new_block(scope_id);
+
         // calculate the arguments
         let (_calc_args, call_values, _call_func_type, def_func_type) =
             self.push_function_call_arguments(abstraction_id, args, &blocks, call_span_id, b)?;
@@ -928,7 +954,7 @@ impl Flatten {
         let body = a.def.body.clone().unwrap();
         let def_span_id = a.def_span_id;
 
-        let result = self.push_bake_lambda(
+        let result = self.push_bake_lambda_and_next(
             name,
             name,
             scope_id,
@@ -942,18 +968,22 @@ impl Flatten {
             VarDefinitionSpace::Reg,
             b,
         )?;
-        let (_variant_id, _, fun_block_id, _, _, _, ret_block_ty, r) = result;
+        let (_variant_id, _fun_scope_id, fun_block_id, _entry_link_id, _next_arg_ty, v_args, ret_block_ty, r) =
+            result;
 
+        // push jump to CPS block
+        let _ = self.push_call_values(&v_args);
+        let link_id = self.push_placeholder_terminal(call_link_id, call_span_id);
+
+        // Call the lambda that we just created
         // now that we have the arguments calculated, and the lambda baked, jump!
         self.switch_blocks(current_block_id);
         // jump into the the lambda
         self.push_jump(fun_block_id.into(), call_values, call_span_id);
 
         self.switch_blocks(next_block_id);
-        let link_id = self.push_placeholder_terminal(next_link_id, call_span_id);
         // in the next block
 
-        //Ok(FlattenResult::link(link_id))
-        Ok(r)
+        Ok(FlattenResult::link(link_id))
     }
 }
