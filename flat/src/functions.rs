@@ -389,7 +389,7 @@ impl Flatten {
 
             let result = self.push_bake_function(
                 abstraction_id,
-                call_func_type.clone(),
+                call_func_type.get_func().clone(),
                 name,
                 global_key,
                 b,
@@ -415,7 +415,13 @@ impl Flatten {
     pub fn push_bake(&mut self, name: StringKey, func_type: AstType, b: &mut NB) -> Result<LinkId> {
         let current_block_id = self.current_block_id();
         if let Some((_, abstraction_id)) = self.resolve_lambda(current_block_id, name) {
-            let result = self.push_bake_function(abstraction_id, func_type, name, name, b);
+            let result = self.push_bake_function(
+                abstraction_id,
+                func_type.get_func().clone(),
+                name,
+                name,
+                b,
+            );
             let (_variant_id, r) = result?;
             self.switch_blocks(current_block_id);
             Ok(r.link_id.unwrap())
@@ -430,7 +436,7 @@ impl Flatten {
     fn push_bake_function(
         &mut self,
         abstraction_id: AbstractionId,
-        def_func_ty: AstType,
+        def_func_ty: AstFuncType,
         name: StringKey,
         global_name: StringKey,
         b: &mut NB,
@@ -440,8 +446,8 @@ impl Flatten {
         let scope_id = block.scope_id;
 
         let a = self.abstractions.get(abstraction_id);
-        let def = a.def.clone();
         let def_span_id = a.def_span_id;
+        let body = a.def.body.clone().unwrap();
 
         // create a next scope, that includes the function
         // when the function returns it jumps to the return block, which is the next function
@@ -453,13 +459,12 @@ impl Flatten {
 
         let (next_block_id, next_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
 
-        let body = *def.body.unwrap();
         let (v_id, _scope, _block_id, entry_link_id, _, argvec, _r) = self.push_bake_lambda(
             name,
             global_name,
             next_scope_id,
             next_block_id,
-            body,
+            *body,
             def_func_ty,
             def_span_id,
             def_span_id,
@@ -482,7 +487,7 @@ impl Flatten {
         next_scope_id: ScopeId,
         next_block_id: BlockId,
         body: AstNode,
-        def_func_type: AstType,
+        def_func_type: AstFuncType,
         def_span_id: SpanId,
         call_span_id: SpanId,
         scope_type: ScopeType,
@@ -509,6 +514,8 @@ impl Flatten {
         let block = self.blocks.get_block(current_block_id);
         let scope_id = block.scope_id;
 
+        let block_ty: AstType = def_func_type.into();
+
         // New Func Scope
         let (fun_block_id, fun_scope_id) = self.new_scope_and_block(scope_type, next_scope_id);
 
@@ -523,14 +530,15 @@ impl Flatten {
         //println!("push start block2: {}{}", fun_scope_id, fun_block_id);
         let (entry_link_id, _) = self.push_start_block(
             fun_scope_id,
-            def_func_type.clone(),
+            block_ty.clone(),
+            //def_func_type.clone().into(),
             Some(global_name),
             def_span_id,
             mem,
         );
 
         // add entry to scope, for recursion
-        let r_ty1 = b.types.u.resolve(&def_func_type).unwrap();
+        let r_ty1 = b.types.u.resolve(&block_ty).unwrap();
         // we need to know the link
         let variant_id = self.variant_add(scope_id, local_name, r_ty1, entry_link_id, fun_block_id);
 
@@ -544,8 +552,7 @@ impl Flatten {
         let _ = self.push_node(body, b)?;
         self.maybe_terminate_block(next_block_id, def_span_id);
 
-        let next_arg_ty =
-            self.resolve_return_type(fun_block_id, def_func_type.clone(), call_span_id, b);
+        let next_arg_ty = self.resolve_return_type(fun_block_id, block_ty.into(), call_span_id, b);
 
         assert!(next_arg_ty.is_composite());
         let block_ty = AstType::Func(
@@ -750,7 +757,7 @@ impl Flatten {
         scope_id: ScopeId,
         call_values: ArgVec,
         def: Lambda,
-        def_func_type: AstType,
+        def_func_type: AstFuncType,
         def_span_id: SpanId,
         call_span_id: SpanId,
         b: &mut NB,
