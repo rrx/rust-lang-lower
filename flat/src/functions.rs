@@ -531,7 +531,6 @@ impl Flatten {
             .block_succ(current_block_id, fun_block_id, succ_type);
 
         self.switch_blocks(fun_block_id);
-        //println!("push start block2: {}{}", fun_scope_id, fun_block_id);
         let (entry_link_id, _) = self.push_start_block(
             fun_scope_id,
             block_ty.clone(),
@@ -615,7 +614,6 @@ impl Flatten {
         span_id: SpanId,
         b: &mut NB,
     ) -> Result<ArgVec> {
-        //let mut current_block_id = self.block_id;
         let mut link_ids = vec![];
         let mut values = vec![];
         for a in args.into_iter() {
@@ -638,7 +636,6 @@ impl Flatten {
                     let mut args_values = vec![];
                     for expr in exprs {
                         let span_id = expr.span_id;
-                        //self.switch_blocks(current_block_id);
                         let r = self.push_node(expr, b)?;
                         let link_id = r.link_id.unwrap();
                         let ty = self.get_type(link_id).clone();
@@ -676,6 +673,37 @@ impl Flatten {
         Ok(values)
     }
 
+    pub fn push_function_call_arguments(
+        &mut self,
+        abstraction_id: AbstractionId,
+        args: Vec<Argument>,
+        call_span_id: SpanId,
+        b: &mut NB,
+    ) -> Result<(ArgVec, AstFuncType, AstFuncType)> {
+        let a = self.abstractions.get(abstraction_id);
+        let def_span_id = a.def_span_id;
+        let def_func_type = b.types.r(a.def.fun_type).get_func().clone();
+        // look up the prototype
+        // calculate the calling arguments
+        let (args, _) =
+            Self::calculate_function_arguments(&a.def, &args, def_span_id, call_span_id, b)?;
+        let call_values = self.push_call_arguments(args.clone(), call_span_id, b)?;
+        let call_ty = crate::argvec_type(&call_values);
+        let def_func_type = self.refresh_func_type(&def_func_type, b);
+
+        // construct call function type
+        let call_func_type =
+            AstFuncType::new(AstType::Struct(call_ty.fields()), def_func_type.ret.clone());
+
+        b.unify(
+            &call_func_type.clone().into(),
+            call_span_id,
+            &def_func_type.clone().into(),
+            def_span_id,
+        );
+        Ok((call_values, call_func_type, def_func_type))
+    }
+
     pub(super) fn push_call(
         &mut self,
         name: StringKey,
@@ -705,29 +733,33 @@ impl Flatten {
         //(scope_id, self.current_block_id())
         //);
 
-        let a = self.abstractions.get(abstraction_id);
-        let def_span_id = a.def_span_id;
-        let def = a.def.clone();
-        let def_func_type = b.types.r(a.def.fun_type).get_func().clone();
+        //let a = self.abstractions.get(abstraction_id);
+        //let def_span_id = a.def_span_id;
+        //let def = a.def.clone();
 
-        // look up the prototype
-        // calculate the calling arguments
-        let (args, _) =
-            Self::calculate_function_arguments(&def, &args, def_span_id, call_span_id, b)?;
-        let call_values = self.push_call_arguments(args.clone(), call_span_id, b)?;
-        let call_ty = crate::argvec_type(&call_values);
-        let def_func_type = self.refresh_func_type(&def_func_type, b);
+        let (call_values, call_func_type, def_func_type) =
+            self.push_function_call_arguments(abstraction_id, args, call_span_id, b)?;
 
-        // construct call function type
-        let call_func_type =
-            AstFuncType::new(AstType::Struct(call_ty.fields()), def_func_type.ret.clone());
+        //let def_func_type = b.types.r(a.def.fun_type).get_func().clone();
 
-        b.unify(
-            &call_func_type.clone().into(),
-            call_span_id,
-            &def_func_type.clone().into(),
-            def_span_id,
-        );
+        //// look up the prototype
+        //// calculate the calling arguments
+        //let (args, _) =
+        //Self::calculate_function_arguments(&def, &args, def_span_id, call_span_id, b)?;
+        //let call_values = self.push_call_arguments(args.clone(), call_span_id, b)?;
+        //let call_ty = crate::argvec_type(&call_values);
+        //let def_func_type = self.refresh_func_type(&def_func_type, b);
+
+        //// construct call function type
+        //let call_func_type =
+        //AstFuncType::new(AstType::Struct(call_ty.fields()), def_func_type.ret.clone());
+
+        //b.unify(
+        //&call_func_type.clone().into(),
+        //call_span_id,
+        //&def_func_type.clone().into(),
+        //def_span_id,
+        //);
 
         let is_static = self.static_scope_id() == scope_id;
         if is_static {
@@ -743,13 +775,12 @@ impl Flatten {
         } else {
             self.switch_blocks(current_block_id);
             self.push_call_inline(
+                abstraction_id,
                 name,
                 scope_id,
                 call_values,
-                def,
-                def_func_type.into(),
-                def_span_id,
                 call_span_id,
+                def_func_type.into(),
                 b,
             )
         }
@@ -757,13 +788,12 @@ impl Flatten {
 
     fn push_call_inline(
         &mut self,
+        abstraction_id: AbstractionId,
         name: StringKey,
         scope_id: ScopeId,
         call_values: ArgVec,
-        def: Lambda,
-        def_func_type: AstFuncType,
-        def_span_id: SpanId,
         call_span_id: SpanId,
+        def_func_type: AstFuncType,
         b: &mut NB,
     ) -> Result<FlattenResult> {
         // we inline here for nested functions
@@ -771,8 +801,11 @@ impl Flatten {
         // create a new block
         // push an extra arg into the arglist, so we can jump to the next block
         //
+        let a = self.abstractions.get(abstraction_id);
+        let body = a.def.body.clone().unwrap();
         let current_block_id = self.current_block_id();
         let next_block_id = self.blocks.new_block(scope_id);
+        let def_span_id = a.def_span_id;
         //let callback_arg = Argument::Positional(
         //Ast::Literal(Literal::Block(next_block_id))
         //.node(call_span_id)
@@ -783,13 +816,12 @@ impl Flatten {
         //new_args.push(arg);
         //}
 
-        let body = *def.body.unwrap();
         let result = self.push_bake_lambda(
             name,
             name,
             scope_id,
             next_block_id,
-            body,
+            *body,
             def_func_type.clone().into(),
             def_span_id,
             call_span_id,

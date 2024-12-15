@@ -972,7 +972,7 @@ impl Flatten {
     pub fn push_function_call(
         &mut self,
         v_fun: LinkId,
-        values: Vec<(Option<StringKey>, LinkId, AstType, SpanId)>,
+        values: ArgVec,
         ret_ty: ReturnType,
         span_id: SpanId,
     ) -> Result<FlattenResult> {
