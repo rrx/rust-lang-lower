@@ -25,6 +25,9 @@ impl std::fmt::Display for ValueId {
 pub struct LinkId(pub(crate) u32);
 
 impl LinkId {
+    pub fn new(index: usize) -> Self {
+        Self(index as u32)
+    }
     pub fn index(&self) -> usize {
         self.0 as usize
     }

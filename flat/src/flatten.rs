@@ -37,7 +37,7 @@ pub struct CodeEntry {
     pub(super) name: Option<StringKey>,
     pub link: Option<LinkId>,
     pub(super) value_id: Option<ValueId>,
-    pub(super) block_id: BlockId,
+    pub block_id: BlockId,
     pub(super) ty: AstType,
     pub(super) span_id: SpanId,
     pub(super) mem: VarDefinitionSpace,

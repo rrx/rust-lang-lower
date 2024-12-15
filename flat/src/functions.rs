@@ -772,7 +772,25 @@ impl Flatten {
             )
         } else {
             self.switch_blocks(current_block_id);
+
+            //if false {
             self.push_call_inline(abstraction_id, name, scope_id, args, call_span_id, b)
+            /*
+            } else {
+                // create a new block static block
+                let next_block_id = self.blocks.new_block(scope_id);
+                let (_v_block, v_args) = self.push_start_block(
+                    scope_id,
+                    ret_block_ty.clone().into(),
+                    Some(b.labels.s(&cont_name)),
+                    call_span_id,
+                    VarDefinitionSpace::Reg,
+                );
+
+                let ret_block_ty = self.push_call_inline_cps(abstraction_id, name, scope_id, args, call_span_id, b)?;
+                self.switch_blocks(next_block_id);
+            }
+                */
         }
     }
 
@@ -791,7 +809,17 @@ impl Flatten {
 
         // create a new block static block
         let next_block_id = self.blocks.new_block(scope_id);
-        let blocks = vec![];
+
+        let code = LCode::Val(Literal::Block(next_block_id));
+        let next_link_id = self.push_code(
+            code,
+            AstType::JumpTarget,
+            None,
+            call_span_id,
+            VarDefinitionSpace::Reg,
+        );
+
+        let blocks = vec![next_link_id];
 
         // calculate the arguments
         let (_calc_args, call_values, _call_func_type, def_func_type) =
@@ -818,7 +846,7 @@ impl Flatten {
             VarDefinitionSpace::Reg,
             b,
         )?;
-        let (_variant_id, _, fun_block_id, _, _, _, ret_block_ty, r) = result;
+        let (_variant_id, _, fun_block_id, _, _, _, _, r) = result;
         // now that we have the arguments calculated, and the lambda baked, jump!
         self.switch_blocks(current_block_id);
         // jump into the the lambda
@@ -881,6 +909,7 @@ impl Flatten {
         let link_id = self.push_placeholder_terminal(next_link_id, call_span_id);
         // in the next block
 
-        Ok(FlattenResult::link(link_id))
+        //Ok(FlattenResult::link(link_id))
+        Ok(r)
     }
 }
