@@ -1070,14 +1070,9 @@ impl Flatten {
         def_func_type: AstFuncType,
         b: &mut NB,
     ) -> Result<(BlockId, AstFuncType, AstType)> {
-        // create the new empty block
-        let next_block_id = self.blocks.new_block(scope_id);
-        println!("next_block_id2: {}", next_block_id);
-
         let a = self.abstractions.get(abstraction_id);
         println!("a: {:?}", a);
         let def_span_id = a.def_span_id;
-
         let scope_type = ScopeType::Function;
         let succ_type = Successor::BlockScope;
         let mem = VarDefinitionSpace::Reg;
@@ -1107,58 +1102,6 @@ impl Flatten {
                 println!("variant_ty2: {}", variant_ty);
                 println!("ret_func_type2: {}", ret_func_type);
                 println!("next_arg_ty2: {}", next_arg_ty);
-
-                /*
-                let body = a.def.body.clone().unwrap();
-                let result = self.push_bake_lambda(
-                    name,
-                    name,
-                    scope_id,
-                    next_block_id,
-                    *body,
-                    def_func_type,
-                    def_span_id,
-                    call_span_id,
-                    scope_type,
-                    succ_type,
-                    mem,
-                    b,
-                )?;
-
-                let (
-                    variant_id1,
-                    fun_scope_id1,
-                    fun_block_id1,
-                    _entry_link_id,
-                    next_arg_ty1,
-                    ret_func_type1,
-                    variant_ty1,
-                ) = result;
-
-                // push the continuation block to which the function returns control
-                // this might just be the return block
-                let s_name = b.labels.r(name.into());
-                let cont_name = format!("{}.next3", s_name);
-
-                self.switch_blocks(next_block_id);
-
-                let (_v_block, v_args) = self.push_start_block(
-                    scope_id,
-                    ret_func_type.clone().into(),
-                    Some(b.labels.s(&cont_name)),
-                    call_span_id,
-                    VarDefinitionSpace::Reg,
-                );
-                */
-
-                //let _ = self.push_call_values(&v_args);
-                // complete the lambda bake with a jump to the continuation, this is the exit of
-                // the lambda
-                //self.push_goto_link(call_link_id, v_args.clone(), call_span_id)?;
-
-                // goto the variant, passing the continuation.  This passes control to the exit.
-                //self.push_goto_link(call_link_id, call_values.clone(), call_span_id)?;
-
                 (
                     variant_id,
                     fun_block_id,
@@ -1168,6 +1111,10 @@ impl Flatten {
                     next_arg_ty,
                 )
             } else {
+                // create the new empty block
+                let next_block_id = self.blocks.new_block(scope_id);
+                println!("next_block_id2: {}", next_block_id);
+
                 let body = a.def.body.clone().unwrap();
                 let result = self.push_bake_lambda_and_update_next(
                     name,
@@ -1202,7 +1149,7 @@ impl Flatten {
                 let _ = self.push_call_values(&v_args);
                 // complete the lambda bake with a jump to the continuation, this is the exit of
                 // the lambda.  The continuation is part of the signature, so we can call it again
-                let goto_link_id =
+                let _goto_link_id =
                     self.push_goto_link(call_link_id, v_args.clone(), call_span_id)?;
 
                 (
