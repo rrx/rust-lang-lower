@@ -240,11 +240,6 @@ impl Flatten {
             value_map.insert(key, callback_arg.into());
             populated_set.insert(key);
             fields_list.push((Some(key), AstType::JumpTarget));
-            //args.push(callback_arg);
-            //let mut new_args = vec![callback_arg];
-            //for arg in args {
-            //new_args.push(arg);
-            //}
         }
         for (index, arg) in args.iter().enumerate() {
             let is_last_arg = index == args.len() - 1;
@@ -522,6 +517,89 @@ impl Flatten {
         AstFuncType, // next block return type
         FlattenResult,
     )> {
+        let result = self.push_bake_lambda_inner(
+            local_name,
+            global_name,
+            next_scope_id,
+            next_block_id,
+            body,
+            def_func_type,
+            def_span_id,
+            call_span_id,
+            scope_type,
+            succ_type,
+            mem,
+            b,
+        )?;
+
+        let (variant_id, fun_scope_id, fun_block_id, entry_link_id, next_arg_ty, ret_block_ty) =
+            result;
+
+        // push the continuation block to which the function returns control
+        // this might just be the return block
+        let s_name = b.labels.r(local_name.into());
+        let cont_name = format!("{}.cont", s_name);
+
+        self.switch_blocks(next_block_id);
+        let (_v_block, v_args) = self.push_start_block(
+            next_scope_id,
+            ret_block_ty.clone().into(),
+            Some(b.labels.s(&cont_name)),
+            call_span_id,
+            VarDefinitionSpace::Reg,
+        );
+
+        let next_link_id = match &next_arg_ty {
+            AstType::Unit => None,
+            _ => {
+                if v_args.len() == 0 {
+                    None
+                } else {
+                    Some(v_args.first().unwrap().1)
+                }
+            }
+        };
+
+        let r = if let Some(link_id) = next_link_id {
+            FlattenResult::link(link_id)
+        } else {
+            FlattenResult::statement()
+        };
+
+        Ok((
+            variant_id,
+            fun_scope_id,
+            fun_block_id,
+            entry_link_id,
+            next_arg_ty,
+            v_args,
+            ret_block_ty,
+            r,
+        ))
+    }
+
+    fn push_bake_lambda_inner(
+        &mut self,
+        local_name: StringKey,
+        global_name: StringKey,
+        next_scope_id: ScopeId,
+        next_block_id: BlockId,
+        body: AstNode,
+        def_func_type: AstFuncType,
+        def_span_id: SpanId,
+        call_span_id: SpanId,
+        scope_type: ScopeType,
+        succ_type: Successor,
+        mem: VarDefinitionSpace,
+        b: &mut NB,
+    ) -> Result<(
+        VariantId,
+        ScopeId,
+        BlockId,
+        LinkId,
+        AstType,
+        AstFuncType, // next block return type
+    )> {
         // lower a function as an inline block
         // returning from the function passes control the enxt block
         //
@@ -578,46 +656,13 @@ impl Flatten {
             ret: ReturnType::Single(AstType::Unit).into(),
         };
 
-        // push the continuation block to which the function returns control
-        // this might just be the return block
-        let s_name = b.labels.r(local_name.into());
-        let cont_name = format!("{}.cont", s_name);
-
-        self.switch_blocks(next_block_id);
-        let (_v_block, v_args) = self.push_start_block(
-            next_scope_id,
-            ret_block_ty.clone().into(),
-            Some(b.labels.s(&cont_name)),
-            call_span_id,
-            VarDefinitionSpace::Reg,
-        );
-
-        let next_link_id = match &next_arg_ty {
-            AstType::Unit => None,
-            _ => {
-                if v_args.len() == 0 {
-                    None
-                } else {
-                    Some(v_args.first().unwrap().1)
-                }
-            }
-        };
-
-        let r = if let Some(link_id) = next_link_id {
-            FlattenResult::link(link_id)
-        } else {
-            FlattenResult::statement()
-        };
-
         Ok((
             variant_id,
             fun_scope_id,
             fun_block_id,
             entry_link_id,
             next_arg_ty,
-            v_args,
             ret_block_ty,
-            r,
         ))
     }
 
@@ -810,16 +855,7 @@ impl Flatten {
         // create a new block static block
         let next_block_id = self.blocks.new_block(scope_id);
 
-        let code = LCode::Val(Literal::Block(next_block_id));
-        let next_link_id = self.push_code(
-            code,
-            AstType::JumpTarget,
-            None,
-            call_span_id,
-            VarDefinitionSpace::Reg,
-        );
-
-        let blocks = vec![next_link_id];
+        let blocks = vec![];
 
         // calculate the arguments
         let (_calc_args, call_values, _call_func_type, def_func_type) =
@@ -862,7 +898,6 @@ impl Flatten {
         scope_id: ScopeId,
         args: Vec<Argument>,
         call_span_id: SpanId,
-        next_link_id: LinkId,
         b: &mut NB,
     ) -> Result<FlattenResult> {
         // we inline here for nested functions
@@ -871,6 +906,15 @@ impl Flatten {
 
         // create a new block static block
         let next_block_id = self.blocks.new_block(scope_id);
+
+        let code = LCode::Val(Literal::Block(next_block_id));
+        let next_link_id = self.push_code(
+            code,
+            AstType::JumpTarget,
+            None,
+            call_span_id,
+            VarDefinitionSpace::Reg,
+        );
         let blocks = vec![next_link_id];
 
         // calculate the arguments
