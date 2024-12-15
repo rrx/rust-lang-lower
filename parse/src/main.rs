@@ -49,6 +49,7 @@ fn make_path<'a>(path: &'a str, extension: &str) -> String {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
+    //unsafe { backtrace_on_stack_overflow::enable() };
     set_up_color_terminal();
     SimpleLogger::new().init().unwrap();
     let config: Config = argh::from_env();

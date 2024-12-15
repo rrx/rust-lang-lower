@@ -17,6 +17,7 @@ simple_logger = "^4.3.0"
 anyhow = "*"
 thiserror = "*"
 argh = "0.1.12"
+backtrace-on-stack-overflow = { git = "https://github.com/matklad/backtrace-on-stack-overflow.git" }
 
 [dev-dependencies]
 criterion = "0.3"

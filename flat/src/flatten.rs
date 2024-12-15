@@ -1277,12 +1277,11 @@ impl Flatten {
         }
 
         let entry = self.get_entry(last_link_id);
-        let code = entry.code.clone();
-        if let LCode::PlaceholderTerminal(_) = code {
+
+        let code = if let LCode::PlaceholderTerminal(_) = entry.code {
             if target_block_ids.len() == 1 {
                 let block_id = target_block_ids.last().unwrap();
-                let entry = self.get_entry_mut(last_link_id);
-                entry.code = LCode::Jump(block_id.into());
+                Some(LCode::Jump(block_id.into()))
             } else if target_block_ids.len() > 1 {
                 target_block_ids.sort();
                 let mut m = HashSet::new();
@@ -1303,8 +1302,7 @@ impl Flatten {
                 }
                 */
 
-                let entry = self.get_entry_mut(last_link_id);
-                entry.code = LCode::Switch(arg_link_id, m);
+                Some(LCode::Switch(arg_link_id, m))
 
                 /*
                 self.scoped_continuations.connect(
@@ -1315,11 +1313,18 @@ impl Flatten {
                 */
             } else {
                 b.push_error("Missing Targets", entry.span_id);
+                None
                 //unreachable!();
             }
         } else {
             unreachable!();
+        };
+        if let Some(code) = code {
+            let entry = self.get_entry_mut(last_link_id);
+            println!("replace: {} {:?}=>{:?}", last_link_id, entry.code, code);
+            entry.code = code;
         }
+
         last_link_id
     }
 
@@ -1457,7 +1462,28 @@ impl Flatten {
             Ast::Literal(lit) => {
                 self.ensure_open(span_id, b);
                 // literal is expression, non-terminal
-                let ty: AstType = lit.clone().into();
+                let ty: AstType = match &lit {
+                    //Literal::Block(block_id, ty) => {
+                    //let link_id = self.block_links.get(&block_id).unwrap();
+                    //let entry = self.get_entry(*link_id);
+                    //println!("entry: {:?}", entry);
+
+                    //let y = b.types.fresh_unknown();
+                    //y
+                    //ty.clone()
+                    //}
+                    Literal::Link(link_id) => {
+                        let _link_id = LinkId::new(*link_id);
+                        //let entry = self.get_entry(link_id);
+                        //println!("entry: {:?}", entry);
+                        //let x = entry.ty.clone();
+                        //println!("X: {:?}", x);
+                        let y = b.types.fresh_unknown();
+                        //b.unify(&x, span_id, &y, span_id);
+                        y
+                    }
+                    _ => lit.clone().into(),
+                };
                 //let mem = if block.scope_id == fenv.static_scope_id() {
                 //VarDefinitionSpace::Static
                 //} else {
@@ -1873,14 +1899,9 @@ impl Flatten {
                     }
                     _ => unimplemented!("{:?}", expr),
                 };
+                let ty = AstType::JumpTarget;
                 let code = LCode::Val(Literal::Block(block_id));
-                let link_id = self.push_code(
-                    code,
-                    AstType::JumpTarget,
-                    None,
-                    span_id,
-                    VarDefinitionSpace::Default,
-                );
+                let link_id = self.push_code(code, ty, None, span_id, VarDefinitionSpace::Default);
                 Ok(FlattenResult::link(link_id))
             }
 

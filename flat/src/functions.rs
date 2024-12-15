@@ -173,7 +173,7 @@ impl Flatten {
     pub fn calculate_function_arguments(
         def: &Lambda,
         args: &[Argument],
-        blocks: &[(LinkId, AstType)],
+        blocks: &[(LinkId, BlockId, AstType)],
         def_span_id: SpanId,
         call_span_id: SpanId,
         b: &mut NB,
@@ -229,11 +229,13 @@ impl Flatten {
             value_map.insert(*key, value.clone());
         }
 
-        for (_index, (link_id, ty)) in blocks.iter().enumerate() {
+        for (_index, (_link_id, block_id, ty)) in blocks.iter().enumerate() {
             let key = b.labels.fresh_key(".b");
-            // insert the new cps argument
             let callback_arg = Argument::Positional(
-                Ast::Literal(Literal::Link(link_id.index()))
+                //Ast::Literal(Literal::Link(link_id.index()))
+                //.node(call_span_id)
+                //.into(),
+                Ast::Literal(Literal::Block(*block_id))
                     .node(call_span_id)
                     .into(),
             );
@@ -738,7 +740,7 @@ impl Flatten {
         &mut self,
         abstraction_id: AbstractionId,
         args: Vec<Argument>,
-        blocks: &[(LinkId, AstType)],
+        blocks: &[(LinkId, BlockId, AstType)],
         call_span_id: SpanId,
         b: &mut NB,
     ) -> Result<(
@@ -762,6 +764,7 @@ impl Flatten {
             call_span_id,
             b,
         )?;
+        println!("call_fields: {:?}", call_fields);
         let def_func_type = AstFuncType::new(
             AstType::Struct(call_fields),
             ReturnType::Single(def_ret_type),
@@ -912,7 +915,7 @@ impl Flatten {
         );
 
         // pass the link along with the call arguments
-        let blocks = vec![(next_link_id, ty.clone())];
+        let blocks = vec![(next_link_id, next_block_id, ty.clone())];
         // calculate the arguments for the CPS function
         let (_calc_args, call_values, _call_func_type, def_func_type) =
             self.push_function_call_arguments(abstraction_id, args, &blocks, call_span_id, b)?;
@@ -1045,11 +1048,9 @@ impl Flatten {
             _,
         ) = result;
 
+        // we have control here.  Finish the block by jumping to the CPS function
         let _ = self.push_call_values(&v_args);
         self.push_goto_link(call_link_id, v_args, call_span_id)?;
-        // we have control here.  Finish the block by jumping to the CPS function
-        //let _ = self.push_call_values(&v_args);
-        //let _ = self.push_placeholder_terminal(call_link_id, call_span_id);
 
         // restore position back to where we started
         self.switch_blocks(current_block_id);

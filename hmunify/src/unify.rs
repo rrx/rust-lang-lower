@@ -377,6 +377,7 @@ impl TypeUnify {
     }
 
     pub fn resolve(&mut self, a: &AstType) -> Option<AstType> {
+        //println!("Resolve: {}", a);
         match a {
             AstType::Args(v) => self.resolve(v).map(|x| AstType::Args(x.into())),
             AstType::Ptr(v) => self.resolve(v).map(|x| AstType::Ptr(x.into())),
@@ -395,16 +396,6 @@ impl TypeUnify {
                     None
                 }
             }
-            /*
-            AstType::TargetUnion(args, ret) => {
-                let resolved_args = args
-                    .clone()
-                    .into_iter()
-                    .map(|v| self.resolve(&v).map(|x| x).unwrap_or(v))
-                    .collect::<Vec<_>>();
-                Some(AstType::TargetUnion(resolved_args, ret.clone()))
-            }
-            */
             AstType::Func(f) => {
                 assert!(f.args.is_composite());
 

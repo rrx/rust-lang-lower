@@ -107,8 +107,8 @@ impl From<&Literal> for AstType {
     fn from(item: &Literal) -> Self {
         match item {
             Literal::Block(_) => AstType::JumpTarget,
-            Literal::Link(_) => AstType::JumpTarget,
-            Literal::Abstraction(_) => AstType::JumpTarget,
+            Literal::Link(_) => unreachable!(), //AstType::JumpTarget,
+            Literal::Abstraction(_) => unreachable!(), //AstType::JumpTarget,
             Literal::Int(_) => AstType::Int,
             Literal::Float(_) => AstType::Float,
             Literal::Bool(_) => AstType::Bool,
