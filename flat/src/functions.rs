@@ -173,7 +173,7 @@ impl Flatten {
     pub fn calculate_function_arguments(
         def: &Lambda,
         args: &[Argument],
-        blocks: &[BlockId],
+        blocks: &[LinkId],
         def_span_id: SpanId,
         call_span_id: SpanId,
         b: &mut NB,
@@ -229,11 +229,11 @@ impl Flatten {
             value_map.insert(*key, value.clone());
         }
 
-        for (index, block_id) in blocks.iter().enumerate() {
+        for (index, link_id) in blocks.iter().enumerate() {
             let key = b.labels.fresh_key(".b");
             // insert the new cps argument
             let callback_arg = Argument::Positional(
-                Ast::Literal(Literal::Block(*block_id))
+                Ast::Literal(Literal::Link(link_id.index()))
                     .node(call_span_id)
                     .into(),
             );
@@ -477,7 +477,7 @@ impl Flatten {
 
         let (next_block_id, next_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
 
-        let (v_id, _scope, _block_id, entry_link_id, _, argvec, _r) = self.push_bake_lambda(
+        let (v_id, _scope, _block_id, entry_link_id, _, argvec, _, _) = self.push_bake_lambda(
             name,
             global_name,
             next_scope_id,
@@ -518,7 +518,8 @@ impl Flatten {
         BlockId,
         LinkId,
         AstType,
-        ArgVec, // return the argvec for the next block, which depends on the function
+        ArgVec,      // return the argvec for the next block, which depends on the function
+        AstFuncType, // next block return type
         FlattenResult,
     )> {
         // lower a function as an inline block
@@ -572,13 +573,10 @@ impl Flatten {
         let next_arg_ty = self.resolve_return_type(fun_block_id, block_ty.into(), call_span_id, b);
 
         assert!(next_arg_ty.is_composite());
-        let block_ty = AstType::Func(
-            AstFuncType {
-                args: next_arg_ty.clone().into(),
-                ret: ReturnType::Single(AstType::Unit).into(),
-            }
-            .into(),
-        );
+        let ret_block_ty = AstFuncType {
+            args: next_arg_ty.clone().into(),
+            ret: ReturnType::Single(AstType::Unit).into(),
+        };
 
         // push the continuation block to which the function returns control
         // this might just be the return block
@@ -588,7 +586,7 @@ impl Flatten {
         self.switch_blocks(next_block_id);
         let (_v_block, v_args) = self.push_start_block(
             next_scope_id,
-            block_ty.clone(),
+            ret_block_ty.clone().into(),
             Some(b.labels.s(&cont_name)),
             call_span_id,
             VarDefinitionSpace::Reg,
@@ -618,6 +616,7 @@ impl Flatten {
             entry_link_id,
             next_arg_ty,
             v_args,
+            ret_block_ty,
             r,
         ))
     }
@@ -691,10 +690,15 @@ impl Flatten {
         &mut self,
         abstraction_id: AbstractionId,
         args: Vec<Argument>,
-        blocks: &[BlockId],
+        blocks: &[LinkId],
         call_span_id: SpanId,
         b: &mut NB,
-    ) -> Result<(Vec<Argument>, ArgVec, AstFuncType, AstFuncType)> {
+    ) -> Result<(
+        Vec<Argument>,
+        ArgVec,
+        AstFuncType, // call_func_type
+        AstFuncType, // def_func_type
+    )> {
         let a = self.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
         //let def_func_type = b.types.r(a.def.fun_type).get_func().clone();
@@ -784,12 +788,10 @@ impl Flatten {
         // we inline here for nested functions
         // we bake the lambda, and then jump to it
         // push an extra arg into the arglist, so we can jump to the next block
-        //
-        //
 
-        // create a new block
+        // create a new block static block
         let next_block_id = self.blocks.new_block(scope_id);
-        let blocks = vec![next_block_id];
+        let blocks = vec![];
 
         // calculate the arguments
         let (_calc_args, call_values, _call_func_type, def_func_type) =
@@ -808,7 +810,7 @@ impl Flatten {
             scope_id,
             next_block_id,
             *body,
-            def_func_type.clone().into(),
+            def_func_type.clone(),
             def_span_id,
             call_span_id,
             ScopeType::Function,
@@ -816,12 +818,69 @@ impl Flatten {
             VarDefinitionSpace::Reg,
             b,
         )?;
-        let (_variant_id, _, fun_block_id, _, _, _, r) = result;
-
+        let (_variant_id, _, fun_block_id, _, _, _, ret_block_ty, r) = result;
         // now that we have the arguments calculated, and the lambda baked, jump!
         self.switch_blocks(current_block_id);
+        // jump into the the lambda
         self.push_jump(fun_block_id.into(), call_values, call_span_id);
         self.switch_blocks(next_block_id);
         Ok(r)
+    }
+
+    fn push_call_inline_cps(
+        &mut self,
+        abstraction_id: AbstractionId,
+        name: StringKey,
+        scope_id: ScopeId,
+        args: Vec<Argument>,
+        call_span_id: SpanId,
+        next_link_id: LinkId,
+        b: &mut NB,
+    ) -> Result<FlattenResult> {
+        // we inline here for nested functions
+        // we bake the lambda, and then jump to it
+        // push an extra arg into the arglist, so we can jump to the next block
+
+        // create a new block static block
+        let next_block_id = self.blocks.new_block(scope_id);
+        let blocks = vec![next_link_id];
+
+        // calculate the arguments
+        let (_calc_args, call_values, _call_func_type, def_func_type) =
+            self.push_function_call_arguments(abstraction_id, args, &blocks, call_span_id, b)?;
+
+        // bookmark this position, to continue later
+        let current_block_id = self.current_block_id();
+
+        let a = self.abstractions.get(abstraction_id);
+        let body = a.def.body.clone().unwrap();
+        let def_span_id = a.def_span_id;
+
+        let result = self.push_bake_lambda(
+            name,
+            name,
+            scope_id,
+            next_block_id,
+            *body,
+            def_func_type.clone(),
+            def_span_id,
+            call_span_id,
+            ScopeType::Function,
+            Successor::BlockScope,
+            VarDefinitionSpace::Reg,
+            b,
+        )?;
+        let (_variant_id, _, fun_block_id, _, _, _, ret_block_ty, r) = result;
+
+        // now that we have the arguments calculated, and the lambda baked, jump!
+        self.switch_blocks(current_block_id);
+        // jump into the the lambda
+        self.push_jump(fun_block_id.into(), call_values, call_span_id);
+
+        self.switch_blocks(next_block_id);
+        let link_id = self.push_placeholder_terminal(next_link_id, call_span_id);
+        // in the next block
+
+        Ok(FlattenResult::link(link_id))
     }
 }
