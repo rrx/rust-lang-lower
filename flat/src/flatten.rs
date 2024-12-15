@@ -1101,10 +1101,12 @@ impl Flatten {
         (block_link_id, v_args)
     }
 
+    /*
     pub fn save_ast_template_caller(&mut self, abs_id: AbstractionId, block_id: BlockId) {
         let a = self.abstractions.get_mut(abs_id);
         a.caller_blocks.insert(block_id);
     }
+    */
 
     pub fn save_ast_template(
         &mut self,

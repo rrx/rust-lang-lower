@@ -126,7 +126,7 @@ impl FunctionVariantBuilder {
 pub struct Abstraction {
     pub def: Lambda,
     pub def_span_id: SpanId,
-    pub caller_blocks: HashSet<BlockId>,
+    //pub caller_blocks: HashSet<BlockId>,
 }
 
 #[derive(Debug)]
@@ -150,7 +150,7 @@ impl AbstractionsBuilder {
         self.0.push(Abstraction {
             def,
             def_span_id,
-            caller_blocks: HashSet::new(),
+            //caller_blocks: HashSet::new(),
         });
         AbstractionId::new(index)
     }
@@ -173,7 +173,7 @@ impl Flatten {
     pub fn calculate_function_arguments(
         def: &Lambda,
         args: &[Argument],
-        blocks: &[LinkId],
+        blocks: &[(LinkId, AstType)],
         def_span_id: SpanId,
         call_span_id: SpanId,
         b: &mut NB,
@@ -229,7 +229,7 @@ impl Flatten {
             value_map.insert(*key, value.clone());
         }
 
-        for (_index, link_id) in blocks.iter().enumerate() {
+        for (_index, (link_id, ty)) in blocks.iter().enumerate() {
             let key = b.labels.fresh_key(".b");
             // insert the new cps argument
             let callback_arg = Argument::Positional(
@@ -239,8 +239,9 @@ impl Flatten {
             );
             value_map.insert(key, callback_arg.into());
             populated_set.insert(key);
-            fields_list.push((Some(key), AstType::JumpTarget));
+            fields_list.push((Some(key), ty.clone()));
         }
+
         for (index, arg) in args.iter().enumerate() {
             let is_last_arg = index == args.len() - 1;
             match arg {
@@ -513,7 +514,7 @@ impl Flatten {
         ScopeId,
         BlockId,
         LinkId,
-        AstType,
+        AstType,     // next block arg type
         ArgVec,      // return the argvec for the next block, which depends on the function
         AstFuncType, // next block return type
         FlattenResult,
@@ -539,9 +540,10 @@ impl Flatten {
         // push the continuation block to which the function returns control
         // this might just be the return block
         let s_name = b.labels.r(local_name.into());
-        let cont_name = format!("{}.cont", s_name);
+        let cont_name = format!("{}.next", s_name);
 
         self.switch_blocks(next_block_id);
+
         let (_v_block, v_args) = self.push_start_block(
             next_scope_id,
             ret_block_ty.clone().into(),
@@ -649,6 +651,7 @@ impl Flatten {
         self.maybe_terminate_block(next_block_id, def_span_id);
 
         let next_arg_ty = self.resolve_return_type(fun_block_id, block_ty.into(), call_span_id, b);
+        println!("next_arg_ty: {}", next_arg_ty);
 
         assert!(next_arg_ty.is_composite());
         let ret_block_ty = AstFuncType {
@@ -735,7 +738,7 @@ impl Flatten {
         &mut self,
         abstraction_id: AbstractionId,
         args: Vec<Argument>,
-        blocks: &[LinkId],
+        blocks: &[(LinkId, AstType)],
         call_span_id: SpanId,
         b: &mut NB,
     ) -> Result<(
@@ -821,7 +824,7 @@ impl Flatten {
             // call the inline function
             // returns a link, which points to the result, which should be a single value
             // if it's void, then it's a statement
-            if true {
+            if false {
                 self.push_call_inline(abstraction_id, name, scope_id, args, call_span_id, b)
             } else {
                 self.push_call_inline_cps(abstraction_id, name, scope_id, args, call_span_id, b)
@@ -872,7 +875,7 @@ impl Flatten {
             VarDefinitionSpace::Reg,
             b,
         )?;
-        let (_variant_id, _, fun_block_id, _, _, _, _, r) = result;
+        let (_variant_id, _, fun_block_id, _, _next_arg_ty, _, _, r) = result;
 
         // now that we have the arguments calculated, and the lambda baked, jump!
         self.switch_blocks(current_block_id);
@@ -895,22 +898,36 @@ impl Flatten {
     ) -> Result<FlattenResult> {
         // create a new block static blocks, which is the final destination
         let next_block_id = self.blocks.new_block(scope_id);
+        println!("next_block_id: {}", next_block_id);
 
+        let ty = b.types.fresh_unknown();
         // create a variable to point to the final destination
         let code = LCode::Val(Literal::Block(next_block_id));
         let next_link_id = self.push_code(
             code,
-            AstType::JumpTarget,
+            ty.clone(),
             None,
             call_span_id,
             VarDefinitionSpace::Reg,
         );
 
         // pass the link along with the call arguments
-        let blocks = vec![next_link_id];
+        let blocks = vec![(next_link_id, ty.clone())];
         // calculate the arguments for the CPS function
         let (_calc_args, call_values, _call_func_type, def_func_type) =
             self.push_function_call_arguments(abstraction_id, args, &blocks, call_span_id, b)?;
+
+        println!("def_func_type: {}", def_func_type);
+
+        b.unify(
+            &ty,
+            call_span_id,
+            &def_func_type.clone().into(),
+            call_span_id,
+        );
+
+        let t = b.types.u.resolve(&def_func_type.clone().into()).unwrap();
+        println!("t: {}", t);
 
         // bookmark position
         let current_block_id = self.current_block_id();
@@ -925,12 +942,18 @@ impl Flatten {
             def_func_type,
             b,
         )?;
-        let (fun_block_id, ret_block_ty) = result;
+        let (fun_block_id, ret_block_ty, next_arg_ty) = result;
 
         // push the continuation block to which the function returns control
         // this might just be the return block
         let s_name = b.labels.r(name.into());
-        let cont_name = format!("{}.cont", s_name);
+        let cont_name = format!("{}.cpsnext", s_name);
+
+        // block graph
+        self.blocks
+            .block_succ(current_block_id, fun_block_id, Successor::BlockScope);
+        self.blocks
+            .block_succ(fun_block_id, next_block_id, Successor::BlockScope);
 
         self.switch_blocks(next_block_id);
         let (_v_block, v_args) = self.push_start_block(
@@ -940,9 +963,12 @@ impl Flatten {
             call_span_id,
             VarDefinitionSpace::Reg,
         );
+        println!("v_args: {:?}", v_args);
+        println!("ret_block_ty: {:?}", ret_block_ty);
+        println!("next_arg_ty: {:?}", next_arg_ty);
 
-        let next_link_id = match &ret_block_ty.ret {
-            ReturnType::Single(AstType::Unit) => None,
+        let next_link_id = match &next_arg_ty {
+            AstType::Unit => None,
             _ => {
                 if v_args.len() == 0 {
                     None
@@ -980,14 +1006,16 @@ impl Flatten {
         call_span_id: SpanId,
         def_func_type: AstFuncType,
         b: &mut NB,
-    ) -> Result<(BlockId, AstFuncType)> {
+    ) -> Result<(BlockId, AstFuncType, AstType)> {
         // bookmark this position, to continue later
         let current_block_id = self.current_block_id();
 
         // create the new empty block
         let next_block_id = self.blocks.new_block(scope_id);
+        println!("next_block_id2: {}", next_block_id);
 
         let a = self.abstractions.get(abstraction_id);
+        println!("a: {:?}", a);
         let body = a.def.body.clone().unwrap();
         let def_span_id = a.def_span_id;
 
@@ -1011,18 +1039,20 @@ impl Flatten {
             _fun_scope_id,
             fun_block_id,
             _entry_link_id,
-            _next_arg_ty,
+            next_arg_ty,
             v_args,
             ret_block_ty,
             _,
         ) = result;
 
-        // we have control here.  Finish the block by jumping to the CPS function
         let _ = self.push_call_values(&v_args);
-        let link_id = self.push_placeholder_terminal(call_link_id, call_span_id);
+        self.push_goto_link(call_link_id, v_args, call_span_id)?;
+        // we have control here.  Finish the block by jumping to the CPS function
+        //let _ = self.push_call_values(&v_args);
+        //let _ = self.push_placeholder_terminal(call_link_id, call_span_id);
 
         // restore position back to where we started
         self.switch_blocks(current_block_id);
-        Ok((fun_block_id, ret_block_ty))
+        Ok((fun_block_id, ret_block_ty, next_arg_ty))
     }
 }

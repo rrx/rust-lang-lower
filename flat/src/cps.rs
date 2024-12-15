@@ -228,6 +228,32 @@ impl Flatten {
         )
     }
 
+    pub fn push_goto_link(
+        &mut self,
+        goto_link_id: LinkId,
+        argvec: ArgVec,
+        call_span_id: SpanId,
+    ) -> Result<FlattenResult> {
+        // push a goto
+        let current_block_id = self.current_block_id();
+        let block = self.blocks.get_block(current_block_id);
+        let scope_id = block.scope_id;
+        let link_id = block.last().unwrap();
+        self.push_placeholder_terminal(link_id, call_span_id);
+
+        let mut d = DeferredGoto::new(
+            scope_id,
+            None,
+            vec![],
+            call_span_id,
+            current_block_id,
+            DeferredType::Name(goto_link_id),
+        );
+        d.argvec = argvec;
+        self.deferred_goto.add_cps(d);
+        return Ok(FlattenResult::statement());
+    }
+
     pub fn push_goto(
         &mut self,
         name: StringKey,
@@ -359,7 +385,9 @@ impl Flatten {
 
             DeferredType::Goto(goto_link_id) => {
                 // are we jumping to an abstraction?
-                if let Some(abstraction_id) = self.resolve_template(d.scope_id, d.name.into()) {
+                if let Some(abstraction_id) =
+                    self.resolve_template(d.scope_id, d.name.unwrap().into())
+                {
                     self.switch_blocks(d.block_id);
                     self.remove_placeholder_terminal(d.block_id);
 
@@ -367,7 +395,7 @@ impl Flatten {
                     // TODO: this function needs to handle unwind
                     let (variant_id, _fun_scope_id, _fun_block_id, _, _, _, _, _link_id) = self
                         .push_cps_block(
-                            d.name,
+                            d.name.unwrap(),
                             d.scope_id,
                             abstraction_id,
                             d.args.clone(),
@@ -383,7 +411,9 @@ impl Flatten {
                 }
 
                 // is it a label?
-                if let Some(target_block_id) = self.resolve_label(d.scope_id, d.name.into()) {
+                if let Some(target_block_id) =
+                    self.resolve_label(d.scope_id, d.name.unwrap().into())
+                {
                     assert_eq!(d.args.len(), 0);
                     // not possible to pass args to a label, use a CPS function instead
                     self.switch_blocks(d.block_id);
@@ -406,7 +436,7 @@ impl Flatten {
                 }
 
                 // otherwise it's not defined, return an error
-                let s = b.labels.r(d.name.into());
+                let s = b.labels.r(d.name.unwrap().into());
                 b.push_error(
                     &format!("ident `{}` not found in {}{}", s, d.scope_id, d.block_id),
                     d.call_span_id,
@@ -437,6 +467,10 @@ impl Flatten {
                     LCode::Declare | LCode::Load(_) => self
                         .scoped_continuations
                         .find_source_blocks(ContinuationFlow::Variable(arg_link_id)),
+
+                    LCode::Val(Literal::Block(block_id)) => {
+                        vec![*block_id]
+                    }
                     _ => {
                         unreachable!("{:?}", code);
                     }

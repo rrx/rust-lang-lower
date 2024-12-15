@@ -66,7 +66,7 @@ pub struct DeferredGoto {
     pub scope_id: ScopeId,
     pub block_id: BlockId,
     pub deferred_type: DeferredType,
-    pub name: StringKey,
+    pub name: Option<StringKey>,
     pub call_span_id: SpanId,
     pub args: Vec<Argument>,
     pub argvec: ArgVec,
@@ -75,7 +75,7 @@ pub struct DeferredGoto {
 impl DeferredGoto {
     pub fn new(
         scope_id: ScopeId,
-        name: StringKey,
+        name: Option<StringKey>,
         args: Vec<Argument>,
         call_span_id: SpanId,
         block_id: BlockId,
