@@ -556,7 +556,7 @@ impl Flatten {
         let (_v_block, v_args) = self.push_start_block(
             next_scope_id,
             ret_block_ty.clone().into(),
-            Some(b.labels.s(&cont_name)),
+            Some(b.labels.fresh_key(&cont_name)),
             call_span_id,
             VarDefinitionSpace::Reg,
         );
@@ -851,7 +851,34 @@ impl Flatten {
             // returns a link, which points to the result, which should be a single value
             // if it's void, then it's a statement
             if true {
-                self.push_call_inline(abstraction_id, name, scope_id, args, call_span_id, b)
+                // calculate the arguments
+                // start the call
+                let (call_values, _call_func_type, def_func_type) = self
+                    .push_function_call_arguments(abstraction_id, args, vec![], call_span_id, b)?;
+
+                // bookmark
+                let current_block_id = self.current_block_id();
+
+                let (fun_block_id, call_values, next_block_id, r) = self.push_call_inline(
+                    abstraction_id,
+                    name,
+                    scope_id,
+                    call_values,
+                    def_func_type,
+                    call_span_id,
+                    b,
+                )?;
+                // now that we have the arguments calculated, and the lambda baked, jump!
+
+                // Complete the call
+                self.switch_blocks(current_block_id);
+                // jump into the the lambda
+                self.push_jump(fun_block_id.into(), call_values, call_span_id);
+
+                self.switch_blocks(next_block_id);
+
+                // r contains the return result link, which is part of the next block arguments.
+                Ok(r)
             } else {
                 self.push_call_inline_cps(abstraction_id, name, scope_id, args, call_span_id, b)
             }
@@ -863,33 +890,32 @@ impl Flatten {
         abstraction_id: AbstractionId,
         name: StringKey,
         scope_id: ScopeId,
-        args: Vec<Argument>,
+        call_values: ArgVec,
+        def_func_type: AstFuncType,
         call_span_id: SpanId,
         b: &mut NB,
-    ) -> Result<FlattenResult> {
+    ) -> Result<(BlockId, ArgVec, BlockId, FlattenResult)> {
         // we inline here for nested functions
         // we bake the lambda, and then jump to it
         // This is a very simple inliner, that doesn't rewrite the function signature
         // We make a new function each time we call it, which is inefficient if we
         // call it multiple times.
 
-        // create a new block static block
-        let next_block_id = self.blocks.new_block(scope_id);
-
-        // calculate the arguments
-        let (call_values, _call_func_type, def_func_type) =
-            self.push_function_call_arguments(abstraction_id, args, vec![], call_span_id, b)?;
-
         // bookmark this position, to continue later
-        let current_block_id = self.current_block_id();
+        //let current_block_id = self.current_block_id();
 
         let a = self.abstractions.get(abstraction_id);
         let body = a.def.body.clone().unwrap();
         let def_span_id = a.def_span_id;
 
+        let s_name = b.labels.r(name.into());
+        let global_name = b.labels.fresh_key(&format!("{}.call", s_name));
+        // create a new block
+        let next_block_id = self.blocks.new_block(scope_id);
+        println!("body: {:?}", body);
         let result = self.push_bake_lambda_and_update_next(
             name,
-            name,
+            global_name,
             scope_id,
             next_block_id,
             *body,
@@ -903,15 +929,11 @@ impl Flatten {
         )?;
         let (_variant_id, _, fun_block_id, _, _next_arg_ty, _, _, _, r) = result;
 
-        // now that we have the arguments calculated, and the lambda baked, jump!
-        self.switch_blocks(current_block_id);
-
-        // jump into the the lambda
-        self.push_jump(fun_block_id.into(), call_values, call_span_id);
-        self.switch_blocks(next_block_id);
+        // lambda is incomplete
+        // waiting for the final jump
 
         // r contains the link to the return value
-        Ok(r)
+        Ok((fun_block_id, call_values, next_block_id, r))
     }
 
     fn push_call_inline_cps(
