@@ -474,7 +474,7 @@ impl Flatten {
 
         let (next_block_id, next_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
 
-        let (v_id, _scope, _block_id, entry_link_id, _, argvec, _, _, _) = self
+        let (v_id, _scope, _block_id, entry_link_id, _, argvec, _, _, _, entry_args) = self
             .push_bake_lambda_and_update_next(
                 name,
                 global_name,
@@ -520,6 +520,7 @@ impl Flatten {
         AstFuncType, // next block return type
         AstType,     // variant type
         FlattenResult,
+        ArgVec, // entry args
     )> {
         let result = self.push_bake_lambda(
             local_name,
@@ -544,6 +545,7 @@ impl Flatten {
             next_arg_ty,
             ret_block_ty,
             variant_ty,
+            entry_args,
         ) = result;
 
         // push the continuation block to which the function returns control
@@ -588,6 +590,7 @@ impl Flatten {
             ret_block_ty,
             variant_ty,
             r,
+            entry_args,
         ))
     }
 
@@ -613,6 +616,7 @@ impl Flatten {
         AstType,
         AstFuncType, // next block return type
         AstType,     // variant type
+        ArgVec,      // entry args
     )> {
         // lower a function as an inline block
         // returning from the function passes control the next block which is static
@@ -638,7 +642,7 @@ impl Flatten {
             .block_succ(current_block_id, fun_block_id, succ_type);
 
         self.switch_blocks(fun_block_id);
-        let (entry_link_id, _) = self.push_start_block(
+        let (entry_link_id, entry_args) = self.push_start_block(
             fun_scope_id,
             block_ty.clone(),
             Some(global_name),
@@ -687,6 +691,7 @@ impl Flatten {
             next_arg_ty,
             ret_block_ty,
             variant_ty,
+            entry_args,
         ))
     }
 
@@ -927,7 +932,7 @@ impl Flatten {
             VarDefinitionSpace::Reg,
             b,
         )?;
-        let (_variant_id, _, fun_block_id, _, _next_arg_ty, _, _, _, r) = result;
+        let (_variant_id, _, fun_block_id, _, _next_arg_ty, _, _, _, r, entry_args) = result;
 
         // lambda is incomplete
         // waiting for the final jump
@@ -964,8 +969,9 @@ impl Flatten {
             self.push_function_call_arguments(abstraction_id, args, system, call_span_id, b)?;
 
         let arg = call_values.last().unwrap();
-        let arg_index = call_values.len() - 1;
+        let _arg_index = call_values.len() - 1;
         let call_link_id = arg.1;
+        println!("call_link_id1: {}", call_link_id);
         let next_ty = arg.2.clone();
 
         self.scoped_continuations.connect(
@@ -1158,21 +1164,28 @@ impl Flatten {
                     fun_block_id,
                     _,
                     next_arg_ty,
-                    v_args,
+                    call_values,
                     ret_func_type,
                     variant_ty,
                     _,
+                    entry_args,
                 ) = result;
                 println!("fun_block_id1: {}", fun_block_id);
                 println!("variant_ty1: {}", variant_ty);
                 println!("ret_func_type1: {}", ret_func_type);
                 println!("next_arg_ty1: {}", next_arg_ty);
 
-                let _ = self.push_call_values(&v_args);
+                let arg = entry_args.last().unwrap();
+                //let arg_index = call_values.len() - 1;
+                let call_link_id = arg.1;
+                println!("call_link_id2: {}", call_link_id);
+                //let next_ty = arg.2.clone();
+
+                let _ = self.push_call_values(&call_values);
                 // complete the lambda bake with a jump to the continuation, this is the exit of
                 // the lambda.  The continuation is part of the signature, so we can call it again
                 let _goto_link_id =
-                    self.push_goto_link(call_link_id, v_args.clone(), call_span_id)?;
+                    self.push_goto_link(call_link_id, call_values.clone(), call_span_id)?;
 
                 (
                     variant_id,

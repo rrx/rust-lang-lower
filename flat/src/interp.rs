@@ -1,4 +1,4 @@
-use crate::{Builtin, ICodeModule, LCode, NodeBuilder, UseIndex, ValueId};
+use crate::{Builtin, ContinuationFlow, ICodeModule, LCode, NodeBuilder, UseIndex, ValueId};
 use anyhow::Result;
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -25,7 +25,7 @@ impl Value {
             Literal::Index(v) => Value::Index(*v),
             Literal::Link(x) => Value::Link(*x),
             Literal::Block(_) => {
-                unreachable!()
+                unreachable!("{:?}", lit);
             }
             _ => unimplemented!("{:?}", lit),
         }
@@ -188,7 +188,12 @@ impl<'a> Interp<'a> {
                     if let Some(value) = scope.values.get(&v) {
                         return Ok(value.clone());
                     } else {
-                        let value = Value::from_lit(lit);
+                        let value = if let Literal::Block(block_id) = lit {
+                            Value::Int(block_id.index() as i64)
+                        } else {
+                            Value::from_lit(lit)
+                        };
+
                         scope.values.insert(v, value);
                     }
                 }
