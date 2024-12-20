@@ -135,21 +135,23 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
         return Err(anyhow::Error::new(BlockifyError::Invalid).into());
     }
 
-    p.codegen(&m, ValueId::new(0), &context, &mut module, b)?;
+    if !config.interp {
+        p.codegen(&m, ValueId::new(0), &context, &mut module, b)?;
 
-    //b.types.dump();
-    if config.verbose {
-        module.as_operation().dump();
-    }
-    assert!(module.as_operation().verify());
+        //b.types.dump();
+        if config.verbose {
+            module.as_operation().dump();
+        }
+        assert!(module.as_operation().verify());
 
-    // run passes
-    let pass_manager = lower_mlir::default_pass_manager(&context, config.optimize);
-    pass_manager.run(&mut module).unwrap();
-    if config.verbose {
-        module.as_operation().dump();
+        // run passes
+        let pass_manager = lower_mlir::default_pass_manager(&context, config.optimize);
+        pass_manager.run(&mut module).unwrap();
+        if config.verbose {
+            module.as_operation().dump();
+        }
+        assert!(module.as_operation().verify());
     }
-    assert!(module.as_operation().verify());
 
     if config.compile {
         let mut path = path.clone();

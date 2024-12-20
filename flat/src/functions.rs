@@ -951,7 +951,7 @@ impl Flatten {
         b: &mut NB,
     ) -> Result<FlattenResult> {
         // create a new block static blocks, which is the final destination
-        let exit_block_id = self.blocks.new_block(scope_id);
+        let (exit_block_id, exit_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id); //.blocks.new_block(scope_id);
 
         let key = b.labels.fresh_key("b");
         let mut system = vec![];
@@ -993,7 +993,7 @@ impl Flatten {
             abstraction_id,
             name,
             scope_id,
-            call_link_id,
+            //call_link_id,
             call_span_id,
             top_def_func_type.clone(),
             b,
@@ -1027,7 +1027,7 @@ impl Flatten {
 
         self.switch_blocks(exit_block_id);
         let (_v_block, v_args) = self.push_start_block(
-            scope_id,
+            exit_scope_id,
             ret_block_ty.clone().into(),
             Some(cont_key),
             call_span_id,
@@ -1050,10 +1050,12 @@ impl Flatten {
         } else {
             FlattenResult::statement()
         };
+        println!("next_link_id: {:?}", next_link_id);
 
         // Call the lambda that we just created
         // now that we have the arguments calculated, and the lambda baked, jump!
         self.switch_blocks(current_block_id);
+
         // jump into the the lambda
         let goto_link_id = self.push_jump(fun_block_id.into(), call_values.clone(), call_span_id);
 
@@ -1091,9 +1093,9 @@ impl Flatten {
     fn push_call_inline_cps_inner(
         &mut self,
         abstraction_id: AbstractionId,
-        name: StringKey,
+        lookup_name: StringKey,
         scope_id: ScopeId,
-        call_link_id: LinkId,
+        //call_link_id: LinkId,
         call_span_id: SpanId,
         def_func_type: AstFuncType,
         b: &mut NB,
@@ -1108,7 +1110,7 @@ impl Flatten {
         let call_func_type = def_func_type.clone().into();
         let (_variant_id, fun_block_id, _fun_scope_id, _def_func_type, ret_block_ty, next_arg_ty) =
             if let Some((variant_id, variant_ty, link_id, fun_scope_id)) =
-                self.resolve_function_name(scope_id, &name, &call_func_type, b)
+                self.resolve_function_name(scope_id, &lookup_name, &call_func_type, b)
             {
                 let entry = self.get_entry(link_id);
                 let fun_block_id = entry.block_id;
@@ -1143,10 +1145,14 @@ impl Flatten {
                 let next_block_id = self.blocks.new_block(scope_id);
                 println!("next_block_id2: {}", next_block_id);
 
+                //let s_name = b.labels.r(name.into());
+                //let local_name = format!("{}.reuse", s_name);
+                //let local_key = b.labels.fresh_key(&local_name);
+
                 let body = a.def.body.clone().unwrap();
                 let result = self.push_bake_lambda_and_update_next(
-                    name,
-                    name,
+                    lookup_name,
+                    lookup_name,
                     scope_id,
                     next_block_id,
                     *body,
@@ -1175,7 +1181,9 @@ impl Flatten {
                 println!("ret_func_type1: {}", ret_func_type);
                 println!("next_arg_ty1: {}", next_arg_ty);
 
+                println!("entry_args: {:?}", entry_args);
                 let arg = entry_args.last().unwrap();
+
                 //let arg_index = call_values.len() - 1;
                 let call_link_id = arg.1;
                 println!("call_link_id2: {}", call_link_id);
