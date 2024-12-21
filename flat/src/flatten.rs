@@ -298,17 +298,12 @@ impl Flatten {
         for (variant_id, r_ty, link_id, scope_id) in
             self.resolve_all_function_name(start_scope_id, &name)
         {
-            //println!("trying {}, {}<=>{}", variant_id, &call_func_type, &r_ty);
             if let Ok(_) = b.types.u.unify(&ty, &r_ty) {
                 result = Some((variant_id, r_ty, link_id, scope_id));
                 break;
             }
         }
         b.types.u.rollback_to(snapshot);
-        println!(
-            "resolve_function_name: {:?}",
-            (name, start_scope_id, call_func_type, &result)
-        );
         result
     }
 
@@ -741,7 +736,7 @@ impl Flatten {
         let block_id = self.current_block_id();
         let entry = CodeEntry::new(
             block_id,
-            LCode::Noop,
+            LCode::Declare,
             ty,
             Some(name),
             span_id,

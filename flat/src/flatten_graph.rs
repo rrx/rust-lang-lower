@@ -213,6 +213,12 @@ pub fn flow_graph(m: &dyn ICodeModule, gblocks: &BlockGraph, filename: &str, b: 
                                     ng.sources.push((v, v_target));
                                     format!("{}:callvalue({})", v, v_target)
                                 }
+                                LCode::Load(decl) => {
+                                    let v_decl = m.resolve_code_offset(decl.into());
+                                    ng.sources.push((v, v_decl));
+                                    format!("{}:load({})", v, v_decl)
+                                }
+
                                 LCode::Store(decl, source) => {
                                     let v_decl = m.resolve_code_offset(decl.into());
                                     let v_source = m.resolve_code_offset(source.into());

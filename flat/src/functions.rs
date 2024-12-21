@@ -780,7 +780,6 @@ impl Flatten {
 
         // look up the prototype
         // calculate the calling arguments
-        println!("args1: {:?}", args);
         let (args, def_func_type) = Self::calculate_function_arguments(
             &a.def,
             &args,
@@ -789,7 +788,6 @@ impl Flatten {
             call_span_id,
             b,
         )?;
-        println!("args2: {:?}", args);
         let call_values = self.push_call_arguments(args.clone(), call_span_id, b)?;
         let call_ty = crate::argvec_type(&call_values);
         let def_func_type = self.refresh_func_type(&def_func_type, b);
@@ -891,7 +889,6 @@ impl Flatten {
         let global_name = b.labels.fresh_key(&s_name); //&format!("{}.call", s_name));
                                                        // create a new block
         let next_block_id = self.blocks.new_block(scope_id);
-        println!("body: {:?}", body);
         let result = self.push_bake_lambda_and_update_next(
             name,
             global_name,
@@ -921,13 +918,13 @@ impl Flatten {
             let ty = next_arg_ty.field_types().first().unwrap().clone();
             let decl_link_id = self.push_decl(ty.clone(), key, call_span_id);
 
-            let decl_link_id = self.push_code(
-                LCode::Declare,
-                ty.clone(),
-                Some(key),
-                call_span_id,
-                VarDefinitionSpace::Default,
-            );
+            //let decl_link_id = self.push_code(
+                //LCode::Declare,
+                //ty.clone(),
+                //Some(key),
+                //call_span_id,
+                //VarDefinitionSpace::Default,
+            //);
             println!(
                 "next_arg_ty: {}, {}, {}, {}",
                 link_id, decl_link_id, next_arg_ty, ty

@@ -265,7 +265,6 @@ impl<'a> Interp<'a> {
     }
 
     pub fn resolve_declaration(&mut self, v: ValueId) -> Value {
-        println!("resolve decl: {}", v);
         let code = self.m.get_code(v);
         //let mem = self.m.get_mem(v.into());
         //if self.statics.contains_key(&v) {
@@ -503,7 +502,6 @@ impl<'a> Interp<'a> {
 
             LCode::Jump(target) => {
                 // push args
-                println!("jump: {:?}", target);
                 let v = self.m.resolve_code_offset(*target);
                 self.jump(v);
                 true
@@ -513,7 +511,6 @@ impl<'a> Interp<'a> {
                 // push args
                 let base = self.m.resolve_code_offset((*link_id).into());
                 let value = self.resolve_value(base)?;
-                println!("switch: {:?}", (&value, h));
 
                 match value {
                     Value::Int(i) => {
