@@ -617,6 +617,12 @@ impl<'a> Interp<'a> {
                     false
                 }
             }
+
+            LCode::Noop => {
+                self.advance();
+                true
+            }
+
             _ => unimplemented!("{:?}", code),
         };
 

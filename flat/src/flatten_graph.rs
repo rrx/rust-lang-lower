@@ -77,6 +77,7 @@ enum GroupEnum {
 
 struct NestedGraph {
     edges: Vec<(ValueId, ValueId)>,
+    sources: Vec<(ValueId, ValueId)>,
     group: Group,
 }
 
@@ -84,6 +85,7 @@ impl NestedGraph {
     fn new() -> Self {
         Self {
             edges: vec![],
+            sources: vec![],
             group: Group::new("module".into(), "".into()),
         }
     }
@@ -102,6 +104,9 @@ graph TD\n\
         self.group.write(f, 0)?;
         for (src, dst) in &self.edges {
             write_with_indent(f, &format!("{} --> {}\n", src, dst), 0)?;
+        }
+        for (src, dst) in &self.sources {
+            write_with_indent(f, &format!("{} -.-> {}\n", src, dst), 0)?;
         }
         Ok(())
     }
@@ -187,7 +192,7 @@ pub fn flow_graph(m: &dyn ICodeModule, gblocks: &BlockGraph, filename: &str, b: 
                                 }
                                 LCode::Switch(link_id, cases) => {
                                     let v_link = m.resolve_code_offset(link_id.into());
-                                    //ng.edges.push((v, v_link));
+                                    ng.sources.push((v, v_link));
                                     for block_id in cases.iter() {
                                         let v_target = m.resolve_code_offset(block_id.into());
                                         ng.edges.push((v, v_target));
@@ -196,7 +201,7 @@ pub fn flow_graph(m: &dyn ICodeModule, gblocks: &BlockGraph, filename: &str, b: 
                                 }
                                 LCode::Branch(c, b1, b2) => {
                                     let v_target = m.resolve_code_offset(*c);
-                                    ng.edges.push((v, v_target));
+                                    ng.sources.push((v, v_target));
                                     let v_target = m.resolve_code_offset(b1.into());
                                     ng.edges.push((v, v_target));
                                     let v_target = m.resolve_code_offset(b2.into());
@@ -205,12 +210,19 @@ pub fn flow_graph(m: &dyn ICodeModule, gblocks: &BlockGraph, filename: &str, b: 
                                 }
                                 LCode::CallValue(offset) => {
                                     let v_target = m.resolve_code_offset(*offset);
-                                    //ng.edges.push((v, v_target));
+                                    ng.sources.push((v, v_target));
                                     format!("{}:callvalue({})", v, v_target)
+                                }
+                                LCode::Store(decl, source) => {
+                                    let v_decl = m.resolve_code_offset(decl.into());
+                                    let v_source = m.resolve_code_offset(source.into());
+                                    ng.sources.push((v, v_decl));
+                                    ng.sources.push((v, v_source));
+                                    format!("{}:store({},{})", v, v_decl, v_source)
                                 }
                                 LCode::Call(offset) => {
                                     let v_target = m.resolve_code_offset(*offset);
-                                    ng.edges.push((v, v_target));
+                                    ng.sources.push((v, v_target));
                                     format!("{}:{}", v, m.code_to_string(v, b))
                                 }
                                 LCode::Label => {

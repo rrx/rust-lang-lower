@@ -675,7 +675,6 @@ impl Flatten {
         self.variant_update(variant_id, variant_ty.clone(), entry_link_id);
 
         let next_arg_ty = self.resolve_return_type(fun_block_id, block_ty.into(), call_span_id, b);
-        println!("next_arg_ty: {}", next_arg_ty);
 
         assert!(next_arg_ty.is_composite());
         let ret_block_ty = AstFuncType {
@@ -872,9 +871,9 @@ impl Flatten {
         // This is a very simple inliner, that doesn't rewrite the function signature
         // We make a new function each time we call it, which is inefficient if we
         // call it multiple times.
-        //
-        // calculate the arguments
+
         // start the call
+        // calculate the arguments
         let (call_values, _call_func_type, def_func_type) =
             self.push_function_call_arguments(abstraction_id, args, vec![], call_span_id, b)?;
 
@@ -889,8 +888,8 @@ impl Flatten {
         let def_span_id = a.def_span_id;
 
         let s_name = b.labels.r(name.into());
-        let global_name = b.labels.fresh_key(&format!("{}.call", s_name));
-        // create a new block
+        let global_name = b.labels.fresh_key(&s_name); //&format!("{}.call", s_name));
+                                                       // create a new block
         let next_block_id = self.blocks.new_block(scope_id);
         println!("body: {:?}", body);
         let result = self.push_bake_lambda_and_update_next(
@@ -907,20 +906,59 @@ impl Flatten {
             VarDefinitionSpace::Reg,
             b,
         )?;
-        let (_variant_id, _, fun_block_id, _, _next_arg_ty, _, _, _, r, _entry_args) = result;
+
+        let (_variant_id, _, fun_block_id, _, next_arg_ty, _, _, _, r, _entry_args) = result;
 
         // now that we have the arguments calculated, and the lambda baked, jump!
 
-        // Complete the call
+        // Complete the call, returning cursor to the caller
         self.switch_blocks(current_block_id);
+
+        // DECLARE
+        // if the function returns a value, then we need to copy it out of the next block arguments
+        let decl = if let Some(link_id) = r.link_id {
+            let key = b.labels.fresh_key("r");
+            let ty = next_arg_ty.field_types().first().unwrap().clone();
+            let decl_link_id = self.push_decl(ty.clone(), key, call_span_id);
+
+            let decl_link_id = self.push_code(
+                LCode::Declare,
+                ty.clone(),
+                Some(key),
+                call_span_id,
+                VarDefinitionSpace::Default,
+            );
+            println!(
+                "next_arg_ty: {}, {}, {}, {}",
+                link_id, decl_link_id, next_arg_ty, ty
+            );
+            //self.push_code(LCode::Store(decl_link_id, link_id), ty, Some(key), call_span_id, VarDefinitionSpace::Default);
+            Some((decl_link_id, link_id, ty, key))
+        } else {
+            None
+        };
+
+        // JUMP
         // jump into the the lambda
         self.push_jump(fun_block_id.into(), call_values, call_span_id);
 
         self.switch_blocks(next_block_id);
 
+        // STORE ARG
         // r contains the link to the return value
         // r contains the return result link, which is part of the next block arguments.
-        Ok(r)
+        if let Some((decl_link_id, arg_link_id, ty, key)) = decl {
+            self.push_code(
+                LCode::Store(decl_link_id, arg_link_id),
+                ty,
+                Some(key),
+                call_span_id,
+                VarDefinitionSpace::Default,
+            );
+            Ok(FlattenResult::link(decl_link_id))
+        } else {
+            Ok(r)
+        }
     }
 
     fn push_call_inline_cps(

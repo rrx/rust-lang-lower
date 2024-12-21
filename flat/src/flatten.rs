@@ -555,7 +555,14 @@ impl Flatten {
                 let scope_type = scope.scope_type;
                 let is_term = entry.code.is_term();
                 if index == size && !is_term && scope_type != ScopeType::Static {
-                    b.push_error(&format!("Unterminated Block: {}", block_id), entry.span_id);
+                    b.push_error(
+                        &format!(
+                            "Unterminated Block: {}, {:?}",
+                            block_id,
+                            (index, size, is_term, scope_type)
+                        ),
+                        entry.span_id,
+                    );
                 }
 
                 let link_id = entry.link.unwrap();
@@ -705,6 +712,48 @@ impl Flatten {
         link_id
     }
 
+    pub fn insert_entry_after(&mut self, before_link_id: LinkId, entry: CodeEntry) -> LinkId {
+        let before_entry = self.get_entry(before_link_id);
+        let before_entry_next = before_entry.next;
+        let next_link_id = self._insert_entry(entry, Some(before_link_id));
+
+        // update the entry
+        let entry = self.get_entry_mut(next_link_id);
+        entry.next = before_entry_next;
+
+        let before_entry = self.get_entry_mut(before_link_id);
+        before_entry.next = next_link_id;
+        next_link_id
+    }
+
+    pub fn insert_decl(&mut self, scope_id: ScopeId, mut entry: CodeEntry) -> LinkId {
+        let scope = self.scopes.get_scope(scope_id);
+        let entry_block_id = scope.entry_block.unwrap();
+        entry.block_id = entry_block_id;
+        let block = self.blocks.get_block_mut(entry_block_id);
+        let last_decl = block.last_decl.unwrap();
+        let link_id = self.insert_entry_after(last_decl, entry);
+        self.blocks.get_block_mut(entry_block_id).push_decl(link_id);
+        link_id
+    }
+
+    pub fn push_decl(&mut self, ty: AstType, name: StringKey, span_id: SpanId) -> LinkId {
+        let block_id = self.current_block_id();
+        let entry = CodeEntry::new(
+            block_id,
+            LCode::Noop,
+            ty,
+            Some(name),
+            span_id,
+            VarDefinitionSpace::Default,
+        );
+        let block = self.blocks.get_block(block_id);
+        let scope_id = block.scope_id;
+        assert!(!block.is_term());
+        let link_id = self.insert_decl(scope_id, entry);
+        link_id
+    }
+
     pub fn push_entry_with_link(&mut self, entry: CodeEntry) -> LinkId {
         let entry_is_term = entry.code.is_term();
         let block_id = entry.block_id;
@@ -714,14 +763,17 @@ impl Flatten {
         if let Some(last_link_id) = block.last() {
             let last_entry = self.get_entry_mut(last_link_id);
             last_entry.next = link_id;
+            // ensure we don't append to a terminated block
             let is_term = last_entry.code.is_term();
             if is_term {
                 unreachable!("appending to term block={}", block_id);
             }
         }
+
         self.blocks
             .get_block_mut(block_id)
             .push(link_id, entry_is_term);
+
         link_id
     }
 
@@ -1100,6 +1152,8 @@ impl Flatten {
         self.replace_label(block_link_id, block_ty, name, span_id, mem);
         self.block_links
             .insert(self.current_block_id(), block_link_id);
+        let block = self.blocks.get_block_mut(self.current_block_id());
+        block.last_decl = block.last;
         (block_link_id, v_args)
     }
 

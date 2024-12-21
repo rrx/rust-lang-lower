@@ -305,8 +305,11 @@ impl FlattenModule {
                             format!("label = \"JUMP:{}:{}\"", v, arg)
                         }
                         ContinuationFlow::Variable(link_id) => {
-                            let v = self.resolve_code_offset(link_id.into());
-                            format!("label = \"VAR:{}\"", v)
+                            if let Some(v) = self.maybe_resolve_code_offset(link_id.into()) {
+                                format!("label = \"VAR:{}\"", v)
+                            } else {
+                                format!("label = \"VAR:?\"")
+                            }
                         }
                     }
                 }

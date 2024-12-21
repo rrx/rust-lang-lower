@@ -24,6 +24,7 @@ pub struct IRBlock {
     pub(super) size: usize,
     pub(super) entry: Option<LinkId>,
     pub(super) last: Option<LinkId>,
+    pub(super) last_decl: Option<LinkId>,
     pub(super) num_ret_args: HashSet<usize>,
     pub(super) ret_types: HashSet<AstType>,
 }
@@ -36,6 +37,7 @@ impl IRBlock {
             term: false,
             entry: None,
             last: None,
+            last_decl: None,
             size: 0,
             num_ret_args: HashSet::new(),
             ret_types: HashSet::new(),
@@ -44,6 +46,14 @@ impl IRBlock {
 
     pub fn len(&self) -> usize {
         self.size
+    }
+
+    pub fn push_decl(&mut self, link_id: LinkId) {
+        if self.last.unwrap() == link_id {
+            self.last = Some(link_id);
+        }
+        self.last_decl = Some(link_id);
+        self.size += 1;
     }
 
     pub fn push(&mut self, link_id: LinkId, term: bool) {

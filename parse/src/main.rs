@@ -117,11 +117,12 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
     cont_path.set_extension("cont.dot");
     m.cont_graph(cont_path.clone().to_str().unwrap(), b);
 
+    let table_path = make_path(&output_filename, "table.txt");
+    let s = m.dump_code_table(&table_path, b);
+
     let mut cfg_path = path.clone();
     cfg_path.set_extension("cfg.mmd");
     m.flow_graph(cfg_path.clone().to_str().unwrap(), &b)?;
-    let table_path = make_path(&output_filename, "table.txt");
-    let s = m.dump_code_table(&table_path, b);
 
     if config.verbose {
         // dump table
