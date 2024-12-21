@@ -474,10 +474,15 @@ impl Flatten {
 
         let (next_block_id, next_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
 
+        // New Func Scope
+        let (fun_block_id, fun_scope_id) = self.new_scope_and_block(ScopeType::Function, scope_id);
+
         let (v_id, _scope, _block_id, entry_link_id, _, argvec, _, _, _, _entry_args) = self
             .push_bake_lambda_and_update_next(
                 name,
                 global_name,
+                fun_scope_id,
+                fun_block_id,
                 next_scope_id,
                 next_block_id,
                 *body,
@@ -500,6 +505,8 @@ impl Flatten {
         &mut self,
         local_name: StringKey,
         global_name: StringKey,
+        fun_scope_id: ScopeId,
+        fun_block_id: BlockId,
         next_scope_id: ScopeId,
         next_block_id: BlockId,
         body: AstNode,
@@ -522,9 +529,6 @@ impl Flatten {
         FlattenResult,
         ArgVec, // entry args
     )> {
-        // New Func Scope
-        let (fun_block_id, fun_scope_id) = self.new_scope_and_block(scope_type, next_scope_id);
-
         let result = self.push_bake_lambda(
             local_name,
             global_name,
@@ -889,9 +893,15 @@ impl Flatten {
         let global_name = b.labels.fresh_key(&s_name); //&format!("{}.call", s_name));
                                                        // create a new block
         let next_block_id = self.blocks.new_block(scope_id);
+
+        // New Func Scope
+        let (fun_block_id, fun_scope_id) = self.new_scope_and_block(ScopeType::Function, scope_id);
+
         let result = self.push_bake_lambda_and_update_next(
             name,
             global_name,
+            fun_scope_id,
+            fun_block_id,
             scope_id,
             next_block_id,
             *body,
@@ -1190,9 +1200,16 @@ impl Flatten {
                 //let local_key = b.labels.fresh_key(&local_name);
 
                 let body = a.def.body.clone().unwrap();
+
+                // New Func Scope
+                let (fun_block_id, fun_scope_id) =
+                    self.new_scope_and_block(ScopeType::Function, scope_id);
+
                 let result = self.push_bake_lambda_and_update_next(
                     lookup_name,
                     lookup_name,
+                    fun_scope_id,
+                    fun_block_id,
                     scope_id,
                     next_block_id,
                     *body,
