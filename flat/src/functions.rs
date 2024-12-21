@@ -851,13 +851,7 @@ impl Flatten {
             // returns a link, which points to the result, which should be a single value
             // if it's void, then it's a statement
             if true {
-                let (_fun_block_id, next_block_id, r) =
-                    self.push_call_inline(abstraction_id, name, scope_id, args, call_span_id, b)?;
-
-                self.switch_blocks(next_block_id);
-
-                // r contains the return result link, which is part of the next block arguments.
-                Ok(r)
+                self.push_call_inline(abstraction_id, name, scope_id, args, call_span_id, b)
             } else {
                 self.push_call_inline_cps(abstraction_id, name, scope_id, args, call_span_id, b)
             }
@@ -872,7 +866,7 @@ impl Flatten {
         args: Vec<Argument>,
         call_span_id: SpanId,
         b: &mut NB,
-    ) -> Result<(BlockId, BlockId, FlattenResult)> {
+    ) -> Result<FlattenResult> {
         // we inline here for nested functions
         // we bake the lambda, and then jump to it
         // This is a very simple inliner, that doesn't rewrite the function signature
@@ -922,11 +916,11 @@ impl Flatten {
         // jump into the the lambda
         self.push_jump(fun_block_id.into(), call_values, call_span_id);
 
-        // lambda is incomplete
-        // waiting for the final jump
+        self.switch_blocks(next_block_id);
 
         // r contains the link to the return value
-        Ok((fun_block_id, next_block_id, r))
+        // r contains the return result link, which is part of the next block arguments.
+        Ok(r)
     }
 
     fn push_call_inline_cps(
