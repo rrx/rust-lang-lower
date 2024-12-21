@@ -474,7 +474,7 @@ impl Flatten {
 
         let (next_block_id, next_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
 
-        let (v_id, _scope, _block_id, entry_link_id, _, argvec, _, _, _, entry_args) = self
+        let (v_id, _scope, _block_id, entry_link_id, _, argvec, _, _, _, _entry_args) = self
             .push_bake_lambda_and_update_next(
                 name,
                 global_name,
@@ -707,14 +707,11 @@ impl Flatten {
         for a in args.into_iter() {
             match a {
                 Argument::Positional(expr) => {
-                    //if let AstNode::Literal(Literal::Block(block_id)) = expr {
-                    //} else {
                     let r = self.push_node(*expr, b)?;
                     let link_id = r.link_id.unwrap();
                     let entry = self.get_entry(link_id);
                     values.push((entry.name, link_id, entry.ty.clone(), span_id));
                     link_ids.push(link_id);
-                    //}
                 }
 
                 Argument::Named(key, expr) | Argument::System(key, expr) => {
@@ -724,6 +721,7 @@ impl Flatten {
                     values.push((Some(key), link_id, ty, span_id));
                     link_ids.push(link_id);
                 }
+
                 Argument::Args(key, exprs) => {
                     let mut args_values = vec![];
                     for expr in exprs {
@@ -752,6 +750,7 @@ impl Flatten {
                     values.push((Some(key), link_id, struct_ty.clone(), span_id));
                     link_ids.push(link_id);
                 }
+
                 Argument::KwArgs(key, _expr) => {
                     let node: AstNode = 1.into();
                     let r = self.push_node(node, b)?;
@@ -762,10 +761,6 @@ impl Flatten {
                 }
             }
         }
-        //for (key, link_id, ty, span_id) in blocks.iter() {
-        //values.push((*key, *link_id, ty.clone(), *span_id));
-        //link_ids.push(*link_id);
-        //}
         Ok(values)
     }
 
@@ -856,29 +851,8 @@ impl Flatten {
             // returns a link, which points to the result, which should be a single value
             // if it's void, then it's a statement
             if true {
-                // calculate the arguments
-                // start the call
-                let (call_values, _call_func_type, def_func_type) = self
-                    .push_function_call_arguments(abstraction_id, args, vec![], call_span_id, b)?;
-
-                // bookmark
-                let current_block_id = self.current_block_id();
-
-                let (fun_block_id, call_values, next_block_id, r) = self.push_call_inline(
-                    abstraction_id,
-                    name,
-                    scope_id,
-                    call_values,
-                    def_func_type,
-                    call_span_id,
-                    b,
-                )?;
-                // now that we have the arguments calculated, and the lambda baked, jump!
-
-                // Complete the call
-                self.switch_blocks(current_block_id);
-                // jump into the the lambda
-                self.push_jump(fun_block_id.into(), call_values, call_span_id);
+                let (_fun_block_id, next_block_id, r) =
+                    self.push_call_inline(abstraction_id, name, scope_id, args, call_span_id, b)?;
 
                 self.switch_blocks(next_block_id);
 
@@ -895,16 +869,23 @@ impl Flatten {
         abstraction_id: AbstractionId,
         name: StringKey,
         scope_id: ScopeId,
-        call_values: ArgVec,
-        def_func_type: AstFuncType,
+        args: Vec<Argument>,
         call_span_id: SpanId,
         b: &mut NB,
-    ) -> Result<(BlockId, ArgVec, BlockId, FlattenResult)> {
+    ) -> Result<(BlockId, BlockId, FlattenResult)> {
         // we inline here for nested functions
         // we bake the lambda, and then jump to it
         // This is a very simple inliner, that doesn't rewrite the function signature
         // We make a new function each time we call it, which is inefficient if we
         // call it multiple times.
+        //
+        // calculate the arguments
+        // start the call
+        let (call_values, _call_func_type, def_func_type) =
+            self.push_function_call_arguments(abstraction_id, args, vec![], call_span_id, b)?;
+
+        // bookmark
+        let current_block_id = self.current_block_id();
 
         // bookmark this position, to continue later
         //let current_block_id = self.current_block_id();
@@ -932,13 +913,20 @@ impl Flatten {
             VarDefinitionSpace::Reg,
             b,
         )?;
-        let (_variant_id, _, fun_block_id, _, _next_arg_ty, _, _, _, r, entry_args) = result;
+        let (_variant_id, _, fun_block_id, _, _next_arg_ty, _, _, _, r, _entry_args) = result;
+
+        // now that we have the arguments calculated, and the lambda baked, jump!
+
+        // Complete the call
+        self.switch_blocks(current_block_id);
+        // jump into the the lambda
+        self.push_jump(fun_block_id.into(), call_values, call_span_id);
 
         // lambda is incomplete
         // waiting for the final jump
 
         // r contains the link to the return value
-        Ok((fun_block_id, call_values, next_block_id, r))
+        Ok((fun_block_id, next_block_id, r))
     }
 
     fn push_call_inline_cps(
