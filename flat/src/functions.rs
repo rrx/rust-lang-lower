@@ -1192,8 +1192,6 @@ impl Flatten {
                 )
             } else {
                 // create the new empty block
-                let next_block_id = self.blocks.new_block(scope_id);
-                println!("next_block_id2: {}", next_block_id);
 
                 //let s_name = b.labels.r(name.into());
                 //let local_name = format!("{}.reuse", s_name);
@@ -1204,6 +1202,9 @@ impl Flatten {
                 // New Func Scope
                 let (fun_block_id, fun_scope_id) =
                     self.new_scope_and_block(ScopeType::Function, scope_id);
+
+                let next_block_id = self.blocks.new_block(fun_scope_id);
+                println!("next_block_id2: {}", next_block_id);
 
                 let result = self.push_bake_lambda_and_update_next(
                     lookup_name,
