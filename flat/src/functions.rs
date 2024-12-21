@@ -522,16 +522,19 @@ impl Flatten {
         FlattenResult,
         ArgVec, // entry args
     )> {
+        // New Func Scope
+        let (fun_block_id, fun_scope_id) = self.new_scope_and_block(scope_type, next_scope_id);
+
         let result = self.push_bake_lambda(
             local_name,
             global_name,
-            next_scope_id,
+            fun_scope_id,
+            fun_block_id,
             next_block_id,
             body,
             def_func_type,
             def_span_id,
             call_span_id,
-            scope_type,
             succ_type,
             mem,
             b,
@@ -598,13 +601,13 @@ impl Flatten {
         &mut self,
         local_name: StringKey,
         global_name: StringKey,
-        next_scope_id: ScopeId,
+        fun_scope_id: ScopeId,
+        fun_block_id: BlockId,
         next_block_id: BlockId,
         body: AstNode,
         def_func_type: AstFuncType,
         def_span_id: SpanId,
         call_span_id: SpanId,
-        scope_type: ScopeType,
         succ_type: Successor,
         mem: VarDefinitionSpace,
         b: &mut NB,
@@ -630,9 +633,6 @@ impl Flatten {
         let scope_id = block.scope_id;
 
         let block_ty: AstType = def_func_type.into();
-
-        // New Func Scope
-        let (fun_block_id, fun_scope_id) = self.new_scope_and_block(scope_type, next_scope_id);
 
         let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
         fun_scope.return_block = Some(next_block_id);
@@ -917,19 +917,10 @@ impl Flatten {
             let key = b.labels.fresh_key("r");
             let ty = next_arg_ty.field_types().first().unwrap().clone();
             let decl_link_id = self.push_decl(ty.clone(), key, call_span_id);
-
-            //let decl_link_id = self.push_code(
-                //LCode::Declare,
-                //ty.clone(),
-                //Some(key),
-                //call_span_id,
-                //VarDefinitionSpace::Default,
-            //);
             println!(
                 "next_arg_ty: {}, {}, {}, {}",
                 link_id, decl_link_id, next_arg_ty, ty
             );
-            //self.push_code(LCode::Store(decl_link_id, link_id), ty, Some(key), call_span_id, VarDefinitionSpace::Default);
             Some((decl_link_id, link_id, ty, key))
         } else {
             None
@@ -968,7 +959,9 @@ impl Flatten {
         b: &mut NB,
     ) -> Result<FlattenResult> {
         // create a new block static blocks, which is the final destination
-        let (exit_block_id, exit_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id); //.blocks.new_block(scope_id);
+        //let (exit_block_id, exit_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id); //.blocks.new_block(scope_id);
+        let exit_block_id = self.blocks.new_block(scope_id);
+        let exit_scope_id = scope_id;
 
         let key = b.labels.fresh_key("b");
         let mut system = vec![];
@@ -1073,6 +1066,21 @@ impl Flatten {
         // now that we have the arguments calculated, and the lambda baked, jump!
         self.switch_blocks(current_block_id);
 
+        // DECLARE
+        // if the function returns a value, then we need to copy it out of the next block arguments
+        let decl = if let Some(link_id) = r.link_id {
+            let key = b.labels.fresh_key("r");
+            let ty = next_arg_ty.field_types().first().unwrap().clone();
+            let decl_link_id = self.push_decl(ty.clone(), key, call_span_id);
+            println!(
+                "next_arg_ty: {}, {}, {}, {}",
+                link_id, decl_link_id, next_arg_ty, ty
+            );
+            Some((decl_link_id, link_id, ty, key))
+        } else {
+            None
+        };
+
         // jump into the the lambda
         let goto_link_id = self.push_jump(fun_block_id.into(), call_values.clone(), call_span_id);
 
@@ -1103,8 +1111,24 @@ impl Flatten {
         self.switch_blocks(exit_block_id);
         // in the next block
 
+        // STORE ARG
         // r contains the link to the return value
-        Ok(r)
+        // r contains the return result link, which is part of the next block arguments.
+        if let Some((decl_link_id, arg_link_id, ty, key)) = decl {
+            self.push_code(
+                LCode::Store(decl_link_id, arg_link_id),
+                ty,
+                Some(key),
+                call_span_id,
+                VarDefinitionSpace::Default,
+            );
+            Ok(FlattenResult::link(decl_link_id))
+        } else {
+            Ok(r)
+        }
+
+        // r contains the link to the return value
+        //Ok(r)
     }
 
     fn push_call_inline_cps_inner(
@@ -1112,7 +1136,6 @@ impl Flatten {
         abstraction_id: AbstractionId,
         lookup_name: StringKey,
         scope_id: ScopeId,
-        //call_link_id: LinkId,
         call_span_id: SpanId,
         def_func_type: AstFuncType,
         b: &mut NB,
