@@ -221,7 +221,6 @@ impl<'a> Interp<'a> {
                 }
 
                 LCode::Arg(_index) => {
-                    //println!("arg: {:?}", (&scope, code));
                     if let Some(value) = scope.values.get(&v) {
                         return Ok(value.clone());
                     }
@@ -241,13 +240,14 @@ impl<'a> Interp<'a> {
                     */
                 }
                 LCode::Load(_link_id) => {
-                    //let v = self.m.resolve_code_offset(link_id.into());
                     if let Some(value) = scope.values.get(&v) {
                         return Ok(value.clone());
                     }
                 }
                 LCode::Call(_) | LCode::Op2(_) | LCode::NaryOp(_) | LCode::Op1(_) => {
-                    return Ok(scope.values.get(&v).unwrap().clone());
+                    if let Some(value) = scope.values.get(&v) {
+                        return Ok(value.clone());
+                    }
                 }
                 LCode::Tuple(link_ids) => {
                     let mut values = vec![];
