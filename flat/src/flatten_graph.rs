@@ -1,6 +1,6 @@
 use crate::{
     BlockGraph, BlockId, ContinuationFlow, Flatten, ICodeModule, LCode, NodeBuilder as NB,
-    Successor, ValueId,
+    Successor, ValueId, VarDefinitionSpace,
 };
 use anyhow::Result;
 use petgraph::visit::EdgeRef;
@@ -182,6 +182,14 @@ pub fn flow_graph(m: &dyn ICodeModule, gblocks: &BlockGraph, filename: &str, b: 
 
                         loop {
                             let entry = m.get_entry(v);
+                            match entry.mem {
+                                VarDefinitionSpace::Stack(x) => {
+                                    let v_source = m.resolve_code_offset(x.into());
+                                    ng.sources.push((v, v_source));
+                                }
+                                _ => (),
+                            }
+
                             let code = &entry.code;
                             let s = match code {
                                 LCode::Jump(offset) => {
@@ -230,6 +238,14 @@ pub fn flow_graph(m: &dyn ICodeModule, gblocks: &BlockGraph, filename: &str, b: 
                                     let v_target = m.resolve_code_offset(*offset);
                                     ng.sources.push((v, v_target));
                                     format!("{}:{}", v, m.code_to_string(v, b))
+                                }
+                                LCode::Arg(num) => {
+                                    format!(
+                                        "{}:arg({}) => {}",
+                                        v,
+                                        num,
+                                        m.mem_to_string(entry.mem, b)
+                                    )
                                 }
                                 LCode::Label => {
                                     let s_name = if let Some(name) = entry.name {

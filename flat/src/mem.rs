@@ -31,3 +31,16 @@ impl VarDefinitionSpace {
         }
     }
 }
+
+impl std::fmt::Display for VarDefinitionSpace {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            VarDefinitionSpace::Arg => write!(f, "Marg"),
+            VarDefinitionSpace::Reg => write!(f, "Mreg"),
+            VarDefinitionSpace::Static => write!(f, "Mstatic"),
+            VarDefinitionSpace::Stack(x) => write!(f, "Mstack(L{})", x.index()),
+            VarDefinitionSpace::Heap => write!(f, "Mheap"),
+            VarDefinitionSpace::Default => write!(f, "Mdef"),
+        }
+    }
+}

@@ -336,6 +336,20 @@ pub trait ICodeModule {
         out
     }
 
+    fn mem_to_string(&self, mem: VarDefinitionSpace, b: &NodeBuilder) -> String {
+        match mem {
+            VarDefinitionSpace::Arg => format!("Marg"),
+            VarDefinitionSpace::Reg => format!("Mreg"),
+            VarDefinitionSpace::Static => format!("Mstatic"),
+            VarDefinitionSpace::Stack(x) => {
+                let v = self.resolve_code_offset(x.into());
+                format!("Mstack({})", v)
+            }
+            VarDefinitionSpace::Heap => format!("Mheap"),
+            VarDefinitionSpace::Default => format!("Mdef"),
+        }
+    }
+
     fn code_to_string(&self, v: ValueId, b: &NodeBuilder) -> String {
         let code = self.get_code(v);
         match code {

@@ -935,6 +935,7 @@ impl Flatten {
 
         // DECLARE
         // if the function returns a value, then we need to copy it out of the next block arguments
+        // this should be unique per call
         let decl = if let Some(link_id) = r.link_id {
             let key = b.labels.fresh_key("r");
             let ty = next_arg_ty.field_types().first().unwrap().clone();
@@ -958,6 +959,11 @@ impl Flatten {
         // r contains the link to the return value
         // r contains the return result link, which is part of the next block arguments.
         if let Some((decl_link_id, arg_link_id, ty, key)) = decl {
+            // specify that the arg is stored on the stack
+            // let mlir handle the rest
+            let entry = self.get_entry_mut(arg_link_id);
+            entry.mem = VarDefinitionSpace::Stack(decl_link_id);
+
             self.push_code(
                 LCode::Store(decl_link_id, arg_link_id),
                 ty,

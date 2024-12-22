@@ -735,8 +735,12 @@ impl Flatten {
 
     pub fn push_decl(&mut self, ty: AstType, name: StringKey, span_id: SpanId) -> LinkId {
         let block_id = self.current_block_id();
+        let block = self.blocks.get_block(block_id);
+        let scope = self.scopes.get_scope(block.scope_id);
+        let entry_block_id = scope.entry_block.unwrap();
+
         let entry = CodeEntry::new(
-            block_id,
+            entry_block_id,
             LCode::Declare,
             ty,
             Some(name),
