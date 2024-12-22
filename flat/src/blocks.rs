@@ -48,12 +48,14 @@ impl IRBlock {
         self.size
     }
 
+    pub fn insert(&mut self) {
+        self.size += 1;
+    }
     pub fn push_decl(&mut self, link_id: LinkId) {
         if self.last.unwrap() == link_id {
             self.last = Some(link_id);
         }
         self.last_decl = Some(link_id);
-        self.size += 1;
     }
 
     pub fn push(&mut self, link_id: LinkId, term: bool) {

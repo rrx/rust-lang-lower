@@ -142,7 +142,7 @@ pub struct ScopeLayer {
     pub lambdas: HashMap<StringLabel, AbstractionId>,
     pub templates: HashMap<StringKey, LinkId>,
     pub unclaimed_labels: HashMap<StringLabel, BlockId>,
-    pub stack_variables: HashMap<LinkId, AstType>,
+    pub stack_variables: HashMap<LinkId, (LinkId, AstType)>,
 }
 
 impl ScopeLayer {
@@ -245,9 +245,17 @@ impl ScopeGraph {
         scope.declarations.insert(name, v);
     }
 
-    pub fn make_stack_variable(&mut self, scope_id: ScopeId, link_id: LinkId, ast_type: AstType) {
+    pub fn make_stack_variable(
+        &mut self,
+        scope_id: ScopeId,
+        link_id: LinkId,
+        decl_link_id: LinkId,
+        ast_type: AstType,
+    ) {
         let scope = self.get_scope_mut(scope_id);
-        scope.stack_variables.insert(link_id, ast_type);
+        scope
+            .stack_variables
+            .insert(link_id, (decl_link_id, ast_type));
     }
 
     pub fn scope_define_template(&mut self, scope_id: ScopeId, key: StringKey, link_id: LinkId) {

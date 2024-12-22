@@ -717,7 +717,9 @@ impl Flatten {
         entry.next = before_entry_next;
 
         let before_entry = self.get_entry_mut(before_link_id);
+        let block_id = before_entry.block_id;
         before_entry.next = next_link_id;
+        self.blocks.get_block_mut(block_id).insert();
         next_link_id
     }
 
@@ -744,7 +746,7 @@ impl Flatten {
         );
         let block = self.blocks.get_block(block_id);
         let scope_id = block.scope_id;
-        assert!(!block.is_term());
+        //assert!(!block.is_term());
         let link_id = self.insert_decl(scope_id, entry);
         link_id
     }
@@ -905,19 +907,21 @@ impl Flatten {
         let block = self.blocks.get_block(block_id);
         let scope_id = block.scope_id;
         for (maybe_key, v, ty, span_id) in values {
-            let entry = self.get_entry(*v);
+            let mut v = *v;
+            let entry = self.get_entry(v);
             let v_block_id = entry.block_id;
             let v_block = self.blocks.get_block(v_block_id);
             let v_scope_id = v_block.scope_id;
             let v_scope = self.scopes.get_scope(v_scope_id);
             let v_entry_block_id = v_scope.entry_block.unwrap();
             let in_entry = v_entry_block_id == v_block_id;
+            let in_block = v_block_id == block_id;
 
             self.scopes
                 .find_nearest_scope(v_scope_id, &[ScopeType::Function, ScopeType::Block]);
             assert!(self.scopes.is_in_scope(scope_id, v_scope_id));
 
-            if !in_entry {
+            if !in_entry && !in_block {
                 // checking if it's in entry is easier than checking if the block is dominant
                 // This could be make more efficient.
                 // get a link the value declaration in the scope entry
@@ -925,17 +929,29 @@ impl Flatten {
                     "{}: {}{}=>{}{}, {}",
                     v, block_id, scope_id, v_block_id, v_scope_id, ty
                 );
-                self.scopes.make_stack_variable(v_scope_id, *v, ty.clone());
                 let current_block_id = self.current_block_id();
                 let key = b.labels.fresh_key("r");
-                //self.switch_blocks(v_entry_block_id);
-                //let decl_link_id = self.push_decl(ty.clone(), key, *span_id);
-                //self.switch_blocks(current_block_id);
+                // create space on the stack in the entry block
+                self.switch_blocks(v_entry_block_id);
+                let decl_link_id = self.push_decl(ty.clone(), key, *span_id);
+                self.switch_blocks(current_block_id);
+                self.scopes
+                    .make_stack_variable(v_scope_id, v, decl_link_id, ty.clone());
+
+                //self.insert_entry_after(v, CodeEntry::new(
+                //block_id,
+                //LCode::Store(decl_link_id, v),
+                //ty.clone(),
+                //None,
+                //*span_id,
+                //VarDefinitionSpace::Default,
+                //));
+                //v = decl_link_id;
             }
 
-            let out = if self.is_load_required(*v) {
+            let out = if self.is_load_required(v) {
                 let link_id = self.push_code(
-                    LCode::Load(*v),
+                    LCode::Load(v),
                     ty.clone(),
                     *maybe_key,
                     *span_id,
@@ -943,7 +959,7 @@ impl Flatten {
                 );
                 (*maybe_key, link_id, ty, *span_id)
             } else {
-                (*maybe_key, *v, ty, *span_id)
+                (*maybe_key, v, ty, *span_id)
             };
 
             updated_values.push(out);

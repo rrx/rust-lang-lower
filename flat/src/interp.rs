@@ -257,8 +257,14 @@ impl<'a> Interp<'a> {
                     }
                     return Ok(Value::Tuple(values));
                 }
+                LCode::Declare => {
+                    //return Ok(self.resolve_declaration(v));
+                    if let Some(value) = scope.values.get(&v) {
+                        return Ok(value.clone());
+                    }
+                }
 
-                _ => unimplemented!("{:?}", code),
+                _ => unimplemented!("{:?}", (code, v)),
             }
         }
         unreachable!()
