@@ -827,8 +827,8 @@ impl Flatten {
         Ok(FlattenResult::link(link_id))
     }
 
-    pub fn push_return(&mut self, values: ArgVec, span_id: SpanId) -> LinkId {
-        let _ = self.push_call_values(&values);
+    pub fn push_return(&mut self, values: ArgVec, span_id: SpanId, b: &mut NB) -> LinkId {
+        let _ = self.push_call_values(&values, b);
 
         self.push_code(
             LCode::Return,
@@ -898,9 +898,41 @@ impl Flatten {
     pub fn push_call_values(
         &mut self,
         values: &[(Option<StringKey>, LinkId, AstType, SpanId)],
+        b: &mut NB,
     ) -> Vec<LinkId> {
         let mut updated_values = vec![];
+        let block_id = self.current_block_id();
+        let block = self.blocks.get_block(block_id);
+        let scope_id = block.scope_id;
         for (maybe_key, v, ty, span_id) in values {
+            let entry = self.get_entry(*v);
+            let v_block_id = entry.block_id;
+            let v_block = self.blocks.get_block(v_block_id);
+            let v_scope_id = v_block.scope_id;
+            let v_scope = self.scopes.get_scope(v_scope_id);
+            let v_entry_block_id = v_scope.entry_block.unwrap();
+            let in_entry = v_entry_block_id == v_block_id;
+
+            self.scopes
+                .find_nearest_scope(v_scope_id, &[ScopeType::Function, ScopeType::Block]);
+            assert!(self.scopes.is_in_scope(scope_id, v_scope_id));
+
+            if !in_entry {
+                // checking if it's in entry is easier than checking if the block is dominant
+                // This could be make more efficient.
+                // get a link the value declaration in the scope entry
+                println!(
+                    "{}: {}{}=>{}{}, {}",
+                    v, block_id, scope_id, v_block_id, v_scope_id, ty
+                );
+                self.scopes.make_stack_variable(v_scope_id, *v, ty.clone());
+                let current_block_id = self.current_block_id();
+                let key = b.labels.fresh_key("r");
+                //self.switch_blocks(v_entry_block_id);
+                //let decl_link_id = self.push_decl(ty.clone(), key, *span_id);
+                //self.switch_blocks(current_block_id);
+            }
+
             let out = if self.is_load_required(*v) {
                 let link_id = self.push_code(
                     LCode::Load(*v),
@@ -936,6 +968,7 @@ impl Flatten {
         target_block_id: BlockId,
         jump_args: ArgVec,
         span_id: SpanId,
+        b: &mut NB,
     ) -> LinkId {
         // handle leaving scope here?
         let current_block_id = self.current_block_id();
@@ -957,6 +990,7 @@ impl Flatten {
                 .into_iter()
                 .map(|(key, v, ty, span_id)| (key, v, ty, span_id))
                 .collect::<Vec<_>>(),
+            b,
         );
 
         //println!(
@@ -1023,9 +1057,10 @@ impl Flatten {
         values: ArgVec,
         ret_ty: ReturnType,
         span_id: SpanId,
+        b: &mut NB,
     ) -> Result<FlattenResult> {
         // Add links
-        self.push_call_values(&values);
+        self.push_call_values(&values, b);
 
         if let ReturnType::Single(ty) = &ret_ty {
             let link_id = self.push_code(
@@ -1061,7 +1096,7 @@ impl Flatten {
         let current_block_id = self.current_block_id();
 
         // Add links
-        self.push_call_values(&call_values);
+        self.push_call_values(&call_values, b);
 
         let link_id = self.push_code(
             LCode::Builtin(id),
@@ -1174,13 +1209,13 @@ impl Flatten {
         Ok(template_id)
     }
 
-    pub fn push_close_block(&mut self, span_id: SpanId, _b: &mut NB) -> Result<FlattenResult> {
+    pub fn push_close_block(&mut self, span_id: SpanId, b: &mut NB) -> Result<FlattenResult> {
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
         let scope_id = block.scope_id;
         let scope = self.scopes.get_scope(scope_id);
         if let Some(loop_block) = scope.loop_block {
-            let link_id = self.maybe_terminate_block(loop_block.start_block, span_id);
+            let link_id = self.maybe_terminate_block(loop_block.start_block, span_id, b);
             self.switch_blocks(loop_block.next_block);
             Ok(FlattenResult::link(link_id))
         } else {
@@ -1490,7 +1525,7 @@ impl Flatten {
                 }
 
                 let scope = self.scopes.get_scope(fun_scope_id);
-                self.push_jump(scope.return_block.unwrap().into(), jump_args, span_id);
+                self.push_jump(scope.return_block.unwrap().into(), jump_args, span_id, b);
                 Ok(FlattenResult::statement())
             }
 
@@ -1527,10 +1562,13 @@ impl Flatten {
 
                 b.unify(&rx_ty, x_span_id, &ry_ty, y_span_id);
 
-                let _ = self.push_call_values(&[
-                    (None, vx, rx_ty.clone(), node.span_id),
-                    (None, vy, ry_ty.clone(), node.span_id),
-                ]);
+                let _ = self.push_call_values(
+                    &[
+                        (None, vx, rx_ty.clone(), node.span_id),
+                        (None, vy, ry_ty.clone(), node.span_id),
+                    ],
+                    b,
+                );
 
                 let ret_ty = op.node.get_type(&rx_ty, &ry_ty);
                 let link_id = self.push_code(
@@ -1754,7 +1792,7 @@ impl Flatten {
                 let link_id = r.link_id.unwrap();
                 let ty = self.get_type(link_id).clone();
 
-                self.push_call_values(&[(None, link_id, ty.clone(), span_id)]);
+                self.push_call_values(&[(None, link_id, ty.clone(), span_id)], b);
 
                 let link_id = self.push_code(
                     LCode::Op1(op),
@@ -1812,7 +1850,7 @@ impl Flatten {
                 );
                 self.switch_blocks(then_block_id);
                 let _ = self.push_node(NB::ensure_seq(*then_expr), b)?;
-                self.maybe_terminate_block(v_next, span_id);
+                self.maybe_terminate_block(v_next, span_id, b);
 
                 // ELSE
                 let else_block_id = if let Some(else_expr) = maybe_else_expr {
@@ -1842,7 +1880,7 @@ impl Flatten {
 
                     self.switch_blocks(else_block_id);
                     let _ = self.push_node(NB::ensure_seq(*else_expr), b)?;
-                    self.maybe_terminate_block(v_next, span_id);
+                    self.maybe_terminate_block(v_next, span_id, b);
                     else_block_id
                 } else {
                     if !term {
@@ -1955,7 +1993,7 @@ impl Flatten {
                     let entry = self.get_entry(last_link_id);
                     if !entry.code.is_term() {
                         assert_eq!(args.len(), 0);
-                        let _link_id = self.push_jump(new_block_id, vec![], span_id);
+                        let _link_id = self.push_jump(new_block_id, vec![], span_id, b);
                     }
                 }
 
@@ -1965,7 +2003,7 @@ impl Flatten {
                 if let Some(last) = block.last() {
                     let entry = self.get_entry(last);
                     if !entry.code.is_term() {
-                        let _ = self.push_jump(new_block_id.into(), vec![], span_id);
+                        let _ = self.push_jump(new_block_id.into(), vec![], span_id, b);
                     }
                 }
 
@@ -2108,7 +2146,7 @@ impl Flatten {
                     if let Some(v) = r.link_id {
                         ty = self.get_type(v).clone();
                         // push single arg
-                        self.push_call_values(&[(None, v.into(), ty.clone(), node.span_id)]);
+                        self.push_call_values(&[(None, v.into(), ty.clone(), node.span_id)], b);
                     }
                 }
 
@@ -2168,7 +2206,8 @@ impl Flatten {
                                 VarDefinitionSpace::Default,
                             );
                             let jump_args = acc.drain(..).collect::<Vec<_>>();
-                            let link_id = self.push_jump(block_id.into(), jump_args, node.span_id);
+                            let link_id =
+                                self.push_jump(block_id.into(), jump_args, node.span_id, b);
                             acc.clear();
                             out_link_id = Some(link_id);
                         }
@@ -2242,7 +2281,7 @@ impl Flatten {
                 );
 
                 self.switch_blocks(current_block_id);
-                let link_id = self.push_jump(loop_block_id.into(), vec![], node.span_id);
+                let link_id = self.push_jump(loop_block_id.into(), vec![], node.span_id, b);
 
                 // open loop block
                 self.switch_blocks(loop_block_id);
@@ -2274,7 +2313,7 @@ impl Flatten {
                 if let Some(loop_scope) = self.scopes.get_loop_scope(scope_id, maybe_key) {
                     self.switch_blocks(current_block_id);
                     let link_id =
-                        self.push_jump(loop_scope.start_block.into(), vec![], node.span_id);
+                        self.push_jump(loop_scope.start_block.into(), vec![], node.span_id, b);
                     self.switch_blocks(current_block_id);
                     Ok(FlattenResult::link(link_id))
                 } else {
@@ -2294,7 +2333,7 @@ impl Flatten {
                 if let Some(loop_scope) = self.scopes.get_loop_scope(scope_id, maybe_name) {
                     self.switch_blocks(current_block_id);
                     let link_id =
-                        self.push_jump(loop_scope.start_block.into(), vec![], node.span_id);
+                        self.push_jump(loop_scope.start_block.into(), vec![], node.span_id, b);
                     self.switch_blocks(current_block_id);
                     Ok(FlattenResult::link(link_id))
                 } else {
@@ -2311,7 +2350,7 @@ impl Flatten {
                 if let Some(loop_scope) = self.scopes.get_loop_scope(scope_id, maybe_key) {
                     self.switch_blocks(current_block_id);
                     let _link_id =
-                        self.push_jump(loop_scope.next_block.into(), vec![], node.span_id);
+                        self.push_jump(loop_scope.next_block.into(), vec![], node.span_id, b);
 
                     let v_next = self.blocks.new_block(scope_id);
                     self.switch_blocks(v_next);
@@ -2340,7 +2379,7 @@ impl Flatten {
                 if let Some(loop_scope) = self.scopes.get_loop_scope(scope_id, maybe_name) {
                     self.switch_blocks(current_block_id);
                     let link_id =
-                        self.push_jump(loop_scope.next_block.into(), vec![], node.span_id);
+                        self.push_jump(loop_scope.next_block.into(), vec![], node.span_id, b);
                     self.switch_blocks(current_block_id);
                     Ok(FlattenResult::link(link_id))
                 } else {
@@ -2466,13 +2505,18 @@ impl Flatten {
         }
     }
 
-    pub fn maybe_terminate_block(&mut self, v_next: BlockId, span_id: SpanId) -> LinkId {
+    pub fn maybe_terminate_block(
+        &mut self,
+        v_next: BlockId,
+        span_id: SpanId,
+        b: &mut NB,
+    ) -> LinkId {
         // is the block isn't terminated, terminate it with a jump to another block
         let block = self.blocks.get_block(self.current_block_id());
         let mut link_id = block.last().unwrap().clone();
         let entry = self.get_entry(link_id);
         if !entry.code.is_term() {
-            link_id = self.push_jump(v_next, vec![], span_id);
+            link_id = self.push_jump(v_next, vec![], span_id, b);
             self.blocks
                 .block_succ(self.current_block_id(), v_next, Successor::BlockScope);
         }

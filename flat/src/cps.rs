@@ -173,7 +173,8 @@ impl Flatten {
         let unwind_scopes = self.scopes.unwind_scopes(fun_scope_id, goto_scope_id)?;
         println!("unwind scopes: {:?}", unwind_scopes);
 
-        let goto_link_id = self.push_jump(fun_block_id.into(), call_values.clone(), call_span_id);
+        let goto_link_id =
+            self.push_jump(fun_block_id.into(), call_values.clone(), call_span_id, b);
 
         for (i, (_, var_link_id, _ty, _)) in call_values.iter().enumerate() {
             self.scoped_continuations.connect(
@@ -453,7 +454,8 @@ impl Flatten {
                     // TODO: args should be unwound before jumping
                     // by replacing jumps out of scope to the unwind function
                     let jump_args = self.push_call_arguments(d.args.clone(), d.call_span_id, b)?;
-                    let link_id = self.push_jump(target_block_id.into(), jump_args, d.call_span_id);
+                    let link_id =
+                        self.push_jump(target_block_id.into(), jump_args, d.call_span_id, b);
                     self.scoped_continuations.connect(
                         ContinuationFlow::Jump(link_id),
                         ContinuationFlow::Block(target_block_id),

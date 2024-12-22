@@ -9,7 +9,7 @@ use std::ops::{Deref, DerefMut};
 use std::collections::{HashMap, HashSet};
 
 use crate::{ArgVec, BlockId, BlockifyError, LinkId, NodeBuilder, StringLabel, ValueId, VariantId};
-use compile_core::{AbstractionId, Argument, Lambda, SpanId, StringKey};
+use compile_core::{AbstractionId, Argument, AstType, Lambda, SpanId, StringKey};
 
 #[derive(Debug)]
 pub enum PlacedBlockId {
@@ -142,6 +142,7 @@ pub struct ScopeLayer {
     pub lambdas: HashMap<StringLabel, AbstractionId>,
     pub templates: HashMap<StringKey, LinkId>,
     pub unclaimed_labels: HashMap<StringLabel, BlockId>,
+    pub stack_variables: HashMap<LinkId, AstType>,
 }
 
 impl ScopeLayer {
@@ -161,6 +162,7 @@ impl ScopeLayer {
             lambdas: HashMap::new(),
             templates: HashMap::new(),
             unclaimed_labels: HashMap::new(),
+            stack_variables: HashMap::new(),
         }
     }
 
@@ -243,6 +245,11 @@ impl ScopeGraph {
         scope.declarations.insert(name, v);
     }
 
+    pub fn make_stack_variable(&mut self, scope_id: ScopeId, link_id: LinkId, ast_type: AstType) {
+        let scope = self.get_scope_mut(scope_id);
+        scope.stack_variables.insert(link_id, ast_type);
+    }
+
     pub fn scope_define_template(&mut self, scope_id: ScopeId, key: StringKey, link_id: LinkId) {
         let scope = self.get_scope_mut(scope_id);
         scope.templates.insert(key.into(), link_id);
@@ -278,6 +285,15 @@ impl ScopeGraph {
         } else {
             false
         }
+    }
+
+    pub fn is_in_scope(&self, start_scope_id: ScopeId, end_scope_id: ScopeId) -> bool {
+        for scope_id in self.walk_scopes(start_scope_id) {
+            if scope_id == end_scope_id {
+                return true;
+            }
+        }
+        false
     }
 
     pub fn find_nearest_scope(

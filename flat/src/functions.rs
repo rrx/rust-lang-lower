@@ -495,7 +495,7 @@ impl Flatten {
                 b,
             )?;
 
-        self.push_return(argvec, def_span_id);
+        self.push_return(argvec, def_span_id, b);
         // restore position back to where we started
         self.switch_blocks(current_block_id);
         Ok((v_id, FlattenResult::link(entry_link_id)))
@@ -673,7 +673,7 @@ impl Flatten {
         // flatten function, and switch to next
         self.switch_blocks(fun_block_id);
         let _ = self.push_node(body, b)?;
-        self.maybe_terminate_block(next_block_id, def_span_id);
+        self.maybe_terminate_block(next_block_id, def_span_id, b);
 
         let variant_ty = b.types.u.resolve(&variant_ty).unwrap();
         self.variant_update(variant_id, variant_ty.clone(), entry_link_id);
@@ -707,12 +707,18 @@ impl Flatten {
     ) -> Result<ArgVec> {
         let mut link_ids = vec![];
         let mut values = vec![];
+        let block_id = self.current_block_id();
         for a in args.into_iter() {
             match a {
                 Argument::Positional(expr) => {
                     let r = self.push_node(*expr, b)?;
                     let link_id = r.link_id.unwrap();
                     let entry = self.get_entry(link_id);
+                    let v_block_id = entry.block_id;
+                    println!(
+                        "{}: v_block_id: {}, block_id: {}",
+                        link_id, v_block_id, block_id
+                    );
                     values.push((entry.name, link_id, entry.ty.clone(), span_id));
                     link_ids.push(link_id);
                 }
@@ -720,8 +726,13 @@ impl Flatten {
                 Argument::Named(key, expr) | Argument::System(key, expr) => {
                     let r = self.push_node(*expr, b)?;
                     let link_id = r.link_id.unwrap();
-                    let ty = self.get_type(link_id).clone();
-                    values.push((Some(key), link_id, ty, span_id));
+                    let entry = self.get_entry(link_id);
+                    let v_block_id = entry.block_id;
+                    println!(
+                        "{}: v_block_id: {}, block_id: {}",
+                        link_id, v_block_id, block_id
+                    );
+                    values.push((Some(key), link_id, entry.ty.clone(), span_id));
                     link_ids.push(link_id);
                 }
 
@@ -735,7 +746,7 @@ impl Flatten {
                         args_values.push((Some(key), link_id, ty, span_id));
                     }
 
-                    self.push_call_values(&args_values);
+                    self.push_call_values(&args_values, b);
 
                     let struct_ty = AstType::Struct(
                         args_values
@@ -844,6 +855,7 @@ impl Flatten {
                 call_values,
                 def_func_type.ret.clone(),
                 call_span_id,
+                b,
             )
         } else {
             self.switch_blocks(current_block_id);
@@ -938,7 +950,7 @@ impl Flatten {
 
         // JUMP
         // jump into the the lambda
-        self.push_jump(fun_block_id.into(), call_values, call_span_id);
+        self.push_jump(fun_block_id.into(), call_values, call_span_id, b);
 
         self.switch_blocks(next_block_id);
 
@@ -1092,7 +1104,8 @@ impl Flatten {
         };
 
         // jump into the the lambda
-        let goto_link_id = self.push_jump(fun_block_id.into(), call_values.clone(), call_span_id);
+        let goto_link_id =
+            self.push_jump(fun_block_id.into(), call_values.clone(), call_span_id, b);
 
         for (i, (_, var_link_id, _ty, _)) in call_values.iter().enumerate() {
             self.scoped_continuations.connect(
@@ -1191,12 +1204,6 @@ impl Flatten {
                     next_arg_ty,
                 )
             } else {
-                // create the new empty block
-
-                //let s_name = b.labels.r(name.into());
-                //let local_name = format!("{}.reuse", s_name);
-                //let local_key = b.labels.fresh_key(&local_name);
-
                 let body = a.def.body.clone().unwrap();
 
                 // New Func Scope
@@ -1204,7 +1211,7 @@ impl Flatten {
                     self.new_scope_and_block(ScopeType::Function, scope_id);
 
                 let next_block_id = self.blocks.new_block(fun_scope_id);
-                println!("next_block_id2: {}", next_block_id);
+                //println!("next_block_id2: {}", next_block_id);
 
                 let result = self.push_bake_lambda_and_update_next(
                     lookup_name,
@@ -1234,20 +1241,20 @@ impl Flatten {
                     _,
                     entry_args,
                 ) = result;
-                println!("fun_block_id1: {}", fun_block_id);
-                println!("variant_ty1: {}", variant_ty);
-                println!("ret_func_type1: {}", ret_func_type);
-                println!("next_arg_ty1: {}", next_arg_ty);
+                //println!("fun_block_id1: {}", fun_block_id);
+                //println!("variant_ty1: {}", variant_ty);
+                //println!("ret_func_type1: {}", ret_func_type);
+                //println!("next_arg_ty1: {}", next_arg_ty);
 
-                println!("entry_args: {:?}", entry_args);
+                //println!("entry_args: {:?}", entry_args);
                 let arg = entry_args.last().unwrap();
 
                 //let arg_index = call_values.len() - 1;
                 let call_link_id = arg.1;
-                println!("call_link_id2: {}", call_link_id);
+                //println!("call_link_id2: {}", call_link_id);
                 //let next_ty = arg.2.clone();
 
-                let _ = self.push_call_values(&call_values);
+                let _ = self.push_call_values(&call_values, b);
                 // complete the lambda bake with a jump to the continuation, this is the exit of
                 // the lambda.  The continuation is part of the signature, so we can call it again
                 let _goto_link_id =
