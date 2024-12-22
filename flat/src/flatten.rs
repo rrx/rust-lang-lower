@@ -917,11 +917,17 @@ impl Flatten {
             let in_entry = v_entry_block_id == v_block_id;
             let in_block = v_block_id == block_id;
 
+            let is_decl = if let LCode::Declare = entry.code {
+                true
+            } else {
+                false
+            };
+
             self.scopes
                 .find_nearest_scope(v_scope_id, &[ScopeType::Function, ScopeType::Block]);
             assert!(self.scopes.is_in_scope(scope_id, v_scope_id));
 
-            if !in_entry && !in_block {
+            if !in_entry && !in_block && !is_decl {
                 // checking if it's in entry is easier than checking if the block is dominant
                 // This could be make more efficient.
                 // get a link the value declaration in the scope entry
@@ -938,15 +944,18 @@ impl Flatten {
                 self.scopes
                     .make_stack_variable(v_scope_id, v, decl_link_id, ty.clone());
 
-                //self.insert_entry_after(v, CodeEntry::new(
-                //block_id,
-                //LCode::Store(decl_link_id, v),
-                //ty.clone(),
-                //None,
-                //*span_id,
-                //VarDefinitionSpace::Default,
-                //));
-                //v = decl_link_id;
+                self.insert_entry_after(
+                    v,
+                    CodeEntry::new(
+                        block_id,
+                        LCode::Store(decl_link_id, v),
+                        ty.clone(),
+                        None,
+                        *span_id,
+                        VarDefinitionSpace::Default,
+                    ),
+                );
+                v = decl_link_id;
             }
 
             let out = if self.is_load_required(v) {
@@ -1682,26 +1691,40 @@ impl Flatten {
                 let expr_ty = expr_entry.ty.clone();
                 let expr_span_id = expr_entry.span_id;
 
-                let offset_decl =
-                    if let Some(v_decl) = self.resolve_name(self.current_block_id(), name) {
-                        // already declared
-                        let decl_entry = self.get_entry(v_decl);
-                        b.unify(&decl_entry.ty, decl_entry.span_id, &expr_ty, expr_span_id);
-                        v_decl
-                    } else {
-                        // need to declare it
-                        let block = self.blocks.get_block(self.current_block_id());
-                        let scope_id = block.scope_id;
-                        let link_id = self.push_code(
-                            LCode::Declare,
-                            expr_ty.clone(),
-                            Some(name),
-                            node.span_id,
-                            VarDefinitionSpace::Stack,
-                        );
-                        self.scopes.scope_define(scope_id, name, link_id);
-                        link_id.into()
-                    };
+                let block_id = self.current_block_id();
+                let block = self.blocks.get_block(block_id);
+                let scope_id = block.scope_id;
+
+                let offset_decl = if let Some(v_decl) = self.resolve_name_in_scope(scope_id, name) {
+                    // already declared
+                    let decl_entry = self.get_entry(v_decl);
+                    b.unify(&decl_entry.ty, decl_entry.span_id, &expr_ty, expr_span_id);
+                    v_decl
+                } else {
+                    // need to declare it
+                    /*
+                    let scope = self.scopes.get_scope(scope_id);
+                    let entry_block_id = scope.entry_block.unwrap();
+
+                    let current_block_id = self.current_block_id();
+                    self.switch_blocks(entry_block_id);
+                    let link_id = self.push_decl(expr_ty.clone(), name, node.span_id);
+                    self.switch_blocks(current_block_id);
+                    let block = self.blocks.get_block(entry_block_id);
+                    */
+
+                    let block = self.blocks.get_block(self.current_block_id());
+                    let scope_id = block.scope_id;
+                    let link_id = self.push_code(
+                        LCode::Declare,
+                        expr_ty.clone(),
+                        Some(name),
+                        node.span_id,
+                        VarDefinitionSpace::Stack,
+                    );
+                    self.scopes.scope_define(scope_id, name, link_id);
+                    link_id.into()
+                };
 
                 let load_link_id = if self.is_load_required(v_expr) {
                     let link_id = self.push_code(
@@ -2252,6 +2275,10 @@ impl Flatten {
                 let block = self.blocks.get_block(current_block_id);
                 let parent_scope_id = block.scope_id;
 
+                let (loop_block_id, loop_scope_id) =
+                    self.new_scope_and_block(ScopeType::Region, parent_scope_id);
+
+                //let (v_next, next_scope_id) = self.new_scope_and_block(ScopeType::Block, parent_scope_id);
                 let v_next = self.blocks.new_block(parent_scope_id);
                 self.switch_blocks(v_next);
                 self.push_start_block(
@@ -2263,8 +2290,6 @@ impl Flatten {
                 );
                 self.switch_blocks(current_block_id);
 
-                let (loop_block_id, loop_scope_id) =
-                    self.new_scope_and_block(ScopeType::Region, parent_scope_id);
                 let scope = self.scopes.get_scope_mut(loop_scope_id);
                 scope.entry_block = Some(loop_block_id);
                 self.blocks
