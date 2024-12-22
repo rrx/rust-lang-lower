@@ -14,6 +14,7 @@ pub mod functions;
 pub mod graph;
 pub mod interp;
 pub mod links;
+pub mod mem;
 pub mod scope;
 
 pub use block_format::*;
@@ -30,6 +31,7 @@ pub use functions::*;
 pub use graph::{Node, CFG};
 pub use interp::*;
 pub use links::*;
+pub use mem::*;
 pub use scope::{
     DeferredGoto, DeferredGotoList, DeferredType, PlacedBlockId, ScopeGraph, ScopeId, ScopeLayer,
     ScopeType,

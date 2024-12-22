@@ -1,5 +1,5 @@
 use anyhow::Result;
-use compile_core::{AstType, LinkOptions, Literal, SpanId, StringKey, VarDefinitionSpace};
+use compile_core::{AstType, LinkOptions, Literal, SpanId, StringKey};
 use petgraph::graph::NodeIndex;
 use std::collections::HashMap;
 
@@ -8,7 +8,8 @@ use std::convert::Into;
 use crate::{
     BlockGraph, BlockId, CodeEntry, CodeOffset, CodeRow, ContinuationFlow, Flatten,
     FunctionVariant, FunctionVariantBuilder, ICodeModule, LCode, LinkId, NodeBuilder as NB,
-    ScopeGraph, ScopeType, ScopedContinuations, StringLabel, Successor, ValueId, VariantId,
+    ScopeGraph, ScopeType, ScopedContinuations, StringLabel, Successor, ValueId,
+    VarDefinitionSpace, VariantId,
 };
 
 use tabled::{settings::Style, Table};

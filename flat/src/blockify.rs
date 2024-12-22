@@ -3,12 +3,11 @@ use thiserror::Error;
 
 use compile_core::{
     AstType, BinaryOperation, BuiltinId, Literal, NaryOperation, SpanId, StringKey, UnaryOperation,
-    VarDefinitionSpace,
 };
 
 use crate::{
     BlockId, CodeEntry, CodeOffset, ContinuationFlow, FunctionVariant, LinkId, Node, NodeBuilder,
-    StringLabel, Successor, ValueId, VariantId, CFG,
+    StringLabel, Successor, ValueId, VarDefinitionSpace, VariantId, CFG,
 };
 
 use std::collections::HashSet;

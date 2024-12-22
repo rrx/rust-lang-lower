@@ -4,7 +4,6 @@ use anyhow::Result;
 use compile_core::{
     AbstractionId, Argument, AssignTarget, Ast, AstFuncType, AstNode, AstType, BuiltinId,
     ControlFlowMarker, Lambda, LinkOptions, Literal, ReturnType, SpanId, StringKey,
-    VarDefinitionSpace,
 };
 
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -15,7 +14,7 @@ use crate::{
     AbstractionsBuilder, BlockGraph, BlockId, BlockifyError, Builtin, CodeOffset, ContinuationFlow,
     DeferredGotoList, FlowEdge, FunctionVariantBuilder, LCode, LinkId, NodeBuilder as NB,
     ScopeGraph, ScopeId, ScopeType, ScopedContinuations, StringLabel, Successor, ValueId,
-    VariantId,
+    VarDefinitionSpace, VariantId,
 };
 
 pub type ArgVec = Vec<(Option<StringKey>, LinkId, AstType, SpanId)>;
@@ -1720,7 +1719,7 @@ impl Flatten {
                         expr_ty.clone(),
                         Some(name),
                         node.span_id,
-                        VarDefinitionSpace::Stack,
+                        VarDefinitionSpace::Default,
                     );
                     self.scopes.scope_define(scope_id, name, link_id);
                     link_id.into()

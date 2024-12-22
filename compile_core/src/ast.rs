@@ -3,38 +3,6 @@ use petgraph::graph::NodeIndex;
 use serde::Serialize;
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
-pub enum VarDefinitionSpace {
-    Arg,
-    Reg,
-    Static,
-    Stack,
-    Heap,
-    Default,
-}
-
-impl Default for VarDefinitionSpace {
-    fn default() -> Self {
-        Self::Default
-    }
-}
-
-impl VarDefinitionSpace {
-    pub fn is_static(&self) -> bool {
-        match self {
-            Self::Static => true,
-            _ => false,
-        }
-    }
-
-    pub fn requires_deref(&self) -> bool {
-        match self {
-            Self::Static | Self::Stack | Self::Heap => true,
-            _ => false,
-        }
-    }
-}
-
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, PartialOrd, Ord, Serialize)]
 pub struct BlockId(u32);
 

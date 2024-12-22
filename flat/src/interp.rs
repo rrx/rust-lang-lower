@@ -1,4 +1,4 @@
-use crate::{Builtin, ContinuationFlow, ICodeModule, LCode, NodeBuilder, UseIndex, ValueId};
+use crate::{Builtin, ICodeModule, LCode, NodeBuilder, UseIndex, ValueId};
 use anyhow::Result;
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -513,7 +513,7 @@ impl<'a> Interp<'a> {
                 true
             }
 
-            LCode::Switch(link_id, h) => {
+            LCode::Switch(link_id, _) => {
                 // push args
                 let base = self.m.resolve_code_offset((*link_id).into());
                 let value = self.resolve_value(base)?;

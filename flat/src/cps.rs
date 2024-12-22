@@ -1,7 +1,6 @@
 use anyhow::Result;
 use compile_core::{
     AbstractionId, Argument, AstFuncType, AstType, Literal, ReturnType, SpanId, StringKey,
-    VarDefinitionSpace,
 };
 
 use std::convert::Into;
@@ -9,7 +8,7 @@ use std::convert::Into;
 use crate::{
     argvec_type, ArgVec, BlockId, ContinuationFlow, DeferredGoto, DeferredType, Flatten,
     FlattenResult, FlowEdge, LCode, LinkId, NodeBuilder as NB, ScopeId, ScopeType, Successor,
-    VariantId,
+    VarDefinitionSpace, VariantId,
 };
 
 impl Flatten {

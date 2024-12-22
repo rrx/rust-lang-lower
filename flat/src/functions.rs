@@ -1,12 +1,12 @@
 use crate::{
     ArgVec, BlockId, BlockifyError, ContinuationFlow, Flatten, FlattenResult, FlowEdge, LCode,
-    LinkId, NodeBuilder as NB, ScopeId, ScopeType, Successor,
+    LinkId, NodeBuilder as NB, ScopeId, ScopeType, Successor, VarDefinitionSpace,
 };
 use anyhow::Error;
 use anyhow::Result;
 use compile_core::{
     AbstractionId, Argument, Ast, AstFuncType, AstNode, AstType, Lambda, Literal, NaryOperation,
-    ReturnType, SpanId, StringKey, VarDefinitionSpace,
+    ReturnType, SpanId, StringKey,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -513,7 +513,7 @@ impl Flatten {
         def_func_type: AstFuncType,
         def_span_id: SpanId,
         call_span_id: SpanId,
-        scope_type: ScopeType,
+        _scope_type: ScopeType,
         succ_type: Successor,
         mem: VarDefinitionSpace,
         b: &mut NB,
@@ -759,7 +759,7 @@ impl Flatten {
                         struct_ty.clone(),
                         None,
                         span_id,
-                        VarDefinitionSpace::Stack,
+                        VarDefinitionSpace::Default,
                     );
                     values.push((Some(key), link_id, struct_ty.clone(), span_id));
                     link_ids.push(link_id);
