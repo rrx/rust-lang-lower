@@ -1,6 +1,7 @@
 use anyhow::Result;
 use flat::{
     Builtin, CodeOffset, ICodeModule, LCode, LinkId, NodeBuilder, StringLabel, UseIndex, ValueId,
+    VarDefinitionSpace,
 };
 use indexmap::IndexMap;
 use melior::ir::Location;
@@ -558,6 +559,78 @@ impl<'c> MLIRGenerator<'c> {
         (ptr_type, tuple_type)
     }
 
+    fn lower_store(&mut self, v: ValueId, v_decl: ValueId, v_value: ValueId) -> SymIndex {
+        let location = self.get_location(v);
+        let entry_id = self.blockify.get_entry_id(v).unwrap();
+        let decl_is_static = self.blockify.is_in_static_scope(v_decl.into());
+        //let value_is_static = self.blockify.is_in_static_scope(v_value.into());
+        //println!(
+        //"store: {}, {}, {}, {}",
+        //v_decl, v_value, decl_is_static, value_is_static
+        //);
+
+        /*
+           let value_index = if value_is_static {
+           let op = memref::get_global(self.context, &static_name, memref_ty, location);
+        //let current = blocks.get_mut(&block_index).unwrap();
+        //let addr_index = current.push(op);
+        //addr_index
+        let c = self.blocks.get_mut(&block_id).unwrap();
+        let index = c.push(op);
+        self.index.insert(v, index);
+        index
+
+        } else {
+        self.resolve_value(v_value.into()).unwrap()
+        };
+        */
+
+        let addr_index = if decl_is_static {
+            let name = self.blockify.get_name(v_decl.into()).unwrap();
+            let lhs_ty = self.blockify.get_type(v_decl.into());
+            let rhs_ty = self.blockify.get_type(v_value.into());
+            assert_eq!(lhs_ty, rhs_ty);
+
+            let (lower_ty, dims) = self.from_type(&lhs_ty);
+            assert_eq!(dims.len(), 0);
+            let memref_ty = MemRefType::new(lower_ty, &[], None, None);
+            let static_name = self.b.labels.r(name);
+            // TODO: FIXME
+            //let static_name = b
+            //.strings
+            //.resolve(&cfg.static_names.get(&sym_index).cloned().unwrap_or(name));
+            let op = memref::get_global(self.context, &static_name, memref_ty, location);
+            //addr_index
+            let c = self.blocks.get_mut(&entry_id).unwrap();
+            let index = c.push(op);
+            //self.index.insert(v, index);
+            index
+        } else {
+            let decl_index = self.resolve_value(v_decl.into()).unwrap();
+            decl_index
+        };
+
+        let value_index = self.resolve_value(v_value.into()).unwrap();
+        let r_addr = self.value0(addr_index);
+        let r_value = self.value0(value_index);
+
+        // emit store
+        // store(value, memref)
+        let r_value_ty = r_value.r#type();
+        let r_addr_ty = r_addr.r#type();
+
+        let op = if r_addr_ty.is_mem_ref() && r_value_ty.is_mem_ref() {
+            ods::memref::copy(self.context, r_value, r_addr, location).into()
+        } else {
+            memref::store(r_value, r_addr, &[], location)
+        };
+
+        let c = self.blocks.get_mut(&entry_id).unwrap();
+        let index = c.push(op);
+        //self.index.insert(v, index);
+        index
+    }
+
     pub fn lower_code(&mut self, v: ValueId) -> Result<()> {
         let code = self.blockify.get_code(v);
         let location = self.get_location(v);
@@ -573,8 +646,33 @@ impl<'c> MLIRGenerator<'c> {
             LCode::Arg(pos) => {
                 self.ensure_call_args_empty();
                 let block_id = self.blockify.get_entry_id(v).unwrap();
-                let index = SymIndex::Arg(block_id, *pos as usize);
-                self.index.insert(v, index);
+                let value_index = SymIndex::Arg(block_id, *pos as usize);
+                self.index.insert(v, value_index);
+
+                let entry = self.blockify.get_entry(v);
+                if let VarDefinitionSpace::Stack(decl_link_id) = entry.mem {
+                    let v_decl = self.blockify.resolve_code_offset(decl_link_id.into());
+                    let addr_index = self.resolve_value(v_decl.into()).unwrap();
+                    let r_addr = self.value0(addr_index);
+                    let r_value = self.value0(value_index);
+
+                    // emit store
+                    // store(value, memref)
+                    let r_value_ty = r_value.r#type();
+                    let r_addr_ty = r_addr.r#type();
+
+                    let op = if r_addr_ty.is_mem_ref() && r_value_ty.is_mem_ref() {
+                        ods::memref::copy(self.context, r_value, r_addr, location).into()
+                    } else {
+                        memref::store(r_value, r_addr, &[], location)
+                    };
+                    let entry_id = self.blockify.get_entry_id(v).unwrap();
+                    let c = self.blocks.get_mut(&entry_id).unwrap();
+                    let _index = c.push(op);
+                    self.index.insert(v, addr_index);
+                } else {
+                    self.index.insert(v, value_index);
+                }
             }
 
             LCode::Jump(target) => self.lower_jump(v, *target)?,
@@ -850,83 +948,9 @@ impl<'c> MLIRGenerator<'c> {
 
             LCode::Store(v_decl, v_value) => {
                 self.ensure_call_args_empty();
-                let block_id = self.blockify.get_entry_id(v).unwrap();
-                let decl_is_static = self.blockify.is_in_static_scope(v_decl.into());
-                //let value_is_static = self.blockify.is_in_static_scope(v_value.into());
-                //println!(
-                //"store: {}, {}, {}, {}",
-                //v_decl, v_value, decl_is_static, value_is_static
-                //);
-
-                /*
-                let value_index = if value_is_static {
-                    let op = memref::get_global(self.context, &static_name, memref_ty, location);
-                    //let current = blocks.get_mut(&block_index).unwrap();
-                    //let addr_index = current.push(op);
-                    //addr_index
-                    let c = self.blocks.get_mut(&block_id).unwrap();
-                    let index = c.push(op);
-                    self.index.insert(v, index);
-                    index
-
-                } else {
-                    self.resolve_value(v_value.into()).unwrap()
-                };
-                */
-
-                let addr_index = if decl_is_static {
-                    let name = self.blockify.get_name(v_decl.into()).unwrap();
-                    let lhs_ty = self.blockify.get_type(v_decl.into());
-                    let rhs_ty = self.blockify.get_type(v_value.into());
-                    assert_eq!(lhs_ty, rhs_ty);
-
-                    let (lower_ty, dims) = self.from_type(&lhs_ty);
-                    assert_eq!(dims.len(), 0);
-                    let memref_ty = MemRefType::new(lower_ty, &[], None, None);
-                    let static_name = self.b.labels.r(name);
-                    // TODO: FIXME
-                    //let static_name = b
-                    //.strings
-                    //.resolve(&cfg.static_names.get(&sym_index).cloned().unwrap_or(name));
-                    let op = memref::get_global(self.context, &static_name, memref_ty, location);
-                    //let current = blocks.get_mut(&block_index).unwrap();
-                    //let addr_index = current.push(op);
-                    //addr_index
-                    let c = self.blocks.get_mut(&block_id).unwrap();
-                    let index = c.push(op);
-                    self.index.insert(v, index);
-                    index
-                } else {
-                    let decl_index = self.resolve_value(v_decl.into()).unwrap();
-                    decl_index
-                };
-
-                let value_index = self.resolve_value(v_value.into()).unwrap();
-                let r_addr = self.value0(addr_index);
-                let r_value = self.value0(value_index);
-
-                // emit store
-                // store(value, memref)
-                let r_value_ty = r_value.r#type();
-                let r_addr_ty = r_addr.r#type();
-                //println!(
-                //"X: {:?}",
-                //(
-                //r_addr_ty,
-                //r_addr_ty.is_mem_ref(),
-                //r_value_ty,
-                //r_value_ty.is_mem_ref()
-                //)
-                //);
-
-                let op = if r_addr_ty.is_mem_ref() && r_value_ty.is_mem_ref() {
-                    ods::memref::copy(self.context, r_value, r_addr, location).into()
-                } else {
-                    memref::store(r_value, r_addr, &[], location)
-                };
-
-                let c = self.blocks.get_mut(&block_id).unwrap();
-                let index = c.push(op);
+                let v_decl = self.blockify.resolve_code_offset(v_decl.into());
+                let v_value = self.blockify.resolve_code_offset(v_value.into());
+                let index = self.lower_store(v, v_decl, v_value);
                 self.index.insert(v, index);
             }
 

@@ -1,4 +1,4 @@
-use crate::{Builtin, ICodeModule, LCode, NodeBuilder, UseIndex, ValueId};
+use crate::{Builtin, ICodeModule, LCode, NodeBuilder, UseIndex, ValueId, VarDefinitionSpace};
 use anyhow::Result;
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -181,7 +181,8 @@ impl<'a> Interp<'a> {
     }
 
     pub fn resolve_value(&mut self, v: ValueId) -> Result<Value> {
-        let code = self.m.get_code(v);
+        let entry = self.m.get_entry(v);
+        let code = &entry.code;
         for scope in self.stack.iter_mut().rev() {
             match code {
                 LCode::Val(lit) => {
@@ -221,6 +222,13 @@ impl<'a> Interp<'a> {
                 }
 
                 LCode::Arg(_index) => {
+                    let v = if let VarDefinitionSpace::Stack(decl_link_id) = entry.mem {
+                        let v_decl = self.m.resolve_code_offset(decl_link_id.into());
+                        v_decl
+                    } else {
+                        v
+                    };
+
                     if let Some(value) = scope.values.get(&v) {
                         return Ok(value.clone());
                     }
@@ -309,7 +317,8 @@ impl<'a> Interp<'a> {
 
     pub fn step(&mut self) -> Result<bool> {
         let pos = self.pos;
-        let code = self.m.get_code(self.pos);
+        let entry = self.m.get_entry(pos);
+        let code = &entry.code;
         let result = match code {
             LCode::DeclareFunction(_) => {
                 self.advance();
@@ -326,7 +335,13 @@ impl<'a> Interp<'a> {
 
             LCode::Arg(_) => {
                 let value = self.call_args.pop_front().unwrap();
-                self.stack.last_mut().unwrap().declare(pos, value);
+
+                if let VarDefinitionSpace::Stack(decl_link_id) = entry.mem {
+                    let v_decl = self.m.resolve_code_offset(decl_link_id.into());
+                    self.stack.last_mut().unwrap().declare(v_decl, value);
+                } else {
+                    self.stack.last_mut().unwrap().declare(pos, value);
+                }
                 self.advance();
                 true
             }

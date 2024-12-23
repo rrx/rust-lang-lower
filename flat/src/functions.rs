@@ -964,6 +964,7 @@ impl Flatten {
             let entry = self.get_entry_mut(arg_link_id);
             entry.mem = VarDefinitionSpace::Stack(decl_link_id);
 
+            /*
             self.push_code(
                 LCode::Store(decl_link_id, arg_link_id),
                 ty,
@@ -971,6 +972,7 @@ impl Flatten {
                 call_span_id,
                 VarDefinitionSpace::Default,
             );
+            */
             Ok(FlattenResult::link(decl_link_id))
         } else {
             Ok(r)

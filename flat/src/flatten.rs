@@ -40,7 +40,7 @@ pub struct CodeEntry {
     pub block_id: BlockId,
     pub(super) ty: AstType,
     pub(super) span_id: SpanId,
-    pub(super) mem: VarDefinitionSpace,
+    pub mem: VarDefinitionSpace,
 }
 
 impl CodeEntry {
