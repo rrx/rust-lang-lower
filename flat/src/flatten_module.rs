@@ -259,6 +259,7 @@ impl FlattenModule {
             }
         }
         let s = Table::new(rows).with(Style::sharp()).to_string();
+        println!("saved table {:?}", filename);
         std::fs::write(filename, s.clone()).unwrap();
         s
     }
@@ -349,8 +350,8 @@ impl FlattenModule {
             },
         );
 
-        let num = petgraph::algo::connected_components(&g);
-        println!("components: {}", num);
+        //let num = petgraph::algo::connected_components(&g);
+        //println!("components: {}", num);
 
         let s = format!(
             "{:?}",

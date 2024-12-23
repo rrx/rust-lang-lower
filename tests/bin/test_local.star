@@ -5,5 +5,5 @@ def x1(x):
   return z
 
 def main():
-  z = 1
-  return z - x1(1)
+  a = 1
+  return a - x1(1)

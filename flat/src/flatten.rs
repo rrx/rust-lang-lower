@@ -708,16 +708,29 @@ impl Flatten {
 
     pub fn insert_entry_after(&mut self, before_link_id: LinkId, entry: CodeEntry) -> LinkId {
         let before_entry = self.get_entry(before_link_id);
+        println!(
+            "insert0: {}, {}, {}",
+            before_entry.prev, before_link_id, before_entry.next
+        );
         let before_entry_next = before_entry.next;
         let next_link_id = self._insert_entry(entry, Some(before_link_id));
 
         // update the entry
         let entry = self.get_entry_mut(next_link_id);
-        entry.next = before_entry_next;
+        if before_entry_next == before_link_id {
+            entry.next = next_link_id;
+        } else {
+            entry.next = before_entry_next;
+        }
+        println!("insert1: {}, {}, {}", entry.prev, next_link_id, entry.next);
 
         let before_entry = self.get_entry_mut(before_link_id);
         let block_id = before_entry.block_id;
         before_entry.next = next_link_id;
+        println!(
+            "insert2: {}, {}, {}",
+            before_entry.prev, before_link_id, before_entry.next
+        );
         self.blocks.get_block_mut(block_id).insert();
         next_link_id
     }
@@ -729,7 +742,9 @@ impl Flatten {
         let block = self.blocks.get_block_mut(entry_block_id);
         let last_decl = block.last_decl.unwrap();
         let link_id = self.insert_entry_after(last_decl, entry);
+        println!("insert3: {:?}", self.blocks.get_block(entry_block_id));
         self.blocks.get_block_mut(entry_block_id).push_decl(link_id);
+        println!("insert4: {:?}", self.blocks.get_block(entry_block_id));
         link_id
     }
 
@@ -747,7 +762,7 @@ impl Flatten {
             span_id,
             VarDefinitionSpace::Default,
         );
-        let block = self.blocks.get_block(block_id);
+        let block = self.blocks.get_block(entry_block_id);
         let scope_id = block.scope_id;
         //assert!(!block.is_term());
         let link_id = self.insert_decl(scope_id, entry);
@@ -1705,19 +1720,13 @@ impl Flatten {
                     v_decl
                 } else {
                     // need to declare it
-                    /*
                     let scope = self.scopes.get_scope(scope_id);
                     let entry_block_id = scope.entry_block.unwrap();
-
                     let current_block_id = self.current_block_id();
-                    self.switch_blocks(entry_block_id);
-                    let link_id = self.push_decl(expr_ty.clone(), name, node.span_id);
-                    self.switch_blocks(current_block_id);
-                    let block = self.blocks.get_block(entry_block_id);
-                    */
-
+                    //let link_id = if current_block_id == entry_block_id {
                     let block = self.blocks.get_block(self.current_block_id());
                     let scope_id = block.scope_id;
+                    //let link_id = self.push_decl(expr_ty.clone(), name, node.span_id);
                     let link_id = self.push_code(
                         LCode::Declare,
                         expr_ty.clone(),
@@ -1725,8 +1734,20 @@ impl Flatten {
                         node.span_id,
                         VarDefinitionSpace::Default,
                     );
+                    println!("link_id2: {}{}", scope_id, link_id);
+                    //link_id
+                    /*
+                                        } else {
+                                            self.switch_blocks(entry_block_id);
+                                            let link_id = self.push_decl(expr_ty.clone(), name, node.span_id);
+                                            println!("link_id1: {}{}", scope_id, link_id);
+                                            self.switch_blocks(current_block_id);
+                                            link_id
+                                        };
+
+                    */
                     self.scopes.scope_define(scope_id, name, link_id);
-                    link_id.into()
+                    link_id
                 };
 
                 let load_link_id = if self.is_load_required(v_expr) {
