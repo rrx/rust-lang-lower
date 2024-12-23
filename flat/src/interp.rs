@@ -164,6 +164,7 @@ impl<'a> Interp<'a> {
         self.jump_type = ScopeType::Function;
         self.pos = target;
     }
+
     pub fn push_arg(&mut self, v: Value) {
         self.stack.last_mut().unwrap().args.push_back(v);
     }
@@ -180,9 +181,34 @@ impl<'a> Interp<'a> {
             .insert(self.pos, value);
     }
 
+    fn get_value(&self, v: ValueId) -> Option<Value> {
+        let entry = self.m.get_entry(v);
+        let v = if let VarDefinitionSpace::Stack(decl_link_id) = entry.mem {
+            let v_decl = self.m.resolve_code_offset(decl_link_id.into());
+            v_decl
+        } else {
+            v
+        };
+
+        for scope in self.stack.iter().rev() {
+            if let Some(value) = scope.values.get(&v) {
+                return Some(value.clone());
+            }
+        }
+        None
+    }
+
     pub fn resolve_value(&mut self, v: ValueId) -> Result<Value> {
         let entry = self.m.get_entry(v);
         let code = &entry.code;
+
+        match code {
+            LCode::Arg(_index) => {
+                return Ok(self.get_value(v).unwrap());
+            }
+            _ => (),
+        }
+
         for scope in self.stack.iter_mut().rev() {
             match code {
                 LCode::Val(lit) => {
@@ -221,32 +247,6 @@ impl<'a> Interp<'a> {
                     return Ok(value.resolve_index(&inds));
                 }
 
-                LCode::Arg(_index) => {
-                    let v = if let VarDefinitionSpace::Stack(decl_link_id) = entry.mem {
-                        let v_decl = self.m.resolve_code_offset(decl_link_id.into());
-                        v_decl
-                    } else {
-                        v
-                    };
-
-                    if let Some(value) = scope.values.get(&v) {
-                        return Ok(value.clone());
-                    }
-
-                    /*
-                    if let Some(value) = scope.args.get(*index as usize) {
-                        return Ok(value.clone());
-                    } else {
-                        let span_id = self.m.get_span_id(v);
-                        self.b.push_error_labels(vec![self
-                            .b
-                            .primary_label(&format!("Not implemented: {}, {:?}", v, code), span_id)]);
-                        return Err(Error::new(BlockifyError::Invalid));
-                        //return false;
-                        //unreachable!()
-                    }
-                    */
-                }
                 LCode::Load(_link_id) => {
                     if let Some(value) = scope.values.get(&v) {
                         return Ok(value.clone());
@@ -315,6 +315,16 @@ impl<'a> Interp<'a> {
         }
     }
 
+    fn store_value(&mut self, v: ValueId, value: Value) {
+        let entry = self.m.get_entry(v);
+        if let VarDefinitionSpace::Stack(decl_link_id) = entry.mem {
+            let v_decl = self.m.resolve_code_offset(decl_link_id.into());
+            self.stack.last_mut().unwrap().declare(v_decl, value);
+        } else {
+            self.stack.last_mut().unwrap().declare(v, value);
+        }
+    }
+
     pub fn step(&mut self) -> Result<bool> {
         let pos = self.pos;
         let entry = self.m.get_entry(pos);
@@ -335,13 +345,7 @@ impl<'a> Interp<'a> {
 
             LCode::Arg(_) => {
                 let value = self.call_args.pop_front().unwrap();
-
-                if let VarDefinitionSpace::Stack(decl_link_id) = entry.mem {
-                    let v_decl = self.m.resolve_code_offset(decl_link_id.into());
-                    self.stack.last_mut().unwrap().declare(v_decl, value);
-                } else {
-                    self.stack.last_mut().unwrap().declare(pos, value);
-                }
+                self.store_value(pos, value);
                 self.advance();
                 true
             }
@@ -418,11 +422,7 @@ impl<'a> Interp<'a> {
                 let output = match op {
                     NaryOperation::Struct => Value::Tuple(values),
                 };
-                self.stack
-                    .last_mut()
-                    .unwrap()
-                    .values
-                    .insert(self.pos, output);
+                self.store_value(pos, output);
                 self.advance();
                 true
             }
@@ -434,7 +434,8 @@ impl<'a> Interp<'a> {
                     (UnaryOperation::Minus, Value::Float(i1)) => Value::Float(-i1),
                     _ => unimplemented!("{:?}", (op, v1)),
                 };
-                self.stack.last_mut().unwrap().values.insert(self.pos, v);
+                self.store_value(self.pos, v);
+                //self.stack.last_mut().unwrap().values.insert(self.pos, v);
                 //self.call_args.push_back(v);
                 self.advance();
                 true
@@ -474,7 +475,8 @@ impl<'a> Interp<'a> {
                         return Ok(false);
                     }
                 };
-                self.stack.last_mut().unwrap().values.insert(self.pos, v);
+                self.store_value(self.pos, v);
+                //self.stack.last_mut().unwrap().values.insert(self.pos, v);
                 //self.call_args.push_back(v);
                 self.advance();
                 true
@@ -486,14 +488,16 @@ impl<'a> Interp<'a> {
                 let index = block_id.index() as i64;
 
                 let value = Value::Int(index);
-                self.save_value(value);
+                self.store_value(self.pos, value);
+                //self.save_value(value);
                 self.advance();
                 true
             }
 
             LCode::Val(lit) => {
                 let value = Value::from_lit(lit);
-                self.save_value(value);
+                //self.save_value(value);
+                self.store_value(self.pos, value);
                 self.advance();
                 true
             }
