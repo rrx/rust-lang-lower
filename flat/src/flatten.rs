@@ -778,30 +778,6 @@ impl<S: BlockState> Flatten<S> {
         let link_id = self.insert_decl(entry_block_id, entry);
         self.switch_blocks(block_id);
         link_id
-
-        /*
-        let block_id = self.current_block_id();
-        let block = self.blocks.get_block(block_id);
-        let scope = self.scopes.get_scope(block.scope_id);
-        let entry_block_id = scope.entry_block.unwrap();
-
-        let entry = CodeEntry::new(
-            entry_block_id,
-            LCode::Declare,
-            ty,
-            Some(name),
-            span_id,
-            VarDefinitionSpace::Default,
-        );
-        let block = self.blocks.get_block(entry_block_id);
-        let scope_id = block.scope_id;
-        //assert!(!block.is_term());
-        let scope = self.scopes.get_scope(scope_id);
-        let entry_block_id = scope.entry_block.unwrap();
-        //entry.block_id = entry_block_id;
-        let link_id = self.insert_decl(entry_block_id, entry);
-        link_id
-        */
     }
 
     fn _push_entry_normal(&mut self, entry: CodeEntry) -> LinkId {
@@ -1023,12 +999,9 @@ impl<S: BlockState> Flatten<S> {
                     "{}: {}{}=>{}{}, {}",
                     v, block_id, scope_id, v_block_id, v_scope_id, ty
                 );
-                let current_block_id = self.current_block_id();
                 let key = b.labels.fresh_key("r");
                 // create space on the stack in the entry block
-                self.switch_blocks(v_entry_block_id);
                 let decl_link_id = self.push_decl(ty.clone(), key, *span_id);
-                self.switch_blocks(current_block_id);
                 self.scopes
                     .make_stack_variable(v_scope_id, v, decl_link_id, ty.clone());
 
@@ -1796,10 +1769,7 @@ impl<S: BlockState> Flatten<S> {
                     //let link_id = if current_block_id == entry_block_id {
                     let block = self.blocks.get_block(self.current_block_id());
                     let scope_id = block.scope_id;
-                    //let link_id = self.push_decl(expr_ty.clone(), name, node.span_id);
 
-                    // TODO: switch this over to the new method
-                    //let link_id = if true {
                     let link_id = self.push_code(
                         LCode::Declare,
                         expr_ty.clone(),
@@ -1807,20 +1777,7 @@ impl<S: BlockState> Flatten<S> {
                         node.span_id,
                         VarDefinitionSpace::Default,
                     );
-                    //} else {
-                    //self.switch_blocks(entry_block_id);
-                    //let link_id = self.push_decl(expr_ty.clone(), name, node.span_id);
-                    //println!("link_id1: {}{}", scope_id, link_id);
-                    //self.switch_blocks(current_block_id);
-                    //link_id
-                    //};
                     println!("link_id2: {}{}", scope_id, link_id);
-                    //link_id
-                    /*
-                                        } else {
-                                        };
-
-                    */
                     self.scopes.scope_define(scope_id, name, link_id);
                     link_id
                 };
