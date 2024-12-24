@@ -26,9 +26,9 @@ impl BlockState for Start {}
 #[derive(Debug, Clone)]
 pub struct IRBlock<S> {
     pub(super) scope_id: ScopeId,
-    pub(super) dead: bool,
+    dead: bool,
     pub(super) term: bool,
-    pub(super) size: usize,
+    size: usize,
     entry: Option<LinkId>,
     links: Vec<LinkId>,
     pub(super) last: Option<LinkId>,
@@ -53,6 +53,10 @@ impl<S> IRBlock<S> {
             links: vec![],
             _state: std::marker::PhantomData::default(),
         }
+    }
+
+    pub fn is_dead(&self) -> bool {
+        self.dead
     }
 
     pub fn entry(&self) -> LinkId {
@@ -96,6 +100,10 @@ impl<S> IRBlock<S> {
 
     pub fn last(&self) -> Option<LinkId> {
         self.last
+    }
+
+    pub fn last_decl(&self) -> Option<LinkId> {
+        self.last_decl
     }
 
     pub fn is_term(&self) -> bool {

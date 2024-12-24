@@ -774,14 +774,11 @@ impl<S: BlockState> Flatten<S> {
 
     pub fn push_entry_with_link(&mut self, entry: CodeEntry) -> LinkId {
         let code = entry.code.clone();
-        let entry_is_term = entry.code.is_term();
         let block_id = entry.block_id;
-        let block = self.blocks.get_block(block_id);
-        let last = block.last();
 
         match &code {
             LCode::Label => {
-                let link_id = self._insert_entry(entry, last);
+                let link_id = self._insert_entry(entry, None);
                 let block = self.blocks.get_block(block_id);
                 if let Some(last_link_id) = block.last() {
                     let last_entry = self.get_entry_mut(last_link_id);
@@ -794,7 +791,7 @@ impl<S: BlockState> Flatten<S> {
             }
             /*
             LCode::Declare => {
-                assert!(false);
+                //assert!(false);
                 let scope_id = block.scope_id;
                 //let scope = self.scopes.get_scope(scope_id);
                 //let entry_block_id = scope.entry_block.unwrap();
@@ -804,6 +801,8 @@ impl<S: BlockState> Flatten<S> {
             }
             */
             _ => {
+                let block = self.blocks.get_block(block_id);
+                let last = block.last();
                 let link_id = self._insert_entry(entry, last);
                 let block = self.blocks.get_block(block_id);
                 if let Some(last_link_id) = block.last() {
@@ -811,7 +810,7 @@ impl<S: BlockState> Flatten<S> {
                     last_entry.next = link_id;
                 }
                 let block = self.blocks.get_block_mut(block_id);
-                block.push_link(link_id, entry_is_term);
+                block.push_link(link_id, code.is_term());
                 link_id
             }
         }
@@ -1251,7 +1250,7 @@ impl<S: BlockState> Flatten<S> {
         self.block_links
             .insert(self.current_block_id(), block_link_id);
         let block = self.blocks.get_block_mut(self.current_block_id());
-        block.last_decl = block.last;
+        block.last_decl = block.last();
         (block_link_id, v_args)
     }
 
@@ -1746,28 +1745,33 @@ impl<S: BlockState> Flatten<S> {
                 } else {
                     // need to declare it
                     let scope = self.scopes.get_scope(scope_id);
-                    let _entry_block_id = scope.entry_block.unwrap();
+                    let entry_block_id = scope.entry_block.unwrap();
                     let _current_block_id = self.current_block_id();
                     //let link_id = if current_block_id == entry_block_id {
                     let block = self.blocks.get_block(self.current_block_id());
                     let scope_id = block.scope_id;
                     //let link_id = self.push_decl(expr_ty.clone(), name, node.span_id);
-                    let link_id = self.push_code(
-                        LCode::Declare,
-                        expr_ty.clone(),
-                        Some(name),
-                        node.span_id,
-                        VarDefinitionSpace::Default,
-                    );
+
+                    // TODO: switch this over to the new method
+                    let link_id = if true {
+                        self.push_code(
+                            LCode::Declare,
+                            expr_ty.clone(),
+                            Some(name),
+                            node.span_id,
+                            VarDefinitionSpace::Default,
+                        )
+                    } else {
+                        self.switch_blocks(entry_block_id);
+                        let link_id = self.push_decl(expr_ty.clone(), name, node.span_id);
+                        println!("link_id1: {}{}", scope_id, link_id);
+                        self.switch_blocks(current_block_id);
+                        link_id
+                    };
                     println!("link_id2: {}{}", scope_id, link_id);
                     //link_id
                     /*
                                         } else {
-                                            self.switch_blocks(entry_block_id);
-                                            let link_id = self.push_decl(expr_ty.clone(), name, node.span_id);
-                                            println!("link_id1: {}{}", scope_id, link_id);
-                                            self.switch_blocks(current_block_id);
-                                            link_id
                                         };
 
                     */

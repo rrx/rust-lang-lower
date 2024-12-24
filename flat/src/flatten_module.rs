@@ -243,7 +243,7 @@ impl<S: BlockState> FlattenModule<S> {
             entry_id: entry_id.map(|v| v.index()).unwrap_or(0),
             block_id: block_id.index(),
             term: code.is_term(),
-            dead: block.dead,
+            dead: block.is_dead(),
             unknown: is_unknown,
         })
     }
@@ -362,7 +362,7 @@ impl<S: BlockState> FlattenModule<S> {
                 &|_, (index, _block)| {
                     let block_id: BlockId = BlockId::new(index.index());
                     let block = self.blocks.get_block(block_id);
-                    if block.dead {
+                    if block.is_dead() {
                         // block marked dead
                         format!("label = \"B{:?}:dead\"", index.index(),)
                     } else {

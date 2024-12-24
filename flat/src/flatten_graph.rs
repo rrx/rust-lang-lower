@@ -138,7 +138,7 @@ pub fn flow_graph<S: BlockState>(
                 let target_id: BlockId = edge.target().into();
                 let block = gblocks.0.node_weight(index).unwrap();
                 let target_block = gblocks.0.node_weight(target_id.into()).unwrap();
-                if succ != &Successor::Jump || block.dead || target_block.dead {
+                if succ != &Successor::Jump || block.is_dead() || target_block.is_dead() {
                     continue;
                 }
                 let source_scope_name = format!("S{}", block.scope_id.index());
@@ -166,7 +166,7 @@ pub fn flow_graph<S: BlockState>(
                 for block_id in values {
                     if !track.contains(block_id) {
                         let block = gblocks.get_block(*block_id);
-                        if block.dead {
+                        if block.is_dead() {
                             continue;
                         }
                         let block_name = format!("{}", block_id);
