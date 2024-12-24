@@ -863,7 +863,7 @@ impl<S: BlockState> Flatten<S> {
             // call the inline function
             // returns a link, which points to the result, which should be a single value
             // if it's void, then it's a statement
-            if true {
+            if false {
                 self.push_call_inline(abstraction_id, name, scope_id, args, call_span_id, b)
             } else {
                 self.push_call_inline_cps(abstraction_id, name, scope_id, args, call_span_id, b)

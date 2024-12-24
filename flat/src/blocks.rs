@@ -82,7 +82,6 @@ impl<S> IRBlock<S> {
     }
 
     pub fn push_label(&mut self, link_id: LinkId) {
-        println!("Push label: {:?}", link_id);
         assert_eq!(self.s, BlockStateEnum::Start);
         self.s = BlockStateEnum::Entry;
         assert!(!self.term);
@@ -95,7 +94,6 @@ impl<S> IRBlock<S> {
     }
 
     pub fn push_arg(&mut self, link_id: LinkId) {
-        println!("Push arg: {:?}", link_id);
         assert_eq!(self.s, BlockStateEnum::Entry);
         assert!(!self.term);
         assert!(self.entry.is_some());
@@ -106,7 +104,6 @@ impl<S> IRBlock<S> {
     }
 
     pub fn push_decl(&mut self, link_id: LinkId) {
-        println!("Push decl: {:?}", link_id);
         assert_ne!(self.s, BlockStateEnum::Start);
         let index = self
             .links
@@ -126,7 +123,6 @@ impl<S> IRBlock<S> {
     }
 
     pub fn push_link(&mut self, link_id: LinkId, term: bool) {
-        println!("Push link: {:?}", (link_id, term));
         assert_ne!(self.s, BlockStateEnum::Term);
         assert!(!self.term);
 
@@ -155,7 +151,6 @@ impl<S> IRBlock<S> {
     }
 
     pub fn pop_terminal(&mut self) -> LinkId {
-        println!("pop term: {:?}", (&self.links));
         assert_eq!(self.s, BlockStateEnum::Term);
         self.s = BlockStateEnum::Body;
         self.term = false;

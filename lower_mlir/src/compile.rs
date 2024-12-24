@@ -40,7 +40,12 @@ pub fn default_context() -> Context {
 
     context.attach_diagnostic_handler(|diagnostic| {
         let location = diagnostic.location();
-        log::error!("E: {}: {}", diagnostic, location);
+        log::error!("E: {}: {}", diagnostic.to_string(), location);
+        for i in 0..diagnostic.note_count() {
+            let note = diagnostic.note(i).unwrap();
+            let loc = note.location();
+            log::error!("E{}: {}, {}", i, note, loc);
+        }
         true
     });
 

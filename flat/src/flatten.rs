@@ -710,11 +710,11 @@ impl<S: BlockState> Flatten<S> {
     }
 
     fn insert_entry_after(&mut self, before_link_id: LinkId, entry: CodeEntry) -> LinkId {
-        let before_entry = self.get_entry(before_link_id);
         println!(
-            "{}: insert0: {}, {}, {}",
-            before_entry.block_id, before_entry.prev, before_link_id, before_entry.next
+            "insert1: {:?}",
+            (&entry, self.blocks.get_block(self.current_block_id()))
         );
+        let before_entry = self.get_entry(before_link_id);
         let before_entry_next = before_entry.next;
         let next_link_id = self._insert_entry(entry, Some(before_link_id));
 
@@ -725,28 +725,14 @@ impl<S: BlockState> Flatten<S> {
         } else {
             entry.next = before_entry_next;
         }
-        println!(
-            "{}: insert1: {}, {}, {}",
-            entry.block_id, entry.prev, next_link_id, entry.next
-        );
 
         if before_entry_next != before_link_id {
             let next = self.get_entry_mut(before_entry_next);
             next.prev = next_link_id;
-            println!(
-                "{}: insert1a: {}, {}, {}",
-                next.block_id, next.prev, before_entry_next, next.next
-            );
         }
 
         let before_entry = self.get_entry_mut(before_link_id);
-        //let block_id = before_entry.block_id;
         before_entry.next = next_link_id;
-        println!(
-            "{}: insert2: {}, {}, {}",
-            before_entry.block_id, before_entry.prev, before_link_id, before_entry.next
-        );
-        //self.blocks.get_block_mut(block_id).insert();
         next_link_id
     }
 
@@ -754,9 +740,7 @@ impl<S: BlockState> Flatten<S> {
         let block = self.blocks.get_block_mut(block_id);
         let last_decl = block.last_decl();
         let link_id = self.insert_entry_after(last_decl, entry);
-        println!("insert3: {:?}", self.blocks.get_block(block_id));
         self.blocks.get_block_mut(block_id).push_decl(link_id);
-        println!("insert4: {:?}", self.blocks.get_block(block_id));
         link_id
     }
 
@@ -996,7 +980,7 @@ impl<S: BlockState> Flatten<S> {
                 // This could be make more efficient.
                 // get a link the value declaration in the scope entry
                 println!(
-                    "{}: {}{}=>{}{}, {}",
+                    "@{}: {}{}=>{}{}, {}",
                     v, block_id, scope_id, v_block_id, v_scope_id, ty
                 );
                 let key = b.labels.fresh_key("r");
@@ -1009,7 +993,7 @@ impl<S: BlockState> Flatten<S> {
                 self.insert_entry_after(
                     v,
                     CodeEntry::new(
-                        block_id,
+                        v_block_id,
                         LCode::Store(decl_link_id, v),
                         ty.clone(),
                         None,
@@ -1059,9 +1043,8 @@ impl<S: BlockState> Flatten<S> {
     ) -> LinkId {
         // handle leaving scope here?
         let current_block_id = self.current_block_id();
-        println!("jump: {}=>{}", current_block_id, target_block_id);
+        //println!("jump: {}=>{}", current_block_id, target_block_id);
         let block = self.blocks.get_block(current_block_id);
-        println!("b: {:?}", block);
         let _start_stack = self.scopes.walk_scopes(block.scope_id);
 
         // Construct the argument type
@@ -1449,7 +1432,7 @@ impl<S: BlockState> Flatten<S> {
                 .block_succ(self.current_block_id(), *block_id, Successor::BlockScope);
         }
 
-        println!("replace: {}=>{:?}", last_link_id, target_block_ids);
+        //println!("replace: {}=>{:?}", last_link_id, target_block_ids);
         let entry = self.get_entry(last_link_id);
 
         let code = if let LCode::PlaceholderTerminal(_) = entry.code {
@@ -1478,7 +1461,7 @@ impl<S: BlockState> Flatten<S> {
         };
         if let Some(code) = code {
             let entry = self.get_entry_mut(last_link_id);
-            println!("replace: {} {:?}=>{:?}", last_link_id, entry.code, code);
+            //println!("replace: {} {:?}=>{:?}", last_link_id, entry.code, code);
             entry.code = code;
         }
 
@@ -1778,7 +1761,6 @@ impl<S: BlockState> Flatten<S> {
                         node.span_id,
                         VarDefinitionSpace::Default,
                     );
-                    println!("link_id2: {}{}", scope_id, link_id);
                     self.scopes.scope_define(scope_id, name, link_id);
                     link_id
                 };
@@ -2089,7 +2071,6 @@ impl<S: BlockState> Flatten<S> {
                     let entry = self.get_entry(last_link_id);
                     if !entry.code.is_term() {
                         assert_eq!(args.len(), 0);
-                        println!("stuff");
                         let _link_id = self.push_jump(new_block_id, vec![], span_id, b);
                     }
                 }
@@ -2100,7 +2081,6 @@ impl<S: BlockState> Flatten<S> {
                 if let Some(last) = block.last() {
                     let entry = self.get_entry(last);
                     if !entry.code.is_term() {
-                        println!("stuff2");
                         let _ = self.push_jump(new_block_id.into(), vec![], span_id, b);
                     }
                 }
@@ -2616,7 +2596,6 @@ impl<S: BlockState> Flatten<S> {
         let mut link_id = block.last().unwrap().clone();
         let entry = self.get_entry(link_id);
         if !entry.code.is_term() {
-            println!("terminating block: {}", self.current_block_id());
             link_id = self.push_jump(v_next, vec![], span_id, b);
             self.blocks
                 .block_succ(self.current_block_id(), v_next, Successor::BlockScope);
