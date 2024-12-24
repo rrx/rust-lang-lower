@@ -801,16 +801,20 @@ impl<S: BlockState> Flatten<S> {
                 block.push_label(link_id);
                 link_id
             }
-            /*
             LCode::Arg(_) => {
                 let block = self.blocks.get_block(block_id);
                 let last = block.last();
                 let link_id = self._insert_entry(entry, last);
+                let block = self.blocks.get_block(block_id);
+                if let Some(last_link_id) = block.last() {
+                    let last_entry = self.get_entry_mut(last_link_id);
+                    last_entry.next = link_id;
+                }
+
                 let block = self.blocks.get_block_mut(block_id);
                 block.push_arg(link_id);
                 link_id
             }
-            */
             /*
             LCode::Declare => {
                 //assert!(false);
