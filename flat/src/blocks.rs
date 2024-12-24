@@ -163,15 +163,6 @@ impl<S> IRBlock<S> {
         self.last = self.links.last().cloned();
         self.last.unwrap()
     }
-
-    pub fn replace_terminal(&mut self, prev_link_id: LinkId) {
-        println!("replace term: {:?}", (prev_link_id, &self.links));
-        assert_eq!(self.s, BlockStateEnum::Term);
-        self.s = BlockStateEnum::Body;
-        assert!(self.term);
-        self.last = Some(prev_link_id);
-        self.term = false;
-    }
 }
 
 pub struct BlockGraph<S: BlockState>(pub(super) DiGraph<IRBlock<S>, Successor>);

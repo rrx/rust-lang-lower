@@ -774,6 +774,25 @@ impl<S: BlockState> Flatten<S> {
             span_id,
             VarDefinitionSpace::Default,
         );
+        self.switch_blocks(entry_block_id);
+        let link_id = self.insert_decl(entry_block_id, entry);
+        self.switch_blocks(block_id);
+        link_id
+
+        /*
+        let block_id = self.current_block_id();
+        let block = self.blocks.get_block(block_id);
+        let scope = self.scopes.get_scope(block.scope_id);
+        let entry_block_id = scope.entry_block.unwrap();
+
+        let entry = CodeEntry::new(
+            entry_block_id,
+            LCode::Declare,
+            ty,
+            Some(name),
+            span_id,
+            VarDefinitionSpace::Default,
+        );
         let block = self.blocks.get_block(entry_block_id);
         let scope_id = block.scope_id;
         //assert!(!block.is_term());
@@ -782,6 +801,7 @@ impl<S: BlockState> Flatten<S> {
         //entry.block_id = entry_block_id;
         let link_id = self.insert_decl(entry_block_id, entry);
         link_id
+        */
     }
 
     fn _push_entry_normal(&mut self, entry: CodeEntry) -> LinkId {
@@ -836,7 +856,6 @@ impl<S: BlockState> Flatten<S> {
                 println!("X: {}, {}, {}", block_id, entry_block_id, scope_id);
                 entry.block_id = entry_block_id;
                 let link_id = self.insert_decl(entry_block_id, entry);
-                //block.push_decl(link_id);
                 link_id
             }
             _ => self._push_entry_normal(entry),
@@ -1436,10 +1455,6 @@ impl<S: BlockState> Flatten<S> {
             let prev_link_id = block.pop_terminal();
             let entry = self.get_entry_mut(prev_link_id);
             entry.next = prev_link_id;
-            // invalidate dummy jump
-            //entry.next = prev_link_id;
-            // remove last entry in the block
-            //block.replace_terminal(prev_link_id);
         }
     }
 
@@ -1776,7 +1791,7 @@ impl<S: BlockState> Flatten<S> {
                 } else {
                     // need to declare it
                     let scope = self.scopes.get_scope(scope_id);
-                    let entry_block_id = scope.entry_block.unwrap();
+                    let _entry_block_id = scope.entry_block.unwrap();
                     let _current_block_id = self.current_block_id();
                     //let link_id = if current_block_id == entry_block_id {
                     let block = self.blocks.get_block(self.current_block_id());
@@ -1784,21 +1799,21 @@ impl<S: BlockState> Flatten<S> {
                     //let link_id = self.push_decl(expr_ty.clone(), name, node.span_id);
 
                     // TODO: switch this over to the new method
-                    let link_id = if true {
-                        self.push_code(
-                            LCode::Declare,
-                            expr_ty.clone(),
-                            Some(name),
-                            node.span_id,
-                            VarDefinitionSpace::Default,
-                        )
-                    } else {
-                        self.switch_blocks(entry_block_id);
-                        let link_id = self.push_decl(expr_ty.clone(), name, node.span_id);
-                        println!("link_id1: {}{}", scope_id, link_id);
-                        self.switch_blocks(current_block_id);
-                        link_id
-                    };
+                    //let link_id = if true {
+                    let link_id = self.push_code(
+                        LCode::Declare,
+                        expr_ty.clone(),
+                        Some(name),
+                        node.span_id,
+                        VarDefinitionSpace::Default,
+                    );
+                    //} else {
+                    //self.switch_blocks(entry_block_id);
+                    //let link_id = self.push_decl(expr_ty.clone(), name, node.span_id);
+                    //println!("link_id1: {}{}", scope_id, link_id);
+                    //self.switch_blocks(current_block_id);
+                    //link_id
+                    //};
                     println!("link_id2: {}{}", scope_id, link_id);
                     //link_id
                     /*
