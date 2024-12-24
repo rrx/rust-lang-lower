@@ -27,7 +27,7 @@ impl BlockState for Start {}
 pub struct IRBlock<S> {
     pub(super) scope_id: ScopeId,
     dead: bool,
-    pub(super) term: bool,
+    term: bool,
     size: usize,
     entry: Option<LinkId>,
     links: Vec<LinkId>,
@@ -108,6 +108,12 @@ impl<S> IRBlock<S> {
 
     pub fn is_term(&self) -> bool {
         self.term
+    }
+
+    pub fn replace_terminal(&mut self, prev_link_id: LinkId) {
+        assert!(self.term);
+        self.last = Some(prev_link_id);
+        self.term = false;
     }
 }
 

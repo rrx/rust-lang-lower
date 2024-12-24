@@ -1407,8 +1407,7 @@ impl<S: BlockState> Flatten<S> {
             entry.next = prev_link_id;
             let block = self.blocks.get_block_mut(goto_block_id);
             // remove last entry in the block
-            block.last = Some(prev_link_id);
-            block.term = false;
+            block.replace_terminal(prev_link_id);
         }
     }
 
@@ -1899,7 +1898,7 @@ impl<S: BlockState> Flatten<S> {
             Ast::Conditional(condition, then_expr, maybe_else_expr) => {
                 let current_block_id = self.current_block_id();
                 let block = self.blocks.get_block(current_block_id);
-                let term = block.term;
+                let term = block.is_term();
                 let parent_scope_id = block.scope_id;
 
                 let v_next = self.blocks.new_block(parent_scope_id);
@@ -2578,7 +2577,7 @@ impl<S: BlockState> Flatten<S> {
         //let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(self.current_block_id());
         let scope_id = block.scope_id;
-        if block.term {
+        if block.is_term() {
             let new_block_id = self.blocks.new_block(scope_id);
             let name = b.labels.fresh_key("dead");
             let scope = self.scopes.get_scope(scope_id);
