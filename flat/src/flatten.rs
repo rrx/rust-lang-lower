@@ -712,8 +712,8 @@ impl<S: BlockState> Flatten<S> {
     pub fn insert_entry_after(&mut self, before_link_id: LinkId, entry: CodeEntry) -> LinkId {
         let before_entry = self.get_entry(before_link_id);
         println!(
-            "insert0: {}, {}, {}",
-            before_entry.prev, before_link_id, before_entry.next
+            "{}: insert0: {}, {}, {}",
+            before_entry.block_id, before_entry.prev, before_link_id, before_entry.next
         );
         let before_entry_next = before_entry.next;
         let next_link_id = self._insert_entry(entry, Some(before_link_id));
@@ -725,23 +725,32 @@ impl<S: BlockState> Flatten<S> {
         } else {
             entry.next = before_entry_next;
         }
-        println!("insert1: {}, {}, {}", entry.prev, next_link_id, entry.next);
+        println!(
+            "{}: insert1: {}, {}, {}",
+            entry.block_id, entry.prev, next_link_id, entry.next
+        );
+
+        if before_entry_next != before_link_id {
+            let next = self.get_entry_mut(before_entry_next);
+            next.prev = next_link_id;
+            println!(
+                "{}: insert1a: {}, {}, {}",
+                next.block_id, next.prev, before_entry_next, next.next
+            );
+        }
 
         let before_entry = self.get_entry_mut(before_link_id);
-        let block_id = before_entry.block_id;
+        //let block_id = before_entry.block_id;
         before_entry.next = next_link_id;
         println!(
-            "insert2: {}, {}, {}",
-            before_entry.prev, before_link_id, before_entry.next
+            "{}: insert2: {}, {}, {}",
+            before_entry.block_id, before_entry.prev, before_link_id, before_entry.next
         );
-        self.blocks.get_block_mut(block_id).insert();
+        //self.blocks.get_block_mut(block_id).insert();
         next_link_id
     }
 
-    pub fn insert_decl(&mut self, block_id: BlockId, mut entry: CodeEntry) -> LinkId {
-        //let scope = self.scopes.get_scope(scope_id);
-        //let entry_block_id = scope.entry_block.unwrap();
-        //entry.block_id = entry_block_id;
+    pub fn insert_decl(&mut self, block_id: BlockId, entry: CodeEntry) -> LinkId {
         let block = self.blocks.get_block_mut(block_id);
         let last_decl = block.last_decl();
         let link_id = self.insert_entry_after(last_decl, entry);
@@ -791,7 +800,7 @@ impl<S: BlockState> Flatten<S> {
         link_id
     }
 
-    pub fn push_entry_with_link(&mut self, entry: CodeEntry) -> LinkId {
+    pub fn push_entry_with_link(&mut self, mut entry: CodeEntry) -> LinkId {
         let code = entry.code.clone();
         let block_id = entry.block_id;
 
@@ -820,11 +829,13 @@ impl<S: BlockState> Flatten<S> {
             }
             LCode::Declare => {
                 //assert!(false);
-                //let block = self.blocks.get_block(block_id);
-                //let scope_id = block.scope_id;
-                //let scope = self.scopes.get_scope(scope_id);
-                //let entry_block_id = scope.entry_block.unwrap();
-                let link_id = self.insert_decl(block_id, entry);
+                let block = self.blocks.get_block(block_id);
+                let scope_id = block.scope_id;
+                let scope = self.scopes.get_scope(scope_id);
+                let entry_block_id = scope.entry_block.unwrap();
+                println!("X: {}, {}, {}", block_id, entry_block_id, scope_id);
+                entry.block_id = entry_block_id;
+                let link_id = self.insert_decl(entry_block_id, entry);
                 //block.push_decl(link_id);
                 link_id
             }
@@ -1055,7 +1066,9 @@ impl<S: BlockState> Flatten<S> {
     ) -> LinkId {
         // handle leaving scope here?
         let current_block_id = self.current_block_id();
+        println!("jump: {}=>{}", current_block_id, target_block_id);
         let block = self.blocks.get_block(current_block_id);
+        println!("b: {:?}", block);
         let _start_stack = self.scopes.walk_scopes(block.scope_id);
 
         // Construct the argument type
@@ -1417,13 +1430,16 @@ impl<S: BlockState> Flatten<S> {
     pub fn remove_placeholder_terminal(&mut self, goto_block_id: BlockId) {
         let block = self.blocks.get_block(goto_block_id);
         let last_link_id = block.last().unwrap();
-        let entry = self.get_entry_mut(last_link_id);
-        if let LCode::PlaceholderTerminal(prev_link_id) = entry.code {
-            // invalidate dummy jump
-            entry.next = prev_link_id;
+        let entry = self.get_entry(last_link_id);
+        if let LCode::PlaceholderTerminal(_prev_link_id) = entry.code {
             let block = self.blocks.get_block_mut(goto_block_id);
+            let prev_link_id = block.pop_terminal();
+            let entry = self.get_entry_mut(prev_link_id);
+            entry.next = prev_link_id;
+            // invalidate dummy jump
+            //entry.next = prev_link_id;
             // remove last entry in the block
-            block.replace_terminal(prev_link_id);
+            //block.replace_terminal(prev_link_id);
         }
     }
 
@@ -2100,6 +2116,7 @@ impl<S: BlockState> Flatten<S> {
                     let entry = self.get_entry(last_link_id);
                     if !entry.code.is_term() {
                         assert_eq!(args.len(), 0);
+                        println!("stuff");
                         let _link_id = self.push_jump(new_block_id, vec![], span_id, b);
                     }
                 }
@@ -2110,6 +2127,7 @@ impl<S: BlockState> Flatten<S> {
                 if let Some(last) = block.last() {
                     let entry = self.get_entry(last);
                     if !entry.code.is_term() {
+                        println!("stuff2");
                         let _ = self.push_jump(new_block_id.into(), vec![], span_id, b);
                     }
                 }
@@ -2625,6 +2643,7 @@ impl<S: BlockState> Flatten<S> {
         let mut link_id = block.last().unwrap().clone();
         let entry = self.get_entry(link_id);
         if !entry.code.is_term() {
+            println!("terminating block: {}", self.current_block_id());
             link_id = self.push_jump(v_next, vec![], span_id, b);
             self.blocks
                 .block_succ(self.current_block_id(), v_next, Successor::BlockScope);

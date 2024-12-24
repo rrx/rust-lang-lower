@@ -27,7 +27,6 @@ impl BlockState for Start {}
 pub enum BlockStateEnum {
     Start,
     Entry,
-    Args,
     Body,
     Term,
 }
@@ -82,11 +81,8 @@ impl<S> IRBlock<S> {
         self.size
     }
 
-    pub fn insert(&mut self) {
-        self.size += 1;
-    }
-
     pub fn push_label(&mut self, link_id: LinkId) {
+        println!("Push label: {:?}", link_id);
         assert_eq!(self.s, BlockStateEnum::Start);
         self.s = BlockStateEnum::Entry;
         assert!(!self.term);
@@ -95,26 +91,42 @@ impl<S> IRBlock<S> {
         self.last = Some(link_id);
         self.last_decl = Some(link_id);
         self.size += 1;
+        self.links.push(link_id)
     }
 
     pub fn push_arg(&mut self, link_id: LinkId) {
+        println!("Push arg: {:?}", link_id);
         assert_eq!(self.s, BlockStateEnum::Entry);
         assert!(!self.term);
         assert!(self.entry.is_some());
         self.last = Some(link_id);
         self.last_decl = Some(link_id);
         self.size += 1;
+        self.links.push(link_id)
     }
 
     pub fn push_decl(&mut self, link_id: LinkId) {
+        println!("Push decl: {:?}", link_id);
+        assert_ne!(self.s, BlockStateEnum::Start);
+        let index = self
+            .links
+            .iter()
+            .position(|x| *x == self.last_decl())
+            .unwrap()
+            + 1;
+        if self.s != BlockStateEnum::Term {
+            self.s = BlockStateEnum::Body;
+        }
         if self.last.unwrap() == self.last_decl.unwrap() {
             self.last = Some(link_id);
         }
         self.last_decl = Some(link_id);
+        self.links.insert(index, link_id);
         self.size += 1;
     }
 
     pub fn push_link(&mut self, link_id: LinkId, term: bool) {
+        println!("Push link: {:?}", (link_id, term));
         assert_ne!(self.s, BlockStateEnum::Term);
         assert!(!self.term);
 
@@ -127,6 +139,7 @@ impl<S> IRBlock<S> {
         self.term = term;
         self.last = Some(link_id);
         self.size += 1;
+        self.links.push(link_id)
     }
 
     pub fn last(&self) -> Option<LinkId> {
@@ -141,7 +154,18 @@ impl<S> IRBlock<S> {
         self.term
     }
 
+    pub fn pop_terminal(&mut self) -> LinkId {
+        println!("pop term: {:?}", (&self.links));
+        assert_eq!(self.s, BlockStateEnum::Term);
+        self.s = BlockStateEnum::Body;
+        self.term = false;
+        self.links.pop().unwrap();
+        self.last = self.links.last().cloned();
+        self.last.unwrap()
+    }
+
     pub fn replace_terminal(&mut self, prev_link_id: LinkId) {
+        println!("replace term: {:?}", (prev_link_id, &self.links));
         assert_eq!(self.s, BlockStateEnum::Term);
         self.s = BlockStateEnum::Body;
         assert!(self.term);

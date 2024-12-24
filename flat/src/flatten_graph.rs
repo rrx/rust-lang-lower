@@ -233,11 +233,14 @@ pub fn flow_graph<S: BlockState>(
                                 }
 
                                 LCode::Store(decl, source) => {
-                                    let v_decl = m.resolve_code_offset(decl.into());
                                     let v_source = m.resolve_code_offset(source.into());
-                                    ng.sources.push((v, v_decl));
                                     ng.sources.push((v, v_source));
-                                    format!("{}:store({},{})", v, v_decl, v_source)
+                                    if let Some(v_decl) = m.maybe_resolve_code_offset(decl.into()) {
+                                        ng.sources.push((v, v_decl));
+                                        format!("{}:store({},{})", v, v_decl, v_source)
+                                    } else {
+                                        format!("{}:store(??,{})", v, v_source)
+                                    }
                                 }
                                 LCode::Call(offset) => {
                                     let v_target = m.resolve_code_offset(*offset);
