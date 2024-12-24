@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::convert::Into;
 
 use crate::{
-    BlockGraph, BlockId, CodeEntry, CodeOffset, CodeRow, ContinuationFlow, Flatten,
+    BlockGraph, BlockId, BlockState, CodeEntry, CodeOffset, CodeRow, ContinuationFlow, Flatten,
     FunctionVariant, FunctionVariantBuilder, ICodeModule, LCode, LinkId, NodeBuilder as NB,
     ScopeGraph, ScopeType, ScopedContinuations, StringLabel, Successor, ValueId,
     VarDefinitionSpace, VariantId,
@@ -14,11 +14,11 @@ use crate::{
 
 use tabled::{settings::Style, Table};
 
-pub struct FlattenModule {
+pub struct FlattenModule<S: BlockState> {
     pub(super) link: LinkOptions,
     pub entries: Vec<CodeEntry>,
     pub values: Vec<LinkId>,
-    pub blocks: BlockGraph,
+    pub blocks: BlockGraph<S>,
     //pub messages: Vec<(String, SpanId)>,
     pub scopes: ScopeGraph,
     pub block_links: HashMap<BlockId, LinkId>,
@@ -28,7 +28,7 @@ pub struct FlattenModule {
     pub scoped_continuations: ScopedContinuations,
 }
 
-impl ICodeModule for FlattenModule {
+impl<S: BlockState> ICodeModule for FlattenModule<S> {
     fn get_entry(&self, value_id: ValueId) -> &CodeEntry {
         let link_id = self.values[value_id.index()];
         self.entries.get(link_id.index()).unwrap()
@@ -179,8 +179,8 @@ impl ICodeModule for FlattenModule {
     }
 }
 
-impl FlattenModule {
-    pub fn build(f: Flatten, b: &mut NB) -> Result<Self> {
+impl<S: BlockState> FlattenModule<S> {
+    pub fn build(f: Flatten<S>, b: &mut NB) -> Result<Self> {
         let (f, values) = f.finish(b)?;
         Ok(Self {
             link: f.link,

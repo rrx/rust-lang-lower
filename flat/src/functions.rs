@@ -1,6 +1,6 @@
 use crate::{
-    ArgVec, BlockId, BlockifyError, ContinuationFlow, Flatten, FlattenResult, FlowEdge, LCode,
-    LinkId, NodeBuilder as NB, ScopeId, ScopeType, Successor, VarDefinitionSpace,
+    ArgVec, BlockId, BlockState, BlockifyError, ContinuationFlow, Flatten, FlattenResult, FlowEdge,
+    LCode, LinkId, NodeBuilder as NB, ScopeId, ScopeType, Successor, VarDefinitionSpace,
 };
 use anyhow::Error;
 use anyhow::Result;
@@ -156,7 +156,7 @@ impl AbstractionsBuilder {
     }
 }
 
-impl Flatten {
+impl<S: BlockState> Flatten<S> {
     pub fn push_bake_main(&mut self, b: &mut NB) -> Result<LinkId> {
         let current_block_id = self.current_block_id();
         let name = b.labels.s("main");
@@ -958,7 +958,7 @@ impl Flatten {
         // STORE ARG
         // r contains the link to the return value
         // r contains the return result link, which is part of the next block arguments.
-        if let Some((decl_link_id, arg_link_id, ty, key)) = decl {
+        if let Some((decl_link_id, arg_link_id, _ty, key)) = decl {
             // specify that the arg is stored on the stack
             // let mlir handle the rest
             let entry = self.get_entry_mut(arg_link_id);

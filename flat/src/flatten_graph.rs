@@ -1,6 +1,6 @@
 use crate::{
-    BlockGraph, BlockId, ContinuationFlow, Flatten, ICodeModule, LCode, NodeBuilder as NB,
-    Successor, ValueId, VarDefinitionSpace,
+    BlockGraph, BlockId, BlockState, ContinuationFlow, Flatten, ICodeModule, LCode,
+    NodeBuilder as NB, Successor, ValueId, VarDefinitionSpace,
 };
 use anyhow::Result;
 use petgraph::visit::EdgeRef;
@@ -112,7 +112,12 @@ graph TD\n\
     }
 }
 
-pub fn flow_graph(m: &dyn ICodeModule, gblocks: &BlockGraph, filename: &str, b: &NB) -> Result<()> {
+pub fn flow_graph<S: BlockState>(
+    m: &dyn ICodeModule,
+    gblocks: &BlockGraph<S>,
+    filename: &str,
+    b: &NB,
+) -> Result<()> {
     let entries = gblocks.graph_get_entries();
     let mut ng = NestedGraph::new();
 
@@ -282,7 +287,7 @@ pub fn flow_graph(m: &dyn ICodeModule, gblocks: &BlockGraph, filename: &str, b: 
     Ok(())
 }
 
-impl Flatten {
+impl<S: BlockState> Flatten<S> {
     pub fn cont_graph(&self, filename: &str, b: &NB) {
         let s = format!(
             "{:?}",

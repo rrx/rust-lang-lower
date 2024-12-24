@@ -11,10 +11,10 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::convert::Into;
 
 use crate::{
-    AbstractionsBuilder, BlockGraph, BlockId, BlockifyError, Builtin, CodeOffset, ContinuationFlow,
-    DeferredGotoList, FlowEdge, FunctionVariantBuilder, LCode, LinkId, NodeBuilder as NB,
-    ScopeGraph, ScopeId, ScopeType, ScopedContinuations, StringLabel, Successor, ValueId,
-    VarDefinitionSpace, VariantId,
+    AbstractionsBuilder, BlockGraph, BlockId, BlockState, BlockifyError, Builtin, CodeOffset,
+    ContinuationFlow, DeferredGotoList, FlowEdge, FunctionVariantBuilder, LCode, LinkId,
+    NodeBuilder as NB, ScopeGraph, ScopeId, ScopeType, ScopedContinuations, StringLabel, Successor,
+    ValueId, VarDefinitionSpace, VariantId,
 };
 
 pub type ArgVec = Vec<(Option<StringKey>, LinkId, AstType, SpanId)>;
@@ -102,10 +102,10 @@ pub enum FlattenMode {
     Template,
 }
 
-pub struct Flatten {
+pub struct Flatten<S: BlockState> {
     pub(super) link: LinkOptions,
     pub(super) entries: Vec<CodeEntry>,
-    pub blocks: BlockGraph,
+    pub blocks: BlockGraph<S>,
     pub(crate) static_scope: Option<ScopeId>,
     pub(crate) static_block: Option<BlockId>,
     pub(crate) current_block: BlockId,
@@ -120,7 +120,7 @@ pub struct Flatten {
     pub abstractions: AbstractionsBuilder,
 }
 
-impl Flatten {
+impl Flatten<super::Start> {
     pub fn new() -> Self {
         let blocks = BlockGraph::new();
 
@@ -144,6 +144,52 @@ impl Flatten {
         }
     }
 
+    pub fn flatten_module(node: AstNode, b: &mut NB) -> Result<Self> {
+        // setup environment with static scope and block
+        // blocks will be moved into environment eventually
+        // FlattenEnvironment represents the module level structures
+        let mut f = Self::new();
+
+        let scope_id = f.scopes.new_scope(ScopeType::Static);
+        f.static_scope = Some(scope_id);
+
+        let static_scope = f.static_scope_id();
+        let block_id = f.blocks.new_block(static_scope);
+        f.current_block = block_id;
+        f.static_block = Some(block_id);
+
+        if let Ast::Module(key, body) = node.node {
+            let static_block_id = f.current_block_id();
+
+            let block = f.blocks.get_block(static_block_id);
+            let static_scope_id = block.scope_id;
+            let static_scope = f.scopes.get_scope_mut(static_scope_id);
+            static_scope.entry_block = Some(static_block_id);
+
+            f.switch_blocks(static_block_id);
+            f.push_start_block(
+                static_scope_id,
+                AstFuncType::new(AstType::Struct(vec![]), ReturnType::Single(AstType::Unit)).into(),
+                Some(key),
+                node.span_id,
+                VarDefinitionSpace::Static,
+            );
+
+            f.static_block = Some(static_block_id);
+            f.static_scope = Some(static_scope_id);
+            f.switch_blocks(static_block_id);
+            let _ = f.push_node(*body, b)?;
+            assert_eq!(static_block_id, f.current_block_id());
+            //f.drain_diagnostics(b);
+            Ok(f)
+        } else {
+            b.push_error("Not a module", node.span_id);
+            Err(Error::new(BlockifyError::Invalid))
+        }
+    }
+}
+
+impl<S: BlockState> Flatten<S> {
     pub fn type_inference(&mut self, b: &mut NB) {
         for entry in self.entries.iter_mut() {
             if !entry.ty.is_unknown() {
@@ -316,6 +362,7 @@ impl Flatten {
         }
         None
     }
+
     pub fn resolve_name(&self, block_id: BlockId, name: StringKey) -> Option<LinkId> {
         // resolve scope through the tree, starting at the current scope
         let block = self.blocks.get_block(block_id);
@@ -390,50 +437,6 @@ impl Flatten {
             }
         }
         None
-    }
-
-    pub fn flatten_module(node: AstNode, b: &mut NB) -> Result<Self> {
-        // setup environment with static scope and block
-        // blocks will be moved into environment eventually
-        // FlattenEnvironment represents the module level structures
-        let mut f = Self::new();
-
-        let scope_id = f.scopes.new_scope(ScopeType::Static);
-        f.static_scope = Some(scope_id);
-
-        let static_scope = f.static_scope_id();
-        let block_id = f.blocks.new_block(static_scope);
-        f.current_block = block_id;
-        f.static_block = Some(block_id);
-
-        if let Ast::Module(key, body) = node.node {
-            let static_block_id = f.current_block_id();
-
-            let block = f.blocks.get_block(static_block_id);
-            let static_scope_id = block.scope_id;
-            let static_scope = f.scopes.get_scope_mut(static_scope_id);
-            static_scope.entry_block = Some(static_block_id);
-
-            f.switch_blocks(static_block_id);
-            f.push_start_block(
-                static_scope_id,
-                AstFuncType::new(AstType::Struct(vec![]), ReturnType::Single(AstType::Unit)).into(),
-                Some(key),
-                node.span_id,
-                VarDefinitionSpace::Static,
-            );
-
-            f.static_block = Some(static_block_id);
-            f.static_scope = Some(static_scope_id);
-            f.switch_blocks(static_block_id);
-            let _ = f.push_node(*body, b)?;
-            assert_eq!(static_block_id, f.current_block_id());
-            //f.drain_diagnostics(b);
-            Ok(f)
-        } else {
-            b.push_error("Not a module", node.span_id);
-            Err(Error::new(BlockifyError::Invalid))
-        }
     }
 
     /*
@@ -631,7 +634,7 @@ impl Flatten {
     }
     */
 
-    pub(super) fn finish(mut self, b: &mut NB) -> Result<(Flatten, Vec<LinkId>)> {
+    pub(super) fn finish(mut self, b: &mut NB) -> Result<(Flatten<S>, Vec<LinkId>)> {
         // make sure all claims have been handled
         self.scopes.ensure_claims(b);
 
@@ -770,24 +773,31 @@ impl Flatten {
     }
 
     pub fn push_entry_with_link(&mut self, entry: CodeEntry) -> LinkId {
+        let code = entry.code.clone();
         let entry_is_term = entry.code.is_term();
         let block_id = entry.block_id;
         let block = self.blocks.get_block(block_id);
         let link_id = self._insert_entry(entry, block.last());
         let block = self.blocks.get_block(block_id);
-        if let Some(last_link_id) = block.last() {
-            let last_entry = self.get_entry_mut(last_link_id);
-            last_entry.next = link_id;
-            // ensure we don't append to a terminated block
-            let is_term = last_entry.code.is_term();
-            if is_term {
-                unreachable!("appending to term block={}", block_id);
+
+        match &code {
+            /*
+            LCode::Label => {
+                block.push_label(link_id);
+            }
+            LCode::Declare => {
+                block.push_decl(link_id);
+            }
+            */
+            _ => {
+                if let Some(last_link_id) = block.last() {
+                    let last_entry = self.get_entry_mut(last_link_id);
+                    last_entry.next = link_id;
+                }
+                let block = self.blocks.get_block_mut(block_id);
+                block.push_link(link_id, entry_is_term);
             }
         }
-
-        self.blocks
-            .get_block_mut(block_id)
-            .push(link_id, entry_is_term);
 
         link_id
     }
@@ -1721,8 +1731,8 @@ impl Flatten {
                 } else {
                     // need to declare it
                     let scope = self.scopes.get_scope(scope_id);
-                    let entry_block_id = scope.entry_block.unwrap();
-                    let current_block_id = self.current_block_id();
+                    let _entry_block_id = scope.entry_block.unwrap();
+                    let _current_block_id = self.current_block_id();
                     //let link_id = if current_block_id == entry_block_id {
                     let block = self.blocks.get_block(self.current_block_id());
                     let scope_id = block.scope_id;

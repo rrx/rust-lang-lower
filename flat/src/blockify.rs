@@ -336,7 +336,7 @@ pub trait ICodeModule {
         out
     }
 
-    fn mem_to_string(&self, mem: VarDefinitionSpace, b: &NodeBuilder) -> String {
+    fn mem_to_string(&self, mem: VarDefinitionSpace, _b: &NodeBuilder) -> String {
         match mem {
             VarDefinitionSpace::Arg => format!("Marg"),
             VarDefinitionSpace::Reg => format!("Mreg"),

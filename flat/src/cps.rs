@@ -6,12 +6,12 @@ use compile_core::{
 use std::convert::Into;
 
 use crate::{
-    argvec_type, ArgVec, BlockId, ContinuationFlow, DeferredGoto, DeferredType, Flatten,
-    FlattenResult, FlowEdge, LCode, LinkId, NodeBuilder as NB, ScopeId, ScopeType, Successor,
-    VarDefinitionSpace, VariantId,
+    argvec_type, ArgVec, BlockId, BlockState, ContinuationFlow, DeferredGoto, DeferredType,
+    Flatten, FlattenResult, FlowEdge, LCode, LinkId, NodeBuilder as NB, ScopeId, ScopeType,
+    Successor, VarDefinitionSpace, VariantId,
 };
 
-impl Flatten {
+impl<S: BlockState> Flatten<S> {
     pub(super) fn push_cps_block_with_type(
         &mut self,
         name: StringKey,

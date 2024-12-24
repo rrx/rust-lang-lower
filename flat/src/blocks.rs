@@ -17,19 +17,28 @@ pub enum Successor {
 }
 
 #[derive(Debug, Clone)]
-pub struct IRBlock {
+pub enum Start {}
+
+pub trait BlockState: std::fmt::Debug + Clone {}
+
+impl BlockState for Start {}
+
+#[derive(Debug, Clone)]
+pub struct IRBlock<S> {
     pub(super) scope_id: ScopeId,
     pub(super) dead: bool,
     pub(super) term: bool,
     pub(super) size: usize,
     pub(super) entry: Option<LinkId>,
+    links: Vec<LinkId>,
     pub(super) last: Option<LinkId>,
     pub(super) last_decl: Option<LinkId>,
     pub(super) num_ret_args: HashSet<usize>,
     pub(super) ret_types: HashSet<AstType>,
+    _state: std::marker::PhantomData<S>,
 }
 
-impl IRBlock {
+impl<S> IRBlock<S> {
     pub fn new(scope_id: ScopeId) -> Self {
         Self {
             scope_id,
@@ -41,6 +50,8 @@ impl IRBlock {
             size: 0,
             num_ret_args: HashSet::new(),
             ret_types: HashSet::new(),
+            links: vec![],
+            _state: std::marker::PhantomData::default(),
         }
     }
 
@@ -51,6 +62,11 @@ impl IRBlock {
     pub fn insert(&mut self) {
         self.size += 1;
     }
+
+    pub fn push_label(&mut self, link_id: LinkId) {
+        self.entry = Some(link_id);
+    }
+
     pub fn push_decl(&mut self, link_id: LinkId) {
         if self.last.unwrap() == link_id {
             self.last = Some(link_id);
@@ -58,8 +74,9 @@ impl IRBlock {
         self.last_decl = Some(link_id);
     }
 
-    pub fn push(&mut self, link_id: LinkId, term: bool) {
+    pub fn push_link(&mut self, link_id: LinkId, term: bool) {
         assert!(!self.term);
+        //assert!(self.entry.is_some());
         if self.entry.is_none() {
             self.entry = Some(link_id);
         }
@@ -77,22 +94,22 @@ impl IRBlock {
     }
 }
 
-pub struct BlockGraph(pub(super) DiGraph<IRBlock, Successor>);
+pub struct BlockGraph<S: BlockState>(pub(super) DiGraph<IRBlock<S>, Successor>);
 
-impl Deref for BlockGraph {
-    type Target = DiGraph<IRBlock, Successor>;
+impl<S: BlockState> Deref for BlockGraph<S> {
+    type Target = DiGraph<IRBlock<S>, Successor>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
-impl DerefMut for BlockGraph {
+impl<S: BlockState> DerefMut for BlockGraph<S> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
-impl BlockGraph {
+impl<S: BlockState> BlockGraph<S> {
     pub fn new() -> Self {
         Self(DiGraph::new())
     }
@@ -120,12 +137,12 @@ impl BlockGraph {
         );
     }
 
-    pub fn get_block(&self, block_id: BlockId) -> &IRBlock {
+    pub fn get_block(&self, block_id: BlockId) -> &IRBlock<S> {
         let index = NodeIndex::new(block_id.index());
         self.node_weight(index).unwrap()
     }
 
-    pub fn get_block_mut(&mut self, block_id: BlockId) -> &mut IRBlock {
+    pub fn get_block_mut(&mut self, block_id: BlockId) -> &mut IRBlock<S> {
         let index = NodeIndex::new(block_id.index());
         self.node_weight_mut(index).unwrap()
     }
