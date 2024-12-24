@@ -709,7 +709,7 @@ impl<S: BlockState> Flatten<S> {
         link_id
     }
 
-    pub fn insert_entry_after(&mut self, before_link_id: LinkId, entry: CodeEntry) -> LinkId {
+    fn insert_entry_after(&mut self, before_link_id: LinkId, entry: CodeEntry) -> LinkId {
         let before_entry = self.get_entry(before_link_id);
         println!(
             "{}: insert0: {}, {}, {}",
@@ -750,7 +750,7 @@ impl<S: BlockState> Flatten<S> {
         next_link_id
     }
 
-    pub fn insert_decl(&mut self, block_id: BlockId, entry: CodeEntry) -> LinkId {
+    fn insert_decl(&mut self, block_id: BlockId, entry: CodeEntry) -> LinkId {
         let block = self.blocks.get_block_mut(block_id);
         let last_decl = block.last_decl();
         let link_id = self.insert_entry_after(last_decl, entry);
@@ -1005,6 +1005,7 @@ impl<S: BlockState> Flatten<S> {
                 self.scopes
                     .make_stack_variable(v_scope_id, v, decl_link_id, ty.clone());
 
+                // TODO: remove this, and replace with stack allocation on the ARG
                 self.insert_entry_after(
                     v,
                     CodeEntry::new(
