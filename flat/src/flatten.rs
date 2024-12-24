@@ -777,31 +777,44 @@ impl<S: BlockState> Flatten<S> {
         let entry_is_term = entry.code.is_term();
         let block_id = entry.block_id;
         let block = self.blocks.get_block(block_id);
-        let link_id = self._insert_entry(entry, block.last());
-        let block = self.blocks.get_block(block_id);
-
-        if let Some(last_link_id) = block.last() {
-            let last_entry = self.get_entry_mut(last_link_id);
-            last_entry.next = link_id;
-        }
+        let last = block.last();
 
         match &code {
             LCode::Label => {
+                let link_id = self._insert_entry(entry, last);
+                let block = self.blocks.get_block(block_id);
+                if let Some(last_link_id) = block.last() {
+                    let last_entry = self.get_entry_mut(last_link_id);
+                    last_entry.next = link_id;
+                }
+
                 let block = self.blocks.get_block_mut(block_id);
                 block.push_label(link_id);
+                link_id
             }
             /*
             LCode::Declare => {
-                block.push_decl(link_id);
+                assert!(false);
+                let scope_id = block.scope_id;
+                //let scope = self.scopes.get_scope(scope_id);
+                //let entry_block_id = scope.entry_block.unwrap();
+                let link_id = self.insert_decl(scope_id, entry);
+                //block.push_decl(link_id);
+                link_id
             }
             */
             _ => {
+                let link_id = self._insert_entry(entry, last);
+                let block = self.blocks.get_block(block_id);
+                if let Some(last_link_id) = block.last() {
+                    let last_entry = self.get_entry_mut(last_link_id);
+                    last_entry.next = link_id;
+                }
                 let block = self.blocks.get_block_mut(block_id);
                 block.push_link(link_id, entry_is_term);
+                link_id
             }
         }
-
-        link_id
     }
 
     pub fn new_scope_and_block(
