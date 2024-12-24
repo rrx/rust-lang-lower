@@ -514,11 +514,11 @@ impl<S: BlockState> Flatten<S> {
             let block = self.blocks.get_block(block_id);
             let size = block.len();
             let scope_id = block.scope_id;
-            if block.entry.is_none() {
+            if block.empty() {
                 continue;
             }
 
-            let entry_id = block.entry.unwrap();
+            let entry_id = block.entry();
 
             let mut entries = vec![];
             let mut v = entry_id;
@@ -670,7 +670,7 @@ impl<S: BlockState> Flatten<S> {
         // declare functions
         for block_id in self.blocks.graph_get_entries() {
             let block = self.blocks.get_block(block_id);
-            let label_link_id = block.entry.unwrap();
+            let label_link_id = block.entry();
             let entry = self.get_entry(label_link_id).clone();
             let ty = self.get_type(label_link_id).clone();
             assert_eq!(entry.mem, VarDefinitionSpace::Static);
@@ -780,20 +780,22 @@ impl<S: BlockState> Flatten<S> {
         let link_id = self._insert_entry(entry, block.last());
         let block = self.blocks.get_block(block_id);
 
+        if let Some(last_link_id) = block.last() {
+            let last_entry = self.get_entry_mut(last_link_id);
+            last_entry.next = link_id;
+        }
+
         match &code {
-            /*
             LCode::Label => {
+                let block = self.blocks.get_block_mut(block_id);
                 block.push_label(link_id);
             }
+            /*
             LCode::Declare => {
                 block.push_decl(link_id);
             }
             */
             _ => {
-                if let Some(last_link_id) = block.last() {
-                    let last_entry = self.get_entry_mut(last_link_id);
-                    last_entry.next = link_id;
-                }
                 let block = self.blocks.get_block_mut(block_id);
                 block.push_link(link_id, entry_is_term);
             }

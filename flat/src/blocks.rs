@@ -29,7 +29,7 @@ pub struct IRBlock<S> {
     pub(super) dead: bool,
     pub(super) term: bool,
     pub(super) size: usize,
-    pub(super) entry: Option<LinkId>,
+    entry: Option<LinkId>,
     links: Vec<LinkId>,
     pub(super) last: Option<LinkId>,
     pub(super) last_decl: Option<LinkId>,
@@ -55,6 +55,14 @@ impl<S> IRBlock<S> {
         }
     }
 
+    pub fn entry(&self) -> LinkId {
+        self.entry.unwrap()
+    }
+
+    pub fn empty(&self) -> bool {
+        self.size == 0
+    }
+
     pub fn len(&self) -> usize {
         self.size
     }
@@ -64,7 +72,11 @@ impl<S> IRBlock<S> {
     }
 
     pub fn push_label(&mut self, link_id: LinkId) {
+        assert!(!self.term);
+        assert!(self.last.is_none());
         self.entry = Some(link_id);
+        self.last = Some(link_id);
+        self.size += 1;
     }
 
     pub fn push_decl(&mut self, link_id: LinkId) {
@@ -76,10 +88,7 @@ impl<S> IRBlock<S> {
 
     pub fn push_link(&mut self, link_id: LinkId, term: bool) {
         assert!(!self.term);
-        //assert!(self.entry.is_some());
-        if self.entry.is_none() {
-            self.entry = Some(link_id);
-        }
+        assert!(self.entry.is_some());
         self.term = term;
         self.last = Some(link_id);
         self.size += 1;

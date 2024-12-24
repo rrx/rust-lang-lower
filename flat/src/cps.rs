@@ -553,7 +553,7 @@ impl<S: BlockState> Flatten<S> {
 
         for (link_id, block_id) in blocks {
             let block = self.blocks.get_block(block_id);
-            let block_entry_id = block.entry.unwrap();
+            let block_entry_id = block.entry();
             let block_entry = self.get_entry(block_entry_id);
             let block_ty = block_entry.ty.clone();
             let block_span_id = block_entry.span_id;
