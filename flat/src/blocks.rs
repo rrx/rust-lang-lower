@@ -23,6 +23,15 @@ pub trait BlockState: std::fmt::Debug + Clone {}
 
 impl BlockState for Start {}
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BlockStateEnum {
+    Start,
+    Entry,
+    Args,
+    Body,
+    Term,
+}
+
 #[derive(Debug, Clone)]
 pub struct IRBlock<S> {
     pub(super) scope_id: ScopeId,
@@ -31,10 +40,11 @@ pub struct IRBlock<S> {
     size: usize,
     entry: Option<LinkId>,
     links: Vec<LinkId>,
-    pub(super) last: Option<LinkId>,
-    pub(super) last_decl: Option<LinkId>,
+    last: Option<LinkId>,
+    last_decl: Option<LinkId>,
     pub(super) num_ret_args: HashSet<usize>,
     pub(super) ret_types: HashSet<AstType>,
+    s: BlockStateEnum,
     _state: std::marker::PhantomData<S>,
 }
 
@@ -52,6 +62,7 @@ impl<S> IRBlock<S> {
             ret_types: HashSet::new(),
             links: vec![],
             _state: std::marker::PhantomData::default(),
+            s: BlockStateEnum::Start,
         }
     }
 
@@ -76,10 +87,22 @@ impl<S> IRBlock<S> {
     }
 
     pub fn push_label(&mut self, link_id: LinkId) {
+        assert_eq!(self.s, BlockStateEnum::Start);
+        self.s = BlockStateEnum::Entry;
         assert!(!self.term);
         assert!(self.last.is_none());
         self.entry = Some(link_id);
         self.last = Some(link_id);
+        self.last_decl = Some(link_id);
+        self.size += 1;
+    }
+
+    pub fn push_arg(&mut self, link_id: LinkId) {
+        assert_eq!(self.s, BlockStateEnum::Entry);
+        assert!(!self.term);
+        assert!(self.entry.is_some());
+        self.last = Some(link_id);
+        self.last_decl = Some(link_id);
         self.size += 1;
     }
 
@@ -88,10 +111,18 @@ impl<S> IRBlock<S> {
             self.last = Some(link_id);
         }
         self.last_decl = Some(link_id);
+        self.size += 1;
     }
 
     pub fn push_link(&mut self, link_id: LinkId, term: bool) {
+        assert_ne!(self.s, BlockStateEnum::Term);
         assert!(!self.term);
+
+        if term {
+            self.s = BlockStateEnum::Term;
+        } else {
+            self.s = BlockStateEnum::Body;
+        }
         assert!(self.entry.is_some());
         self.term = term;
         self.last = Some(link_id);
@@ -102,8 +133,8 @@ impl<S> IRBlock<S> {
         self.last
     }
 
-    pub fn last_decl(&self) -> Option<LinkId> {
-        self.last_decl
+    pub fn last_decl(&self) -> LinkId {
+        self.last_decl.unwrap()
     }
 
     pub fn is_term(&self) -> bool {
@@ -111,6 +142,8 @@ impl<S> IRBlock<S> {
     }
 
     pub fn replace_terminal(&mut self, prev_link_id: LinkId) {
+        assert_eq!(self.s, BlockStateEnum::Term);
+        self.s = BlockStateEnum::Body;
         assert!(self.term);
         self.last = Some(prev_link_id);
         self.term = false;

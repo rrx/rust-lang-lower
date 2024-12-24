@@ -743,7 +743,7 @@ impl<S: BlockState> Flatten<S> {
         let entry_block_id = scope.entry_block.unwrap();
         entry.block_id = entry_block_id;
         let block = self.blocks.get_block_mut(entry_block_id);
-        let last_decl = block.last_decl.unwrap();
+        let last_decl = block.last_decl();
         let link_id = self.insert_entry_after(last_decl, entry);
         println!("insert3: {:?}", self.blocks.get_block(entry_block_id));
         self.blocks.get_block_mut(entry_block_id).push_decl(link_id);
@@ -772,23 +772,45 @@ impl<S: BlockState> Flatten<S> {
         link_id
     }
 
+    fn _push_entry_normal(&mut self, entry: CodeEntry) -> LinkId {
+        let block_id = entry.block_id;
+        let code = entry.code.clone();
+        let block = self.blocks.get_block(block_id);
+        let last = block.last();
+        let link_id = self._insert_entry(entry, last);
+        let block = self.blocks.get_block(block_id);
+        if let Some(last_link_id) = block.last() {
+            let last_entry = self.get_entry_mut(last_link_id);
+            last_entry.next = link_id;
+        }
+        let block = self.blocks.get_block_mut(block_id);
+        block.push_link(link_id, code.is_term());
+        link_id
+    }
+
     pub fn push_entry_with_link(&mut self, entry: CodeEntry) -> LinkId {
         let code = entry.code.clone();
         let block_id = entry.block_id;
 
         match &code {
             LCode::Label => {
-                let link_id = self._insert_entry(entry, None);
                 let block = self.blocks.get_block(block_id);
-                if let Some(last_link_id) = block.last() {
-                    let last_entry = self.get_entry_mut(last_link_id);
-                    last_entry.next = link_id;
-                }
-
+                assert!(block.last().is_none());
+                let link_id = self._insert_entry(entry, None);
                 let block = self.blocks.get_block_mut(block_id);
                 block.push_label(link_id);
                 link_id
             }
+            /*
+            LCode::Arg(_) => {
+                let block = self.blocks.get_block(block_id);
+                let last = block.last();
+                let link_id = self._insert_entry(entry, last);
+                let block = self.blocks.get_block_mut(block_id);
+                block.push_arg(link_id);
+                link_id
+            }
+            */
             /*
             LCode::Declare => {
                 //assert!(false);
@@ -800,19 +822,7 @@ impl<S: BlockState> Flatten<S> {
                 link_id
             }
             */
-            _ => {
-                let block = self.blocks.get_block(block_id);
-                let last = block.last();
-                let link_id = self._insert_entry(entry, last);
-                let block = self.blocks.get_block(block_id);
-                if let Some(last_link_id) = block.last() {
-                    let last_entry = self.get_entry_mut(last_link_id);
-                    last_entry.next = link_id;
-                }
-                let block = self.blocks.get_block_mut(block_id);
-                block.push_link(link_id, code.is_term());
-                link_id
-            }
+            _ => self._push_entry_normal(entry),
         }
     }
 
@@ -1249,8 +1259,8 @@ impl<S: BlockState> Flatten<S> {
         self.replace_label(block_link_id, block_ty, name, span_id, mem);
         self.block_links
             .insert(self.current_block_id(), block_link_id);
-        let block = self.blocks.get_block_mut(self.current_block_id());
-        block.last_decl = block.last();
+        //let block = self.blocks.get_block_mut(self.current_block_id());
+        //block.last_decl = block.last();
         (block_link_id, v_args)
     }
 
