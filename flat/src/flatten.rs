@@ -738,16 +738,16 @@ impl<S: BlockState> Flatten<S> {
         next_link_id
     }
 
-    pub fn insert_decl(&mut self, scope_id: ScopeId, mut entry: CodeEntry) -> LinkId {
-        let scope = self.scopes.get_scope(scope_id);
-        let entry_block_id = scope.entry_block.unwrap();
-        entry.block_id = entry_block_id;
-        let block = self.blocks.get_block_mut(entry_block_id);
+    pub fn insert_decl(&mut self, block_id: BlockId, mut entry: CodeEntry) -> LinkId {
+        //let scope = self.scopes.get_scope(scope_id);
+        //let entry_block_id = scope.entry_block.unwrap();
+        //entry.block_id = entry_block_id;
+        let block = self.blocks.get_block_mut(block_id);
         let last_decl = block.last_decl();
         let link_id = self.insert_entry_after(last_decl, entry);
-        println!("insert3: {:?}", self.blocks.get_block(entry_block_id));
-        self.blocks.get_block_mut(entry_block_id).push_decl(link_id);
-        println!("insert4: {:?}", self.blocks.get_block(entry_block_id));
+        println!("insert3: {:?}", self.blocks.get_block(block_id));
+        self.blocks.get_block_mut(block_id).push_decl(link_id);
+        println!("insert4: {:?}", self.blocks.get_block(block_id));
         link_id
     }
 
@@ -768,7 +768,10 @@ impl<S: BlockState> Flatten<S> {
         let block = self.blocks.get_block(entry_block_id);
         let scope_id = block.scope_id;
         //assert!(!block.is_term());
-        let link_id = self.insert_decl(scope_id, entry);
+        let scope = self.scopes.get_scope(scope_id);
+        let entry_block_id = scope.entry_block.unwrap();
+        //entry.block_id = entry_block_id;
+        let link_id = self.insert_decl(entry_block_id, entry);
         link_id
     }
 
@@ -815,17 +818,16 @@ impl<S: BlockState> Flatten<S> {
                 block.push_arg(link_id);
                 link_id
             }
-            /*
             LCode::Declare => {
                 //assert!(false);
-                let scope_id = block.scope_id;
+                //let block = self.blocks.get_block(block_id);
+                //let scope_id = block.scope_id;
                 //let scope = self.scopes.get_scope(scope_id);
                 //let entry_block_id = scope.entry_block.unwrap();
-                let link_id = self.insert_decl(scope_id, entry);
+                let link_id = self.insert_decl(block_id, entry);
                 //block.push_decl(link_id);
                 link_id
             }
-            */
             _ => self._push_entry_normal(entry),
         }
     }

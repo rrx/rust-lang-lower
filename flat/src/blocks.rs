@@ -107,7 +107,7 @@ impl<S> IRBlock<S> {
     }
 
     pub fn push_decl(&mut self, link_id: LinkId) {
-        if self.last.unwrap() == link_id {
+        if self.last.unwrap() == self.last_decl.unwrap() {
             self.last = Some(link_id);
         }
         self.last_decl = Some(link_id);
