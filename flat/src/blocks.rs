@@ -16,13 +16,6 @@ pub enum Successor {
     TemplateDeclaration,
 }
 
-#[derive(Debug, Clone)]
-pub enum Start {}
-
-pub trait BlockState: std::fmt::Debug + Clone {}
-
-impl BlockState for Start {}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BlockStateEnum {
     Start,
@@ -32,7 +25,7 @@ pub enum BlockStateEnum {
 }
 
 #[derive(Debug, Clone)]
-pub struct IRBlock<S> {
+pub struct IRBlock {
     pub(super) scope_id: ScopeId,
     dead: bool,
     term: bool,
@@ -44,10 +37,9 @@ pub struct IRBlock<S> {
     pub(super) num_ret_args: HashSet<usize>,
     pub(super) ret_types: HashSet<AstType>,
     s: BlockStateEnum,
-    _state: std::marker::PhantomData<S>,
 }
 
-impl<S> IRBlock<S> {
+impl IRBlock {
     pub fn new(scope_id: ScopeId) -> Self {
         Self {
             scope_id,
@@ -60,7 +52,6 @@ impl<S> IRBlock<S> {
             num_ret_args: HashSet::new(),
             ret_types: HashSet::new(),
             links: vec![],
-            _state: std::marker::PhantomData::default(),
             s: BlockStateEnum::Start,
         }
     }
@@ -160,22 +151,22 @@ impl<S> IRBlock<S> {
     }
 }
 
-pub struct BlockGraph<S: BlockState>(pub(super) DiGraph<IRBlock<S>, Successor>);
+pub struct BlockGraph(pub(super) DiGraph<IRBlock, Successor>);
 
-impl<S: BlockState> Deref for BlockGraph<S> {
-    type Target = DiGraph<IRBlock<S>, Successor>;
+impl Deref for BlockGraph {
+    type Target = DiGraph<IRBlock, Successor>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
-impl<S: BlockState> DerefMut for BlockGraph<S> {
+impl DerefMut for BlockGraph {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
-impl<S: BlockState> BlockGraph<S> {
+impl BlockGraph {
     pub fn new() -> Self {
         Self(DiGraph::new())
     }
@@ -203,12 +194,12 @@ impl<S: BlockState> BlockGraph<S> {
         );
     }
 
-    pub fn get_block(&self, block_id: BlockId) -> &IRBlock<S> {
+    pub fn get_block(&self, block_id: BlockId) -> &IRBlock {
         let index = NodeIndex::new(block_id.index());
         self.node_weight(index).unwrap()
     }
 
-    pub fn get_block_mut(&mut self, block_id: BlockId) -> &mut IRBlock<S> {
+    pub fn get_block_mut(&mut self, block_id: BlockId) -> &mut IRBlock {
         let index = NodeIndex::new(block_id.index());
         self.node_weight_mut(index).unwrap()
     }

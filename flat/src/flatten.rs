@@ -11,10 +11,10 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::convert::Into;
 
 use crate::{
-    AbstractionsBuilder, BlockGraph, BlockId, BlockState, BlockifyError, Builtin, CodeOffset,
-    ContinuationFlow, DeferredGotoList, FlowEdge, FunctionVariantBuilder, LCode, LinkId,
-    NodeBuilder as NB, ScopeGraph, ScopeId, ScopeType, ScopedContinuations, StringLabel, Successor,
-    ValueId, VarDefinitionSpace, VariantId,
+    AbstractionsBuilder, BlockGraph, BlockId, BlockifyError, Builtin, CodeOffset, ContinuationFlow,
+    DeferredGotoList, FlowEdge, FunctionVariantBuilder, LCode, LinkId, NodeBuilder as NB,
+    ScopeGraph, ScopeId, ScopeType, ScopedContinuations, StringLabel, Successor, ValueId,
+    VarDefinitionSpace, VariantId,
 };
 
 pub type ArgVec = Vec<(Option<StringKey>, LinkId, AstType, SpanId)>;
@@ -102,10 +102,15 @@ pub enum FlattenMode {
     Template,
 }
 
-pub struct Flatten<S: BlockState> {
+pub trait FlattenState: std::fmt::Debug + Clone {}
+#[derive(Debug, Clone)]
+pub enum Start {}
+impl FlattenState for Start {}
+
+pub struct Flatten<S: FlattenState> {
     pub(super) link: LinkOptions,
     pub(super) entries: Vec<CodeEntry>,
-    pub blocks: BlockGraph<S>,
+    pub blocks: BlockGraph,
     pub(crate) static_scope: Option<ScopeId>,
     pub(crate) static_block: Option<BlockId>,
     pub(crate) current_block: BlockId,
@@ -118,9 +123,10 @@ pub struct Flatten<S: BlockState> {
     pub deferred_goto: DeferredGotoList,
     pub variants: FunctionVariantBuilder,
     pub abstractions: AbstractionsBuilder,
+    _s: std::marker::PhantomData<S>,
 }
 
-impl Flatten<super::Start> {
+impl Flatten<Start> {
     pub fn new() -> Self {
         let blocks = BlockGraph::new();
 
@@ -140,6 +146,7 @@ impl Flatten<super::Start> {
             deferred_goto: DeferredGotoList::new(),
             variants: FunctionVariantBuilder::new(),
             abstractions: AbstractionsBuilder::new(),
+            _s: std::marker::PhantomData,
         }
     }
 
@@ -188,7 +195,7 @@ impl Flatten<super::Start> {
     }
 }
 
-impl<S: BlockState> Flatten<S> {
+impl<S: FlattenState> Flatten<S> {
     pub fn type_inference(&mut self, b: &mut NB) {
         for entry in self.entries.iter_mut() {
             if !entry.ty.is_unknown() {
@@ -1705,7 +1712,6 @@ impl<S: BlockState> Flatten<S> {
                     let scope = self.scopes.get_scope(scope_id);
                     let _entry_block_id = scope.entry_block.unwrap();
                     let _current_block_id = self.current_block_id();
-                    //let link_id = if current_block_id == entry_block_id {
                     let block = self.blocks.get_block(self.current_block_id());
                     let scope_id = block.scope_id;
 
@@ -1726,6 +1732,7 @@ impl<S: BlockState> Flatten<S> {
                     FlowEdge::Store,
                 );
 
+                // explicit store for assign
                 self.push_code(
                     LCode::Store(offset_decl, v_expr),
                     AstType::Unit,

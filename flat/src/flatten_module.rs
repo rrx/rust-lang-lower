@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::convert::Into;
 
 use crate::{
-    BlockGraph, BlockId, BlockState, CodeEntry, CodeOffset, CodeRow, ContinuationFlow, Flatten,
+    BlockGraph, BlockId, CodeEntry, CodeOffset, CodeRow, ContinuationFlow, Flatten, FlattenState,
     FunctionVariant, FunctionVariantBuilder, ICodeModule, LCode, LinkId, NodeBuilder as NB,
     ScopeGraph, ScopeType, ScopedContinuations, StringLabel, Successor, ValueId,
     VarDefinitionSpace, VariantId,
@@ -14,11 +14,11 @@ use crate::{
 
 use tabled::{settings::Style, Table};
 
-pub struct FlattenModule<S: BlockState> {
+pub struct FlattenModule<S: FlattenState> {
     pub(super) link: LinkOptions,
     pub entries: Vec<CodeEntry>,
     pub values: Vec<LinkId>,
-    pub blocks: BlockGraph<S>,
+    pub blocks: BlockGraph,
     //pub messages: Vec<(String, SpanId)>,
     pub scopes: ScopeGraph,
     pub block_links: HashMap<BlockId, LinkId>,
@@ -26,9 +26,10 @@ pub struct FlattenModule<S: BlockState> {
     pub statics: HashMap<StringKey, Literal>,
     pub variants: FunctionVariantBuilder,
     pub scoped_continuations: ScopedContinuations,
+    _s: std::marker::PhantomData<S>,
 }
 
-impl<S: BlockState> ICodeModule for FlattenModule<S> {
+impl<S: FlattenState> ICodeModule for FlattenModule<S> {
     fn get_entry(&self, value_id: ValueId) -> &CodeEntry {
         let link_id = self.values[value_id.index()];
         self.entries.get(link_id.index()).unwrap()
@@ -179,7 +180,7 @@ impl<S: BlockState> ICodeModule for FlattenModule<S> {
     }
 }
 
-impl<S: BlockState> FlattenModule<S> {
+impl<S: FlattenState> FlattenModule<S> {
     pub fn build(f: Flatten<S>, b: &mut NB) -> Result<Self> {
         let (f, values) = f.finish(b)?;
         Ok(Self {
@@ -194,6 +195,7 @@ impl<S: BlockState> FlattenModule<S> {
             statics: f.statics,
             variants: f.variants,
             scoped_continuations: f.scoped_continuations,
+            _s: std::marker::PhantomData,
         })
     }
 
@@ -322,7 +324,7 @@ impl<S: BlockState> FlattenModule<S> {
     }
 
     pub fn flow_graph(&self, filename: &str, b: &NB) -> Result<()> {
-        crate::flatten_graph::flow_graph(self, &self.blocks, filename, b)
+        crate::flatten_graph::flow_graph::<S>(self, &self.blocks, filename, b)
     }
 
     pub fn dump_scopes(&self) {
