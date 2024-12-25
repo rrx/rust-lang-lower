@@ -1070,13 +1070,13 @@ impl<S: BlockState> Flatten<S> {
 
         // DECLARE
         // if the function returns a value, then we need to copy it out of the next block arguments
-        let decl = if let Some(link_id) = r.link_id {
+        let v_decl = if let Some(link_id) = r.link_id {
             let key = b.labels.fresh_key("r");
             let ty = next_arg_ty.field_types().first().unwrap().clone();
             let decl_link_id = self.push_decl(ty.clone(), key, call_span_id);
             let entry = self.get_entry_mut(link_id);
             entry.mem = VarDefinitionSpace::Stack(decl_link_id);
-            Some((decl_link_id, link_id, ty, key))
+            Some(decl_link_id)
         } else {
             None
         };
@@ -1110,7 +1110,7 @@ impl<S: BlockState> Flatten<S> {
         // STORE ARG
         // r contains the link to the return value
         // r contains the return result link, which is part of the next block arguments.
-        if let Some((decl_link_id, arg_link_id, ty, key)) = decl {
+        if let Some(decl_link_id) = v_decl {
             Ok(FlattenResult::link(decl_link_id))
         } else {
             Ok(r)
