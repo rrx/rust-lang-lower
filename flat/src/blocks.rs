@@ -32,8 +32,9 @@ pub struct IRBlock {
     size: usize,
     entry: Option<LinkId>,
     terminal: Option<LinkId>,
+    decls: Vec<LinkId>,
     links: Vec<LinkId>,
-    last: Option<LinkId>,
+    //last: Option<LinkId>,
     last_decl: Option<LinkId>,
     pub(super) num_ret_args: HashSet<usize>,
     pub(super) ret_types: HashSet<AstType>,
@@ -48,12 +49,13 @@ impl IRBlock {
             term: false,
             entry: None,
             terminal: None,
-            last: None,
+            //last: None,
             last_decl: None,
             size: 0,
             num_ret_args: HashSet::new(),
             ret_types: HashSet::new(),
             links: vec![],
+            decls: vec![],
             s: BlockStateEnum::Start,
         }
     }
@@ -78,9 +80,10 @@ impl IRBlock {
         assert_eq!(self.s, BlockStateEnum::Start);
         self.s = BlockStateEnum::Entry;
         assert!(!self.term);
-        assert!(self.last.is_none());
+        assert!(self.entry.is_none());
+        assert!(self.last().is_none());
         self.entry = Some(link_id);
-        self.last = Some(link_id);
+        //self.last = Some(link_id);
         self.last_decl = Some(link_id);
         self.size += 1;
         self.links.push(link_id)
@@ -90,7 +93,7 @@ impl IRBlock {
         assert_eq!(self.s, BlockStateEnum::Entry);
         assert!(!self.term);
         assert!(self.entry.is_some());
-        self.last = Some(link_id);
+        //self.last = Some(link_id);
         self.last_decl = Some(link_id);
         self.size += 1;
         self.links.push(link_id)
@@ -107,9 +110,9 @@ impl IRBlock {
         if self.s != BlockStateEnum::Term {
             self.s = BlockStateEnum::Body;
         }
-        if self.last.unwrap() == self.last_decl.unwrap() {
-            self.last = Some(link_id);
-        }
+        //if self.last.unwrap() == self.last_decl.unwrap() {
+        //self.last = Some(link_id);
+        //}
         self.last_decl = Some(link_id);
         self.links.insert(index, link_id);
         self.size += 1;
@@ -128,12 +131,27 @@ impl IRBlock {
             self.links.push(link_id)
         }
         self.term = term;
-        self.last = Some(link_id);
+        //self.last = Some(link_id);
         self.size += 1;
     }
 
     pub fn last(&self) -> Option<LinkId> {
-        self.last
+        if let Some(last) = self.terminal {
+            return Some(last);
+        }
+
+        if let Some(last) = self.links.last().cloned() {
+            return Some(last);
+        }
+
+        if let Some(last) = self.decls.last().cloned() {
+            return Some(last);
+        }
+
+        if let Some(last) = self.entry {
+            return Some(last);
+        }
+        None
     }
 
     pub fn last_decl(&self) -> LinkId {
@@ -149,8 +167,9 @@ impl IRBlock {
         self.s = BlockStateEnum::Body;
         self.term = false;
         self.terminal.take().unwrap();
-        self.last = self.links.last().cloned();
-        self.last.unwrap()
+        self.last().unwrap()
+        //self.last = self.links.last().cloned();
+        //self.last.unwrap()
     }
 }
 
