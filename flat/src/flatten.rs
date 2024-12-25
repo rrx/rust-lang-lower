@@ -34,11 +34,11 @@ pub struct CodeEntry {
     pub(super) next: LinkId,
     prev: LinkId,
     pub(super) code: LCode,
-    pub(super) name: Option<StringKey>,
+    pub name: Option<StringKey>,
     pub link: Option<LinkId>,
     pub(super) value_id: Option<ValueId>,
     pub block_id: BlockId,
-    pub(super) ty: AstType,
+    pub ty: AstType,
     pub(super) span_id: SpanId,
     pub mem: VarDefinitionSpace,
 }
@@ -1241,17 +1241,8 @@ impl<S: BlockState> Flatten<S> {
         self.replace_label(block_link_id, block_ty, name, span_id, mem);
         self.block_links
             .insert(self.current_block_id(), block_link_id);
-        //let block = self.blocks.get_block_mut(self.current_block_id());
-        //block.last_decl = block.last();
         (block_link_id, v_args)
     }
-
-    /*
-    pub fn save_ast_template_caller(&mut self, abs_id: AbstractionId, block_id: BlockId) {
-        let a = self.abstractions.get_mut(abs_id);
-        a.caller_blocks.insert(block_id);
-    }
-    */
 
     pub fn save_ast_template(
         &mut self,
@@ -1419,7 +1410,6 @@ impl<S: BlockState> Flatten<S> {
                 .block_succ(self.current_block_id(), *block_id, Successor::BlockScope);
         }
 
-        //println!("replace: {}=>{:?}", last_link_id, target_block_ids);
         let entry = self.get_entry(last_link_id);
 
         let code = if let LCode::PlaceholderTerminal(_) = entry.code {
@@ -1448,7 +1438,6 @@ impl<S: BlockState> Flatten<S> {
         };
         if let Some(code) = code {
             let entry = self.get_entry_mut(last_link_id);
-            //println!("replace: {} {:?}=>{:?}", last_link_id, entry.code, code);
             entry.code = code;
         }
 
@@ -1752,33 +1741,20 @@ impl<S: BlockState> Flatten<S> {
                     link_id
                 };
 
-                let load_link_id = if self.is_load_required(v_expr) {
-                    let link_id = self.push_code(
-                        LCode::Load(v_expr),
-                        expr_ty.clone(),
-                        None,
-                        node.span_id,
-                        VarDefinitionSpace::Default,
-                    );
-                    link_id
-                } else {
-                    v_expr
-                };
-
                 self.scoped_continuations.connect(
-                    ContinuationFlow::Variable(load_link_id),
+                    ContinuationFlow::Variable(v_expr),
                     ContinuationFlow::Variable(offset_decl),
                     FlowEdge::Store,
                 );
 
-                let link_id = self.push_code(
-                    LCode::Store(offset_decl, load_link_id),
+                self.push_code(
+                    LCode::Store(offset_decl, v_expr),
                     AstType::Unit,
                     None,
                     node.span_id,
                     VarDefinitionSpace::Default,
                 );
-                Ok(FlattenResult::link(link_id))
+                Ok(FlattenResult::link(offset_decl))
             }
 
             Ast::Import(module_key, args) => {

@@ -121,6 +121,26 @@ pub fn flow_graph<S: BlockState>(
     let entries = gblocks.graph_get_entries();
     let mut ng = NestedGraph::new();
 
+    let mut scope_group = Group::new("static scope".into(), "".into());
+    let static_block_id = BlockId::new(0);
+    let module = m.resolve_code_offset(static_block_id.into());
+    let links = m.get_links(module);
+    let mut block_group = Group::new("static block".into(), "".into());
+    block_group.push_value(GroupValue::new("V0".into(), "module".into()));
+    for v in links {
+        let value_id = m.resolve_code_offset(v.into());
+        let entry = m.get_entry(value_id);
+        if let LCode::Val(_) = entry.code {
+            ng.sources.push((module, value_id));
+            let s = format!("{}:{}", v, m.code_to_string(v, b));
+            block_group.push_value(GroupValue::new(format!("{}", v), s));
+        } else {
+            continue;
+        }
+    }
+    scope_group.push_group(block_group);
+    ng.group.push_group(scope_group);
+
     for entry in entries {
         let fun_block_id: BlockId = entry.into();
         let fun_key = m.get_name(fun_block_id.into()).unwrap();

@@ -563,28 +563,31 @@ impl<'c> MLIRGenerator<'c> {
         let location = self.get_location(v);
         let entry_id = self.blockify.get_entry_id(v).unwrap();
         let decl_is_static = self.blockify.is_in_static_scope(v_decl.into());
-        //let value_is_static = self.blockify.is_in_static_scope(v_value.into());
+
+        let value_is_static = self.blockify.is_in_static_scope(v_value.into());
         //println!(
         //"store: {}, {}, {}, {}",
         //v_decl, v_value, decl_is_static, value_is_static
         //);
 
-        /*
-           let value_index = if value_is_static {
-           let op = memref::get_global(self.context, &static_name, memref_ty, location);
-        //let current = blocks.get_mut(&block_index).unwrap();
-        //let addr_index = current.push(op);
-        //addr_index
-        let c = self.blocks.get_mut(&block_id).unwrap();
-        let index = c.push(op);
-        self.index.insert(v, index);
-        index
-
+        // resolve value
+        let value_index = if value_is_static {
+            let v_entry = self.blockify.get_entry(v_value);
+            let static_name = self.b.labels.r(v_entry.name.unwrap().into());
+            let (lower_ty, dims) = self.from_type(&v_entry.ty);
+            assert_eq!(dims.len(), 0);
+            let memref_ty = MemRefType::new(lower_ty, &[], None, None);
+            let op = memref::get_global(self.context, &static_name, memref_ty, location);
+            let c = self.blocks.get_mut(&entry_id).unwrap();
+            //let c = self.blocks.get_mut(&block_id).unwrap();
+            let index = c.push(op);
+            self.index.insert(v, index);
+            index
         } else {
-        self.resolve_value(v_value.into()).unwrap()
+            self.resolve_value(v_value.into()).unwrap()
         };
-        */
 
+        // resolve address
         let addr_index = if decl_is_static {
             let name = self.blockify.get_name(v_decl.into()).unwrap();
             let lhs_ty = self.blockify.get_type(v_decl.into());
@@ -610,7 +613,6 @@ impl<'c> MLIRGenerator<'c> {
             decl_index
         };
 
-        let value_index = self.resolve_value(v_value.into()).unwrap();
         let r_addr = self.value0(addr_index);
         let r_value = self.value0(value_index);
 
