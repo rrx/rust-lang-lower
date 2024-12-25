@@ -31,6 +31,7 @@ pub struct IRBlock {
     term: bool,
     size: usize,
     entry: Option<LinkId>,
+    terminal: Option<LinkId>,
     links: Vec<LinkId>,
     last: Option<LinkId>,
     last_decl: Option<LinkId>,
@@ -46,6 +47,7 @@ impl IRBlock {
             dead: false,
             term: false,
             entry: None,
+            terminal: None,
             last: None,
             last_decl: None,
             size: 0,
@@ -116,17 +118,18 @@ impl IRBlock {
     pub fn push_link(&mut self, link_id: LinkId, term: bool) {
         assert_ne!(self.s, BlockStateEnum::Term);
         assert!(!self.term);
+        assert!(self.entry.is_some());
 
         if term {
             self.s = BlockStateEnum::Term;
+            self.terminal = Some(link_id);
         } else {
             self.s = BlockStateEnum::Body;
+            self.links.push(link_id)
         }
-        assert!(self.entry.is_some());
         self.term = term;
         self.last = Some(link_id);
         self.size += 1;
-        self.links.push(link_id)
     }
 
     pub fn last(&self) -> Option<LinkId> {
@@ -145,7 +148,7 @@ impl IRBlock {
         assert_eq!(self.s, BlockStateEnum::Term);
         self.s = BlockStateEnum::Body;
         self.term = false;
-        self.links.pop().unwrap();
+        self.terminal.take().unwrap();
         self.last = self.links.last().cloned();
         self.last.unwrap()
     }
