@@ -198,6 +198,15 @@ impl<'a> Interp<'a> {
         None
     }
 
+    fn get_value_scope(&mut self, v: ValueId) -> Option<&mut Scope> {
+        for scope in self.stack.iter_mut().rev() {
+            if scope.values.contains_key(&v) {
+                return Some(scope);
+            }
+        }
+        None
+    }
+
     pub fn resolve_value(&mut self, v: ValueId) -> Result<Value> {
         let entry = self.m.get_entry(v);
         let code = &entry.code;
@@ -206,25 +215,25 @@ impl<'a> Interp<'a> {
             LCode::Arg(_index) => {
                 return Ok(self.get_value(v).unwrap());
             }
+            LCode::Declare => {
+                return Ok(self.resolve_declaration(v));
+            }
+
+            LCode::Val(_) => {
+                return Ok(self
+                    .get_value_scope(v)
+                    .unwrap()
+                    .values
+                    .get(&v)
+                    .cloned()
+                    .unwrap());
+            }
+
             _ => (),
         }
 
         for scope in self.stack.iter_mut().rev() {
             match code {
-                LCode::Val(lit) => {
-                    if let Some(value) = scope.values.get(&v) {
-                        return Ok(value.clone());
-                    } else {
-                        let value = if let Literal::Block(block_id) = lit {
-                            Value::Int(block_id.index() as i64)
-                        } else {
-                            Value::from_lit(lit)
-                        };
-
-                        scope.values.insert(v, value);
-                    }
-                }
-
                 LCode::Use(base, inds) => {
                     let v = self.m.resolve_code_offset(*base);
                     let value = scope.values.get(&v).unwrap().clone();

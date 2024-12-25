@@ -128,7 +128,6 @@ impl Flatten<super::Start> {
             entries: vec![],
             blocks,
             link: LinkOptions::new(),
-            //messages: vec![],
             static_scope: None,
             static_block: None,
             current_block: BlockId::new(0),
@@ -438,15 +437,6 @@ impl<S: BlockState> Flatten<S> {
         }
         None
     }
-
-    /*
-    pub(super) fn drain_diagnostics(&mut self, b: &mut NB) {
-        // XXX: This needs to be run before any errors kick in, there must be a better way.
-        for (msg, span_id) in self.messages.drain(..) {
-            b.push_error(&msg, span_id);
-        }
-    }
-    */
 
     pub fn inject_builtin_prototypes(&mut self, b: &mut NB) {
         // inject builtin prototypes
@@ -991,18 +981,7 @@ impl<S: BlockState> Flatten<S> {
                 v = decl_link_id;
             }
 
-            let out = if self.is_load_required(v) {
-                let link_id = self.push_code(
-                    LCode::Load(v),
-                    ty.clone(),
-                    *maybe_key,
-                    *span_id,
-                    VarDefinitionSpace::Reg,
-                );
-                (*maybe_key, link_id, ty, *span_id)
-            } else {
-                (*maybe_key, v, ty, *span_id)
-            };
+            let out = (*maybe_key, v, ty, *span_id);
 
             updated_values.push(out);
         }

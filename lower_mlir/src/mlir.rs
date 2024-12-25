@@ -37,7 +37,8 @@ pub trait LowerIR<'c> {
 pub enum SymIndex {
     Op(ValueId, usize),
     Arg(ValueId, usize),
-    Def(ValueId, usize),
+    Def(ValueId, usize, ValueId),
+    Static(ValueId, usize, ValueId),
 }
 
 impl SymIndex {
@@ -45,15 +46,17 @@ impl SymIndex {
         match self {
             SymIndex::Op(block_index, _)
             | SymIndex::Arg(block_index, _)
-            | SymIndex::Def(block_index, _) => *block_index,
+            | SymIndex::Def(block_index, _, _) => *block_index,
+            SymIndex::Static(block_index, _, _) => *block_index,
         }
     }
 
     pub fn offset(&self) -> usize {
         match self {
-            SymIndex::Op(_, offset) | SymIndex::Arg(_, offset) | SymIndex::Def(_, offset) => {
-                *offset
-            }
+            SymIndex::Op(_, offset)
+            | SymIndex::Arg(_, offset)
+            | SymIndex::Def(_, offset, _)
+            | SymIndex::Static(_, offset, _) => *offset,
         }
     }
 
@@ -105,6 +108,19 @@ impl<'c> OpCollection<'c> {
         self.ops.push(op);
         self.op_count += 1;
         SymIndex::Op(self.block_id, offset)
+    }
+
+    pub fn push_static(&mut self, op: Operation<'c>, v: ValueId) -> SymIndex {
+        let offset = self.op_count;
+        self.ops.push(op);
+        self.op_count += 1;
+        SymIndex::Def(self.block_id, offset, v)
+    }
+    pub fn push_decl(&mut self, op: Operation<'c>, v: ValueId) -> SymIndex {
+        let offset = self.op_count;
+        self.ops.push(op);
+        self.op_count += 1;
+        SymIndex::Def(self.block_id, offset, v)
     }
 
     pub fn take_ops(&mut self) -> Vec<Operation<'c>> {
@@ -203,12 +219,12 @@ impl<'c> MLIRGenerator<'c> {
     pub fn value0(&self, index: SymIndex) -> Value<'c, '_> {
         let c = self.blocks.get(&index.block()).unwrap();
         match index {
-            SymIndex::Op(_, pos) => {
+            SymIndex::Op(_, pos) | SymIndex::Def(_, pos, _) | SymIndex::Static(_, pos, _) => {
                 let op = c.ops.get(pos).expect("Op missing");
                 op.result(0).unwrap().into()
             }
             SymIndex::Arg(_, pos) => c.block.as_ref().unwrap().argument(pos).unwrap().into(),
-            _ => unimplemented!(),
+            //_ => unimplemented!(),
         }
     }
 
@@ -263,7 +279,7 @@ impl<'c> LowerIR<'c> for MLIRGenerator<'c> {
             //let current = blocks.blocks.get_mut(&block_index).unwrap();
             //let op = current.op_ref(sym_index);
             op.set_attribute("initial_value", attribute.into());
-            let index = c.push(op);
+            let index = c.push_static(op, v);
             //if !is_current_static {
             // STATIC VARIABLE IN FUNCTION CONTEXT
             // TODO: FIXME
@@ -273,7 +289,6 @@ impl<'c> LowerIR<'c> for MLIRGenerator<'c> {
             //Ok(index)
             self.index.insert(v, index);
         } else {
-            //println!("literal: {:?}", lit);
             let op = self.emit_literal_const(lit, location);
             let c = self
                 .blocks
@@ -299,6 +314,22 @@ impl<'c> MLIRGenerator<'c> {
             ir::Location::new(self.context, &name, loc.line_number, loc.column_number)
         } else {
             ir::Location::unknown(self.context)
+        }
+    }
+
+    pub fn resolve_value_lower_load(
+        &mut self,
+        block_id: ValueId,
+        offset: CodeOffset,
+    ) -> Option<SymIndex> {
+        if let Some(index) = self.resolve_value(offset) {
+            match index {
+                SymIndex::Static(_, _, v_decl) => Some(self.lower_load(block_id, v_decl)),
+                SymIndex::Def(_, _, v_decl) => Some(self.lower_load(block_id, v_decl)),
+                _ => Some(index),
+            }
+        } else {
+            None
         }
     }
 
@@ -443,7 +474,10 @@ impl<'c> MLIRGenerator<'c> {
         let arity = values.len();
         let indicies = values
             .into_iter()
-            .map(|value_id| self.resolve_value(value_id.into()).unwrap())
+            .map(|value_id| {
+                self.resolve_value_lower_load(block_id, value_id.into())
+                    .unwrap()
+            })
             .collect();
         let rs = self.values(indicies);
 
@@ -559,6 +593,38 @@ impl<'c> MLIRGenerator<'c> {
         (ptr_type, tuple_type)
     }
 
+    fn lower_load(&mut self, block_id: ValueId, v_decl: ValueId) -> SymIndex {
+        let location = self.get_location(v_decl);
+        let v_decl = self.blockify.resolve_declaration(v_decl.into()).unwrap();
+        if self.blockify.is_in_static_scope(v_decl) {
+            let ast_ty = self.blockify.get_type(v_decl.into());
+            let (lower_ty, dims) = self.from_type(&ast_ty);
+            assert_eq!(dims.len(), 0);
+            let memref_ty = MemRefType::new(lower_ty, &[], None, None);
+            // TODO: FIXME
+            let decl_name = self.blockify.get_name(v_decl).unwrap();
+            let static_name = self.b.labels.r(decl_name);
+            let op = memref::get_global(self.context, &static_name, memref_ty, location);
+            let c = self.blocks.get_mut(&block_id).unwrap();
+            let addr_index = c.push(op);
+            let r_addr = self.value0(addr_index);
+            let op = memref::load(r_addr, &[], location);
+            let c = self.blocks.get_mut(&block_id).unwrap();
+            let index = c.push(op);
+            index
+        } else {
+            let decl_index = self.resolve_value(v_decl).expect(&format!(
+                "Unable to resolve declaration {} for load {}",
+                v_decl, block_id
+            ));
+            let r_addr = self.value0(decl_index);
+            let op = memref::load(r_addr, &[], location);
+            let c = self.blocks.get_mut(&block_id).unwrap();
+            let index = c.push(op);
+            index
+        }
+    }
+
     fn lower_store(&mut self, v: ValueId, v_decl: ValueId, v_value: ValueId) -> SymIndex {
         let location = self.get_location(v);
         let entry_id = self.blockify.get_entry_id(v).unwrap();
@@ -579,7 +645,6 @@ impl<'c> MLIRGenerator<'c> {
             let memref_ty = MemRefType::new(lower_ty, &[], None, None);
             let op = memref::get_global(self.context, &static_name, memref_ty, location);
             let c = self.blocks.get_mut(&entry_id).unwrap();
-            //let c = self.blocks.get_mut(&block_id).unwrap();
             let index = c.push(op);
             self.index.insert(v, index);
             index
@@ -825,10 +890,14 @@ impl<'c> MLIRGenerator<'c> {
                     let (ret_type, dims) = self.from_type(&ret_ty);
                     assert_eq!(dims.len(), 0);
                     // handle call arguments
+                    let block_id = self.blockify.get_entry_id(v).unwrap();
 
                     let indicies = values
                         .into_iter()
-                        .map(|value_id| self.resolve_value(value_id.into()).unwrap())
+                        .map(|value_id| {
+                            self.resolve_value_lower_load(block_id, value_id.into())
+                                .unwrap()
+                        })
                         .collect();
                     let rs = self.values(indicies);
 
@@ -840,7 +909,6 @@ impl<'c> MLIRGenerator<'c> {
 
                     let op = func::call(self.context, f, &rs, &ret, location);
 
-                    let block_id = self.blockify.get_entry_id(v).unwrap();
                     let c = self.blocks.get_mut(&block_id).unwrap();
                     let index = c.push(op);
                     self.index.insert(v, index);
@@ -892,7 +960,7 @@ impl<'c> MLIRGenerator<'c> {
                 let op = llvm::alloca(self.context, r_size, ptr_type, location, options);
                 */
                 let c = self.blocks.get_mut(&block_id).unwrap();
-                let index = c.push(op);
+                let index = c.push_decl(op, v);
                 self.index.insert(v, index);
             }
 
@@ -960,33 +1028,9 @@ impl<'c> MLIRGenerator<'c> {
                 self.ensure_call_args_empty();
                 let block_id = self.blockify.get_entry_id(v).unwrap();
                 let v_decl = self.blockify.resolve_declaration(v_decl.into()).unwrap();
-                if self.blockify.is_in_static_scope(v_decl) {
-                    let ast_ty = self.blockify.get_type(v.into());
-                    let (lower_ty, dims) = self.from_type(&ast_ty);
-                    assert_eq!(dims.len(), 0);
-                    let memref_ty = MemRefType::new(lower_ty, &[], None, None);
-                    // TODO: FIXME
-                    let decl_name = self.blockify.get_name(v_decl).unwrap();
-                    let static_name = self.b.labels.r(decl_name);
-                    let op = memref::get_global(self.context, &static_name, memref_ty, location);
-                    let c = self.blocks.get_mut(&block_id).unwrap();
-                    let addr_index = c.push(op);
-                    let r_addr = self.value0(addr_index);
-                    let op = memref::load(r_addr, &[], location);
-                    let c = self.blocks.get_mut(&block_id).unwrap();
-                    let index = c.push(op);
-                    self.index.insert(v, index);
-                } else {
-                    let decl_index = self.resolve_value(v_decl).expect(&format!(
-                        "Unable to resolve declaration {} for load {}",
-                        v_decl, v
-                    ));
-                    let r_addr = self.value0(decl_index);
-                    let op = memref::load(r_addr, &[], location);
-                    let c = self.blocks.get_mut(&block_id).unwrap();
-                    let index = c.push(op);
-                    self.index.insert(v, index);
-                }
+                let v_decl = self.blockify.resolve_code_offset(v_decl.into());
+                let index = self.lower_load(block_id, v_decl);
+                self.index.insert(v, index);
             }
 
             LCode::Op1(op) => {
@@ -994,7 +1038,7 @@ impl<'c> MLIRGenerator<'c> {
                 let x = values.pop().unwrap().into();
 
                 let block_id = self.blockify.get_entry_id(v).unwrap();
-                let x_index = self.resolve_value(x).unwrap();
+                let x_index = self.resolve_value_lower_load(block_id, x).unwrap();
                 let ast_ty = self.blockify.get_type(x);
                 let (ty, dims) = self.from_type(&ast_ty);
                 assert_eq!(dims.len(), 0);
@@ -1030,19 +1074,17 @@ impl<'c> MLIRGenerator<'c> {
 
             LCode::Op2(op) => {
                 let mut values = self.take_call_args();
-                let y = values.pop().unwrap();
-                let x = values.pop().unwrap();
+                let vy = values.pop().unwrap();
+                let vx = values.pop().unwrap();
 
-                let vx = self.blockify.resolve_code_offset(x.into());
-                let vy = self.blockify.resolve_code_offset(y.into());
                 let block_id = self.blockify.get_entry_id(v).unwrap();
                 let x_span_id = self.blockify.get_span_id(vx);
                 let y_span_id = self.blockify.get_span_id(vy);
-                //let x_span = b.spans.lookup(x_span_id);
-                //let y_span = b.spans.lookup(y_span_id);
-                let x_index = self.resolve_value(vx.into()).unwrap();
+                let x_index = self.resolve_value_lower_load(block_id, vx.into()).unwrap();
+
+                let y_index = self.resolve_value_lower_load(block_id, vy.into()).unwrap();
+
                 let r_x = self.value0(x_index);
-                let y_index = self.resolve_value(vy.into()).unwrap();
                 let r_y = self.value0(y_index);
 
                 let r = self.build_binop(op.clone(), r_x, &x_span_id, r_y, &y_span_id, location);
@@ -1150,7 +1192,10 @@ impl<'c> MLIRGenerator<'c> {
                 let v_then = self.blockify.resolve_code_offset((*then_block_id).into());
                 let v_else = self.blockify.resolve_code_offset((*else_block_id).into());
 
-                let c_index = self.resolve_value((*condition).into()).unwrap();
+                let block_id = self.blockify.get_entry_id(v).unwrap();
+                let c_index = self
+                    .resolve_value_lower_load(block_id, (*condition).into())
+                    .unwrap();
                 let r_c = self.value0(c_index);
 
                 let c = self.blocks.get(&v_then).unwrap();
@@ -1277,6 +1322,7 @@ impl<'c> MLIRGenerator<'c> {
             LCode::Builtin(id) => {
                 let values = self.take_call_args();
                 let bi = self.b.builtins.get_enum(*id);
+                let block_id = self.blockify.get_entry_id(v).unwrap();
                 match bi {
                     Builtin::Import => {
                         unreachable!()
@@ -1284,14 +1330,16 @@ impl<'c> MLIRGenerator<'c> {
                     Builtin::Assert => {
                         let indicies = values
                             .into_iter()
-                            .map(|value_id| self.resolve_value(value_id.into()).unwrap())
+                            .map(|value_id| {
+                                self.resolve_value_lower_load(block_id, value_id.into())
+                                    .unwrap()
+                            })
                             .collect();
                         let rs = self.values(indicies);
 
                         let msg = "assert";
                         //let msg = d.emit_string(error(msg, self.span));
                         let op = cf::assert(self.context, rs[0], &msg, location);
-                        let block_id = self.blockify.get_entry_id(v).unwrap();
                         let c = self.blocks.get_mut(&block_id).unwrap();
                         let index = c.push(op);
                         self.index.insert(v, index);
@@ -1299,7 +1347,10 @@ impl<'c> MLIRGenerator<'c> {
                     Builtin::Print => {
                         let indicies = values
                             .into_iter()
-                            .map(|value_id| self.resolve_value(value_id.into()).unwrap())
+                            .map(|value_id| {
+                                self.resolve_value_lower_load(block_id, value_id.into())
+                                    .unwrap()
+                            })
                             .collect();
                         let rs = self.values(indicies);
                         let r = rs[0];
