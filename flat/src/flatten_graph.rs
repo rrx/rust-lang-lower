@@ -1,5 +1,5 @@
 use crate::{
-    BlockGraph, BlockId, ContinuationFlow, Flatten, FlattenState, ICodeModule, LCode,
+    BlockGraph, BlockId, ContinuationFlow, FlattenInner, FlattenState, ICodeModule, LCode,
     NodeBuilder as NB, Successor, ValueId, VarDefinitionSpace,
 };
 use anyhow::Result;
@@ -315,7 +315,7 @@ pub fn flow_graph<S: FlattenState>(
     Ok(())
 }
 
-impl<S: FlattenState> Flatten<S> {
+impl FlattenInner {
     pub fn cont_graph(&self, filename: &str, b: &NB) {
         let s = format!(
             "{:?}",

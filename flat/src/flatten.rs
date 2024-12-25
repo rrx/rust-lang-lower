@@ -16,6 +16,7 @@ use crate::{
     ScopeGraph, ScopeId, ScopeType, ScopedContinuations, StringLabel, Successor, ValueId,
     VarDefinitionSpace, VariantId,
 };
+use std::ops::{Deref, DerefMut};
 
 pub type ArgVec = Vec<(Option<StringKey>, LinkId, AstType, SpanId)>;
 pub type ArgVecRef<'a> = &'a ArgVec;
@@ -104,10 +105,16 @@ pub enum FlattenMode {
 
 pub trait FlattenState: std::fmt::Debug + Clone {}
 #[derive(Debug, Clone)]
-pub enum Start {}
+pub struct Start {}
 impl FlattenState for Start {}
 
-pub struct Flatten<S: FlattenState> {
+#[derive(Debug, Clone)]
+pub struct Module {
+    pub values: Vec<LinkId>,
+}
+impl FlattenState for Module {}
+
+pub struct FlattenInner {
     pub(super) link: LinkOptions,
     pub(super) entries: Vec<CodeEntry>,
     pub blocks: BlockGraph,
@@ -123,10 +130,9 @@ pub struct Flatten<S: FlattenState> {
     pub deferred_goto: DeferredGotoList,
     pub variants: FunctionVariantBuilder,
     pub abstractions: AbstractionsBuilder,
-    _s: std::marker::PhantomData<S>,
 }
 
-impl Flatten<Start> {
+impl FlattenInner {
     pub fn new() -> Self {
         let blocks = BlockGraph::new();
 
@@ -146,8 +152,44 @@ impl Flatten<Start> {
             deferred_goto: DeferredGotoList::new(),
             variants: FunctionVariantBuilder::new(),
             abstractions: AbstractionsBuilder::new(),
-            _s: std::marker::PhantomData,
         }
+    }
+}
+
+pub struct Flatten<S: FlattenState> {
+    pub inner: Box<FlattenInner>,
+    pub state: S,
+}
+
+impl<S: FlattenState> Deref for Flatten<S> {
+    type Target = FlattenInner;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl<S: FlattenState> DerefMut for Flatten<S> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+
+impl Flatten<Start> {
+    pub fn new() -> Self {
+        Self {
+            inner: FlattenInner::new().into(),
+            state: Start {},
+        }
+    }
+
+    pub fn finish(self, b: &mut NB) -> Result<Flatten<Module>> {
+        let (f, values) = self.inner._finish(b)?;
+        let m = Flatten {
+            inner: f.into(),
+            state: Module { values },
+        };
+        Ok(m)
     }
 
     pub fn flatten_module(node: AstNode, b: &mut NB) -> Result<Self> {
@@ -195,7 +237,7 @@ impl Flatten<Start> {
     }
 }
 
-impl<S: FlattenState> Flatten<S> {
+impl FlattenInner {
     pub fn type_inference(&mut self, b: &mut NB) {
         for entry in self.entries.iter_mut() {
             if !entry.ty.is_unknown() {
@@ -631,7 +673,7 @@ impl<S: FlattenState> Flatten<S> {
     }
     */
 
-    pub(super) fn finish(mut self, b: &mut NB) -> Result<(Flatten<S>, Vec<LinkId>)> {
+    fn _finish(mut self, b: &mut NB) -> Result<(Self, Vec<LinkId>)> {
         // make sure all claims have been handled
         self.scopes.ensure_claims(b);
 
@@ -688,7 +730,6 @@ impl<S: FlattenState> Flatten<S> {
         // the last thing we do is calculate the values, which is the post order traversal of the
         // blocks.
         let values = self.finish_values(b);
-
         Ok((self, values))
     }
 

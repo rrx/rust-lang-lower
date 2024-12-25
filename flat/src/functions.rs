@@ -1,6 +1,6 @@
 use crate::{
-    ArgVec, BlockId, BlockifyError, ContinuationFlow, Flatten, FlattenResult, FlattenState,
-    FlowEdge, LCode, LinkId, NodeBuilder as NB, ScopeId, ScopeType, Successor, VarDefinitionSpace,
+    ArgVec, BlockId, BlockifyError, ContinuationFlow, FlattenInner, FlattenResult, FlowEdge, LCode,
+    LinkId, NodeBuilder as NB, ScopeId, ScopeType, Successor, VarDefinitionSpace,
 };
 use anyhow::Error;
 use anyhow::Result;
@@ -156,7 +156,7 @@ impl AbstractionsBuilder {
     }
 }
 
-impl<S: FlattenState> Flatten<S> {
+impl FlattenInner {
     pub fn push_bake_main(&mut self, b: &mut NB) -> Result<LinkId> {
         let current_block_id = self.current_block_id();
         let name = b.labels.s("main");

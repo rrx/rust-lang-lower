@@ -6,7 +6,7 @@ use std::io::Write;
 
 use lower_mlir::default_context;
 
-use flat::{BlockifyError, Flatten, FlattenModule, ICodeModule, NodeBuilder, ValueId};
+use flat::{BlockifyError, Flatten, ICodeModule, NodeBuilder, ValueId};
 use parse::starlark::StarlarkParser;
 use std::path::PathBuf;
 
@@ -94,7 +94,7 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
 
     f.push_bake_main(b)?;
 
-    let m = FlattenModule::build(f, b)?;
+    let m = f.finish(b)?;
 
     let directory = std::path::Path::new(output_filename)
         .parent()

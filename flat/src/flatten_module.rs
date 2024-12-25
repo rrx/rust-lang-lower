@@ -1,37 +1,20 @@
 use anyhow::Result;
-use compile_core::{AstType, LinkOptions, Literal, SpanId, StringKey};
+use compile_core::{AstType, SpanId, StringKey};
 use petgraph::graph::NodeIndex;
-use std::collections::HashMap;
 
 use std::convert::Into;
 
 use crate::{
-    BlockGraph, BlockId, CodeEntry, CodeOffset, CodeRow, ContinuationFlow, Flatten, FlattenState,
-    FunctionVariant, FunctionVariantBuilder, ICodeModule, LCode, LinkId, NodeBuilder as NB,
-    ScopeGraph, ScopeType, ScopedContinuations, StringLabel, Successor, ValueId,
-    VarDefinitionSpace, VariantId,
+    BlockId, CodeEntry, CodeOffset, CodeRow, ContinuationFlow, Flatten, FunctionVariant,
+    ICodeModule, LCode, LinkId, Module, NodeBuilder as NB, ScopeType, StringLabel, Successor,
+    ValueId, VarDefinitionSpace, VariantId,
 };
 
 use tabled::{settings::Style, Table};
 
-pub struct FlattenModule<S: FlattenState> {
-    pub(super) link: LinkOptions,
-    pub entries: Vec<CodeEntry>,
-    pub values: Vec<LinkId>,
-    pub blocks: BlockGraph,
-    //pub messages: Vec<(String, SpanId)>,
-    pub scopes: ScopeGraph,
-    pub block_links: HashMap<BlockId, LinkId>,
-    pub(crate) functions: HashMap<StringKey, LinkId>,
-    pub statics: HashMap<StringKey, Literal>,
-    pub variants: FunctionVariantBuilder,
-    pub scoped_continuations: ScopedContinuations,
-    _s: std::marker::PhantomData<S>,
-}
-
-impl<S: FlattenState> ICodeModule for FlattenModule<S> {
+impl ICodeModule for Flatten<Module> {
     fn get_entry(&self, value_id: ValueId) -> &CodeEntry {
-        let link_id = self.values[value_id.index()];
+        let link_id = self.state.values[value_id.index()];
         self.entries.get(link_id.index()).unwrap()
     }
 
@@ -60,14 +43,14 @@ impl<S: FlattenState> ICodeModule for FlattenModule<S> {
     }
 
     fn get_span_id(&self, value_id: ValueId) -> SpanId {
-        let link_id = self.values[value_id.index()];
+        let link_id = self.state.values[value_id.index()];
         let entry = self.get_link_entry(link_id);
         entry.span_id
     }
 
     fn get_name(&self, offset: CodeOffset) -> Option<StringLabel> {
         if let Some(value_id) = self.maybe_resolve_code_offset(offset) {
-            let link_id = self.values[value_id.index()];
+            let link_id = self.state.values[value_id.index()];
             self.get_link_entry(link_id).name.map(|n| n.into())
         } else {
             None
@@ -75,12 +58,12 @@ impl<S: FlattenState> ICodeModule for FlattenModule<S> {
     }
 
     fn get_code(&self, value_id: ValueId) -> &LCode {
-        let link_id = self.values[value_id.index()];
+        let link_id = self.state.values[value_id.index()];
         &self.get_link_entry(link_id).code
     }
 
     fn get_next(&self, value_id: ValueId) -> Option<ValueId> {
-        let link_id = self.values[value_id.index()];
+        let link_id = self.state.values[value_id.index()];
         let entry = self.get_link_entry(link_id);
         if entry.next != link_id {
             let next_entry = self.get_link_entry(entry.next);
@@ -103,7 +86,7 @@ impl<S: FlattenState> ICodeModule for FlattenModule<S> {
     */
 
     fn get_block_successors(&self, entry_id: ValueId) -> Vec<(Successor, CodeOffset)> {
-        let link_id = self.values[entry_id.index()];
+        let link_id = self.state.values[entry_id.index()];
         let entry = self.get_link_entry(link_id);
         let block_id = entry.block_id;
         self.blocks.get_block_successors(block_id)
@@ -111,20 +94,20 @@ impl<S: FlattenState> ICodeModule for FlattenModule<S> {
 
     fn get_type(&self, v: CodeOffset) -> AstType {
         let value_id = self.resolve_code_offset(v);
-        let link_id = self.values[value_id.index()];
+        let link_id = self.state.values[value_id.index()];
         let entry = self.get_link_entry(link_id);
         entry.clone().ty
     }
 
     fn get_entry_id(&self, value_id: ValueId) -> Option<ValueId> {
-        let link_id = self.values[value_id.index()];
+        let link_id = self.state.values[value_id.index()];
         let block_id = self.get_link_entry(link_id).block_id;
         self.maybe_resolve_code_offset(block_id.into())
     }
 
     fn is_in_static_scope(&self, offset: CodeOffset) -> bool {
         let value_id = self.resolve_code_offset(offset);
-        let link_id = self.values[value_id.index()];
+        let link_id = self.state.values[value_id.index()];
         let entry = self.get_link_entry(link_id);
         let block = self.blocks.get_block(entry.block_id);
         let scope = self.scopes.get_scope(block.scope_id);
@@ -133,7 +116,7 @@ impl<S: FlattenState> ICodeModule for FlattenModule<S> {
 
     fn get_mem(&self, offset: CodeOffset) -> &VarDefinitionSpace {
         let value_id = self.resolve_code_offset(offset);
-        let link_id = self.values[value_id.index()];
+        let link_id = self.state.values[value_id.index()];
         &self.get_link_entry(link_id).mem
     }
 
@@ -166,7 +149,7 @@ impl<S: FlattenState> ICodeModule for FlattenModule<S> {
 
     fn dump_code_table(&self, filename: &str, b: &mut NB) {
         let mut rows = vec![];
-        for index in 0..self.values.len() {
+        for index in 0..self.state.values.len() {
             let value_id = ValueId::new(index as u32);
             if let Some(row) = self.get_code_row(value_id, b) {
                 rows.push(row);
@@ -180,31 +163,13 @@ impl<S: FlattenState> ICodeModule for FlattenModule<S> {
     }
 }
 
-impl<S: FlattenState> FlattenModule<S> {
-    pub fn build(f: Flatten<S>, b: &mut NB) -> Result<Self> {
-        let (f, values) = f.finish(b)?;
-        Ok(Self {
-            link: f.link,
-            entries: f.entries,
-            values,
-            blocks: f.blocks,
-            //messages: f.messages,
-            scopes: f.scopes,
-            block_links: f.block_links,
-            functions: f.functions,
-            statics: f.statics,
-            variants: f.variants,
-            scoped_continuations: f.scoped_continuations,
-            _s: std::marker::PhantomData,
-        })
-    }
-
+impl Flatten<Module> {
     fn get_link_entry(&self, link_id: LinkId) -> &CodeEntry {
         self.entries.get(link_id.index()).unwrap()
     }
 
     pub fn get_code_row(&self, v: ValueId, b: &mut NB) -> Option<CodeRow> {
-        let link_id = self.values[v.index()];
+        let link_id = self.state.values[v.index()];
         let entry = self.get_link_entry(link_id);
         let code = self.get_code(v);
 
@@ -252,7 +217,7 @@ impl<S: FlattenState> FlattenModule<S> {
 
     pub fn dump_code_table(&self, filename: &str, b: &mut NB) -> String {
         let mut rows = vec![];
-        for index in 0..self.values.len() {
+        for index in 0..self.state.values.len() {
             let value_id = ValueId::new(index as u32);
             if let Some(row) = self.get_code_row(value_id, b) {
                 rows.push(row);
@@ -324,7 +289,7 @@ impl<S: FlattenState> FlattenModule<S> {
     }
 
     pub fn flow_graph(&self, filename: &str, b: &NB) -> Result<()> {
-        crate::flatten_graph::flow_graph::<S>(self, &self.blocks, filename, b)
+        crate::flatten_graph::flow_graph::<Module>(self, &self.blocks, filename, b)
     }
 
     pub fn dump_scopes(&self) {

@@ -25,7 +25,6 @@ pub use builtin::*;
 pub use compile_core::{AbstractionId, BlockId};
 pub use continuations::*;
 pub use flatten::*;
-pub use flatten_module::*;
 pub use flatten_seq::*;
 pub use functions::*;
 pub use graph::{Node, CFG};

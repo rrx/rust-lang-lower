@@ -6,12 +6,12 @@ use compile_core::{
 use std::convert::Into;
 
 use crate::{
-    argvec_type, ArgVec, BlockId, ContinuationFlow, DeferredGoto, DeferredType, Flatten,
-    FlattenResult, FlattenState, FlowEdge, LCode, LinkId, NodeBuilder as NB, ScopeId, ScopeType,
-    Successor, VarDefinitionSpace, VariantId,
+    argvec_type, ArgVec, BlockId, ContinuationFlow, DeferredGoto, DeferredType, FlattenInner,
+    FlattenResult, FlowEdge, LCode, LinkId, NodeBuilder as NB, ScopeId, ScopeType, Successor,
+    VarDefinitionSpace, VariantId,
 };
 
-impl<S: FlattenState> Flatten<S> {
+impl FlattenInner {
     pub(super) fn push_cps_block_with_type(
         &mut self,
         name: StringKey,
@@ -47,12 +47,10 @@ impl<S: FlattenState> Flatten<S> {
             } else {
                 let (fun_block_id, fun_scope_id) =
                     self.new_scope_and_block(ScopeType::Block, scope_id);
+                let current_block_id = self.current_block_id();
                 // block graph
-                self.blocks.block_succ(
-                    self.current_block_id(),
-                    fun_block_id,
-                    Successor::BlockScope,
-                );
+                self.blocks
+                    .block_succ(current_block_id, fun_block_id, Successor::BlockScope);
                 // Start lambda block
                 let lambda_name = b.labels.fresh_key(&s_name);
 
