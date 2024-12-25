@@ -187,13 +187,14 @@ pub fn flow_graph<S: BlockState>(
 
                         loop {
                             let entry = m.get_entry(v);
-                            match entry.mem {
+                            let v_decl = match entry.mem {
                                 VarDefinitionSpace::Stack(x) => {
                                     let v_source = m.resolve_code_offset(x.into());
                                     ng.sources.push((v, v_source));
+                                    Some(v_source)
                                 }
-                                _ => (),
-                            }
+                                _ => None,
+                            };
 
                             let code = &entry.code;
                             let s = match code {
@@ -264,7 +265,11 @@ pub fn flow_graph<S: BlockState>(
                                     format!("{}:{}:label({})", v, entry.block_id, s_name)
                                 }
                                 _ => {
-                                    format!("{}:{}", v, m.code_to_string(v, b))
+                                    if let Some(v_decl) = v_decl {
+                                        format!("{}:{} => {}", v, m.code_to_string(v, b), v_decl)
+                                    } else {
+                                        format!("{}:{}", v, m.code_to_string(v, b))
+                                    }
                                 }
                             };
                             block_group.push_value(GroupValue::new(format!("{}", v), s));

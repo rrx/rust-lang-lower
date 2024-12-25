@@ -178,8 +178,6 @@ impl<S: BlockState> Flatten<S> {
         call_span_id: SpanId,
         b: &mut NB,
     ) -> Result<(Vec<Argument>, AstFuncType)> {
-        //println!("args: {:?}", args);
-
         let func_arg = b.types.r(def.arg_type).clone();
 
         // A rough outline of this large function
@@ -318,7 +316,6 @@ impl<S: BlockState> Flatten<S> {
         //value_map.insert(key, Ast::Sequence(args_seq).into());
         //}
         // Do the same with kwargs eventually
-        //println!("field_list: {:?}", fields_list);
 
         let args: Vec<Argument> = fields_list
             .iter()
@@ -863,6 +860,8 @@ impl<S: BlockState> Flatten<S> {
             // call the inline function
             // returns a link, which points to the result, which should be a single value
             // if it's void, then it's a statement
+            // We want to support both of these options
+            // TODO: break this out into a compile parameter for the function
             if false {
                 self.push_call_inline(abstraction_id, name, scope_id, args, call_span_id, b)
             } else {
@@ -940,10 +939,6 @@ impl<S: BlockState> Flatten<S> {
             let key = b.labels.fresh_key("r");
             let ty = next_arg_ty.field_types().first().unwrap().clone();
             let decl_link_id = self.push_decl(ty.clone(), key, call_span_id);
-            println!(
-                "next_arg_ty: {}, {}, {}, {}",
-                link_id, decl_link_id, next_arg_ty, ty
-            );
             Some((decl_link_id, link_id, ty, key))
         } else {
             None
@@ -958,21 +953,11 @@ impl<S: BlockState> Flatten<S> {
         // STORE ARG
         // r contains the link to the return value
         // r contains the return result link, which is part of the next block arguments.
-        if let Some((decl_link_id, arg_link_id, _ty, key)) = decl {
+        if let Some((decl_link_id, arg_link_id, _ty, _key)) = decl {
             // specify that the arg is stored on the stack
             // let mlir handle the rest
             let entry = self.get_entry_mut(arg_link_id);
             entry.mem = VarDefinitionSpace::Stack(decl_link_id);
-
-            /*
-            self.push_code(
-                LCode::Store(decl_link_id, arg_link_id),
-                ty,
-                Some(key),
-                call_span_id,
-                VarDefinitionSpace::Default,
-            );
-            */
             Ok(FlattenResult::link(decl_link_id))
         } else {
             Ok(r)
@@ -989,7 +974,7 @@ impl<S: BlockState> Flatten<S> {
         b: &mut NB,
     ) -> Result<FlattenResult> {
         // create a new block static blocks, which is the final destination
-        //let (exit_block_id, exit_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id); //.blocks.new_block(scope_id);
+        //let (exit_block_id, exit_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
         let exit_block_id = self.blocks.new_block(scope_id);
         let exit_scope_id = scope_id;
 
@@ -1011,7 +996,6 @@ impl<S: BlockState> Flatten<S> {
         let arg = call_values.last().unwrap();
         let _arg_index = call_values.len() - 1;
         let call_link_id = arg.1;
-        println!("call_link_id1: {}", call_link_id);
         let next_ty = arg.2.clone();
 
         self.scoped_continuations.connect(
@@ -1023,23 +1007,17 @@ impl<S: BlockState> Flatten<S> {
         // bookmark position
         let current_block_id = self.current_block_id();
 
-        let s_name = b.labels.r(name.into());
-        println!("s_name: {}", s_name);
-        println!("top_def_func_type: {:?}", top_def_func_type);
-
         // generate the CPS function, that's it
         // and jump to it, passing the exit continuation
         let result = self.push_call_inline_cps_inner(
             abstraction_id,
             name,
             scope_id,
-            //call_link_id,
             call_span_id,
             top_def_func_type.clone(),
             b,
         )?;
         let (fun_block_id, ret_block_ty, next_arg_ty) = result;
-        println!("fun_block_id: {}", fun_block_id);
 
         b.unify(
             &next_ty,
@@ -1047,11 +1025,6 @@ impl<S: BlockState> Flatten<S> {
             &ret_block_ty.clone().into(),
             call_span_id,
         );
-
-        //self.switch_blocks(current_block_id);
-        println!("top_def_func_type: {}", top_def_func_type);
-        let r_ty = b.types.u.resolve(&top_def_func_type.into()).unwrap();
-        println!("r_ty: {}", r_ty);
 
         // push the continuation block to which the function returns control
         // this might just be the return block
@@ -1090,7 +1063,6 @@ impl<S: BlockState> Flatten<S> {
         } else {
             FlattenResult::statement()
         };
-        println!("next_link_id: {:?}", next_link_id);
 
         // Call the lambda that we just created
         // now that we have the arguments calculated, and the lambda baked, jump!
@@ -1102,10 +1074,8 @@ impl<S: BlockState> Flatten<S> {
             let key = b.labels.fresh_key("r");
             let ty = next_arg_ty.field_types().first().unwrap().clone();
             let decl_link_id = self.push_decl(ty.clone(), key, call_span_id);
-            println!(
-                "next_arg_ty: {}, {}, {}, {}",
-                link_id, decl_link_id, next_arg_ty, ty
-            );
+            let entry = self.get_entry_mut(link_id);
+            entry.mem = VarDefinitionSpace::Stack(decl_link_id);
             Some((decl_link_id, link_id, ty, key))
         } else {
             None
@@ -1128,11 +1098,6 @@ impl<S: BlockState> Flatten<S> {
             );
         }
 
-        //self.scoped_continuations.connect(
-        //ContinuationFlow::Variable(call_link_id),
-        //ContinuationFlow::Jump(goto_link_id),
-        //FlowEdge::JumpArg,
-        //);
         self.scoped_continuations.connect(
             ContinuationFlow::Jump(goto_link_id),
             ContinuationFlow::Block(fun_block_id),
@@ -1146,13 +1111,6 @@ impl<S: BlockState> Flatten<S> {
         // r contains the link to the return value
         // r contains the return result link, which is part of the next block arguments.
         if let Some((decl_link_id, arg_link_id, ty, key)) = decl {
-            self.push_code(
-                LCode::Store(decl_link_id, arg_link_id),
-                ty,
-                Some(key),
-                call_span_id,
-                VarDefinitionSpace::Default,
-            );
             Ok(FlattenResult::link(decl_link_id))
         } else {
             Ok(r)
@@ -1172,7 +1130,6 @@ impl<S: BlockState> Flatten<S> {
         b: &mut NB,
     ) -> Result<(BlockId, AstFuncType, AstType)> {
         let a = self.abstractions.get(abstraction_id);
-        println!("a: {:?}", a);
         let def_span_id = a.def_span_id;
         let scope_type = ScopeType::Function;
         let succ_type = Successor::BlockScope;
@@ -1199,10 +1156,6 @@ impl<S: BlockState> Flatten<S> {
                     unimplemented!();
                 };
                 let next_arg_ty = resolve_func_type.args.clone();
-                println!("fun_block_id2: {}", fun_block_id);
-                println!("variant_ty2: {}", variant_ty);
-                println!("ret_func_type2: {}", ret_func_type);
-                println!("next_arg_ty2: {}", next_arg_ty);
                 (
                     variant_id,
                     fun_block_id,
@@ -1219,7 +1172,6 @@ impl<S: BlockState> Flatten<S> {
                     self.new_scope_and_block(ScopeType::Function, scope_id);
 
                 let next_block_id = self.blocks.new_block(fun_scope_id);
-                //println!("next_block_id2: {}", next_block_id);
 
                 let result = self.push_bake_lambda_and_update_next(
                     lookup_name,
@@ -1249,17 +1201,10 @@ impl<S: BlockState> Flatten<S> {
                     _,
                     entry_args,
                 ) = result;
-                //println!("fun_block_id1: {}", fun_block_id);
-                //println!("variant_ty1: {}", variant_ty);
-                //println!("ret_func_type1: {}", ret_func_type);
-                //println!("next_arg_ty1: {}", next_arg_ty);
-
-                //println!("entry_args: {:?}", entry_args);
                 let arg = entry_args.last().unwrap();
 
                 //let arg_index = call_values.len() - 1;
                 let call_link_id = arg.1;
-                //println!("call_link_id2: {}", call_link_id);
                 //let next_ty = arg.2.clone();
 
                 let _ = self.push_call_values(&call_values, b);

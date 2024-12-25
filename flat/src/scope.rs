@@ -9,7 +9,7 @@ use std::ops::{Deref, DerefMut};
 use std::collections::{HashMap, HashSet};
 
 use crate::{ArgVec, BlockId, BlockifyError, LinkId, NodeBuilder, StringLabel, ValueId, VariantId};
-use compile_core::{AbstractionId, Argument, AstType, Lambda, SpanId, StringKey};
+use compile_core::{AbstractionId, Argument, Lambda, SpanId, StringKey};
 
 #[derive(Debug)]
 pub enum PlacedBlockId {
@@ -142,7 +142,7 @@ pub struct ScopeLayer {
     pub lambdas: HashMap<StringLabel, AbstractionId>,
     pub templates: HashMap<StringKey, LinkId>,
     pub unclaimed_labels: HashMap<StringLabel, BlockId>,
-    pub stack_variables: HashMap<LinkId, (LinkId, AstType)>,
+    //pub stack_variables: HashMap<LinkId, (LinkId, AstType)>,
 }
 
 impl ScopeLayer {
@@ -162,7 +162,7 @@ impl ScopeLayer {
             lambdas: HashMap::new(),
             templates: HashMap::new(),
             unclaimed_labels: HashMap::new(),
-            stack_variables: HashMap::new(),
+            //stack_variables: HashMap::new(),
         }
     }
 
@@ -245,6 +245,7 @@ impl ScopeGraph {
         scope.declarations.insert(name, v);
     }
 
+    /*
     pub fn make_stack_variable(
         &mut self,
         scope_id: ScopeId,
@@ -257,6 +258,7 @@ impl ScopeGraph {
             .stack_variables
             .insert(link_id, (decl_link_id, ast_type));
     }
+    */
 
     pub fn scope_define_template(&mut self, scope_id: ScopeId, key: StringKey, link_id: LinkId) {
         let scope = self.get_scope_mut(scope_id);

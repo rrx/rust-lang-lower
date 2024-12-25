@@ -986,21 +986,8 @@ impl<S: BlockState> Flatten<S> {
                 let key = b.labels.fresh_key("r");
                 // create space on the stack in the entry block
                 let decl_link_id = self.push_decl(ty.clone(), key, *span_id);
-                self.scopes
-                    .make_stack_variable(v_scope_id, v, decl_link_id, ty.clone());
-
-                // TODO: remove this, and replace with stack allocation on the ARG
-                self.insert_entry_after(
-                    v,
-                    CodeEntry::new(
-                        v_block_id,
-                        LCode::Store(decl_link_id, v),
-                        ty.clone(),
-                        None,
-                        *span_id,
-                        VarDefinitionSpace::Default,
-                    ),
-                );
+                let entry = self.get_entry_mut(v);
+                entry.mem = VarDefinitionSpace::Stack(decl_link_id);
                 v = decl_link_id;
             }
 
