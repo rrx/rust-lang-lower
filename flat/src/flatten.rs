@@ -32,8 +32,6 @@ pub fn argvec_type(values: &ArgVec) -> AstType {
 
 #[derive(Debug, Clone)]
 pub struct CodeEntry {
-    pub(super) next: LinkId,
-    prev: LinkId,
     pub(super) code: LCode,
     pub name: Option<StringKey>,
     pub link: Option<LinkId>,
@@ -54,8 +52,6 @@ impl CodeEntry {
         mem: VarDefinitionSpace,
     ) -> Self {
         Self {
-            next: LinkId(0),
-            prev: LinkId(0),
             block_id,
             code,
             name,
@@ -720,47 +716,16 @@ impl FlattenInner {
         Ok((self, values))
     }
 
-    fn _insert_entry(&mut self, mut entry: CodeEntry, prev: Option<LinkId>) -> LinkId {
+    fn insert_entry_after(&mut self, mut entry: CodeEntry) -> LinkId {
         let index = self.entries.len();
         let link_id = LinkId(index as u32);
         entry.link = Some(link_id);
-        if let Some(prev) = prev {
-            entry.prev = prev;
-        } else {
-            entry.prev = link_id;
-        }
-        entry.next = link_id;
         self.entries.push(entry);
         link_id
     }
 
-    fn insert_entry_after(&mut self, before_link_id: LinkId, entry: CodeEntry) -> LinkId {
-        let before_entry = self.get_entry(before_link_id);
-        let before_entry_next = before_entry.next;
-        let next_link_id = self._insert_entry(entry, Some(before_link_id));
-
-        // update the entry
-        let entry = self.get_entry_mut(next_link_id);
-        if before_entry_next == before_link_id {
-            entry.next = next_link_id;
-        } else {
-            entry.next = before_entry_next;
-        }
-
-        if before_entry_next != before_link_id {
-            let next = self.get_entry_mut(before_entry_next);
-            next.prev = next_link_id;
-        }
-
-        let before_entry = self.get_entry_mut(before_link_id);
-        before_entry.next = next_link_id;
-        next_link_id
-    }
-
     fn insert_decl(&mut self, block_id: BlockId, entry: CodeEntry) -> LinkId {
-        let block = self.blocks.get_block_mut(block_id);
-        let last_decl = block.last_decl().unwrap();
-        let link_id = self.insert_entry_after(last_decl, entry);
+        let link_id = self.insert_entry_after(entry);
         self.blocks.get_block_mut(block_id).push_decl(link_id);
         link_id
     }
@@ -788,14 +753,7 @@ impl FlattenInner {
     fn _push_entry_normal(&mut self, entry: CodeEntry) -> LinkId {
         let block_id = entry.block_id;
         let code = entry.code.clone();
-        let block = self.blocks.get_block(block_id);
-        let last = block.last();
-        let link_id = self._insert_entry(entry, last);
-        let block = self.blocks.get_block(block_id);
-        if let Some(last_link_id) = block.last() {
-            let last_entry = self.get_entry_mut(last_link_id);
-            last_entry.next = link_id;
-        }
+        let link_id = self.insert_entry_after(entry);
         let block = self.blocks.get_block_mut(block_id);
         block.push_link(link_id, code.is_term());
         link_id
@@ -809,27 +767,18 @@ impl FlattenInner {
             LCode::Label => {
                 let block = self.blocks.get_block(block_id);
                 assert!(block.last().is_none());
-                let link_id = self._insert_entry(entry, None);
+                let link_id = self.insert_entry_after(entry);
                 let block = self.blocks.get_block_mut(block_id);
                 block.push_label(link_id);
                 link_id
             }
             LCode::Arg(_) => {
-                let block = self.blocks.get_block(block_id);
-                let last = block.last();
-                let link_id = self._insert_entry(entry, last);
-                let block = self.blocks.get_block(block_id);
-                if let Some(last_link_id) = block.last() {
-                    let last_entry = self.get_entry_mut(last_link_id);
-                    last_entry.next = link_id;
-                }
-
+                let link_id = self.insert_entry_after(entry);
                 let block = self.blocks.get_block_mut(block_id);
                 block.push_arg(link_id);
                 link_id
             }
             LCode::Declare | LCode::DeclareFunction(_) => {
-                //assert!(false);
                 let block = self.blocks.get_block(block_id);
                 let scope_id = block.scope_id;
                 let scope = self.scopes.get_scope(scope_id);
@@ -1394,9 +1343,7 @@ impl FlattenInner {
         let entry = self.get_entry(last_link_id);
         if let LCode::PlaceholderTerminal(_prev_link_id) = entry.code {
             let block = self.blocks.get_block_mut(goto_block_id);
-            let prev_link_id = block.pop_terminal();
-            let entry = self.get_entry_mut(prev_link_id);
-            entry.next = prev_link_id;
+            let _ = block.pop_terminal();
         }
     }
 
@@ -1916,7 +1863,6 @@ impl FlattenInner {
                 };
 
                 // condition
-                let span_id = condition.span_id;
                 self.switch_blocks(current_block_id);
                 let r = self.push_node(*condition, b)?;
                 let v = self.push_code(

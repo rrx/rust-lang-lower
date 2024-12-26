@@ -65,15 +65,11 @@ impl ICodeModule for Flatten<Module> {
     fn get_next(&self, value_id: ValueId) -> Option<ValueId> {
         let link_id = self.state.values[value_id.index()];
         let entry = self.get_link_entry(link_id);
-        let x = if entry.code.is_term() {
+        if entry.code.is_term() {
             None
         } else {
-            //let v = self.resolve_code_offset(entry.next.into());
-            let v2 = ValueId::new(value_id.index() as u32 + 1);
-            //assert_eq!(v, v2);
-            Some(v2)
-        };
-        x
+            Some(ValueId::new(value_id.index() as u32 + 1))
+        }
     }
 
     fn get_block_successors(&self, entry_id: ValueId) -> Vec<(Successor, CodeOffset)> {
@@ -186,8 +182,6 @@ impl Flatten<Module> {
         Some(CodeRow {
             pos: v.index(),
             link: entry.link.unwrap().index(),
-            next: entry.next.index(),
-            //prev: entry.prev.index(),
             value: self.code_to_string(v, b),
             ty: s_ty,
             mem: format!("{:?}", mem),
