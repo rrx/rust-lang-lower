@@ -2545,8 +2545,6 @@ impl FlattenInner {
         let entry = self.get_entry(link_id);
         if !entry.code.is_term() {
             link_id = self.push_jump(v_next, vec![], span_id, b);
-            self.blocks
-                .block_succ(self.current_block_id(), v_next, Successor::BlockScope);
         }
         link_id
     }
