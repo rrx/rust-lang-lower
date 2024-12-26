@@ -913,7 +913,11 @@ impl FlattenInner {
         let s_name = b.labels.r(name.into());
         let global_name = b.labels.fresh_key(&s_name); //&format!("{}.call", s_name));
                                                        // create a new block
-        let next_block_id = self.blocks.new_block(scope_id);
+        let scope = self.scopes.get_scope(scope_id);
+        let scope_block_id = scope.entry_block.unwrap();
+        let next_block_id = self
+            .blocks
+            .new_block(scope_block_id, scope_id, Successor::BlockScope);
 
         // New Func Scope
         let (fun_block_id, fun_scope_id) = self.new_scope_and_block(
@@ -990,7 +994,11 @@ impl FlattenInner {
     ) -> Result<FlattenResult> {
         // create a new block static blocks, which is the final destination
         //let (exit_block_id, exit_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
-        let exit_block_id = self.blocks.new_block(scope_id);
+        let scope = self.scopes.get_scope(scope_id);
+        let scope_block_id = scope.entry_block.unwrap();
+        let exit_block_id = self
+            .blocks
+            .new_block(scope_block_id, scope_id, Successor::BlockScope);
         let exit_scope_id = scope_id;
 
         let key = b.labels.fresh_key("b");
@@ -1192,7 +1200,7 @@ impl FlattenInner {
                     Successor::BlockScope,
                 );
 
-                let next_block_id = self.blocks.new_block(fun_scope_id);
+                let next_block_id = self.blocks.new_block(block_id, fun_scope_id, succ_type);
 
                 let result = self.push_bake_lambda_and_update_next(
                     lookup_name,

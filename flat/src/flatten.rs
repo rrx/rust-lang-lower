@@ -194,8 +194,10 @@ impl Flatten<Start> {
         let scope_id = f.scopes.new_scope(ScopeType::Static);
         f.static_scope = Some(scope_id);
 
+        // TODO: This is the initial block.  Clean this up
+        // It doesn't require adding successors to the graph, because it's the root node
         let static_scope = f.static_scope_id();
-        let block_id = f.blocks.new_block(static_scope);
+        let block_id = f.blocks.new_block_with_scope(static_scope);
         f.current_block = block_id;
         f.static_block = Some(block_id);
 
@@ -849,7 +851,7 @@ impl FlattenInner {
     ) -> (BlockId, ScopeId) {
         let scope_id = self.scopes.new_scope(scope_type);
         let scope = self.scopes.get_scope_mut(scope_id);
-        let block_id = self.blocks.new_block(scope_id);
+        let block_id = self.blocks.new_block(parent_block_id, scope_id, succ_type);
         scope.entry_block = Some(block_id);
         self.scopes.scope_succ(parent_scope_id, scope_id);
 
@@ -1841,7 +1843,9 @@ impl FlattenInner {
 
                 let parent_scope_id = block.scope_id;
 
-                let v_next = self.blocks.new_block(parent_scope_id);
+                let v_next =
+                    self.blocks
+                        .new_block(current_block_id, parent_scope_id, Successor::BlockScope);
                 self.switch_blocks(v_next);
                 self.push_start_block(
                     parent_scope_id,
@@ -1994,7 +1998,9 @@ impl FlattenInner {
 
                 // create a new block
                 assert_eq!(0, args.len());
-                let new_block_id = self.blocks.new_block(scope_id);
+                let new_block_id =
+                    self.blocks
+                        .new_block(self.current_block_id(), scope_id, Successor::BlockScope);
                 self.blocks.block_succ(
                     self.current_block_id(),
                     new_block_id,
@@ -2216,7 +2222,11 @@ impl FlattenInner {
                             }
 
                             let label = b.labels.fresh_key("chain");
-                            let v_next = self.blocks.new_block(parent_scope_id);
+                            let v_next = self.blocks.new_block(
+                                current_block_id,
+                                parent_scope_id,
+                                Successor::BlockScope,
+                            );
                             self.switch_blocks(v_next);
                             self.push_start_block(
                                 parent_scope_id,
@@ -2263,7 +2273,9 @@ impl FlattenInner {
                     Successor::BlockScope,
                 );
 
-                let v_next = self.blocks.new_block(parent_scope_id);
+                let v_next =
+                    self.blocks
+                        .new_block(current_block_id, parent_scope_id, Successor::BlockScope);
                 self.switch_blocks(v_next);
                 self.push_start_block(
                     parent_scope_id,
@@ -2375,7 +2387,9 @@ impl FlattenInner {
                     let _link_id =
                         self.push_jump(loop_scope.next_block.into(), vec![], node.span_id, b);
 
-                    let v_next = self.blocks.new_block(scope_id);
+                    let v_next =
+                        self.blocks
+                            .new_block(current_block_id, scope_id, Successor::BlockScope);
                     self.switch_blocks(v_next);
                     let (link_id, _) = self.push_start_block(
                         scope_id,
@@ -2510,7 +2524,9 @@ impl FlattenInner {
         let block = self.blocks.get_block(self.current_block_id());
         let scope_id = block.scope_id;
         if block.is_term() {
-            let new_block_id = self.blocks.new_block(scope_id);
+            let new_block_id =
+                self.blocks
+                    .new_block(self.current_block_id(), scope_id, Successor::BlockScope);
             let name = b.labels.fresh_key("dead");
             let scope = self.scopes.get_scope(scope_id);
             self.blocks.block_succ(

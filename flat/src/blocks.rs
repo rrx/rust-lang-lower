@@ -177,12 +177,26 @@ impl BlockGraph {
         Self(DiGraph::new())
     }
 
-    pub fn new_block(&mut self, scope_id: ScopeId) -> BlockId {
+    pub fn new_block(
+        &mut self,
+        parent_block_id: BlockId,
+        scope_id: ScopeId,
+        succ: Successor,
+    ) -> BlockId {
+        let block_id = self.new_block_with_scope(scope_id);
+        self.block_succ(parent_block_id, block_id, succ);
+        block_id
+    }
+
+    pub fn new_block_with_scope(&mut self, scope_id: ScopeId) -> BlockId {
         let ir_block = IRBlock::new(scope_id);
         let index = self.add_node(ir_block);
+
+        // ensure the first block is the static block
         if index.index() > 0 && scope_id.index() == 0 {
             assert!(false);
         }
+
         BlockId::new(index.index())
     }
 
