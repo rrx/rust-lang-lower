@@ -145,7 +145,6 @@ pub trait ICodeModule {
     fn get_span_id(&self, value_id: ValueId) -> SpanId;
     fn get_name(&self, v: CodeOffset) -> Option<StringLabel>;
     fn get_code(&self, value_id: ValueId) -> &LCode;
-    fn get_next(&self, value_id: ValueId) -> Option<ValueId>;
 
     fn get_cfg(&self, block_id: BlockId, b: &NodeBuilder) -> CFG {
         let entry_id = self.resolve_code_offset(block_id.into());

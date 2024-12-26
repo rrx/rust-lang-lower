@@ -44,16 +44,6 @@ impl ICodeModule for Flatten<Module> {
         &self.get_link_entry(link_id).code
     }
 
-    fn get_next(&self, value_id: ValueId) -> Option<ValueId> {
-        let link_id = self.state.values[value_id.index()];
-        let entry = self.get_link_entry(link_id);
-        if entry.code.is_term() {
-            None
-        } else {
-            Some(ValueId::new(value_id.index() as u32 + 1))
-        }
-    }
-
     fn get_block_successors(&self, entry_id: ValueId) -> Vec<(Successor, CodeOffset)> {
         let link_id = self.state.values[entry_id.index()];
         let entry = self.get_link_entry(link_id);
