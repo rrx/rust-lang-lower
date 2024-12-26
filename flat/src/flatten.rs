@@ -174,6 +174,13 @@ impl<S: FlattenState> DerefMut for Flatten<S> {
 }
 
 impl Flatten<Start> {
+    pub fn next(self) -> Flatten<FirstPass> {
+        Flatten {
+            inner: self.inner,
+            state: FirstPass {},
+        }
+    }
+
     pub fn flatten_module(node: AstNode, b: &mut NB) -> Result<Flatten<FirstPass>> {
         // setup environment with static scope and block
         // blocks will be moved into environment eventually
@@ -217,10 +224,7 @@ impl Flatten<Start> {
 
             // return control to the root block
             f.switch_blocks(static_block_id);
-            Ok(Flatten {
-                inner: f.inner.into(),
-                state: FirstPass {},
-            })
+            Ok(f.next())
         } else {
             b.push_error("Not a module", node.span_id);
             Err(Error::new(BlockifyError::Invalid))
@@ -1043,22 +1047,6 @@ impl FlattenInner {
         Ok(FlattenResult::link(link_id))
     }
 
-    fn replace_label(
-        &mut self,
-        link_id: LinkId,
-        ty: AstType,
-        name: Option<StringKey>,
-        span_id: SpanId,
-        mem: VarDefinitionSpace,
-    ) {
-        assert!(name.is_some());
-        let entry = self.get_entry_mut(link_id);
-        entry.ty = ty;
-        entry.span_id = span_id;
-        entry.mem = mem;
-        entry.name = name;
-    }
-
     fn push_start_block_args(
         &mut self,
         scope_id: ScopeId,
@@ -1414,7 +1402,7 @@ impl FlattenInner {
                 let block = self.blocks.get_block(current_block_id);
                 let fun_scope_id = self
                     .scopes
-                    .find_nearest_scope(block.scope_id, &[ScopeType::Template, ScopeType::Function])
+                    .find_nearest_scope(block.scope_id, &[ScopeType::Function])
                     .expect(&format!(
                         "Not in function context, scope_id:{}",
                         block.scope_id

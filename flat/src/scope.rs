@@ -26,7 +26,7 @@ pub enum PlacedBlockId {
 pub enum ScopeType {
     Static,
     Function,
-    Template,
+    //Template,
     Block,
     Region,
     Loop,
@@ -128,13 +128,26 @@ impl DeferredGotoList {
 }
 
 #[derive(Debug)]
+pub struct ScopeStateFunction {
+    return_block: Option<BlockId>,
+}
+
+#[derive(Debug)]
+pub struct ScopeStateBlock {}
+
+#[derive(Debug)]
+pub enum ScopeState {
+    Function(ScopeStateFunction),
+    Block(ScopeStateBlock),
+}
+
+#[derive(Debug)]
 pub struct ScopeLayer {
     pub names: HashMap<StringKey, LinkId>,
     pub entries: HashMap<StringKey, HashSet<VariantId>>,
     pub declarations: HashMap<StringKey, LinkId>,
     pub labels: HashMap<StringLabel, ValueId>,
     pub(crate) block_labels: HashMap<StringLabel, BlockId>,
-    pub blocks: Vec<ValueId>,
     pub entry_block: Option<BlockId>,
     pub return_block: Option<BlockId>,
     pub(crate) loop_block: Option<LoopScope>,
@@ -142,7 +155,7 @@ pub struct ScopeLayer {
     pub lambdas: HashMap<StringLabel, AbstractionId>,
     pub templates: HashMap<StringKey, LinkId>,
     pub unclaimed_labels: HashMap<StringLabel, BlockId>,
-    //pub stack_variables: HashMap<LinkId, (LinkId, AstType)>,
+    pub state: ScopeState,
 }
 
 impl ScopeLayer {
@@ -150,7 +163,6 @@ impl ScopeLayer {
         Self {
             labels: HashMap::new(),
             block_labels: HashMap::new(),
-            blocks: vec![],
             names: HashMap::new(),
             entries: HashMap::new(),
             declarations: HashMap::new(),
@@ -162,7 +174,7 @@ impl ScopeLayer {
             lambdas: HashMap::new(),
             templates: HashMap::new(),
             unclaimed_labels: HashMap::new(),
-            //stack_variables: HashMap::new(),
+            state: ScopeState::Block(ScopeStateBlock {}),
         }
     }
 
@@ -429,6 +441,11 @@ impl ScopeGraph {
             println!("DumpScope: {}", scope_id);
             scope.dump(b);
         });
+    }
+
+    pub fn get_funcion_scope_id(&self, scope_id: ScopeId) -> ScopeId {
+        self.find_nearest_scope(scope_id, &[ScopeType::Function])
+            .expect(&format!("Not in function context, scope_id:{}", scope_id))
     }
 
     pub fn scope_graph(&self, filename: &str) {
