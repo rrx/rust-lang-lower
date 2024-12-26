@@ -1378,14 +1378,7 @@ impl FlattenInner {
 
             Ast::Return(maybe_expr) => {
                 let block = self.blocks.get_block(current_block_id);
-                let fun_scope_id = self
-                    .blocks
-                    .find_nearest_scope(block.scope_id, &[ScopeType::Function])
-                    .expect(&format!(
-                        "Not in function context, scope_id:{}",
-                        block.scope_id
-                    ));
-
+                let fun_scope_id = self.blocks.get_function_scope_id(block.scope_id);
                 let fun_block_id = self.blocks.get_entry_block(fun_scope_id);
 
                 let mut jump_args = vec![];

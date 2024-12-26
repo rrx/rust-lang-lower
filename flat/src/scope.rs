@@ -236,23 +236,6 @@ impl ScopeLayer {
     }
 }
 
-//pub struct ScopeGraph(DiGraph<ScopeLayer, ()>);
-
-/*
-impl Deref for ScopeGraph {
-    type Target = DiGraph<ScopeLayer, ()>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-impl DerefMut for ScopeGraph {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-*/
-
 impl BlockGraph {
     pub fn scope_graph(&self) -> &DiGraph<ScopeLayer, ()> {
         &self.sg
@@ -462,7 +445,7 @@ impl BlockGraph {
         });
     }
 
-    pub fn get_funcion_scope_id(&self, scope_id: ScopeId) -> ScopeId {
+    pub fn get_function_scope_id(&self, scope_id: ScopeId) -> ScopeId {
         self.find_nearest_scope(scope_id, &[ScopeType::Function])
             .expect(&format!("Not in function context, scope_id:{}", scope_id))
     }
