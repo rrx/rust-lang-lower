@@ -123,6 +123,7 @@ impl Flatten<Module> {
         let block_id = entry.block_id;
         let block = self
             .blocks
+            .block_graph()
             .node_weight(NodeIndex::new(block_id.index()))
             .unwrap();
         let entry_id = self.get_entry_id(v);
@@ -176,7 +177,10 @@ impl Flatten<Module> {
     }
 
     pub fn dump_scopes(&self) {
-        petgraph::dot::Dot::with_config(&self.scopes.0, &[petgraph::dot::Config::EdgeNoLabel]);
+        petgraph::dot::Dot::with_config(
+            &self.scopes.scope_graph(),
+            &[petgraph::dot::Config::EdgeNoLabel],
+        );
     }
 
     pub fn dump_variants(&self, b: &NB) {

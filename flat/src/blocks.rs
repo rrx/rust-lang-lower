@@ -4,8 +4,7 @@ use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
 use std::collections::HashSet;
 
-use crate::{BlockId, CodeOffset, LinkId, ScopeId};
-use std::ops::{Deref, DerefMut};
+use crate::{BlockId, CodeOffset, LinkId, ScopeId, ScopeLayer};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Successor {
@@ -161,8 +160,12 @@ impl IRBlock {
     }
 }
 
-pub struct BlockGraph(pub(super) DiGraph<IRBlock, Successor>);
+pub struct BlockGraph {
+    bg: DiGraph<IRBlock, Successor>,
+    sg: DiGraph<ScopeLayer, ()>,
+}
 
+/*
 impl Deref for BlockGraph {
     type Target = DiGraph<IRBlock, Successor>;
 
@@ -175,10 +178,14 @@ impl DerefMut for BlockGraph {
         &mut self.0
     }
 }
+*/
 
 impl BlockGraph {
     pub fn new() -> Self {
-        Self(DiGraph::new())
+        Self {
+            bg: DiGraph::new(),
+            sg: DiGraph::new(),
+        }
     }
 
     pub fn new_block(
@@ -194,7 +201,7 @@ impl BlockGraph {
 
     pub fn new_block_with_scope(&mut self, scope_id: ScopeId) -> BlockId {
         let ir_block = IRBlock::new(scope_id);
-        let index = self.add_node(ir_block);
+        let index = self.bg.add_node(ir_block);
 
         // ensure the first block is the static block
         if index.index() > 0 && scope_id.index() == 0 {
@@ -216,7 +223,7 @@ impl BlockGraph {
         target_block_id: BlockId,
         succ_type: Successor,
     ) {
-        self.add_edge(
+        self.bg.add_edge(
             NodeIndex::new(source_block_id.index()),
             NodeIndex::new(target_block_id.index()),
             succ_type,
@@ -225,24 +232,25 @@ impl BlockGraph {
 
     pub fn get_block(&self, block_id: BlockId) -> &IRBlock {
         let index = NodeIndex::new(block_id.index());
-        self.node_weight(index).unwrap()
+        self.bg.node_weight(index).unwrap()
     }
 
     pub fn get_block_mut(&mut self, block_id: BlockId) -> &mut IRBlock {
         let index = NodeIndex::new(block_id.index());
-        self.node_weight_mut(index).unwrap()
+        self.bg.node_weight_mut(index).unwrap()
     }
 
     pub fn get_block_successors(&self, block_id: BlockId) -> Vec<(Successor, CodeOffset)> {
         let index = NodeIndex::new(block_id.index());
         let edges = self
+            .bg
             .edges_directed(index, petgraph::Direction::Outgoing)
             .collect::<Vec<_>>();
         let mut out = vec![];
         for edge in edges {
             let succ_type = edge.weight();
             let i = edge.target();
-            let block = self.node_weight(i).unwrap();
+            let block = self.bg.node_weight(i).unwrap();
             if !block.dead {
                 let block_id = BlockId::new(i.index()).into();
                 out.push((*succ_type, block_id));
@@ -257,7 +265,7 @@ impl BlockGraph {
             .into_iter()
             .collect::<Vec<BlockId>>();
 
-        let subgraph = self.filter_map(
+        let subgraph = self.bg.filter_map(
             |_n_index, n| Some(n.clone()),
             |_e_index, e| {
                 if let Successor::Jump = e {
@@ -276,8 +284,8 @@ impl BlockGraph {
             all.insert(entry.into());
 
             let mut dfs = petgraph::visit::Dfs::new(&subgraph, NodeIndex::new(entry.index()));
-            while let Some(visited) = dfs.next(&self.0) {
-                for edge in self.edges(visited) {
+            while let Some(visited) = dfs.next(&self.bg) {
+                for edge in self.bg.edges(visited) {
                     let b: BlockId = BlockId::new(edge.target().index());
                     all.insert(b);
                 }
@@ -298,7 +306,7 @@ impl BlockGraph {
             //println!("[{:?}] Reachable: {:?}", entry, &reachable);
             for block_id in dead {
                 let index = NodeIndex::new((*block_id).index());
-                let block = self.node_weight_mut(index).unwrap();
+                let block = self.bg.node_weight_mut(index).unwrap();
                 block.dead = true;
                 out.push(*block_id);
                 //let v = self.get_entry_id_from_block_id(*block_id);
@@ -310,10 +318,10 @@ impl BlockGraph {
     }
 
     pub fn graph_get_entries(&self) -> HashSet<BlockId> {
-        let mut dfs = petgraph::visit::Dfs::new(&self.0, NodeIndex::new(0));
+        let mut dfs = petgraph::visit::Dfs::new(&self.bg, NodeIndex::new(0));
         let mut entries = HashSet::new();
-        while let Some(visited) = dfs.next(&self.0) {
-            for edge in self.0.edges(visited) {
+        while let Some(visited) = dfs.next(&self.bg) {
+            for edge in self.bg.edges(visited) {
                 if Successor::FunctionDeclaration == *edge.weight() {
                     entries.insert(BlockId::new(edge.target().index()));
                 }
@@ -327,12 +335,38 @@ impl BlockGraph {
         for block_id in self.graph_get_entries() {
             let mut seq: Vec<BlockId> = vec![];
             let mut dfs =
-                petgraph::visit::DfsPostOrder::new(&self.0, NodeIndex::new(block_id.index()));
-            while let Some(index) = dfs.next(&self.0) {
+                petgraph::visit::DfsPostOrder::new(&self.bg, NodeIndex::new(block_id.index()));
+            while let Some(index) = dfs.next(&self.bg) {
                 seq.push(BlockId::new(index.index()));
             }
             blocks.extend(seq.into_iter().rev());
         }
         blocks
+    }
+
+    pub fn block_graph(&self) -> &DiGraph<IRBlock, Successor> {
+        &self.bg
+    }
+
+    pub fn subgraph_jumps(&self) -> DiGraph<IRBlock, Successor> {
+        self.bg.filter_map(
+            |_n_index, n| Some(n.clone()),
+            |_e_index, e| {
+                if let Successor::Jump = e {
+                    Some(e.clone())
+                } else {
+                    None
+                }
+            },
+        )
+    }
+
+    pub fn dump_blocks(&self) {
+        let bg = self.block_graph();
+        for node in bg.node_indices() {
+            let block_id: BlockId = node.into();
+            let block = bg.node_weight(node).unwrap();
+            println!("[{}] Block: {:?}", block_id, block);
+        }
     }
 }

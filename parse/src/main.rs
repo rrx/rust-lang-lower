@@ -111,7 +111,8 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
 
     let mut scopes_path = path.clone();
     scopes_path.set_extension("scopes.dot");
-    m.scopes.scope_graph(scopes_path.clone().to_str().unwrap());
+    m.scopes
+        .gen_scope_graph(scopes_path.clone().to_str().unwrap());
 
     let mut cont_path = path.clone();
     cont_path.set_extension("cont.dot");

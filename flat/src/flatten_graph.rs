@@ -146,18 +146,15 @@ impl Flatten<Module> {
             let fun_name = b.labels.r(fun_key);
             let mut fun_group = Group::new(fun_name.clone(), "".to_string());
             let mut h = HashMap::new();
-            let mut bfs = petgraph::visit::Bfs::new(&self.blocks.0, entry.into());
-            while let Some(index) = bfs.next(&self.blocks.0) {
-                for edge in self
-                    .blocks
-                    .0
-                    .edges_directed(index, petgraph::Direction::Outgoing)
-                {
+            let g = self.blocks.block_graph();
+            let mut bfs = petgraph::visit::Bfs::new(g, entry.into());
+            while let Some(index) = bfs.next(g) {
+                for edge in g.edges_directed(index, petgraph::Direction::Outgoing) {
                     let succ = edge.weight();
                     let block_id: BlockId = edge.source().into();
                     let target_id: BlockId = edge.target().into();
-                    let block = self.blocks.0.node_weight(index).unwrap();
-                    let target_block = self.blocks.0.node_weight(target_id.into()).unwrap();
+                    let block = g.node_weight(index).unwrap();
+                    let target_block = g.node_weight(target_id.into()).unwrap();
                     if succ != &Successor::Jump || block.is_dead() || target_block.is_dead() {
                         continue;
                     }
@@ -368,16 +365,7 @@ impl Flatten<Module> {
 
     pub fn block_graph(&self, filename: &str, _b: &NB) {
         use petgraph::dot::{Config, Dot};
-        let g = self.blocks.0.filter_map(
-            |_n_index, n| Some(n.clone()),
-            |_e_index, e| {
-                if let Successor::Jump = e {
-                    Some(e.clone())
-                } else {
-                    None
-                }
-            },
-        );
+        let g = self.blocks.subgraph_jumps();
 
         //let num = petgraph::algo::connected_components(&g);
         //println!("components: {}", num);
@@ -490,7 +478,7 @@ impl FlattenInner {
         let s = format!(
             "{:?}",
             petgraph::dot::Dot::with_attr_getters(
-                &self.blocks.0,
+                self.blocks.block_graph(),
                 &[
                     petgraph::dot::Config::EdgeNoLabel,
                     petgraph::dot::Config::NodeNoLabel

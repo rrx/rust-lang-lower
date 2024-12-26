@@ -231,7 +231,7 @@ impl ScopeLayer {
     }
 }
 
-pub struct ScopeGraph(pub(super) DiGraph<ScopeLayer, ()>);
+pub struct ScopeGraph(DiGraph<ScopeLayer, ()>);
 
 impl Deref for ScopeGraph {
     type Target = DiGraph<ScopeLayer, ()>;
@@ -249,6 +249,10 @@ impl DerefMut for ScopeGraph {
 impl ScopeGraph {
     pub fn new() -> Self {
         Self(DiGraph::new())
+    }
+
+    pub fn scope_graph(&self) -> &DiGraph<ScopeLayer, ()> {
+        &self.0
     }
 
     pub fn new_function_scope(&mut self, state: ScopeStateFunction) -> ScopeId {
@@ -284,21 +288,6 @@ impl ScopeGraph {
         let scope = self.get_scope_mut(scope_id);
         scope.declarations.insert(name, v);
     }
-
-    /*
-    pub fn make_stack_variable(
-        &mut self,
-        scope_id: ScopeId,
-        link_id: LinkId,
-        decl_link_id: LinkId,
-        ast_type: AstType,
-    ) {
-        let scope = self.get_scope_mut(scope_id);
-        scope
-            .stack_variables
-            .insert(link_id, (decl_link_id, ast_type));
-    }
-    */
 
     pub fn scope_define_template(&mut self, scope_id: ScopeId, key: StringKey, link_id: LinkId) {
         let scope = self.get_scope_mut(scope_id);
@@ -476,7 +465,7 @@ impl ScopeGraph {
             .expect(&format!("Not in function context, scope_id:{}", scope_id))
     }
 
-    pub fn scope_graph(&self, filename: &str) {
+    pub fn gen_scope_graph(&self, filename: &str) {
         use petgraph::dot::{Config, Dot};
         let s = format!(
             "{:?}",

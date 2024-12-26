@@ -328,14 +328,6 @@ impl FlattenInner {
         self.scopes.dump_scope(block.scope_id, b);
     }
 
-    pub fn dump_blocks(&self) {
-        for node in self.blocks.node_indices() {
-            let block_id: BlockId = node.into();
-            let block = self.blocks.node_weight(node).unwrap();
-            println!("[{}] Block: {:?}", block_id, block);
-        }
-    }
-
     pub fn list_variants_by_name(
         &self,
         start_scope_id: ScopeId,

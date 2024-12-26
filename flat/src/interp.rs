@@ -291,7 +291,7 @@ impl<'a> Interp<'a> {
         unreachable!()
     }
 
-    pub fn unwind(&mut self) -> Scope {
+    fn unwind(&mut self) -> Scope {
         loop {
             let scope = self.stack.pop().unwrap();
             match scope.ty {
