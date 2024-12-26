@@ -557,20 +557,7 @@ impl FlattenInner {
                 continue;
             }
 
-            let entry_id = block.entry();
-
-            let mut entries = vec![];
-            let mut v = entry_id;
-            loop {
-                let entry = self.get_entry(v).clone();
-                let next = entry.next;
-                entries.push(entry);
-                if next == v {
-                    break;
-                } else {
-                    v = next;
-                }
-            }
+            let entries: Vec<_> = block.iter().map(|v| self.get_entry(v).clone()).collect();
 
             let mut index = 0;
             for mut entry in entries.into_iter() {
@@ -776,7 +763,7 @@ impl FlattenInner {
 
     fn insert_decl(&mut self, block_id: BlockId, entry: CodeEntry) -> LinkId {
         let block = self.blocks.get_block_mut(block_id);
-        let last_decl = block.last_decl();
+        let last_decl = block.last_decl().unwrap();
         let link_id = self.insert_entry_after(last_decl, entry);
         self.blocks.get_block_mut(block_id).push_decl(link_id);
         link_id

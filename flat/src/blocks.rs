@@ -30,12 +30,10 @@ pub struct IRBlock {
     dead: bool,
     term: bool,
     size: usize,
-    entry: Option<LinkId>,
+    entry: Vec<LinkId>,
     terminal: Option<LinkId>,
     decls: Vec<LinkId>,
     links: Vec<LinkId>,
-    //last: Option<LinkId>,
-    last_decl: Option<LinkId>,
     pub(super) num_ret_args: HashSet<usize>,
     pub(super) ret_types: HashSet<AstType>,
     s: BlockStateEnum,
@@ -47,10 +45,8 @@ impl IRBlock {
             scope_id,
             dead: false,
             term: false,
-            entry: None,
+            entry: vec![],
             terminal: None,
-            //last: None,
-            last_decl: None,
             size: 0,
             num_ret_args: HashSet::new(),
             ret_types: HashSet::new(),
@@ -60,12 +56,21 @@ impl IRBlock {
         }
     }
 
+    pub fn iter(&self) -> impl Iterator<Item = LinkId> + '_ {
+        self.entry
+            .iter()
+            .copied()
+            .chain(self.decls.iter().copied())
+            .chain(self.links.iter().copied())
+            .chain(self.terminal.iter().copied())
+    }
+
     pub fn is_dead(&self) -> bool {
         self.dead
     }
 
     pub fn entry(&self) -> LinkId {
-        self.entry.unwrap()
+        self.entry.first().unwrap().clone()
     }
 
     pub fn empty(&self) -> bool {
@@ -80,48 +85,33 @@ impl IRBlock {
         assert_eq!(self.s, BlockStateEnum::Start);
         self.s = BlockStateEnum::Entry;
         assert!(!self.term);
-        assert!(self.entry.is_none());
+        assert!(self.entry.is_empty());
         assert!(self.last().is_none());
-        self.entry = Some(link_id);
-        //self.last = Some(link_id);
-        self.last_decl = Some(link_id);
+        self.entry.push(link_id);
         self.size += 1;
-        self.links.push(link_id)
     }
 
     pub fn push_arg(&mut self, link_id: LinkId) {
         assert_eq!(self.s, BlockStateEnum::Entry);
         assert!(!self.term);
-        assert!(self.entry.is_some());
-        //self.last = Some(link_id);
-        self.last_decl = Some(link_id);
+        assert!(!self.entry.is_empty());
         self.size += 1;
-        self.links.push(link_id)
+        self.entry.push(link_id)
     }
 
     pub fn push_decl(&mut self, link_id: LinkId) {
         assert_ne!(self.s, BlockStateEnum::Start);
-        let index = self
-            .links
-            .iter()
-            .position(|x| *x == self.last_decl())
-            .unwrap()
-            + 1;
         if self.s != BlockStateEnum::Term {
             self.s = BlockStateEnum::Body;
         }
-        //if self.last.unwrap() == self.last_decl.unwrap() {
-        //self.last = Some(link_id);
-        //}
-        self.last_decl = Some(link_id);
-        self.links.insert(index, link_id);
+        self.decls.push(link_id);
         self.size += 1;
     }
 
     pub fn push_link(&mut self, link_id: LinkId, term: bool) {
         assert_ne!(self.s, BlockStateEnum::Term);
         assert!(!self.term);
-        assert!(self.entry.is_some());
+        assert!(!self.entry.is_empty());
 
         if term {
             self.s = BlockStateEnum::Term;
@@ -131,35 +121,31 @@ impl IRBlock {
             self.links.push(link_id)
         }
         self.term = term;
-        //self.last = Some(link_id);
         self.size += 1;
+    }
+
+    pub fn last_decl(&self) -> Option<LinkId> {
+        if let Some(last) = self.decls.last().cloned() {
+            return Some(last);
+        }
+        if let Some(last) = self.entry.last().cloned() {
+            return Some(last);
+        }
+        None
     }
 
     pub fn last(&self) -> Option<LinkId> {
         if let Some(last) = self.terminal {
             return Some(last);
         }
-
         if let Some(last) = self.links.last().cloned() {
             return Some(last);
         }
-
-        if let Some(last) = self.decls.last().cloned() {
-            return Some(last);
-        }
-
-        if let Some(last) = self.entry {
-            return Some(last);
-        }
-        None
-    }
-
-    pub fn last_decl(&self) -> LinkId {
-        self.last_decl.unwrap()
+        self.last_decl()
     }
 
     pub fn is_term(&self) -> bool {
-        self.term
+        self.terminal.is_some()
     }
 
     pub fn pop_terminal(&mut self) -> LinkId {
@@ -168,8 +154,6 @@ impl IRBlock {
         self.term = false;
         self.terminal.take().unwrap();
         self.last().unwrap()
-        //self.last = self.links.last().cloned();
-        //self.last.unwrap()
     }
 }
 
@@ -196,7 +180,6 @@ impl BlockGraph {
     pub fn new_block(&mut self, scope_id: ScopeId) -> BlockId {
         let ir_block = IRBlock::new(scope_id);
         let index = self.add_node(ir_block);
-        //println!("new block: {:?}", (block_id, scope_id));
         if index.index() > 0 && scope_id.index() == 0 {
             assert!(false);
         }
