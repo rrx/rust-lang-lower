@@ -485,4 +485,27 @@ impl FlattenInner {
         println!("saved graph {:?}", filename);
         std::fs::write(filename, s).unwrap();
     }
+
+    pub fn save_graph(&self, filename: &str) {
+        let s = format!(
+            "{:?}",
+            petgraph::dot::Dot::with_attr_getters(
+                &self.blocks.0,
+                &[
+                    petgraph::dot::Config::EdgeNoLabel,
+                    petgraph::dot::Config::NodeNoLabel
+                ],
+                &|_, edge| {
+                    let w = edge.weight();
+                    format!("label = \"{:?}\"", w,)
+                },
+                &|_, (index, block)| {
+                    let block_id: BlockId = index.into();
+                    format!("label = \"{}:{}\"", block_id, block.len())
+                }
+            )
+        );
+        println!("saved graph {:?}", filename);
+        std::fs::write(filename, s).unwrap();
+    }
 }

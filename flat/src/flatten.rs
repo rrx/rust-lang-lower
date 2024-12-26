@@ -174,18 +174,14 @@ impl<S: FlattenState> DerefMut for Flatten<S> {
 }
 
 impl Flatten<Start> {
-    pub fn new() -> Self {
-        Self {
-            inner: FlattenInner::new().into(),
-            state: Start {},
-        }
-    }
-
     pub fn flatten_module(node: AstNode, b: &mut NB) -> Result<Flatten<FirstPass>> {
         // setup environment with static scope and block
         // blocks will be moved into environment eventually
         // FlattenEnvironment represents the module level structures
-        let mut f = Self::new();
+        let mut f = Self {
+            inner: FlattenInner::new().into(),
+            state: Start {},
+        };
 
         let scope_id = f.scopes.new_scope(ScopeType::Static);
         f.static_scope = Some(scope_id);
@@ -203,13 +199,12 @@ impl Flatten<Start> {
             let block = f.blocks.get_block(static_block_id);
             let static_scope_id = block.scope_id;
             let static_scope = f.scopes.get_scope_mut(static_scope_id);
-            //let span_id = body.span_id;
             static_scope.entry_block = Some(static_block_id);
 
             f.switch_blocks(static_block_id);
             f.push_start_block(
                 static_scope_id,
-                AstFuncType::new(AstType::Struct(vec![]), ReturnType::Single(AstType::Unit)).into(),
+                AstFuncType::new_void_void().into(),
                 Some(key),
                 node.span_id,
                 VarDefinitionSpace::Static,
@@ -220,10 +215,8 @@ impl Flatten<Start> {
             f.switch_blocks(static_block_id);
             let _ = f.push_node(*body, b)?;
 
+            // return control to the root block
             f.switch_blocks(static_block_id);
-
-            assert_eq!(static_block_id, f.current_block_id());
-            //f.drain_diagnostics(b);
             Ok(Flatten {
                 inner: f.inner.into(),
                 state: FirstPass {},
@@ -269,9 +262,7 @@ impl FlattenInner {
             }
         }
     }
-}
 
-impl FlattenInner {
     pub fn type_inference(&mut self, b: &mut NB) {
         for entry in self.entries.iter_mut() {
             if !entry.ty.is_unknown() {
@@ -337,29 +328,6 @@ impl FlattenInner {
             let block = self.blocks.node_weight(node).unwrap();
             println!("[{}] Block: {:?}", block_id, block);
         }
-    }
-
-    pub fn save_graph(&self, filename: &str) {
-        let s = format!(
-            "{:?}",
-            petgraph::dot::Dot::with_attr_getters(
-                &self.blocks.0,
-                &[
-                    petgraph::dot::Config::EdgeNoLabel,
-                    petgraph::dot::Config::NodeNoLabel
-                ],
-                &|_, edge| {
-                    let w = edge.weight();
-                    format!("label = \"{:?}\"", w,)
-                },
-                &|_, (index, block)| {
-                    let block_id: BlockId = index.into();
-                    format!("label = \"{}:{}\"", block_id, block.len())
-                }
-            )
-        );
-        println!("saved graph {:?}", filename);
-        std::fs::write(filename, s).unwrap();
     }
 
     pub fn list_variants_by_name(
@@ -558,7 +526,6 @@ impl FlattenInner {
         let block_id = entry.block_id;
         let block = self.blocks.get_block(block_id);
         let scope_id = block.scope_id;
-        //let target_field_types = ty.field_types();
 
         self.switch_blocks(block_id);
         let (_variant_id, _fun_scope_id, fun_block_id, _) =
@@ -610,67 +577,6 @@ impl FlattenInner {
         }
         values
     }
-
-    /*
-    pub(super) fn finish_block(&mut self, block_id: BlockId, _b: &mut NB) {
-        // trying to walk the graph, this is a bit awkward
-        // get block ordering
-        //let blocks = self.blocks.post_order_blocks();
-        //for block_id in blocks.into_iter() {
-            //self.finish_block(block_id, b);
-        //}
-        let block = self.blocks.get_block(block_id);
-        if block.entry.is_none() {
-            return;
-        }
-
-        if block_id != self.static_block_id() {
-            if let Some(last_link_id) = block.last() {
-                let entry = self.get_entry(last_link_id);
-                let (_ty, _targets) = match entry.code {
-                    LCode::PlaceholderTerminal(_link_id) => {
-                        let ty = self.get_type(last_link_id).clone();
-                        (ty, vec![])
-                    }
-                    LCode::Switch(_, ref m) => {
-                        let ty = self.get_type(last_link_id).clone();
-                        let mut targets = m.iter().map(|block_id| *block_id).collect::<Vec<_>>();
-                        targets.sort();
-                        (ty, targets)
-                    }
-                    LCode::Jump(offset) => {
-                        let ty = self.get_type(last_link_id).clone();
-                        let targets = match offset {
-                            CodeOffset::Block(block_id) => {
-                                //let block = self.blocks.get_block(block_id);
-                                //let entry = self.get_entry(block.entry.unwrap());
-                                //let ty = entry.ty.clone();
-                                vec![block_id]
-                            }
-                            _ => unreachable!(),
-                        };
-                        (ty, targets)
-                    }
-                    LCode::Branch(_, then_block_id, else_block_id) => {
-                        let ty = self.get_type(last_link_id).clone();
-                        (ty, vec![then_block_id, else_block_id])
-                    }
-                    LCode::Return => {
-                        let ty = self.get_type(last_link_id).clone();
-                        (ty, vec![])
-                    }
-                    LCode::Yield => {
-                        let ty = self.get_type(last_link_id).clone();
-                        (ty, vec![])
-                    }
-                    _ => unreachable!("{:?}", entry.code),
-                };
-            } else {
-                unreachable!()
-            }
-        }
-    }
-    */
 
     fn _finish(mut self, b: &mut NB) -> Result<(Self, Vec<LinkId>)> {
         self.switch_blocks(self.static_block_id());
@@ -1098,7 +1004,6 @@ impl FlattenInner {
         span_id: SpanId,
         b: &mut NB,
     ) -> Result<FlattenResult> {
-        // Add links
         self.push_call_values(&values, b);
 
         if let ReturnType::Single(ty) = &ret_ty {
@@ -1124,38 +1029,18 @@ impl FlattenInner {
         b: &mut NB,
     ) -> Result<FlattenResult> {
         let def_span_id = b.spans.get_span_unknown();
-        let ret_ty = b.types.r(def.return_type).clone();
-        let blocks = vec![];
-        let (args, _) =
-            Self::calculate_function_arguments(&def, &args, &blocks, def_span_id, call_span_id, b)?;
-
+        let (args, func_type) =
+            Self::calculate_function_arguments(&def, &args, &[], def_span_id, call_span_id, b)?;
         let call_values = self.push_call_arguments(args, call_span_id, b)?;
-        let _call_ty = argvec_type(&call_values);
-
-        let current_block_id = self.current_block_id();
-
-        // Add links
         self.push_call_values(&call_values, b);
-
         let link_id = self.push_code(
             LCode::Builtin(id),
-            ret_ty.clone(),
+            func_type.into(),
             None,
             call_span_id,
             VarDefinitionSpace::Default,
         );
-        self.switch_blocks(current_block_id);
         Ok(FlattenResult::link(link_id))
-    }
-
-    fn push_empty_label(&mut self, span_id: SpanId) -> LinkId {
-        self.push_code(
-            LCode::Label,
-            AstType::Unit,
-            None,
-            span_id,
-            VarDefinitionSpace::Default,
-        )
     }
 
     fn replace_label(
@@ -1216,9 +1101,8 @@ impl FlattenInner {
         span_id: SpanId,
         mem: VarDefinitionSpace,
     ) -> (LinkId, ArgVec) {
-        let block_link_id = self.push_empty_label(span_id);
+        let block_link_id = self.push_code(LCode::Label, block_ty.clone(), name, span_id, mem);
         let v_args = self.push_start_block_args(scope_id, block_ty.clone(), span_id);
-        self.replace_label(block_link_id, block_ty, name, span_id, mem);
         self.block_links
             .insert(self.current_block_id(), block_link_id);
         (block_link_id, v_args)

@@ -100,8 +100,9 @@ impl ICodeModule for Flatten<Module> {
         for current in args {
             let entry = self.get_link_entry(current);
             if let LCode::Arg(_) = &entry.code {
-                let ty = self.get_type(current.into());
-                out.push(ty);
+                out.push(entry.ty.clone());
+            } else {
+                unreachable!()
             }
         }
         out

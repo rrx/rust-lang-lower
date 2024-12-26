@@ -106,6 +106,10 @@ impl AstFuncType {
     pub fn new(args: AstType, ret: ReturnType) -> Self {
         Self { args, ret }
     }
+
+    pub fn new_void_void() -> Self {
+        Self::new(AstType::Struct(vec![]), ReturnType::Single(AstType::Unit))
+    }
 }
 
 impl From<AstFuncType> for AstType {
