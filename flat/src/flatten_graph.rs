@@ -1,5 +1,5 @@
 use crate::{
-    BlockGraph, BlockId, ContinuationFlow, FlattenInner, FlattenState, ICodeModule, LCode,
+    BlockId, CodeOffset, ContinuationFlow, Flatten, FlattenInner, ICodeModule, LCode, Module,
     NodeBuilder as NB, Successor, ValueId, VarDefinitionSpace,
 };
 use anyhow::Result;
@@ -112,207 +112,264 @@ graph TD\n\
     }
 }
 
-pub fn flow_graph<S: FlattenState>(
-    m: &dyn ICodeModule,
-    gblocks: &BlockGraph,
-    filename: &str,
-    b: &NB,
-) -> Result<()> {
-    let entries = gblocks.graph_get_entries();
-    let mut ng = NestedGraph::new();
+impl Flatten<Module> {
+    pub fn flow_graph(&self, filename: &str, b: &NB) -> Result<()> {
+        let entries = self.blocks.graph_get_entries();
+        let mut ng = NestedGraph::new();
 
-    let mut scope_group = Group::new("static scope".into(), "".into());
-    let static_block_id = BlockId::new(0);
-    let module = m.resolve_code_offset(static_block_id.into());
-    let links = m.get_links(module);
-    let mut block_group = Group::new("static block".into(), "".into());
-    block_group.push_value(GroupValue::new("V0".into(), "module".into()));
-    for v in links {
-        let value_id = m.resolve_code_offset(v.into());
-        let entry = m.get_entry(value_id);
-        if let LCode::Val(_) = entry.code {
-            ng.sources.push((module, value_id));
-            let s = format!("{}:{}", v, m.code_to_string(v, b));
-            block_group.push_value(GroupValue::new(format!("{}", v), s));
-        } else {
-            continue;
-        }
-    }
-    scope_group.push_group(block_group);
-    ng.group.push_group(scope_group);
-
-    for entry in entries {
-        let fun_block_id: BlockId = entry.into();
-        let fun_key = m.get_name(fun_block_id.into()).unwrap();
-        let fun_name = b.labels.r(fun_key);
-        let mut fun_group = Group::new(fun_name.clone(), "".to_string());
-        let mut h = HashMap::new();
-        let mut bfs = petgraph::visit::Bfs::new(&gblocks.0, entry.into());
-        while let Some(index) = bfs.next(&gblocks.0) {
-            for edge in gblocks
-                .0
-                .edges_directed(index, petgraph::Direction::Outgoing)
-            {
-                let succ = edge.weight();
-                let block_id: BlockId = edge.source().into();
-                let target_id: BlockId = edge.target().into();
-                let block = gblocks.0.node_weight(index).unwrap();
-                let target_block = gblocks.0.node_weight(target_id.into()).unwrap();
-                if succ != &Successor::Jump || block.is_dead() || target_block.is_dead() {
-                    continue;
-                }
-                let source_scope_name = format!("S{}", block.scope_id.index());
-                let target_scope_name = format!("S{}", target_block.scope_id.index());
-                if !h.contains_key(&source_scope_name) {
-                    h.insert(source_scope_name.clone(), vec![]);
-                }
-                if !h.contains_key(&target_scope_name) {
-                    h.insert(target_scope_name.clone(), vec![]);
-                }
-                h.get_mut(&source_scope_name).unwrap().push(block_id);
-                h.get_mut(&target_scope_name).unwrap().push(target_id);
+        let mut scope_group = Group::new("static scope".into(), "".into());
+        let static_block_id = BlockId::new(0);
+        let module = self
+            .maybe_resolve_code_offset(static_block_id.into())
+            .unwrap();
+        let static_block = self.blocks.get_block(static_block_id);
+        let links: Vec<_> = static_block.iter().collect();
+        let mut block_group = Group::new("static block".into(), "".into());
+        block_group.push_value(GroupValue::new("V0".into(), "module".into()));
+        for v in links {
+            let value_id = self.resolve_code_offset(v.into());
+            let entry = self.get_link_entry(v);
+            if let LCode::Val(_) = entry.code {
+                ng.sources.push((module, value_id));
+                let s = format!("{}:{}", v, self.code_to_string(value_id, b));
+                block_group.push_value(GroupValue::new(format!("{}", v), s));
+            } else {
+                continue;
             }
         }
+        scope_group.push_group(block_group);
+        ng.group.push_group(scope_group);
 
-        if h.len() == 0 {
-            continue;
-        }
+        for entry in entries {
+            let fun_block_id: BlockId = entry.into();
+            let fun_key = self.get_name(fun_block_id.into()).unwrap();
+            let fun_name = b.labels.r(fun_key);
+            let mut fun_group = Group::new(fun_name.clone(), "".to_string());
+            let mut h = HashMap::new();
+            let mut bfs = petgraph::visit::Bfs::new(&self.blocks.0, entry.into());
+            while let Some(index) = bfs.next(&self.blocks.0) {
+                for edge in self
+                    .blocks
+                    .0
+                    .edges_directed(index, petgraph::Direction::Outgoing)
+                {
+                    let succ = edge.weight();
+                    let block_id: BlockId = edge.source().into();
+                    let target_id: BlockId = edge.target().into();
+                    let block = self.blocks.0.node_weight(index).unwrap();
+                    let target_block = self.blocks.0.node_weight(target_id.into()).unwrap();
+                    if succ != &Successor::Jump || block.is_dead() || target_block.is_dead() {
+                        continue;
+                    }
+                    let source_scope_name = format!("S{}", block.scope_id.index());
+                    let target_scope_name = format!("S{}", target_block.scope_id.index());
+                    if !h.contains_key(&source_scope_name) {
+                        h.insert(source_scope_name.clone(), vec![]);
+                    }
+                    if !h.contains_key(&target_scope_name) {
+                        h.insert(target_scope_name.clone(), vec![]);
+                    }
+                    h.get_mut(&source_scope_name).unwrap().push(block_id);
+                    h.get_mut(&target_scope_name).unwrap().push(target_id);
+                }
+            }
 
-        let mut track = HashSet::new();
+            if h.len() == 0 {
+                continue;
+            }
 
-        for (scope_name, values) in h.iter() {
-            if values.len() > 0 {
-                let mut scope_group = Group::new(scope_name.clone(), "".into());
-                for block_id in values {
-                    if !track.contains(block_id) {
-                        let block = gblocks.get_block(*block_id);
-                        if block.is_dead() {
-                            continue;
-                        }
-                        let block_name = format!("{}", block_id);
-                        let block_body = if let Some(key) = m.get_name(block_id.into()) {
-                            b.labels.r(key)
-                        } else {
-                            "".into()
-                        };
+            let mut track = HashSet::new();
 
-                        let mut block_group = Group::new(block_name, block_body);
-
-                        let maybe_v = m.maybe_resolve_code_offset(block_id.into());
-
-                        if maybe_v.is_none() {
-                            continue;
-                        }
-                        let mut v = maybe_v.unwrap();
-
-                        loop {
-                            let entry = m.get_entry(v);
-                            let v_decl = match entry.mem {
-                                VarDefinitionSpace::Stack(x) => {
-                                    let v_source = m.resolve_code_offset(x.into());
-                                    ng.sources.push((v, v_source));
-                                    Some(v_source)
-                                }
-                                _ => None,
-                            };
-
-                            let code = &entry.code;
-                            let s = match code {
-                                LCode::Jump(offset) => {
-                                    if let Some(v_target) = m.maybe_resolve_code_offset(*offset) {
-                                        ng.edges.push((v, v_target));
-                                    }
-                                    format!("{}:{}", v, m.code_to_string(v, b))
-                                }
-                                LCode::Switch(link_id, cases) => {
-                                    let v_link = m.resolve_code_offset(link_id.into());
-                                    ng.sources.push((v, v_link));
-                                    for block_id in cases.iter() {
-                                        let v_target = m.resolve_code_offset(block_id.into());
-                                        ng.edges.push((v, v_target));
-                                    }
-                                    format!("{}:switch({},{:?})", v, v_link, cases)
-                                }
-                                LCode::Branch(c, b1, b2) => {
-                                    let v_target = m.resolve_code_offset(*c);
-                                    ng.sources.push((v, v_target));
-                                    let v_target = m.resolve_code_offset(b1.into());
-                                    ng.edges.push((v, v_target));
-                                    let v_target = m.resolve_code_offset(b2.into());
-                                    ng.edges.push((v, v_target));
-                                    format!("{}:{}", v, m.code_to_string(v, b))
-                                }
-                                LCode::CallValue(offset) => {
-                                    let v_target = m.resolve_code_offset(*offset);
-                                    ng.sources.push((v, v_target));
-                                    format!("{}:callvalue({})", v, v_target)
-                                }
-                                LCode::Load(decl) => {
-                                    let v_decl = m.resolve_code_offset(decl.into());
-                                    ng.sources.push((v, v_decl));
-                                    format!("{}:load({})", v, v_decl)
-                                }
-
-                                LCode::Store(decl, source) => {
-                                    let v_source = m.resolve_code_offset(source.into());
-                                    ng.sources.push((v, v_source));
-                                    if let Some(v_decl) = m.maybe_resolve_code_offset(decl.into()) {
-                                        ng.sources.push((v, v_decl));
-                                        format!("{}:store({},{})", v, v_decl, v_source)
-                                    } else {
-                                        format!("{}:store(??,{})", v, v_source)
-                                    }
-                                }
-                                LCode::Call(offset) => {
-                                    let v_target = m.resolve_code_offset(*offset);
-                                    ng.sources.push((v, v_target));
-                                    format!("{}:{}", v, m.code_to_string(v, b))
-                                }
-                                LCode::Arg(num) => {
-                                    format!(
-                                        "{}:arg({}) => {}",
-                                        v,
-                                        num,
-                                        m.mem_to_string(entry.mem, b)
-                                    )
-                                }
-                                LCode::Label => {
-                                    let s_name = if let Some(name) = entry.name {
-                                        b.labels.r(name.into())
-                                    } else {
-                                        "?".to_string()
-                                    };
-                                    format!("{}:{}:label({})", v, entry.block_id, s_name)
-                                }
-                                _ => {
-                                    if let Some(v_decl) = v_decl {
-                                        format!("{}:{} => {}", v, m.code_to_string(v, b), v_decl)
-                                    } else {
-                                        format!("{}:{}", v, m.code_to_string(v, b))
-                                    }
-                                }
-                            };
-                            block_group.push_value(GroupValue::new(format!("{}", v), s));
-                            if let Some(v_next) = m.get_next(v) {
-                                ng.edges.push((v, v_next));
-                                v = v_next;
-                            } else {
-                                break;
+            for (scope_name, values) in h.iter() {
+                if values.len() > 0 {
+                    let mut scope_group = Group::new(scope_name.clone(), "".into());
+                    for block_id in values {
+                        if !track.contains(block_id) {
+                            let block = self.blocks.get_block(*block_id);
+                            if block.is_dead() {
+                                continue;
                             }
+                            let block_name = format!("{}", block_id);
+                            let block_body = if let Some(key) = self.get_name(block_id.into()) {
+                                b.labels.r(key)
+                            } else {
+                                "".into()
+                            };
+
+                            let mut block_group = Group::new(block_name, block_body);
+
+                            let maybe_v = self.maybe_resolve_code_offset(block_id.into());
+
+                            if maybe_v.is_none() {
+                                continue;
+                            }
+                            let mut v = maybe_v.unwrap();
+
+                            loop {
+                                let entry = self.get_entry(v);
+                                let v_decl = match entry.mem {
+                                    VarDefinitionSpace::Stack(x) => {
+                                        let v_source = self.resolve_code_offset(x.into());
+                                        ng.sources.push((v, v_source));
+                                        Some(v_source)
+                                    }
+                                    _ => None,
+                                };
+
+                                let code = &entry.code;
+                                let s = match code {
+                                    LCode::Jump(offset) => {
+                                        if let Some(v_target) =
+                                            self.maybe_resolve_code_offset(*offset)
+                                        {
+                                            ng.edges.push((v, v_target));
+                                        }
+                                        format!("{}:{}", v, self.code_to_string(v, b))
+                                    }
+                                    LCode::Switch(link_id, cases) => {
+                                        let v_link = self.resolve_code_offset(link_id.into());
+                                        ng.sources.push((v, v_link));
+                                        for block_id in cases.iter() {
+                                            let v_target =
+                                                self.resolve_code_offset(block_id.into());
+                                            ng.edges.push((v, v_target));
+                                        }
+                                        format!("{}:switch({},{:?})", v, v_link, cases)
+                                    }
+                                    LCode::Branch(c, b1, b2) => {
+                                        let v_target = self.resolve_code_offset(*c);
+                                        ng.sources.push((v, v_target));
+                                        let v_target = self.resolve_code_offset(b1.into());
+                                        ng.edges.push((v, v_target));
+                                        let v_target = self.resolve_code_offset(b2.into());
+                                        ng.edges.push((v, v_target));
+                                        format!("{}:{}", v, self.code_to_string(v, b))
+                                    }
+                                    LCode::CallValue(offset) => {
+                                        let v_target = self.resolve_code_offset(*offset);
+                                        ng.sources.push((v, v_target));
+                                        format!("{}:callvalue({})", v, v_target)
+                                    }
+                                    LCode::Load(decl) => {
+                                        let v_decl = self.resolve_code_offset(decl.into());
+                                        ng.sources.push((v, v_decl));
+                                        format!("{}:load({})", v, v_decl)
+                                    }
+
+                                    LCode::Store(decl, source) => {
+                                        let v_source = self.resolve_code_offset(source.into());
+                                        ng.sources.push((v, v_source));
+                                        if let Some(v_decl) =
+                                            self.maybe_resolve_code_offset(decl.into())
+                                        {
+                                            ng.sources.push((v, v_decl));
+                                            format!("{}:store({},{})", v, v_decl, v_source)
+                                        } else {
+                                            format!("{}:store(??,{})", v, v_source)
+                                        }
+                                    }
+                                    LCode::Call(offset) => {
+                                        let v_target = self.resolve_code_offset(*offset);
+                                        ng.sources.push((v, v_target));
+                                        format!("{}:{}", v, self.code_to_string(v, b))
+                                    }
+                                    LCode::Arg(num) => {
+                                        format!(
+                                            "{}:arg({}) => {}",
+                                            v,
+                                            num,
+                                            self.mem_to_string(entry.mem, b)
+                                        )
+                                    }
+                                    LCode::Label => {
+                                        let s_name = if let Some(name) = entry.name {
+                                            b.labels.r(name.into())
+                                        } else {
+                                            "?".to_string()
+                                        };
+                                        format!("{}:{}:label({})", v, entry.block_id, s_name)
+                                    }
+                                    _ => {
+                                        if let Some(v_decl) = v_decl {
+                                            format!(
+                                                "{}:{} => {}",
+                                                v,
+                                                self.code_to_string(v, b),
+                                                v_decl
+                                            )
+                                        } else {
+                                            format!("{}:{}", v, self.code_to_string(v, b))
+                                        }
+                                    }
+                                };
+                                block_group.push_value(GroupValue::new(format!("{}", v), s));
+                                if let Some(v_next) = self.get_next(v) {
+                                    ng.edges.push((v, v_next));
+                                    v = v_next;
+                                } else {
+                                    break;
+                                }
+                            }
+                            scope_group.push_group(block_group);
+                            track.insert(block_id);
                         }
-                        scope_group.push_group(block_group);
-                        track.insert(block_id);
+                    }
+                    fun_group.push_group(scope_group);
+                }
+            }
+            ng.group.push_group(fun_group);
+        }
+        let mut f = File::create(filename)?;
+        println!("saved graph {:?}", filename);
+        ng.write(&mut f)?;
+        Ok(())
+    }
+
+    pub fn save_graph(&self, filename: &str, b: &NB) {
+        use petgraph::dot::{Config, Dot};
+        let cfg = self.get_graph(ValueId::new(0), None, b);
+        let s = format!(
+            "{:?}",
+            Dot::with_attr_getters(
+                &cfg.g,
+                &[Config::EdgeNoLabel, Config::NodeNoLabel],
+                &|_, _er| String::new(),
+                &|_, (_index, data)| {
+                    match data.code_offset {
+                        CodeOffset::Link(link_id) => {
+                            format!(
+                                //"label = \"L{}:{}\" shape=\"{:?}\"",
+                                "label = \"L{}:{}\"",
+                                link_id.index(),
+                                &data.name,
+                                //&data.ty.to_string()
+                            )
+                        }
+                        CodeOffset::Value(value_id) => {
+                            format!(
+                                //"label = \"V{}:{}\" shape={:?}",
+                                "label = \"V{}:{}\"",
+                                value_id.index(),
+                                &data.name,
+                                //&data.ty.to_string()
+                            )
+                        }
+                        CodeOffset::Block(block_id) => {
+                            format!(
+                                //"label = \"B{}:{}\" shape={:?}",
+                                "label = \"B{}:{}\"",
+                                block_id.index(),
+                                &data.name,
+                                //&data.ty.to_string()
+                            )
+                        }
                     }
                 }
-                fun_group.push_group(scope_group);
-            }
-        }
-        ng.group.push_group(fun_group);
+            )
+        );
+        println!("saved graph {:?}", filename);
+        std::fs::write(filename, s).unwrap();
     }
-    let mut f = File::create(filename)?;
-    println!("saved graph {:?}", filename);
-    ng.write(&mut f)?;
-    Ok(())
 }
 
 impl FlattenInner {
@@ -352,13 +409,25 @@ impl FlattenInner {
                             format!("label = \"BA.{}:{}:{}\"", s_name, block_id, arg)
                         }
                         ContinuationFlow::Jump(link_id) => {
-                            format!("label = \"JUMP:{}\"", link_id)
+                            if let Some(v) = self.maybe_resolve_code_offset(link_id.into()) {
+                                format!("label = \"JUMP:{}\"", v)
+                            } else {
+                                format!("label = \"JUMP:?{}\"", link_id)
+                            }
                         }
                         ContinuationFlow::JumpArg(link_id, arg) => {
-                            format!("label = \"JUMP:{}:{}\"", link_id, arg)
+                            if let Some(v) = self.maybe_resolve_code_offset(link_id.into()) {
+                                format!("label = \"JUMP:{}:{}\"", v, arg)
+                            } else {
+                                format!("label = \"JUMP:?{}:{}\"", link_id, arg)
+                            }
                         }
                         ContinuationFlow::Variable(link_id) => {
-                            format!("label = \"VAR:{}\"", link_id)
+                            if let Some(v) = self.maybe_resolve_code_offset(link_id.into()) {
+                                format!("label = \"VAR:{}\"", v)
+                            } else {
+                                format!("label = \"VAR:?\"")
+                            }
                         }
                     }
                 }

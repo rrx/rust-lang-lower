@@ -2497,4 +2497,27 @@ impl FlattenInner {
         }
         link_id
     }
+
+    pub fn resolve_code_offset(&self, code_offset: CodeOffset) -> ValueId {
+        self.maybe_resolve_code_offset(code_offset)
+            .expect(&format!("Unable to resolve: {}", code_offset))
+    }
+
+    pub fn maybe_resolve_code_offset(&self, code_offset: CodeOffset) -> Option<ValueId> {
+        match code_offset {
+            CodeOffset::Value(v) => Some(v),
+            CodeOffset::Link(link_id) => {
+                let entry = self.get_entry(link_id);
+                entry.value_id
+            }
+            CodeOffset::Block(block_id) => {
+                if let Some(link_id) = self.block_links.get(&block_id) {
+                    let entry = self.get_entry(*link_id);
+                    entry.value_id
+                } else {
+                    None
+                }
+            }
+        }
+    }
 }

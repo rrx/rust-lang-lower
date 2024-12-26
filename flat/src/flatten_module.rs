@@ -108,50 +108,20 @@ impl ICodeModule for Flatten<Module> {
     }
 
     fn resolve_code_offset(&self, code_offset: CodeOffset) -> ValueId {
-        self.maybe_resolve_code_offset(code_offset)
-            .expect(&format!("Unable to resolve: {}", code_offset))
+        self.inner.resolve_code_offset(code_offset)
     }
 
     fn maybe_resolve_code_offset(&self, code_offset: CodeOffset) -> Option<ValueId> {
-        match code_offset {
-            CodeOffset::Value(v) => Some(v),
-            CodeOffset::Link(link_id) => {
-                let entry = self.get_link_entry(link_id);
-                entry.value_id
-            }
-            CodeOffset::Block(block_id) => {
-                if let Some(link_id) = self.block_links.get(&block_id) {
-                    let entry = self.get_link_entry(*link_id);
-                    entry.value_id
-                } else {
-                    None
-                }
-            }
-        }
+        self.inner.maybe_resolve_code_offset(code_offset)
     }
 
     fn code_count(&self) -> usize {
         self.entries.len()
     }
-
-    fn dump_code_table(&self, filename: &str, b: &mut NB) {
-        let mut rows = vec![];
-        for index in 0..self.state.values.len() {
-            let value_id = ValueId::new(index as u32);
-            if let Some(row) = self.get_code_row(value_id, b) {
-                rows.push(row);
-            } else {
-                println!("Unable to load entry: {}", value_id);
-            }
-        }
-        let s = Table::new(rows).with(Style::sharp()).to_string();
-        println!("{}", s);
-        std::fs::write(filename, s).unwrap();
-    }
 }
 
 impl Flatten<Module> {
-    fn get_link_entry(&self, link_id: LinkId) -> &CodeEntry {
+    pub fn get_link_entry(&self, link_id: LinkId) -> &CodeEntry {
         self.entries.get(link_id.index()).unwrap()
     }
 
@@ -214,67 +184,6 @@ impl Flatten<Module> {
         println!("saved table {:?}", filename);
         std::fs::write(filename, s.clone()).unwrap();
         s
-    }
-
-    pub fn cont_graph(&self, filename: &str, b: &NB) {
-        let s = format!(
-            "{:?}",
-            petgraph::dot::Dot::with_attr_getters(
-                &self.scoped_continuations.g,
-                &[
-                    petgraph::dot::Config::EdgeNoLabel,
-                    petgraph::dot::Config::NodeNoLabel
-                ],
-                &|_, edge| {
-                    let w = edge.weight();
-                    format!("label = \"{:?}\"", w,)
-                },
-                &|_, (_, c)| {
-                    match c {
-                        ContinuationFlow::Block(block_id) => {
-                            let s_name = if let Some(name) = self.get_name(block_id.into()) {
-                                b.labels.r(name)
-                            } else {
-                                "?".to_string()
-                            };
-                            format!("label = \"B.{}:{}\"", s_name, block_id)
-                        }
-                        ContinuationFlow::BlockArg(block_id, arg) => {
-                            let s_name = if let Some(name) = self.get_name(block_id.into()) {
-                                b.labels.r(name)
-                            } else {
-                                "?".to_string()
-                            };
-                            format!("label = \"BA.{}:{}:{}\"", s_name, block_id, arg)
-                        }
-                        ContinuationFlow::Jump(link_id) => {
-                            if let Some(v) = self.maybe_resolve_code_offset(link_id.into()) {
-                                format!("label = \"JUMP:{}\"", v)
-                            } else {
-                                format!("label = \"JUMP:?{}\"", link_id)
-                            }
-                        }
-                        ContinuationFlow::JumpArg(link_id, arg) => {
-                            let v = self.resolve_code_offset(link_id.into());
-                            format!("label = \"JUMP:{}:{}\"", v, arg)
-                        }
-                        ContinuationFlow::Variable(link_id) => {
-                            if let Some(v) = self.maybe_resolve_code_offset(link_id.into()) {
-                                format!("label = \"VAR:{}\"", v)
-                            } else {
-                                format!("label = \"VAR:?\"")
-                            }
-                        }
-                    }
-                }
-            )
-        );
-        println!("saved graph {:?}", filename);
-        std::fs::write(filename, s).unwrap();
-    }
-
-    pub fn flow_graph(&self, filename: &str, b: &NB) -> Result<()> {
-        crate::flatten_graph::flow_graph::<Module>(self, &self.blocks, filename, b)
     }
 
     pub fn dump_scopes(&self) {
