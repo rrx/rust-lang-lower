@@ -100,6 +100,22 @@ impl ICodeModule for Flatten<Module> {
     fn code_count(&self) -> usize {
         self.entries.len()
     }
+
+    fn get_label_args(&self, v: ValueId) -> Vec<AstType> {
+        let entry = self.get_entry(v);
+        let block_id = entry.block_id;
+        let block = self.blocks.get_block(block_id);
+        let args: Vec<_> = block.iter_args().collect();
+        let mut out = vec![];
+        for current in args {
+            let entry = self.get_link_entry(current);
+            if let LCode::Arg(_) = &entry.code {
+                let ty = self.get_type(current.into());
+                out.push(ty);
+            }
+        }
+        out
+    }
 }
 
 impl Flatten<Module> {

@@ -56,6 +56,10 @@ impl IRBlock {
         }
     }
 
+    pub fn iter_args(&self) -> impl Iterator<Item = LinkId> + '_ {
+        self.entry.iter().skip(1).cloned()
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = LinkId> + '_ {
         self.entry
             .iter()

@@ -259,24 +259,7 @@ pub trait ICodeModule {
         let cfg = self.get_cfg(block_id, b);
         cfg.blocks(v)
     }
-
-    fn get_label_args(&self, v: ValueId) -> Vec<AstType> {
-        let mut current = v;
-        let mut out = vec![];
-        loop {
-            if let Some(next) = self.get_next(current) {
-                current = next;
-                let code = self.get_code(current);
-                if let LCode::Arg(_) = code {
-                    let ty = self.get_type(current.into());
-                    out.push(ty);
-                    continue;
-                }
-            }
-            break;
-        }
-        out
-    }
+    fn get_label_args(&self, v: ValueId) -> Vec<AstType>;
 
     fn mem_to_string(&self, mem: VarDefinitionSpace, _b: &NodeBuilder) -> String {
         match mem {
