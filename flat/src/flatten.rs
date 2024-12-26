@@ -124,7 +124,6 @@ pub struct FlattenInner {
     pub scopes: ScopeGraph,
     pub(super) block_links: HashMap<BlockId, LinkId>,
     pub(crate) functions: HashMap<StringKey, LinkId>,
-    pub(crate) statics: HashMap<StringKey, Literal>,
     pub(crate) open_identifiers: Vec<LinkId>,
     pub(crate) scoped_continuations: ScopedContinuations,
     pub deferred_goto: DeferredGotoList,
@@ -146,7 +145,6 @@ impl FlattenInner {
             scopes: ScopeGraph::new(),
             block_links: HashMap::new(),
             functions: HashMap::new(),
-            statics: HashMap::new(),
             open_identifiers: vec![],
             scoped_continuations: ScopedContinuations::new(),
             deferred_goto: DeferredGotoList::new(),
@@ -563,15 +561,6 @@ impl FlattenInner {
             for mut entry in entries.into_iter() {
                 if let Some(ty) = b.types.u.resolve(&entry.ty) {
                     entry.ty = ty;
-                }
-
-                if entry.mem == VarDefinitionSpace::Static {
-                    match &entry.code {
-                        LCode::Val(lit) => {
-                            self.statics.insert(entry.name.unwrap(), lit.clone());
-                        }
-                        _ => (),
-                    }
                 }
 
                 let scope = self.scopes.get_scope(scope_id);
