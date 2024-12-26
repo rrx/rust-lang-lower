@@ -469,12 +469,20 @@ impl FlattenInner {
         // This behavior is slightly different than inline functions that jump back into the same
         // scope from which they were called.
 
-        let (next_block_id, next_scope_id) =
-            self.new_scope_and_block(ScopeType::Block, scope_id, Successor::BlockScope);
+        let (next_block_id, next_scope_id) = self.new_scope_and_block(
+            ScopeType::Block,
+            current_block_id,
+            scope_id,
+            Successor::BlockScope,
+        );
 
         // New Func Scope
-        let (fun_block_id, fun_scope_id) =
-            self.new_scope_and_block(ScopeType::Function, scope_id, Successor::BlockScope);
+        let (fun_block_id, fun_scope_id) = self.new_scope_and_block(
+            ScopeType::Function,
+            current_block_id,
+            scope_id,
+            Successor::BlockScope,
+        );
 
         let (v_id, _scope, _block_id, entry_link_id, _, argvec, _, _, _, _entry_args) = self
             .push_bake_lambda_and_update_next(
@@ -908,8 +916,12 @@ impl FlattenInner {
         let next_block_id = self.blocks.new_block(scope_id);
 
         // New Func Scope
-        let (fun_block_id, fun_scope_id) =
-            self.new_scope_and_block(ScopeType::Function, scope_id, Successor::BlockScope);
+        let (fun_block_id, fun_scope_id) = self.new_scope_and_block(
+            ScopeType::Function,
+            current_block_id,
+            scope_id,
+            Successor::BlockScope,
+        );
 
         let result = self.push_bake_lambda_and_update_next(
             name,
@@ -1170,9 +1182,15 @@ impl FlattenInner {
             } else {
                 let body = a.def.body.clone().unwrap();
 
+                let scope = self.scopes.get_scope(scope_id);
+                let block_id = scope.entry_block.unwrap();
                 // New Func Scope
-                let (fun_block_id, fun_scope_id) =
-                    self.new_scope_and_block(ScopeType::Function, scope_id, Successor::BlockScope);
+                let (fun_block_id, fun_scope_id) = self.new_scope_and_block(
+                    ScopeType::Function,
+                    block_id,
+                    scope_id,
+                    Successor::BlockScope,
+                );
 
                 let next_block_id = self.blocks.new_block(fun_scope_id);
 

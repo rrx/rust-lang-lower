@@ -45,12 +45,15 @@ impl FlattenInner {
                 b.unify(&call_arg_type, call_span_id, &resolve_type, def_span_id);
                 (variant_id, fun_block_id, fun_scope_id, resolve_type)
             } else {
-                let (fun_block_id, fun_scope_id) =
-                    self.new_scope_and_block(ScopeType::Block, scope_id, Successor::BlockScope);
-                let current_block_id = self.current_block_id();
-                // block graph
-                self.blocks
-                    .block_succ(current_block_id, fun_block_id, Successor::BlockScope);
+                let scope = self.scopes.get_scope(scope_id);
+                let block_id = scope.entry_block.unwrap();
+
+                let (fun_block_id, fun_scope_id) = self.new_scope_and_block(
+                    ScopeType::Block,
+                    block_id,
+                    scope_id,
+                    Successor::BlockScope,
+                );
                 // Start lambda block
                 let lambda_name = b.labels.fresh_key(&s_name);
 

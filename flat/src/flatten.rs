@@ -843,6 +843,7 @@ impl FlattenInner {
     pub fn new_scope_and_block(
         &mut self,
         scope_type: ScopeType,
+        parent_block_id: BlockId,
         parent_scope_id: ScopeId,
         succ_type: Successor,
     ) -> (BlockId, ScopeId) {
@@ -851,6 +852,11 @@ impl FlattenInner {
         let block_id = self.blocks.new_block(scope_id);
         scope.entry_block = Some(block_id);
         self.scopes.scope_succ(parent_scope_id, scope_id);
+
+        self.blocks.block_succ(parent_block_id, block_id, succ_type);
+        self.blocks
+            .block_succ(parent_block_id, block_id, Successor::Jump);
+
         (block_id, scope_id)
     }
 
@@ -1849,13 +1855,10 @@ impl FlattenInner {
                 // THEN
                 let (then_block_id, then_scope_id) = self.new_scope_and_block(
                     ScopeType::Block,
+                    current_block_id,
                     parent_scope_id,
                     Successor::BlockScope,
                 );
-                self.blocks
-                    .block_succ(current_block_id, then_block_id, Successor::BlockScope);
-                self.blocks
-                    .block_succ(current_block_id, then_block_id, Successor::Jump);
 
                 let then_span_id = then_expr.span_id;
 
@@ -1881,13 +1884,10 @@ impl FlattenInner {
                 let else_block_id = if let Some(else_expr) = maybe_else_expr {
                     let (else_block_id, else_scope_id) = self.new_scope_and_block(
                         ScopeType::Block,
+                        current_block_id,
                         parent_scope_id,
                         Successor::BlockScope,
                     );
-                    self.blocks
-                        .block_succ(current_block_id, else_block_id, Successor::BlockScope);
-                    self.blocks
-                        .block_succ(current_block_id, else_block_id, Successor::Jump);
 
                     let else_span_id = else_expr.span_id;
                     let name = b.labels.fresh_key("else");
@@ -2090,14 +2090,14 @@ impl FlattenInner {
                 };
 
                 // THEN
-                let (then_block_id, then_scope_id) =
-                    self.new_scope_and_block(ScopeType::Region, scope_id, Successor::Operation);
+                let (then_block_id, then_scope_id) = self.new_scope_and_block(
+                    ScopeType::Region,
+                    current_block_id,
+                    scope_id,
+                    Successor::Operation,
+                );
                 let then_span_id = x.span_id;
                 let then_ast = AstNode::make_yield(*x);
-                self.blocks
-                    .block_succ(current_block_id, then_block_id, Successor::Operation);
-                self.blocks
-                    .block_succ(current_block_id, then_block_id, Successor::Jump);
 
                 let name = b.labels.fresh_key("t_then");
 
@@ -2117,13 +2117,13 @@ impl FlattenInner {
 
                 // ELSE
                 let else_span_id = y.span_id;
-                let (else_block_id, else_scope_id) =
-                    self.new_scope_and_block(ScopeType::Region, scope_id, Successor::Operation);
+                let (else_block_id, else_scope_id) = self.new_scope_and_block(
+                    ScopeType::Region,
+                    current_block_id,
+                    scope_id,
+                    Successor::Operation,
+                );
                 let else_ast = AstNode::make_yield(*y);
-                self.blocks
-                    .block_succ(current_block_id, else_block_id, Successor::Operation);
-                self.blocks
-                    .block_succ(current_block_id, else_block_id, Successor::Jump);
 
                 self.switch_blocks(else_block_id);
                 self.push_start_block(
@@ -2258,13 +2258,10 @@ impl FlattenInner {
 
                 let (loop_block_id, loop_scope_id) = self.new_scope_and_block(
                     ScopeType::Region,
+                    current_block_id,
                     parent_scope_id,
                     Successor::BlockScope,
                 );
-                self.blocks
-                    .block_succ(current_block_id, loop_block_id, Successor::BlockScope);
-                self.blocks
-                    .block_succ(current_block_id, loop_block_id, Successor::Jump);
 
                 let v_next = self.blocks.new_block(parent_scope_id);
                 self.switch_blocks(v_next);
