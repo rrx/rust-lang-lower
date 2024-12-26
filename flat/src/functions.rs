@@ -475,6 +475,8 @@ impl FlattenInner {
             scope_id,
             Successor::BlockScope,
         );
+        self.blocks
+            .block_succ(current_block_id, next_block_id, Successor::Jump);
 
         // New Func Scope
         let (fun_block_id, fun_scope_id) = self.new_scope_and_block(
@@ -483,6 +485,8 @@ impl FlattenInner {
             scope_id,
             Successor::BlockScope,
         );
+        self.blocks
+            .block_succ(current_block_id, fun_block_id, Successor::Jump);
 
         let (v_id, _scope, _block_id, entry_link_id, _, argvec, _, _, _, _entry_args) = self
             .push_bake_lambda_and_update_next(
@@ -926,6 +930,8 @@ impl FlattenInner {
             scope_id,
             Successor::BlockScope,
         );
+        self.blocks
+            .block_succ(current_block_id, fun_block_id, Successor::Jump);
 
         let result = self.push_bake_lambda_and_update_next(
             name,
@@ -1199,6 +1205,8 @@ impl FlattenInner {
                     scope_id,
                     Successor::BlockScope,
                 );
+                self.blocks
+                    .block_succ(block_id, fun_block_id, Successor::Jump);
 
                 let next_block_id = self.blocks.new_block(block_id, fun_scope_id, succ_type);
 

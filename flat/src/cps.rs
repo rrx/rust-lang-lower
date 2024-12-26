@@ -54,6 +54,9 @@ impl FlattenInner {
                     scope_id,
                     Successor::BlockScope,
                 );
+                self.blocks
+                    .block_succ(block_id, fun_block_id, Successor::Jump);
+
                 // Start lambda block
                 let lambda_name = b.labels.fresh_key(&s_name);
 
