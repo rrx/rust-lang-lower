@@ -470,7 +470,7 @@ impl FlattenInner {
         // This behavior is slightly different than inline functions that jump back into the same
         // scope from which they were called.
 
-        let (next_block_id, next_scope_id) = self.new_scope_and_block(
+        let (next_block_id, next_scope_id) = self.blocks.new_scope_and_block(
             ScopeType::Block,
             ScopeState::block(),
             current_block_id,
@@ -480,7 +480,7 @@ impl FlattenInner {
         self.blocks.control_flow(current_block_id, &[next_block_id]);
 
         // New Func Scope
-        let (fun_block_id, fun_scope_id) = self.new_scope_and_block(
+        let (fun_block_id, fun_scope_id) = self.blocks.new_scope_and_block(
             ScopeType::Function,
             ScopeState::function(next_block_id),
             current_block_id,
@@ -925,7 +925,7 @@ impl FlattenInner {
             .new_block(scope_block_id, scope_id, Successor::BlockScope);
 
         // New Func Scope
-        let (fun_block_id, fun_scope_id) = self.new_scope_and_block(
+        let (fun_block_id, fun_scope_id) = self.blocks.new_scope_and_block(
             ScopeType::Function,
             ScopeState::function(next_block_id),
             current_block_id,
@@ -1201,7 +1201,7 @@ impl FlattenInner {
                 let block_id = scope.entry_block.unwrap();
 
                 // New Func Scope
-                let (fun_block_id, fun_scope_id) = self.new_scope_and_block(
+                let (fun_block_id, fun_scope_id) = self.blocks.new_scope_and_block(
                     ScopeType::Function,
                     ScopeState::block(),
                     block_id,

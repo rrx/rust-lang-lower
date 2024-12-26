@@ -720,23 +720,6 @@ impl FlattenInner {
         }
     }
 
-    pub fn new_scope_and_block(
-        &mut self,
-        scope_type: ScopeType,
-        scope_state: ScopeState,
-        parent_block_id: BlockId,
-        parent_scope_id: ScopeId,
-        succ_type: Successor,
-    ) -> (BlockId, ScopeId) {
-        let scope_id = self.blocks.new_scope(scope_type, scope_state);
-        let block_id = self.blocks.new_block(parent_block_id, scope_id, succ_type);
-        let scope = self.blocks.get_scope_mut(scope_id);
-        scope.entry_block = Some(block_id);
-        self.blocks.scope_succ(parent_scope_id, scope_id);
-
-        (block_id, scope_id)
-    }
-
     pub fn get_entry(&self, link_id: LinkId) -> &CodeEntry {
         self.entries.get(link_id.index()).unwrap()
     }
@@ -1697,7 +1680,7 @@ impl FlattenInner {
                 self.switch_blocks(current_block_id);
 
                 // THEN
-                let (then_block_id, then_scope_id) = self.new_scope_and_block(
+                let (then_block_id, then_scope_id) = self.blocks.new_scope_and_block(
                     ScopeType::Block,
                     ScopeState::block(),
                     current_block_id,
@@ -1728,7 +1711,7 @@ impl FlattenInner {
 
                 // ELSE
                 let else_block_id = if let Some(else_expr) = maybe_else_expr {
-                    let (else_block_id, else_scope_id) = self.new_scope_and_block(
+                    let (else_block_id, else_scope_id) = self.blocks.new_scope_and_block(
                         ScopeType::Block,
                         ScopeState::block(),
                         current_block_id,
@@ -1934,7 +1917,7 @@ impl FlattenInner {
                 };
 
                 // THEN
-                let (then_block_id, then_scope_id) = self.new_scope_and_block(
+                let (then_block_id, then_scope_id) = self.blocks.new_scope_and_block(
                     ScopeType::Region,
                     ScopeState::region(),
                     current_block_id,
@@ -1963,7 +1946,7 @@ impl FlattenInner {
 
                 // ELSE
                 let else_span_id = y.span_id;
-                let (else_block_id, else_scope_id) = self.new_scope_and_block(
+                let (else_block_id, else_scope_id) = self.blocks.new_scope_and_block(
                     ScopeType::Region,
                     ScopeState::region(),
                     current_block_id,
@@ -2108,7 +2091,7 @@ impl FlattenInner {
                 let block = self.blocks.get_block(current_block_id);
                 let parent_scope_id = block.scope_id;
 
-                let (loop_block_id, loop_scope_id) = self.new_scope_and_block(
+                let (loop_block_id, loop_scope_id) = self.blocks.new_scope_and_block(
                     ScopeType::Region,
                     ScopeState::region(),
                     current_block_id,

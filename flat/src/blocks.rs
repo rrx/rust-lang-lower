@@ -4,7 +4,7 @@ use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
 use std::collections::HashSet;
 
-use crate::{BlockId, CodeOffset, LinkId, ScopeId, ScopeLayer};
+use crate::{BlockId, CodeOffset, LinkId, ScopeId, ScopeLayer, ScopeState, ScopeType};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Successor {
@@ -197,6 +197,22 @@ impl BlockGraph {
         let block_id = self.new_block_with_scope(scope_id);
         self.block_succ(parent_block_id, block_id, succ);
         block_id
+    }
+
+    pub fn new_scope_and_block(
+        &mut self,
+        scope_type: ScopeType,
+        scope_state: ScopeState,
+        parent_block_id: BlockId,
+        parent_scope_id: ScopeId,
+        succ_type: Successor,
+    ) -> (BlockId, ScopeId) {
+        let scope_id = self.new_scope(scope_type, scope_state);
+        let block_id = self.new_block(parent_block_id, scope_id, succ_type);
+        let scope = self.get_scope_mut(scope_id);
+        scope.entry_block = Some(block_id);
+        self.scope_succ(parent_scope_id, scope_id);
+        (block_id, scope_id)
     }
 
     pub fn new_block_with_scope(&mut self, scope_id: ScopeId) -> BlockId {
