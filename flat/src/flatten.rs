@@ -1859,8 +1859,7 @@ impl FlattenInner {
                     parent_scope_id,
                     Successor::BlockScope,
                 );
-                self.blocks
-                    .block_succ(current_block_id, then_block_id, Successor::Jump);
+                self.blocks.control_flow(current_block_id, &[then_block_id]);
 
                 let then_span_id = then_expr.span_id;
 
@@ -1890,8 +1889,7 @@ impl FlattenInner {
                         parent_scope_id,
                         Successor::BlockScope,
                     );
-                    self.blocks
-                        .block_succ(current_block_id, else_block_id, Successor::Jump);
+                    self.blocks.control_flow(current_block_id, &[else_block_id]);
 
                     let else_span_id = else_expr.span_id;
                     let name = b.labels.fresh_key("else");
@@ -2097,8 +2095,7 @@ impl FlattenInner {
                     scope_id,
                     Successor::Operation,
                 );
-                self.blocks
-                    .block_succ(current_block_id, then_block_id, Successor::Jump);
+                self.blocks.control_flow(current_block_id, &[then_block_id]);
                 let then_span_id = x.span_id;
                 let then_ast = AstNode::make_yield(*x);
 
@@ -2126,8 +2123,7 @@ impl FlattenInner {
                     scope_id,
                     Successor::Operation,
                 );
-                self.blocks
-                    .block_succ(current_block_id, else_block_id, Successor::Jump);
+                self.blocks.control_flow(current_block_id, &[else_block_id]);
                 let else_ast = AstNode::make_yield(*y);
 
                 self.switch_blocks(else_block_id);
@@ -2271,8 +2267,7 @@ impl FlattenInner {
                     parent_scope_id,
                     Successor::BlockScope,
                 );
-                self.blocks
-                    .block_succ(current_block_id, loop_block_id, Successor::Jump);
+                self.blocks.control_flow(current_block_id, &[loop_block_id]);
 
                 let v_next =
                     self.blocks

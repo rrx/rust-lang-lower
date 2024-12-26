@@ -200,6 +200,12 @@ impl BlockGraph {
         BlockId::new(index.index())
     }
 
+    pub fn control_flow(&mut self, source_block_id: BlockId, target_block_ids: &[BlockId]) {
+        for target_block_id in target_block_ids {
+            self.block_succ(source_block_id, *target_block_id, Successor::Jump);
+        }
+    }
+
     pub fn block_succ(
         &mut self,
         source_block_id: BlockId,
