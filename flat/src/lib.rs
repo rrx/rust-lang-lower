@@ -31,7 +31,4 @@ pub use graph::{Node, CFG};
 pub use interp::*;
 pub use links::*;
 pub use mem::*;
-pub use scope::{
-    DeferredGoto, DeferredGotoList, DeferredType, PlacedBlockId, ScopeGraph, ScopeId, ScopeLayer,
-    ScopeType,
-};
+pub use scope::*;

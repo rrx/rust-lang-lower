@@ -1,6 +1,6 @@
 use crate::{
     ArgVec, BlockId, BlockifyError, ContinuationFlow, FlattenInner, FlattenResult, FlowEdge, LCode,
-    LinkId, NodeBuilder as NB, ScopeId, ScopeType, Successor, VarDefinitionSpace,
+    LinkId, NodeBuilder as NB, ScopeId, ScopeState, ScopeType, Successor, VarDefinitionSpace,
 };
 use anyhow::Error;
 use anyhow::Result;
@@ -471,6 +471,7 @@ impl FlattenInner {
 
         let (next_block_id, next_scope_id) = self.new_scope_and_block(
             ScopeType::Block,
+            ScopeState::block(),
             current_block_id,
             scope_id,
             Successor::BlockScope,
@@ -480,6 +481,7 @@ impl FlattenInner {
         // New Func Scope
         let (fun_block_id, fun_scope_id) = self.new_scope_and_block(
             ScopeType::Function,
+            ScopeState::function(next_block_id),
             current_block_id,
             scope_id,
             Successor::BlockScope,
@@ -924,6 +926,7 @@ impl FlattenInner {
         // New Func Scope
         let (fun_block_id, fun_scope_id) = self.new_scope_and_block(
             ScopeType::Function,
+            ScopeState::function(next_block_id),
             current_block_id,
             scope_id,
             Successor::BlockScope,
@@ -1195,16 +1198,20 @@ impl FlattenInner {
 
                 let scope = self.scopes.get_scope(scope_id);
                 let block_id = scope.entry_block.unwrap();
+
                 // New Func Scope
                 let (fun_block_id, fun_scope_id) = self.new_scope_and_block(
                     ScopeType::Function,
+                    ScopeState::block(),
                     block_id,
                     scope_id,
                     Successor::BlockScope,
                 );
                 self.blocks.control_flow(block_id, &[fun_block_id]);
+                let next_block_id = self.blocks.new_block(block_id, scope_id, succ_type);
 
-                let next_block_id = self.blocks.new_block(block_id, fun_scope_id, succ_type);
+                let scope = self.scopes.get_scope_mut(scope_id);
+                scope.state = ScopeState::function(next_block_id);
 
                 let result = self.push_bake_lambda_and_update_next(
                     lookup_name,

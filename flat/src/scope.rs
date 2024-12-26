@@ -129,7 +129,12 @@ impl DeferredGotoList {
 
 #[derive(Debug)]
 pub struct ScopeStateFunction {
-    return_block: Option<BlockId>,
+    return_block: BlockId,
+}
+impl ScopeStateFunction {
+    pub fn new(return_block: BlockId) -> Self {
+        Self { return_block }
+    }
 }
 
 #[derive(Debug)]
@@ -139,6 +144,22 @@ pub struct ScopeStateBlock {}
 pub enum ScopeState {
     Function(ScopeStateFunction),
     Block(ScopeStateBlock),
+    Static,
+    Region,
+}
+impl ScopeState {
+    pub fn function(return_block: BlockId) -> Self {
+        Self::Function(ScopeStateFunction::new(return_block))
+    }
+    pub fn block() -> Self {
+        Self::Block(ScopeStateBlock {})
+    }
+    pub fn static_scope() -> Self {
+        Self::Static
+    }
+    pub fn region() -> Self {
+        Self::Region
+    }
 }
 
 #[derive(Debug)]
@@ -159,7 +180,7 @@ pub struct ScopeLayer {
 }
 
 impl ScopeLayer {
-    pub fn new(scope_type: ScopeType) -> Self {
+    pub fn new(scope_type: ScopeType, state: ScopeState) -> Self {
         Self {
             labels: HashMap::new(),
             block_labels: HashMap::new(),
@@ -168,13 +189,12 @@ impl ScopeLayer {
             declarations: HashMap::new(),
             entry_block: None,
             return_block: None,
-            //next_block: vec![],
             loop_block: None,
             scope_type,
             lambdas: HashMap::new(),
             templates: HashMap::new(),
             unclaimed_labels: HashMap::new(),
-            state: ScopeState::Block(ScopeStateBlock {}),
+            state,
         }
     }
 
@@ -231,8 +251,16 @@ impl ScopeGraph {
         Self(DiGraph::new())
     }
 
-    pub fn new_scope(&mut self, scope_type: ScopeType) -> ScopeId {
-        let scope = ScopeLayer::new(scope_type);
+    pub fn new_function_scope(&mut self, state: ScopeStateFunction) -> ScopeId {
+        self.new_scope(ScopeType::Function, ScopeState::Function(state))
+    }
+
+    pub fn new_block_scope(&mut self, state: ScopeStateBlock) -> ScopeId {
+        self.new_scope(ScopeType::Function, ScopeState::Block(state))
+    }
+
+    pub fn new_scope(&mut self, scope_type: ScopeType, state: ScopeState) -> ScopeId {
+        let scope = ScopeLayer::new(scope_type, state);
         let index = self.add_node(scope);
         ScopeId(index.index() as u32)
     }

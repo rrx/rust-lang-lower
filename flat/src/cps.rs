@@ -7,8 +7,8 @@ use std::convert::Into;
 
 use crate::{
     argvec_type, ArgVec, BlockId, ContinuationFlow, DeferredGoto, DeferredType, FlattenInner,
-    FlattenResult, FlowEdge, LCode, LinkId, NodeBuilder as NB, ScopeId, ScopeType, Successor,
-    VarDefinitionSpace, VariantId,
+    FlattenResult, FlowEdge, LCode, LinkId, NodeBuilder as NB, ScopeId, ScopeState, ScopeType,
+    Successor, VarDefinitionSpace, VariantId,
 };
 
 impl FlattenInner {
@@ -50,6 +50,7 @@ impl FlattenInner {
 
                 let (fun_block_id, fun_scope_id) = self.new_scope_and_block(
                     ScopeType::Block,
+                    ScopeState::block(),
                     block_id,
                     scope_id,
                     Successor::BlockScope,

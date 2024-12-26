@@ -13,8 +13,8 @@ use std::convert::Into;
 use crate::{
     AbstractionsBuilder, BlockGraph, BlockId, BlockifyError, Builtin, CodeOffset, ContinuationFlow,
     DeferredGotoList, FlowEdge, FunctionVariantBuilder, LCode, LinkId, NodeBuilder as NB,
-    ScopeGraph, ScopeId, ScopeType, ScopedContinuations, StringLabel, Successor, ValueId,
-    VarDefinitionSpace, VariantId,
+    ScopeGraph, ScopeId, ScopeState, ScopeType, ScopedContinuations, StringLabel, Successor,
+    ValueId, VarDefinitionSpace, VariantId,
 };
 use std::ops::{Deref, DerefMut};
 
@@ -190,7 +190,9 @@ impl Flatten<Start> {
             state: Start {},
         };
 
-        let scope_id = f.scopes.new_scope(ScopeType::Static);
+        let scope_id = f
+            .scopes
+            .new_scope(ScopeType::Static, ScopeState::static_scope());
         f.static_scope = Some(scope_id);
 
         // TODO: This is the initial block.  Clean this up
@@ -729,11 +731,12 @@ impl FlattenInner {
     pub fn new_scope_and_block(
         &mut self,
         scope_type: ScopeType,
+        scope_state: ScopeState,
         parent_block_id: BlockId,
         parent_scope_id: ScopeId,
         succ_type: Successor,
     ) -> (BlockId, ScopeId) {
-        let scope_id = self.scopes.new_scope(scope_type);
+        let scope_id = self.scopes.new_scope(scope_type, scope_state);
         let scope = self.scopes.get_scope_mut(scope_id);
         let block_id = self.blocks.new_block(parent_block_id, scope_id, succ_type);
         scope.entry_block = Some(block_id);
@@ -1704,6 +1707,7 @@ impl FlattenInner {
                 // THEN
                 let (then_block_id, then_scope_id) = self.new_scope_and_block(
                     ScopeType::Block,
+                    ScopeState::block(),
                     current_block_id,
                     parent_scope_id,
                     Successor::BlockScope,
@@ -1734,6 +1738,7 @@ impl FlattenInner {
                 let else_block_id = if let Some(else_expr) = maybe_else_expr {
                     let (else_block_id, else_scope_id) = self.new_scope_and_block(
                         ScopeType::Block,
+                        ScopeState::block(),
                         current_block_id,
                         parent_scope_id,
                         Successor::BlockScope,
@@ -1939,6 +1944,7 @@ impl FlattenInner {
                 // THEN
                 let (then_block_id, then_scope_id) = self.new_scope_and_block(
                     ScopeType::Region,
+                    ScopeState::region(),
                     current_block_id,
                     scope_id,
                     Successor::Operation,
@@ -1967,6 +1973,7 @@ impl FlattenInner {
                 let else_span_id = y.span_id;
                 let (else_block_id, else_scope_id) = self.new_scope_and_block(
                     ScopeType::Region,
+                    ScopeState::region(),
                     current_block_id,
                     scope_id,
                     Successor::Operation,
@@ -2111,6 +2118,7 @@ impl FlattenInner {
 
                 let (loop_block_id, loop_scope_id) = self.new_scope_and_block(
                     ScopeType::Region,
+                    ScopeState::region(),
                     current_block_id,
                     parent_scope_id,
                     Successor::BlockScope,

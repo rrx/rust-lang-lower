@@ -52,14 +52,14 @@ impl Value {
 }
 
 #[derive(Debug, Copy, Clone)]
-pub enum ScopeType {
+enum ScopeType {
     Static,
     Function,
     Block,
 }
 
 #[derive(Debug)]
-pub struct Scope {
+struct Scope {
     ty: ScopeType,
     return_link_id: Option<ValueId>,
     args: VecDeque<Value>,
