@@ -35,7 +35,7 @@ pub struct CodeEntry {
     pub(super) code: LCode,
     pub name: Option<StringKey>,
     pub link: Option<LinkId>,
-    pub(super) value_id: Option<ValueId>,
+    pub value_id: Option<ValueId>,
     pub block_id: BlockId,
     pub ty: AstType,
     pub(super) span_id: SpanId,

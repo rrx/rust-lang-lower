@@ -146,30 +146,8 @@ pub trait ICodeModule {
     fn get_name(&self, v: CodeOffset) -> Option<StringLabel>;
     fn get_code(&self, value_id: ValueId) -> &LCode;
     fn get_next(&self, value_id: ValueId) -> Option<ValueId>;
-    //fn get_prev(&self, value_id: ValueId) -> Option<ValueId>;
-    //
-    //
     fn find_source_blocks(&self, flow: ContinuationFlow) -> Vec<BlockId>;
     fn find_sink_block(&self, flow: ContinuationFlow) -> Option<ContinuationFlow>;
-
-    /*
-        fn block_source_index(&self, v: ValueId, block_id: BlockId) -> i64 {
-            block_id.index() as i64
-            /*
-            let entry = self.get_entry(v);
-            let link_id = entry.link.unwrap();
-            let sink = self
-                .find_sink_block(ContinuationFlow::Variable(link_id))
-                .unwrap();
-            let mut all_sources = self.find_source_blocks(sink);
-            all_sources.sort();
-            let index = all_sources.iter().position(|x| x == &block_id).unwrap();
-            println!("all_sources: {:?}", (v, block_id, all_sources, index));
-
-            index as i64
-                */
-        }
-    */
 
     fn get_variant_by_block(&self, block_id: BlockId) -> Option<VariantId>;
     fn get_variant(&self, variant_id: VariantId) -> &FunctionVariant;
@@ -273,25 +251,6 @@ pub trait ICodeModule {
             return Some(current);
         }
     }
-
-    /*
-    fn get_previous_values(&self, v: ValueId) -> Vec<CodeOffset> {
-        let mut values = VecDeque::new();
-        loop {
-            let i = values.len();
-            let v = ValueId((v.index() - 1 - i) as u32);
-            let code = self.get_code(v);
-            if let LCode::CallValue(base) = code {
-                //let offset = inds.clone().offset();
-                let offset = *base;
-                values.push_front(offset.into());
-                continue;
-            }
-            break;
-        }
-        values.into()
-    }
-    */
 
     fn get_type(&self, v: CodeOffset) -> AstType;
     fn get_entry_id(&self, value_id: ValueId) -> Option<ValueId>;

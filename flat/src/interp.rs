@@ -1,4 +1,7 @@
-use crate::{Builtin, ICodeModule, LCode, NodeBuilder, UseIndex, ValueId, VarDefinitionSpace};
+use crate::{
+    Builtin, Flatten, ICodeModule, LCode, Module, NodeBuilder, UseIndex, ValueId,
+    VarDefinitionSpace,
+};
 use anyhow::Result;
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -93,25 +96,25 @@ pub struct Interp<'a> {
 }
 
 impl<'a> Interp<'a> {
-    pub fn new(m: &'a dyn ICodeModule, b: &'a mut NodeBuilder, name: StringKey) -> Self {
+    pub fn new(m: &'a Flatten<Module>, b: &'a mut NodeBuilder, name: StringKey) -> Self {
         let link_id = m.lookup_name(&name).unwrap();
         let pos = m.resolve_code_offset(link_id.into());
         let mut scope = Scope::new(ScopeType::Static, None);
 
-        let mut current = ValueId::new(0);
-        loop {
-            let code = m.get_code(current);
+        let block_id = m.static_block_id();
+        let block = m.blocks.get_block(block_id);
+        let links = block.iter().collect::<Vec<_>>();
+
+        for link_id in links {
+            let entry = m.get_link_entry(link_id);
+            let code = &entry.code;
+            let value_id = entry.value_id.unwrap();
             match code {
                 LCode::Val(lit) => {
                     let value = Value::from_lit(lit);
-                    scope.declare(current, value);
+                    scope.declare(value_id, value);
                 }
                 _ => (),
-            }
-            if let Some(next) = m.get_next(current) {
-                current = next;
-            } else {
-                break;
             }
         }
 
@@ -119,37 +122,12 @@ impl<'a> Interp<'a> {
             m,
             b,
             pos,
-            //statics: HashMap::new(),
             stack: vec![scope],
             call_args: VecDeque::new(),
             return_link_id: None,
             jump_type: ScopeType::Function,
         }
     }
-
-    /*
-    pub fn load_static(&mut self, v: ValueId) -> Value {
-        let code = self.m.get_code(v.into());
-        let mem = self.m.get_mem(v.into());
-        assert_eq!(mem, &VarDefinitionSpace::Static);
-        //if let Some(value) = self.statics.get(&v) {
-            value.clone()
-        } else {
-            let value = match code {
-                LCode::Const(lit) => Value::from_lit(lit),
-                _ => unimplemented!()
-            };
-            self.statics.insert(v, value.clone());
-            value
-        }
-    }
-
-    pub fn save_static(&mut self, v: ValueId, value: Value) {
-        let mem = self.m.get_mem(v.into());
-        assert_eq!(mem, &VarDefinitionSpace::Static);
-        self.statics.insert(v, value.clone());
-    }
-    */
 
     pub fn advance(&mut self) {
         self.pos = ValueId::new(self.pos.index() as u32 + 1);
@@ -663,7 +641,7 @@ impl<'a> Interp<'a> {
 
 pub fn interp<'c>(
     shared: &[String],
-    m: &dyn ICodeModule,
+    m: &Flatten<Module>,
     libpath: &str,
     b: &mut NodeBuilder,
 ) -> i32 {

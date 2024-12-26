@@ -3,7 +3,7 @@ use anyhow::Error;
 use anyhow::Result;
 use compile_core::Diagnostic;
 use compile_core::{Ast, AstNode, AstType, BinaryOperation, Literal, SpanId};
-use flat::LinkId;
+use flat::{ICodeModule, LinkId};
 use melior::ir::Location;
 use melior::{
     dialect::{

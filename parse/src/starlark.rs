@@ -13,9 +13,7 @@ use compile_core::{
     Label, LinkOptions, Parameter, ReturnType, SpanId, StringKey,
 };
 
-use flat::{ICodeModule, NodeBuilder, NodeBuilder as NB, ValueId};
-
-use lower_mlir::Module;
+use flat::{Flatten, ICodeModule, Module, NodeBuilder, NodeBuilder as NB, ValueId};
 
 #[derive(Debug)]
 pub struct Environment {
@@ -536,10 +534,10 @@ impl StarlarkParser {
 
     pub fn codegen<'c>(
         &mut self,
-        blockify: &dyn ICodeModule,
+        blockify: &Flatten<Module>,
         module_block_id: ValueId,
         context: &'c lower_mlir::Context,
-        module: &mut Module<'c>,
+        module: &mut lower_mlir::Module<'c>,
         b: &mut NodeBuilder,
     ) -> Result<()> {
         for lib in blockify.shared_libraries() {

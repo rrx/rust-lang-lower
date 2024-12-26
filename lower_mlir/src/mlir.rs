@@ -1,7 +1,7 @@
 use anyhow::Result;
 use flat::{
-    Builtin, CodeOffset, ICodeModule, LCode, LinkId, NodeBuilder, StringLabel, UseIndex, ValueId,
-    VarDefinitionSpace,
+    Builtin, CodeOffset, Flatten, ICodeModule, LCode, LinkId, Module, NodeBuilder, StringLabel,
+    UseIndex, ValueId, VarDefinitionSpace,
 };
 use indexmap::IndexMap;
 use melior::ir::Location;
@@ -81,7 +81,6 @@ impl SymIndex {
 pub struct OpCollection<'c> {
     block_id: ValueId,
     op_count: usize,
-    //arg_count: usize,
     block: Option<Block<'c>>,
     ops: Vec<Operation<'c>>,
     complete: bool,
@@ -92,7 +91,6 @@ impl<'c> OpCollection<'c> {
         Self {
             block_id,
             op_count: 0,
-            //arg_count: 0,
             block: Some(block),
             ops: vec![],
             complete: false,
@@ -164,7 +162,7 @@ impl<'c> OpCollection<'c> {
 
 pub struct MLIRGenerator<'c> {
     pub(crate) context: &'c Context,
-    pub(crate) blockify: &'c dyn ICodeModule,
+    pub(crate) blockify: &'c Flatten<Module>,
     index: IndexMap<ValueId, SymIndex>,
     module_block_id: ValueId,
     blocks: HashMap<ValueId, OpCollection<'c>>,
@@ -175,7 +173,7 @@ pub struct MLIRGenerator<'c> {
 impl<'c> MLIRGenerator<'c> {
     pub fn new(
         context: &'c Context,
-        blockify: &'c dyn ICodeModule,
+        blockify: &'c Flatten<Module>,
         module_block_id: ValueId,
         b: &'c NodeBuilder,
     ) -> Self {
@@ -431,27 +429,6 @@ impl<'c> MLIRGenerator<'c> {
                 })
                 .collect()
         }
-        /*
-        let mut out = vec![];
-        let mut current = v;
-        loop {
-            current = self.blockify.get_next(current).unwrap();
-            let code = self.blockify.get_code(current);
-            if let LCode::Arg(_) = code {
-                let location = self.get_location(current);
-                let ty = self.blockify.get_type(current.into());
-                //assert!(ty != AstType::Unit);
-                //if ty == AstType::Unit {
-                //}
-                let (ty, dims) = self.from_type(&ty);
-                assert_eq!(dims.len(), 0);
-                out.push((ty, location));
-            } else {
-                break;
-            }
-        }
-        out
-        */
     }
 
     pub fn create_block(&mut self, entry_id: ValueId) {
@@ -1225,11 +1202,8 @@ impl<'c> MLIRGenerator<'c> {
             LCode::Ternary(condition, then_block_id, else_block_id) => {
                 self.ensure_call_args_empty();
                 // THEN
-                //let then_block_id = blockify.get_entry_id(*v_then);
-                //let then_block_id = blockify.resolve_code_offset(v_then);
-                let then_block_id = *then_block_id;
                 let v_then = self.blockify.resolve_code_offset(then_block_id.into());
-                let then_block_ids = self.blockify.blocks(then_block_id, v_then, self.b);
+                let then_block_ids = self.blockify.blocks(*then_block_id, v_then, self.b);
 
                 for block_id in then_block_ids.iter() {
                     let entry_id = self.blockify.resolve_code_offset(*block_id);
@@ -1246,11 +1220,8 @@ impl<'c> MLIRGenerator<'c> {
                 let then_ty = r2.r#type();
 
                 // ELSE
-                //let else_block_id = blockify.get_entry_id(*v_else);
-                //let else_block_id = blockify.resolve_code_offset(*v_else);
-                let else_block_id = *else_block_id;
                 let v_else = self.blockify.resolve_code_offset(else_block_id.into());
-                let else_block_ids = self.blockify.blocks(else_block_id, v_else, self.b);
+                let else_block_ids = self.blockify.blocks(*else_block_id, v_else, self.b);
 
                 for block_id in else_block_ids.iter() {
                     let entry_id = self.blockify.resolve_code_offset(*block_id);
@@ -1392,15 +1363,14 @@ impl<'c> MLIRGenerator<'c> {
     }
 
     pub fn lower_block(&mut self, entry_id: ValueId) -> Result<()> {
-        //println!("lower block: {}", entry_id);
-        let mut current = entry_id;
-        loop {
+        let entry = self.blockify.get_entry(entry_id);
+        let block_id = entry.block_id;
+        let block = self.blockify.blocks.get_block(block_id);
+        let links: Vec<_> = block.iter().collect();
+        for link_id in links {
+            let entry = self.blockify.get_link_entry(link_id);
+            let current = entry.value_id.unwrap();
             self.lower_code(current)?;
-            if let Some(next) = self.blockify.get_next(current) {
-                current = next;
-            } else {
-                break;
-            }
         }
         self.blocks.get_mut(&entry_id).unwrap().complete = true;
         Ok(())
