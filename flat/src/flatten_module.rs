@@ -4,9 +4,8 @@ use petgraph::graph::NodeIndex;
 use std::convert::Into;
 
 use crate::{
-    BlockId, CodeEntry, CodeOffset, CodeRow, ContinuationFlow, Flatten, FunctionVariant,
-    ICodeModule, LCode, LinkId, Module, NodeBuilder as NB, ScopeType, StringLabel, Successor,
-    ValueId, VarDefinitionSpace, VariantId,
+    CodeEntry, CodeOffset, CodeRow, Flatten, ICodeModule, LCode, LinkId, Module, NodeBuilder as NB,
+    ScopeType, StringLabel, Successor, ValueId, VarDefinitionSpace, VariantId,
 };
 
 use tabled::{settings::Style, Table};
@@ -15,22 +14,6 @@ impl ICodeModule for Flatten<Module> {
     fn get_entry(&self, value_id: ValueId) -> &CodeEntry {
         let link_id = self.state.values[value_id.index()];
         self.entries.get(link_id.index()).unwrap()
-    }
-
-    fn find_source_blocks(&self, flow: ContinuationFlow) -> Vec<BlockId> {
-        self.scoped_continuations.find_source_blocks(flow)
-    }
-
-    fn find_sink_block(&self, flow: ContinuationFlow) -> Option<ContinuationFlow> {
-        self.scoped_continuations.find_sink_block(flow)
-    }
-
-    fn get_variant_by_block(&self, block_id: BlockId) -> Option<VariantId> {
-        self.variants.get_by_block(block_id)
-    }
-
-    fn get_variant(&self, variant_id: VariantId) -> &FunctionVariant {
-        self.variants.get(variant_id)
     }
 
     fn shared_libraries(&self) -> Vec<String> {
@@ -195,59 +178,5 @@ impl Flatten<Module> {
             let name = b.labels.r(v.name.into());
             println!("[{}] Variant: {:?}", variant_id, (name, v));
         }
-    }
-
-    pub fn block_graph(&self, filename: &str, _b: &NB) {
-        use petgraph::dot::{Config, Dot};
-        let g = self.blocks.0.filter_map(
-            |_n_index, n| Some(n.clone()),
-            |_e_index, e| {
-                if let Successor::Jump = e {
-                    Some(e.clone())
-                } else {
-                    None
-                }
-            },
-        );
-
-        //let num = petgraph::algo::connected_components(&g);
-        //println!("components: {}", num);
-
-        let s = format!(
-            "{:?}",
-            Dot::with_attr_getters(
-                &g,
-                &[Config::NodeNoLabel],
-                &|_, _er| String::new(),
-                &|_, (index, _block)| {
-                    let block_id: BlockId = BlockId::new(index.index());
-                    let block = self.blocks.get_block(block_id);
-                    if block.is_dead() {
-                        // block marked dead
-                        format!("label = \"B{:?}:dead\"", index.index(),)
-                    } else {
-                        if let Some(link_id) = self.block_links.get(&block_id) {
-                            let entry = self.get_link_entry(*link_id);
-                            if entry.value_id.is_some() {
-                                let v = self.resolve_code_offset(block_id.into());
-                                // block found
-                                format!("label = \"B{:?}:{}\"", index.index(), v)
-                            } else {
-                                // block is not included in our list
-                                format!("label = \"B{:?}:oob\"", index.index(),)
-                            }
-                        } else {
-                            // block not found
-                            // this should never happen
-                            // it does happen in error cases, like unclaimed labels
-                            format!("label = \"B{:?}:?\"", index.index(),)
-                            //unreachable!();
-                        }
-                    }
-                }
-            )
-        );
-        println!("saved graph {:?}", filename);
-        std::fs::write(filename, s).unwrap();
     }
 }

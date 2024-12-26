@@ -6,8 +6,8 @@ use compile_core::{
 };
 
 use crate::{
-    BlockId, CodeEntry, CodeOffset, ContinuationFlow, FunctionVariant, LinkId, Node, NodeBuilder,
-    StringLabel, Successor, ValueId, VarDefinitionSpace, VariantId, CFG,
+    BlockId, CodeEntry, CodeOffset, LinkId, Node, NodeBuilder, StringLabel, Successor, ValueId,
+    VarDefinitionSpace, CFG,
 };
 
 use std::collections::HashSet;
@@ -146,11 +146,6 @@ pub trait ICodeModule {
     fn get_name(&self, v: CodeOffset) -> Option<StringLabel>;
     fn get_code(&self, value_id: ValueId) -> &LCode;
     fn get_next(&self, value_id: ValueId) -> Option<ValueId>;
-    fn find_source_blocks(&self, flow: ContinuationFlow) -> Vec<BlockId>;
-    fn find_sink_block(&self, flow: ContinuationFlow) -> Option<ContinuationFlow>;
-
-    fn get_variant_by_block(&self, block_id: BlockId) -> Option<VariantId>;
-    fn get_variant(&self, variant_id: VariantId) -> &FunctionVariant;
 
     fn get_cfg(&self, block_id: BlockId, b: &NodeBuilder) -> CFG {
         let entry_id = self.resolve_code_offset(block_id.into());

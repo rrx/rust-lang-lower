@@ -370,6 +370,60 @@ impl Flatten<Module> {
         println!("saved graph {:?}", filename);
         std::fs::write(filename, s).unwrap();
     }
+
+    pub fn block_graph(&self, filename: &str, _b: &NB) {
+        use petgraph::dot::{Config, Dot};
+        let g = self.blocks.0.filter_map(
+            |_n_index, n| Some(n.clone()),
+            |_e_index, e| {
+                if let Successor::Jump = e {
+                    Some(e.clone())
+                } else {
+                    None
+                }
+            },
+        );
+
+        //let num = petgraph::algo::connected_components(&g);
+        //println!("components: {}", num);
+
+        let s = format!(
+            "{:?}",
+            Dot::with_attr_getters(
+                &g,
+                &[Config::NodeNoLabel],
+                &|_, _er| String::new(),
+                &|_, (index, _block)| {
+                    let block_id: BlockId = BlockId::new(index.index());
+                    let block = self.blocks.get_block(block_id);
+                    if block.is_dead() {
+                        // block marked dead
+                        format!("label = \"B{:?}:dead\"", index.index(),)
+                    } else {
+                        if let Some(link_id) = self.block_links.get(&block_id) {
+                            let entry = self.get_link_entry(*link_id);
+                            if entry.value_id.is_some() {
+                                let v = self.resolve_code_offset(block_id.into());
+                                // block found
+                                format!("label = \"B{:?}:{}\"", index.index(), v)
+                            } else {
+                                // block is not included in our list
+                                format!("label = \"B{:?}:oob\"", index.index(),)
+                            }
+                        } else {
+                            // block not found
+                            // this should never happen
+                            // it does happen in error cases, like unclaimed labels
+                            format!("label = \"B{:?}:?\"", index.index(),)
+                            //unreachable!();
+                        }
+                    }
+                }
+            )
+        );
+        println!("saved graph {:?}", filename);
+        std::fs::write(filename, s).unwrap();
+    }
 }
 
 impl FlattenInner {

@@ -1400,20 +1400,20 @@ impl<'c> MLIRGenerator<'c> {
 
     pub fn lower_static_block(&mut self, module_block_id: ValueId) -> Result<()> {
         // reorder things, so we lower declarations last
-        let mut current = module_block_id;
-        let mut values = VecDeque::new();
+        let entry = self.blockify.get_entry(module_block_id);
+        let block_id = entry.block_id;
+        let block = self.blockify.blocks.get_block(block_id);
+        let links: Vec<_> = block.iter().collect();
 
-        loop {
+        let mut values = VecDeque::new();
+        for link_id in links {
+            let entry = self.blockify.get_link_entry(link_id);
+            let current = entry.value_id.unwrap();
             let code = self.blockify.get_code(current);
             if let LCode::DeclareFunction(Some(_)) = code {
                 values.push_back(current);
             } else {
                 values.push_front(current);
-            }
-            if let Some(next) = self.blockify.get_next(current) {
-                current = next;
-            } else {
-                break;
             }
         }
 
