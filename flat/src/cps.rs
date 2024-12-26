@@ -46,7 +46,7 @@ impl FlattenInner {
                 (variant_id, fun_block_id, fun_scope_id, resolve_type)
             } else {
                 let (fun_block_id, fun_scope_id) =
-                    self.new_scope_and_block(ScopeType::Block, scope_id);
+                    self.new_scope_and_block(ScopeType::Block, scope_id, Successor::BlockScope);
                 let current_block_id = self.current_block_id();
                 // block graph
                 self.blocks

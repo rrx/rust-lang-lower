@@ -844,6 +844,7 @@ impl FlattenInner {
         &mut self,
         scope_type: ScopeType,
         parent_scope_id: ScopeId,
+        succ_type: Successor,
     ) -> (BlockId, ScopeId) {
         let scope_id = self.scopes.new_scope(scope_type);
         let scope = self.scopes.get_scope_mut(scope_id);
@@ -875,7 +876,7 @@ impl FlattenInner {
         let start_stack = self.scopes.walk_scopes(block.scope_id);
 
         for (_i, expr) in seq.into_iter().enumerate() {
-            let _r = self.push_node(expr, b)?;
+            let _ = self.push_node(expr, b)?;
         }
 
         // ensure that we close any blocks that were opened
@@ -1447,6 +1448,9 @@ impl FlattenInner {
     }
 
     pub fn push_node(&mut self, node: AstNode, b: &mut NB) -> Result<FlattenResult> {
+        // we can only push into an open block
+        self.ensure_open(node.span_id, b);
+
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block_mut(current_block_id);
         let span_id = node.span_id;
@@ -1578,20 +1582,13 @@ impl FlattenInner {
             }
 
             Ast::Literal(lit) => {
-                self.ensure_open(span_id, b);
                 // literal is expression, non-terminal
                 let ty: AstType = match &lit {
                     Literal::Block(_block_id) => b.types.fresh_unknown(),
                     Literal::Link(_link_id) => b.types.fresh_unknown(),
                     _ => lit.clone().into(),
                 };
-                //let mem = if block.scope_id == fenv.static_scope_id() {
-                //VarDefinitionSpace::Static
-                //} else {
-                //VarDefinitionSpace::Default
-                //};
                 let mem = VarDefinitionSpace::Default;
-
                 let link_id = self.push_code(LCode::Val(lit), ty.clone(), None, node.span_id, mem);
                 Ok(FlattenResult::link(link_id))
             }
@@ -1683,22 +1680,6 @@ impl FlattenInner {
                 // push the definition into the lambda list
                 if let Ast::Lambda(def) = expr.node {
                     self.switch_blocks(current_block_id);
-
-                    // push template
-                    // we might not need this, we inline everything we need
-                    // at this point all scope rules should have been applied.
-                    // we have to monomorphize here in order to have correct scope
-                    // there are two ways to scope the lambda function
-                    // we scope in place, so that the function is able to access
-                    // variables in this scope.  We can accomplish this by inserting the entry
-                    // here.  The lambda is subordinate to the variables in scope, so it should
-                    // just work.
-                    // The other method is to use the scope at the point of the call.  This is
-                    // less intuitive, but also possible.
-                    // The third method is to be able to provide arbitrary scope.
-                    // We can only do the first method if we have CPS, which isn't yet implemented.
-                    // The 3rd method is easiest, as we insert the code at the caller.
-                    // It's simpler, and get's us most of the way there.
 
                     // save the template
                     let def_span_id = expr.span_id;
@@ -1850,7 +1831,8 @@ impl FlattenInner {
             Ast::Conditional(condition, then_expr, maybe_else_expr) => {
                 let current_block_id = self.current_block_id();
                 let block = self.blocks.get_block(current_block_id);
-                let term = block.is_term();
+                assert!(!block.is_term());
+
                 let parent_scope_id = block.scope_id;
 
                 let v_next = self.blocks.new_block(parent_scope_id);
@@ -1865,17 +1847,17 @@ impl FlattenInner {
                 self.switch_blocks(current_block_id);
 
                 // THEN
-                let (then_block_id, then_scope_id) =
-                    self.new_scope_and_block(ScopeType::Block, parent_scope_id);
-                let then_span_id = then_expr.span_id;
-                // only jump if we are in an open block
-                if !term {
-                    self.blocks
-                        .block_succ(current_block_id, then_block_id, Successor::BlockScope);
+                let (then_block_id, then_scope_id) = self.new_scope_and_block(
+                    ScopeType::Block,
+                    parent_scope_id,
+                    Successor::BlockScope,
+                );
+                self.blocks
+                    .block_succ(current_block_id, then_block_id, Successor::BlockScope);
+                self.blocks
+                    .block_succ(current_block_id, then_block_id, Successor::Jump);
 
-                    self.blocks
-                        .block_succ(current_block_id, then_block_id, Successor::Jump);
-                }
+                let then_span_id = then_expr.span_id;
 
                 let branch_block_type = AstFuncType {
                     args: AstType::Struct(vec![]).into(),
@@ -1897,19 +1879,17 @@ impl FlattenInner {
 
                 // ELSE
                 let else_block_id = if let Some(else_expr) = maybe_else_expr {
-                    let (else_block_id, else_scope_id) =
-                        self.new_scope_and_block(ScopeType::Block, parent_scope_id);
-                    let else_span_id = else_expr.span_id;
-                    if !term {
-                        self.blocks.block_succ(
-                            current_block_id,
-                            else_block_id,
-                            Successor::BlockScope,
-                        );
-                        self.blocks
-                            .block_succ(current_block_id, else_block_id, Successor::Jump);
-                    }
+                    let (else_block_id, else_scope_id) = self.new_scope_and_block(
+                        ScopeType::Block,
+                        parent_scope_id,
+                        Successor::BlockScope,
+                    );
+                    self.blocks
+                        .block_succ(current_block_id, else_block_id, Successor::BlockScope);
+                    self.blocks
+                        .block_succ(current_block_id, else_block_id, Successor::Jump);
 
+                    let else_span_id = else_expr.span_id;
                     let name = b.labels.fresh_key("else");
 
                     self.switch_blocks(else_block_id);
@@ -1926,12 +1906,10 @@ impl FlattenInner {
                     self.maybe_terminate_block(v_next, span_id, b);
                     else_block_id
                 } else {
-                    if !term {
-                        self.blocks
-                            .block_succ(current_block_id, v_next, Successor::BlockScope);
-                        self.blocks
-                            .block_succ(current_block_id, v_next, Successor::Jump);
-                    }
+                    self.blocks
+                        .block_succ(current_block_id, v_next, Successor::BlockScope);
+                    self.blocks
+                        .block_succ(current_block_id, v_next, Successor::Jump);
                     v_next
                 };
 
@@ -1969,7 +1947,6 @@ impl FlattenInner {
                     Ast::Identifier(key) => {
                         let key = *key;
                         let ty = AstType::func(vec![], AstType::Unit);
-                        //let func_ty = ty.get_func();
                         let scope_id = block.scope_id;
                         if let Some((variant_id, _resolve_type, link_id, _scope_id)) =
                             self.resolve_function_name(scope_id, &key, &ty, b)
@@ -2114,7 +2091,7 @@ impl FlattenInner {
 
                 // THEN
                 let (then_block_id, then_scope_id) =
-                    self.new_scope_and_block(ScopeType::Region, scope_id);
+                    self.new_scope_and_block(ScopeType::Region, scope_id, Successor::Operation);
                 let then_span_id = x.span_id;
                 let then_ast = AstNode::make_yield(*x);
                 self.blocks
@@ -2141,7 +2118,7 @@ impl FlattenInner {
                 // ELSE
                 let else_span_id = y.span_id;
                 let (else_block_id, else_scope_id) =
-                    self.new_scope_and_block(ScopeType::Region, scope_id);
+                    self.new_scope_and_block(ScopeType::Region, scope_id, Successor::Operation);
                 let else_ast = AstNode::make_yield(*y);
                 self.blocks
                     .block_succ(current_block_id, else_block_id, Successor::Operation);
@@ -2279,10 +2256,16 @@ impl FlattenInner {
                 let block = self.blocks.get_block(current_block_id);
                 let parent_scope_id = block.scope_id;
 
-                let (loop_block_id, loop_scope_id) =
-                    self.new_scope_and_block(ScopeType::Region, parent_scope_id);
+                let (loop_block_id, loop_scope_id) = self.new_scope_and_block(
+                    ScopeType::Region,
+                    parent_scope_id,
+                    Successor::BlockScope,
+                );
+                self.blocks
+                    .block_succ(current_block_id, loop_block_id, Successor::BlockScope);
+                self.blocks
+                    .block_succ(current_block_id, loop_block_id, Successor::Jump);
 
-                //let (v_next, next_scope_id) = self.new_scope_and_block(ScopeType::Block, parent_scope_id);
                 let v_next = self.blocks.new_block(parent_scope_id);
                 self.switch_blocks(v_next);
                 self.push_start_block(
@@ -2296,8 +2279,6 @@ impl FlattenInner {
 
                 let scope = self.scopes.get_scope_mut(loop_scope_id);
                 scope.entry_block = Some(loop_block_id);
-                self.blocks
-                    .block_succ(current_block_id, loop_block_id, Successor::BlockScope);
 
                 self.scopes.update_loop_blocks(
                     loop_scope_id,
@@ -2517,6 +2498,7 @@ impl FlattenInner {
                 b.push_error(&format!("AST Error"), node.span_id);
                 Err(Error::new(BlockifyError::Invalid))
             }
+
             _ => {
                 b.push_error(&format!("AST Unimplemented"), node.span_id);
                 unimplemented!("{:?}", ast);
@@ -2525,8 +2507,9 @@ impl FlattenInner {
         }
     }
 
-    pub fn ensure_open(&mut self, span_id: SpanId, b: &mut NB) {
-        //let current_block_id = self.current_block_id();
+    pub(super) fn ensure_open(&mut self, span_id: SpanId, b: &mut NB) {
+        // we we want to add a node, and the current block is terminated
+        // we create a new block for the dead code that follows.
         let block = self.blocks.get_block(self.current_block_id());
         let scope_id = block.scope_id;
         if block.is_term() {
@@ -2550,7 +2533,7 @@ impl FlattenInner {
         }
     }
 
-    pub fn maybe_terminate_block(
+    pub(super) fn maybe_terminate_block(
         &mut self,
         v_next: BlockId,
         span_id: SpanId,
