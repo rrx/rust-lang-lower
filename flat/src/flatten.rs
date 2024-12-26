@@ -854,8 +854,6 @@ impl FlattenInner {
         let block_id = self.blocks.new_block(parent_block_id, scope_id, succ_type);
         scope.entry_block = Some(block_id);
         self.scopes.scope_succ(parent_scope_id, scope_id);
-
-        self.blocks.block_succ(parent_block_id, block_id, succ_type);
         self.blocks
             .block_succ(parent_block_id, block_id, Successor::Jump);
 
@@ -2001,11 +1999,6 @@ impl FlattenInner {
                 let new_block_id =
                     self.blocks
                         .new_block(self.current_block_id(), scope_id, Successor::BlockScope);
-                self.blocks.block_succ(
-                    self.current_block_id(),
-                    new_block_id,
-                    Successor::BlockScope,
-                );
                 let scope = self.scopes.get_scope_mut(scope_id);
                 scope.block_labels.insert(name.into(), new_block_id);
 
@@ -2528,12 +2521,6 @@ impl FlattenInner {
                 self.blocks
                     .new_block(self.current_block_id(), scope_id, Successor::BlockScope);
             let name = b.labels.fresh_key("dead");
-            let scope = self.scopes.get_scope(scope_id);
-            self.blocks.block_succ(
-                scope.entry_block.unwrap(),
-                new_block_id,
-                Successor::BlockScope,
-            );
 
             self.switch_blocks(new_block_id);
             self.push_start_block(
