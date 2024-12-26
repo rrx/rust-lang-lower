@@ -1,6 +1,7 @@
 use crate::{
     ArgVec, BlockId, BlockifyError, ContinuationFlow, FlattenInner, FlattenResult, FlowEdge, LCode,
-    LinkId, NodeBuilder as NB, ScopeId, ScopeState, ScopeType, Successor, VarDefinitionSpace,
+    LinkId, NodeBuilder as NB, ScopeId, ScopeState, ScopeStateFunction, ScopeType, Successor,
+    VarDefinitionSpace,
 };
 use anyhow::Error;
 use anyhow::Result;
@@ -1202,7 +1203,6 @@ impl FlattenInner {
                 // New Func Scope
                 let (fun_block_id, fun_scope_id) = self.new_scope_and_block(
                     ScopeType::Function,
-                    // TODO: this is a hack, we need to fix this
                     ScopeState::block(),
                     block_id,
                     scope_id,
@@ -1211,9 +1211,8 @@ impl FlattenInner {
                 self.blocks.control_flow(block_id, &[fun_block_id]);
                 let next_block_id = self.blocks.new_block(block_id, scope_id, succ_type);
 
-                // TODO: hack, we have to update this, shouldn't need to
                 let scope = self.blocks.get_scope_mut(scope_id);
-                scope.state = ScopeState::function(next_block_id);
+                scope.make_function_scope(ScopeStateFunction::new(next_block_id));
 
                 let result = self.push_bake_lambda_and_update_next(
                     lookup_name,

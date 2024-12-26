@@ -177,9 +177,8 @@ pub struct ScopeLayer {
     pub(crate) loop_block: Option<LoopScope>,
     pub scope_type: ScopeType,
     pub lambdas: HashMap<StringLabel, AbstractionId>,
-    pub templates: HashMap<StringKey, LinkId>,
-    pub unclaimed_labels: HashMap<StringLabel, BlockId>,
-    pub state: ScopeState,
+    unclaimed_labels: HashMap<StringLabel, BlockId>,
+    state: ScopeState,
 }
 
 impl ScopeLayer {
@@ -195,10 +194,13 @@ impl ScopeLayer {
             loop_block: None,
             scope_type,
             lambdas: HashMap::new(),
-            templates: HashMap::new(),
             unclaimed_labels: HashMap::new(),
             state,
         }
+    }
+
+    pub fn make_function_scope(&mut self, state: ScopeStateFunction) {
+        self.state = ScopeState::Function(state);
     }
 
     pub fn variant_link(&mut self, name: StringKey, variant_id: VariantId) {
@@ -290,11 +292,6 @@ impl BlockGraph {
         scope.declarations.insert(name, v);
     }
 
-    pub fn scope_define_template(&mut self, scope_id: ScopeId, key: StringKey, link_id: LinkId) {
-        let scope = self.get_scope_mut(scope_id);
-        scope.templates.insert(key.into(), link_id);
-    }
-
     pub fn scope_succ(&mut self, source_scope_id: ScopeId, target_scope_id: ScopeId) {
         self.sg
             .add_edge(source_scope_id.into(), target_scope_id.into(), ());
@@ -314,8 +311,6 @@ impl BlockGraph {
                     ),
                     span_id,
                 );
-                //assert!(false);
-                //println!("unclaimed:{:?}", (s, block_id, scope_id))
             }
         }
     }
