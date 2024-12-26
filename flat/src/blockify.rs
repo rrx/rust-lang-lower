@@ -81,6 +81,7 @@ impl From<&LinkId> for UseIndexList {
 
 #[derive(Debug, Clone)]
 pub enum LCode {
+    EndModule,
     Label, // number of positional arguments, number of named arguments
     Noop,
     Declare,
@@ -127,10 +128,12 @@ impl LCode {
     pub fn is_term(&self) -> bool {
         match self {
             Self::Jump(_) => true,
+            Self::Switch(_, _) => true,
             Self::PlaceholderTerminal(_) => true,
             Self::Branch(_, _, _) => true,
             Self::Return => true,
             Self::Yield => true,
+            Self::EndModule => true,
             _ => false,
         }
     }

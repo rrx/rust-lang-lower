@@ -109,6 +109,10 @@ pub struct Start {}
 impl FlattenState for Start {}
 
 #[derive(Debug, Clone)]
+pub struct FirstPass {}
+impl FlattenState for FirstPass {}
+
+#[derive(Debug, Clone)]
 pub struct Module {
     pub values: Vec<LinkId>,
 }
@@ -181,16 +185,7 @@ impl Flatten<Start> {
         }
     }
 
-    pub fn finish(self, b: &mut NB) -> Result<Flatten<Module>> {
-        let (f, values) = self.inner._finish(b)?;
-        let m = Flatten {
-            inner: f.into(),
-            state: Module { values },
-        };
-        Ok(m)
-    }
-
-    pub fn flatten_module(node: AstNode, b: &mut NB) -> Result<Self> {
+    pub fn flatten_module(node: AstNode, b: &mut NB) -> Result<Flatten<FirstPass>> {
         // setup environment with static scope and block
         // blocks will be moved into environment eventually
         // FlattenEnvironment represents the module level structures
@@ -210,6 +205,7 @@ impl Flatten<Start> {
             let block = f.blocks.get_block(static_block_id);
             let static_scope_id = block.scope_id;
             let static_scope = f.scopes.get_scope_mut(static_scope_id);
+            //let span_id = body.span_id;
             static_scope.entry_block = Some(static_block_id);
 
             f.switch_blocks(static_block_id);
@@ -225,13 +221,30 @@ impl Flatten<Start> {
             f.static_scope = Some(static_scope_id);
             f.switch_blocks(static_block_id);
             let _ = f.push_node(*body, b)?;
+
+            f.switch_blocks(static_block_id);
+
             assert_eq!(static_block_id, f.current_block_id());
             //f.drain_diagnostics(b);
-            Ok(f)
+            Ok(Flatten {
+                inner: f.inner.into(),
+                state: FirstPass {},
+            })
         } else {
             b.push_error("Not a module", node.span_id);
             Err(Error::new(BlockifyError::Invalid))
         }
+    }
+}
+
+impl Flatten<FirstPass> {
+    pub fn finish(self, b: &mut NB) -> Result<Flatten<Module>> {
+        let (f, values) = self.inner._finish(b)?;
+        let m = Flatten {
+            inner: f.into(),
+            state: Module { values },
+        };
+        Ok(m)
     }
 }
 
@@ -637,6 +650,15 @@ impl FlattenInner {
     */
 
     fn _finish(mut self, b: &mut NB) -> Result<(Self, Vec<LinkId>)> {
+        self.switch_blocks(self.static_block_id());
+        let _ = self.push_code(
+            LCode::EndModule,
+            AstType::Unit,
+            None,
+            b.spans.get_span_unknown(),
+            VarDefinitionSpace::Default,
+        );
+
         // make sure all claims have been handled
         self.scopes.ensure_claims(b);
 
@@ -711,10 +733,6 @@ impl FlattenInner {
     }
 
     fn insert_entry_after(&mut self, before_link_id: LinkId, entry: CodeEntry) -> LinkId {
-        println!(
-            "insert1: {:?}",
-            (&entry, self.blocks.get_block(self.current_block_id()))
-        );
         let before_entry = self.get_entry(before_link_id);
         let before_entry_next = before_entry.next;
         let next_link_id = self._insert_entry(entry, Some(before_link_id));
@@ -808,13 +826,12 @@ impl FlattenInner {
                 block.push_arg(link_id);
                 link_id
             }
-            LCode::Declare => {
+            LCode::Declare | LCode::DeclareFunction(_) => {
                 //assert!(false);
                 let block = self.blocks.get_block(block_id);
                 let scope_id = block.scope_id;
                 let scope = self.scopes.get_scope(scope_id);
                 let entry_block_id = scope.entry_block.unwrap();
-                println!("X: {}, {}, {}", block_id, entry_block_id, scope_id);
                 entry.block_id = entry_block_id;
                 let link_id = self.insert_decl(entry_block_id, entry);
                 link_id
@@ -920,6 +937,7 @@ impl FlattenInner {
             LCode::Branch(_, _, _) => unreachable!(),
             LCode::Builtin(_) => unreachable!(),
             LCode::CallValue(_) => unreachable!(),
+            LCode::EndModule => unreachable!(),
         }
     }
 
@@ -1042,13 +1060,6 @@ impl FlattenInner {
             b,
         );
 
-        //println!(
-        //"jump to: {}{}=>{}{}",
-        //current_scope_id,
-        //self.current_block_id(),
-        //target_scope_id,
-        //target_block_id
-        //);
         self.blocks
             .block_succ(self.current_block_id(), target_block_id, Successor::Jump);
         self.blocks.block_succ(
@@ -1254,6 +1265,7 @@ impl FlattenInner {
         let block = self.blocks.get_block(current_block_id);
         let scope_id = block.scope_id;
         let scope = self.scopes.get_scope(scope_id);
+
         if let Some(loop_block) = scope.loop_block {
             let link_id = self.maybe_terminate_block(loop_block.start_block, span_id, b);
             self.switch_blocks(loop_block.next_block);

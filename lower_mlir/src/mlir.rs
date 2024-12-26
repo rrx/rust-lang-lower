@@ -1384,6 +1384,9 @@ impl<'c> MLIRGenerator<'c> {
             LCode::DeclareTemplate(_) => {
                 self.ensure_call_args_empty();
             }
+            LCode::EndModule => {
+                self.ensure_call_args_empty();
+            }
         }
         Ok(())
     }
