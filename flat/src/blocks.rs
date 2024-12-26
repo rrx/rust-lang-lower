@@ -165,21 +165,6 @@ pub struct BlockGraph {
     pub(super) sg: DiGraph<ScopeLayer, ()>,
 }
 
-/*
-impl Deref for BlockGraph {
-    type Target = DiGraph<IRBlock, Successor>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-impl DerefMut for BlockGraph {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-*/
-
 impl BlockGraph {
     pub fn new() -> Self {
         Self {
