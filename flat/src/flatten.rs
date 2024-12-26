@@ -1336,6 +1336,11 @@ impl FlattenInner {
                             self.save_ast_template(current_block_id, &name, &def, span_id)?;
                         }
 
+                        // TODO: The function doesn't actually exist until we call it
+                        // So we have no way of returning a reference to it yet
+                        // We only add it to the graph when it's monomorphized
+                        // We could return the abstraction_id, and allow the program to
+                        // perform the monomorphization itself.
                         if let Some(_body) = &def.body {
                             Ok(FlattenResult::statement())
                         } else {
