@@ -4,11 +4,14 @@ use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::Bfs;
 
-use std::ops::{Deref, DerefMut};
+//use std::ops::{Deref, DerefMut};
 
 use std::collections::{HashMap, HashSet};
 
-use crate::{ArgVec, BlockId, BlockifyError, LinkId, NodeBuilder, StringLabel, ValueId, VariantId};
+use crate::{
+    ArgVec, BlockGraph, BlockId, BlockifyError, LinkId, NodeBuilder, StringLabel, ValueId,
+    VariantId,
+};
 use compile_core::{AbstractionId, Argument, Lambda, SpanId, StringKey};
 
 #[derive(Debug)]
@@ -231,8 +234,9 @@ impl ScopeLayer {
     }
 }
 
-pub struct ScopeGraph(DiGraph<ScopeLayer, ()>);
+//pub struct ScopeGraph(DiGraph<ScopeLayer, ()>);
 
+/*
 impl Deref for ScopeGraph {
     type Target = DiGraph<ScopeLayer, ()>;
 
@@ -245,14 +249,11 @@ impl DerefMut for ScopeGraph {
         &mut self.0
     }
 }
+*/
 
-impl ScopeGraph {
-    pub fn new() -> Self {
-        Self(DiGraph::new())
-    }
-
+impl BlockGraph {
     pub fn scope_graph(&self) -> &DiGraph<ScopeLayer, ()> {
-        &self.0
+        &self.sg
     }
 
     pub fn new_function_scope(&mut self, state: ScopeStateFunction) -> ScopeId {
@@ -265,18 +266,18 @@ impl ScopeGraph {
 
     pub fn new_scope(&mut self, scope_type: ScopeType, state: ScopeState) -> ScopeId {
         let scope = ScopeLayer::new(scope_type, state);
-        let index = self.add_node(scope);
+        let index = self.sg.add_node(scope);
         ScopeId(index.index() as u32)
     }
 
     pub fn get_scope(&self, scope_id: ScopeId) -> &ScopeLayer {
         let index = NodeIndex::new(scope_id.index());
-        self.node_weight(index).unwrap()
+        self.sg.node_weight(index).unwrap()
     }
 
     pub fn get_scope_mut(&mut self, scope_id: ScopeId) -> &mut ScopeLayer {
         let index = NodeIndex::new(scope_id.index());
-        self.node_weight_mut(index).unwrap()
+        self.sg.node_weight_mut(index).unwrap()
     }
 
     pub fn scope_define(&mut self, scope_id: ScopeId, name: StringKey, v: LinkId) {
@@ -295,13 +296,14 @@ impl ScopeGraph {
     }
 
     pub fn scope_succ(&mut self, source_scope_id: ScopeId, target_scope_id: ScopeId) {
-        self.add_edge(source_scope_id.into(), target_scope_id.into(), ());
+        self.sg
+            .add_edge(source_scope_id.into(), target_scope_id.into(), ());
     }
 
     pub fn ensure_claims(&self, b: &mut NodeBuilder) {
-        for index in self.0.node_indices() {
+        for index in self.sg.node_indices() {
             let scope_id: ScopeId = index.into();
-            let scope = self.0.node_weight(index).unwrap();
+            let scope = self.sg.node_weight(index).unwrap();
             for (key, block_id) in scope.unclaimed_labels.iter() {
                 let s = b.labels.r(*key);
                 let span_id = b.spans.get_span_unknown();
@@ -378,7 +380,8 @@ impl ScopeGraph {
     }
 
     pub fn step_up(&self, scope_id: ScopeId) -> Option<ScopeId> {
-        self.neighbors_directed(scope_id.into(), petgraph::Direction::Incoming)
+        self.sg
+            .neighbors_directed(scope_id.into(), petgraph::Direction::Incoming)
             .next()
             .map(|n| (n).into())
     }
@@ -399,8 +402,8 @@ impl ScopeGraph {
 
     pub fn find_scopes(&self, scope_id: ScopeId) -> Vec<ScopeId> {
         let mut out = vec![];
-        let mut bfs = Bfs::new(&self.0, scope_id.into());
-        while let Some(index) = bfs.next(&self.0) {
+        let mut bfs = Bfs::new(&self.sg, scope_id.into());
+        while let Some(index) = bfs.next(&self.sg) {
             out.push(index.into());
         }
         out
@@ -451,8 +454,12 @@ impl ScopeGraph {
         }
     }
 
+    pub fn dump_scopes(&self) {
+        petgraph::dot::Dot::with_config(&self.scope_graph(), &[petgraph::dot::Config::EdgeNoLabel]);
+    }
+
     pub fn dump(&self, b: &NodeBuilder) {
-        self.0.node_indices().for_each(|index| {
+        self.sg.node_indices().for_each(|index| {
             let scope_id: ScopeId = index.into();
             let scope = self.get_scope(scope_id);
             println!("DumpScope: {}", scope_id);
@@ -470,7 +477,7 @@ impl ScopeGraph {
         let s = format!(
             "{:?}",
             Dot::with_attr_getters(
-                &self.0,
+                &self.sg,
                 &[Config::EdgeNoLabel, Config::NodeNoLabel],
                 &|_, _er| String::new(),
                 &|_, (index, scope)| {

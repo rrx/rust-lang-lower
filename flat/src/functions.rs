@@ -649,7 +649,7 @@ impl FlattenInner {
 
         let block_ty: AstType = def_func_type.into();
 
-        let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
+        let fun_scope = self.blocks.get_scope_mut(fun_scope_id);
         fun_scope.return_block = Some(next_block_id);
 
         // block graph
@@ -678,7 +678,7 @@ impl FlattenInner {
 
         // add the name to scope
         // do this early for recursive functions
-        self.scopes
+        self.blocks
             .scope_define(scope_id, global_name, entry_link_id);
 
         // flatten function, and switch to next
@@ -917,7 +917,7 @@ impl FlattenInner {
         let s_name = b.labels.r(name.into());
         let global_name = b.labels.fresh_key(&s_name); //&format!("{}.call", s_name));
                                                        // create a new block
-        let scope = self.scopes.get_scope(scope_id);
+        let scope = self.blocks.get_scope(scope_id);
         let scope_block_id = scope.entry_block.unwrap();
         let next_block_id = self
             .blocks
@@ -1000,7 +1000,7 @@ impl FlattenInner {
     ) -> Result<FlattenResult> {
         // create a new block static blocks, which is the final destination
         //let (exit_block_id, exit_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
-        let scope = self.scopes.get_scope(scope_id);
+        let scope = self.blocks.get_scope(scope_id);
         let scope_block_id = scope.entry_block.unwrap();
         let exit_block_id = self
             .blocks
@@ -1196,7 +1196,7 @@ impl FlattenInner {
             } else {
                 let body = a.def.body.clone().unwrap();
 
-                let scope = self.scopes.get_scope(scope_id);
+                let scope = self.blocks.get_scope(scope_id);
                 let block_id = scope.entry_block.unwrap();
 
                 // New Func Scope
@@ -1212,7 +1212,7 @@ impl FlattenInner {
                 let next_block_id = self.blocks.new_block(block_id, scope_id, succ_type);
 
                 // TODO: hack, we have to update this, shouldn't need to
-                let scope = self.scopes.get_scope_mut(scope_id);
+                let scope = self.blocks.get_scope_mut(scope_id);
                 scope.state = ScopeState::function(next_block_id);
 
                 let result = self.push_bake_lambda_and_update_next(

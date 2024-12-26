@@ -45,7 +45,7 @@ impl FlattenInner {
                 b.unify(&call_arg_type, call_span_id, &resolve_type, def_span_id);
                 (variant_id, fun_block_id, fun_scope_id, resolve_type)
             } else {
-                let scope = self.scopes.get_scope(scope_id);
+                let scope = self.blocks.get_scope(scope_id);
                 let block_id = scope.entry_block.unwrap();
 
                 let (fun_block_id, fun_scope_id) = self.new_scope_and_block(
@@ -78,7 +78,7 @@ impl FlattenInner {
                 // add the name to scope
                 // do this early for recursive functions
                 // add entry to scope, for recursion
-                self.scopes
+                self.blocks
                     .scope_define(scope_id, lambda_name, entry_link_id);
 
                 let variant_id =
@@ -134,7 +134,7 @@ impl FlattenInner {
         let def_span_id = a.def_span_id;
         let def = a.def.clone();
 
-        //let fun_scope = self.scopes.get_scope_mut(fun_scope_id);
+        //let fun_scope = self.blocks.get_scope_mut(fun_scope_id);
         // we might want to handle this later
         // return in a CPS will return from the scoped function
         //fun_scope.return_block = Some(next_block_id);
@@ -173,7 +173,7 @@ impl FlattenInner {
 
         // TODO: now that we know the target, we need to replace any call values with unwind
         // functions. We also need to do this for the goto_block_id.
-        let unwind_scopes = self.scopes.unwind_scopes(fun_scope_id, goto_scope_id)?;
+        let unwind_scopes = self.blocks.unwind_scopes(fun_scope_id, goto_scope_id)?;
         println!("unwind scopes: {:?}", unwind_scopes);
 
         let goto_link_id =
@@ -304,7 +304,7 @@ impl FlattenInner {
 
         // if we don't have a template or a label already, then we defer
         // ensure we are in function scope
-        if self.scopes.in_function_scope(scope_id) {
+        if self.blocks.in_function_scope(scope_id) {
             let link_id = block.last().unwrap();
             self.push_placeholder_terminal(link_id, AstType::Unit, call_span_id);
 

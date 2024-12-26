@@ -69,7 +69,7 @@ impl ICodeModule for Flatten<Module> {
         let link_id = self.state.values[value_id.index()];
         let entry = self.get_link_entry(link_id);
         let block = self.blocks.get_block(entry.block_id);
-        let scope = self.scopes.get_scope(block.scope_id);
+        let scope = self.blocks.get_scope(block.scope_id);
         scope.scope_type == ScopeType::Static
     }
 
@@ -174,13 +174,6 @@ impl Flatten<Module> {
         println!("saved table {:?}", filename);
         std::fs::write(filename, s.clone()).unwrap();
         s
-    }
-
-    pub fn dump_scopes(&self) {
-        petgraph::dot::Dot::with_config(
-            &self.scopes.scope_graph(),
-            &[petgraph::dot::Config::EdgeNoLabel],
-        );
     }
 
     pub fn dump_variants(&self, b: &NB) {

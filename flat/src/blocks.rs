@@ -161,8 +161,8 @@ impl IRBlock {
 }
 
 pub struct BlockGraph {
-    bg: DiGraph<IRBlock, Successor>,
-    sg: DiGraph<ScopeLayer, ()>,
+    pub(super) bg: DiGraph<IRBlock, Successor>,
+    pub(super) sg: DiGraph<ScopeLayer, ()>,
 }
 
 /*
