@@ -1,3 +1,4 @@
+use anyhow::Result;
 use argh::FromArgs;
 use simple_logger::{set_up_color_terminal, SimpleLogger};
 use std::error::Error;
@@ -49,7 +50,6 @@ fn make_path<'a>(path: &'a str, extension: &str) -> String {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    //unsafe { backtrace_on_stack_overflow::enable() };
     set_up_color_terminal();
     SimpleLogger::new().init().unwrap();
     let config: Config = argh::from_env();
@@ -137,9 +137,7 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
     }
 
     if !config.interp {
-        p.codegen(&m, ValueId::new(0), &context, &mut module, b)?;
-
-        //b.types.dump();
+        lower_mlir::codegen(&m, ValueId::new(0), &context, &mut module, b)?;
         if config.verbose {
             module.as_operation().dump();
         }
@@ -159,7 +157,6 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
         path.set_extension("o");
         lower_mlir::save_object_file(&module, &path.to_str().unwrap());
         println!("Wrote: {:?}", &path.as_os_str());
-
         let mut path = path.clone();
         path.set_extension("mlir");
         let s = module.as_operation().to_string();
@@ -169,14 +166,12 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
     }
 
     let exit_code = if config.interp {
-        //let exit_code = p.interp(&m, "target/debug", b);
         let exit_code = flat::interp::interp(&m.shared_libraries(), &m, "target/debug", b);
         exit_code
     } else if config.exec {
         println!("exec");
         let exit_code =
             lower_mlir::compile::exec_main(&m.shared_libraries(), &module, "target/debug");
-        //let exit_code = p.exec_main(&mut module, "target/debug");
         exit_code
     } else {
         let mut path = path.clone();

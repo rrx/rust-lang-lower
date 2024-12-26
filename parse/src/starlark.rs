@@ -10,10 +10,10 @@ use starlark_syntax::syntax::module::AstModuleFields;
 
 use compile_core::{
     ast, AssignTarget, Ast, AstFuncType, AstNode, AstType, BinOpNode, CodeLocation, Diagnostic,
-    Label, LinkOptions, Parameter, ReturnType, SpanId, StringKey,
+    Label, Parameter, ReturnType, SpanId, StringKey,
 };
 
-use flat::{Flatten, ICodeModule, Module, NodeBuilder, NodeBuilder as NB, ValueId};
+use flat::{Flatten, Module, NodeBuilder, NodeBuilder as NB, ValueId};
 
 #[derive(Debug)]
 pub struct Environment {
@@ -503,15 +503,11 @@ impl Parser {
 }
 
 #[derive(Default)]
-pub struct StarlarkParser {
-    link: LinkOptions,
-}
+pub struct StarlarkParser {}
 
 impl StarlarkParser {
     pub fn new() -> Self {
-        Self {
-            link: LinkOptions::new(),
-        }
+        Self {}
     }
 
     pub fn parse(
@@ -528,7 +524,6 @@ impl StarlarkParser {
         let mut parser = Parser::new();
         let module_key = b.labels.s("module");
         let ast: AstNode = parser.parse(Path::new(filename), None, module_key, file_id, b)?;
-        //let ast: AstNode = parser.parse(Path::new(filename), None, module_key, file_id, b)?;
         Ok(ast)
     }
 
@@ -540,9 +535,6 @@ impl StarlarkParser {
         module: &mut lower_mlir::Module<'c>,
         b: &mut NodeBuilder,
     ) -> Result<()> {
-        for lib in blockify.shared_libraries() {
-            self.link.add_library(&lib);
-        }
         let mut gen = lower_mlir::MLIRGenerator::new(context, blockify, module_block_id, b);
         gen.lower_module(module)?;
         Ok(())

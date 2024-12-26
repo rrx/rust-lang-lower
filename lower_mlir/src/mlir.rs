@@ -160,6 +160,18 @@ impl<'c> OpCollection<'c> {
     }
 }
 
+pub fn codegen<'c>(
+    blockify: &Flatten<flat::Module>,
+    module_block_id: ValueId,
+    context: &'c Context,
+    module: &mut melior::ir::Module<'c>,
+    b: &mut NodeBuilder,
+) -> Result<()> {
+    let mut gen = MLIRGenerator::new(context, blockify, module_block_id, b);
+    gen.lower_module(module)?;
+    Ok(())
+}
+
 pub struct MLIRGenerator<'c> {
     pub(crate) context: &'c Context,
     pub(crate) blockify: &'c Flatten<Module>,
@@ -187,9 +199,19 @@ impl<'c> MLIRGenerator<'c> {
             b,
         }
     }
-}
 
-impl<'c> MLIRGenerator<'c> {
+    pub fn codegen(
+        blockify: &'c Flatten<Module>,
+        module_block_id: ValueId,
+        context: &'c Context,
+        module: &'c mut melior::ir::Module<'c>,
+        b: &'c mut NodeBuilder,
+    ) -> Result<()> {
+        let mut gen = Self::new(context, blockify, module_block_id, b);
+        gen.lower_module(module)?;
+        Ok(())
+    }
+
     pub fn take_call_args(&mut self) -> Vec<ValueId> {
         self.call_args.drain(..).collect()
     }

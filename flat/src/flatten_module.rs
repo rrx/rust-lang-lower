@@ -1,4 +1,3 @@
-use anyhow::Result;
 use compile_core::{AstType, SpanId, StringKey};
 use petgraph::graph::NodeIndex;
 
