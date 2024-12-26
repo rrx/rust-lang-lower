@@ -554,23 +554,18 @@ impl FlattenInner {
                 continue;
             }
 
-            let entries: Vec<_> = block.iter().map(|v| self.get_entry(v).clone()).collect();
-
             let scope = self.scopes.get_scope(scope_id);
             let scope_type = scope.scope_type;
             if !block.is_term() && scope_type != ScopeType::Static {
+                let entry = self.get_entry(block.last().unwrap());
                 b.push_error(
                     &format!("Unterminated Block: {}, {:?}", block_id, (scope_type)),
-                    entries.last().unwrap().span_id,
+                    entry.span_id,
                 );
             }
 
-            for mut entry in entries.into_iter() {
-                if let Some(ty) = b.types.u.resolve(&entry.ty) {
-                    entry.ty = ty;
-                }
-
-                let link_id = entry.link.unwrap();
+            let links = block.iter().collect::<Vec<_>>();
+            for link_id in links {
                 let value_id = ValueId::new(values.len() as u32);
                 values.push(link_id);
                 let entry = self.get_entry_mut(link_id);
