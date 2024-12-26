@@ -198,15 +198,11 @@ impl Flatten<Module> {
 
                             let mut block_group = Group::new(block_name, block_body);
 
-                            let maybe_v = self.maybe_resolve_code_offset(block_id.into());
-
-                            if maybe_v.is_none() {
-                                continue;
-                            }
-                            let mut v = maybe_v.unwrap();
-
-                            loop {
-                                let entry = self.get_entry(v);
+                            let mut last = None;
+                            for link_id in block.iter() {
+                                let entry = self.get_link_entry(link_id);
+                                let v = entry.value_id.unwrap();
+                                let code = &entry.code;
                                 let v_decl = match entry.mem {
                                     VarDefinitionSpace::Stack(x) => {
                                         let v_source = self.resolve_code_offset(x.into());
@@ -216,7 +212,12 @@ impl Flatten<Module> {
                                     _ => None,
                                 };
 
-                                let code = &entry.code;
+                                // connect sequential values
+                                if let Some(v_last) = last {
+                                    ng.edges.push((v_last, v));
+                                }
+                                last = Some(v);
+
                                 let s = match code {
                                     LCode::Jump(offset) => {
                                         if let Some(v_target) =
@@ -303,12 +304,6 @@ impl Flatten<Module> {
                                     }
                                 };
                                 block_group.push_value(GroupValue::new(format!("{}", v), s));
-                                if let Some(v_next) = self.get_next(v) {
-                                    ng.edges.push((v, v_next));
-                                    v = v_next;
-                                } else {
-                                    break;
-                                }
                             }
                             scope_group.push_group(block_group);
                             track.insert(block_id);
