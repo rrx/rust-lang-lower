@@ -417,8 +417,9 @@ impl FlattenInner {
 
             DeferredType::Goto(goto_link_id) => {
                 // are we jumping to an abstraction?
-                if let Some(abstraction_id) =
-                    self.resolve_template(d.scope_id, d.name.unwrap().into())
+                if let Some(abstraction_id) = self
+                    .blocks
+                    .resolve_template(d.scope_id, d.name.unwrap().into())
                 {
                     self.switch_blocks(d.block_id);
                     self.remove_placeholder_terminal(d.block_id);
@@ -548,7 +549,8 @@ impl FlattenInner {
             let key = entry.name.unwrap();
             if let Some(label_block_id) = self.resolve_label(scope_id, key.into()) {
                 blocks.push((*link_id, label_block_id));
-            } else if let Some(abstraction_id) = self.resolve_template(scope_id, key.into()) {
+            } else if let Some(abstraction_id) = self.blocks.resolve_template(scope_id, key.into())
+            {
                 abstractions.push((*link_id, abstraction_id));
             } else {
                 errors.push(*link_id);

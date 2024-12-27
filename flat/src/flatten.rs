@@ -190,9 +190,7 @@ impl Flatten<Start> {
             state: Start {},
         };
 
-        let scope_id = f
-            .blocks
-            .new_scope(ScopeType::Static, ScopeState::static_scope());
+        let scope_id = f.blocks.new_scope(ScopeType::Static);
         f.static_scope = Some(scope_id);
 
         // TODO: This is the initial block.  Clean this up
@@ -424,53 +422,6 @@ impl FlattenInner {
             let scope = self.blocks.get_scope(scope_id);
             if let Some(data) = scope.declarations.get(&name) {
                 return Some(data.clone());
-            }
-        }
-        None
-    }
-
-    pub fn resolve_lambda_scope(&self, block_id: BlockId, name: StringLabel) -> Option<ScopeId> {
-        // resolve scope through the tree, starting at the current scope
-        let block = self.blocks.get_block(block_id);
-        for scope_id in self.blocks.walk_scopes(block.scope_id) {
-            let scope = self.blocks.get_scope(scope_id);
-            if let Some(_template_id) = scope.lambdas.get(&name) {
-                return Some(scope_id);
-            }
-        }
-        None
-    }
-
-    pub fn resolve_lambda(
-        &self,
-        block_id: BlockId,
-        name: StringKey,
-    ) -> Option<(ScopeId, AbstractionId)> {
-        match self.resolve_lambda_scope(block_id, name.into()) {
-            Some(scope_id) => {
-                let scope = self.blocks.get_scope(scope_id);
-                if let Some(abstraction_id) = scope.lambdas.get(&name.into()).cloned() {
-                    //let a = self.abstractions.get(template_id);
-                    //let (def, span_id, _) = self.get_ast_template(template_id).clone();
-                    Some((scope_id, abstraction_id))
-                } else {
-                    None
-                }
-            }
-            None => None,
-        }
-    }
-
-    pub fn resolve_template(
-        &self,
-        start_scope_id: ScopeId,
-        name: StringLabel,
-    ) -> Option<AbstractionId> {
-        // search scopes to find a template
-        for scope_id in self.blocks.walk_scopes(start_scope_id) {
-            let scope = self.blocks.get_scope(scope_id);
-            if let Some(template_id) = scope.lambdas.get(&name).cloned() {
-                return Some(template_id);
             }
         }
         None
@@ -1081,12 +1032,11 @@ impl FlattenInner {
         def: &Lambda,
         span_id: SpanId,
     ) -> Result<AbstractionId> {
-        let template_id = self.abstractions.add(def.clone(), span_id);
+        let abstraction_id = self.abstractions.add(def.clone(), span_id);
         let block = self.blocks.get_block(block_id);
-        let scope_id = block.scope_id;
-        let scope = self.blocks.get_scope_mut(scope_id);
-        scope.lambdas.insert(name.into(), template_id);
-        Ok(template_id)
+        self.blocks
+            .define_lambda(block.scope_id, name.into(), abstraction_id);
+        Ok(abstraction_id)
     }
 
     pub fn push_close_block(&mut self, span_id: SpanId, b: &mut NB) -> Result<FlattenResult> {
@@ -1400,8 +1350,11 @@ impl FlattenInner {
                     fun_block.ret_types.insert(ty.clone());
                 }
 
-                let scope = self.blocks.get_scope(fun_scope_id);
-                self.push_jump(scope.return_block.unwrap().into(), jump_args, span_id, b);
+                //let scope = self.blocks.get_scope(fun_scope_id);
+                //let ret_block_id = scope.return_block.unwrap();
+                let scope = self.blocks.get_function_scope(fun_block_id);
+                let ret_block_id = scope.return_block();
+                self.push_jump(ret_block_id, jump_args, span_id, b);
                 Ok(FlattenResult::statement())
             }
 
@@ -1464,7 +1417,7 @@ impl FlattenInner {
                 // we are resolving the abstraction lexically here, but it could also be defined
                 // later.  TODO: if we don't find it, it might be defined later, so we should defer
                 // and throw the error later if it's not found.
-                if let Some(abstraction_id) = self.resolve_template(scope_id, key.into()) {
+                if let Some(abstraction_id) = self.blocks.resolve_template(scope_id, key.into()) {
                     let code = LCode::Val(Literal::Abstraction(abstraction_id));
                     let ty = b.types.fresh_unknown();
                     let link_id = self.push_code(
@@ -1615,7 +1568,7 @@ impl FlattenInner {
                     // lambdas should also be non-terminal
                     Ast::Identifier(ident) => {
                         if let Some((scope_id, abstraction_id)) =
-                            self.resolve_lambda(current_block_id, *ident)
+                            self.blocks.resolve_lambda(current_block_id, *ident)
                         {
                             self.push_call(*ident, scope_id, abstraction_id, span_id, args, b)
                         } else {

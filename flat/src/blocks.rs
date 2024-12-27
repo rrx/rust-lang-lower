@@ -192,11 +192,15 @@ impl BlockGraph {
         parent_scope_id: ScopeId,
         succ_type: Successor,
     ) -> (BlockId, ScopeId) {
-        let scope_id = self.new_scope(scope_type, scope_state);
+        let scope_id = self.new_scope(scope_type);
         let block_id = self.new_block(parent_block_id, scope_id, succ_type);
         let scope = self.get_scope_mut(scope_id);
         scope.entry_block = Some(block_id);
         self.scope_succ(parent_scope_id, scope_id);
+        if let ScopeState::Function(state) = scope_state {
+            let scope = self.get_scope_mut(scope_id);
+            scope.make_function_scope(state);
+        }
         (block_id, scope_id)
     }
 

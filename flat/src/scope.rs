@@ -29,7 +29,6 @@ pub enum PlacedBlockId {
 pub enum ScopeType {
     Static,
     Function,
-    //Template,
     Block,
     Region,
     Loop,
@@ -130,7 +129,7 @@ impl DeferredGotoList {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ScopeStateFunction {
     return_block: BlockId,
 }
@@ -140,10 +139,10 @@ impl ScopeStateFunction {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ScopeStateBlock {}
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ScopeState {
     Function(ScopeStateFunction),
     Block(ScopeStateBlock),
@@ -208,16 +207,15 @@ pub struct ScopeLayer {
     pub labels: HashMap<StringLabel, ValueId>,
     pub(crate) block_labels: HashMap<StringLabel, BlockId>,
     pub entry_block: Option<BlockId>,
-    pub return_block: Option<BlockId>,
+    return_block: Option<BlockId>,
     pub(crate) loop_block: Option<LoopScope>,
     pub scope_type: ScopeType,
-    pub lambdas: HashMap<StringLabel, AbstractionId>,
+    lambdas: HashMap<StringLabel, AbstractionId>,
     unclaimed_labels: HashMap<StringLabel, BlockId>,
-    state: ScopeState,
 }
 
 impl ScopeLayer {
-    pub fn new(scope_type: ScopeType, state: ScopeState) -> Self {
+    pub fn new(scope_type: ScopeType) -> Self {
         Self {
             labels: HashMap::new(),
             block_labels: HashMap::new(),
@@ -230,12 +228,11 @@ impl ScopeLayer {
             scope_type,
             lambdas: HashMap::new(),
             unclaimed_labels: HashMap::new(),
-            state,
         }
     }
 
     pub fn make_function_scope(&mut self, state: ScopeStateFunction) {
-        self.state = ScopeState::Function(state);
+        self.return_block = Some(state.return_block);
     }
 
     pub fn variant_link(&mut self, name: StringKey, variant_id: VariantId) {
@@ -276,16 +273,8 @@ impl BlockGraph {
         &self.sg
     }
 
-    pub fn new_function_scope(&mut self, state: ScopeStateFunction) -> ScopeId {
-        self.new_scope(ScopeType::Function, ScopeState::Function(state))
-    }
-
-    pub fn new_block_scope(&mut self, state: ScopeStateBlock) -> ScopeId {
-        self.new_scope(ScopeType::Function, ScopeState::Block(state))
-    }
-
-    pub fn new_scope(&mut self, scope_type: ScopeType, state: ScopeState) -> ScopeId {
-        let scope = ScopeLayer::new(scope_type, state);
+    pub fn new_scope(&mut self, scope_type: ScopeType) -> ScopeId {
+        let scope = ScopeLayer::new(scope_type);
         let index = self.sg.add_node(scope);
         ScopeId(index.index() as u32)
     }
@@ -516,6 +505,63 @@ impl BlockGraph {
         );
         println!("saved graph {:?}", filename);
         std::fs::write(filename, s).unwrap();
+    }
+
+    pub fn define_lambda(
+        &mut self,
+        scope_id: ScopeId,
+        name: StringLabel,
+        abstraction_id: AbstractionId,
+    ) {
+        let scope = self.get_scope_mut(scope_id);
+        scope.lambdas.insert(name, abstraction_id);
+    }
+
+    pub fn resolve_lambda_scope(&self, block_id: BlockId, name: StringLabel) -> Option<ScopeId> {
+        // resolve scope through the tree, starting at the current scope
+        let block = self.get_block(block_id);
+        for scope_id in self.walk_scopes(block.scope_id) {
+            let scope = self.get_scope(scope_id);
+            if let Some(_template_id) = scope.lambdas.get(&name) {
+                return Some(scope_id);
+            }
+        }
+        None
+    }
+
+    pub fn resolve_lambda(
+        &self,
+        block_id: BlockId,
+        name: StringKey,
+    ) -> Option<(ScopeId, AbstractionId)> {
+        match self.resolve_lambda_scope(block_id, name.into()) {
+            Some(scope_id) => {
+                let scope = self.get_scope(scope_id);
+                if let Some(abstraction_id) = scope.lambdas.get(&name.into()).cloned() {
+                    //let a = self.abstractions.get(template_id);
+                    //let (def, span_id, _) = self.get_ast_template(template_id).clone();
+                    Some((scope_id, abstraction_id))
+                } else {
+                    None
+                }
+            }
+            None => None,
+        }
+    }
+
+    pub fn resolve_template(
+        &self,
+        start_scope_id: ScopeId,
+        name: StringLabel,
+    ) -> Option<AbstractionId> {
+        // search scopes to find a template
+        for scope_id in self.walk_scopes(start_scope_id) {
+            let scope = self.get_scope(scope_id);
+            if let Some(template_id) = scope.lambdas.get(&name).cloned() {
+                return Some(template_id);
+            }
+        }
+        None
     }
 }
 

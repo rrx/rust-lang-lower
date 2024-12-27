@@ -433,7 +433,7 @@ impl FlattenInner {
         b: &mut NB,
     ) -> Result<LinkId> {
         let current_block_id = self.current_block_id();
-        if let Some((_, abstraction_id)) = self.resolve_lambda(current_block_id, name) {
+        if let Some((_, abstraction_id)) = self.blocks.resolve_lambda(current_block_id, name) {
             let result = self.push_bake_function(abstraction_id, func_type, name, name, b);
             let (_variant_id, r) = result?;
             self.switch_blocks(current_block_id);
@@ -651,7 +651,8 @@ impl FlattenInner {
         let block_ty: AstType = def_func_type.into();
 
         let fun_scope = self.blocks.get_scope_mut(fun_scope_id);
-        fun_scope.return_block = Some(next_block_id);
+        //fun_scope.return_block = Some(next_block_id);
+        fun_scope.make_function_scope(ScopeStateFunction::new(next_block_id));
 
         // block graph
         self.blocks
@@ -1203,16 +1204,18 @@ impl FlattenInner {
                 // New Func Scope
                 let (fun_block_id, fun_scope_id) = self.blocks.new_scope_and_block(
                     ScopeType::Function,
+                    // hack: we turn this into function scope later
+                    //ScopeState::function(next_block_id),
                     ScopeState::block(),
                     block_id,
                     scope_id,
                     Successor::BlockScope,
                 );
                 self.blocks.control_flow(block_id, &[fun_block_id]);
-                let next_block_id = self.blocks.new_block(block_id, scope_id, succ_type);
 
-                let scope = self.blocks.get_scope_mut(scope_id);
-                scope.make_function_scope(ScopeStateFunction::new(next_block_id));
+                // hack: this needs to be defined after fun_block, for some reason
+                // The ordering shouldn't matter
+                let next_block_id = self.blocks.new_block(block_id, scope_id, succ_type);
 
                 let result = self.push_bake_lambda_and_update_next(
                     lookup_name,
@@ -1244,9 +1247,7 @@ impl FlattenInner {
                 ) = result;
                 let arg = entry_args.last().unwrap();
 
-                //let arg_index = call_values.len() - 1;
                 let call_link_id = arg.1;
-                //let next_ty = arg.2.clone();
 
                 let _ = self.push_call_values(&call_values, b);
                 // complete the lambda bake with a jump to the continuation, this is the exit of
