@@ -817,6 +817,12 @@ impl FlattenInner {
             VarDefinitionSpace::Reg,
         );
 
+        self.scoped_continuations.connect(
+            ContinuationFlow::Jump(jump_link_id),
+            ContinuationFlow::Block(target_block_id),
+            FlowEdge::JumpBlock,
+        );
+
         jump_link_id
     }
 

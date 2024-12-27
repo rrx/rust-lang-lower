@@ -220,7 +220,7 @@ impl FlattenInner {
             let next_block_id =
                 self.blocks
                     .new_block(entry_block_id, scope_id, Successor::BlockScope);
-            let block_id = self.gen_unwind_cps(scope_id, call_span_id, b);
+            let unwind_block_id = self.gen_unwind_cps(scope_id, call_span_id, b);
             self.push_jump(new_block_id, vec![], call_span_id, b);
             self.switch_blocks(new_block_id);
             let void_func_type = AstFuncType::new_void_void();
@@ -233,8 +233,8 @@ impl FlattenInner {
                 VarDefinitionSpace::Default,
             );
 
-            let code = LCode::Val(Literal::Block(block_id));
-            let link_id = self.push_code(
+            let code = LCode::Val(Literal::Block(next_block_id));
+            let var_link_id = self.push_code(
                 code,
                 void_func_type.clone().into(),
                 None,
@@ -243,12 +243,31 @@ impl FlattenInner {
             );
 
             // jump to unwind block
-            self.push_jump(
-                block_id,
-                vec![(None, link_id, void_func_type.into(), call_span_id)],
+            let unwind_jump_link_id = self.push_jump(
+                unwind_block_id,
+                vec![(None, var_link_id, void_func_type.into(), call_span_id)],
                 call_span_id,
                 b,
             );
+
+            self.scoped_continuations.connect(
+                ContinuationFlow::Block(next_block_id),
+                ContinuationFlow::Variable(var_link_id),
+                FlowEdge::UnwindBlockVar,
+            );
+
+            self.scoped_continuations.connect(
+                ContinuationFlow::Variable(var_link_id),
+                ContinuationFlow::JumpArg(unwind_jump_link_id, 0),
+                FlowEdge::UnwindVarJump,
+            );
+
+            self.scoped_continuations.connect(
+                ContinuationFlow::JumpArg(unwind_jump_link_id, 0),
+                ContinuationFlow::BlockArg(unwind_block_id, 0),
+                FlowEdge::UnwindJumpArg,
+            );
+
             self.switch_blocks(next_block_id);
             let next_key = b.labels.fresh_key("unext");
             self.push_start_block(
@@ -262,7 +281,7 @@ impl FlattenInner {
         self.push_jump(target_block_id, vec![], call_span_id, b);
 
         self.switch_blocks(current_block_id);
-        target_block_id
+        start_block_id
     }
 
     pub(super) fn push_cps_block(
@@ -334,12 +353,6 @@ impl FlattenInner {
                 FlowEdge::JumpArg,
             );
         }
-
-        self.scoped_continuations.connect(
-            ContinuationFlow::Jump(goto_link_id),
-            ContinuationFlow::Block(fun_block_id),
-            FlowEdge::Jump,
-        );
 
         // if this really is a CPS function, then it should never return
         // TODO: verify that it never returns, could be with the function signature
