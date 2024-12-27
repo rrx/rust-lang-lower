@@ -190,25 +190,13 @@ impl Flatten<Start> {
             state: Start {},
         };
 
-        let scope_id = f.blocks.new_scope(ScopeType::Static);
-        f.static_scope = Some(scope_id);
-
-        // TODO: This is the initial block.  Clean this up
-        // It doesn't require adding successors to the graph, because it's the root node
-        let static_scope = f.static_scope_id();
-        let block_id = f.blocks.new_block_with_scope(static_scope);
-        f.current_block = block_id;
-        f.static_block = Some(block_id);
+        let (static_block_id, static_scope_id) = f.blocks.root();
+        f.static_scope = Some(static_scope_id);
+        f.current_block = static_block_id;
+        f.static_block = Some(static_block_id);
 
         if let Ast::Module(key, body) = node.node {
-            let static_block_id = f.current_block_id();
-
-            let block = f.blocks.get_block(static_block_id);
-            let static_scope_id = block.scope_id;
-            let static_scope = f.blocks.get_scope_mut(static_scope_id);
-            static_scope.entry_block = Some(static_block_id);
-
-            f.switch_blocks(static_block_id);
+            // start module block
             f.push_start_block(
                 static_scope_id,
                 AstFuncType::new_void_void().into(),
@@ -216,10 +204,6 @@ impl Flatten<Start> {
                 node.span_id,
                 VarDefinitionSpace::Static,
             );
-
-            f.static_block = Some(static_block_id);
-            f.static_scope = Some(static_scope_id);
-            f.switch_blocks(static_block_id);
             let _ = f.push_node(*body, b)?;
 
             // return control to the root block

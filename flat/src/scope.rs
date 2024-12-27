@@ -9,8 +9,8 @@ use std::ops::{Deref, DerefMut};
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    ArgVec, BlockGraph, BlockId, BlockifyError, LinkId, NodeBuilder, StringLabel, ValueId,
-    VariantId,
+    ArgVec, BlockGraph, BlockId, BlockifyError, LinkId, NodeBuilder, StringLabel, Successor,
+    ValueId, VariantId,
 };
 use compile_core::{AbstractionId, Argument, Lambda, SpanId, StringKey};
 
@@ -295,6 +295,34 @@ impl ScopeLayer {
 }
 
 impl BlockGraph {
+    pub fn root(&mut self) -> (BlockId, ScopeId) {
+        let scope_id = self.new_scope(ScopeType::Static);
+        let block_id = self.new_block_with_scope(scope_id);
+        let static_scope = self.get_scope_mut(scope_id);
+        static_scope.entry_block = Some(block_id);
+        (block_id, scope_id)
+    }
+
+    pub fn new_scope_and_block(
+        &mut self,
+        scope_type: ScopeType,
+        scope_state: ScopeState,
+        parent_block_id: BlockId,
+        parent_scope_id: ScopeId,
+        succ_type: Successor,
+    ) -> (BlockId, ScopeId) {
+        let scope_id = self.new_scope(scope_type);
+        let block_id = self.new_block(parent_block_id, scope_id, succ_type);
+        let scope = self.get_scope_mut(scope_id);
+        scope.entry_block = Some(block_id);
+        self.scope_succ(parent_scope_id, scope_id);
+        if let ScopeState::Function(state) = scope_state {
+            let scope = self.get_scope_mut(scope_id);
+            scope.make_function_scope(state);
+        }
+        (block_id, scope_id)
+    }
+
     pub fn scope_graph(&self) -> &DiGraph<ScopeLayer, ()> {
         &self.sg
     }
