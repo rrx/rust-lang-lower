@@ -1479,7 +1479,7 @@ impl FlattenInner {
                 } else {
                     // need to declare it
                     let scope = self.blocks.get_scope(scope_id);
-                    let _entry_block_id = scope.entry_block.unwrap();
+                    let _entry_block_id = scope.entry_block();
                     let _current_block_id = self.current_block_id();
                     let block = self.blocks.get_block(self.current_block_id());
                     let scope_id = block.scope_id;
@@ -1801,7 +1801,7 @@ impl FlattenInner {
                 let scope = self.blocks.get_scope(new_scope_id);
 
                 // ensure this block is not an entry block, this should never happen.
-                assert!(scope.entry_block != Some(new_block_id));
+                assert!(scope.entry_block() != new_block_id);
 
                 self.blocks
                     .block_succ(current_block_id, new_block_id, Successor::BlockScope);
@@ -2054,8 +2054,8 @@ impl FlattenInner {
                 );
                 self.switch_blocks(current_block_id);
 
-                let scope = self.blocks.get_scope_mut(loop_scope_id);
-                scope.entry_block = Some(loop_block_id);
+                //let scope = self.blocks.get_scope_mut(loop_scope_id);
+                //scope.entry_block = Some(loop_block_id);
 
                 self.blocks.update_loop_blocks(
                     loop_scope_id,

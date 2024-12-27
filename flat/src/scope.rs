@@ -249,6 +249,10 @@ impl ScopeLayer {
         }
     }
 
+    pub fn entry_block(&self) -> BlockId {
+        self.entry_block.unwrap()
+    }
+
     pub fn is_static(&self) -> bool {
         self.scope_type == ScopeType::Static
     }
