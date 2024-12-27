@@ -221,7 +221,6 @@ impl<'a> TypedScope<'a, ScopeTypeStateLoop> {
 pub struct ScopeLayer {
     pub names: HashMap<StringKey, LinkId>,
     pub entries: HashMap<StringKey, HashSet<VariantId>>,
-    pub labels: HashMap<StringLabel, ValueId>,
     pub(crate) block_labels: HashMap<StringLabel, BlockId>,
     entry_block: Option<BlockId>,
     return_block: Option<BlockId>,
@@ -234,7 +233,6 @@ pub struct ScopeLayer {
 impl ScopeLayer {
     pub fn new(scope_type: ScopeType) -> Self {
         Self {
-            labels: HashMap::new(),
             block_labels: HashMap::new(),
             names: HashMap::new(),
             entries: HashMap::new(),
@@ -275,10 +273,6 @@ impl ScopeLayer {
 
     pub fn dump(&self, b: &NodeBuilder) {
         println!("Scope: {:?}", self.scope_type);
-        for (k, v) in self.labels.iter() {
-            let s = b.labels.r(*k);
-            println!("\tLabel: {}:{:?}", s, v);
-        }
         for (k, v) in self.entries.iter() {
             let name = b.labels.r((*k).into());
             for variant_id in v.iter() {
