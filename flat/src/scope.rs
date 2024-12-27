@@ -221,7 +221,6 @@ impl<'a> TypedScope<'a, ScopeTypeStateLoop> {
 pub struct ScopeLayer {
     pub names: HashMap<StringKey, LinkId>,
     pub entries: HashMap<StringKey, HashSet<VariantId>>,
-    pub declarations: HashMap<StringKey, LinkId>,
     pub labels: HashMap<StringLabel, ValueId>,
     pub(crate) block_labels: HashMap<StringLabel, BlockId>,
     entry_block: Option<BlockId>,
@@ -239,7 +238,6 @@ impl ScopeLayer {
             block_labels: HashMap::new(),
             names: HashMap::new(),
             entries: HashMap::new(),
-            declarations: HashMap::new(),
             entry_block: None,
             return_block: None,
             loop_block: None,
@@ -346,11 +344,6 @@ impl BlockGraph {
     pub fn scope_define(&mut self, scope_id: ScopeId, name: StringKey, v: LinkId) {
         let scope = self.get_scope_mut(scope_id);
         scope.names.insert(name, v);
-    }
-
-    pub fn scope_define_declaration(&mut self, scope_id: ScopeId, name: StringKey, v: LinkId) {
-        let scope = self.get_scope_mut(scope_id);
-        scope.declarations.insert(name, v);
     }
 
     pub fn scope_succ(&mut self, source_scope_id: ScopeId, target_scope_id: ScopeId) {

@@ -399,18 +399,6 @@ impl FlattenInner {
         self.resolve_name_in_scope(block.scope_id, name)
     }
 
-    pub fn resolve_declaration(&self, block_id: BlockId, name: StringKey) -> Option<LinkId> {
-        // resolve scope through the tree, starting at the current scope
-        let block = self.blocks.get_block(block_id);
-        for scope_id in self.blocks.walk_scopes(block.scope_id) {
-            let scope = self.blocks.get_scope(scope_id);
-            if let Some(data) = scope.declarations.get(&name) {
-                return Some(data.clone());
-            }
-        }
-        None
-    }
-
     pub fn resolve_label(&self, start_scope_id: ScopeId, name: StringLabel) -> Option<BlockId> {
         // search scopes to find a template
         for scope_id in self.blocks.walk_scopes(start_scope_id) {
