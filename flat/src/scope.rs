@@ -176,25 +176,25 @@ impl ScopeTypeState for ScopeTypeStateBlock {}
 impl ScopeTypeState for ScopeTypeStateStatic {}
 impl ScopeTypeState for ScopeTypeStateFunction {}
 
-pub struct TypedScope<ScopeTypeState> {
-    inner: Box<ScopeLayer>,
+pub struct TypedScope<'a, ScopeTypeState> {
+    inner: &'a mut ScopeLayer,
     _s: std::marker::PhantomData<ScopeTypeState>,
 }
 
-impl<S: ScopeTypeState> Deref for TypedScope<S> {
+impl<'a, S: ScopeTypeState> Deref for TypedScope<'a, S> {
     type Target = ScopeLayer;
 
     fn deref(&self) -> &Self::Target {
-        &self.inner
+        self.inner
     }
 }
-impl<S: ScopeTypeState> DerefMut for TypedScope<S> {
+impl<'a, S: ScopeTypeState> DerefMut for TypedScope<'a, S> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
+        self.inner
     }
 }
 
-impl TypedScope<ScopeTypeStateFunction> {
+impl<'a> TypedScope<'a, ScopeTypeStateFunction> {
     pub fn return_block(&self) -> BlockId {
         self.inner.return_block.unwrap()
     }
@@ -483,6 +483,16 @@ impl BlockGraph {
     pub fn get_function_scope_id(&self, scope_id: ScopeId) -> ScopeId {
         self.find_nearest_scope(scope_id, &[ScopeType::Function])
             .expect(&format!("Not in function context, scope_id:{}", scope_id))
+    }
+
+    pub fn get_function_scope(&mut self, block_id: BlockId) -> TypedScope<ScopeTypeStateFunction> {
+        let block = self.get_block(block_id);
+        let function_scope_id = self.get_function_scope_id(block.scope_id);
+        let scope = self.get_scope_mut(function_scope_id);
+        TypedScope {
+            inner: scope,
+            _s: std::marker::PhantomData,
+        }
     }
 
     pub fn gen_scope_graph(&self, filename: &str) {
