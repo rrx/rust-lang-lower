@@ -1,7 +1,7 @@
 use anyhow::Result;
 use compile_core::{
-    AbstractionId, Argument, Ast, AstFuncType, AstType, ControlFlowMarker, Lambda, Literal,
-    ReturnType, SpanId, StringKey,
+    AbstractionId, Argument, AstFuncType, AstType, ControlFlowMarker, Lambda, Literal, ReturnType,
+    SpanId, StringKey,
 };
 
 use std::convert::Into;
@@ -146,13 +146,12 @@ impl FlattenInner {
             );
 
             let arg_type_id = b.types.s(&ty.args);
-            let return_type = b.types.s(&AstType::Unit);
             let fun_type_id = b.types.s(&ty.clone().into());
 
             let lambda = Lambda {
+                func_type: ty.clone(),
                 fun_type: fun_type_id,
                 arg_type: arg_type_id,
-                return_type,
                 body: Some(body.into()),
                 defaults: HashMap::new(),
             };

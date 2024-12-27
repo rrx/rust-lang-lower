@@ -356,11 +356,8 @@ impl FlattenInner {
             );
         }
 
-        let def_ret_type = b.types.r(def.return_type).clone();
-        let def_func_type = AstFuncType::new(
-            AstType::Struct(fields_list),
-            ReturnType::Single(def_ret_type),
-        );
+        let def_func_type =
+            AstFuncType::new(AstType::Struct(fields_list), def.func_type.ret.clone());
 
         Ok((args, def_func_type))
     }
@@ -381,7 +378,6 @@ impl FlattenInner {
         let block = self.blocks.get_block(current_block_id);
 
         let a = self.abstractions.get(abstraction_id);
-        //let def = a.def.clone();
         let def_span_id = a.def_span_id;
 
         // if it's defined in static scope, just call it

@@ -141,16 +141,15 @@ impl Builtin {
     }
 
     pub fn get_lambda(&self, b: &mut NodeBuilder) -> Lambda {
-        let ret_type_id = b.types.s(&self.get_return_type());
         let key = b.labels.s("a");
         let unknown = b.types.fresh_unknown();
         let arg_type = AstType::Struct(vec![(Some(key), unknown)]);
         let func_ty =
-            AstFuncType::new(arg_type.clone(), ReturnType::Single(self.get_return_type())).into();
+            AstFuncType::new(arg_type.clone(), ReturnType::Single(self.get_return_type()));
         let def = Lambda {
-            fun_type: b.types.s(&func_ty),
+            func_type: func_ty.clone(),
+            fun_type: b.types.s(&func_ty.into()),
             arg_type: b.types.s(&arg_type),
-            return_type: ret_type_id,
             body: None,
             defaults: HashMap::new(),
         };

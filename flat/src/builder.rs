@@ -135,14 +135,6 @@ impl TypeBuilder {
     pub fn r(&self, id: TypeId) -> &AstType {
         self.pool.resolve(&id)
     }
-
-    pub fn get_type(&mut self, lambda: &Lambda) -> AstType {
-        //let spans = def.params.iter().map(|p| p.span_id).collect::<Vec<_>>();
-        let arg_type = self.r(lambda.arg_type).clone();
-        let return_type = self.r(lambda.return_type).clone();
-        let ty = AstFuncType::new(arg_type, ReturnType::Single(return_type.clone())).into();
-        ty
-    }
 }
 
 pub struct NodeBuilder {
@@ -228,19 +220,16 @@ impl NodeBuilder {
                 .collect::<Vec<_>>(),
         );
         let arg_type_id = self.types.s(&arg_type);
-        let fun_type = AstFuncType::new(arg_type, ReturnType::Single(return_type.clone())).into();
-        let return_type = self.types.s(&return_type);
-        let fun_type_id = self.types.s(&fun_type);
+        let fun_type = AstFuncType::new(arg_type, ReturnType::Single(return_type.clone()));
+        let fun_type_id = self.types.s(&fun_type.clone().into());
         Self::global(
             name,
             Ast::Lambda(Lambda {
+                func_type: fun_type.clone(),
                 fun_type: fun_type_id,
                 arg_type: arg_type_id,
-                return_type,
                 body: body.map(|b| b.into()),
                 defaults: HashMap::new(),
-                //open_args: None,
-                //open_kwargs: None,
             })
             .into(),
         )

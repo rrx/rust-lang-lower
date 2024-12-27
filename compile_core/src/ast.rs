@@ -1,4 +1,4 @@
-use crate::{AstNode, AstType, BuiltinId, SpanId, StringKey, TypeId};
+use crate::{AstFuncType, AstNode, AstType, BuiltinId, SpanId, StringKey, TypeId};
 use petgraph::graph::NodeIndex;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -217,9 +217,9 @@ pub struct ParameterNode {
 
 #[derive(Debug, Clone)]
 pub struct Lambda {
+    pub func_type: AstFuncType,
     pub fun_type: TypeId,
     pub arg_type: TypeId,
-    pub return_type: TypeId,
     pub body: Option<Box<AstNode>>,
     pub defaults: HashMap<StringKey, AstNode>,
 }
