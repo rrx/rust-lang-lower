@@ -889,6 +889,18 @@ impl FlattenInner {
             Self::calculate_function_arguments(&def, &args, &[], def_span_id, call_span_id, b)?;
         let call_values = self.push_call_arguments(args, call_span_id, b)?;
         self.push_call_values(&call_values, b);
+
+        let call_types = call_values.iter().map(|v| v.2.clone()).collect::<Vec<_>>();
+
+        // unify args
+        // TODO: return type should also be unified
+        b.unify(
+            &func_type.args,
+            call_span_id,
+            &AstType::build_struct(call_types),
+            call_span_id,
+        );
+
         let link_id = self.push_code(
             LCode::Builtin(id),
             func_type.into(),

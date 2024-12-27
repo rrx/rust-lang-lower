@@ -194,11 +194,74 @@ impl FlattenInner {
             .unwrap();
 
         println!("unwind scopes: {:?}", unwind_scopes);
-        for scope_id in unwind_scopes {
-            let block_id = self.gen_unwind_cps(scope_id, call_span_id, b);
+        if unwind_scopes.is_empty() {
+            return target_block_id;
         }
 
-        //assert!(unwind_scopes.is_ok());
+        let start_key = b.labels.fresh_key("ustart");
+        let start_block_id =
+            self.blocks
+                .new_block(current_block_id, goto_scope_id, Successor::BlockScope);
+        self.switch_blocks(start_block_id);
+        self.push_start_block(
+            goto_scope_id,
+            AstFuncType::new_void_void().into(),
+            Some(start_key),
+            call_span_id,
+            VarDefinitionSpace::Default,
+        );
+
+        for scope_id in unwind_scopes {
+            let scope = self.blocks.get_scope(scope_id);
+            let entry_block_id = scope.entry_block();
+            let new_block_id =
+                self.blocks
+                    .new_block(entry_block_id, scope_id, Successor::BlockScope);
+            let next_block_id =
+                self.blocks
+                    .new_block(entry_block_id, scope_id, Successor::BlockScope);
+            let block_id = self.gen_unwind_cps(scope_id, call_span_id, b);
+            self.push_jump(new_block_id, vec![], call_span_id, b);
+            self.switch_blocks(new_block_id);
+            let void_func_type = AstFuncType::new_void_void();
+            let new_key = b.labels.fresh_key("unew");
+            self.push_start_block(
+                scope_id,
+                void_func_type.clone().into(),
+                Some(new_key),
+                call_span_id,
+                VarDefinitionSpace::Default,
+            );
+
+            let code = LCode::Val(Literal::Block(block_id));
+            let link_id = self.push_code(
+                code,
+                void_func_type.clone().into(),
+                None,
+                call_span_id,
+                VarDefinitionSpace::Default,
+            );
+
+            // jump to unwind block
+            self.push_jump(
+                block_id,
+                vec![(None, link_id, void_func_type.into(), call_span_id)],
+                call_span_id,
+                b,
+            );
+            self.switch_blocks(next_block_id);
+            let next_key = b.labels.fresh_key("unext");
+            self.push_start_block(
+                scope_id,
+                AstFuncType::new_void_void().into(),
+                Some(next_key),
+                call_span_id,
+                VarDefinitionSpace::Default,
+            );
+        }
+        self.push_jump(target_block_id, vec![], call_span_id, b);
+
+        self.switch_blocks(current_block_id);
         target_block_id
     }
 
