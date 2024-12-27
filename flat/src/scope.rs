@@ -224,7 +224,7 @@ pub struct ScopeLayer {
     pub declarations: HashMap<StringKey, LinkId>,
     pub labels: HashMap<StringLabel, ValueId>,
     pub(crate) block_labels: HashMap<StringLabel, BlockId>,
-    pub entry_block: Option<BlockId>,
+    entry_block: Option<BlockId>,
     return_block: Option<BlockId>,
     loop_block: Option<LoopScope>,
     scope_type: ScopeType,

@@ -920,7 +920,7 @@ impl FlattenInner {
         let global_name = b.labels.fresh_key(&s_name); //&format!("{}.call", s_name));
                                                        // create a new block
         let scope = self.blocks.get_scope(scope_id);
-        let scope_block_id = scope.entry_block.unwrap();
+        let scope_block_id = scope.entry_block();
         let next_block_id = self
             .blocks
             .new_block(scope_block_id, scope_id, Successor::BlockScope);
@@ -1003,7 +1003,7 @@ impl FlattenInner {
         // create a new block static blocks, which is the final destination
         //let (exit_block_id, exit_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
         let scope = self.blocks.get_scope(scope_id);
-        let scope_block_id = scope.entry_block.unwrap();
+        let scope_block_id = scope.entry_block();
         let exit_block_id = self
             .blocks
             .new_block(scope_block_id, scope_id, Successor::BlockScope);
@@ -1199,7 +1199,7 @@ impl FlattenInner {
                 let body = a.def.body.clone().unwrap();
 
                 let scope = self.blocks.get_scope(scope_id);
-                let block_id = scope.entry_block.unwrap();
+                let block_id = scope.entry_block();
 
                 // New Func Scope
                 let (fun_block_id, fun_scope_id) = self.blocks.new_scope_and_block(

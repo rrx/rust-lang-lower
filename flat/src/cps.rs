@@ -46,7 +46,7 @@ impl FlattenInner {
                 (variant_id, fun_block_id, fun_scope_id, resolve_type)
             } else {
                 let scope = self.blocks.get_scope(scope_id);
-                let block_id = scope.entry_block.unwrap();
+                let block_id = scope.entry_block();
 
                 let (fun_block_id, fun_scope_id) = self.blocks.new_scope_and_block(
                     ScopeType::Block,

@@ -594,7 +594,7 @@ impl FlattenInner {
         let block_id = self.current_block_id();
         let block = self.blocks.get_block(block_id);
         let scope = self.blocks.get_scope(block.scope_id);
-        let entry_block_id = scope.entry_block.unwrap();
+        let entry_block_id = scope.entry_block();
 
         let entry = CodeEntry::new(
             entry_block_id,
@@ -642,7 +642,7 @@ impl FlattenInner {
                 let block = self.blocks.get_block(block_id);
                 let scope_id = block.scope_id;
                 let scope = self.blocks.get_scope(scope_id);
-                let entry_block_id = scope.entry_block.unwrap();
+                let entry_block_id = scope.entry_block();
                 entry.block_id = entry_block_id;
                 let link_id = self.insert_decl(entry_block_id, entry);
                 link_id
@@ -778,7 +778,7 @@ impl FlattenInner {
             let v_block = self.blocks.get_block(v_block_id);
             let v_scope_id = v_block.scope_id;
             let v_scope = self.blocks.get_scope(v_scope_id);
-            let v_entry_block_id = v_scope.entry_block.unwrap();
+            let v_entry_block_id = v_scope.entry_block();
             let in_entry = v_entry_block_id == v_block_id;
             let in_block = v_block_id == block_id;
 
