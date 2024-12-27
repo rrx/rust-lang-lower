@@ -1407,9 +1407,6 @@ impl FlattenInner {
                         v_decl
                     } else {
                         // need to declare it
-                        let scope = self.blocks.get_scope(scope_id);
-                        let _entry_block_id = scope.entry_block();
-                        let _current_block_id = self.current_block_id();
                         let block = self.blocks.get_block(self.current_block_id());
                         let scope_id = block.scope();
 
@@ -1976,9 +1973,6 @@ impl FlattenInner {
                 );
                 self.switch_blocks(current_block_id);
 
-                //let scope = self.blocks.get_scope_mut(loop_scope_id);
-                //scope.entry_block = Some(loop_block_id);
-
                 self.blocks.update_loop_blocks(
                     loop_scope_id,
                     maybe_key,
@@ -2137,7 +2131,7 @@ impl FlattenInner {
                     let link_id = r.link_id.unwrap();
                     let ty = self.get_type(link_id).clone();
                     link_ids.push(link_id);
-                    types.push(ty.clone()); //r.ty.clone());
+                    types.push(ty.clone());
                     values.push((None, link_id, ty, span_id));
                 }
 

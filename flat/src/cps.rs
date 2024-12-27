@@ -137,7 +137,6 @@ impl FlattenInner {
         //let fun_scope = self.blocks.get_scope_mut(fun_scope_id);
         // we might want to handle this later
         // return in a CPS will return from the scoped function
-        //fun_scope.return_block = Some(next_block_id);
         //
         // WRITE GOTO
         let (args, _) =
@@ -146,7 +145,6 @@ impl FlattenInner {
         let goto_block_id = self.current_block_id();
         let block = self.blocks.get_block(goto_block_id);
         let goto_scope_id = block.scope();
-        //let s_name = b.labels.r(name.into());
         let call_arg_type = argvec_type(&call_values);
         let call_func_type =
             AstFuncType::new(call_arg_type.clone().into(), ReturnType::Never.into()).into();
