@@ -1,6 +1,7 @@
 use anyhow::Result;
 use compile_core::{
-    AbstractionId, Argument, AstFuncType, AstType, Literal, ReturnType, SpanId, StringKey,
+    AbstractionId, Argument, Ast, AstFuncType, AstType, ControlFlowMarker, Lambda, Literal,
+    ReturnType, SpanId, StringKey,
 };
 
 use std::convert::Into;
@@ -11,6 +12,8 @@ use crate::{
     Successor, VarDefinitionSpace, VariantId,
 };
 
+use std::collections::HashMap;
+
 impl FlattenInner {
     pub(super) fn gen_cps_block_with_type(
         &mut self,
@@ -19,6 +22,7 @@ impl FlattenInner {
         abstraction_id: AbstractionId,
         call_func_type: &AstType,
         call_span_id: SpanId,
+        new_scope: bool,
         b: &mut NB,
     ) -> Result<(VariantId, ScopeId, BlockId, AstType)> {
         let s_name = b.labels.r(name.into());
@@ -48,14 +52,22 @@ impl FlattenInner {
                 let scope = self.blocks.get_scope(scope_id);
                 let block_id = scope.entry_block();
 
-                let (fun_block_id, fun_scope_id) = self.blocks.new_scope_and_block(
-                    ScopeType::Block,
-                    ScopeState::block(),
-                    block_id,
-                    scope_id,
-                    Successor::BlockScope,
-                );
-                self.blocks.control_flow(block_id, &[fun_block_id]);
+                let (fun_block_id, fun_scope_id) = if new_scope {
+                    self.blocks.new_scope_and_block(
+                        ScopeType::Block,
+                        ScopeState::block(),
+                        block_id,
+                        scope_id,
+                        Successor::BlockScope,
+                    )
+                } else {
+                    let fun_block_id =
+                        self.blocks
+                            .new_block(block_id, scope_id, Successor::BlockScope);
+                    (fun_block_id, scope_id)
+                };
+
+                //self.blocks.control_flow(block_id, &[fun_block_id]);
 
                 // Start lambda block
                 let lambda_name = b.labels.fresh_key(&s_name);
@@ -111,7 +123,12 @@ impl FlattenInner {
         Ok((variant_id, fun_scope_id, fun_block_id, def_arg_type))
     }
 
-    fn push_unwind(&mut self, target_block_id: BlockId) -> BlockId {
+    fn push_unwind(
+        &mut self,
+        target_block_id: BlockId,
+        call_span_id: SpanId,
+        b: &mut NB,
+    ) -> BlockId {
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
         let goto_scope_id = block.scope();
@@ -121,8 +138,56 @@ impl FlattenInner {
 
         // TODO: now that we know the target, we need to replace any call values with unwind
         // functions. We also need to do this for the goto_block_id.
-        let unwind_scopes = self.blocks.unwind_scopes(goto_scope_id, target_scope_id);
+        let unwind_scopes = self
+            .blocks
+            .unwind_scopes(goto_scope_id, target_scope_id)
+            .unwrap();
+
         println!("unwind scopes: {:?}", unwind_scopes);
+        for scope_id in unwind_scopes {
+            let scope = self.blocks.get_scope(scope_id);
+            let block_id = scope.entry_block();
+            let name = format!("U{}", scope_id.index());
+            let key = b.labels.s(&name);
+            let arg_key = b.labels.s("u");
+
+            let target_type = AstFuncType::new_void_void();
+            let params = vec![(arg_key, AstType::Func(target_type.clone().into()))];
+            let ty = AstFuncType::new(
+                AstType::Struct(vec![(Some(arg_key), target_type.into())]),
+                ReturnType::Never,
+            );
+            let body = NB::seq(
+                vec![ControlFlowMarker::Goto(arg_key, vec![]).node(call_span_id)],
+                call_span_id,
+            );
+
+            let arg_type_id = b.types.s(&ty.args);
+            let return_type = b.types.s(&AstType::Unit);
+            let fun_type_id = b.types.s(&ty.clone().into());
+
+            let lambda = Lambda {
+                fun_type: fun_type_id,
+                arg_type: arg_type_id,
+                return_type,
+                body: Some(body.into()),
+                defaults: HashMap::new(),
+            };
+
+            let abstraction_id = self.save_ast_template(block_id, &key, &lambda, call_span_id);
+            let (variant_id, scope_id, block_id, ty) = self
+                .gen_cps_block_with_type(
+                    key,
+                    scope_id,
+                    abstraction_id,
+                    &ty.into(),
+                    call_span_id,
+                    false,
+                    b,
+                )
+                .unwrap();
+        }
+
         //assert!(unwind_scopes.is_ok());
         target_block_id
     }
@@ -158,8 +223,6 @@ impl FlattenInner {
             Self::calculate_function_arguments(&def, &args, &[], def_span_id, call_span_id, b)?;
         let call_values = self.push_call_arguments(args, call_span_id, b)?;
         let goto_block_id = self.current_block_id();
-        //let block = self.blocks.get_block(goto_block_id);
-        //let goto_scope_id = block.scope();
         let call_arg_type = argvec_type(&call_values);
         let call_func_type =
             AstFuncType::new(call_arg_type.clone().into(), ReturnType::Never.into()).into();
@@ -170,10 +233,10 @@ impl FlattenInner {
             abstraction_id,
             &call_func_type,
             call_span_id,
+            true,
             b,
         )?;
 
-        //self.switch_blocks(goto_block_id);
         // NOW JUMP
         // now that we have the arguments calculated, and the lambda baked, jump!
         self.remove_placeholder_terminal(goto_block_id);
@@ -183,14 +246,8 @@ impl FlattenInner {
             .map(|(_, link_id, _, _)| *link_id)
             .collect::<Vec<_>>();
 
-        let unwind_target_block_id = self.push_unwind(fun_block_id);
-
-        let goto_link_id = self.push_jump(
-            unwind_target_block_id.into(),
-            call_values.clone(),
-            call_span_id,
-            b,
-        );
+        let goto_link_id =
+            self.push_jump(fun_block_id.into(), call_values.clone(), call_span_id, b);
 
         for (i, (_, var_link_id, _ty, _)) in call_values.iter().enumerate() {
             self.scoped_continuations.connect(
@@ -466,6 +523,8 @@ impl FlattenInner {
 
                     // TODO: we just have a label, so we need to handle unwind here.  We can't jump
                     // directly, we need to jump to the unwind function
+                    let unwind_target_block_id =
+                        self.push_unwind(target_block_id, d.call_span_id, b);
 
                     // TODO: args should be unwound before jumping
                     // by replacing jumps out of scope to the unwind function

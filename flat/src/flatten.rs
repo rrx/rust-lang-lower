@@ -402,9 +402,8 @@ impl FlattenInner {
         let block = self.blocks.get_block(block_id);
         let scope_id = block.scope();
 
-        self.switch_blocks(block_id);
         let (_variant_id, _fun_scope_id, fun_block_id, _) =
-            self.gen_cps_block_with_type(name, scope_id, abstraction_id, &ty, span_id, b)?;
+            self.gen_cps_block_with_type(name, scope_id, abstraction_id, &ty, span_id, true, b)?;
 
         self.scoped_continuations.connect(
             ContinuationFlow::Block(fun_block_id),
@@ -955,12 +954,12 @@ impl FlattenInner {
         name: &StringKey,
         def: &Lambda,
         span_id: SpanId,
-    ) -> Result<AbstractionId> {
+    ) -> AbstractionId {
         let abstraction_id = self.abstractions.add(def.clone(), span_id);
         let block = self.blocks.get_block(block_id);
         self.blocks
             .define_lambda(block.scope(), name.into(), abstraction_id);
-        Ok(abstraction_id)
+        abstraction_id
     }
 
     pub fn push_close_block(&mut self, span_id: SpanId, b: &mut NB) -> Result<FlattenResult> {
@@ -1076,13 +1075,16 @@ impl FlattenInner {
 
     pub(super) fn refresh_func_type(&self, def_func_type: &AstFuncType, b: &mut NB) -> AstFuncType {
         // refresh variables
-        if let ReturnType::Single(ret_ty) = &def_func_type.ret {
-            AstFuncType::new(
+        match &def_func_type.ret {
+            ReturnType::Single(ret_ty) => AstFuncType::new(
                 b.types.refresh(def_func_type.args.clone()),
                 ReturnType::Single(b.types.refresh(ret_ty.clone())),
-            )
-        } else {
-            unreachable!()
+            ),
+            ReturnType::Never => AstFuncType::new(
+                b.types.refresh(def_func_type.args.clone()),
+                ReturnType::Never,
+            ),
+            _ => unreachable!(),
         }
     }
 
@@ -1104,6 +1106,7 @@ impl FlattenInner {
         b: &mut NB,
     ) -> LinkId {
         let block = self.blocks.get_block(goto_block_id);
+        println!("replace: {}, {}", goto_block_id, block.is_dead());
         let last_link_id = block.last().unwrap();
 
         for block_id in &target_block_ids {
@@ -1132,7 +1135,7 @@ impl FlattenInner {
 
                 Some(LCode::Switch(arg_link_id, m))
             } else {
-                b.push_error("Missing Targets", entry.span_id);
+                b.push_warning("Missing Targets", entry.span_id);
                 None
                 //unreachable!();
             }
@@ -1173,7 +1176,7 @@ impl FlattenInner {
                     Ast::Lambda(def) => {
                         // save template for later use
                         if def.body.is_some() {
-                            self.save_ast_template(current_block_id, &name, &def, span_id)?;
+                            self.save_ast_template(current_block_id, &name, &def, span_id);
                         }
 
                         // TODO: The function doesn't actually exist until we call it
@@ -1383,7 +1386,7 @@ impl FlattenInner {
 
                     // save the template
                     let def_span_id = expr.span_id;
-                    let _ = self.save_ast_template(current_block_id, &name, &def, def_span_id)?;
+                    let _ = self.save_ast_template(current_block_id, &name, &def, def_span_id);
                     self.switch_blocks(current_block_id);
                     return Ok(FlattenResult::statement());
                 }
