@@ -267,6 +267,14 @@ impl ScopeLayer {
         self.return_block = Some(state.return_block);
     }
 
+    pub fn define_label(&mut self, block_id: BlockId, name: StringKey) {
+        self.block_labels.insert(name.into(), block_id);
+    }
+
+    pub fn resolve_label(&self, name: StringLabel) -> Option<BlockId> {
+        self.block_labels.get(&name).cloned()
+    }
+
     pub fn variant_link(&mut self, name: StringKey, variant_id: VariantId) {
         if let Some(m) = self.entries.get_mut(&name) {
             m.insert(variant_id);
@@ -677,8 +685,8 @@ impl BlockGraph {
         // search scopes to find a template
         for scope_id in self.walk_scopes(start_scope_id) {
             let scope = self.get_scope(scope_id);
-            if let Some(block_id) = scope.block_labels.get(&name) {
-                return Some(*block_id);
+            if let Some(block_id) = scope.resolve_label(name) {
+                return Some(block_id);
             }
         }
         None
