@@ -306,7 +306,7 @@ impl FlattenInner {
 
     pub fn dump_scope(&self, block_id: BlockId, b: &NB) {
         let block = self.blocks.get_block(block_id);
-        self.blocks.dump_scope(block.scope_id, b);
+        self.blocks.dump_scope(block.scope(), b);
     }
 
     pub fn variant_add(
@@ -400,7 +400,7 @@ impl FlattenInner {
         let name = entry.name.unwrap();
         let block_id = entry.block_id;
         let block = self.blocks.get_block(block_id);
-        let scope_id = block.scope_id;
+        let scope_id = block.scope();
 
         self.switch_blocks(block_id);
         let (_variant_id, _fun_scope_id, fun_block_id, _) =
@@ -427,7 +427,7 @@ impl FlattenInner {
 
         for block_id in blocks.into_iter() {
             let block = self.blocks.get_block(block_id);
-            let scope_id = block.scope_id;
+            let scope_id = block.scope();
             if block.empty() {
                 continue;
             }
@@ -535,7 +535,7 @@ impl FlattenInner {
     pub fn push_decl(&mut self, ty: AstType, name: StringKey, span_id: SpanId) -> LinkId {
         let block_id = self.current_block_id();
         let block = self.blocks.get_block(block_id);
-        let scope = self.blocks.get_scope(block.scope_id);
+        let scope = self.blocks.get_scope(block.scope());
         let entry_block_id = scope.entry_block();
 
         let entry = CodeEntry::new(
@@ -582,7 +582,7 @@ impl FlattenInner {
             }
             LCode::Declare | LCode::DeclareFunction(_) => {
                 let block = self.blocks.get_block(block_id);
-                let scope_id = block.scope_id;
+                let scope_id = block.scope();
                 let scope = self.blocks.get_scope(scope_id);
                 let entry_block_id = scope.entry_block();
                 entry.block_id = entry_block_id;
@@ -612,7 +612,7 @@ impl FlattenInner {
         b: &mut NB,
     ) -> Result<FlattenResult> {
         let block = self.blocks.get_block(self.current_block_id());
-        let start_stack = self.blocks.walk_scopes(block.scope_id);
+        let start_stack = self.blocks.walk_scopes(block.scope());
 
         for (_i, expr) in seq.into_iter().enumerate() {
             let _ = self.push_node(expr, b)?;
@@ -621,7 +621,7 @@ impl FlattenInner {
         // ensure that we close any blocks that were opened
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
-        let scope_id = block.scope_id;
+        let scope_id = block.scope();
         let end_stack = self.blocks.walk_scopes(scope_id);
         for _ in 0..end_stack.len() - start_stack.len() {
             let ast: Ast = ControlFlowMarker::BlockEnd.into();
@@ -712,13 +712,13 @@ impl FlattenInner {
         let mut updated_values = vec![];
         let block_id = self.current_block_id();
         let block = self.blocks.get_block(block_id);
-        let scope_id = block.scope_id;
+        let scope_id = block.scope();
         for (maybe_key, v, ty, span_id) in values {
             let mut v = *v;
             let entry = self.get_entry(v);
             let v_block_id = entry.block_id;
             let v_block = self.blocks.get_block(v_block_id);
-            let v_scope_id = v_block.scope_id;
+            let v_scope_id = v_block.scope();
             let v_scope = self.blocks.get_scope(v_scope_id);
             let v_entry_block_id = v_scope.entry_block();
             let in_entry = v_entry_block_id == v_block_id;
@@ -780,7 +780,7 @@ impl FlattenInner {
         let current_block_id = self.current_block_id();
         //println!("jump: {}=>{}", current_block_id, target_block_id);
         let block = self.blocks.get_block(current_block_id);
-        let _start_stack = self.blocks.walk_scopes(block.scope_id);
+        let _start_stack = self.blocks.walk_scopes(block.scope());
 
         // Construct the argument type
         let arg_ty = AstType::Struct(
@@ -957,14 +957,14 @@ impl FlattenInner {
         let abstraction_id = self.abstractions.add(def.clone(), span_id);
         let block = self.blocks.get_block(block_id);
         self.blocks
-            .define_lambda(block.scope_id, name.into(), abstraction_id);
+            .define_lambda(block.scope(), name.into(), abstraction_id);
         Ok(abstraction_id)
     }
 
     pub fn push_close_block(&mut self, span_id: SpanId, b: &mut NB) -> Result<FlattenResult> {
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
-        let scope_id = block.scope_id;
+        let scope_id = block.scope();
 
         if let Some(scope) = self.blocks.try_loop_scope(scope_id) {
             let start_block = scope.start_block();
@@ -980,7 +980,7 @@ impl FlattenInner {
     pub fn dump_position(&self) {
         let block_id = self.current_block_id();
         let block = self.blocks.get_block(block_id);
-        let scope_id = block.scope_id;
+        let scope_id = block.scope();
         println!("pos: {}{}", scope_id, block_id);
     }
 
@@ -1186,7 +1186,7 @@ impl FlattenInner {
                     }
 
                     Ast::Literal(lit) => {
-                        let scope_id = block.scope_id;
+                        let scope_id = block.scope();
                         let scope = self.blocks.get_scope(scope_id);
 
                         let static_block_id = self.static_block_id();
@@ -1249,7 +1249,7 @@ impl FlattenInner {
 
             Ast::Return(maybe_expr) => {
                 let block = self.blocks.get_block(current_block_id);
-                let fun_scope_id = self.blocks.get_function_scope_id(block.scope_id);
+                let fun_scope_id = self.blocks.get_function_scope_id(block.scope());
                 let fun_block_id = self.blocks.get_entry_block(fun_scope_id);
 
                 let mut jump_args = vec![];
@@ -1327,7 +1327,7 @@ impl FlattenInner {
 
             Ast::Identifier(key) => {
                 // identifier is expression, non-terminal
-                let scope_id = block.scope_id;
+                let scope_id = block.scope();
 
                 // resolve identifier lexically
                 if let Some(def_link_id) = self.blocks.resolve_name(current_block_id, key) {
@@ -1395,7 +1395,7 @@ impl FlattenInner {
 
                 let block_id = self.current_block_id();
                 let block = self.blocks.get_block(block_id);
-                let scope_id = block.scope_id;
+                let scope_id = block.scope();
 
                 let offset_decl =
                     if let Some(v_decl) = self.blocks.resolve_name_in_scope(scope_id, name) {
@@ -1409,7 +1409,7 @@ impl FlattenInner {
                         let _entry_block_id = scope.entry_block();
                         let _current_block_id = self.current_block_id();
                         let block = self.blocks.get_block(self.current_block_id());
-                        let scope_id = block.scope_id;
+                        let scope_id = block.scope();
 
                         let link_id = self.push_code(
                             LCode::Declare,
@@ -1441,7 +1441,7 @@ impl FlattenInner {
 
             Ast::Import(module_key, args) => {
                 let module_name = b.labels.r(module_key.into());
-                let scope_id = block.scope_id;
+                let scope_id = block.scope();
 
                 if &module_name == "prelude" {
                     let print = b.labels.s("print");
@@ -1532,7 +1532,7 @@ impl FlattenInner {
                 let block = self.blocks.get_block(current_block_id);
                 assert!(!block.is_term());
 
-                let parent_scope_id = block.scope_id;
+                let parent_scope_id = block.scope();
 
                 let v_next =
                     self.blocks
@@ -1645,7 +1645,7 @@ impl FlattenInner {
                     Ast::Identifier(key) => {
                         let key = *key;
                         let ty = AstType::func(vec![], AstType::Unit);
-                        let scope_id = block.scope_id;
+                        let scope_id = block.scope();
                         if let Some((variant_id, _resolve_type, link_id, _scope_id)) =
                             self.resolve_function_name(scope_id, &key, &ty, b)
                         {
@@ -1683,7 +1683,7 @@ impl FlattenInner {
                 // LABEL
                 let name = name.unwrap();
                 // push a new block.  But check to make sure the previous block was closed
-                let scope_id = block.scope_id;
+                let scope_id = block.scope();
 
                 // check for duplicates
                 if let Some(block_id) = self.blocks.resolve_label(scope_id, name.into()) {
@@ -1765,7 +1765,7 @@ impl FlattenInner {
             Ast::Ternary(c, x, y) => {
                 // expression, non-terminal
                 let block = self.blocks.get_block(current_block_id);
-                let scope_id = block.scope_id;
+                let scope_id = block.scope();
 
                 // Condition
                 self.switch_blocks(current_block_id);
@@ -1881,7 +1881,7 @@ impl FlattenInner {
                 let mut argvec = VecDeque::from(argvec);
                 let mut acc = VecDeque::new();
                 let block = self.blocks.get_block(current_block_id);
-                let parent_scope_id = block.scope_id;
+                let parent_scope_id = block.scope();
                 let current_block_id = self.current_block_id();
                 let mut out_link_id = None;
                 if argvec.is_empty() {
@@ -1950,7 +1950,7 @@ impl FlattenInner {
 
             Ast::ControlFlowMarker(ControlFlowMarker::LoopStart(maybe_key)) => {
                 let block = self.blocks.get_block(current_block_id);
-                let parent_scope_id = block.scope_id;
+                let parent_scope_id = block.scope();
 
                 let (loop_block_id, loop_scope_id) = self.blocks.new_scope_and_block(
                     ScopeType::Region,
@@ -2030,7 +2030,7 @@ impl FlattenInner {
             */
             Ast::ControlFlowMarker(ControlFlowMarker::LoopContinue(maybe_key)) => {
                 let block = self.blocks.get_block(current_block_id);
-                let scope_id = block.scope_id;
+                let scope_id = block.scope();
 
                 // loop up loop blocks by name
                 if let Some(loop_scope) = self.blocks.get_loop_scope(scope_id, maybe_key) {
@@ -2048,7 +2048,7 @@ impl FlattenInner {
 
             Ast::Continue(maybe_name, args) => {
                 let block = self.blocks.get_block(current_block_id);
-                let scope_id = block.scope_id;
+                let scope_id = block.scope();
 
                 // args not implemented yet
                 assert_eq!(args.len(), 0);
@@ -2068,7 +2068,7 @@ impl FlattenInner {
 
             Ast::ControlFlowMarker(ControlFlowMarker::LoopBreak(maybe_key)) => {
                 let block = self.blocks.get_block(current_block_id);
-                let scope_id = block.scope_id;
+                let scope_id = block.scope();
                 // loop up loop blocks by name
                 if let Some(loop_scope) = self.blocks.get_loop_scope(scope_id, maybe_key) {
                     self.switch_blocks(current_block_id);
@@ -2096,7 +2096,7 @@ impl FlattenInner {
 
             Ast::Break(maybe_name, args) => {
                 let block = self.blocks.get_block(current_block_id);
-                let scope_id = block.scope_id;
+                let scope_id = block.scope();
 
                 // args not implemented yet
                 assert_eq!(args.len(), 0);
@@ -2210,7 +2210,7 @@ impl FlattenInner {
         // we we want to add a node, and the current block is terminated
         // we create a new block for the dead code that follows.
         let block = self.blocks.get_block(self.current_block_id());
-        let scope_id = block.scope_id;
+        let scope_id = block.scope();
         if block.is_term() {
             let new_block_id =
                 self.blocks

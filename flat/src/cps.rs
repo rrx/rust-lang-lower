@@ -145,7 +145,7 @@ impl FlattenInner {
         let call_values = self.push_call_arguments(args, call_span_id, b)?;
         let goto_block_id = self.current_block_id();
         let block = self.blocks.get_block(goto_block_id);
-        let goto_scope_id = block.scope_id;
+        let goto_scope_id = block.scope();
         //let s_name = b.labels.r(name.into());
         let call_arg_type = argvec_type(&call_values);
         let call_func_type =
@@ -246,7 +246,7 @@ impl FlattenInner {
         // push a goto
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
-        let scope_id = block.scope_id;
+        let scope_id = block.scope();
         let link_id = block.last().unwrap();
         let ty = AstFuncType::new(argvec_type(&argvec), ReturnType::Never).into();
 
@@ -277,7 +277,7 @@ impl FlattenInner {
         // Goto is terminal, so we write out placeholders
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
-        let scope_id = block.scope_id;
+        let scope_id = block.scope();
 
         let _s_name = b.labels.r(name.into());
 
@@ -546,7 +546,7 @@ impl FlattenInner {
             let entry = self.get_entry(*link_id);
             let block_id = entry.block_id;
             let block = self.blocks.get_block(block_id);
-            let scope_id = block.scope_id;
+            let scope_id = block.scope();
             let key = entry.name.unwrap();
             if let Some(label_block_id) = self.blocks.resolve_label(scope_id, key.into()) {
                 blocks.push((*link_id, label_block_id));

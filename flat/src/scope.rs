@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     ArgVec, BlockGraph, BlockId, BlockifyError, LinkId, NodeBuilder, StringLabel, Successor,
-    ValueId, VariantId,
+    VariantId,
 };
 use compile_core::{AbstractionId, Argument, Lambda, SpanId, StringKey};
 
@@ -517,7 +517,7 @@ impl BlockGraph {
 
     pub fn get_function_scope(&mut self, block_id: BlockId) -> TypedScope<ScopeTypeStateFunction> {
         let block = self.get_block(block_id);
-        let function_scope_id = self.get_function_scope_id(block.scope_id);
+        let function_scope_id = self.get_function_scope_id(block.scope());
         let scope = self.get_scope_mut(function_scope_id);
         TypedScope {
             inner: scope,
@@ -573,7 +573,7 @@ impl BlockGraph {
     pub fn resolve_lambda_scope(&self, block_id: BlockId, name: StringLabel) -> Option<ScopeId> {
         // resolve scope through the tree, starting at the current scope
         let block = self.get_block(block_id);
-        for scope_id in self.walk_scopes(block.scope_id) {
+        for scope_id in self.walk_scopes(block.scope()) {
             let scope = self.get_scope(scope_id);
             if let Some(_template_id) = scope.lambdas.get(&name) {
                 return Some(scope_id);
@@ -648,7 +648,7 @@ impl BlockGraph {
     pub fn resolve_name(&self, block_id: BlockId, name: StringKey) -> Option<LinkId> {
         // resolve scope through the tree, starting at the current scope
         let block = self.get_block(block_id);
-        self.resolve_name_in_scope(block.scope_id, name)
+        self.resolve_name_in_scope(block.scope(), name)
     }
 
     pub fn define_label(&mut self, scope_id: ScopeId, block_id: BlockId, name: StringKey) {

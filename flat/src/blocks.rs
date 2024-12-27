@@ -4,7 +4,7 @@ use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
 use std::collections::HashSet;
 
-use crate::{BlockId, CodeOffset, LinkId, ScopeId, ScopeLayer, ScopeState, ScopeType};
+use crate::{BlockId, CodeOffset, LinkId, ScopeId, ScopeLayer};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Successor {
@@ -25,7 +25,7 @@ pub enum BlockStateEnum {
 
 #[derive(Debug, Clone)]
 pub struct IRBlock {
-    pub(super) scope_id: ScopeId,
+    scope_id: ScopeId,
     dead: bool,
     term: bool,
     size: usize,
@@ -53,6 +53,10 @@ impl IRBlock {
             decls: vec![],
             s: BlockStateEnum::Start,
         }
+    }
+
+    pub fn scope(&self) -> ScopeId {
+        self.scope_id
     }
 
     pub fn iter_args(&self) -> impl Iterator<Item = LinkId> + '_ {

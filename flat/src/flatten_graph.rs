@@ -158,8 +158,8 @@ impl Flatten<Module> {
                     if succ != &Successor::Jump || block.is_dead() || target_block.is_dead() {
                         continue;
                     }
-                    let source_scope_name = format!("S{}", block.scope_id.index());
-                    let target_scope_name = format!("S{}", target_block.scope_id.index());
+                    let source_scope_name = format!("S{}", block.scope().index());
+                    let target_scope_name = format!("S{}", target_block.scope().index());
                     if !h.contains_key(&source_scope_name) {
                         h.insert(source_scope_name.clone(), vec![]);
                     }

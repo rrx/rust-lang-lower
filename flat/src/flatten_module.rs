@@ -5,7 +5,7 @@ use std::convert::Into;
 
 use crate::{
     CodeEntry, CodeOffset, CodeRow, Flatten, ICodeModule, LCode, LinkId, Module, NodeBuilder as NB,
-    ScopeType, StringLabel, Successor, ValueId, VarDefinitionSpace, VariantId,
+    StringLabel, Successor, ValueId, VarDefinitionSpace, VariantId,
 };
 
 use tabled::{settings::Style, Table};
@@ -69,7 +69,7 @@ impl ICodeModule for Flatten<Module> {
         let link_id = self.state.values[value_id.index()];
         let entry = self.get_link_entry(link_id);
         let block = self.blocks.get_block(entry.block_id);
-        let scope = self.blocks.get_scope(block.scope_id);
+        let scope = self.blocks.get_scope(block.scope());
         scope.is_static()
     }
 
@@ -137,7 +137,7 @@ impl Flatten<Module> {
         let is_unknown = r_ty.is_unknown();
         let s_ty = format!("{}", &r_ty);
 
-        let scope_id = block.scope_id;
+        let scope_id = block.scope();
 
         Some(CodeRow {
             pos: v.index(),

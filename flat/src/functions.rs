@@ -386,7 +386,7 @@ impl FlattenInner {
 
         // if it's defined in static scope, just call it
         let (_variant_id, v_entry) = if let Some((variant_id, r_ty, v_entry, _scope_id)) =
-            self.resolve_function_name(block.scope_id, &name, &call_func_type.clone().into(), b)
+            self.resolve_function_name(block.scope(), &name, &call_func_type.clone().into(), b)
         {
             // unify the resolved function with the caller
             // the function should be resolved, this resolves any thing missing in the caller
@@ -456,7 +456,7 @@ impl FlattenInner {
     ) -> Result<(VariantId, FlattenResult)> {
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
-        let scope_id = block.scope_id;
+        let scope_id = block.scope();
 
         let a = self.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
@@ -646,7 +646,7 @@ impl FlattenInner {
         //
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
-        let scope_id = block.scope_id;
+        let scope_id = block.scope();
 
         let block_ty: AstType = def_func_type.into();
 
