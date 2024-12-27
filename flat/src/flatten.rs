@@ -507,13 +507,9 @@ impl FlattenInner {
             }
 
             let scope = self.blocks.get_scope(scope_id);
-            let scope_type = scope.scope_type;
-            if !block.is_term() && scope_type != ScopeType::Static {
+            if !block.is_term() && !scope.is_static() {
                 let entry = self.get_entry(block.last().unwrap());
-                b.push_error(
-                    &format!("Unterminated Block: {}, {:?}", block_id, (scope_type)),
-                    entry.span_id,
-                );
+                b.push_error(&format!("Unterminated Block: {}", block_id), entry.span_id);
             }
 
             let links = block.iter().collect::<Vec<_>>();
@@ -1271,7 +1267,7 @@ impl FlattenInner {
                         let static_block_id = self.static_block_id();
 
                         // Generate the global name, unique if it's local
-                        let global_name = if let ScopeType::Static = scope.scope_type {
+                        let global_name = if scope.is_static() {
                             b.labels.r(name.into()).to_string()
                         } else {
                             // static var with local name

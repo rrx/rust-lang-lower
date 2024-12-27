@@ -209,7 +209,7 @@ pub struct ScopeLayer {
     pub entry_block: Option<BlockId>,
     return_block: Option<BlockId>,
     pub(crate) loop_block: Option<LoopScope>,
-    pub scope_type: ScopeType,
+    scope_type: ScopeType,
     lambdas: HashMap<StringLabel, AbstractionId>,
     unclaimed_labels: HashMap<StringLabel, BlockId>,
 }
@@ -229,6 +229,10 @@ impl ScopeLayer {
             lambdas: HashMap::new(),
             unclaimed_labels: HashMap::new(),
         }
+    }
+
+    pub fn is_static(&self) -> bool {
+        self.scope_type == ScopeType::Static
     }
 
     pub fn make_function_scope(&mut self, state: ScopeStateFunction) {

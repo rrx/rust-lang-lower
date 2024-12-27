@@ -70,7 +70,7 @@ impl ICodeModule for Flatten<Module> {
         let entry = self.get_link_entry(link_id);
         let block = self.blocks.get_block(entry.block_id);
         let scope = self.blocks.get_scope(block.scope_id);
-        scope.scope_type == ScopeType::Static
+        scope.is_static()
     }
 
     fn get_mem(&self, offset: CodeOffset) -> &VarDefinitionSpace {
