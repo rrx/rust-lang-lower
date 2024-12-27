@@ -1695,8 +1695,7 @@ impl FlattenInner {
                 let new_block_id =
                     self.blocks
                         .new_block(self.current_block_id(), scope_id, Successor::BlockScope);
-                let scope = self.blocks.get_scope_mut(scope_id);
-                scope.block_labels.insert(name.into(), new_block_id);
+                self.blocks.define_label(scope_id, new_block_id, name);
 
                 self.switch_blocks(current_block_id);
 

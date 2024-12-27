@@ -221,7 +221,7 @@ impl<'a> TypedScope<'a, ScopeTypeStateLoop> {
 pub struct ScopeLayer {
     names: HashMap<StringKey, LinkId>,
     entries: HashMap<StringKey, HashSet<VariantId>>,
-    pub(crate) block_labels: HashMap<StringLabel, BlockId>,
+    block_labels: HashMap<StringLabel, BlockId>,
     entry_block: Option<BlockId>,
     return_block: Option<BlockId>,
     loop_block: Option<LoopScope>,
@@ -649,6 +649,11 @@ impl BlockGraph {
         // resolve scope through the tree, starting at the current scope
         let block = self.get_block(block_id);
         self.resolve_name_in_scope(block.scope_id, name)
+    }
+
+    pub fn define_label(&mut self, scope_id: ScopeId, block_id: BlockId, name: StringKey) {
+        let scope = self.get_scope_mut(scope_id);
+        scope.block_labels.insert(name.into(), block_id);
     }
 
     pub fn resolve_label(&self, start_scope_id: ScopeId, name: StringLabel) -> Option<BlockId> {
