@@ -149,7 +149,6 @@ impl Builtin {
         let def = Lambda {
             func_type: func_ty.clone(),
             fun_type: b.types.s(&func_ty.into()),
-            arg_type: b.types.s(&arg_type),
             body: None,
             defaults: HashMap::new(),
         };

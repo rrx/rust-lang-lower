@@ -165,11 +165,10 @@ impl NodeBuilder {
             }
 
             Ast::Lambda(def) => {
-                //let s = format!("func({}):", b.r(def.name));
                 let s = format!("func:");
                 out.push((depth, s.into(), node.span_id));
 
-                let arg_type = self.types.r(def.arg_type);
+                let arg_type = &def.func_type.args;
                 for (i, (maybe_key, ty)) in arg_type.fields().iter().enumerate() {
                     let name = if let Some(key) = maybe_key {
                         self.labels.r(key.into())

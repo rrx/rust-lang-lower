@@ -305,14 +305,12 @@ impl Parser {
                         .collect::<Vec<_>>(),
                 );
 
-                let arg_type_id = b.types.s(&arg_type);
                 let fun_type = AstFuncType::new(arg_type, ReturnType::Single(return_type.clone()));
                 let fun_type_id = b.types.s(&fun_type.clone().into());
 
                 let def_ast = Ast::Lambda(ast::Lambda {
                     func_type: fun_type.clone(),
                     fun_type: fun_type_id,
-                    arg_type: arg_type_id,
                     body: Some(body),
                     defaults,
                 });

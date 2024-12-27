@@ -145,13 +145,11 @@ impl FlattenInner {
                 call_span_id,
             );
 
-            let arg_type_id = b.types.s(&ty.args);
             let fun_type_id = b.types.s(&ty.clone().into());
 
             let lambda = Lambda {
                 func_type: ty.clone(),
                 fun_type: fun_type_id,
-                arg_type: arg_type_id,
                 body: Some(body.into()),
                 defaults: HashMap::new(),
             };

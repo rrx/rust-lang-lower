@@ -219,7 +219,6 @@ pub struct ParameterNode {
 pub struct Lambda {
     pub func_type: AstFuncType,
     pub fun_type: TypeId,
-    pub arg_type: TypeId,
     pub body: Option<Box<AstNode>>,
     pub defaults: HashMap<StringKey, AstNode>,
 }

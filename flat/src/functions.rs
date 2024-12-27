@@ -179,7 +179,7 @@ impl FlattenInner {
         call_span_id: SpanId,
         b: &mut NB,
     ) -> Result<(Vec<Argument>, AstFuncType)> {
-        let func_arg = b.types.r(def.arg_type).clone();
+        let func_arg = def.func_type.args.clone();
 
         // A rough outline of this large function
         // - We need to take in a list of calling args, and the function definition,
