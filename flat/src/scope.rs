@@ -12,7 +12,7 @@ use crate::{
     ArgVec, BlockGraph, BlockId, BlockifyError, LinkId, NodeBuilder, StringLabel, Successor,
     VariantId,
 };
-use compile_core::{AbstractionId, Argument, Lambda, SpanId, StringKey};
+use compile_core::{AbstractionId, Argument, AstType, Lambda, SpanId, StringKey};
 
 #[derive(Debug)]
 pub enum PlacedBlockId {
@@ -206,6 +206,12 @@ impl<'a> TypedScope<'a, ScopeTypeStateFunction> {
     pub fn return_block(&self) -> BlockId {
         self.inner.return_block.unwrap()
     }
+    pub fn num_ret_args(&self) -> HashSet<usize> {
+        self.inner.num_ret_args.clone()
+    }
+    pub fn ret_types(&self) -> HashSet<AstType> {
+        self.inner.ret_types.clone()
+    }
 }
 
 impl<'a> TypedScope<'a, ScopeTypeStateLoop> {
@@ -228,6 +234,8 @@ pub struct ScopeLayer {
     scope_type: ScopeType,
     lambdas: HashMap<StringLabel, AbstractionId>,
     unclaimed_labels: HashMap<StringLabel, BlockId>,
+    num_ret_args: HashSet<usize>,
+    ret_types: HashSet<AstType>,
 }
 
 impl ScopeLayer {
@@ -242,6 +250,8 @@ impl ScopeLayer {
             scope_type,
             lambdas: HashMap::new(),
             unclaimed_labels: HashMap::new(),
+            num_ret_args: HashSet::new(),
+            ret_types: HashSet::new(),
         }
     }
 
@@ -265,6 +275,11 @@ impl ScopeLayer {
             m.insert(variant_id);
             self.entries.insert(name, m);
         }
+    }
+
+    pub fn insert_ret_arg(&mut self, args: Vec<AstType>) {
+        self.num_ret_args.insert(args.len());
+        self.ret_types = args.into_iter().collect();
     }
 
     pub fn lookup(&self, name: StringKey) -> Option<LinkId> {
@@ -515,10 +530,10 @@ impl BlockGraph {
             .expect(&format!("Not in function context, scope_id:{}", scope_id))
     }
 
-    pub fn get_function_scope(&mut self, block_id: BlockId) -> TypedScope<ScopeTypeStateFunction> {
+    pub fn get_function_scope(&self, block_id: BlockId) -> TypedScope<ScopeTypeStateFunction> {
         let block = self.get_block(block_id);
         let function_scope_id = self.get_function_scope_id(block.scope());
-        let scope = self.get_scope_mut(function_scope_id);
+        let scope = self.get_scope(function_scope_id);
         TypedScope {
             inner: scope,
             _s: std::marker::PhantomData,

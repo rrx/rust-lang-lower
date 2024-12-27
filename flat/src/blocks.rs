@@ -33,8 +33,6 @@ pub struct IRBlock {
     terminal: Option<LinkId>,
     decls: Vec<LinkId>,
     links: Vec<LinkId>,
-    pub(super) num_ret_args: HashSet<usize>,
-    pub(super) ret_types: HashSet<AstType>,
     s: BlockStateEnum,
 }
 
@@ -47,8 +45,6 @@ impl IRBlock {
             entry: vec![],
             terminal: None,
             size: 0,
-            num_ret_args: HashSet::new(),
-            ret_types: HashSet::new(),
             links: vec![],
             decls: vec![],
             s: BlockStateEnum::Start,

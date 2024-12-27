@@ -1002,16 +1002,18 @@ impl FlattenInner {
         };
 
         // write out return block
-        let fun_block = self.blocks.get_block(fun_block_id);
+        let fun_scope = self.blocks.get_function_scope(fun_block_id);
+        let num_ret_args = fun_scope.num_ret_args();
+        let ret_types = fun_scope.ret_types();
 
-        if fun_block.num_ret_args.len() > 1 {
+        if num_ret_args.len() > 1 {
             b.push_error(
-                &format!("Return type mismatch: {:?}", &fun_block.num_ret_args),
+                &format!("Return type mismatch: {:?}", num_ret_args),
                 span_id,
             );
         }
 
-        let num_ret_args = fun_block.num_ret_args.iter().next().unwrap_or(&0).clone();
+        let num_ret_args = num_ret_args.iter().next().unwrap_or(&0).clone();
 
         // we need to know at least the arity of the return value
         // is it something or nothing
@@ -1033,7 +1035,7 @@ impl FlattenInner {
         assert!(num_ret_args <= 1);
 
         // all the possible return types, unify them
-        for ty in fun_block.ret_types.iter() {
+        for ty in ret_types.iter() {
             if b.types.u.unify(ty, &func_ret_ty).is_err() {
                 b.push_error(
                     &format!("7-Type Mismatch: LHS: {}, RHS: {}", ty, &func_ret_ty),
@@ -1042,8 +1044,7 @@ impl FlattenInner {
             }
         }
         // resolve the return types
-        let ret_types = fun_block
-            .ret_types
+        let ret_types = ret_types
             .iter()
             .map(|t| b.types.u.resolve(&t).unwrap_or(t.clone()))
             .collect::<HashSet<_>>();
@@ -1265,11 +1266,12 @@ impl FlattenInner {
                     node.span_id
                 };
 
-                let fun_block = self.blocks.get_block_mut(fun_block_id);
-                fun_block.num_ret_args.insert(jump_args.len());
-                for (_, _, ty, _) in jump_args.iter() {
-                    fun_block.ret_types.insert(ty.clone());
-                }
+                let fun_scope = self.blocks.get_scope_mut(fun_scope_id);
+                let jump_types = jump_args
+                    .iter()
+                    .map(|(_, _, ty, _)| ty.clone())
+                    .collect::<Vec<_>>();
+                fun_scope.insert_ret_arg(jump_types);
 
                 //let scope = self.blocks.get_scope(fun_scope_id);
                 //let ret_block_id = scope.return_block.unwrap();
