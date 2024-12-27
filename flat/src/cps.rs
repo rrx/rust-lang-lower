@@ -12,7 +12,7 @@ use crate::{
 };
 
 impl FlattenInner {
-    pub(super) fn push_cps_block_with_type(
+    pub(super) fn gen_cps_block_with_type(
         &mut self,
         name: StringKey,
         scope_id: ScopeId,
@@ -111,6 +111,22 @@ impl FlattenInner {
         Ok((variant_id, fun_scope_id, fun_block_id, def_arg_type))
     }
 
+    fn push_unwind(&mut self, target_block_id: BlockId) -> BlockId {
+        let current_block_id = self.current_block_id();
+        let block = self.blocks.get_block(current_block_id);
+        let goto_scope_id = block.scope();
+
+        let block = self.blocks.get_block(target_block_id);
+        let target_scope_id = block.scope();
+
+        // TODO: now that we know the target, we need to replace any call values with unwind
+        // functions. We also need to do this for the goto_block_id.
+        let unwind_scopes = self.blocks.unwind_scopes(goto_scope_id, target_scope_id);
+        println!("unwind scopes: {:?}", unwind_scopes);
+        //assert!(unwind_scopes.is_ok());
+        target_block_id
+    }
+
     pub(super) fn push_cps_block(
         &mut self,
         name: StringKey,
@@ -134,7 +150,6 @@ impl FlattenInner {
         let def_span_id = a.def_span_id;
         let def = a.def.clone();
 
-        //let fun_scope = self.blocks.get_scope_mut(fun_scope_id);
         // we might want to handle this later
         // return in a CPS will return from the scoped function
         //
@@ -143,23 +158,22 @@ impl FlattenInner {
             Self::calculate_function_arguments(&def, &args, &[], def_span_id, call_span_id, b)?;
         let call_values = self.push_call_arguments(args, call_span_id, b)?;
         let goto_block_id = self.current_block_id();
-        let block = self.blocks.get_block(goto_block_id);
-        let goto_scope_id = block.scope();
+        //let block = self.blocks.get_block(goto_block_id);
+        //let goto_scope_id = block.scope();
         let call_arg_type = argvec_type(&call_values);
         let call_func_type =
             AstFuncType::new(call_arg_type.clone().into(), ReturnType::Never.into()).into();
 
-        let (variant_id, fun_scope_id, fun_block_id, def_arg_type) = self
-            .push_cps_block_with_type(
-                name,
-                scope_id,
-                abstraction_id,
-                &call_func_type,
-                call_span_id,
-                b,
-            )?;
+        let (variant_id, fun_scope_id, fun_block_id, def_arg_type) = self.gen_cps_block_with_type(
+            name,
+            scope_id,
+            abstraction_id,
+            &call_func_type,
+            call_span_id,
+            b,
+        )?;
 
-        self.switch_blocks(goto_block_id);
+        //self.switch_blocks(goto_block_id);
         // NOW JUMP
         // now that we have the arguments calculated, and the lambda baked, jump!
         self.remove_placeholder_terminal(goto_block_id);
@@ -169,13 +183,14 @@ impl FlattenInner {
             .map(|(_, link_id, _, _)| *link_id)
             .collect::<Vec<_>>();
 
-        // TODO: now that we know the target, we need to replace any call values with unwind
-        // functions. We also need to do this for the goto_block_id.
-        let unwind_scopes = self.blocks.unwind_scopes(fun_scope_id, goto_scope_id)?;
-        println!("unwind scopes: {:?}", unwind_scopes);
+        let unwind_target_block_id = self.push_unwind(fun_block_id);
 
-        let goto_link_id =
-            self.push_jump(fun_block_id.into(), call_values.clone(), call_span_id, b);
+        let goto_link_id = self.push_jump(
+            unwind_target_block_id.into(),
+            call_values.clone(),
+            call_span_id,
+            b,
+        );
 
         for (i, (_, var_link_id, _ty, _)) in call_values.iter().enumerate() {
             self.scoped_continuations.connect(
@@ -268,7 +283,7 @@ impl FlattenInner {
         name: StringKey,
         args: Vec<Argument>,
         call_span_id: SpanId,
-        b: &mut NB,
+        _b: &mut NB,
     ) -> Result<FlattenResult> {
         // push a goto
         // to keep things simpler, we just defer all resolution of the gotos until the end
@@ -276,8 +291,6 @@ impl FlattenInner {
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
         let scope_id = block.scope();
-
-        let _s_name = b.labels.r(name.into());
 
         // if this is a name, we can resolve now, no need to defer
         // this happens in a CPS function, where we try to jump to a variable.

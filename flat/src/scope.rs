@@ -417,6 +417,7 @@ impl BlockGraph {
         let mut out = vec![];
         let mut current = start_scope_id;
         loop {
+            println!("current:{}", current);
             if current == end_scope_id {
                 break;
             }
@@ -434,6 +435,7 @@ impl BlockGraph {
             "unwind scopes: {}=>{}, {:?}",
             start_scope_id, end_scope_id, out
         );
+        println!("unwind scopes: {:?}", out);
         Ok(out)
     }
 

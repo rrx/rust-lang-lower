@@ -404,7 +404,7 @@ impl FlattenInner {
 
         self.switch_blocks(block_id);
         let (_variant_id, _fun_scope_id, fun_block_id, _) =
-            self.push_cps_block_with_type(name, scope_id, abstraction_id, &ty, span_id, b)?;
+            self.gen_cps_block_with_type(name, scope_id, abstraction_id, &ty, span_id, b)?;
 
         self.scoped_continuations.connect(
             ContinuationFlow::Block(fun_block_id),
