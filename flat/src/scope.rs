@@ -4,7 +4,7 @@ use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::Bfs;
 
-//use std::ops::{Deref, DerefMut};
+use std::ops::{Deref, DerefMut};
 
 use std::collections::{HashMap, HashSet};
 
@@ -162,6 +162,41 @@ impl ScopeState {
     }
     pub fn region() -> Self {
         Self::Region
+    }
+}
+
+pub trait ScopeTypeState {}
+#[derive(Debug)]
+pub struct ScopeTypeStateBlock {}
+#[derive(Debug)]
+pub struct ScopeTypeStateFunction {}
+#[derive(Debug)]
+pub struct ScopeTypeStateStatic {}
+impl ScopeTypeState for ScopeTypeStateBlock {}
+impl ScopeTypeState for ScopeTypeStateStatic {}
+impl ScopeTypeState for ScopeTypeStateFunction {}
+
+pub struct TypedScope<ScopeTypeState> {
+    inner: Box<ScopeLayer>,
+    _s: std::marker::PhantomData<ScopeTypeState>,
+}
+
+impl<S: ScopeTypeState> Deref for TypedScope<S> {
+    type Target = ScopeLayer;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+impl<S: ScopeTypeState> DerefMut for TypedScope<S> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+
+impl TypedScope<ScopeTypeStateFunction> {
+    pub fn return_block(&self) -> BlockId {
+        self.inner.return_block.unwrap()
     }
 }
 
