@@ -4,7 +4,7 @@ use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::Bfs;
 
-use std::ops::{Deref, DerefMut};
+use std::ops::Deref;
 
 use std::collections::{HashMap, HashSet};
 

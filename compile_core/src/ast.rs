@@ -270,7 +270,7 @@ pub enum Ast {
     BinaryOp(BinOpNode, Box<AstNode>, Box<AstNode>),
     UnaryOp(UnaryOperation, Box<AstNode>),
     NaryOp(NaryOperation, Vec<AstNode>),
-    // func, args, return type
+    // func, args
     Call(Box<AstNode>, Vec<Argument>),
     ComptimeCall(Box<AstNode>, Vec<Argument>),
 

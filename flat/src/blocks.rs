@@ -1,4 +1,3 @@
-use compile_core::AstType;
 use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
