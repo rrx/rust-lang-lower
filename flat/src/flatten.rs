@@ -1721,16 +1721,10 @@ impl FlattenInner {
                     }
                 }
 
-                let new_block = self.blocks.get_block(new_block_id);
-                let new_scope_id = new_block.scope_id;
-
-                let scope = self.blocks.get_scope(new_scope_id);
+                let scope = self.blocks.get_scope(scope_id);
 
                 // ensure this block is not an entry block, this should never happen.
                 assert!(scope.entry_block() != new_block_id);
-
-                self.blocks
-                    .block_succ(current_block_id, new_block_id, Successor::BlockScope);
 
                 let arg_ty = AstType::Struct(
                     args.iter()
@@ -1743,7 +1737,7 @@ impl FlattenInner {
 
                 self.switch_blocks(new_block_id);
                 let (link_id, _) = self.push_start_block(
-                    new_scope_id,
+                    scope_id,
                     AstFuncType {
                         args: arg_ty.clone().into(),
                         ret: ReturnType::Single(AstType::Unit).into(),
