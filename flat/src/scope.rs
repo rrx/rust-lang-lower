@@ -219,8 +219,8 @@ impl<'a> TypedScope<'a, ScopeTypeStateLoop> {
 
 #[derive(Debug)]
 pub struct ScopeLayer {
-    pub names: HashMap<StringKey, LinkId>,
-    pub entries: HashMap<StringKey, HashSet<VariantId>>,
+    names: HashMap<StringKey, LinkId>,
+    entries: HashMap<StringKey, HashSet<VariantId>>,
     pub(crate) block_labels: HashMap<StringLabel, BlockId>,
     entry_block: Option<BlockId>,
     return_block: Option<BlockId>,
@@ -612,6 +612,51 @@ impl BlockGraph {
             let scope = self.get_scope(scope_id);
             if let Some(template_id) = scope.lambdas.get(&name).cloned() {
                 return Some(template_id);
+            }
+        }
+        None
+    }
+
+    pub fn list_variants_by_name(
+        &self,
+        start_scope_id: ScopeId,
+        name: &StringKey,
+    ) -> Vec<VariantId> {
+        let mut out = vec![];
+        for scope_id in self.walk_scopes(start_scope_id) {
+            let scope = self.get_scope(scope_id);
+            if let Some(e) = scope.entries.get(name) {
+                for variant_id in e.iter() {
+                    out.push(*variant_id);
+                }
+            }
+        }
+        out
+    }
+
+    pub fn resolve_name_in_scope(&self, scope_id: ScopeId, name: StringKey) -> Option<LinkId> {
+        // resolve scope through the tree, starting at the current scope
+        for scope_id in self.walk_scopes(scope_id) {
+            let scope = self.get_scope(scope_id);
+            if let Some(data) = scope.names.get(&name) {
+                return Some(data.clone());
+            }
+        }
+        None
+    }
+
+    pub fn resolve_name(&self, block_id: BlockId, name: StringKey) -> Option<LinkId> {
+        // resolve scope through the tree, starting at the current scope
+        let block = self.get_block(block_id);
+        self.resolve_name_in_scope(block.scope_id, name)
+    }
+
+    pub fn resolve_label(&self, start_scope_id: ScopeId, name: StringLabel) -> Option<BlockId> {
+        // search scopes to find a template
+        for scope_id in self.walk_scopes(start_scope_id) {
+            let scope = self.get_scope(scope_id);
+            if let Some(block_id) = scope.block_labels.get(&name) {
+                return Some(*block_id);
             }
         }
         None

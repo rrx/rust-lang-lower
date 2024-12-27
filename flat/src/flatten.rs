@@ -13,8 +13,7 @@ use std::convert::Into;
 use crate::{
     AbstractionsBuilder, BlockGraph, BlockId, BlockifyError, Builtin, CodeOffset, ContinuationFlow,
     DeferredGotoList, FlowEdge, FunctionVariantBuilder, LCode, LinkId, NodeBuilder as NB, ScopeId,
-    ScopeState, ScopeType, ScopedContinuations, StringLabel, Successor, ValueId,
-    VarDefinitionSpace, VariantId,
+    ScopeState, ScopeType, ScopedContinuations, Successor, ValueId, VarDefinitionSpace, VariantId,
 };
 use std::ops::{Deref, DerefMut};
 
@@ -310,23 +309,6 @@ impl FlattenInner {
         self.blocks.dump_scope(block.scope_id, b);
     }
 
-    pub fn list_variants_by_name(
-        &self,
-        start_scope_id: ScopeId,
-        name: &StringKey,
-    ) -> Vec<VariantId> {
-        let mut out = vec![];
-        for scope_id in self.blocks.walk_scopes(start_scope_id) {
-            let scope = self.blocks.get_scope(scope_id);
-            if let Some(e) = scope.entries.get(name) {
-                for variant_id in e.iter() {
-                    out.push(*variant_id);
-                }
-            }
-        }
-        out
-    }
-
     pub fn variant_add(
         &mut self,
         scope_id: ScopeId,
@@ -353,7 +335,7 @@ impl FlattenInner {
         name: &StringKey,
     ) -> Vec<(VariantId, AstType, LinkId, ScopeId)> {
         let mut out = vec![];
-        for variant_id in self.list_variants_by_name(start_scope_id, name) {
+        for variant_id in self.blocks.list_variants_by_name(start_scope_id, name) {
             let v = self.variants.get(variant_id);
             out.push((variant_id, v.ty.clone(), v.link_id, start_scope_id));
         }
@@ -380,34 +362,6 @@ impl FlattenInner {
         }
         b.types.u.rollback_to(snapshot);
         result
-    }
-
-    pub fn resolve_name_in_scope(&self, scope_id: ScopeId, name: StringKey) -> Option<LinkId> {
-        // resolve scope through the tree, starting at the current scope
-        for scope_id in self.blocks.walk_scopes(scope_id) {
-            let scope = self.blocks.get_scope(scope_id);
-            if let Some(data) = scope.names.get(&name) {
-                return Some(data.clone());
-            }
-        }
-        None
-    }
-
-    pub fn resolve_name(&self, block_id: BlockId, name: StringKey) -> Option<LinkId> {
-        // resolve scope through the tree, starting at the current scope
-        let block = self.blocks.get_block(block_id);
-        self.resolve_name_in_scope(block.scope_id, name)
-    }
-
-    pub fn resolve_label(&self, start_scope_id: ScopeId, name: StringLabel) -> Option<BlockId> {
-        // search scopes to find a template
-        for scope_id in self.blocks.walk_scopes(start_scope_id) {
-            let scope = self.blocks.get_scope(scope_id);
-            if let Some(block_id) = scope.block_labels.get(&name) {
-                return Some(*block_id);
-            }
-        }
-        None
     }
 
     pub fn inject_builtin_prototypes(&mut self, b: &mut NB) {
@@ -1376,7 +1330,7 @@ impl FlattenInner {
                 let scope_id = block.scope_id;
 
                 // resolve identifier lexically
-                if let Some(def_link_id) = self.resolve_name(current_block_id, key) {
+                if let Some(def_link_id) = self.blocks.resolve_name(current_block_id, key) {
                     let link_id = def_link_id;
                     return Ok(FlattenResult::link(link_id));
                 }
@@ -1443,29 +1397,30 @@ impl FlattenInner {
                 let block = self.blocks.get_block(block_id);
                 let scope_id = block.scope_id;
 
-                let offset_decl = if let Some(v_decl) = self.resolve_name_in_scope(scope_id, name) {
-                    // already declared
-                    let decl_entry = self.get_entry(v_decl);
-                    b.unify(&decl_entry.ty, decl_entry.span_id, &expr_ty, expr_span_id);
-                    v_decl
-                } else {
-                    // need to declare it
-                    let scope = self.blocks.get_scope(scope_id);
-                    let _entry_block_id = scope.entry_block();
-                    let _current_block_id = self.current_block_id();
-                    let block = self.blocks.get_block(self.current_block_id());
-                    let scope_id = block.scope_id;
+                let offset_decl =
+                    if let Some(v_decl) = self.blocks.resolve_name_in_scope(scope_id, name) {
+                        // already declared
+                        let decl_entry = self.get_entry(v_decl);
+                        b.unify(&decl_entry.ty, decl_entry.span_id, &expr_ty, expr_span_id);
+                        v_decl
+                    } else {
+                        // need to declare it
+                        let scope = self.blocks.get_scope(scope_id);
+                        let _entry_block_id = scope.entry_block();
+                        let _current_block_id = self.current_block_id();
+                        let block = self.blocks.get_block(self.current_block_id());
+                        let scope_id = block.scope_id;
 
-                    let link_id = self.push_code(
-                        LCode::Declare,
-                        expr_ty.clone(),
-                        Some(name),
-                        node.span_id,
-                        VarDefinitionSpace::Default,
-                    );
-                    self.blocks.scope_define(scope_id, name, link_id);
-                    link_id
-                };
+                        let link_id = self.push_code(
+                            LCode::Declare,
+                            expr_ty.clone(),
+                            Some(name),
+                            node.span_id,
+                            VarDefinitionSpace::Default,
+                        );
+                        self.blocks.scope_define(scope_id, name, link_id);
+                        link_id
+                    };
 
                 self.scoped_continuations.connect(
                     ContinuationFlow::Variable(v_expr),
@@ -1731,7 +1686,7 @@ impl FlattenInner {
                 let scope_id = block.scope_id;
 
                 // check for duplicates
-                if let Some(block_id) = self.resolve_label(scope_id, name.into()) {
+                if let Some(block_id) = self.blocks.resolve_label(scope_id, name.into()) {
                     unimplemented!("duplicate label: {}", block_id);
                 }
 

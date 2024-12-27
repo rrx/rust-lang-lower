@@ -286,7 +286,7 @@ impl FlattenInner {
         // we don't need to defer because we know the target
         // We will rewrite in a later step, this goto will become a select
 
-        if let Some(name_link_id) = self.resolve_name_in_scope(scope_id, name.into()) {
+        if let Some(name_link_id) = self.blocks.resolve_name_in_scope(scope_id, name.into()) {
             let link_id = block.last().unwrap();
             self.push_placeholder_terminal(link_id, AstType::Unit, call_span_id);
 
@@ -444,8 +444,9 @@ impl FlattenInner {
                 }
 
                 // is it a label?
-                if let Some(target_block_id) =
-                    self.resolve_label(d.scope_id, d.name.unwrap().into())
+                if let Some(target_block_id) = self
+                    .blocks
+                    .resolve_label(d.scope_id, d.name.unwrap().into())
                 {
                     assert_eq!(d.args.len(), 0);
                     // not possible to pass args to a label, use a CPS function instead
@@ -547,7 +548,7 @@ impl FlattenInner {
             let block = self.blocks.get_block(block_id);
             let scope_id = block.scope_id;
             let key = entry.name.unwrap();
-            if let Some(label_block_id) = self.resolve_label(scope_id, key.into()) {
+            if let Some(label_block_id) = self.blocks.resolve_label(scope_id, key.into()) {
                 blocks.push((*link_id, label_block_id));
             } else if let Some(abstraction_id) = self.blocks.resolve_template(scope_id, key.into())
             {
