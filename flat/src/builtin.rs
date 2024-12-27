@@ -148,7 +148,6 @@ impl Builtin {
             AstFuncType::new(arg_type.clone(), ReturnType::Single(self.get_return_type()));
         let def = Lambda {
             func_type: func_ty.clone(),
-            fun_type: b.types.s(&func_ty.into()),
             body: None,
             defaults: HashMap::new(),
         };

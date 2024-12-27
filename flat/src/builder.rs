@@ -220,12 +220,10 @@ impl NodeBuilder {
                 .collect::<Vec<_>>(),
         );
         let fun_type = AstFuncType::new(arg_type, ReturnType::Single(return_type.clone()));
-        let fun_type_id = self.types.s(&fun_type.clone().into());
         Self::global(
             name,
             Ast::Lambda(Lambda {
                 func_type: fun_type.clone(),
-                fun_type: fun_type_id,
                 body: body.map(|b| b.into()),
                 defaults: HashMap::new(),
             })

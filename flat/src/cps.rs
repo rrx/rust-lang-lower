@@ -31,8 +31,7 @@ impl FlattenInner {
 
         let a = self.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
-        let func_type = b.types.r(a.def.fun_type).get_func().clone();
-        let mut func_type = self.refresh_func_type(&func_type, b);
+        let mut func_type = self.refresh_func_type(&a.def.func_type, b);
         func_type.ret = ReturnType::Never;
         let call_arg_type = AstType::Struct(call_func_type.fields());
         b.unify(&call_arg_type, call_span_id, &func_type.args, def_span_id);
@@ -66,8 +65,6 @@ impl FlattenInner {
                             .new_block(block_id, scope_id, Successor::BlockScope);
                     (fun_block_id, scope_id)
                 };
-
-                //self.blocks.control_flow(block_id, &[fun_block_id]);
 
                 // Start lambda block
                 let lambda_name = b.labels.fresh_key(&s_name);
@@ -145,11 +142,8 @@ impl FlattenInner {
                 call_span_id,
             );
 
-            let fun_type_id = b.types.s(&ty.clone().into());
-
             let lambda = Lambda {
                 func_type: ty.clone(),
-                fun_type: fun_type_id,
                 body: Some(body.into()),
                 defaults: HashMap::new(),
             };
