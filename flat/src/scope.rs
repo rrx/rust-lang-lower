@@ -165,18 +165,25 @@ impl ScopeState {
 }
 
 pub trait ScopeTypeState {}
+
 #[derive(Debug)]
 pub struct ScopeTypeStateBlock {}
+impl ScopeTypeState for ScopeTypeStateBlock {}
+
+#[derive(Debug)]
+pub struct ScopeTypeStateLoop {}
+impl ScopeTypeState for ScopeTypeStateLoop {}
+
 #[derive(Debug)]
 pub struct ScopeTypeStateFunction {}
-#[derive(Debug)]
-pub struct ScopeTypeStateStatic {}
-impl ScopeTypeState for ScopeTypeStateBlock {}
-impl ScopeTypeState for ScopeTypeStateStatic {}
 impl ScopeTypeState for ScopeTypeStateFunction {}
 
+#[derive(Debug)]
+pub struct ScopeTypeStateStatic {}
+impl ScopeTypeState for ScopeTypeStateStatic {}
+
 pub struct TypedScope<'a, ScopeTypeState> {
-    inner: &'a mut ScopeLayer,
+    inner: &'a ScopeLayer,
     _s: std::marker::PhantomData<ScopeTypeState>,
 }
 
@@ -187,15 +194,26 @@ impl<'a, S: ScopeTypeState> Deref for TypedScope<'a, S> {
         self.inner
     }
 }
+/*
 impl<'a, S: ScopeTypeState> DerefMut for TypedScope<'a, S> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.inner
     }
 }
+*/
 
 impl<'a> TypedScope<'a, ScopeTypeStateFunction> {
     pub fn return_block(&self) -> BlockId {
         self.inner.return_block.unwrap()
+    }
+}
+
+impl<'a> TypedScope<'a, ScopeTypeStateLoop> {
+    pub fn start_block(&self) -> BlockId {
+        self.inner.loop_block.unwrap().start_block
+    }
+    pub fn next_block(&self) -> BlockId {
+        self.inner.loop_block.unwrap().next_block
     }
 }
 
@@ -208,7 +226,7 @@ pub struct ScopeLayer {
     pub(crate) block_labels: HashMap<StringLabel, BlockId>,
     pub entry_block: Option<BlockId>,
     return_block: Option<BlockId>,
-    pub(crate) loop_block: Option<LoopScope>,
+    loop_block: Option<LoopScope>,
     scope_type: ScopeType,
     lambdas: HashMap<StringLabel, AbstractionId>,
     unclaimed_labels: HashMap<StringLabel, BlockId>,
@@ -485,6 +503,18 @@ impl BlockGraph {
         TypedScope {
             inner: scope,
             _s: std::marker::PhantomData,
+        }
+    }
+
+    pub fn try_loop_scope(&self, scope_id: ScopeId) -> Option<TypedScope<ScopeTypeStateLoop>> {
+        let scope = self.get_scope(scope_id);
+        if let Some(_) = scope.loop_block {
+            Some(TypedScope {
+                inner: scope,
+                _s: std::marker::PhantomData,
+            })
+        } else {
+            None
         }
     }
 

@@ -1039,16 +1039,15 @@ impl FlattenInner {
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
         let scope_id = block.scope_id;
-        let scope = self.blocks.get_scope(scope_id);
 
-        if let Some(loop_block) = scope.loop_block {
-            let link_id = self.maybe_terminate_block(loop_block.start_block, span_id, b);
-            self.switch_blocks(loop_block.next_block);
+        if let Some(scope) = self.blocks.try_loop_scope(scope_id) {
+            let start_block = scope.start_block();
+            let next_block = scope.next_block();
+            let link_id = self.maybe_terminate_block(start_block, span_id, b);
+            self.switch_blocks(next_block);
             Ok(FlattenResult::link(link_id))
         } else {
-            let block_id = scope.entry_block.unwrap();
-            let block = self.blocks.get_block(block_id);
-            Ok(FlattenResult::link(block.last().unwrap()))
+            unimplemented!();
         }
     }
 
