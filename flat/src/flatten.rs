@@ -778,9 +778,11 @@ impl FlattenInner {
     ) -> LinkId {
         // handle leaving scope here?
         let current_block_id = self.current_block_id();
+        assert_ne!(current_block_id, target_block_id);
+        //let block = self.blocks.get_block(current_block_id);
+        //let start_scope_id = block.scope();
+        //let start_stack = self.blocks.walk_scopes(block.scope());
         //println!("jump: {}=>{}", current_block_id, target_block_id);
-        let block = self.blocks.get_block(current_block_id);
-        let _start_stack = self.blocks.walk_scopes(block.scope());
 
         // Construct the argument type
         let arg_ty = AstType::Struct(
@@ -1273,8 +1275,6 @@ impl FlattenInner {
                     .collect::<Vec<_>>();
                 fun_scope.insert_ret_arg(jump_types);
 
-                //let scope = self.blocks.get_scope(fun_scope_id);
-                //let ret_block_id = scope.return_block.unwrap();
                 let scope = self.blocks.get_function_scope(fun_block_id);
                 let ret_block_id = scope.return_block();
                 self.push_jump(ret_block_id, jump_args, span_id, b);
