@@ -572,6 +572,14 @@ impl FlattenInner {
                 );
             }
 
+            LCode::Load(decl_link_id) => {
+                self.scoped_continuations.connect(
+                    ContinuationFlow::Variable(decl_link_id),
+                    ContinuationFlow::Variable(link_id),
+                    FlowEdge::LoadBlockArg,
+                );
+            }
+
             LCode::Val(Literal::Block(fun_block_id)) => {
                 self.scoped_continuations.connect(
                     ContinuationFlow::Block(fun_block_id),

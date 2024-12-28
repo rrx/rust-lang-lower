@@ -318,19 +318,6 @@ impl FlattenInner {
         let goto_link_id =
             self.push_jump(fun_block_id.into(), call_values.clone(), call_span_id, b);
 
-        for (i, (_, var_link_id, _ty, _)) in call_values.iter().enumerate() {
-            self.scoped_continuations.connect(
-                ContinuationFlow::Variable(*var_link_id),
-                ContinuationFlow::JumpArg(goto_link_id, i as u8),
-                FlowEdge::VarJumpArg,
-            );
-            self.scoped_continuations.connect(
-                ContinuationFlow::JumpArg(goto_link_id, i as u8),
-                ContinuationFlow::BlockArg(fun_block_id, i as u8),
-                FlowEdge::JumpArg,
-            );
-        }
-
         // if this really is a CPS function, then it should never return
         // TODO: verify that it never returns, could be with the function signature
         // If the function returns, it has no meaning, because a goto must be terminal,
@@ -487,11 +474,6 @@ impl FlattenInner {
                         entry.name,
                         entry.span_id,
                         VarDefinitionSpace::Default,
-                    );
-                    self.scoped_continuations.connect(
-                        ContinuationFlow::Variable(*def_target_link_id),
-                        ContinuationFlow::Variable(link_id),
-                        FlowEdge::LoadBlockArg,
                     );
                     link_id
                 } else {
