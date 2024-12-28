@@ -898,11 +898,6 @@ impl FlattenInner {
                 if let Some(name) = name {
                     self.blocks.scope_define(scope_id, *name, link_id.into());
                 }
-                self.scoped_continuations.connect(
-                    ContinuationFlow::BlockArg(self.current_block_id(), i as u8),
-                    ContinuationFlow::Variable(link_id),
-                    FlowEdge::BlockArg,
-                );
             }
             v_args
         } else {
