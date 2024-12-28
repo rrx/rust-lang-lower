@@ -466,7 +466,7 @@ impl FlattenInner {
         // This behavior is slightly different than inline functions that jump back into the same
         // scope from which they were called.
 
-        let (next_block_id, next_scope_id) = self.blocks.new_scope_and_block(
+        let (next_block_id, _) = self.blocks.new_scope_and_block(
             ScopeType::Block,
             ScopeState::block(),
             current_block_id,
@@ -491,7 +491,6 @@ impl FlattenInner {
                 global_name,
                 fun_scope_id,
                 fun_block_id,
-                next_scope_id,
                 next_block_id,
                 *body,
                 def_func_ty,
@@ -515,7 +514,6 @@ impl FlattenInner {
         global_name: StringKey,
         fun_scope_id: ScopeId,
         fun_block_id: BlockId,
-        next_scope_id: ScopeId,
         next_block_id: BlockId,
         body: AstNode,
         def_func_type: AstFuncType,
@@ -574,7 +572,6 @@ impl FlattenInner {
             ret_block_ty.clone().into(),
             Some(b.labels.fresh_key(&cont_name)),
             call_span_id,
-            VarDefinitionSpace::Reg,
         );
 
         let next_link_id = match &next_arg_ty {
@@ -653,7 +650,7 @@ impl FlattenInner {
 
         self.switch_blocks(fun_block_id);
         let (entry_link_id, entry_args) =
-            self.push_start_block(def_func_type.clone(), Some(global_name), def_span_id, mem);
+            self.push_start_block_mem(def_func_type.clone(), Some(global_name), def_span_id, mem);
 
         // add entry to scope, for recursion
         let variant_ty = b.types.u.resolve(&def_func_type.clone().into()).unwrap();
@@ -928,7 +925,6 @@ impl FlattenInner {
             global_name,
             fun_scope_id,
             fun_block_id,
-            scope_id,
             next_block_id,
             *body,
             def_func_type.clone(),
@@ -994,7 +990,6 @@ impl FlattenInner {
         let exit_block_id = self
             .blocks
             .new_block(scope_block_id, scope_id, Successor::BlockScope);
-        let exit_scope_id = scope_id;
 
         let key = b.labels.fresh_key("b");
         let mut system = vec![];
@@ -1053,12 +1048,8 @@ impl FlattenInner {
             .block_succ(fun_block_id, exit_block_id, Successor::BlockScope);
 
         self.switch_blocks(exit_block_id);
-        let (_v_block, v_args) = self.push_start_block(
-            ret_block_ty.clone().into(),
-            Some(cont_key),
-            call_span_id,
-            VarDefinitionSpace::Reg,
-        );
+        let (_v_block, v_args) =
+            self.push_start_block(ret_block_ty.clone().into(), Some(cont_key), call_span_id);
 
         let next_link_id = match &next_arg_ty {
             AstType::Unit => None,
@@ -1185,7 +1176,6 @@ impl FlattenInner {
                     lookup_name,
                     fun_scope_id,
                     fun_block_id,
-                    scope_id,
                     next_block_id,
                     *body,
                     def_func_type,

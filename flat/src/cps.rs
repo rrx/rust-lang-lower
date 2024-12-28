@@ -81,7 +81,6 @@ impl FlattenInner {
                     r_ty1.clone().get_func().clone(),
                     Some(lambda_name),
                     def_span_id,
-                    VarDefinitionSpace::Default,
                 );
                 // add the name to scope
                 // do this early for recursive functions
@@ -201,7 +200,6 @@ impl FlattenInner {
             AstFuncType::new_void_void().into(),
             Some(start_key),
             call_span_id,
-            VarDefinitionSpace::Default,
         );
 
         for scope_id in unwind_scopes {
@@ -218,12 +216,7 @@ impl FlattenInner {
             self.switch_blocks(new_block_id);
             let void_func_type = AstFuncType::new_void_void();
             let new_key = b.labels.fresh_key("unew");
-            self.push_start_block(
-                void_func_type.clone().into(),
-                Some(new_key),
-                call_span_id,
-                VarDefinitionSpace::Default,
-            );
+            self.push_start_block(void_func_type.clone().into(), Some(new_key), call_span_id);
 
             let code = LCode::Val(Literal::Block(next_block_id));
             let var_link_id = self.push_code(
@@ -248,7 +241,6 @@ impl FlattenInner {
                 AstFuncType::new_void_void().into(),
                 Some(next_key),
                 call_span_id,
-                VarDefinitionSpace::Default,
             );
         }
         self.push_jump(target_block_id, vec![], call_span_id, b);

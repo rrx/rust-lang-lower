@@ -138,17 +138,11 @@ impl Flatten<Start> {
             state: Start {},
         };
 
-        let static_scope_id = f.static_scope;
         let static_block_id = f.static_block;
 
         if let Ast::Module(key, body) = node.node {
             // start module block
-            f.push_start_block(
-                AstFuncType::new_void_void().into(),
-                Some(key),
-                node.span_id,
-                VarDefinitionSpace::Static,
-            );
+            f.push_start_block_static(AstFuncType::new_void_void().into(), Some(key), node.span_id);
             let _ = f.push_node(*body, b)?;
 
             // return control to the root block
@@ -926,7 +920,25 @@ impl FlattenInner {
         v_args
     }
 
+    pub(super) fn push_start_block_static(
+        &mut self,
+        block_ty: AstFuncType,
+        name: Option<StringKey>,
+        span_id: SpanId,
+    ) -> (LinkId, ArgVec) {
+        self.push_start_block_mem(block_ty, name, span_id, VarDefinitionSpace::Static)
+    }
+
     pub(super) fn push_start_block(
+        &mut self,
+        block_ty: AstFuncType,
+        name: Option<StringKey>,
+        span_id: SpanId,
+    ) -> (LinkId, ArgVec) {
+        self.push_start_block_mem(block_ty, name, span_id, VarDefinitionSpace::Default)
+    }
+
+    pub(super) fn push_start_block_mem(
         &mut self,
         block_ty: AstFuncType,
         name: Option<StringKey>,
@@ -1531,12 +1543,11 @@ impl FlattenInner {
                     AstFuncType::new_void_void(),
                     Some(b.labels.fresh_key("cond_next")),
                     span_id,
-                    VarDefinitionSpace::Default,
                 );
                 self.switch_blocks(current_block_id);
 
                 // THEN
-                let (then_block_id, then_scope_id) = self.blocks.new_scope_and_block(
+                let (then_block_id, _) = self.blocks.new_scope_and_block(
                     ScopeType::Block,
                     ScopeState::block(),
                     current_block_id,
@@ -1554,12 +1565,7 @@ impl FlattenInner {
 
                 let name = b.labels.fresh_key("then");
                 self.switch_blocks(then_block_id);
-                self.push_start_block(
-                    branch_block_type.clone().into(),
-                    Some(name),
-                    then_span_id,
-                    VarDefinitionSpace::Reg,
-                );
+                self.push_start_block(branch_block_type.clone().into(), Some(name), then_span_id);
                 self.switch_blocks(then_block_id);
                 let _ = self.push_node(NB::ensure_seq(*then_expr), b)?;
 
@@ -1567,7 +1573,7 @@ impl FlattenInner {
 
                 // ELSE
                 let else_block_id = if let Some(else_expr) = maybe_else_expr {
-                    let (else_block_id, else_scope_id) = self.blocks.new_scope_and_block(
+                    let (else_block_id, _) = self.blocks.new_scope_and_block(
                         ScopeType::Block,
                         ScopeState::block(),
                         current_block_id,
@@ -1580,12 +1586,7 @@ impl FlattenInner {
                     let name = b.labels.fresh_key("else");
 
                     self.switch_blocks(else_block_id);
-                    self.push_start_block(
-                        branch_block_type.into(),
-                        Some(name),
-                        else_span_id,
-                        VarDefinitionSpace::Reg,
-                    );
+                    self.push_start_block(branch_block_type.into(), Some(name), else_span_id);
 
                     self.switch_blocks(else_block_id);
                     let _ = self.push_node(NB::ensure_seq(*else_expr), b)?;
@@ -1723,7 +1724,6 @@ impl FlattenInner {
                     .into(),
                     Some(name),
                     span_id,
-                    VarDefinitionSpace::Default,
                 );
                 self.switch_blocks(new_block_id);
                 Ok(FlattenResult::link(link_id))
@@ -1756,7 +1756,7 @@ impl FlattenInner {
                 };
 
                 // THEN
-                let (then_block_id, then_scope_id) = self.blocks.new_scope_and_block(
+                let (then_block_id, _) = self.blocks.new_scope_and_block(
                     ScopeType::Region,
                     ScopeState::region(),
                     current_block_id,
@@ -1770,12 +1770,7 @@ impl FlattenInner {
                 let name = b.labels.fresh_key("t_then");
 
                 self.switch_blocks(then_block_id);
-                self.push_start_block(
-                    branch_block_type.clone().into(),
-                    Some(name),
-                    then_span_id,
-                    VarDefinitionSpace::Reg,
-                );
+                self.push_start_block(branch_block_type.clone().into(), Some(name), then_span_id);
 
                 self.switch_blocks(then_block_id);
                 let r = self.push_node(then_ast, b)?;
@@ -1784,7 +1779,7 @@ impl FlattenInner {
 
                 // ELSE
                 let else_span_id = y.span_id;
-                let (else_block_id, else_scope_id) = self.blocks.new_scope_and_block(
+                let (else_block_id, _) = self.blocks.new_scope_and_block(
                     ScopeType::Region,
                     ScopeState::region(),
                     current_block_id,
@@ -1795,12 +1790,7 @@ impl FlattenInner {
                 let else_ast = AstNode::make_yield(*y);
 
                 self.switch_blocks(else_block_id);
-                self.push_start_block(
-                    branch_block_type.into(),
-                    Some(name),
-                    else_span_id,
-                    VarDefinitionSpace::Reg,
-                );
+                self.push_start_block(branch_block_type.into(), Some(name), else_span_id);
 
                 self.switch_blocks(else_block_id);
                 let r = self.push_node(else_ast, b)?;
@@ -1897,7 +1887,6 @@ impl FlattenInner {
                                 ),
                                 Some(label),
                                 span_id,
-                                VarDefinitionSpace::Default,
                             );
                             let jump_args = acc.drain(..).collect::<Vec<_>>();
                             let link_id =
@@ -1947,7 +1936,6 @@ impl FlattenInner {
                     AstFuncType::new_void_void(),
                     Some(b.labels.fresh_key("postloop")),
                     span_id,
-                    VarDefinitionSpace::Default,
                 );
                 self.switch_blocks(current_block_id);
 
@@ -1973,7 +1961,6 @@ impl FlattenInner {
                     .into(),
                     Some(key),
                     span_id,
-                    VarDefinitionSpace::Reg,
                 );
 
                 self.switch_blocks(current_block_id);
@@ -2056,7 +2043,6 @@ impl FlattenInner {
                         AstFuncType::new_void_void(),
                         Some(b.labels.fresh_key("postloopbreak")),
                         span_id,
-                        VarDefinitionSpace::Default,
                     );
                     Ok(FlattenResult::link(link_id))
                 } else {
@@ -2242,7 +2228,6 @@ impl FlattenInner {
                 AstFuncType::new(AstType::Struct(vec![]), ReturnType::Single(AstType::Unit)).into(),
                 Some(name),
                 span_id,
-                VarDefinitionSpace::Reg,
             );
         }
     }
