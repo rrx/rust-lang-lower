@@ -33,10 +33,13 @@ impl FlattenInner {
         let def_span_id = a.def_span_id;
         let mut func_type = self.refresh_func_type(&a.def.func_type, b);
         func_type.ret = ReturnType::Never;
+
+        // unify, making sure we have the correct arity
+        // do we even needs this?
         let call_arg_type = AstType::Struct(call_func_type.fields());
         b.unify(&call_arg_type, call_span_id, &func_type.args, def_span_id);
 
-        let def_func_type = func_type.into();
+        let def_func_type = func_type.clone().into();
         b.unify(&def_func_type, call_span_id, &call_func_type, def_span_id);
 
         let (variant_id, fun_block_id, fun_scope_id, def_arg_type) =
@@ -168,9 +171,11 @@ impl FlattenInner {
     pub(crate) fn push_unwind(
         &mut self,
         target_block_id: BlockId,
+        jump_args: ArgVec,
         call_span_id: SpanId,
         b: &mut NB,
     ) -> BlockId {
+        let save_block_id = self.current_block_id();
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
         let goto_scope_id = block.scope();
@@ -183,9 +188,6 @@ impl FlattenInner {
         let unwind_scopes = self.blocks.unwind_scopes(goto_scope_id, target_scope_id);
 
         println!("unwind scopes: {:?}", unwind_scopes);
-        if unwind_scopes.is_empty() {
-            return target_block_id;
-        }
 
         let start_key = b.labels.fresh_key("ustart");
         let start_block_id =
@@ -216,6 +218,8 @@ impl FlattenInner {
             })
             .collect::<Vec<_>>();
 
+        println!("unwind blocks: {:?}", unwind_block_ids);
+
         for (scope_id, unwind_block_id) in unwind_block_ids {
             let scope = self.blocks.get_scope(scope_id);
             let entry_block_id = scope.entry_block();
@@ -240,7 +244,7 @@ impl FlattenInner {
                 VarDefinitionSpace::Default,
             );
             // jump to unwind block
-            let _jump_link_id = self.push_jump(
+            let _jump_link_id = self.push_jump_direct(
                 unwind_block_id,
                 vec![(None, var_link_id, void_func_type.into(), call_span_id)],
                 call_span_id,
@@ -249,7 +253,7 @@ impl FlattenInner {
 
             // jump to the new block
             self.switch_blocks(current_block_id);
-            self.push_jump(new_block_id, vec![], call_span_id, b);
+            self.push_jump_direct(new_block_id, vec![], call_span_id, b);
 
             // define next block
             self.switch_blocks(next_block_id);
@@ -260,9 +264,9 @@ impl FlattenInner {
                 call_span_id,
             );
         }
-        self.push_jump(target_block_id, vec![], call_span_id, b);
+        self.push_jump_direct(target_block_id, jump_args, call_span_id, b);
 
-        self.switch_blocks(current_block_id);
+        self.switch_blocks(save_block_id);
         start_block_id
     }
 
@@ -559,16 +563,17 @@ impl FlattenInner {
                     self.switch_blocks(d.block_id);
                     self.remove_placeholder_terminal(d.block_id);
 
-                    // TODO: we just have a label, so we need to handle unwind here.  We can't jump
-                    // directly, we need to jump to the unwind function
-                    let unwind_target_block_id =
-                        self.push_unwind(target_block_id, d.call_span_id, b);
-
                     // TODO: args should be unwound before jumping
                     // by replacing jumps out of scope to the unwind function
                     let jump_args = self.push_call_arguments(d.args.clone(), d.call_span_id, b)?;
+
+                    // TODO: we just have a label, so we need to handle unwind here.  We can't jump
+                    // directly, we need to jump to the unwind function
+                    //let unwind_target_block_id =
+                    //self.push_unwind(target_block_id, jump_args, d.call_span_id, b);
+
                     let _ =
-                        self.push_jump(unwind_target_block_id.into(), jump_args, d.call_span_id, b);
+                        self.push_jump_direct(target_block_id.into(), jump_args, d.call_span_id, b);
 
                     return Ok(true);
                 }

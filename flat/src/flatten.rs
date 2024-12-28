@@ -744,9 +744,6 @@ impl FlattenInner {
         // We unwind at the caller.
 
         // TODO: unwind when leaving this scope
-        //let unwind_next = self.push_unwind(v_next, span_id, b);
-        //let unwind_next = v_next;
-
         let current_block_id = self.current_block_id();
         let current_scope_id = self.blocks.get_block(current_block_id).scope();
         let target_scope_id = self.blocks.get_block(target_block_id).scope();
@@ -766,11 +763,49 @@ impl FlattenInner {
                     .find_scope_next_down(current_scope_id, target_scope_id)
                     .unwrap();
                 println!("down: {:?}", down);
+                self.push_jump_direct(target_block_id, jump_args, span_id, b)
             } else {
                 println!("unwind: {:?}", unwind);
-            }
-        }
 
+                // for all of the return links, copy them into the target scope
+                // Anything we are referencing here is potentially going to be destroyed
+                // We copy everything for now, but don't need to do this in all circumstances
+                // For example, if the value is already in the target scope, or it's on the heap.
+                let return_links = jump_args.iter().map(|j| j.1).collect::<Vec<_>>();
+                let mut copied_link_ids = vec![];
+                for link_id in return_links.iter() {
+                    let entry = self.get_entry(*link_id);
+                    let ty = entry.ty.clone();
+                    let key = b.labels.fresh_key("r");
+                    self.switch_blocks(target_block_id);
+                    let decl_link_id = self.push_decl(ty.clone(), key, span_id);
+                    self.switch_blocks(current_block_id);
+                    self.push_code(
+                        LCode::Store(decl_link_id, *link_id),
+                        AstType::Unit,
+                        None,
+                        span_id,
+                        VarDefinitionSpace::Default,
+                    );
+                    copied_link_ids.push((None, decl_link_id, ty, span_id));
+                }
+
+                let target = self.push_unwind(target_block_id, copied_link_ids, span_id, b);
+                println!("target: {:?}", target);
+                self.push_jump_direct(target, vec![], span_id, b)
+            }
+        } else {
+            self.push_jump_direct(target_block_id, jump_args, span_id, b)
+        }
+    }
+
+    pub fn push_jump_direct(
+        &mut self,
+        target_block_id: BlockId,
+        jump_args: ArgVec,
+        span_id: SpanId,
+        b: &mut NB,
+    ) -> LinkId {
         // Construct the argument type
         let arg_ty = AstType::Struct(
             jump_args
@@ -2185,28 +2220,17 @@ impl FlattenInner {
                     }
                 };
 
+                let required_ty = AstFuncType::new(
+                    AstType::Struct(vec![(None, AstFuncType::new_void_void().into())]),
+                    ReturnType::Never,
+                );
+                b.unify(&ty, node.span_id, &required_ty.into(), node.span_id);
+
                 let current_block_id = self.current_block_id();
                 let block = self.blocks.get_block(current_block_id);
                 let scope_id = block.scope();
                 let scope = self.blocks.get_scope_mut(scope_id);
                 scope.prepend_deferral(func_block_id);
-
-                let unwind_block_id = self.gen_unwind_cps(scope_id, span_id, b);
-
-                let ty = AstType::Unit;
-
-                let code = LCode::Call(func_link_id.into());
-                let call_link_id = self.insert_entry(CodeEntry::new(
-                    unwind_block_id,
-                    code,
-                    ty,
-                    None,
-                    span_id,
-                    VarDefinitionSpace::Reg,
-                ));
-
-                let unwind_block = self.blocks.get_block_mut(unwind_block_id);
-                unwind_block.prepend_link(call_link_id);
 
                 Ok(FlattenResult::statement())
             }
@@ -2255,6 +2279,7 @@ impl FlattenInner {
         let mut link_id = block.last().unwrap().clone();
         let entry = self.get_entry(link_id);
         if !entry.code.is_term() {
+            println!("maybe_terminate_block: {:?}", entry);
             link_id = self.push_jump(v_next, vec![], span_id, b);
         }
         link_id
