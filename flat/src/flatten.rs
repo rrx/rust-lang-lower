@@ -759,6 +759,8 @@ impl FlattenInner {
                 .collect::<Vec<_>>(),
         );
 
+        let var_link_ids = jump_args.iter().map(|j| j.1).collect::<Vec<_>>();
+
         let _field_types = arg_ty.field_types();
 
         let _link_ids = self.push_call_values(
@@ -784,6 +786,19 @@ impl FlattenInner {
             span_id,
             VarDefinitionSpace::Reg,
         );
+
+        for (i, var_link_id) in var_link_ids.iter().enumerate() {
+            self.scoped_continuations.connect(
+                ContinuationFlow::Variable(*var_link_id),
+                ContinuationFlow::JumpArg(jump_link_id, i as u8),
+                FlowEdge::VarJumpArgInline,
+            );
+            self.scoped_continuations.connect(
+                ContinuationFlow::JumpArg(jump_link_id, i as u8),
+                ContinuationFlow::BlockArg(target_block_id, i as u8),
+                FlowEdge::JumpArgInline,
+            );
+        }
 
         jump_link_id
     }

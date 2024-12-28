@@ -1111,19 +1111,6 @@ impl FlattenInner {
         let goto_link_id =
             self.push_jump(fun_block_id.into(), call_values.clone(), call_span_id, b);
 
-        for (i, (_, var_link_id, _ty, _)) in call_values.iter().enumerate() {
-            self.scoped_continuations.connect(
-                ContinuationFlow::Variable(*var_link_id),
-                ContinuationFlow::JumpArg(goto_link_id, i as u8),
-                FlowEdge::VarJumpArgInline,
-            );
-            self.scoped_continuations.connect(
-                ContinuationFlow::JumpArg(goto_link_id, i as u8),
-                ContinuationFlow::BlockArg(fun_block_id, i as u8),
-                FlowEdge::JumpArgInline,
-            );
-        }
-
         self.switch_blocks(exit_block_id);
         // in the next block
 
