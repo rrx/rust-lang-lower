@@ -548,6 +548,15 @@ impl FlattenInner {
                 );
                 v
             }
+            LCode::Jump(b) => {
+                let v = self._push_entry_normal(entry);
+                self.scoped_continuations.connect(
+                    ContinuationFlow::Jump(v),
+                    ContinuationFlow::Block(*b),
+                    FlowEdge::JumpLabel,
+                );
+                v
+            }
             _ => self._push_entry_normal(entry),
         }
     }
@@ -751,12 +760,6 @@ impl FlattenInner {
             None,
             span_id,
             VarDefinitionSpace::Reg,
-        );
-
-        self.scoped_continuations.connect(
-            ContinuationFlow::Jump(jump_link_id),
-            ContinuationFlow::Block(target_block_id),
-            FlowEdge::JumpBlock,
         );
 
         jump_link_id
@@ -1075,7 +1078,7 @@ impl FlattenInner {
         let code = if let LCode::PlaceholderTerminal = entry.code {
             if target_block_ids.len() == 1 {
                 let block_id = target_block_ids.last().unwrap();
-                Some(LCode::Jump(block_id.into()))
+                Some(LCode::Jump(*block_id))
             } else if target_block_ids.len() > 1 {
                 target_block_ids.sort();
                 let mut m = HashSet::new();

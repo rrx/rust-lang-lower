@@ -467,7 +467,7 @@ impl<'c> MLIRGenerator<'c> {
         }
     }
 
-    pub fn lower_jump(&mut self, v: ValueId, target: CodeOffset) -> Result<()> {
+    pub fn lower_jump(&mut self, v: ValueId, target: BlockId) -> Result<()> {
         let block_id = self.blockify.get_entry_id(v).unwrap();
         let values = self.take_call_args();
         let arity = values.len();
@@ -480,7 +480,7 @@ impl<'c> MLIRGenerator<'c> {
             .collect();
         let rs = self.values(indicies);
 
-        let target_value_id = self.blockify.resolve_code_offset(target);
+        let target_value_id = self.blockify.resolve_code_offset(target.into());
 
         let c = self
             .blocks

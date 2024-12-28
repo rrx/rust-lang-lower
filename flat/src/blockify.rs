@@ -107,7 +107,7 @@ pub enum LCode {
     Yield,                 // yield values
 
     // jump to block, with num args
-    Jump(CodeOffset),
+    Jump(BlockId),
     Switch(LinkId, HashSet<BlockId>),
     PlaceholderTerminal,
     PlaceholderCodeReference,

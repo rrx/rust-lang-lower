@@ -218,7 +218,7 @@ impl Flatten<Module> {
                                 let s = match code {
                                     LCode::Jump(offset) => {
                                         if let Some(v_target) =
-                                            self.maybe_resolve_code_offset(*offset)
+                                            self.maybe_resolve_code_offset(offset.into())
                                         {
                                             ng.edges.push((v, v_target));
                                         }

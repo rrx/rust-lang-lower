@@ -514,7 +514,7 @@ impl<'a> Interp<'a> {
 
             LCode::Jump(target) => {
                 // push args
-                let v = self.m.resolve_code_offset(*target);
+                let v = self.m.resolve_code_offset(target.into());
                 self.jump(v);
                 true
             }
