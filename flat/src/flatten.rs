@@ -534,6 +534,20 @@ impl FlattenInner {
                 let link_id = self.insert_decl(entry_block_id, entry);
                 link_id
             }
+            LCode::Branch(_, b1, b2) => {
+                let v = self._push_entry_normal(entry);
+                self.scoped_continuations.connect(
+                    ContinuationFlow::Jump(v),
+                    ContinuationFlow::Block(*b1),
+                    FlowEdge::CondThen,
+                );
+                self.scoped_continuations.connect(
+                    ContinuationFlow::Jump(v),
+                    ContinuationFlow::Block(*b2),
+                    FlowEdge::CondElse,
+                );
+                v
+            }
             _ => self._push_entry_normal(entry),
         }
     }
@@ -693,6 +707,14 @@ impl FlattenInner {
         b: &mut NB,
     ) -> LinkId {
         // handle leaving scope here?
+        // We need to unwind the target, as well as any CPS parameters we send
+        // We unwind at the caller.
+        // We also need to do this for branches
+        //
+        // TODO: unwind when leaving this scope
+        //let unwind_next = self.push_unwind(v_next, span_id, b);
+        //let unwind_next = v_next;
+
         let current_block_id = self.current_block_id();
         assert_ne!(current_block_id, target_block_id);
         //println!("jump: {}=>{}", current_block_id, target_block_id);
@@ -1510,10 +1532,7 @@ impl FlattenInner {
                 self.switch_blocks(then_block_id);
                 let _ = self.push_node(NB::ensure_seq(*then_expr), b)?;
 
-                // TODO: unwind when leaving this scope
-                //let unwind_next = self.push_unwind(v_next, span_id, b);
-                let unwind_next = v_next;
-                self.maybe_terminate_block(unwind_next, span_id, b);
+                self.maybe_terminate_block(v_next, span_id, b);
 
                 // ELSE
                 let else_block_id = if let Some(else_expr) = maybe_else_expr {
@@ -1554,6 +1573,7 @@ impl FlattenInner {
                 // condition
                 self.switch_blocks(current_block_id);
                 let r = self.push_node(*condition, b)?;
+
                 let v = self.push_code(
                     LCode::Branch(
                         r.link_id.unwrap().into(),
@@ -1564,16 +1584,6 @@ impl FlattenInner {
                     None,
                     span_id,
                     VarDefinitionSpace::Reg,
-                );
-                self.scoped_continuations.connect(
-                    ContinuationFlow::Jump(v),
-                    ContinuationFlow::Block(then_block_id),
-                    FlowEdge::CondThen,
-                );
-                self.scoped_continuations.connect(
-                    ContinuationFlow::Jump(v),
-                    ContinuationFlow::Block(else_block_id),
-                    FlowEdge::CondElse,
                 );
                 self.switch_blocks(v_next);
                 Ok(FlattenResult::link(v))
