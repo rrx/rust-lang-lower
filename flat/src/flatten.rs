@@ -521,6 +521,7 @@ impl FlattenInner {
             }
             LCode::Arg(_) => {
                 let link_id = self.insert_entry(entry);
+                self.update_connections(link_id);
                 let block = self.blocks.get_block_mut(block_id);
                 block.push_arg(link_id);
                 link_id
@@ -551,6 +552,12 @@ impl FlattenInner {
     fn update_connections(&mut self, link_id: LinkId) {
         let code = self.get_entry(link_id).code.clone();
         match code {
+            LCode::Arg(i) => self.scoped_continuations.connect(
+                ContinuationFlow::BlockArg(self.current_block_id(), i),
+                ContinuationFlow::Variable(link_id),
+                FlowEdge::BlockArg,
+            ),
+
             LCode::Branch(_, b1, b2) => {
                 self.scoped_continuations.connect(
                     ContinuationFlow::Jump(link_id),
