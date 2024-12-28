@@ -352,17 +352,11 @@ impl FlattenInner {
         let (_variant_id, _fun_scope_id, fun_block_id, _) =
             self.gen_cps_block_with_type(name, scope_id, abstraction_id, &ty, span_id, true, b)?;
 
-        self.scoped_continuations.connect(
-            ContinuationFlow::Block(fun_block_id),
-            ContinuationFlow::Variable(link_id),
-            FlowEdge::BlockRef,
-        );
-
         // now replace the abstraction code
         let entry = self.get_entry_mut(link_id);
         entry.code = LCode::Val(Literal::Block(fun_block_id));
-
         b.unify(&entry.ty, entry.span_id, &ty, span_id);
+        self.update_connections(link_id);
         self.switch_blocks(current_block_id);
         Ok(())
     }
@@ -575,6 +569,14 @@ impl FlattenInner {
                     ContinuationFlow::Variable(v_expr),
                     ContinuationFlow::Variable(offset_decl),
                     FlowEdge::Store,
+                );
+            }
+
+            LCode::Val(Literal::Block(fun_block_id)) => {
+                self.scoped_continuations.connect(
+                    ContinuationFlow::Block(fun_block_id),
+                    ContinuationFlow::Variable(link_id),
+                    FlowEdge::BlockRef,
                 );
             }
 
