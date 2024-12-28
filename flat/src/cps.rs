@@ -562,13 +562,8 @@ impl FlattenInner {
                     // TODO: args should be unwound before jumping
                     // by replacing jumps out of scope to the unwind function
                     let jump_args = self.push_call_arguments(d.args.clone(), d.call_span_id, b)?;
-                    let link_id =
+                    let _ =
                         self.push_jump(unwind_target_block_id.into(), jump_args, d.call_span_id, b);
-                    self.scoped_continuations.connect(
-                        ContinuationFlow::Jump(link_id),
-                        ContinuationFlow::Block(target_block_id),
-                        FlowEdge::JumpLabel,
-                    );
 
                     return Ok(true);
                 }
@@ -669,16 +664,12 @@ impl FlattenInner {
             let block_span_id = block_entry.span_id;
 
             self.switch_blocks(block_id);
-            self.scoped_continuations.connect(
-                ContinuationFlow::Block(block_id),
-                ContinuationFlow::Variable(link_id),
-                FlowEdge::BlockRef,
-            );
 
             // now replace the abstraction code
             let entry = self.get_entry_mut(link_id);
             entry.code = LCode::Val(Literal::Block(block_id));
             b.unify(&entry.ty, entry.span_id, &block_ty, block_span_id);
+            self.update_connections(link_id);
         }
 
         for (link_id, abstraction_id) in abstractions {

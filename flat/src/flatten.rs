@@ -535,7 +535,7 @@ impl FlattenInner {
         v
     }
 
-    fn update_connections(&mut self, link_id: LinkId) {
+    pub(super) fn update_connections(&mut self, link_id: LinkId) {
         let code = self.get_entry(link_id).code.clone();
         match code {
             LCode::Arg(i) => self.scoped_continuations.connect(
