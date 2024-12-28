@@ -463,7 +463,7 @@ impl FlattenInner {
         Ok((self, values))
     }
 
-    fn insert_entry_after(&mut self, mut entry: CodeEntry) -> LinkId {
+    fn insert_entry(&mut self, mut entry: CodeEntry) -> LinkId {
         let index = self.entries.len();
         let link_id = LinkId(index as u32);
         entry.link = Some(link_id);
@@ -472,7 +472,7 @@ impl FlattenInner {
     }
 
     fn insert_decl(&mut self, block_id: BlockId, entry: CodeEntry) -> LinkId {
-        let link_id = self.insert_entry_after(entry);
+        let link_id = self.insert_entry(entry);
         self.blocks.get_block_mut(block_id).push_decl(link_id);
         link_id
     }
@@ -500,7 +500,7 @@ impl FlattenInner {
     fn _push_entry_normal(&mut self, entry: CodeEntry) -> LinkId {
         let block_id = entry.block_id;
         let code = entry.code.clone();
-        let link_id = self.insert_entry_after(entry);
+        let link_id = self.insert_entry(entry);
         let block = self.blocks.get_block_mut(block_id);
         block.push_link(link_id, code.is_term());
         link_id
@@ -514,13 +514,13 @@ impl FlattenInner {
             LCode::Label => {
                 let block = self.blocks.get_block(block_id);
                 assert!(block.last().is_none());
-                let link_id = self.insert_entry_after(entry);
+                let link_id = self.insert_entry(entry);
                 let block = self.blocks.get_block_mut(block_id);
                 block.push_label(link_id);
                 link_id
             }
             LCode::Arg(_) => {
-                let link_id = self.insert_entry_after(entry);
+                let link_id = self.insert_entry(entry);
                 let block = self.blocks.get_block_mut(block_id);
                 block.push_arg(link_id);
                 link_id
@@ -1024,7 +1024,7 @@ impl FlattenInner {
         let block = self.blocks.get_block(goto_block_id);
         let last_link_id = block.last().unwrap();
         let entry = self.get_entry(last_link_id);
-        if let LCode::PlaceholderTerminal(_prev_link_id) = entry.code {
+        if let LCode::PlaceholderTerminal = entry.code {
             let block = self.blocks.get_block_mut(goto_block_id);
             let _ = block.pop_terminal();
         }
@@ -1050,7 +1050,7 @@ impl FlattenInner {
 
         let entry = self.get_entry(last_link_id);
 
-        let code = if let LCode::PlaceholderTerminal(_) = entry.code {
+        let code = if let LCode::PlaceholderTerminal = entry.code {
             if target_block_ids.len() == 1 {
                 let block_id = target_block_ids.last().unwrap();
                 Some(LCode::Jump(block_id.into()))
@@ -1509,7 +1509,11 @@ impl FlattenInner {
                 );
                 self.switch_blocks(then_block_id);
                 let _ = self.push_node(NB::ensure_seq(*then_expr), b)?;
-                self.maybe_terminate_block(v_next, span_id, b);
+
+                // TODO: unwind when leaving this scope
+                //let unwind_next = self.push_unwind(v_next, span_id, b);
+                let unwind_next = v_next;
+                self.maybe_terminate_block(unwind_next, span_id, b);
 
                 // ELSE
                 let else_block_id = if let Some(else_expr) = maybe_else_expr {
@@ -1536,6 +1540,7 @@ impl FlattenInner {
 
                     self.switch_blocks(else_block_id);
                     let _ = self.push_node(NB::ensure_seq(*else_expr), b)?;
+                    // TODO: unwind when leaving this scope
                     self.maybe_terminate_block(v_next, span_id, b);
                     else_block_id
                 } else {
@@ -2127,23 +2132,49 @@ impl FlattenInner {
             Ast::Defer(expr) => {
                 // defer is terminal
                 let r = self.push_node(*expr, b)?;
-                let link_id = r.link_id.unwrap();
+                let func_link_id = r.link_id.unwrap();
                 // expression must be a function with no arguments.  We bake it here.
-                let ty = self.get_type(link_id).clone();
+                let ty = self.get_type(func_link_id).clone();
+                println!("ty: {:?}", ty);
 
-                //self.push_call(
+                let entry = self.get_entry(func_link_id);
+                println!("entry: {:?}", entry);
+
+                let func_block_id = match &entry.code {
+                    LCode::Val(Literal::Block(block_id)) => *block_id,
+                    _ => {
+                        b.push_error(
+                            &format!("Defer must be a function with no arguments"),
+                            node.span_id,
+                        );
+                        return Err(Error::new(BlockifyError::Invalid));
+                    }
+                };
 
                 let current_block_id = self.current_block_id();
                 let block = self.blocks.get_block(current_block_id);
                 let scope_id = block.scope();
-                let unwind_block_id = self.gen_unwind_cps(scope_id, span_id, b);
-                let unwind_block = self.blocks.get_block_mut(unwind_block_id);
-                unwind_block.prepend_link(link_id);
+                let scope = self.blocks.get_scope_mut(scope_id);
+                scope.prepend_deferral(func_block_id);
 
-                println!("ty: {:?}", ty);
-                //let code = LCode::Defer(link_id);
-                //let link_id = self.push_code(code, ty, None, node.span_id, VarDefinitionSpace::Reg);
-                Ok(FlattenResult::link(link_id))
+                let unwind_block_id = self.gen_unwind_cps(scope_id, span_id, b);
+
+                let ty = AstType::Unit;
+
+                let code = LCode::Call(func_link_id.into());
+                let call_link_id = self.insert_entry(CodeEntry::new(
+                    unwind_block_id,
+                    code,
+                    ty,
+                    None,
+                    span_id,
+                    VarDefinitionSpace::Reg,
+                ));
+
+                let unwind_block = self.blocks.get_block_mut(unwind_block_id);
+                unwind_block.prepend_link(call_link_id);
+
+                Ok(FlattenResult::statement())
             }
 
             Ast::Error => {

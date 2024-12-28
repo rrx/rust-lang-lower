@@ -236,6 +236,7 @@ pub struct ScopeLayer {
     unclaimed_labels: HashMap<StringLabel, BlockId>,
     num_ret_args: HashSet<usize>,
     ret_types: HashSet<AstType>,
+    deferrals: Vec<BlockId>,
 }
 
 impl ScopeLayer {
@@ -252,6 +253,7 @@ impl ScopeLayer {
             unclaimed_labels: HashMap::new(),
             num_ret_args: HashSet::new(),
             ret_types: HashSet::new(),
+            deferrals: vec![],
         }
     }
 
@@ -261,6 +263,10 @@ impl ScopeLayer {
 
     pub fn is_static(&self) -> bool {
         self.scope_type == ScopeType::Static
+    }
+
+    pub fn prepend_deferral(&mut self, block_id: BlockId) {
+        self.deferrals.insert(0, block_id);
     }
 
     pub fn make_function_scope(&mut self, state: ScopeStateFunction) {

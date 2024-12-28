@@ -744,7 +744,7 @@ impl<'c> MLIRGenerator<'c> {
             LCode::Jump(target) => self.lower_jump(v, *target)?,
             LCode::Switch(arg, m) => self.lower_switch(v, *arg, m)?,
 
-            LCode::PlaceholderTerminal(_) => {
+            LCode::PlaceholderTerminal => {
                 unreachable!("Placeholder terminated block")
             }
             LCode::PlaceholderCodeReference => {

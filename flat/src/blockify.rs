@@ -109,7 +109,7 @@ pub enum LCode {
     // jump to block, with num args
     Jump(CodeOffset),
     Switch(LinkId, HashSet<BlockId>),
-    PlaceholderTerminal(LinkId),
+    PlaceholderTerminal,
     PlaceholderCodeReference,
 
     Branch(CodeOffset, BlockId, BlockId),
@@ -129,7 +129,7 @@ impl LCode {
         match self {
             Self::Jump(_) => true,
             Self::Switch(_, _) => true,
-            Self::PlaceholderTerminal(_) => true,
+            Self::PlaceholderTerminal => true,
             Self::Branch(_, _, _) => true,
             Self::Return => true,
             Self::Yield => true,

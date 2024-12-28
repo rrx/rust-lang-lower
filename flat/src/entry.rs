@@ -58,7 +58,7 @@ impl CodeEntry {
             LCode::Yield => unreachable!(),
             LCode::Jump(_) => unreachable!(),
             LCode::Switch(_, _) => unreachable!(),
-            LCode::PlaceholderTerminal(_) => unreachable!(),
+            LCode::PlaceholderTerminal => unreachable!(),
             LCode::PlaceholderCodeReference => false,
             LCode::Branch(_, _, _) => unreachable!(),
             LCode::Builtin(_) => unreachable!(),

@@ -108,8 +108,7 @@ impl FlattenInner {
                 // this is for dead code
                 let block = self.blocks.get_block(self.current_block_id());
                 if !block.is_term() {
-                    self.push_placeholder_terminal(block.last().unwrap(), r_ty1, def_span_id);
-                    //println!("placeholder4: {}", p_link_id);
+                    self.push_placeholder_terminal(r_ty1, def_span_id);
                 }
 
                 (variant_id, fun_block_id, fun_scope_id, r_ty2)
@@ -169,7 +168,7 @@ impl FlattenInner {
         }
     }
 
-    fn push_unwind(
+    pub(crate) fn push_unwind(
         &mut self,
         target_block_id: BlockId,
         call_span_id: SpanId,
@@ -374,14 +373,9 @@ impl FlattenInner {
         ));
     }
 
-    pub fn push_placeholder_terminal(
-        &mut self,
-        link_id: LinkId,
-        ty: AstType,
-        call_span_id: SpanId,
-    ) -> LinkId {
+    pub fn push_placeholder_terminal(&mut self, ty: AstType, call_span_id: SpanId) -> LinkId {
         self.push_code(
-            LCode::PlaceholderTerminal(link_id),
+            LCode::PlaceholderTerminal,
             ty,
             None,
             call_span_id,
@@ -399,10 +393,9 @@ impl FlattenInner {
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
         let scope_id = block.scope();
-        let link_id = block.last().unwrap();
         let ty = AstFuncType::new(argvec_type(&argvec), ReturnType::Never).into();
 
-        self.push_placeholder_terminal(link_id, ty, call_span_id);
+        self.push_placeholder_terminal(ty, call_span_id);
 
         let mut d = DeferredGoto::new(
             scope_id,
@@ -437,8 +430,7 @@ impl FlattenInner {
         // We will rewrite in a later step, this goto will become a select
 
         if let Some(name_link_id) = self.blocks.resolve_name_in_scope(scope_id, name.into()) {
-            let link_id = block.last().unwrap();
-            self.push_placeholder_terminal(link_id, AstType::Unit, call_span_id);
+            self.push_placeholder_terminal(AstType::Unit, call_span_id);
 
             let d = DeferredGoto::new(
                 scope_id,
@@ -456,7 +448,7 @@ impl FlattenInner {
         // ensure we are in function scope
         if self.blocks.in_function_scope(scope_id) {
             let link_id = block.last().unwrap();
-            self.push_placeholder_terminal(link_id, AstType::Unit, call_span_id);
+            self.push_placeholder_terminal(AstType::Unit, call_span_id);
 
             let d = DeferredGoto::new(
                 scope_id,
@@ -554,12 +546,7 @@ impl FlattenInner {
                 d.deferred_type = DeferredType::Name(load_link_id);
                 d.argvec = goto_values;
 
-                let block = self.blocks.get_block(self.current_block_id());
-                self.push_placeholder_terminal(
-                    block.last().unwrap(),
-                    goto_func_type,
-                    d.call_span_id,
-                );
+                self.push_placeholder_terminal(goto_func_type, d.call_span_id);
 
                 self.deferred_goto.add_cps(d);
                 return Ok(true);
