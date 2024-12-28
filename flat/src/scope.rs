@@ -427,11 +427,7 @@ impl BlockGraph {
         None
     }
 
-    pub fn unwind_scopes(
-        &self,
-        start_scope_id: ScopeId,
-        end_scope_id: ScopeId,
-    ) -> Result<Vec<ScopeId>> {
+    pub fn unwind_scopes(&self, start_scope_id: ScopeId, end_scope_id: ScopeId) -> Vec<ScopeId> {
         let mut out = vec![];
         let mut current = start_scope_id;
         loop {
@@ -444,17 +440,10 @@ impl BlockGraph {
                 out.push(current);
                 current = next_scope_id;
             } else {
-                let msg = format!("{}=>{}", start_scope_id, end_scope_id);
-                println!("msg:{}", msg);
-                return Err(Error::new(BlockifyError::UnwindNotFound(msg)));
+                return vec![];
             }
         }
-        println!(
-            "unwind scopes: {}=>{}, {:?}",
-            start_scope_id, end_scope_id, out
-        );
-        println!("unwind scopes: {:?}", out);
-        Ok(out)
+        out
     }
 
     pub fn step_up(&self, scope_id: ScopeId) -> Option<ScopeId> {
@@ -476,6 +465,18 @@ impl BlockGraph {
             }
         }
         out
+    }
+
+    pub fn find_scope_next_down(
+        &self,
+        start_scope_id: ScopeId,
+        target_scope_id: ScopeId,
+    ) -> Option<ScopeId> {
+        self.sg
+            .neighbors_directed(start_scope_id.into(), petgraph::Direction::Outgoing)
+            .into_iter()
+            .find(|x| *x == target_scope_id.into())
+            .map(|x| x.into())
     }
 
     pub fn find_scopes(&self, scope_id: ScopeId) -> Vec<ScopeId> {

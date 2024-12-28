@@ -751,10 +751,25 @@ impl FlattenInner {
         let current_scope_id = self.blocks.get_block(current_block_id).scope();
         let target_scope_id = self.blocks.get_block(target_block_id).scope();
         assert_ne!(current_block_id, target_block_id);
+
         println!(
             "jump: {}{}=>{}{}",
             current_block_id, current_scope_id, target_block_id, target_scope_id
         );
+
+        let scope_changed = current_scope_id != target_scope_id;
+        if scope_changed {
+            let unwind = self.blocks.unwind_scopes(current_scope_id, target_scope_id);
+            if unwind.is_empty() {
+                let down = self
+                    .blocks
+                    .find_scope_next_down(current_scope_id, target_scope_id)
+                    .unwrap();
+                println!("down: {:?}", down);
+            } else {
+                println!("unwind: {:?}", unwind);
+            }
+        }
 
         // Construct the argument type
         let arg_ty = AstType::Struct(
@@ -1593,6 +1608,7 @@ impl FlattenInner {
                     let _ = self.push_node(NB::ensure_seq(*else_expr), b)?;
                     // TODO: unwind when leaving this scope
                     self.maybe_terminate_block(v_next, span_id, b);
+
                     else_block_id
                 } else {
                     self.blocks

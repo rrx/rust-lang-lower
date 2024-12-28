@@ -180,10 +180,7 @@ impl FlattenInner {
 
         // TODO: now that we know the target, we need to replace any call values with unwind
         // functions. We also need to do this for the goto_block_id.
-        let unwind_scopes = self
-            .blocks
-            .unwind_scopes(goto_scope_id, target_scope_id)
-            .unwrap();
+        let unwind_scopes = self.blocks.unwind_scopes(goto_scope_id, target_scope_id);
 
         println!("unwind scopes: {:?}", unwind_scopes);
         if unwind_scopes.is_empty() {
