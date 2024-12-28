@@ -62,6 +62,39 @@ impl CodeEntry {
         }
     }
 
+    pub fn is_load_required(&self) -> bool {
+        match self.code {
+            LCode::Val(_) => self.mem.is_static(),
+            LCode::Declare => true,
+            LCode::Arg(_) => false,
+            LCode::Load(_) => false,
+            LCode::Tuple(_) => false,
+            LCode::NaryOp(_) => false,
+            LCode::Op1(_) => false,
+            LCode::Op2(_) => false,
+            LCode::Call(_) => false,
+            LCode::Use(_, _) => false,
+            LCode::Label => false,
+            LCode::Ternary(_, _, _) => false,
+            // shouldn't happen
+            LCode::DeclareFunction(_) => unimplemented!(),
+            LCode::Extern => unimplemented!(),
+            LCode::Store(_, _) => unreachable!(),
+            LCode::Noop => unreachable!(),
+            LCode::DeclareTemplate(_) => unreachable!(),
+            LCode::Return => unreachable!(),
+            LCode::Yield => unreachable!(),
+            LCode::Jump(_) => unreachable!(),
+            LCode::Switch(_, _) => unreachable!(),
+            LCode::PlaceholderTerminal(_) => unreachable!(),
+            LCode::PlaceholderCodeReference => false,
+            LCode::Branch(_, _, _) => unreachable!(),
+            LCode::Builtin(_) => unreachable!(),
+            LCode::CallValue(_) => unreachable!(),
+            LCode::EndModule => unreachable!(),
+        }
+    }
+
     pub fn add_mem(mut self, mem: VarDefinitionSpace) -> Self {
         self.mem = mem;
         self
@@ -117,40 +150,16 @@ pub struct FlattenInner {
     pub(super) link: LinkOptions,
     pub(super) entries: Vec<CodeEntry>,
     pub blocks: BlockGraph,
-    pub(crate) static_scope: Option<ScopeId>,
-    pub(crate) static_block: Option<BlockId>,
+    static_scope: ScopeId,
+    static_block: BlockId,
     pub(crate) current_block: BlockId,
-    //pub scopes: ScopeGraph,
     pub(super) block_links: HashMap<BlockId, LinkId>,
     pub(crate) functions: HashMap<StringKey, LinkId>,
     pub(crate) open_identifiers: Vec<LinkId>,
     pub(crate) scoped_continuations: ScopedContinuations,
-    pub deferred_goto: DeferredGotoList,
-    pub variants: FunctionVariantBuilder,
-    pub abstractions: AbstractionsBuilder,
-}
-
-impl FlattenInner {
-    pub fn new() -> Self {
-        let blocks = BlockGraph::new();
-
-        Self {
-            entries: vec![],
-            blocks,
-            link: LinkOptions::new(),
-            static_scope: None,
-            static_block: None,
-            current_block: BlockId::new(0),
-            //scopes: ScopeGraph::new(),
-            block_links: HashMap::new(),
-            functions: HashMap::new(),
-            open_identifiers: vec![],
-            scoped_continuations: ScopedContinuations::new(),
-            deferred_goto: DeferredGotoList::new(),
-            variants: FunctionVariantBuilder::new(),
-            abstractions: AbstractionsBuilder::new(),
-        }
-    }
+    pub(super) deferred_goto: DeferredGotoList,
+    pub(super) variants: FunctionVariantBuilder,
+    pub(super) abstractions: AbstractionsBuilder,
 }
 
 pub struct Flatten<S: FlattenState> {
@@ -184,15 +193,32 @@ impl Flatten<Start> {
         // setup environment with static scope and block
         // blocks will be moved into environment eventually
         // FlattenEnvironment represents the module level structures
+
+        let mut blocks = BlockGraph::new();
+        let (static_block_id, static_scope_id) = blocks.root();
+        let inner = FlattenInner {
+            entries: vec![],
+            blocks,
+            link: LinkOptions::new(),
+            static_scope: static_scope_id,
+            static_block: static_block_id,
+            current_block: static_block_id,
+            block_links: HashMap::new(),
+            functions: HashMap::new(),
+            open_identifiers: vec![],
+            scoped_continuations: ScopedContinuations::new(),
+            deferred_goto: DeferredGotoList::new(),
+            variants: FunctionVariantBuilder::new(),
+            abstractions: AbstractionsBuilder::new(),
+        };
+
         let mut f = Self {
-            inner: FlattenInner::new().into(),
+            inner: inner.into(),
             state: Start {},
         };
 
-        let (static_block_id, static_scope_id) = f.blocks.root();
-        f.static_scope = Some(static_scope_id);
-        f.current_block = static_block_id;
-        f.static_block = Some(static_block_id);
+        let static_scope_id = f.static_scope;
+        let static_block_id = f.static_block;
 
         if let Ast::Module(key, body) = node.node {
             // start module block
@@ -289,11 +315,11 @@ impl FlattenInner {
     }
 
     pub fn static_scope_id(&self) -> ScopeId {
-        self.static_scope.unwrap()
+        self.static_scope
     }
 
     pub fn static_block_id(&self) -> BlockId {
-        self.static_block.unwrap()
+        self.static_block
     }
 
     pub fn switch_blocks(&mut self, block_id: BlockId) {
@@ -481,7 +507,6 @@ impl FlattenInner {
         let dead_blocks = self.blocks.find_dead_blocks_from_graph();
         for block_id in dead_blocks {
             if let Some(link_id) = self.block_links.get(&block_id).cloned() {
-                //let v = self.get_entry_id_from_block_id(block_id);
                 let entry = self.get_entry(link_id);
                 b.push_warning(&format!("Dead Block: {}", block_id), entry.span_id);
             } else {
@@ -648,36 +673,7 @@ impl FlattenInner {
 
     pub fn is_load_required(&mut self, v: LinkId) -> bool {
         let entry = self.get_entry(v);
-        match entry.code {
-            LCode::Val(_) => entry.mem.is_static(),
-            LCode::Declare => true,
-            LCode::Arg(_) => false,
-            LCode::Load(_) => false,
-            LCode::Tuple(_) => false,
-            LCode::NaryOp(_) => false,
-            LCode::Op1(_) => false,
-            LCode::Op2(_) => false,
-            LCode::Call(_) => false,
-            LCode::Use(_, _) => false,
-            LCode::Label => false,
-            LCode::Ternary(_, _, _) => false,
-            // shouldn't happen
-            LCode::DeclareFunction(_) => unimplemented!(),
-            LCode::Extern => unimplemented!(),
-            LCode::Store(_, _) => unreachable!(),
-            LCode::Noop => unreachable!(),
-            LCode::DeclareTemplate(_) => unreachable!(),
-            LCode::Return => unreachable!(),
-            LCode::Yield => unreachable!(),
-            LCode::Jump(_) => unreachable!(),
-            LCode::Switch(_, _) => unreachable!(),
-            LCode::PlaceholderTerminal(_) => unreachable!(),
-            LCode::PlaceholderCodeReference => false,
-            LCode::Branch(_, _, _) => unreachable!(),
-            LCode::Builtin(_) => unreachable!(),
-            LCode::CallValue(_) => unreachable!(),
-            LCode::EndModule => unreachable!(),
-        }
+        entry.is_load_required()
     }
 
     pub fn push_loads_if_needed(
@@ -778,9 +774,6 @@ impl FlattenInner {
         // handle leaving scope here?
         let current_block_id = self.current_block_id();
         assert_ne!(current_block_id, target_block_id);
-        //let block = self.blocks.get_block(current_block_id);
-        //let start_scope_id = block.scope();
-        //let start_stack = self.blocks.walk_scopes(block.scope());
         //println!("jump: {}=>{}", current_block_id, target_block_id);
 
         // Construct the argument type
