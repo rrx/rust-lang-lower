@@ -1124,12 +1124,6 @@ impl FlattenInner {
             );
         }
 
-        self.scoped_continuations.connect(
-            ContinuationFlow::Jump(goto_link_id),
-            ContinuationFlow::Block(fun_block_id),
-            FlowEdge::JumpInline,
-        );
-
         self.switch_blocks(exit_block_id);
         // in the next block
 
