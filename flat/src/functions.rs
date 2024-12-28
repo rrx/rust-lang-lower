@@ -571,7 +571,6 @@ impl FlattenInner {
         self.switch_blocks(next_block_id);
 
         let (_v_block, v_args) = self.push_start_block(
-            next_scope_id,
             ret_block_ty.clone().into(),
             Some(b.labels.fresh_key(&cont_name)),
             call_span_id,
@@ -653,13 +652,8 @@ impl FlattenInner {
             .block_succ(current_block_id, fun_block_id, succ_type);
 
         self.switch_blocks(fun_block_id);
-        let (entry_link_id, entry_args) = self.push_start_block(
-            fun_scope_id.clone(),
-            def_func_type.clone(),
-            Some(global_name),
-            def_span_id,
-            mem,
-        );
+        let (entry_link_id, entry_args) =
+            self.push_start_block(def_func_type.clone(), Some(global_name), def_span_id, mem);
 
         // add entry to scope, for recursion
         let variant_ty = b.types.u.resolve(&def_func_type.clone().into()).unwrap();
@@ -1060,7 +1054,6 @@ impl FlattenInner {
 
         self.switch_blocks(exit_block_id);
         let (_v_block, v_args) = self.push_start_block(
-            exit_scope_id,
             ret_block_ty.clone().into(),
             Some(cont_key),
             call_span_id,

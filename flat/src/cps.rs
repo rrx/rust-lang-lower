@@ -78,7 +78,6 @@ impl FlattenInner {
                 let r_ty1 = b.types.u.resolve(&def_func_type.into()).unwrap();
 
                 let (entry_link_id, _) = self.push_start_block(
-                    fun_scope_id,
                     r_ty1.clone().get_func().clone(),
                     Some(lambda_name),
                     def_span_id,
@@ -199,7 +198,6 @@ impl FlattenInner {
                 .new_block(current_block_id, goto_scope_id, Successor::BlockScope);
         self.switch_blocks(start_block_id);
         self.push_start_block(
-            goto_scope_id,
             AstFuncType::new_void_void().into(),
             Some(start_key),
             call_span_id,
@@ -221,7 +219,6 @@ impl FlattenInner {
             let void_func_type = AstFuncType::new_void_void();
             let new_key = b.labels.fresh_key("unew");
             self.push_start_block(
-                scope_id,
                 void_func_type.clone().into(),
                 Some(new_key),
                 call_span_id,
@@ -248,7 +245,6 @@ impl FlattenInner {
             self.switch_blocks(next_block_id);
             let next_key = b.labels.fresh_key("unext");
             self.push_start_block(
-                scope_id,
                 AstFuncType::new_void_void().into(),
                 Some(next_key),
                 call_span_id,

@@ -144,7 +144,6 @@ impl Flatten<Start> {
         if let Ast::Module(key, body) = node.node {
             // start module block
             f.push_start_block(
-                static_scope_id,
                 AstFuncType::new_void_void().into(),
                 Some(key),
                 node.span_id,
@@ -904,13 +903,11 @@ impl FlattenInner {
         Ok(FlattenResult::link(link_id))
     }
 
-    fn push_start_block_args(
-        &mut self,
-        scope_id: ScopeId,
-        block_ty: AstFuncType,
-        span_id: SpanId,
-    ) -> ArgVec {
+    fn push_start_block_args(&mut self, block_ty: AstFuncType, span_id: SpanId) -> ArgVec {
         assert!(block_ty.args.is_composite());
+
+        let block_id = self.current_block_id();
+        let scope_id = self.blocks.get_block(block_id).scope();
 
         let mut v_args = vec![];
         for (i, (name, ty)) in block_ty.args.fields().iter().enumerate() {
@@ -931,7 +928,6 @@ impl FlattenInner {
 
     pub(super) fn push_start_block(
         &mut self,
-        scope_id: ScopeId,
         block_ty: AstFuncType,
         name: Option<StringKey>,
         span_id: SpanId,
@@ -939,7 +935,7 @@ impl FlattenInner {
     ) -> (LinkId, ArgVec) {
         let block_link_id =
             self.push_code(LCode::Label, block_ty.clone().into(), name, span_id, mem);
-        let v_args = self.push_start_block_args(scope_id, block_ty, span_id);
+        let v_args = self.push_start_block_args(block_ty, span_id);
         self.block_links
             .insert(self.current_block_id(), block_link_id);
         (block_link_id, v_args)
@@ -1532,7 +1528,6 @@ impl FlattenInner {
                         .new_block(current_block_id, parent_scope_id, Successor::BlockScope);
                 self.switch_blocks(v_next);
                 self.push_start_block(
-                    parent_scope_id,
                     AstFuncType::new_void_void(),
                     Some(b.labels.fresh_key("cond_next")),
                     span_id,
@@ -1560,7 +1555,6 @@ impl FlattenInner {
                 let name = b.labels.fresh_key("then");
                 self.switch_blocks(then_block_id);
                 self.push_start_block(
-                    then_scope_id,
                     branch_block_type.clone().into(),
                     Some(name),
                     then_span_id,
@@ -1587,7 +1581,6 @@ impl FlattenInner {
 
                     self.switch_blocks(else_block_id);
                     self.push_start_block(
-                        else_scope_id,
                         branch_block_type.into(),
                         Some(name),
                         else_span_id,
@@ -1723,7 +1716,6 @@ impl FlattenInner {
 
                 self.switch_blocks(new_block_id);
                 let (link_id, _) = self.push_start_block(
-                    scope_id,
                     AstFuncType {
                         args: arg_ty.clone().into(),
                         ret: ReturnType::Single(AstType::Unit).into(),
@@ -1779,7 +1771,6 @@ impl FlattenInner {
 
                 self.switch_blocks(then_block_id);
                 self.push_start_block(
-                    then_scope_id,
                     branch_block_type.clone().into(),
                     Some(name),
                     then_span_id,
@@ -1805,7 +1796,6 @@ impl FlattenInner {
 
                 self.switch_blocks(else_block_id);
                 self.push_start_block(
-                    else_scope_id,
                     branch_block_type.into(),
                     Some(name),
                     else_span_id,
@@ -1901,7 +1891,6 @@ impl FlattenInner {
                             );
                             self.switch_blocks(v_next);
                             self.push_start_block(
-                                parent_scope_id,
                                 AstFuncType::new(
                                     AstType::Struct(acc_types).into(),
                                     ReturnType::Single(AstType::Unit),
@@ -1955,7 +1944,6 @@ impl FlattenInner {
                         .new_block(current_block_id, parent_scope_id, Successor::BlockScope);
                 self.switch_blocks(v_next);
                 self.push_start_block(
-                    parent_scope_id,
                     AstFuncType::new_void_void(),
                     Some(b.labels.fresh_key("postloop")),
                     span_id,
@@ -1978,7 +1966,6 @@ impl FlattenInner {
 
                 self.switch_blocks(loop_block_id);
                 self.push_start_block(
-                    loop_scope_id,
                     AstFuncType {
                         args: AstType::Struct(vec![]).into(),
                         ret: ReturnType::Single(AstType::Unit).into(),
@@ -2066,7 +2053,6 @@ impl FlattenInner {
                             .new_block(current_block_id, scope_id, Successor::BlockScope);
                     self.switch_blocks(v_next);
                     let (link_id, _) = self.push_start_block(
-                        scope_id,
                         AstFuncType::new_void_void(),
                         Some(b.labels.fresh_key("postloopbreak")),
                         span_id,
@@ -2253,7 +2239,6 @@ impl FlattenInner {
 
             self.switch_blocks(new_block_id);
             self.push_start_block(
-                scope_id,
                 AstFuncType::new(AstType::Struct(vec![]), ReturnType::Single(AstType::Unit)).into(),
                 Some(name),
                 span_id,
