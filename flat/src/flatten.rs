@@ -534,30 +534,43 @@ impl FlattenInner {
                 let link_id = self.insert_decl(entry_block_id, entry);
                 link_id
             }
-            LCode::Branch(_, b1, b2) => {
+            LCode::Branch(_, _, _) => {
                 let v = self._push_entry_normal(entry);
-                self.scoped_continuations.connect(
-                    ContinuationFlow::Jump(v),
-                    ContinuationFlow::Block(*b1),
-                    FlowEdge::CondThen,
-                );
-                self.scoped_continuations.connect(
-                    ContinuationFlow::Jump(v),
-                    ContinuationFlow::Block(*b2),
-                    FlowEdge::CondElse,
-                );
+                self.update_connections(v);
                 v
             }
-            LCode::Jump(b) => {
+            LCode::Jump(_) => {
                 let v = self._push_entry_normal(entry);
-                self.scoped_continuations.connect(
-                    ContinuationFlow::Jump(v),
-                    ContinuationFlow::Block(*b),
-                    FlowEdge::JumpLabel,
-                );
+                self.update_connections(v);
                 v
             }
             _ => self._push_entry_normal(entry),
+        }
+    }
+
+    fn update_connections(&mut self, link_id: LinkId) {
+        let code = self.get_entry(link_id).code.clone();
+        match code {
+            LCode::Branch(_, b1, b2) => {
+                self.scoped_continuations.connect(
+                    ContinuationFlow::Jump(link_id),
+                    ContinuationFlow::Block(b1),
+                    FlowEdge::CondThen,
+                );
+                self.scoped_continuations.connect(
+                    ContinuationFlow::Jump(link_id),
+                    ContinuationFlow::Block(b2),
+                    FlowEdge::CondElse,
+                );
+            }
+            LCode::Jump(b) => {
+                self.scoped_continuations.connect(
+                    ContinuationFlow::Jump(link_id),
+                    ContinuationFlow::Block(b),
+                    FlowEdge::JumpLabel,
+                );
+            }
+            _ => (),
         }
     }
 
