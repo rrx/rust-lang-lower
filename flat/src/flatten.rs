@@ -510,7 +510,7 @@ impl FlattenInner {
         let code = entry.code.clone();
         let block_id = entry.block_id;
 
-        match &code {
+        let v = match &code {
             LCode::Label => {
                 let block = self.blocks.get_block(block_id);
                 assert!(block.last().is_none());
@@ -535,18 +535,10 @@ impl FlattenInner {
                 let link_id = self.insert_decl(entry_block_id, entry);
                 link_id
             }
-            LCode::Branch(_, _, _) => {
-                let v = self._push_entry_normal(entry);
-                self.update_connections(v);
-                v
-            }
-            LCode::Jump(_) => {
-                let v = self._push_entry_normal(entry);
-                self.update_connections(v);
-                v
-            }
             _ => self._push_entry_normal(entry),
-        }
+        };
+        self.update_connections(v);
+        v
     }
 
     fn update_connections(&mut self, link_id: LinkId) {
@@ -577,6 +569,15 @@ impl FlattenInner {
                     FlowEdge::JumpLabel,
                 );
             }
+
+            LCode::Store(offset_decl, v_expr) => {
+                self.scoped_continuations.connect(
+                    ContinuationFlow::Variable(v_expr),
+                    ContinuationFlow::Variable(offset_decl),
+                    FlowEdge::Store,
+                );
+            }
+
             _ => (),
         }
     }
@@ -1395,12 +1396,6 @@ impl FlattenInner {
                         self.blocks.scope_define(scope_id, name, link_id);
                         link_id
                     };
-
-                self.scoped_continuations.connect(
-                    ContinuationFlow::Variable(v_expr),
-                    ContinuationFlow::Variable(offset_decl),
-                    FlowEdge::Store,
-                );
 
                 // explicit store for assign
                 self.push_code(
