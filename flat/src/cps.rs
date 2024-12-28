@@ -238,29 +238,11 @@ impl FlattenInner {
             );
 
             // jump to unwind block
-            let unwind_jump_link_id = self.push_jump(
+            let jump_link_id = self.push_jump(
                 unwind_block_id,
                 vec![(None, var_link_id, void_func_type.into(), call_span_id)],
                 call_span_id,
                 b,
-            );
-
-            self.scoped_continuations.connect(
-                ContinuationFlow::Block(next_block_id),
-                ContinuationFlow::Variable(var_link_id),
-                FlowEdge::UnwindBlockVar,
-            );
-
-            self.scoped_continuations.connect(
-                ContinuationFlow::Variable(var_link_id),
-                ContinuationFlow::JumpArg(unwind_jump_link_id, 0),
-                FlowEdge::UnwindVarJump,
-            );
-
-            self.scoped_continuations.connect(
-                ContinuationFlow::JumpArg(unwind_jump_link_id, 0),
-                ContinuationFlow::BlockArg(unwind_block_id, 0),
-                FlowEdge::UnwindJumpArg,
             );
 
             self.switch_blocks(next_block_id);
