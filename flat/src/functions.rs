@@ -1024,11 +1024,7 @@ impl FlattenInner {
         let call_link_id = arg.1;
         let next_ty = arg.2.clone();
 
-        self.scoped_continuations.connect(
-            ContinuationFlow::Block(exit_block_id),
-            ContinuationFlow::Variable(call_link_id),
-            FlowEdge::VarJumpArgInline,
-        );
+        self.update_connections(call_link_id);
 
         // bookmark position
         let current_block_id = self.current_block_id();
