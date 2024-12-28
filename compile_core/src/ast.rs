@@ -289,6 +289,7 @@ pub enum Ast {
     Branch(Box<AstNode>, StringKey, StringKey),
     Conditional(Box<AstNode>, Box<AstNode>, Option<Box<AstNode>>),
     Ternary(Box<AstNode>, Box<AstNode>, Box<AstNode>),
+    Defer(Box<AstNode>),
     Return(Option<Box<AstNode>>),
     CloseBlock, // implicit close has different meaning depending on the context
     Yield(Option<Box<AstNode>>),

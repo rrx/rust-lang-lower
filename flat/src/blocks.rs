@@ -110,6 +110,11 @@ impl IRBlock {
         self.size += 1;
     }
 
+    pub fn prepend_link(&mut self, link_id: LinkId) {
+        self.links.insert(0, link_id);
+        self.size += 1;
+    }
+
     pub fn push_link(&mut self, link_id: LinkId, term: bool) {
         assert_ne!(self.s, BlockStateEnum::Term);
         assert!(!self.term);

@@ -127,7 +127,7 @@ impl FunctionVariantBuilder {
 pub struct Abstraction {
     pub def: Lambda,
     pub def_span_id: SpanId,
-    //pub caller_blocks: HashSet<BlockId>,
+    pub name: StringKey,
 }
 
 #[derive(Debug)]
@@ -146,11 +146,12 @@ impl AbstractionsBuilder {
         self.0.get_mut(abstraction_id.index()).unwrap()
     }
 
-    pub fn add(&mut self, def: Lambda, def_span_id: SpanId) -> AbstractionId {
+    pub fn add(&mut self, name: StringKey, def: Lambda, def_span_id: SpanId) -> AbstractionId {
         let index = self.0.len();
         self.0.push(Abstraction {
             def,
             def_span_id,
+            name,
             //caller_blocks: HashSet::new(),
         });
         AbstractionId::new(index)
@@ -364,21 +365,21 @@ impl FlattenInner {
 
     fn push_bake_static(
         &mut self,
-        name: StringKey,
         abstraction_id: AbstractionId,
         call_func_type: AstFuncType,
         call_span_id: SpanId,
         b: &mut NB,
     ) -> Result<(LinkId, AstType)> {
+        let a = self.abstractions.get(abstraction_id);
+        let def_span_id = a.def_span_id;
+        let name = a.name;
+
         let s = b.labels.r(name.into());
         let global_key = b.labels.fresh_key(&s);
         //let s_global = b.labels.r(global_key.into());
         let current_block_id = self.current_block_id();
         self.switch_blocks(self.static_block_id());
         let block = self.blocks.get_block(current_block_id);
-
-        let a = self.abstractions.get(abstraction_id);
-        let def_span_id = a.def_span_id;
 
         // if it's defined in static scope, just call it
         let (_variant_id, v_entry) = if let Some((variant_id, r_ty, v_entry, _scope_id)) =
@@ -831,7 +832,6 @@ impl FlattenInner {
 
     pub(super) fn push_call(
         &mut self,
-        name: StringKey,
         scope_id: ScopeId,
         abstraction_id: AbstractionId,
         call_span_id: SpanId,
@@ -856,7 +856,7 @@ impl FlattenInner {
         if is_static {
             let (call_values, call_func_type, def_func_type) =
                 self.push_function_call_arguments(abstraction_id, args, vec![], call_span_id, b)?;
-            let r = self.push_bake_static(name, abstraction_id, call_func_type, call_span_id, b)?;
+            let r = self.push_bake_static(abstraction_id, call_func_type, call_span_id, b)?;
             let (fun_link_id, _bake_ty) = r;
             self.switch_blocks(current_block_id);
             self.push_function_call(
@@ -875,9 +875,9 @@ impl FlattenInner {
             // We want to support both of these options
             // TODO: break this out into a compile parameter for the function
             if false {
-                self.push_call_inline(abstraction_id, name, scope_id, args, call_span_id, b)
+                self.push_call_inline(abstraction_id, scope_id, args, call_span_id, b)
             } else {
-                self.push_call_inline_cps(abstraction_id, name, scope_id, args, call_span_id, b)
+                self.push_call_inline_cps(abstraction_id, scope_id, args, call_span_id, b)
             }
         }
     }
@@ -885,7 +885,6 @@ impl FlattenInner {
     fn push_call_inline(
         &mut self,
         abstraction_id: AbstractionId,
-        name: StringKey,
         scope_id: ScopeId,
         args: Vec<Argument>,
         call_span_id: SpanId,
@@ -909,6 +908,7 @@ impl FlattenInner {
         //let current_block_id = self.current_block_id();
 
         let a = self.abstractions.get(abstraction_id);
+        let name = a.name;
         let body = a.def.body.clone().unwrap();
         let def_span_id = a.def_span_id;
 
@@ -990,7 +990,6 @@ impl FlattenInner {
     fn push_call_inline_cps(
         &mut self,
         abstraction_id: AbstractionId,
-        name: StringKey,
         scope_id: ScopeId,
         args: Vec<Argument>,
         call_span_id: SpanId,
@@ -1038,7 +1037,6 @@ impl FlattenInner {
         // and jump to it, passing the exit continuation
         let result = self.push_call_inline_cps_inner(
             abstraction_id,
-            name,
             scope_id,
             call_span_id,
             top_def_func_type.clone(),
@@ -1053,9 +1051,10 @@ impl FlattenInner {
             call_span_id,
         );
 
+        let a = self.abstractions.get(abstraction_id);
         // push the continuation block to which the function returns control
         // this might just be the return block
-        let s_name = b.labels.r(name.into());
+        let s_name = b.labels.r(a.name.into());
         let cont_name = format!("{}.exit", s_name);
         let cont_key = b.labels.fresh_key(&cont_name);
 
@@ -1150,13 +1149,13 @@ impl FlattenInner {
     fn push_call_inline_cps_inner(
         &mut self,
         abstraction_id: AbstractionId,
-        lookup_name: StringKey,
         scope_id: ScopeId,
         call_span_id: SpanId,
         def_func_type: AstFuncType,
         b: &mut NB,
     ) -> Result<(BlockId, AstFuncType, AstType)> {
         let a = self.abstractions.get(abstraction_id);
+        let lookup_name = a.name;
         let def_span_id = a.def_span_id;
         let scope_type = ScopeType::Function;
         let succ_type = Successor::BlockScope;

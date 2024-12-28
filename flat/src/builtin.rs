@@ -107,6 +107,11 @@ pub fn builtin_from_name(
             )
         }
 
+        "defer" => {
+            let expr = args.pop().unwrap().expr();
+            Some(Ast::Defer(expr.clone().into()).node(span_id))
+        }
+
         "check" | "print" | "use" => {
             let bb = match name {
                 "check" => Builtin::Assert,

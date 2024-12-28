@@ -887,7 +887,7 @@ impl FlattenInner {
         def: &Lambda,
         span_id: SpanId,
     ) -> AbstractionId {
-        let abstraction_id = self.abstractions.add(def.clone(), span_id);
+        let abstraction_id = self.abstractions.add(*name, def.clone(), span_id);
         let block = self.blocks.get_block(block_id);
         self.blocks
             .define_lambda(block.scope(), name.into(), abstraction_id);
@@ -1426,7 +1426,7 @@ impl FlattenInner {
                         if let Some((scope_id, abstraction_id)) =
                             self.blocks.resolve_lambda(current_block_id, *ident)
                         {
-                            self.push_call(*ident, scope_id, abstraction_id, span_id, args, b)
+                            self.push_call(scope_id, abstraction_id, span_id, args, b)
                         } else {
                             let name = b.labels.r(ident.into());
                             b.push_error(&format!("Call name not found: {}", name), span_id);
@@ -2122,6 +2122,28 @@ impl FlattenInner {
                 let node = attr;
                 let ast = resolve_attribute(ident, &node, span_id, vec![], b)?;
                 self.push_node(ast, b)
+            }
+
+            Ast::Defer(expr) => {
+                // defer is terminal
+                let r = self.push_node(*expr, b)?;
+                let link_id = r.link_id.unwrap();
+                // expression must be a function with no arguments.  We bake it here.
+                let ty = self.get_type(link_id).clone();
+
+                //self.push_call(
+
+                let current_block_id = self.current_block_id();
+                let block = self.blocks.get_block(current_block_id);
+                let scope_id = block.scope();
+                let unwind_block_id = self.gen_unwind_cps(scope_id, span_id, b);
+                let unwind_block = self.blocks.get_block_mut(unwind_block_id);
+                unwind_block.prepend_link(link_id);
+
+                println!("ty: {:?}", ty);
+                //let code = LCode::Defer(link_id);
+                //let link_id = self.push_code(code, ty, None, node.span_id, VarDefinitionSpace::Reg);
+                Ok(FlattenResult::link(link_id))
             }
 
             Ast::Error => {

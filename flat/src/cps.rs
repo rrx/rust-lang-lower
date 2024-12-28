@@ -120,7 +120,12 @@ impl FlattenInner {
         Ok((variant_id, fun_scope_id, fun_block_id, def_arg_type))
     }
 
-    fn gen_unwind_cps(&mut self, scope_id: ScopeId, call_span_id: SpanId, b: &mut NB) -> BlockId {
+    pub(crate) fn gen_unwind_cps(
+        &mut self,
+        scope_id: ScopeId,
+        call_span_id: SpanId,
+        b: &mut NB,
+    ) -> BlockId {
         let name = format!("U{}", scope_id.index());
         let key = b.labels.s(&name);
 
