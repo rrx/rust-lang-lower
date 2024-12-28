@@ -343,7 +343,7 @@ impl FlattenInner {
         let scope_id = block.scope();
 
         let (_variant_id, _fun_scope_id, fun_block_id, _) =
-            self.gen_cps_block_with_type(name, scope_id, abstraction_id, &ty, span_id, true, b)?;
+            self.gen_cps_block_with_type(name, scope_id, abstraction_id, &ty, span_id, false, b)?;
 
         // now replace the abstraction code
         let entry = self.get_entry_mut(link_id);
@@ -1549,7 +1549,6 @@ impl FlattenInner {
                     Some(b.labels.fresh_key("cond_next")),
                     span_id,
                 );
-                self.switch_blocks(current_block_id);
 
                 // THEN Block
                 let (then_block_id, _) = self.blocks.new_scope_and_block(
