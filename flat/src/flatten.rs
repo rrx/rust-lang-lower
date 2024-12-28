@@ -742,15 +742,19 @@ impl FlattenInner {
         // handle leaving scope here?
         // We need to unwind the target, as well as any CPS parameters we send
         // We unwind at the caller.
-        // We also need to do this for branches
-        //
+
         // TODO: unwind when leaving this scope
         //let unwind_next = self.push_unwind(v_next, span_id, b);
         //let unwind_next = v_next;
 
         let current_block_id = self.current_block_id();
+        let current_scope_id = self.blocks.get_block(current_block_id).scope();
+        let target_scope_id = self.blocks.get_block(target_block_id).scope();
         assert_ne!(current_block_id, target_block_id);
-        //println!("jump: {}=>{}", current_block_id, target_block_id);
+        println!(
+            "jump: {}{}=>{}{}",
+            current_block_id, current_scope_id, target_block_id, target_scope_id
+        );
 
         // Construct the argument type
         let arg_ty = AstType::Struct(
@@ -1535,6 +1539,7 @@ impl FlattenInner {
 
                 let parent_scope_id = block.scope();
 
+                // Start Next Block
                 let v_next =
                     self.blocks
                         .new_block(current_block_id, parent_scope_id, Successor::BlockScope);
@@ -1546,12 +1551,11 @@ impl FlattenInner {
                 );
                 self.switch_blocks(current_block_id);
 
-                // THEN
+                // THEN Block
                 let (then_block_id, _) = self.blocks.new_scope_and_block(
                     ScopeType::Block,
                     ScopeState::block(),
                     current_block_id,
-                    parent_scope_id,
                     Successor::BlockScope,
                 );
                 self.blocks.control_flow(current_block_id, &[then_block_id]);
@@ -1568,16 +1572,14 @@ impl FlattenInner {
                 self.push_start_block(branch_block_type.clone().into(), Some(name), then_span_id);
                 self.switch_blocks(then_block_id);
                 let _ = self.push_node(NB::ensure_seq(*then_expr), b)?;
-
                 self.maybe_terminate_block(v_next, span_id, b);
 
-                // ELSE
+                // ELSE Block
                 let else_block_id = if let Some(else_expr) = maybe_else_expr {
                     let (else_block_id, _) = self.blocks.new_scope_and_block(
                         ScopeType::Block,
                         ScopeState::block(),
                         current_block_id,
-                        parent_scope_id,
                         Successor::BlockScope,
                     );
                     self.blocks.control_flow(current_block_id, &[else_block_id]);
@@ -1742,8 +1744,6 @@ impl FlattenInner {
             */
             Ast::Ternary(c, x, y) => {
                 // expression, non-terminal
-                let block = self.blocks.get_block(current_block_id);
-                let scope_id = block.scope();
 
                 // Condition
                 self.switch_blocks(current_block_id);
@@ -1760,7 +1760,6 @@ impl FlattenInner {
                     ScopeType::Region,
                     ScopeState::region(),
                     current_block_id,
-                    scope_id,
                     Successor::Operation,
                 );
                 self.blocks.control_flow(current_block_id, &[then_block_id]);
@@ -1783,7 +1782,6 @@ impl FlattenInner {
                     ScopeType::Region,
                     ScopeState::region(),
                     current_block_id,
-                    scope_id,
                     Successor::Operation,
                 );
                 self.blocks.control_flow(current_block_id, &[else_block_id]);
@@ -1923,7 +1921,6 @@ impl FlattenInner {
                     ScopeType::Region,
                     ScopeState::region(),
                     current_block_id,
-                    parent_scope_id,
                     Successor::BlockScope,
                 );
                 self.blocks.control_flow(current_block_id, &[loop_block_id]);

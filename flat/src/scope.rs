@@ -269,6 +269,10 @@ impl ScopeLayer {
         self.deferrals.insert(0, block_id);
     }
 
+    pub fn deferrals(&self) -> Vec<BlockId> {
+        self.deferrals.clone()
+    }
+
     pub fn make_function_scope(&mut self, state: ScopeStateFunction) {
         self.return_block = Some(state.return_block);
     }
@@ -329,9 +333,9 @@ impl BlockGraph {
         scope_type: ScopeType,
         scope_state: ScopeState,
         parent_block_id: BlockId,
-        parent_scope_id: ScopeId,
         succ_type: Successor,
     ) -> (BlockId, ScopeId) {
+        let parent_scope_id = self.get_block(parent_block_id).scope();
         let scope_id = self.new_scope(scope_type);
         let block_id = self.new_block(parent_block_id, scope_id, succ_type);
         let scope = self.get_scope_mut(scope_id);

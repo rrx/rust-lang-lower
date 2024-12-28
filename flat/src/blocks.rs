@@ -54,6 +54,10 @@ impl IRBlock {
         self.scope_id
     }
 
+    pub fn scope_set(&mut self, scope_id: ScopeId) {
+        self.scope_id = scope_id;
+    }
+
     pub fn iter_args(&self) -> impl Iterator<Item = LinkId> + '_ {
         self.entry.iter().skip(1).cloned()
     }
@@ -191,12 +195,6 @@ impl BlockGraph {
     pub fn new_block_with_scope(&mut self, scope_id: ScopeId) -> BlockId {
         let ir_block = IRBlock::new(scope_id);
         let index = self.bg.add_node(ir_block);
-
-        // ensure the first block is the static block
-        if index.index() > 0 && scope_id.index() == 0 {
-            assert!(false);
-        }
-
         BlockId::new(index.index())
     }
 

@@ -3,7 +3,7 @@ q.use("prelude")
 def main():
   x = 1
   if True:
-    def deferred():
+    def f():
       x = 0
-    q.defer(deferred)
+    q.defer(f)
   return 0 

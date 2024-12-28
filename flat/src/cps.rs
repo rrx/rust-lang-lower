@@ -56,7 +56,6 @@ impl FlattenInner {
                         ScopeType::Block,
                         ScopeState::block(),
                         block_id,
-                        scope_id,
                         Successor::BlockScope,
                     )
                 } else {
@@ -202,9 +201,22 @@ impl FlattenInner {
             call_span_id,
         );
 
+        // generate unwind blocks, including deferrals in scope
+        // deferral blocks must be CPS blocks with signature ()->()->()
         let unwind_block_ids = unwind_scopes
             .iter()
-            .map(|scope_id| (*scope_id, self.gen_unwind_cps(*scope_id, call_span_id, b)))
+            .flat_map(|scope_id| {
+                let scope = self.blocks.get_scope(*scope_id);
+                scope
+                    .deferrals()
+                    .into_iter()
+                    .map(|block_id| (*scope_id, block_id))
+                    .chain(
+                        vec![(*scope_id, self.gen_unwind_cps(*scope_id, call_span_id, b))]
+                            .into_iter(),
+                    )
+                    .collect::<Vec<_>>()
+            })
             .collect::<Vec<_>>();
 
         for (scope_id, unwind_block_id) in unwind_block_ids {

@@ -451,9 +451,6 @@ impl FlattenInner {
         b: &mut NB,
     ) -> Result<(VariantId, FlattenResult)> {
         let current_block_id = self.current_block_id();
-        let block = self.blocks.get_block(current_block_id);
-        let scope_id = block.scope();
-
         let a = self.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
         let body = a.def.body.clone().unwrap();
@@ -466,24 +463,20 @@ impl FlattenInner {
         // This behavior is slightly different than inline functions that jump back into the same
         // scope from which they were called.
 
-        let (next_block_id, _) = self.blocks.new_scope_and_block(
-            ScopeType::Block,
-            ScopeState::block(),
-            current_block_id,
-            scope_id,
-            Successor::BlockScope,
-        );
-        self.blocks.control_flow(current_block_id, &[next_block_id]);
-
         // New Func Scope
         let (fun_block_id, fun_scope_id) = self.blocks.new_scope_and_block(
             ScopeType::Function,
-            ScopeState::function(next_block_id),
+            // hack: return block is set in the bake
+            ScopeState::block(),
             current_block_id,
-            scope_id,
             Successor::BlockScope,
         );
         self.blocks.control_flow(current_block_id, &[fun_block_id]);
+
+        let next_block_id =
+            self.blocks
+                .new_block(current_block_id, fun_scope_id, Successor::BlockScope);
+        self.blocks.control_flow(current_block_id, &[next_block_id]);
 
         let (v_id, _scope, _block_id, entry_link_id, _, argvec, _, _, _, _entry_args) = self
             .push_bake_lambda_and_update_next(
@@ -915,7 +908,6 @@ impl FlattenInner {
             ScopeType::Function,
             ScopeState::function(next_block_id),
             current_block_id,
-            scope_id,
             Successor::BlockScope,
         );
         self.blocks.control_flow(current_block_id, &[fun_block_id]);
@@ -984,7 +976,6 @@ impl FlattenInner {
         b: &mut NB,
     ) -> Result<FlattenResult> {
         // create a new block static blocks, which is the final destination
-        //let (exit_block_id, exit_scope_id) = self.new_scope_and_block(ScopeType::Block, scope_id);
         let scope = self.blocks.get_scope(scope_id);
         let scope_block_id = scope.entry_block();
         let exit_block_id = self
@@ -1162,7 +1153,6 @@ impl FlattenInner {
                     //ScopeState::function(next_block_id),
                     ScopeState::block(),
                     block_id,
-                    scope_id,
                     Successor::BlockScope,
                 );
                 self.blocks.control_flow(block_id, &[fun_block_id]);
