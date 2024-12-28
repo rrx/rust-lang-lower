@@ -769,9 +769,7 @@ impl FlattenInner {
 
         let var_link_ids = jump_args.iter().map(|j| j.1).collect::<Vec<_>>();
 
-        let _field_types = arg_ty.field_types();
-
-        let _link_ids = self.push_call_values(
+        let _ = self.push_call_values(
             &jump_args
                 .into_iter()
                 .map(|(key, v, ty, span_id)| (key, v, ty, span_id))
@@ -795,6 +793,10 @@ impl FlattenInner {
             VarDefinitionSpace::Reg,
         );
 
+        // it would be better to move this to be close to the other connections
+        // but it's more convenient to have it here
+        // We could read in the call values, but how that works is likely to change
+        // so we are keeping these here.
         for (i, var_link_id) in var_link_ids.iter().enumerate() {
             self.scoped_continuations.connect(
                 ContinuationFlow::Variable(*var_link_id),
@@ -905,42 +907,39 @@ impl FlattenInner {
     fn push_start_block_args(
         &mut self,
         scope_id: ScopeId,
-        block_ty: AstType,
+        block_ty: AstFuncType,
         span_id: SpanId,
     ) -> ArgVec {
-        if let AstType::Func(f) = &block_ty {
-            assert!(f.args.is_composite());
+        assert!(block_ty.args.is_composite());
 
-            let mut v_args = vec![];
-            for (i, (name, ty)) in f.args.fields().iter().enumerate() {
-                let link_id = self.push_code(
-                    LCode::Arg(i as u8),
-                    ty.clone(),
-                    *name,
-                    span_id,
-                    VarDefinitionSpace::Arg,
-                );
-                v_args.push((*name, link_id, ty.clone(), span_id));
-                if let Some(name) = name {
-                    self.blocks.scope_define(scope_id, *name, link_id.into());
-                }
+        let mut v_args = vec![];
+        for (i, (name, ty)) in block_ty.args.fields().iter().enumerate() {
+            let link_id = self.push_code(
+                LCode::Arg(i as u8),
+                ty.clone(),
+                *name,
+                span_id,
+                VarDefinitionSpace::Arg,
+            );
+            v_args.push((*name, link_id, ty.clone(), span_id));
+            if let Some(name) = name {
+                self.blocks.scope_define(scope_id, *name, link_id.into());
             }
-            v_args
-        } else {
-            unreachable!("{:?}", block_ty)
         }
+        v_args
     }
 
     pub(super) fn push_start_block(
         &mut self,
         scope_id: ScopeId,
-        block_ty: AstType,
+        block_ty: AstFuncType,
         name: Option<StringKey>,
         span_id: SpanId,
         mem: VarDefinitionSpace,
     ) -> (LinkId, ArgVec) {
-        let block_link_id = self.push_code(LCode::Label, block_ty.clone(), name, span_id, mem);
-        let v_args = self.push_start_block_args(scope_id, block_ty.clone(), span_id);
+        let block_link_id =
+            self.push_code(LCode::Label, block_ty.clone().into(), name, span_id, mem);
+        let v_args = self.push_start_block_args(scope_id, block_ty, span_id);
         self.block_links
             .insert(self.current_block_id(), block_link_id);
         (block_link_id, v_args)
@@ -1534,7 +1533,7 @@ impl FlattenInner {
                 self.switch_blocks(v_next);
                 self.push_start_block(
                     parent_scope_id,
-                    AstType::func(vec![], AstType::Unit), // void=>void
+                    AstFuncType::new_void_void(),
                     Some(b.labels.fresh_key("cond_next")),
                     span_id,
                     VarDefinitionSpace::Default,
@@ -1891,7 +1890,7 @@ impl FlattenInner {
                                 arg_types.iter().zip(acc.iter())
                             {
                                 b.unify(&ty1, span_id, &ty2, *span_id2);
-                                acc_types.push(ty2.clone());
+                                acc_types.push((None, ty2.clone()));
                             }
 
                             let label = b.labels.fresh_key("chain");
@@ -1903,7 +1902,10 @@ impl FlattenInner {
                             self.switch_blocks(v_next);
                             self.push_start_block(
                                 parent_scope_id,
-                                AstType::func(acc_types, AstType::Unit),
+                                AstFuncType::new(
+                                    AstType::Struct(acc_types).into(),
+                                    ReturnType::Single(AstType::Unit),
+                                ),
                                 Some(label),
                                 span_id,
                                 VarDefinitionSpace::Default,
@@ -1954,7 +1956,7 @@ impl FlattenInner {
                 self.switch_blocks(v_next);
                 self.push_start_block(
                     parent_scope_id,
-                    AstType::func(vec![], AstType::Unit), // void=>void
+                    AstFuncType::new_void_void(),
                     Some(b.labels.fresh_key("postloop")),
                     span_id,
                     VarDefinitionSpace::Default,
@@ -2065,7 +2067,7 @@ impl FlattenInner {
                     self.switch_blocks(v_next);
                     let (link_id, _) = self.push_start_block(
                         scope_id,
-                        AstType::func(vec![], AstType::Unit), // void=>void
+                        AstFuncType::new_void_void(),
                         Some(b.labels.fresh_key("postloopbreak")),
                         span_id,
                         VarDefinitionSpace::Default,

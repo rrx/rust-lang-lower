@@ -8,8 +8,8 @@ use std::convert::Into;
 
 use crate::{
     argvec_type, ArgVec, BlockId, ContinuationFlow, DeferredGoto, DeferredType, FlattenInner,
-    FlattenResult, FlowEdge, LCode, LinkId, NodeBuilder as NB, ScopeId, ScopeState, ScopeType,
-    Successor, VarDefinitionSpace, VariantId,
+    FlattenResult, LCode, LinkId, NodeBuilder as NB, ScopeId, ScopeState, ScopeType, Successor,
+    VarDefinitionSpace, VariantId,
 };
 
 use std::collections::HashMap;
@@ -79,7 +79,7 @@ impl FlattenInner {
 
                 let (entry_link_id, _) = self.push_start_block(
                     fun_scope_id,
-                    r_ty1.clone(),
+                    r_ty1.clone().get_func().clone(),
                     Some(lambda_name),
                     def_span_id,
                     VarDefinitionSpace::Default,
@@ -238,7 +238,7 @@ impl FlattenInner {
             );
 
             // jump to unwind block
-            let jump_link_id = self.push_jump(
+            let _jump_link_id = self.push_jump(
                 unwind_block_id,
                 vec![(None, var_link_id, void_func_type.into(), call_span_id)],
                 call_span_id,

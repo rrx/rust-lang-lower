@@ -1,7 +1,6 @@
 use crate::{
-    ArgVec, BlockId, BlockifyError, ContinuationFlow, FlattenInner, FlattenResult, FlowEdge, LCode,
-    LinkId, NodeBuilder as NB, ScopeId, ScopeState, ScopeStateFunction, ScopeType, Successor,
-    VarDefinitionSpace,
+    ArgVec, BlockId, BlockifyError, FlattenInner, FlattenResult, LCode, LinkId, NodeBuilder as NB,
+    ScopeId, ScopeState, ScopeStateFunction, ScopeType, Successor, VarDefinitionSpace,
 };
 use anyhow::Error;
 use anyhow::Result;
@@ -645,8 +644,6 @@ impl FlattenInner {
         let block = self.blocks.get_block(current_block_id);
         let scope_id = block.scope();
 
-        let block_ty: AstType = def_func_type.into();
-
         let fun_scope = self.blocks.get_scope_mut(fun_scope_id);
         //fun_scope.return_block = Some(next_block_id);
         fun_scope.make_function_scope(ScopeStateFunction::new(next_block_id));
@@ -657,15 +654,15 @@ impl FlattenInner {
 
         self.switch_blocks(fun_block_id);
         let (entry_link_id, entry_args) = self.push_start_block(
-            fun_scope_id,
-            block_ty.clone(),
+            fun_scope_id.clone(),
+            def_func_type.clone(),
             Some(global_name),
             def_span_id,
             mem,
         );
 
         // add entry to scope, for recursion
-        let variant_ty = b.types.u.resolve(&block_ty).unwrap();
+        let variant_ty = b.types.u.resolve(&def_func_type.clone().into()).unwrap();
         // we need to know the link
         let variant_id = self.variant_add(
             scope_id,
@@ -688,7 +685,8 @@ impl FlattenInner {
         let variant_ty = b.types.u.resolve(&variant_ty).unwrap();
         self.variant_update(variant_id, variant_ty.clone(), entry_link_id);
 
-        let next_arg_ty = self.resolve_return_type(fun_block_id, block_ty.into(), call_span_id, b);
+        let next_arg_ty =
+            self.resolve_return_type(fun_block_id, def_func_type.into(), call_span_id, b);
 
         assert!(next_arg_ty.is_composite());
         let ret_block_ty = AstFuncType {
@@ -1104,7 +1102,7 @@ impl FlattenInner {
         };
 
         // jump into the the lambda
-        let goto_link_id =
+        let _goto_link_id =
             self.push_jump(fun_block_id.into(), call_values.clone(), call_span_id, b);
 
         self.switch_blocks(exit_block_id);

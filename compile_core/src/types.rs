@@ -152,19 +152,6 @@ impl std::fmt::Display for AstType {
 }
 
 impl AstType {
-    /*
-    pub fn target_union_block_index(&self, block_id: &BlockId) -> i64 {
-        if let AstType::TargetUnion(_, blocks) = self {
-            let mut blocks = blocks.clone();
-            blocks.sort();
-            let index = blocks.iter().position(|&x| x == *block_id).unwrap();
-            index as i64
-        } else {
-            unreachable!()
-        }
-    }
-    */
-
     pub fn get_func(&self) -> &AstFuncType {
         if let Self::Func(f) = self {
             f
