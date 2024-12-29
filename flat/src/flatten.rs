@@ -765,6 +765,18 @@ impl FlattenInner {
             .collect::<Vec<_>>();
     }
 
+    pub fn push_jump_unwind_pre(
+        &mut self,
+        target_block_id: BlockId,
+        jump_args: ArgVec,
+        span_id: SpanId,
+        b: &mut NB,
+    ) -> LinkId {
+        let (target_block_id, jump_args) =
+            self.push_jump_unwind(target_block_id, jump_args, span_id, b);
+        self.push_jump_direct(target_block_id, jump_args, span_id, b)
+    }
+
     pub fn push_jump(
         &mut self,
         target_block_id: BlockId,
@@ -775,6 +787,45 @@ impl FlattenInner {
         let (target_block_id, jump_args) =
             self.push_jump_unwind(target_block_id, jump_args, span_id, b);
         self.push_jump_direct(target_block_id, jump_args, span_id, b)
+    }
+
+    pub fn push_store_args(
+        &mut self,
+        decl_scope_id: ScopeId,
+        jump_args: ArgVec,
+        span_id: SpanId,
+        b: &mut NB,
+    ) -> ArgVec {
+        // for all of the return links, copy them into the target scope
+        // Anything we are referencing here is potentially going to be destroyed
+        // We copy everything for now, but don't need to do this in all circumstances
+        // For example, if the value is already in the target scope, or it's on the heap.
+        let start_block_id = self.current_block_id();
+        let scope = self.blocks.get_scope(decl_scope_id);
+        let decl_block_id = scope.entry_block();
+        let return_links = jump_args.iter().map(|j| j.1).collect::<Vec<_>>();
+        let mut copied_link_ids = vec![];
+        for link_id in return_links.iter() {
+            let entry = self.get_entry(*link_id);
+            let ty = entry.ty.clone();
+            let key = b.labels.fresh_key("r");
+
+            // switch to the target block, so we can create the declaration
+            self.switch_blocks(decl_block_id);
+            let decl_link_id = self.push_decl(ty.clone(), key, span_id);
+
+            // switch back to the start block, so we can store the value
+            self.switch_blocks(start_block_id);
+            self.push_code(
+                LCode::Store(decl_link_id, *link_id),
+                AstType::Unit,
+                None,
+                span_id,
+                VarDefinitionSpace::Default,
+            );
+            copied_link_ids.push((None, decl_link_id, ty, span_id));
+        }
+        copied_link_ids
     }
 
     pub fn push_jump_unwind(
@@ -811,34 +862,7 @@ impl FlattenInner {
                 (target_block_id, jump_args)
             } else {
                 println!("unwind: {:?}", unwind);
-
-                // for all of the return links, copy them into the target scope
-                // Anything we are referencing here is potentially going to be destroyed
-                // We copy everything for now, but don't need to do this in all circumstances
-                // For example, if the value is already in the target scope, or it's on the heap.
-                let return_links = jump_args.iter().map(|j| j.1).collect::<Vec<_>>();
-                let mut copied_link_ids = vec![];
-                for link_id in return_links.iter() {
-                    let entry = self.get_entry(*link_id);
-                    let ty = entry.ty.clone();
-                    let key = b.labels.fresh_key("r");
-
-                    // switch to the target block, so we can create the declaration
-                    self.switch_blocks(target_block_id);
-                    let decl_link_id = self.push_decl(ty.clone(), key, span_id);
-
-                    // switch back to the start block, so we can store the value
-                    self.switch_blocks(start_block_id);
-                    self.push_code(
-                        LCode::Store(decl_link_id, *link_id),
-                        AstType::Unit,
-                        None,
-                        span_id,
-                        VarDefinitionSpace::Default,
-                    );
-                    copied_link_ids.push((None, decl_link_id, ty, span_id));
-                }
-
+                let copied_link_ids = self.push_store_args(target_scope_id, jump_args, span_id, b);
                 let target = self.push_unwind(target_block_id, copied_link_ids, span_id, b);
                 (target, vec![])
             }
@@ -1263,6 +1287,7 @@ impl FlattenInner {
         if let Some(code) = code {
             let entry = self.get_entry_mut(last_link_id);
             entry.code = code;
+            println!("ty: {:?}", entry.ty);
             self.update_connections(last_link_id);
         }
 
