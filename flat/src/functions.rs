@@ -1,6 +1,6 @@
 use crate::{
     ArgVec, BlockId, BlockifyError, FlattenInner, FlattenResult, LCode, LinkId, NodeBuilder as NB,
-    ScopeId, ScopeState, ScopeStateFunction, ScopeType, Successor, VarDefinitionSpace,
+    PushContext, ScopeId, ScopeState, ScopeStateFunction, ScopeType, Successor, VarDefinitionSpace,
 };
 use anyhow::Error;
 use anyhow::Result;
@@ -663,8 +663,8 @@ impl FlattenInner {
 
         // flatten function, and switch to next
         self.switch_blocks(fun_block_id);
-        let _ = self.push_node(body, b)?;
-        self.maybe_terminate_block(next_block_id, def_span_id, b);
+        let _ = self.push_node(body, PushContext::Default, b)?;
+        self.maybe_terminate_block(next_block_id, def_span_id, PushContext::Function, b);
 
         let variant_ty = b.types.u.resolve(&variant_ty).unwrap();
         self.variant_update(variant_id, variant_ty.clone(), entry_link_id);
@@ -699,31 +699,31 @@ impl FlattenInner {
     ) -> Result<ArgVec> {
         let mut link_ids = vec![];
         let mut values = vec![];
-        let block_id = self.current_block_id();
+        //let block_id = self.current_block_id();
         for a in args.into_iter() {
             match a {
                 Argument::Positional(expr) => {
-                    let r = self.push_node(*expr, b)?;
+                    let r = self.push_node(*expr, PushContext::Default, b)?;
                     let link_id = r.link_id.unwrap();
                     let entry = self.get_entry(link_id);
-                    let v_block_id = entry.block_id;
-                    println!(
-                        "{}: v_block_id: {}, block_id: {}",
-                        link_id, v_block_id, block_id
-                    );
+                    //let v_block_id = entry.block_id;
+                    //println!(
+                    //"{}: v_block_id: {}, block_id: {}",
+                    //link_id, v_block_id, block_id
+                    //);
                     values.push((entry.name, link_id, entry.ty.clone(), span_id));
                     link_ids.push(link_id);
                 }
 
                 Argument::Named(key, expr) | Argument::System(key, expr) => {
-                    let r = self.push_node(*expr, b)?;
+                    let r = self.push_node(*expr, PushContext::Default, b)?;
                     let link_id = r.link_id.unwrap();
                     let entry = self.get_entry(link_id);
-                    let v_block_id = entry.block_id;
-                    println!(
-                        "{}: v_block_id: {}, block_id: {}",
-                        link_id, v_block_id, block_id
-                    );
+                    //let v_block_id = entry.block_id;
+                    //println!(
+                    //"{}: v_block_id: {}, block_id: {}",
+                    //link_id, v_block_id, block_id
+                    //);
                     values.push((Some(key), link_id, entry.ty.clone(), span_id));
                     link_ids.push(link_id);
                 }
@@ -732,7 +732,7 @@ impl FlattenInner {
                     let mut args_values = vec![];
                     for expr in exprs {
                         let span_id = expr.span_id;
-                        let r = self.push_node(expr, b)?;
+                        let r = self.push_node(expr, PushContext::Default, b)?;
                         let link_id = r.link_id.unwrap();
                         let ty = self.get_type(link_id).clone();
                         args_values.push((Some(key), link_id, ty, span_id));
@@ -759,7 +759,7 @@ impl FlattenInner {
 
                 Argument::KwArgs(key, _expr) => {
                     let node: AstNode = 1.into();
-                    let r = self.push_node(node, b)?;
+                    let r = self.push_node(node, PushContext::Default, b)?;
                     let link_id = r.link_id.unwrap();
                     let ty = self.get_type(link_id).clone();
                     values.push((Some(key), link_id, ty, span_id));

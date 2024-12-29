@@ -8,8 +8,8 @@ use std::convert::Into;
 
 use crate::{
     argvec_type, ArgVec, BlockId, ContinuationFlow, DeferredGoto, DeferredType, FlattenInner,
-    FlattenResult, LCode, LinkId, NodeBuilder as NB, ScopeId, ScopeState, ScopeType, Successor,
-    VarDefinitionSpace, VariantId,
+    FlattenResult, LCode, LinkId, NodeBuilder as NB, PushContext, ScopeId, ScopeState, ScopeType,
+    Successor, VarDefinitionSpace, VariantId,
 };
 
 use std::collections::HashMap;
@@ -95,7 +95,7 @@ impl FlattenInner {
 
                 // flatten function, and switch to next
                 // lower first, so we resolve types
-                let _ = self.push_node(*body, b)?;
+                let _ = self.push_node(*body, PushContext::Default, b)?;
 
                 let r_ty2 = b
                     .types
@@ -603,11 +603,9 @@ impl FlattenInner {
                 let arg_block_id = entry.block_id;
 
                 let sources = match &code {
-                    LCode::Arg(arg_num) => {
-                        println!("arg: {}:{}", arg_link_id, arg_num);
-                        self.scoped_continuations
-                            .find_source_blocks(ContinuationFlow::BlockArg(arg_block_id, *arg_num))
-                    }
+                    LCode::Arg(arg_num) => self
+                        .scoped_continuations
+                        .find_source_blocks(ContinuationFlow::BlockArg(arg_block_id, *arg_num)),
 
                     LCode::Declare | LCode::Load(_) => {
                         println!("decl: {}", arg_link_id);

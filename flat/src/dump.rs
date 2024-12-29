@@ -233,7 +233,7 @@ impl NodeBuilder {
                 self.dump_strings(a, out, depth + 2);
                 if let Some(else_expr) = mb {
                     let s = format!("else:");
-                    out.push((depth, s, node.span_id));
+                    out.push((depth + 1, s, node.span_id));
                     self.dump_strings(else_expr, out, depth + 2);
                 }
             }
