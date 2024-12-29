@@ -1,9 +1,12 @@
 q.use("prelude")
 
 def main():
-  x = 1
+  x = 3
   if True:
-    def f():
-      x = 0
+    def f(next):
+      x = x - 1
+      q.goto(next)
     q.defer(f)
-  return 0 
+    q.defer(f)
+    q.defer(f)
+  return x

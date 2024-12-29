@@ -212,6 +212,7 @@ impl AstType {
 
     pub fn is_composite(&self) -> bool {
         match self {
+            Self::Func(_) => true,
             Self::Union(_) => true,
             Self::Struct(_) => true,
             Self::Tuple(_) => true,

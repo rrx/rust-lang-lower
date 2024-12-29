@@ -34,13 +34,18 @@ impl FlattenInner {
         let mut func_type = self.refresh_func_type(&a.def.func_type, b);
         func_type.ret = ReturnType::Never;
 
-        // unify, making sure we have the correct arity
-        // do we even needs this?
-        let call_arg_type = AstType::Struct(call_func_type.fields());
-        b.unify(&call_arg_type, call_span_id, &func_type.args, def_span_id);
-
         let def_func_type = func_type.clone().into();
         b.unify(&def_func_type, call_span_id, &call_func_type, def_span_id);
+
+        // unify, making sure we have the correct arity
+        // do we even needs this?
+
+        // the call function must not be unknown at this point, we at least need to know it's arity
+        let call_func_type = b.types.u.resolve(call_func_type).unwrap();
+        assert_eq!(true, call_func_type.is_composite());
+
+        let call_arg_type = AstType::Struct(call_func_type.fields());
+        b.unify(&call_arg_type, call_span_id, &func_type.args, def_span_id);
 
         let (variant_id, fun_block_id, fun_scope_id, def_arg_type) =
             if let Some((variant_id, resolve_type, link_id, fun_scope_id)) =
