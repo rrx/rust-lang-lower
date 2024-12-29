@@ -631,14 +631,6 @@ impl FlattenInner {
             };
 
             let _ = self.push_node(expr, context, b)?;
-            let block = self.blocks.get_block(self.current_block_id());
-            println!(
-                "seq: {}, {}{}, {}",
-                i,
-                self.current_block_id(),
-                block.scope(),
-                block.is_term()
-            );
         }
 
         // ensure that we close any blocks that were opened
@@ -655,7 +647,6 @@ impl FlattenInner {
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
         let link_id = block.last().unwrap();
-        println!("seq_end: {:?}", (link_id, block.is_term()));
         Ok(FlattenResult::link(link_id))
     }
 
@@ -1629,14 +1620,20 @@ impl FlattenInner {
 
                 let parent_scope_id = block.scope();
 
+                // Start Next Block, we might not need this
+                let v_next =
+                    self.blocks
+                        .new_block(current_block_id, parent_scope_id, Successor::BlockScope);
+
                 // THEN Block
-                let (then_block_id, _) = self.blocks.new_scope_and_block(
+                let (then_start_block_id, _) = self.blocks.new_scope_and_block(
                     ScopeType::Block,
                     ScopeState::block(),
                     current_block_id,
                     Successor::BlockScope,
                 );
-                self.blocks.control_flow(current_block_id, &[then_block_id]);
+                self.blocks
+                    .control_flow(current_block_id, &[then_start_block_id]);
 
                 let then_span_id = then_expr.span_id;
 
@@ -1646,91 +1643,58 @@ impl FlattenInner {
                 };
 
                 let name = b.labels.fresh_key("then");
-                self.switch_blocks(then_block_id);
+                self.switch_blocks(then_start_block_id);
                 self.push_start_block(branch_block_type.clone().into(), Some(name), then_span_id);
-                self.switch_blocks(then_block_id);
+                self.switch_blocks(then_start_block_id);
                 let _ = self.push_node(NB::ensure_seq(*then_expr), PushContext::CondThen, b)?;
-                let then_block_id2 = self.current_block_id();
-                let block = self.blocks.get_block(self.current_block_id());
-                let then_is_term = block.is_term();
-                println!(
-                    "then: {:?}",
-                    (
-                        then_block_id,
-                        self.current_block_id(),
-                        then_is_term,
-                        block.last(),
-                        block.scope()
-                    )
-                );
+                let then_end_block_id = self.current_block_id();
+                let then_is_term = self.blocks.get_block(then_end_block_id).is_term();
 
                 // ELSE Block
-                let mut else_is_term = false;
+                let (has_else, else_is_term, else_start_block_id, else_end_block_id) =
+                    if let Some(else_expr) = maybe_else_expr {
+                        let (else_block_id, _) = self.blocks.new_scope_and_block(
+                            ScopeType::Block,
+                            ScopeState::block(),
+                            current_block_id,
+                            Successor::BlockScope,
+                        );
+                        self.blocks.control_flow(current_block_id, &[else_block_id]);
 
-                let mut else_block = if let Some(else_expr) = maybe_else_expr {
-                    let (else_block_id, _) = self.blocks.new_scope_and_block(
-                        ScopeType::Block,
-                        ScopeState::block(),
-                        current_block_id,
-                        Successor::BlockScope,
-                    );
-                    self.blocks.control_flow(current_block_id, &[else_block_id]);
+                        let else_span_id = else_expr.span_id;
+                        let name = b.labels.fresh_key("else");
 
-                    let else_span_id = else_expr.span_id;
-                    let name = b.labels.fresh_key("else");
+                        self.switch_blocks(else_block_id);
+                        self.push_start_block(branch_block_type.into(), Some(name), else_span_id);
 
-                    self.switch_blocks(else_block_id);
-                    self.push_start_block(branch_block_type.into(), Some(name), else_span_id);
-
-                    self.switch_blocks(else_block_id);
-                    let _ = self.push_node(NB::ensure_seq(*else_expr), PushContext::CondElse, b)?;
-                    let block = self.blocks.get_block(self.current_block_id());
-                    else_is_term = block.is_term();
-                    println!(
-                        "else: {:?}",
-                        (
-                            else_block_id,
-                            self.current_block_id(),
-                            else_is_term,
-                            block.last(),
-                            block.scope()
-                        )
-                    );
-                    // TODO: unwind when leaving this scope
-
-                    Some((else_block_id, self.current_block_id()))
-                } else {
-                    None
-                };
-
-                // we only want to create a next block if either of the branches are not terminated
-                // Otherwise we need it
-                // If both branches terminate, then we terminate
-                // Otherwise we leave the block open
-                let is_next_needed = !then_is_term || !else_is_term;
-
-                let v_next = if is_next_needed {
-                    // Start Next Block
-                    let v_next = self.blocks.new_block(
-                        current_block_id,
-                        parent_scope_id,
-                        Successor::BlockScope,
-                    );
-
-                    // terminate blocks if needed
-                    if let Some((_, else_block_id2)) = else_block {
-                        self.switch_blocks(else_block_id2);
-                        println!("X: {}", v_next);
-                        self.maybe_terminate_block(v_next, span_id, push_context, b);
+                        self.switch_blocks(else_block_id);
+                        let _ =
+                            self.push_node(NB::ensure_seq(*else_expr), PushContext::CondElse, b)?;
+                        let else_end_block_id = self.current_block_id();
+                        let else_is_term = self.blocks.get_block(else_end_block_id).is_term();
+                        (true, else_is_term, else_block_id, else_end_block_id)
                     } else {
                         self.blocks
                             .block_succ(current_block_id, v_next, Successor::BlockScope);
                         self.blocks
                             .block_succ(current_block_id, v_next, Successor::Jump);
-                        else_block = Some((v_next, v_next));
+                        (false, false, v_next, v_next)
+                    };
+
+                // we only want to create a next block if either of the branches are not terminated
+                // Otherwise we need it
+                // If both branches are terminal, then this block should be terminal
+                // if either of the branches are not terminal, then we need to create a next block,
+                // and leave the block open
+                let is_next_needed = !then_is_term || !else_is_term;
+
+                let v_next = if is_next_needed {
+                    if has_else {
+                        self.switch_blocks(else_end_block_id);
+                        self.maybe_terminate_block(v_next, span_id, push_context, b);
                     }
 
-                    self.switch_blocks(then_block_id2);
+                    self.switch_blocks(then_end_block_id);
                     self.maybe_terminate_block(v_next, span_id, push_context, b);
 
                     // start the next block
@@ -1746,7 +1710,6 @@ impl FlattenInner {
                     None
                 };
 
-                println!("cond: {}, {}", then_is_term, else_is_term);
                 // condition
                 self.switch_blocks(current_block_id);
                 let r = self.push_node(*condition, PushContext::Default, b)?;
@@ -1754,15 +1717,17 @@ impl FlattenInner {
                 let v = self.push_code(
                     LCode::Branch(
                         r.link_id.unwrap().into(),
-                        then_block_id.into(),
-                        else_block.unwrap().0.into(),
+                        then_start_block_id.into(),
+                        else_start_block_id.into(),
                     ),
                     AstType::Unit,
                     None,
                     span_id,
                     VarDefinitionSpace::Reg,
                 );
+
                 if let Some(v_next) = v_next {
+                    // if next is used, leave the block open
                     self.switch_blocks(v_next);
                 }
                 Ok(FlattenResult::link(v))
@@ -2371,21 +2336,17 @@ impl FlattenInner {
         &mut self,
         v_next: BlockId,
         span_id: SpanId,
-        push_context: PushContext,
+        _push_context: PushContext,
         b: &mut NB,
     ) -> LinkId {
         // is the block isn't terminated, terminate it with a jump to another block
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
-        let block_len = block.len();
+        //let block_len = block.len();
         let mut link_id = block.last().unwrap().clone();
         let entry = self.get_entry(link_id);
         if !entry.code.is_term() {
             link_id = self.push_jump(v_next, vec![], span_id, b);
-            println!(
-                "maybe_terminate_block: {:?}",
-                (current_block_id, v_next, link_id, push_context, block_len)
-            );
         }
         link_id
     }
