@@ -551,6 +551,16 @@ impl FlattenInner {
                 FlowEdge::BlockArg,
             ),
 
+            LCode::Switch(_, branches) => {
+                for b in branches.iter() {
+                    self.scoped_continuations.connect(
+                        ContinuationFlow::Jump(link_id),
+                        ContinuationFlow::Block(*b),
+                        FlowEdge::Switch,
+                    );
+                }
+            }
+
             LCode::Branch(_, b1, b2) => {
                 self.scoped_continuations.connect(
                     ContinuationFlow::Jump(link_id),
@@ -762,31 +772,43 @@ impl FlattenInner {
         span_id: SpanId,
         b: &mut NB,
     ) -> LinkId {
+        let (target_block_id, jump_args) =
+            self.push_jump_unwind(target_block_id, jump_args, span_id, b);
+        self.push_jump_direct(target_block_id, jump_args, span_id, b)
+    }
+
+    pub fn push_jump_unwind(
+        &mut self,
+        target_block_id: BlockId,
+        jump_args: ArgVec,
+        span_id: SpanId,
+        b: &mut NB,
+    ) -> (BlockId, ArgVec) {
         // handle leaving scope here?
         // We need to unwind the target, as well as any CPS parameters we send
         // We unwind at the caller.
 
         // TODO: unwind when leaving this scope
-        let current_block_id = self.current_block_id();
-        let current_scope_id = self.blocks.get_block(current_block_id).scope();
+        let start_block_id = self.current_block_id();
+        let start_scope_id = self.blocks.get_block(start_block_id).scope();
         let target_scope_id = self.blocks.get_block(target_block_id).scope();
-        assert_ne!(current_block_id, target_block_id);
+        assert_ne!(start_block_id, target_block_id);
 
         println!(
             "jump: {}{}=>{}{}",
-            current_block_id, current_scope_id, target_block_id, target_scope_id
+            start_block_id, start_scope_id, target_block_id, target_scope_id
         );
 
-        let scope_changed = current_scope_id != target_scope_id;
+        let scope_changed = start_scope_id != target_scope_id;
         if scope_changed {
-            let unwind = self.blocks.unwind_scopes(current_scope_id, target_scope_id);
+            let unwind = self.blocks.unwind_scopes(start_scope_id, target_scope_id);
             if unwind.is_empty() {
                 let down = self
                     .blocks
-                    .find_scope_next_down(current_scope_id, target_scope_id)
+                    .find_scope_next_down(start_scope_id, target_scope_id)
                     .unwrap();
                 println!("down: {:?}", down);
-                self.push_jump_direct(target_block_id, jump_args, span_id, b)
+                (target_block_id, jump_args)
             } else {
                 println!("unwind: {:?}", unwind);
 
@@ -800,9 +822,13 @@ impl FlattenInner {
                     let entry = self.get_entry(*link_id);
                     let ty = entry.ty.clone();
                     let key = b.labels.fresh_key("r");
+
+                    // switch to the target block, so we can create the declaration
                     self.switch_blocks(target_block_id);
                     let decl_link_id = self.push_decl(ty.clone(), key, span_id);
-                    self.switch_blocks(current_block_id);
+
+                    // switch back to the start block, so we can store the value
+                    self.switch_blocks(start_block_id);
                     self.push_code(
                         LCode::Store(decl_link_id, *link_id),
                         AstType::Unit,
@@ -814,10 +840,11 @@ impl FlattenInner {
                 }
 
                 let target = self.push_unwind(target_block_id, copied_link_ids, span_id, b);
-                self.push_jump_direct(target, vec![], span_id, b)
+                (target, vec![])
             }
         } else {
-            self.push_jump_direct(target_block_id, jump_args, span_id, b)
+            println!("nochange: {:?}", start_scope_id);
+            (target_block_id, jump_args)
         }
     }
 
@@ -1205,7 +1232,13 @@ impl FlattenInner {
 
         let code = if let LCode::PlaceholderTerminal = entry.code {
             if target_block_ids.len() == 1 {
+                let goto_scope_id = self.blocks.get_block(goto_block_id).scope();
                 let block_id = target_block_ids.last().unwrap();
+                let scope_id = self.blocks.get_block(*block_id).scope();
+                println!(
+                    "replace: {}{}=>{}{}",
+                    goto_block_id, goto_scope_id, block_id, scope_id
+                );
                 Some(LCode::Jump(*block_id))
             } else if target_block_ids.len() > 1 {
                 target_block_ids.sort();
@@ -1230,6 +1263,7 @@ impl FlattenInner {
         if let Some(code) = code {
             let entry = self.get_entry_mut(last_link_id);
             entry.code = code;
+            self.update_connections(last_link_id);
         }
 
         last_link_id
