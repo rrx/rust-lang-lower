@@ -1,6 +1,6 @@
 q.use("prelude")
 
-def fibonacci_recursive(n, a, c) -> int:
+def fibonacci_recursive(n, a, c):
   out = 0
   if n == 0:
     return a
