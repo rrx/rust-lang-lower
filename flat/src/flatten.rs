@@ -537,7 +537,7 @@ impl FlattenInner {
             }
 
             LCode::Switch(_, h) => {
-                for block_id in h.iter() {
+                for (index, block_id) in h.iter() {
                     self.blocks
                         .block_succ(self.current_block_id(), *block_id, Successor::Jump);
                     self.blocks.block_succ(
@@ -573,7 +573,7 @@ impl FlattenInner {
             ),
 
             LCode::Switch(_, branches) => {
-                for b in branches.iter() {
+                for (index, b) in branches.iter() {
                     self.scoped_continuations.connect(
                         ContinuationFlow::Jump(link_id),
                         ContinuationFlow::Block(*b),
@@ -1265,9 +1265,9 @@ impl FlattenInner {
             // Currently we are passing around the actual block_ids, which is very simple,
             // but it's also very hacky.
             target_block_ids.sort();
-            let mut m = HashSet::new();
+            let mut m = HashMap::new();
             for block_id in target_block_ids.iter() {
-                m.insert(*block_id);
+                m.insert(block_id.index(), *block_id);
             }
             Some(LCode::Switch(arg_link_id, m))
         } else {

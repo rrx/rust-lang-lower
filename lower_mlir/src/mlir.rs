@@ -498,7 +498,12 @@ impl<'c> MLIRGenerator<'c> {
         Ok(())
     }
 
-    pub fn lower_switch(&mut self, v: ValueId, arg: LinkId, m: &HashSet<BlockId>) -> Result<()> {
+    pub fn lower_switch(
+        &mut self,
+        v: ValueId,
+        arg: LinkId,
+        m: &HashMap<usize, BlockId>,
+    ) -> Result<()> {
         let block_id = self.blockify.get_entry_id(v).unwrap();
         let values = self.take_call_args();
         let arity = values.len();
@@ -513,13 +518,15 @@ impl<'c> MLIRGenerator<'c> {
         let v_arg = self.value0(i_arg);
         let flag_type = IntegerType::new(self.context, 64).into();
 
-        let mut case_values = m.iter().map(|v| v.index() as i64).collect::<Vec<i64>>();
+        let mut case_values = m
+            .iter()
+            .map(|(index, v)| *index as i64)
+            .collect::<Vec<i64>>();
         case_values.sort();
 
         let case_destinations = case_values
             .iter()
             .map(|i| {
-                //let block_id = m.get(i).unwrap();
                 let block_id = BlockId::new(*i as usize);
                 let target_value_id = self.blockify.resolve_code_offset(block_id.into());
                 let c = self

@@ -10,7 +10,7 @@ use crate::{
     VarDefinitionSpace, CFG,
 };
 
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 #[derive(Error, Debug)]
 pub enum BlockifyError {
@@ -108,7 +108,7 @@ pub enum LCode {
 
     // jump to block, with num args
     Jump(BlockId),
-    Switch(LinkId, HashSet<BlockId>),
+    Switch(LinkId, HashMap<usize, BlockId>),
     PlaceholderTerminal,
     PlaceholderCodeReference,
 
