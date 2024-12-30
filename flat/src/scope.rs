@@ -1,5 +1,3 @@
-use anyhow::Error;
-use anyhow::Result;
 use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::Bfs;
@@ -8,10 +6,7 @@ use std::ops::Deref;
 
 use std::collections::{HashMap, HashSet};
 
-use crate::{
-    ArgVec, BlockGraph, BlockId, BlockifyError, LinkId, NodeBuilder, StringLabel, Successor,
-    VariantId,
-};
+use crate::{ArgVec, BlockGraph, BlockId, LinkId, NodeBuilder, StringLabel, Successor, VariantId};
 use compile_core::{AbstractionId, Argument, AstType, Lambda, SpanId, StringKey};
 
 #[derive(Debug)]
@@ -57,8 +52,7 @@ pub struct LoopScope {
 
 #[derive(Debug, Clone)]
 pub enum DeferredType {
-    Goto(LinkId),
-    Variant(LinkId, BlockId, VariantId),
+    Goto,
     Name(LinkId),
     Ident(LinkId),
 }

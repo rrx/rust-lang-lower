@@ -430,7 +430,6 @@ impl FlattenInner {
         // if we don't have a template or a label already, then we defer
         // ensure we are in function scope
         if self.blocks.in_function_scope(scope_id) {
-            let link_id = block.last().unwrap();
             self.push_placeholder_terminal(AstType::Unit, call_span_id);
 
             let d = DeferredGoto::new(
@@ -439,7 +438,7 @@ impl FlattenInner {
                 args,
                 call_span_id,
                 current_block_id,
-                DeferredType::Goto(link_id),
+                DeferredType::Goto,
             );
             self.deferred_goto.add_deferred(d);
             return Ok(FlattenResult::statement());
@@ -530,7 +529,7 @@ impl FlattenInner {
                 return Ok(true);
             }
 
-            DeferredType::Goto(goto_link_id) => {
+            DeferredType::Goto => {
                 // are we jumping to an abstraction?
                 if let Some(abstraction_id) = self
                     .blocks
@@ -541,7 +540,7 @@ impl FlattenInner {
 
                     // push and jump
                     // TODO: this function needs to handle unwind
-                    let (variant_id, _fun_scope_id, _fun_block_id, _, _, _, _, _link_id) = self
+                    let (_, _fun_scope_id, _fun_block_id, _, _, _, _, _link_id) = self
                         .push_cps_block(
                             d.name.unwrap(),
                             d.scope_id,
@@ -550,11 +549,6 @@ impl FlattenInner {
                             d.call_span_id,
                             b,
                         )?;
-
-                    let dt = DeferredType::Variant(*goto_link_id, d.block_id, variant_id);
-                    let mut d = d;
-                    d.deferred_type = dt;
-                    self.deferred_goto.add_cps(d);
                     return Ok(true);
                 }
 
@@ -640,7 +634,6 @@ impl FlattenInner {
                 let _jump_link_id =
                     self.replace_placeholder_terminal(d.block_id, arg_link_id, sources.clone(), b);
             }
-            DeferredType::Variant(_goto_link_id, _source_block_id, _variant_id) => {}
             _ => {
                 unreachable!("{:?}", d);
             }
