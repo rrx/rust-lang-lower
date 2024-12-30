@@ -371,10 +371,8 @@ impl FlattenInner {
         goto_link_id: LinkId,
         argvec: ArgVec,
         call_span_id: SpanId,
-        b: &mut NB,
+        _b: &mut NB,
     ) -> Result<FlattenResult> {
-        let _ = self.push_call_values(&argvec, b);
-
         // push a goto
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
@@ -598,8 +596,12 @@ impl FlattenInner {
         // this is where we actually do the rewrite
         match d.deferred_type {
             DeferredType::Name(arg_link_id) => {
-                // we replace the placeholder here
                 self.switch_blocks(d.block_id);
+                let last_link_id = self.remove_placeholder_terminal(d.block_id);
+                let mut last_entry = self.get_entry(last_link_id).clone();
+
+                let _ = self.push_call_values(&d.argvec, b);
+
                 let entry = self.get_entry(arg_link_id).clone();
                 let code = entry.code;
                 let arg_block_id = entry.block_id;
@@ -634,9 +636,13 @@ impl FlattenInner {
                     }
                 };
 
-                let _jump_link_id =
-                    self.replace_placeholder_terminal(d.block_id, arg_link_id, sources.clone(), b);
+                let code = self
+                    .calc_jump_code(arg_link_id, sources, d.call_span_id, b)
+                    .unwrap();
+                last_entry.code = code;
+                self.push_entry_with_link(last_entry);
             }
+
             _ => {
                 unreachable!("{:?}", d);
             }

@@ -536,6 +536,28 @@ impl FlattenInner {
                 let link_id = self.insert_decl(entry_block_id, entry);
                 link_id
             }
+
+            LCode::Switch(_, h) => {
+                for block_id in h.iter() {
+                    self.blocks
+                        .block_succ(self.current_block_id(), *block_id, Successor::Jump);
+                    self.blocks.block_succ(
+                        self.current_block_id(),
+                        *block_id,
+                        Successor::BlockScope,
+                    );
+                }
+                self._push_entry_normal(entry)
+            }
+
+            LCode::Jump(target) => {
+                self.blocks
+                    .block_succ(self.current_block_id(), *target, Successor::Jump);
+                self.blocks
+                    .block_succ(self.current_block_id(), *target, Successor::BlockScope);
+                self._push_entry_normal(entry)
+            }
+
             _ => self._push_entry_normal(entry),
         };
         self.update_connections(v);
@@ -1225,7 +1247,7 @@ impl FlattenInner {
         }
     }
 
-    pub fn remove_placeholder_terminal(&mut self, goto_block_id: BlockId) {
+    pub fn remove_placeholder_terminal(&mut self, goto_block_id: BlockId) -> LinkId {
         let block = self.blocks.get_block(goto_block_id);
         let last_link_id = block.last().unwrap();
         let entry = self.get_entry(last_link_id);
@@ -1233,65 +1255,34 @@ impl FlattenInner {
             let block = self.blocks.get_block_mut(goto_block_id);
             let _ = block.pop_terminal();
         }
+        last_link_id
     }
 
-    pub fn replace_placeholder_terminal(
+    pub fn calc_jump_code(
         &mut self,
-        goto_block_id: BlockId,
         arg_link_id: LinkId,
         mut target_block_ids: Vec<BlockId>,
+        span_id: SpanId,
         b: &mut NB,
-    ) -> LinkId {
-        let block = self.blocks.get_block(goto_block_id);
-        let last_link_id = block.last().unwrap();
-
-        for block_id in &target_block_ids {
-            self.blocks
-                .block_succ(self.current_block_id(), *block_id, Successor::Jump);
-            self.blocks
-                .block_succ(self.current_block_id(), *block_id, Successor::BlockScope);
-        }
-
-        let entry = self.get_entry(last_link_id);
-
-        let code = if let LCode::PlaceholderTerminal = entry.code {
-            if target_block_ids.len() == 1 {
-                let goto_scope_id = self.blocks.get_block(goto_block_id).scope();
-                let block_id = target_block_ids.last().unwrap();
-                let scope_id = self.blocks.get_block(*block_id).scope();
-                println!(
-                    "replace: {}{}=>{}{}",
-                    goto_block_id, goto_scope_id, block_id, scope_id
-                );
-                Some(LCode::Jump(*block_id))
-            } else if target_block_ids.len() > 1 {
-                target_block_ids.sort();
-                let mut m = HashSet::new();
-                for block_id in target_block_ids.iter() {
-                    m.insert(*block_id);
-                }
-
-                // connects here aren't actually used to calculate the flows
-                // This function is called when we have calculated the static flow and we update
-                // the graph.
-
-                Some(LCode::Switch(arg_link_id, m))
-            } else {
-                b.push_warning("Missing Targets", entry.span_id);
-                None
-                //unreachable!();
+    ) -> Option<LCode> {
+        if target_block_ids.len() == 1 {
+            let block_id = *target_block_ids.last().unwrap();
+            Some(LCode::Jump(block_id))
+        } else if target_block_ids.len() > 1 {
+            // It's not necessary to sort these, but we do it so that the list is consistent
+            // between builds
+            // Currently we are passing around the actual block_ids, which is very simple,
+            // but it's also very hacky.
+            target_block_ids.sort();
+            let mut m = HashSet::new();
+            for block_id in target_block_ids.iter() {
+                m.insert(*block_id);
             }
+            Some(LCode::Switch(arg_link_id, m))
         } else {
-            unreachable!();
-        };
-        if let Some(code) = code {
-            let entry = self.get_entry_mut(last_link_id);
-            entry.code = code;
-            println!("ty: {:?}", entry.ty);
-            self.update_connections(last_link_id);
+            b.push_warning("Missing Targets", span_id);
+            None
         }
-
-        last_link_id
     }
 
     pub fn push_node(
