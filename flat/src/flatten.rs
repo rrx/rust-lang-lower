@@ -918,14 +918,6 @@ impl FlattenInner {
             b,
         );
 
-        self.blocks
-            .block_succ(self.current_block_id(), target_block_id, Successor::Jump);
-        self.blocks.block_succ(
-            self.current_block_id(),
-            target_block_id,
-            Successor::BlockScope,
-        );
-
         let jump_link_id = self.push_code(
             LCode::Jump(target_block_id.into()),
             AstFuncType::new(arg_ty, ReturnType::Single(AstType::Unit)).into(),

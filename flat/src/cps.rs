@@ -12,7 +12,7 @@ use crate::{
     Successor, VarDefinitionSpace, VariantId,
 };
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 impl FlattenInner {
     pub(super) fn gen_cps_block_with_type(
@@ -130,7 +130,7 @@ impl FlattenInner {
         call_span_id: SpanId,
         b: &mut NB,
     ) -> BlockId {
-        let name = format!("U{}", scope_id.index());
+        let name = format!(".U{}", scope_id.index());
         let key = b.labels.s(&name);
 
         let scope = self.blocks.get_scope(scope_id);
@@ -471,13 +471,6 @@ impl FlattenInner {
                 self.switch_blocks(d.block_id);
                 self.remove_placeholder_terminal(d.block_id);
 
-                // push the arguments, and unify the type,
-                // but keep the placeholder, we will replace it in the rewrite step
-                // we do just enough calculation here to resolve the types, and we push it back on the
-                // stack
-                //
-                //
-
                 // Push load if required.  This is needed if the target is stored in memory,
                 // rather than a register
                 let load_link_id = if self.is_load_required(*def_target_link_id) {
@@ -600,8 +593,6 @@ impl FlattenInner {
                 let last_link_id = self.remove_placeholder_terminal(d.block_id);
                 let mut last_entry = self.get_entry(last_link_id).clone();
 
-                let _ = self.push_call_values(&d.argvec, b);
-
                 let entry = self.get_entry(arg_link_id).clone();
                 let code = entry.code;
                 let arg_block_id = entry.block_id;
@@ -636,17 +627,72 @@ impl FlattenInner {
                     }
                 };
 
-                let code = self
-                    .calc_jump_code(arg_link_id, sources, d.call_span_id, b)
-                    .unwrap();
-                last_entry.code = code;
-                self.push_entry_with_link(last_entry);
+                if sources.len() == 1 {
+                    self.push_jump(sources[0], d.argvec, d.call_span_id, b);
+                } else {
+                    // TODO: handle unwind for the switch statement
+                    // eventually we will want to support different args for each branch in the
+                    // switch, but that's not how we use it.  It's a single set of args, that are
+                    // used for all branches in the switch.  But we need to unwind everything first
+
+                    // We can make this a little easier, but creating a new block for each switch
+                    // branch, and then using the existing jump logic to do the actual unwind.
+
+                    let current_scope_id = self.blocks.get_block(d.block_id).scope();
+                    //let mut targets = vec![];
+                    let mut scopes = HashSet::new();
+                    for target_block_id in sources.iter() {
+                        let scope_id = self.blocks.get_block(*target_block_id).scope();
+                        scopes.insert(scope_id);
+                    }
+
+                    // TODO: this code doesn't handle unwind yet.
+                    // if we rewrite the jump targets, everything get's messed up
+                    //
+                    self.switch_blocks(d.block_id);
+                    let code = self
+                        .calc_jump_code(arg_link_id, sources, d.call_span_id, b)
+                        .unwrap();
+                    last_entry.code = code;
+                    let _ = self.push_call_values(&d.argvec, b);
+                    self.push_entry_with_link(last_entry);
+                    //} else {
+                    //unimplemented!();
+                    /*
+                    for target_block_id in sources {
+                        let key = b.labels.fresh_key(".sw");
+                        let new_block_id =
+                            self.blocks
+                            .new_block(d.block_id, d.scope_id, Successor::BlockScope);
+                        self.switch_blocks(new_block_id);
+                        self.push_start_block(
+                            AstFuncType::new_void_void().into(),
+                            Some(key),
+                            d.call_span_id,
+                        );
+                        self.push_jump(target_block_id, d.argvec.clone(), d.call_span_id, b);
+                        targets.push(new_block_id);
+                    }
+
+                    self.switch_blocks(d.block_id);
+                    let code = self
+                        .calc_jump_code(arg_link_id, targets, d.call_span_id, b)
+                        .unwrap();
+                    last_entry.code = code;
+                    let _ = self.push_call_values(&d.argvec, b);
+                    self.push_entry_with_link(last_entry);
+                    */
+                    //}
+                }
             }
 
             _ => {
                 unreachable!("{:?}", d);
             }
         }
+
+        // we just pushed a bunch of unwind blocks, we need to start over on deferrals
+        self.resolve_deferred(b)?;
         Ok(())
     }
 
@@ -655,19 +701,21 @@ impl FlattenInner {
         let mut blocks = vec![];
         let mut errors = vec![];
 
-        for link_id in &self.open_identifiers {
-            let entry = self.get_entry(*link_id);
+        let link_ids = self.open_identifiers.drain(..).collect::<Vec<_>>();
+
+        for link_id in link_ids {
+            let entry = self.get_entry(link_id);
             let block_id = entry.block_id;
             let block = self.blocks.get_block(block_id);
             let scope_id = block.scope();
             let key = entry.name.unwrap();
             if let Some(label_block_id) = self.blocks.resolve_label(scope_id, key.into()) {
-                blocks.push((*link_id, label_block_id));
+                blocks.push((link_id, label_block_id));
             } else if let Some(abstraction_id) = self.blocks.resolve_template(scope_id, key.into())
             {
-                abstractions.push((*link_id, abstraction_id));
+                abstractions.push((link_id, abstraction_id));
             } else {
-                errors.push(*link_id);
+                errors.push(link_id);
             }
         }
 

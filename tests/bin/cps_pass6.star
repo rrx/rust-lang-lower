@@ -20,7 +20,9 @@ def main():
     q.label("N2")
     q.goto(U3, x)
 
+  # TODO: try to support a chain like this
   #q.goto_chain(U3, U2, U1, next)
+
   q.goto(U3U2U1, A)
   q.label("A")
   return 0
