@@ -625,11 +625,19 @@ impl FlattenInner {
                     _ => {
                         unreachable!("{:?}", code);
                     }
-                };
+                }
+                .into_iter()
+                .collect::<HashSet<_>>();
 
                 if sources.len() == 1 {
-                    self.push_jump(sources[0], d.argvec, d.call_span_id, b);
+                    self.push_jump(
+                        sources.iter().next().unwrap().clone(),
+                        d.argvec,
+                        d.call_span_id,
+                        b,
+                    );
                 } else {
+                    /*
                     // TODO: handle unwind for the switch statement
                     // eventually we will want to support different args for each branch in the
                     // switch, but that's not how we use it.  It's a single set of args, that are
@@ -639,11 +647,32 @@ impl FlattenInner {
                     // branch, and then using the existing jump logic to do the actual unwind.
 
                     //let current_scope_id = self.blocks.get_block(d.block_id).scope();
-                    //let mut targets = vec![];
                     let mut scopes = HashSet::new();
                     for target_block_id in sources.iter() {
                         let scope_id = self.blocks.get_block(*target_block_id).scope();
                         scopes.insert(scope_id);
+                    }
+
+                    println!("sources: {:?}", sources);
+                    let mut out = vec![];
+                    for target_block_id in sources {
+                        let key = b.labels.fresh_key(".sw");
+                        let new_block_id =
+                            self.blocks
+                                .new_block(d.block_id, d.scope_id, Successor::BlockScope);
+                        self.switch_blocks(new_block_id);
+                        self.push_start_block(
+                            AstFuncType::new_void_void().into(),
+                            Some(key),
+                            d.call_span_id,
+                        );
+                        self.push_jump(target_block_id, d.argvec.clone(), d.call_span_id, b);
+                        out.push((target_block_id, new_block_id));
+                    }
+                    let mut m = HashMap::new();
+                    for (target_block_id, new_block_id) in out {
+                        println!("insert: {} => {}", target_block_id, new_block_id);
+                        m.insert(target_block_id.index(), new_block_id);
                     }
 
                     // TODO: this code doesn't handle unwind yet.
@@ -651,7 +680,7 @@ impl FlattenInner {
                     //
                     self.switch_blocks(d.block_id);
 
-                    let m: HashMap<_, _> = sources.into_iter().map(|x| (x.index(), x)).collect();
+                    //let m: HashMap<_, _> = sources.into_iter().map(|x| (x.index(), x)).collect();
                     let code = LCode::Switch(arg_link_id, m);
                     //let code = self
                     //.calc_jump_code(arg_link_id, sources, d.call_span_id, b)
@@ -661,21 +690,11 @@ impl FlattenInner {
                     self.push_entry_with_link(last_entry);
                     //} else {
                     //unimplemented!();
-                    /*
-                    for target_block_id in sources {
-                        let key = b.labels.fresh_key(".sw");
-                        let new_block_id =
-                            self.blocks
-                            .new_block(d.block_id, d.scope_id, Successor::BlockScope);
-                        self.switch_blocks(new_block_id);
-                        self.push_start_block(
-                            AstFuncType::new_void_void().into(),
-                            Some(key),
-                            d.call_span_id,
-                        );
-                        self.push_jump(target_block_id, d.argvec.clone(), d.call_span_id, b);
-                        targets.push(new_block_id);
-                    }
+                    //
+                    */
+
+                    let mut targets = sources.into_iter().collect::<Vec<_>>();
+                    targets.sort();
 
                     self.switch_blocks(d.block_id);
                     let code = self
@@ -684,8 +703,6 @@ impl FlattenInner {
                     last_entry.code = code;
                     let _ = self.push_call_values(&d.argvec, b);
                     self.push_entry_with_link(last_entry);
-                    */
-                    //}
                 }
             }
 

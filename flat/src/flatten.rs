@@ -786,18 +786,6 @@ impl FlattenInner {
             .collect::<Vec<_>>();
     }
 
-    pub fn push_jump_unwind_pre(
-        &mut self,
-        target_block_id: BlockId,
-        jump_args: ArgVec,
-        span_id: SpanId,
-        b: &mut NB,
-    ) -> LinkId {
-        let (target_block_id, jump_args) =
-            self.push_jump_unwind(target_block_id, jump_args, span_id, b);
-        self.push_jump_direct(target_block_id, jump_args, span_id, b)
-    }
-
     pub fn push_jump(
         &mut self,
         target_block_id: BlockId,
