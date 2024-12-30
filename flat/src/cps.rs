@@ -371,7 +371,10 @@ impl FlattenInner {
         goto_link_id: LinkId,
         argvec: ArgVec,
         call_span_id: SpanId,
+        b: &mut NB,
     ) -> Result<FlattenResult> {
+        let _ = self.push_call_values(&argvec, b);
+
         // push a goto
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);

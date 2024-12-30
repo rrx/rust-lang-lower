@@ -1192,11 +1192,10 @@ impl FlattenInner {
 
                 let call_link_id = arg.1;
 
-                let _ = self.push_call_values(&call_values, b);
                 // complete the lambda bake with a jump to the continuation, this is the exit of
                 // the lambda.  The continuation is part of the signature, so we can call it again
                 let _goto_link_id =
-                    self.push_goto_link(call_link_id, call_values.clone(), call_span_id)?;
+                    self.push_goto_link(call_link_id, call_values.clone(), call_span_id, b)?;
 
                 (
                     variant_id,
