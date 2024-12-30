@@ -522,7 +522,6 @@ impl FlattenInner {
             }
             LCode::Arg(_) => {
                 let link_id = self.insert_entry(entry);
-                self.update_connections(link_id);
                 let block = self.blocks.get_block_mut(block_id);
                 block.push_arg(link_id);
                 link_id
