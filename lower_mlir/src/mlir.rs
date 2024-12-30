@@ -509,7 +509,10 @@ impl<'c> MLIRGenerator<'c> {
         let arity = values.len();
         let indicies = values
             .into_iter()
-            .map(|value_id| self.resolve_value(value_id.into()).unwrap())
+            .map(|value_id| {
+                self.resolve_value_lower_load(block_id, value_id.into())
+                    .unwrap()
+            })
             .collect();
         let rs = self.values(indicies);
 
