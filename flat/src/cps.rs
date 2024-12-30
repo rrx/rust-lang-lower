@@ -646,13 +646,6 @@ impl FlattenInner {
                         // We can make this a little easier, but creating a new block for each switch
                         // branch, and then using the existing jump logic to do the actual unwind.
 
-                        //let current_scope_id = self.blocks.get_block(d.block_id).scope();
-                        let mut scopes = HashSet::new();
-                        for target_block_id in sources.iter() {
-                            let scope_id = self.blocks.get_block(*target_block_id).scope();
-                            scopes.insert(scope_id);
-                        }
-
                         println!("sources: {:?}", sources);
                         let mut out = vec![];
                         for target_block_id in sources {
@@ -681,7 +674,7 @@ impl FlattenInner {
 
                         let code = LCode::Switch(arg_link_id, m);
                         last_entry.code = code;
-                        let _ = self.push_call_values(&d.argvec, b);
+                        last_entry.ty = AstFuncType::new_void_void().into();
                         self.push_entry_with_link(last_entry);
                     } else {
                         // TODO: this code doesn't handle unwind yet.

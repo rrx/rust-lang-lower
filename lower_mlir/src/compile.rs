@@ -84,6 +84,7 @@ pub fn default_pass_manager<'c>(context: &Context, optimize: bool) -> pass::Pass
         pass_manager.add_pass(pass::transform::create_sccp());
         pass_manager.add_pass(pass::transform::create_control_flow_sink());
         pass_manager.add_pass(pass::transform::create_symbol_privatize());
+        pass_manager.add_pass(pass::transform::create_topological_sort());
     }
 
     pass_manager

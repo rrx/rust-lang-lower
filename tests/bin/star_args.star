@@ -10,9 +10,11 @@ def positional(x, *args, asdf=1):
 
 def main():
   q.check(positional(10) == 10)
-  # this doesn't work yet, because we only make one version of a def currently
+
+  # TODO: this doesn't work yet, because we only make one version of a def currently
   # the second type signature does not unify
   #q.check(keyword_arg(10, asdf=11) == 11)
+
   q.check(keyword_arg(10, 11, 12, True, False, asdf=11) == 11)
 
   # nested function should work too
