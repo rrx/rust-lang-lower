@@ -637,7 +637,7 @@ impl FlattenInner {
                         b,
                     );
                 } else {
-                    if false {
+                    if true {
                         // TODO: handle unwind for the switch statement
                         // eventually we will want to support different args for each branch in the
                         // switch, but that's not how we use it.  It's a single set of args, that are

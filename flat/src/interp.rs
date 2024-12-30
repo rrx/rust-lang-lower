@@ -134,6 +134,7 @@ impl<'a> Interp<'a> {
     }
 
     pub fn jump(&mut self, target: ValueId) {
+        println!("@{}: jump: {}", self.pos, target);
         self.jump_type = ScopeType::Block;
         self.pos = target;
     }
@@ -322,6 +323,9 @@ impl<'a> Interp<'a> {
                 true
             }
             LCode::Label => {
+                let s_name = self.b.labels.r(entry.name.unwrap().into());
+                println!("@{}: label: {}, {:?}", pos, s_name, self.call_args);
+
                 // load args into scope
                 let scope = Scope::new(self.jump_type, self.return_link_id);
                 self.stack.push(scope);
@@ -331,9 +335,12 @@ impl<'a> Interp<'a> {
             }
 
             LCode::Arg(_) => {
-                let value = self.call_args.pop_front().unwrap();
-                self.store_value(pos, value);
-                self.advance();
+                if let Some(value) = self.call_args.pop_front() {
+                    self.store_value(pos, value);
+                    self.advance();
+                } else {
+                    unreachable!("missing arg: {}", pos);
+                }
                 true
             }
 
@@ -519,15 +526,15 @@ impl<'a> Interp<'a> {
                 true
             }
 
-            LCode::Switch(link_id, _) => {
+            LCode::Switch(link_id, m) => {
                 // push args
                 let base = self.m.resolve_code_offset((*link_id).into());
                 let value = self.resolve_value(base)?;
 
                 match value {
                     Value::Int(i) => {
-                        // The switch index is actually the block_id
-                        let block_id = BlockId::new(i as usize);
+                        // lookup the block_id in the switch map
+                        let block_id = m.get(&(i as usize)).unwrap();
                         let target = self.m.resolve_code_offset(block_id.into());
                         self.jump(target);
                     }

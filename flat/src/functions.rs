@@ -1159,7 +1159,7 @@ impl FlattenInner {
 
                 // hack: this needs to be defined after fun_block, for some reason
                 // The ordering shouldn't matter
-                let next_block_id = self.blocks.new_block(block_id, scope_id, succ_type);
+                let next_block_id = self.blocks.new_block(block_id, fun_scope_id, succ_type);
 
                 let result = self.push_bake_lambda_and_update_next(
                     lookup_name,
