@@ -1,15 +1,12 @@
 q.use("prelude")
 
 def main():
-  def f2(asdf):
-    q.print(asdf)
-    return asdf
-  def f1(asdf):
+  def f(asdf):
     q.print(asdf)
     return asdf
 
-  x = f2(1)
-  y = f2(1)
+  x = f(1)
+  y = f(1)
 
   q.print(x)
   q.print(y)
