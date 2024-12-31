@@ -63,7 +63,6 @@ struct Scope {
     ty: ScopeType,
     return_link_id: Option<ValueId>,
     args: VecDeque<Value>,
-    values: HashMap<ValueId, Value>,
     declarations: HashSet<ValueId>,
 }
 
@@ -73,13 +72,11 @@ impl Scope {
             ty,
             return_link_id,
             args: VecDeque::new(),
-            values: HashMap::new(),
             declarations: HashSet::new(),
         }
     }
 
-    pub fn declare(&mut self, v: ValueId, value: Value) {
-        self.values.insert(v, value);
+    pub fn declare(&mut self, v: ValueId) {
         self.declarations.insert(v);
     }
 }
@@ -89,10 +86,10 @@ pub struct Interp<'a> {
     b: &'a mut NodeBuilder,
     pos: ValueId,
     stack: Vec<Scope>,
-    //statics: HashMap<ValueId, Value>,
     call_args: VecDeque<Value>,
     return_link_id: Option<ValueId>,
     jump_type: ScopeType,
+    values: HashMap<ValueId, Value>,
 }
 
 impl<'a> Interp<'a> {
@@ -104,6 +101,7 @@ impl<'a> Interp<'a> {
         let block_id = m.static_block_id();
         let block = m.blocks.get_block(block_id);
         let links = block.iter().collect::<Vec<_>>();
+        let mut values = HashMap::new();
 
         for link_id in links {
             let entry = m.get_link_entry(link_id);
@@ -112,7 +110,8 @@ impl<'a> Interp<'a> {
             match code {
                 LCode::Val(lit) => {
                     let value = Value::from_lit(lit);
-                    scope.declare(value_id, value);
+                    values.insert(value_id, value);
+                    scope.declare(value_id);
                 }
                 _ => (),
             }
@@ -126,6 +125,7 @@ impl<'a> Interp<'a> {
             call_args: VecDeque::new(),
             return_link_id: None,
             jump_type: ScopeType::Function,
+            values,
         }
     }
 
@@ -153,11 +153,7 @@ impl<'a> Interp<'a> {
     }
 
     pub fn save_value(&mut self, value: Value) {
-        self.stack
-            .last_mut()
-            .unwrap()
-            .values
-            .insert(self.pos, value);
+        self.values.insert(self.pos, value);
     }
 
     fn get_value(&self, v: ValueId) -> Option<Value> {
@@ -169,21 +165,7 @@ impl<'a> Interp<'a> {
             v
         };
 
-        for scope in self.stack.iter().rev() {
-            if let Some(value) = scope.values.get(&v) {
-                return Some(value.clone());
-            }
-        }
-        None
-    }
-
-    fn get_value_scope(&mut self, v: ValueId) -> Option<&mut Scope> {
-        for scope in self.stack.iter_mut().rev() {
-            if scope.values.contains_key(&v) {
-                return Some(scope);
-            }
-        }
-        None
+        self.values.get(&v).cloned()
     }
 
     pub fn resolve_value(&mut self, v: ValueId) -> Result<Value> {
@@ -198,96 +180,66 @@ impl<'a> Interp<'a> {
                 return Ok(self.resolve_declaration(v));
             }
 
-            LCode::Val(_) => {
-                return Ok(self
-                    .get_value_scope(v)
-                    .unwrap()
-                    .values
-                    .get(&v)
+            LCode::Val(_)
+            | LCode::Load(_)
+            | LCode::Call(_)
+            | LCode::Op2(_)
+            | LCode::NaryOp(_)
+            | LCode::Op1(_) => {
+                return Ok(self.values.get(&v).unwrap().clone());
+            }
+
+            LCode::Tuple(link_ids) => {
+                let mut values = vec![];
+                for offset in link_ids {
+                    let v = self.m.resolve_code_offset(offset.into());
+                    values.push(self.resolve_value(v)?);
+                }
+                return Ok(Value::Tuple(values));
+            }
+
+            LCode::Use(base, inds) => {
+                let v = self.m.resolve_code_offset(*base);
+                let value = self.values.get(&v).unwrap().clone();
+                //let value = scope.values.get(&v).unwrap().clone();
+                let inds = inds
+                    .iter()
                     .cloned()
-                    .unwrap());
-            }
-
-            _ => (),
-        }
-
-        for scope in self.stack.iter_mut().rev() {
-            match code {
-                LCode::Use(base, inds) => {
-                    let v = self.m.resolve_code_offset(*base);
-                    let value = scope.values.get(&v).unwrap().clone();
-                    let inds = inds
-                        .iter()
-                        .cloned()
-                        .map(|i| match i {
-                            UseIndex::Use(offset) => {
-                                let v = self.m.resolve_code_offset(offset);
-                                let v = self.resolve_value(v).unwrap();
-                                match v {
-                                    Value::Int(i) => UseIndex::Pos(i as usize),
-                                    Value::Index(i) => UseIndex::Pos(i),
-                                    _ => unimplemented!(),
-                                }
+                    .map(|i| match i {
+                        UseIndex::Use(offset) => {
+                            let v = self.m.resolve_code_offset(offset);
+                            let v = self.resolve_value(v).unwrap();
+                            match v {
+                                Value::Int(i) => UseIndex::Pos(i as usize),
+                                Value::Index(i) => UseIndex::Pos(i),
+                                _ => unimplemented!(),
                             }
-                            _ => i.clone(),
-                        })
-                        .collect::<Vec<_>>();
-                    return Ok(value.resolve_index(&inds));
-                }
-
-                LCode::Load(_link_id) => {
-                    if let Some(value) = scope.values.get(&v) {
-                        return Ok(value.clone());
-                    }
-                }
-                LCode::Call(_) | LCode::Op2(_) | LCode::NaryOp(_) | LCode::Op1(_) => {
-                    if let Some(value) = scope.values.get(&v) {
-                        return Ok(value.clone());
-                    }
-                }
-                LCode::Tuple(link_ids) => {
-                    let mut values = vec![];
-                    for offset in link_ids {
-                        let v = self.m.resolve_code_offset(offset.into());
-                        values.push(self.resolve_value(v)?);
-                    }
-                    return Ok(Value::Tuple(values));
-                }
-                LCode::Declare => {
-                    //return Ok(self.resolve_declaration(v));
-                    if let Some(value) = scope.values.get(&v) {
-                        return Ok(value.clone());
-                    }
-                }
-
-                _ => unimplemented!("{:?}", (code, v)),
+                        }
+                        _ => i.clone(),
+                    })
+                    .collect::<Vec<_>>();
+                return Ok(value.resolve_index(&inds));
             }
+
+            _ => unimplemented!("{:?}", (code, v)),
         }
-        unreachable!()
     }
 
     pub fn resolve_declaration(&mut self, v: ValueId) -> Value {
         let code = self.m.get_code(v);
-        //let mem = self.m.get_mem(v.into());
-        //if self.statics.contains_key(&v) {
-        //return self.load_static(v);
-        //}
 
-        for scope in self.stack.iter().rev() {
-            match code {
-                LCode::Declare => {
-                    if let Some(value) = scope.values.get(&v) {
-                        return value.clone();
-                    }
+        match code {
+            LCode::Declare => {
+                if let Some(value) = self.values.get(&v) {
+                    return value.clone();
                 }
-                LCode::Val(_) => {
-                    if let Some(value) = scope.values.get(&v) {
-                        return value.clone();
-                    }
-                    //return Value::from_lit(lit);
-                }
-                _ => unimplemented!("{:?}", code),
             }
+            LCode::Val(_) => {
+                if let Some(value) = self.values.get(&v) {
+                    return value.clone();
+                }
+            }
+            _ => unimplemented!("{:?}", code),
         }
         unreachable!()
     }
@@ -305,12 +257,14 @@ impl<'a> Interp<'a> {
 
     fn store_value(&mut self, v: ValueId, value: Value) {
         let entry = self.m.get_entry(v);
-        if let VarDefinitionSpace::Stack(decl_link_id) = entry.mem {
+        let v_decl = if let VarDefinitionSpace::Stack(decl_link_id) = entry.mem {
             let v_decl = self.m.resolve_code_offset(decl_link_id.into());
-            self.stack.last_mut().unwrap().declare(v_decl, value);
+            v_decl
         } else {
-            self.stack.last_mut().unwrap().declare(v, value);
-        }
+            v
+        };
+        self.values.insert(v_decl, value);
+        self.stack.last_mut().unwrap().declare(v_decl);
     }
 
     pub fn step(&mut self) -> Result<bool> {
@@ -345,10 +299,8 @@ impl<'a> Interp<'a> {
             }
 
             LCode::Declare => {
-                self.stack
-                    .last_mut()
-                    .unwrap()
-                    .declare(self.pos, Value::Uninitialized);
+                self.stack.last_mut().unwrap().declare(self.pos);
+                self.save_value(Value::Uninitialized);
                 self.advance();
                 true
             }
@@ -357,12 +309,10 @@ impl<'a> Interp<'a> {
                 let v_decl = self.m.resolve_code_offset(decl.into());
                 let v_value = self.m.resolve_code_offset(v.into());
                 let value = self.resolve_value(v_value)?;
-                for scope in self.stack.iter_mut().rev() {
-                    if scope.values.contains_key(&v_decl) {
-                        scope.values.insert(v_decl, value);
-                        self.advance();
-                        return Ok(true);
-                    }
+                if self.values.contains_key(&v_decl) {
+                    self.values.insert(v_decl, value);
+                    self.advance();
+                    return Ok(true);
                 }
                 unreachable!()
             }
@@ -370,11 +320,7 @@ impl<'a> Interp<'a> {
             LCode::Load(decl) => {
                 let v_decl = self.m.resolve_code_offset(decl.into());
                 let value = self.resolve_declaration(v_decl);
-                self.stack
-                    .last_mut()
-                    .unwrap()
-                    .values
-                    .insert(self.pos, value);
+                self.save_value(value);
                 self.advance();
                 true
             }
@@ -388,11 +334,7 @@ impl<'a> Interp<'a> {
 
             LCode::Tuple(_) => {
                 let value = self.resolve_value(self.pos)?;
-                self.stack
-                    .last_mut()
-                    .unwrap()
-                    .values
-                    .insert(self.pos, value);
+                self.save_value(value);
                 self.advance();
                 true
             }
@@ -429,8 +371,6 @@ impl<'a> Interp<'a> {
                     _ => unimplemented!("{:?}", (op, v1)),
                 };
                 self.store_value(self.pos, v);
-                //self.stack.last_mut().unwrap().values.insert(self.pos, v);
-                //self.call_args.push_back(v);
                 self.advance();
                 true
             }
@@ -470,27 +410,22 @@ impl<'a> Interp<'a> {
                     }
                 };
                 self.store_value(self.pos, v);
-                //self.stack.last_mut().unwrap().values.insert(self.pos, v);
-                //self.call_args.push_back(v);
                 self.advance();
                 true
             }
 
             LCode::Val(Literal::Block(block_id)) => {
                 // the index is actually the block_id
-                //let index = self.m.block_source_index(pos, *block_id);
                 let index = block_id.index() as i64;
 
                 let value = Value::Int(index);
                 self.store_value(self.pos, value);
-                //self.save_value(value);
                 self.advance();
                 true
             }
 
             LCode::Val(lit) => {
                 let value = Value::from_lit(lit);
-                //self.save_value(value);
                 self.store_value(self.pos, value);
                 self.advance();
                 true
@@ -501,18 +436,8 @@ impl<'a> Interp<'a> {
                 true
             }
 
-            /*
-            LCode::Value(v) => {
-                let v = self.m.resolve_code_offset(v.into());
-                let value = self.resolve_value(v)?;
-                self.call_args.push_back(value);
-                self.advance();
-                true
-            }
-            */
             LCode::CallValue(base) => {
                 let base = self.m.resolve_code_offset(*base);
-                //let v = self.m.resolve_code_offset(inds.clone().offset());
                 let value = self.resolve_value(base)?;
                 self.call_args.push_back(value);
                 self.advance();
@@ -623,7 +548,7 @@ impl<'a> Interp<'a> {
                     assert!(self.call_args.len() <= 1);
                     if self.call_args.len() == 1 {
                         let value = self.call_args.pop_back().unwrap();
-                        self.stack.last_mut().unwrap().values.insert(target, value);
+                        self.values.insert(target, value);
                     }
 
                     self.jump(target.succ());
