@@ -51,7 +51,7 @@ impl Value {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum ScopeType {
     Static,
     Function,
@@ -76,7 +76,7 @@ impl Scope {
 }
 
 pub struct Interp<'a> {
-    m: &'a dyn ICodeModule,
+    m: &'a Flatten<Module>,
     b: &'a mut NodeBuilder,
     pos: ValueId,
     stack: Vec<Scope>,
@@ -87,15 +87,15 @@ pub struct Interp<'a> {
 }
 
 impl<'a> Interp<'a> {
-    pub fn new(m: &'a Flatten<Module>, b: &'a mut NodeBuilder, name: StringKey) -> Self {
-        let link_id = m.lookup_name(&name).unwrap();
-        let pos = m.resolve_code_offset(link_id.into());
+    pub fn new(m: &'a Flatten<Module>, b: &'a mut NodeBuilder) -> Self {
         let scope = Scope::new(ScopeType::Static, None);
 
         let block_id = m.static_block_id();
         let block = m.blocks.get_block(block_id);
         let links = block.iter().collect::<Vec<_>>();
         let mut values = HashMap::new();
+
+        let module = m.resolve_code_offset(links.first().unwrap().into());
 
         // statics
         for link_id in links {
@@ -114,11 +114,11 @@ impl<'a> Interp<'a> {
         Self {
             m,
             b,
-            pos,
+            pos: module,
             stack: vec![scope],
             call_args: VecDeque::new(),
             return_link_id: None,
-            jump_type: ScopeType::Function,
+            jump_type: ScopeType::Static,
             values,
         }
     }
@@ -153,8 +153,12 @@ impl<'a> Interp<'a> {
         self.stack.last_mut().unwrap().args.pop_front().unwrap()
     }
 
+    pub fn save_value_at_pos(&mut self, pos: ValueId, value: Value) {
+        self.values.insert(pos, value);
+    }
+
     pub fn save_value(&mut self, value: Value) {
-        self.values.insert(self.pos, value);
+        self.save_value_at_pos(self.pos, value);
     }
 
     fn get_value(&self, v: ValueId) -> Option<Value> {
@@ -174,22 +178,16 @@ impl<'a> Interp<'a> {
         let code = &entry.code;
 
         match code {
-            LCode::Arg(_index) => {
-                return Ok(self.get_value(v).unwrap());
-            }
-            LCode::Declare => {
-                let value = self.values.get(&v).unwrap().clone();
-                return Ok(value);
-            }
-
             LCode::Val(_)
             | LCode::Load(_)
+            | LCode::Arg(_)
             | LCode::Call(_)
             | LCode::Op2(_)
+            | LCode::Declare
             | LCode::NaryOp(_)
             | LCode::Ternary(_, _, _)
             | LCode::Op1(_) => {
-                return Ok(self.values.get(&v).unwrap().clone());
+                return Ok(self.get_value(v).unwrap());
             }
 
             LCode::Tuple(link_ids) => {
@@ -248,7 +246,7 @@ impl<'a> Interp<'a> {
         } else {
             v
         };
-        self.values.insert(v_decl, value);
+        self.save_value_at_pos(v_decl, value);
     }
 
     pub fn step(&mut self) -> Result<bool> {
@@ -265,8 +263,10 @@ impl<'a> Interp<'a> {
                 println!("@{}: label: {}, {:?}", pos, s_name, self.call_args);
 
                 // load args into scope
-                let scope = Scope::new(self.jump_type, self.return_link_id);
-                self.stack.push(scope);
+                if self.jump_type == ScopeType::Function {
+                    let scope = Scope::new(self.jump_type, self.return_link_id);
+                    self.stack.push(scope);
+                }
 
                 self.advance();
                 true
@@ -293,7 +293,7 @@ impl<'a> Interp<'a> {
                 let v_value = self.m.resolve_code_offset(v.into());
                 let value = self.resolve_value(v_value)?;
                 if self.values.contains_key(&v_decl) {
-                    self.values.insert(v_decl, value);
+                    self.save_value_at_pos(v_decl, value);
                     self.advance();
                     return Ok(true);
                 }
@@ -515,7 +515,7 @@ impl<'a> Interp<'a> {
                     if self.call_args.len() > 0 {
                         let value = self.call_args.pop_back().unwrap();
                         // save the value in the return link
-                        self.values.insert(target, value);
+                        self.save_value_at_pos(target, value);
                     }
 
                     // only support a single return value
@@ -539,6 +539,33 @@ impl<'a> Interp<'a> {
 
         Ok(result)
     }
+
+    pub fn run(&mut self, name: StringKey) -> Vec<Value> {
+        let link_id = self.m.lookup_name(&name).unwrap();
+        let pos = self.m.resolve_code_offset(link_id.into());
+        self.return_link_id = None;
+        self.jump_type = ScopeType::Function;
+        self.pos = pos;
+        loop {
+            //let pos = interp.pos;
+            //let code = interp.m.get_code(pos);
+            let r = self.step();
+            //println!("step: {}, {}", pos, interp.format_code(pos));
+            //println!("\tcall_args: {:?}", interp.call_args);
+            //for (index, scope) in interp.stack.iter().enumerate() {
+            //println!("\t[{}] scope: {:?}", index, scope);
+            //}
+            if let Ok(cond) = r {
+                if !cond {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+        let values = self.call_args.drain(..).collect();
+        values
+    }
 }
 
 pub fn interp<'c>(
@@ -559,31 +586,14 @@ pub fn interp<'c>(
     let _shared = paths.iter().map(|p| p.as_str()).collect::<Vec<_>>();
 
     let main = b.labels.s("main");
-    let mut interp = Interp::new(m, b, main);
-    loop {
-        //let pos = interp.pos;
-        //let code = interp.m.get_code(pos);
-        let r = interp.step();
-        //println!("step: {}, {}", pos, interp.format_code(pos));
-        //println!("\tcall_args: {:?}", interp.call_args);
-        //for (index, scope) in interp.stack.iter().enumerate() {
-        //println!("\t[{}] scope: {:?}", index, scope);
-        //}
-
-        if let Ok(cond) = r {
-            if !cond {
-                break;
-            }
-        } else {
-            break;
-        }
-    }
+    let mut interp = Interp::new(m, b);
+    let values = interp.run(main);
 
     let mut result: i32 = -1;
-    println!("exec: {:?}, {:?}", interp.call_args, interp.stack);
-    if let Some(Value::Int(value)) = interp.call_args.get(0) {
+    println!("exec: {:?}, {:?}", values, interp.stack);
+    if let Some(Value::Int(value)) = values.get(0) {
         result = *value as i32;
     }
-    println!("main({:?}) => {:?}", interp.call_args, result);
+    println!("main({:?}) => {:?}", values, result);
     result
 }
