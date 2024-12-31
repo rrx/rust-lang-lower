@@ -140,6 +140,7 @@ impl<'a> Interp<'a> {
     }
 
     pub fn call(&mut self, target: ValueId) {
+        self.return_link_id = Some(self.pos);
         self.jump_type = ScopeType::Function;
         self.pos = target;
     }
@@ -186,6 +187,7 @@ impl<'a> Interp<'a> {
             | LCode::Call(_)
             | LCode::Op2(_)
             | LCode::NaryOp(_)
+            | LCode::Ternary(_, _, _)
             | LCode::Op1(_) => {
                 return Ok(self.values.get(&v).unwrap().clone());
             }
@@ -226,27 +228,6 @@ impl<'a> Interp<'a> {
         }
     }
 
-    /*
-    pub fn resolve_declaration(&mut self, v: ValueId) -> Value {
-        let code = self.m.get_code(v);
-
-        match code {
-            LCode::Declare => {
-                if let Some(value) = self.values.get(&v) {
-                    return value.clone();
-                }
-            }
-            LCode::Val(_) => {
-                if let Some(value) = self.values.get(&v) {
-                    return value.clone();
-                }
-            }
-            _ => unimplemented!("{:?}", code),
-        }
-        unreachable!()
-    }
-    */
-
     fn unwind(&mut self) -> Scope {
         loop {
             let scope = self.stack.pop().unwrap();
@@ -258,7 +239,8 @@ impl<'a> Interp<'a> {
         }
     }
 
-    fn store_value(&mut self, v: ValueId, value: Value) {
+    fn store_value(&mut self, value: Value) {
+        let v = self.pos;
         let entry = self.m.get_entry(v);
         let v_decl = if let VarDefinitionSpace::Stack(decl_link_id) = entry.mem {
             let v_decl = self.m.resolve_code_offset(decl_link_id.into());
@@ -292,7 +274,7 @@ impl<'a> Interp<'a> {
 
             LCode::Arg(_) => {
                 if let Some(value) = self.call_args.pop_front() {
-                    self.store_value(pos, value);
+                    self.store_value(value);
                     self.advance();
                 } else {
                     unreachable!("missing arg: {}", pos);
@@ -328,38 +310,23 @@ impl<'a> Interp<'a> {
 
             LCode::Call(f) => {
                 let v_func = self.m.resolve_code_offset(f.into());
-                self.return_link_id = Some(self.pos);
                 self.call(v_func);
                 true
             }
 
             LCode::Tuple(_) => {
                 let value = self.resolve_value(self.pos)?;
-                self.save_value(value);
+                self.store_value(value);
                 self.advance();
                 true
             }
+
             LCode::NaryOp(op) => {
                 let values = self.call_args.drain(..).collect();
-                //let orig_values = self.m.get_previous_values(pos);
-
-                /*
-                let mut values = vec![];
-                for offset in orig_values {
-                    let v = self.m.resolve_code_offset(offset);
-                    values.push(self.resolve_value(v)?);
-                }
-
-                // remove args
-                for _ in 0..values.len() {
-                    self.call_args.pop_front();
-                }
-                */
-
                 let output = match op {
                     NaryOperation::Struct => Value::Tuple(values),
                 };
-                self.store_value(pos, output);
+                self.store_value(output);
                 self.advance();
                 true
             }
@@ -371,7 +338,7 @@ impl<'a> Interp<'a> {
                     (UnaryOperation::Minus, Value::Float(i1)) => Value::Float(-i1),
                     _ => unimplemented!("{:?}", (op, v1)),
                 };
-                self.store_value(self.pos, v);
+                self.store_value(v);
                 self.advance();
                 true
             }
@@ -410,7 +377,7 @@ impl<'a> Interp<'a> {
                         return Ok(false);
                     }
                 };
-                self.store_value(self.pos, v);
+                self.store_value(v);
                 self.advance();
                 true
             }
@@ -419,14 +386,14 @@ impl<'a> Interp<'a> {
                 // the index is actually the block_id
                 let index = block_id.index() as i64;
                 let value = Value::Int(index);
-                self.store_value(self.pos, value);
+                self.store_value(value);
                 self.advance();
                 true
             }
 
             LCode::Val(lit) => {
                 let value = Value::from_lit(lit);
-                self.store_value(self.pos, value);
+                self.store_value(value);
                 self.advance();
                 true
             }
@@ -547,6 +514,7 @@ impl<'a> Interp<'a> {
                 if let Some(target) = scope.return_link_id {
                     if self.call_args.len() > 0 {
                         let value = self.call_args.pop_back().unwrap();
+                        // save the value in the return link
                         self.values.insert(target, value);
                     }
 
