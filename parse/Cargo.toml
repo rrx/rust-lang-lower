@@ -13,7 +13,7 @@ lower_mlir = { path = "../lower_mlir" }
 
 starlark_syntax = { git = "https://github.com/facebookexperimental/starlark-rust.git", branch = "main" }
 log = "*"
-simple_logger = "^4.3.0"
+fern = "^0.7"
 anyhow = "*"
 thiserror = "*"
 argh = "0.1.12"

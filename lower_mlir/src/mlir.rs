@@ -161,18 +161,20 @@ impl<'c> OpCollection<'c> {
 }
 
 pub fn codegen<'c>(
+    config: &flat::Config,
     blockify: &Flatten<flat::Module>,
     module_block_id: ValueId,
     context: &'c Context,
     module: &mut melior::ir::Module<'c>,
     b: &mut NodeBuilder,
 ) -> Result<()> {
-    let mut gen = MLIRGenerator::new(context, blockify, module_block_id, b);
+    let mut gen = MLIRGenerator::new(config, context, blockify, module_block_id, b);
     gen.lower_module(module)?;
     Ok(())
 }
 
 pub struct MLIRGenerator<'c> {
+    config: &'c flat::Config,
     pub(crate) context: &'c Context,
     pub(crate) blockify: &'c Flatten<Module>,
     index: IndexMap<ValueId, SymIndex>,
@@ -184,12 +186,14 @@ pub struct MLIRGenerator<'c> {
 
 impl<'c> MLIRGenerator<'c> {
     pub fn new(
+        config: &'c flat::Config,
         context: &'c Context,
         blockify: &'c Flatten<Module>,
         module_block_id: ValueId,
         b: &'c NodeBuilder,
     ) -> Self {
         Self {
+            config,
             context,
             blockify,
             index: IndexMap::new(),
@@ -201,13 +205,14 @@ impl<'c> MLIRGenerator<'c> {
     }
 
     pub fn codegen(
+        config: &'c flat::Config,
         blockify: &'c Flatten<Module>,
         module_block_id: ValueId,
         context: &'c Context,
         module: &'c mut melior::ir::Module<'c>,
         b: &'c mut NodeBuilder,
     ) -> Result<()> {
-        let mut gen = Self::new(context, blockify, module_block_id, b);
+        let mut gen = Self::new(config, context, blockify, module_block_id, b);
         gen.lower_module(module)?;
         Ok(())
     }
@@ -707,7 +712,9 @@ impl<'c> MLIRGenerator<'c> {
     pub fn lower_code(&mut self, v: ValueId) -> Result<()> {
         let code = self.blockify.get_code(v);
         let location = self.get_location(v);
-        //println!("lower: {:?}", (v, code));
+        if self.config.verbose {
+            println!("lower: {:?}", (v, code));
+        }
 
         match code {
             LCode::Label => {

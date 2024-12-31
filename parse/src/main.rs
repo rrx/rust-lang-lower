@@ -1,6 +1,5 @@
 use anyhow::Result;
 use argh::FromArgs;
-use simple_logger::{set_up_color_terminal, SimpleLogger};
 use std::error::Error;
 use std::fs::File;
 use std::io::Write;
@@ -50,9 +49,8 @@ fn make_path<'a>(path: &'a str, extension: &str) -> String {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    set_up_color_terminal();
-    SimpleLogger::new().init().unwrap();
     let config: Config = argh::from_env();
+    setup_logger(&config)?;
     let mut b: NodeBuilder = NodeBuilder::new();
     let r = run(&config, &mut b);
     b.spans.diagnostics_dump();
@@ -60,13 +58,28 @@ fn main() -> Result<(), Box<dyn Error>> {
     std::process::exit(exit_code);
 }
 
-fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
-    if config.verbose {
-        log::set_max_level(log::LevelFilter::Warn);
-    } else {
-        log::set_max_level(log::LevelFilter::Info);
-    }
+fn setup_logger(config: &Config) -> Result<(), fern::InitError> {
+    let logger = fern::Dispatch::new()
+        .format(move |out, message, record| {
+            out.finish(format_args!(
+                "[{:<5} {}] {}",
+                record.level(),
+                record.target(),
+                message
+            ))
+        })
+        .level_for("ena", log::LevelFilter::Info)
+        .chain(std::io::stdout());
 
+    if config.verbose {
+        logger.level(log::LevelFilter::Debug).apply()?;
+    } else {
+        logger.level(log::LevelFilter::Info).apply()?;
+    }
+    Ok(())
+}
+
+fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
     let output_filename;
     let path = if let Some(out_filename) = &config.output {
         output_filename = out_filename;
@@ -120,14 +133,16 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
 
     let table_path = make_path(&output_filename, "table.txt");
     let s = m.dump_code_table(&table_path, b);
+    if config.verbose {
+        // dump code table
+        println!("{}", s);
+    }
 
     let mut cfg_path = path.clone();
     cfg_path.set_extension("cfg.mmd");
     m.flow_graph(cfg_path.clone().to_str().unwrap(), &b)?;
 
     if config.verbose {
-        // dump table
-        println!("{}", s);
         m.blocks.dump_scopes();
         m.dump_variants(b);
         m.blocks.dump(b);
@@ -137,8 +152,12 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
         return Err(anyhow::Error::new(BlockifyError::Invalid).into());
     }
 
+    let conf = flat::Config {
+        verbose: config.verbose,
+    };
+
     if !config.interp {
-        lower_mlir::codegen(&m, ValueId::new(0), &context, &mut module, b)?;
+        lower_mlir::codegen(&conf, &m, ValueId::new(0), &context, &mut module, b)?;
         if config.verbose {
             module.as_operation().dump();
         }
@@ -157,20 +176,20 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
         let mut path = path.clone();
         path.set_extension("o");
         lower_mlir::save_object_file(&module, &path.to_str().unwrap());
-        println!("Wrote: {:?}", &path.as_os_str());
+        log::info!("Wrote: {:?}", &path.as_os_str());
         let mut path = path.clone();
         path.set_extension("mlir");
         let s = module.as_operation().to_string();
         let mut output = File::create(path.clone())?;
         write!(output, "{}", s)?;
-        println!("Wrote: {:?}", &path.as_os_str());
+        log::info!("Wrote: {:?}", &path.as_os_str());
     }
 
     let exit_code = if config.interp {
-        let exit_code = flat::interp::interp(&m.shared_libraries(), &m, "target/debug", b);
+        let exit_code = flat::interp::interp(&conf, &m.shared_libraries(), &m, "target/debug", b);
         exit_code
     } else if config.exec {
-        println!("exec");
+        log::info!("exec");
         let exit_code =
             lower_mlir::compile::exec_main(&m.shared_libraries(), &module, "target/debug");
         exit_code
@@ -180,7 +199,7 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
         let s = module.as_operation().to_string();
         let mut output = File::create(path.clone())?;
         write!(output, "{}", s)?;
-        println!("Wrote: {:?}", &path.as_os_str());
+        log::info!("Wrote: {:?}", &path.as_os_str());
         0
     };
     Ok(exit_code)

@@ -1,5 +1,5 @@
 use crate::{
-    Builtin, Flatten, ICodeModule, LCode, Module, NodeBuilder, UseIndex, ValueId,
+    Builtin, Config, Flatten, ICodeModule, LCode, Module, NodeBuilder, UseIndex, ValueId,
     VarDefinitionSpace,
 };
 use anyhow::Result;
@@ -76,6 +76,7 @@ impl Scope {
 }
 
 pub struct Interp<'a> {
+    config: &'a Config,
     m: &'a Flatten<Module>,
     b: &'a mut NodeBuilder,
     pos: ValueId,
@@ -87,7 +88,7 @@ pub struct Interp<'a> {
 }
 
 impl<'a> Interp<'a> {
-    pub fn new(m: &'a Flatten<Module>, b: &'a mut NodeBuilder) -> Self {
+    pub fn new(config: &'a Config, m: &'a Flatten<Module>, b: &'a mut NodeBuilder) -> Self {
         let scope = Scope::new(ScopeType::Static, None);
 
         let block_id = m.static_block_id();
@@ -112,6 +113,7 @@ impl<'a> Interp<'a> {
         }
 
         Self {
+            config,
             m,
             b,
             pos: module,
@@ -130,9 +132,6 @@ impl<'a> Interp<'a> {
     pub fn jump(&mut self, target: ValueId) {
         let entry = self.m.get_entry(self.pos);
         let ty = &entry.ty;
-        println!("ty: {:?}", ty);
-        println!("@{}: jump: {}", self.pos, target);
-
         // ensure arity match
         assert_eq!(ty.fields().len(), self.call_args.len());
         self.jump_type = ScopeType::Block;
@@ -259,9 +258,6 @@ impl<'a> Interp<'a> {
                 true
             }
             LCode::Label => {
-                let s_name = self.b.labels.r(entry.name.unwrap().into());
-                println!("@{}: label: {}, {:?}", pos, s_name, self.call_args);
-
                 // load args into scope
                 if self.jump_type == ScopeType::Function {
                     let scope = Scope::new(self.jump_type, self.return_link_id);
@@ -498,9 +494,9 @@ impl<'a> Interp<'a> {
                     Builtin::Print => {
                         assert_eq!(self.call_args.len(), bi.arity());
                         let value = self.call_args.pop_front().unwrap();
-                        println!("========================");
-                        println!("***print: {:?}", value);
-                        println!("========================");
+                        log::info!("========================");
+                        log::info!("***print: {:?}", value);
+                        log::info!("========================");
                         //assert!(false);
                         true
                     }
@@ -547,14 +543,13 @@ impl<'a> Interp<'a> {
         self.jump_type = ScopeType::Function;
         self.pos = pos;
         loop {
-            //let pos = interp.pos;
-            //let code = interp.m.get_code(pos);
+            let pos = self.pos;
             let r = self.step();
-            //println!("step: {}, {}", pos, interp.format_code(pos));
-            //println!("\tcall_args: {:?}", interp.call_args);
-            //for (index, scope) in interp.stack.iter().enumerate() {
-            //println!("\t[{}] scope: {:?}", index, scope);
-            //}
+            if self.config.verbose {
+                let entry = self.m.get_entry(pos);
+                log::debug!("step: {}, {:?}", pos, entry.code);
+                log::debug!("\tcall_args: {:?}", self.call_args);
+            }
             if let Ok(cond) = r {
                 if !cond {
                     break;
@@ -568,7 +563,8 @@ impl<'a> Interp<'a> {
     }
 }
 
-pub fn interp<'c>(
+pub fn interp(
+    config: &Config,
     shared: &[String],
     m: &Flatten<Module>,
     libpath: &str,
@@ -586,14 +582,15 @@ pub fn interp<'c>(
     let _shared = paths.iter().map(|p| p.as_str()).collect::<Vec<_>>();
 
     let main = b.labels.s("main");
-    let mut interp = Interp::new(m, b);
+    let mut interp = Interp::new(config, m, b);
     let values = interp.run(main);
 
-    let mut result: i32 = -1;
-    println!("exec: {:?}, {:?}", values, interp.stack);
-    if let Some(Value::Int(value)) = values.get(0) {
-        result = *value as i32;
-    }
-    println!("main({:?}) => {:?}", values, result);
+    log::info!("exec: {:?}, {:?}", values, interp.stack);
+    let result = if let Some(Value::Int(value)) = values.get(0) {
+        *value as i32
+    } else {
+        unreachable!("invalid return value: {:?}", values);
+    };
+    log::info!("main({:?}) => {:?}", values, result);
     result
 }

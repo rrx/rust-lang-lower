@@ -524,14 +524,14 @@ impl StarlarkParser {
 
     pub fn codegen<'c>(
         &mut self,
+        config: &flat::Config,
         blockify: &Flatten<Module>,
         module_block_id: ValueId,
         context: &'c lower_mlir::Context,
         module: &mut lower_mlir::Module<'c>,
         b: &mut NodeBuilder,
     ) -> Result<()> {
-        let mut gen = lower_mlir::MLIRGenerator::new(context, blockify, module_block_id, b);
-        gen.lower_module(module)?;
+        lower_mlir::codegen(&config, blockify, module_block_id, context, module, b)?;
         Ok(())
     }
 }

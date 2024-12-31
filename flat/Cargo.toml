@@ -15,6 +15,7 @@ petgraph = "0.6.4"
 tabled = "0.15.0"
 serde = "1.0"
 serde_json = "*"
+log = "*"
 
 [dev-dependencies]
 criterion = "0.3"

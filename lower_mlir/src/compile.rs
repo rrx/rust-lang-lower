@@ -28,7 +28,7 @@ pub fn exec_main<'c>(shared: &[String], module: &ir::Module<'c>, libpath: &str) 
         engine
             .invoke_packed("main", &mut [&mut result as *mut i32 as *mut ()])
             .unwrap();
-        println!("exec: {}", result);
+        log::info!("exec: {}", result);
         result
     }
 }
