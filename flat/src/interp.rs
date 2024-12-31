@@ -3,9 +3,9 @@ use crate::{
     VarDefinitionSpace,
 };
 use anyhow::Result;
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 
-use compile_core::{BinaryOperation, BlockId, Literal, NaryOperation, StringKey, UnaryOperation};
+use compile_core::{BinaryOperation, Literal, NaryOperation, StringKey, UnaryOperation};
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -63,7 +63,6 @@ struct Scope {
     ty: ScopeType,
     return_link_id: Option<ValueId>,
     args: VecDeque<Value>,
-    declarations: HashSet<ValueId>,
 }
 
 impl Scope {
@@ -72,12 +71,7 @@ impl Scope {
             ty,
             return_link_id,
             args: VecDeque::new(),
-            declarations: HashSet::new(),
         }
-    }
-
-    pub fn declare(&mut self, v: ValueId) {
-        self.declarations.insert(v);
     }
 }
 
@@ -96,13 +90,14 @@ impl<'a> Interp<'a> {
     pub fn new(m: &'a Flatten<Module>, b: &'a mut NodeBuilder, name: StringKey) -> Self {
         let link_id = m.lookup_name(&name).unwrap();
         let pos = m.resolve_code_offset(link_id.into());
-        let mut scope = Scope::new(ScopeType::Static, None);
+        let scope = Scope::new(ScopeType::Static, None);
 
         let block_id = m.static_block_id();
         let block = m.blocks.get_block(block_id);
         let links = block.iter().collect::<Vec<_>>();
         let mut values = HashMap::new();
 
+        // statics
         for link_id in links {
             let entry = m.get_link_entry(link_id);
             let code = &entry.code;
@@ -111,7 +106,6 @@ impl<'a> Interp<'a> {
                 LCode::Val(lit) => {
                     let value = Value::from_lit(lit);
                     values.insert(value_id, value);
-                    scope.declare(value_id);
                 }
                 _ => (),
             }
@@ -134,7 +128,13 @@ impl<'a> Interp<'a> {
     }
 
     pub fn jump(&mut self, target: ValueId) {
+        let entry = self.m.get_entry(self.pos);
+        let ty = &entry.ty;
+        println!("ty: {:?}", ty);
         println!("@{}: jump: {}", self.pos, target);
+
+        // ensure arity match
+        assert_eq!(ty.fields().len(), self.call_args.len());
         self.jump_type = ScopeType::Block;
         self.pos = target;
     }
@@ -177,7 +177,8 @@ impl<'a> Interp<'a> {
                 return Ok(self.get_value(v).unwrap());
             }
             LCode::Declare => {
-                return Ok(self.resolve_declaration(v));
+                let value = self.values.get(&v).unwrap().clone();
+                return Ok(value);
             }
 
             LCode::Val(_)
@@ -225,6 +226,7 @@ impl<'a> Interp<'a> {
         }
     }
 
+    /*
     pub fn resolve_declaration(&mut self, v: ValueId) -> Value {
         let code = self.m.get_code(v);
 
@@ -243,6 +245,7 @@ impl<'a> Interp<'a> {
         }
         unreachable!()
     }
+    */
 
     fn unwind(&mut self) -> Scope {
         loop {
@@ -264,7 +267,6 @@ impl<'a> Interp<'a> {
             v
         };
         self.values.insert(v_decl, value);
-        self.stack.last_mut().unwrap().declare(v_decl);
     }
 
     pub fn step(&mut self) -> Result<bool> {
@@ -299,7 +301,6 @@ impl<'a> Interp<'a> {
             }
 
             LCode::Declare => {
-                self.stack.last_mut().unwrap().declare(self.pos);
                 self.save_value(Value::Uninitialized);
                 self.advance();
                 true
@@ -319,7 +320,7 @@ impl<'a> Interp<'a> {
 
             LCode::Load(decl) => {
                 let v_decl = self.m.resolve_code_offset(decl.into());
-                let value = self.resolve_declaration(v_decl);
+                let value = self.resolve_value(v_decl).unwrap();
                 self.save_value(value);
                 self.advance();
                 true
@@ -417,7 +418,6 @@ impl<'a> Interp<'a> {
             LCode::Val(Literal::Block(block_id)) => {
                 // the index is actually the block_id
                 let index = block_id.index() as i64;
-
                 let value = Value::Int(index);
                 self.store_value(self.pos, value);
                 self.advance();
@@ -545,11 +545,13 @@ impl<'a> Interp<'a> {
             LCode::Return | LCode::Yield => {
                 let scope = self.unwind();
                 if let Some(target) = scope.return_link_id {
-                    assert!(self.call_args.len() <= 1);
-                    if self.call_args.len() == 1 {
+                    if self.call_args.len() > 0 {
                         let value = self.call_args.pop_back().unwrap();
                         self.values.insert(target, value);
                     }
+
+                    // only support a single return value
+                    assert!(self.call_args.len() <= 1);
 
                     self.jump(target.succ());
                     true

@@ -537,7 +537,7 @@ impl FlattenInner {
             }
 
             LCode::Switch(_, h) => {
-                for (index, block_id) in h.iter() {
+                for block_id in h.values() {
                     self.blocks
                         .block_succ(self.current_block_id(), *block_id, Successor::Jump);
                     self.blocks.block_succ(
@@ -573,7 +573,7 @@ impl FlattenInner {
             ),
 
             LCode::Switch(_, branches) => {
-                for (index, b) in branches.iter() {
+                for b in branches.values() {
                     self.scoped_continuations.connect(
                         ContinuationFlow::Jump(link_id),
                         ContinuationFlow::Block(*b),

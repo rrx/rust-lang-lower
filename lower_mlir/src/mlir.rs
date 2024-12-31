@@ -27,7 +27,7 @@ use std::collections::VecDeque;
 
 use compile_core::{AstType, BlockId, Literal, NaryOperation, ReturnType, Span, UnaryOperation};
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 pub trait LowerIR<'c> {
     fn lower_literal(&mut self, v: ValueId, lit: &compile_core::Literal);
