@@ -397,13 +397,7 @@ impl FlattenInner {
             // if it's not already baked, we need to do that here
             self.switch_blocks(self.static_block_id());
 
-            let r = self.push_bake_function(
-                abstraction_id,
-                call_func_type.clone(),
-                name,
-                global_key,
-                b,
-            );
+            let r = self.push_bake_function(abstraction_id, call_func_type.clone(), global_key, b);
             let v_entry = r.link_id.unwrap();
             self.switch_blocks(current_block_id);
             v_entry
@@ -425,7 +419,7 @@ impl FlattenInner {
     ) -> Result<LinkId> {
         let current_block_id = self.current_block_id();
         if let Some((_, abstraction_id)) = self.blocks.resolve_lambda(current_block_id, name) {
-            let r = self.push_bake_function(abstraction_id, func_type, name, name, b);
+            let r = self.push_bake_function(abstraction_id, func_type, name, b);
             self.switch_blocks(current_block_id);
             Ok(r.link_id.unwrap())
         } else {
@@ -440,7 +434,6 @@ impl FlattenInner {
         &mut self,
         abstraction_id: AbstractionId,
         def_func_ty: AstFuncType,
-        name: StringKey,
         global_name: StringKey,
         b: &mut NB,
     ) -> FlattenResult {
@@ -474,7 +467,6 @@ impl FlattenInner {
         let (_block_id, entry_link_id, _, argvec, _, _r, _entry_args) = self
             .push_bake_lambda_and_update_next(
                 abstraction_id,
-                name,
                 global_name,
                 fun_scope_id,
                 fun_block_id,
@@ -495,7 +487,6 @@ impl FlattenInner {
     fn push_bake_lambda_and_update_next(
         &mut self,
         abstraction_id: AbstractionId,
-        local_name: StringKey,
         global_name: StringKey,
         fun_scope_id: ScopeId,
         fun_block_id: BlockId,
@@ -517,6 +508,7 @@ impl FlattenInner {
         let a = self.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
         let body = a.def.body.clone().unwrap();
+        let local_name = a.name;
 
         let result = self.push_bake_lambda(
             local_name,
@@ -863,7 +855,6 @@ impl FlattenInner {
 
         let result = self.push_bake_lambda_and_update_next(
             abstraction_id,
-            name,
             global_name,
             fun_scope_id,
             fun_block_id,
@@ -1095,7 +1086,6 @@ impl FlattenInner {
 
             let result = self.push_bake_lambda_and_update_next(
                 abstraction_id,
-                lookup_name,
                 lookup_name,
                 fun_scope_id,
                 fun_block_id,
