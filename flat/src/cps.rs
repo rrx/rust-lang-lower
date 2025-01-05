@@ -559,7 +559,7 @@ impl FlattenInner {
         false
     }
 
-    fn resolve_cps_single(&mut self, d: DeferredGoto, b: &mut NB) -> Result<()> {
+    fn resolve_cps_single(&mut self, d: DeferredGoto, b: &mut NB) {
         // this is where we actually do the rewrite
         match d.deferred_type {
             DeferredType::Name(arg_link_id) => {
@@ -674,7 +674,6 @@ impl FlattenInner {
 
         // we just pushed a bunch of unwind blocks, we need to start over on deferrals
         self.resolve_deferred(b);
-        Ok(())
     }
 
     pub(super) fn resolve_open_identifiers(&mut self, b: &mut NB) {
@@ -728,15 +727,14 @@ impl FlattenInner {
         }
     }
 
-    pub(super) fn resolve_cps(&mut self, b: &mut NB) -> Result<()> {
+    pub(super) fn resolve_cps(&mut self, b: &mut NB) {
         loop {
             if let Some(d) = self.deferred_goto.pop_cps() {
-                self.resolve_cps_single(d, b)?;
+                self.resolve_cps_single(d, b);
             } else {
                 break;
             }
         }
-        Ok(())
     }
 
     pub(super) fn resolve_deferred(&mut self, b: &mut NB) {

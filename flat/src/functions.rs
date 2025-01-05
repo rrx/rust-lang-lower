@@ -534,8 +534,7 @@ impl FlattenInner {
             b,
         );
 
-        let (fun_block_id, entry_link_id, next_arg_ty, ret_block_ty, variant_ty, entry_args) =
-            result;
+        let (fun_block_id, entry_link_id, next_arg_ty, ret_block_ty, entry_args) = result;
 
         // push the continuation block to which the function returns control
         // this might just be the return block
@@ -598,7 +597,6 @@ impl FlattenInner {
         LinkId,
         AstType,
         AstFuncType, // next block return type
-        AstType,     // variant type
         ArgVec,      // entry args
     ) {
         // lower a function as an inline block
@@ -662,7 +660,6 @@ impl FlattenInner {
             entry_link_id,
             next_arg_ty,
             ret_block_ty,
-            variant_ty,
             entry_args,
         )
     }
