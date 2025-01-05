@@ -66,7 +66,6 @@ impl ReturnType {
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub enum AstType {
-    //Number,
     Int,
     Index,
     String,
@@ -77,7 +76,6 @@ pub enum AstType {
     Error,
     Type,
     JumpTarget,
-    //TargetUnion(Vec<AstType>, Vec<BlockId>),
     Args(Box<AstType>),   // *args type
     KwArgs(Box<AstType>), // **kwargs type
     Array(Box<AstType>, Vec<usize>),
@@ -91,12 +89,12 @@ pub enum AstType {
     Union(Vec<(Option<StringKey>, AstType)>),
     Ptr(Box<AstType>),
     // Func(parameters, return type)
-    Func(Box<AstFuncType>), //Box<AstType>, Box<ReturnType>),
+    Func(Box<AstFuncType>),
     TypeArg(u32),
     Variable(u32),
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub struct AstFuncType {
     pub args: AstType,
     pub ret: ReturnType,
@@ -118,10 +116,16 @@ impl From<AstFuncType> for AstType {
     }
 }
 
-impl std::fmt::Display for AstFuncType {
+impl std::fmt::Debug for AstFuncType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         assert!(self.args.is_composite());
-        write!(f, "fn({})->{}", self.args, self.ret)
+        write!(f, "fn({}->{})", self.args, self.ret)
+    }
+}
+
+impl std::fmt::Display for AstFuncType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
     }
 }
 
@@ -132,10 +136,10 @@ impl std::fmt::Display for AstType {
                 write!(f, "{}", func_ty)
             }
             Self::Struct(fields) => {
-                //let mut t = f.debug_struct("Struct");
-                let mut t = f.debug_tuple("Struct");
+                let mut t = f.debug_struct("Struct");
+                //let mut t = f.debug_tuple("Struct");
                 for (_index, (key, ty)) in fields.iter().enumerate() {
-                    t.field(&format!("{}:{}", key.map(|k| k.index()).unwrap_or(0), ty));
+                    t.field(&format!("{}", key.map(|k| k.index()).unwrap_or(0)), ty);
                 }
                 t.finish()
             }

@@ -9,7 +9,7 @@ use std::convert::Into;
 use crate::{
     argvec_type, ArgVec, BlockId, ContinuationFlow, DeferredGoto, DeferredType, FlattenInner,
     FlattenResult, LCode, LinkId, NodeBuilder as NB, PushContext, ScopeId, ScopeState, ScopeType,
-    Successor, VarDefinitionSpace, VariantId,
+    Successor, VarDefinitionSpace,
 };
 
 use std::collections::{HashMap, HashSet};
@@ -24,7 +24,7 @@ impl FlattenInner {
         call_span_id: SpanId,
         new_scope: bool,
         b: &mut NB,
-    ) -> Result<(VariantId, ScopeId, BlockId, AstType)> {
+    ) -> Result<(ScopeId, BlockId, AstType)> {
         let s_name = b.labels.r(name.into());
         // call in the context of the caller, which is a goto
         let current_block_id = self.current_block_id();
@@ -47,14 +47,14 @@ impl FlattenInner {
         let call_arg_type = AstType::Struct(call_func_type.fields());
         b.unify(&call_arg_type, call_span_id, &func_type.args, def_span_id);
 
-        let (variant_id, fun_block_id, fun_scope_id, def_arg_type) =
-            if let Some((variant_id, resolve_type, link_id, fun_scope_id)) =
+        let (fun_block_id, fun_scope_id, def_arg_type) =
+            if let Some((resolve_type, link_id, fun_scope_id)) =
                 self.resolve_function_name(scope_id, &name, &call_arg_type, b)
             {
                 let entry = self.get_entry(link_id);
                 let fun_block_id = entry.block_id;
                 b.unify(&call_arg_type, call_span_id, &resolve_type, def_span_id);
-                (variant_id, fun_block_id, fun_scope_id, resolve_type)
+                (fun_block_id, fun_scope_id, resolve_type)
             } else {
                 let scope = self.blocks.get_scope(scope_id);
                 let block_id = scope.entry_block();
@@ -116,12 +116,12 @@ impl FlattenInner {
                     self.push_placeholder_terminal(r_ty1, def_span_id);
                 }
 
-                (variant_id, fun_block_id, fun_scope_id, r_ty2)
+                (fun_block_id, fun_scope_id, r_ty2)
             };
 
         self.switch_blocks(current_block_id);
 
-        Ok((variant_id, fun_scope_id, fun_block_id, def_arg_type))
+        Ok((fun_scope_id, fun_block_id, def_arg_type))
     }
 
     pub(crate) fn gen_unwind_cps(
@@ -158,7 +158,7 @@ impl FlattenInner {
             };
 
             let abstraction_id = self.save_ast_template(block_id, &key, &lambda, call_span_id);
-            let (_variant_id, _scope_id, block_id, _ty) = self
+            let (_scope_id, block_id, _ty) = self
                 .gen_cps_block_with_type(
                     key,
                     scope_id,
@@ -284,7 +284,6 @@ impl FlattenInner {
         call_span_id: SpanId,
         b: &mut NB,
     ) -> Result<(
-        VariantId,
         ScopeId,
         BlockId,
         AstType,
@@ -310,7 +309,7 @@ impl FlattenInner {
         let call_func_type =
             AstFuncType::new(call_arg_type.clone().into(), ReturnType::Never.into()).into();
 
-        let (variant_id, fun_scope_id, fun_block_id, def_arg_type) = self.gen_cps_block_with_type(
+        let (fun_scope_id, fun_block_id, def_arg_type) = self.gen_cps_block_with_type(
             name,
             scope_id,
             abstraction_id,
@@ -345,7 +344,6 @@ impl FlattenInner {
         let def_ret_type = ReturnType::Never;
 
         return Ok((
-            variant_id,
             fun_scope_id,
             fun_block_id,
             def_func_type,
@@ -534,7 +532,7 @@ impl FlattenInner {
 
                     // push and jump
                     // TODO: this function needs to handle unwind
-                    let (_, _fun_scope_id, _fun_block_id, _, _, _, _, _link_id) = self
+                    let (_fun_scope_id, _fun_block_id, _, _, _, _, _link_id) = self
                         .push_cps_block(
                             d.name.unwrap(),
                             d.scope_id,

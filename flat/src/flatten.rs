@@ -287,11 +287,11 @@ impl FlattenInner {
         &self,
         start_scope_id: ScopeId,
         name: &StringKey,
-    ) -> Vec<(VariantId, AstType, LinkId, ScopeId)> {
+    ) -> Vec<(AstType, LinkId, ScopeId)> {
         let mut out = vec![];
         for variant_id in self.blocks.list_variants_by_name(start_scope_id, name) {
             let v = self.variants.get(variant_id);
-            out.push((variant_id, v.ty.clone(), v.link_id, start_scope_id));
+            out.push((v.ty.clone(), v.link_id, start_scope_id));
         }
         out
     }
@@ -302,15 +302,13 @@ impl FlattenInner {
         name: &StringKey,
         call_func_type: &AstType,
         b: &mut NB,
-    ) -> Option<(VariantId, AstType, LinkId, ScopeId)> {
+    ) -> Option<(AstType, LinkId, ScopeId)> {
         let mut result = None;
         let snapshot = b.types.u.snapshot();
         let ty = call_func_type.clone().into();
-        for (variant_id, r_ty, link_id, scope_id) in
-            self.resolve_all_function_name(start_scope_id, &name)
-        {
+        for (r_ty, link_id, scope_id) in self.resolve_all_function_name(start_scope_id, &name) {
             if let Ok(_) = b.types.u.unify(&ty, &r_ty) {
-                result = Some((variant_id, r_ty, link_id, scope_id));
+                result = Some((r_ty, link_id, scope_id));
                 break;
             }
         }
@@ -356,7 +354,7 @@ impl FlattenInner {
         let block = self.blocks.get_block(block_id);
         let scope_id = block.scope();
 
-        let (_variant_id, _fun_scope_id, fun_block_id, _) =
+        let (_fun_scope_id, fun_block_id, _) =
             self.gen_cps_block_with_type(name, scope_id, abstraction_id, &ty, span_id, false, b)?;
 
         // now replace the abstraction code
@@ -812,9 +810,8 @@ impl FlattenInner {
         let start_block_id = self.current_block_id();
         let scope = self.blocks.get_scope(decl_scope_id);
         let decl_block_id = scope.entry_block();
-        let return_links = jump_args.iter().map(|j| j.1).collect::<Vec<_>>();
         let mut copied_link_ids = vec![];
-        for link_id in return_links.iter() {
+        for (_, link_id, _, _) in jump_args.iter() {
             let entry = self.get_entry(*link_id);
             let ty = entry.ty.clone();
             let key = b.labels.fresh_key("r");
@@ -854,9 +851,12 @@ impl FlattenInner {
         let target_scope_id = self.blocks.get_block(target_block_id).scope();
         assert_ne!(start_block_id, target_block_id);
 
-        println!(
+        log::debug!(
             "jump: {}{}=>{}{}",
-            start_block_id, start_scope_id, target_block_id, target_scope_id
+            start_block_id,
+            start_scope_id,
+            target_block_id,
+            target_scope_id
         );
 
         let scope_changed = start_scope_id != target_scope_id;
@@ -867,16 +867,16 @@ impl FlattenInner {
                     .blocks
                     .find_scope_next_down(start_scope_id, target_scope_id)
                     .unwrap();
-                println!("down: {:?}", down);
+                log::debug!("down: {:?}", down);
                 (target_block_id, jump_args)
             } else {
-                println!("unwind: {:?}", unwind);
+                log::debug!("unwind: {:?}", unwind);
                 let copied_link_ids = self.push_store_args(target_scope_id, jump_args, span_id, b);
                 let target = self.push_unwind(target_block_id, copied_link_ids, span_id, b);
                 (target, vec![])
             }
         } else {
-            println!("nochange: {:?}", start_scope_id);
+            log::debug!("nochange: {:?}", start_scope_id);
             (target_block_id, jump_args)
         }
     }
@@ -1763,16 +1763,16 @@ impl FlattenInner {
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::BlockReference(expr)) => {
-                let (_variant_id, block_id) = match &expr.node {
+                let block_id = match &expr.node {
                     Ast::Identifier(key) => {
                         let key = *key;
                         let ty = AstType::func(vec![], AstType::Unit);
                         let scope_id = block.scope();
-                        if let Some((variant_id, _resolve_type, link_id, _scope_id)) =
+                        if let Some((_resolve_type, link_id, _scope_id)) =
                             self.resolve_function_name(scope_id, &key, &ty, b)
                         {
                             let entry = self.get_entry(link_id);
-                            (variant_id, entry.block_id)
+                            entry.block_id
                         } else {
                             let link_id = self
                                 .push_node(*expr, PushContext::Default, b)?
@@ -1780,12 +1780,7 @@ impl FlattenInner {
                                 .unwrap();
                             let entry = self.get_entry(link_id);
                             match &entry.code {
-                                LCode::Label => {
-                                    let variant_id =
-                                        self.variants.block_lookup.get(&entry.block_id).unwrap();
-                                    let _v = self.variants.get_by_block(entry.block_id).unwrap();
-                                    (*variant_id, entry.block_id)
-                                }
+                                LCode::Label => entry.block_id,
                                 LCode::PlaceholderCodeReference => {
                                     let s_name = b.labels.r(key.into());
                                     unimplemented!("{:?}", (s_name, entry));
@@ -2297,10 +2292,7 @@ impl FlattenInner {
                 let func_link_id = r.link_id.unwrap();
                 // expression must be a function with no arguments.  We bake it here.
                 let ty = self.get_type(func_link_id).clone();
-                println!("ty: {:?}", ty);
-
                 let entry = self.get_entry(func_link_id);
-                println!("entry: {:?}", entry);
 
                 let func_block_id = match &entry.code {
                     LCode::Val(Literal::Block(block_id)) => *block_id,

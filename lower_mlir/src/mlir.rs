@@ -712,9 +712,9 @@ impl<'c> MLIRGenerator<'c> {
     pub fn lower_code(&mut self, v: ValueId) -> Result<()> {
         let code = self.blockify.get_code(v);
         let location = self.get_location(v);
-        if self.config.verbose {
-            println!("lower: {:?}", (v, code));
-        }
+        //if self.config.verbose {
+        //println!("lower: {:?}", (v, code));
+        //}
 
         match code {
             LCode::Label => {
@@ -1387,13 +1387,10 @@ impl<'c> MLIRGenerator<'c> {
                         self.index.insert(v, index);
                     } //_ => unreachable!("{:?}", bi),
                 }
-            } //_ => unimplemented!("{:?}", (v, code)),
-            LCode::DeclareTemplate(_) => {
-                self.ensure_call_args_empty();
             }
             LCode::EndModule => {
                 self.ensure_call_args_empty();
-            }
+            } //_ => unimplemented!("{:?}", (v, code)),
         }
         Ok(())
     }

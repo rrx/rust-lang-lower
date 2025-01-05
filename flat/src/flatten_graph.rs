@@ -227,7 +227,7 @@ impl Flatten<Module> {
                                     LCode::Switch(link_id, cases) => {
                                         let v_link = self.resolve_code_offset(link_id.into());
                                         ng.sources.push((v, v_link));
-                                        for (index, block_id) in cases.iter() {
+                                        for (_index, block_id) in cases.iter() {
                                             let v_target =
                                                 self.resolve_code_offset(block_id.into());
                                             ng.edges.push((v, v_target));

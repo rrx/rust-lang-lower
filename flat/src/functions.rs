@@ -236,7 +236,7 @@ impl FlattenInner {
         }
 
         for (index, arg) in args.iter().chain(system.iter()).enumerate() {
-            let is_last_arg = index == args.len() - 1;
+            let is_last_arg = index == args.len() + system.len() - 1;
             match arg {
                 // these are the first args, and they don't have associated names
                 // so we look them up in the field list
@@ -381,7 +381,7 @@ impl FlattenInner {
         let block = self.blocks.get_block(current_block_id);
 
         // if it's defined in static scope, just call it
-        let (_variant_id, v_entry) = if let Some((variant_id, r_ty, v_entry, _scope_id)) =
+        let v_entry = if let Some((r_ty, v_entry, _scope_id)) =
             self.resolve_function_name(block.scope(), &name, &call_func_type.clone().into(), b)
         {
             // unify the resolved function with the caller
@@ -392,7 +392,7 @@ impl FlattenInner {
                 &r_ty,
                 def_span_id,
             );
-            (variant_id, v_entry)
+            v_entry
         } else {
             // if it's not already baked, we need to do that here
             self.switch_blocks(self.static_block_id());
@@ -411,7 +411,7 @@ impl FlattenInner {
 
             // update the variant with the resolved type
             self.variant_update(variant_id, r_ty2.clone(), v_entry);
-            (variant_id, v_entry)
+            v_entry
         };
 
         // we are keeping a list of function names so we can look them up later
@@ -706,11 +706,6 @@ impl FlattenInner {
                     let r = self.push_node(*expr, PushContext::Default, b)?;
                     let link_id = r.link_id.unwrap();
                     let entry = self.get_entry(link_id);
-                    //let v_block_id = entry.block_id;
-                    //println!(
-                    //"{}: v_block_id: {}, block_id: {}",
-                    //link_id, v_block_id, block_id
-                    //);
                     values.push((entry.name, link_id, entry.ty.clone(), span_id));
                     link_ids.push(link_id);
                 }
@@ -719,11 +714,6 @@ impl FlattenInner {
                     let r = self.push_node(*expr, PushContext::Default, b)?;
                     let link_id = r.link_id.unwrap();
                     let entry = self.get_entry(link_id);
-                    //let v_block_id = entry.block_id;
-                    //println!(
-                    //"{}: v_block_id: {}, block_id: {}",
-                    //link_id, v_block_id, block_id
-                    //);
                     values.push((Some(key), link_id, entry.ty.clone(), span_id));
                     link_ids.push(link_id);
                 }
@@ -1009,14 +999,14 @@ impl FlattenInner {
 
         // generate the CPS function, that's it
         // and jump to it, passing the exit continuation
-        let result = self.push_call_inline_cps_inner(
+        let (fun_block_id, ret_block_ty) = self.push_call_inline_cps_inner(
             abstraction_id,
             scope_id,
             call_span_id,
             top_def_func_type.clone(),
             b,
         )?;
-        let (fun_block_id, ret_block_ty, next_arg_ty) = result;
+        let next_arg_ty = ret_block_ty.args.clone();
 
         b.unify(
             &next_ty,
@@ -1067,6 +1057,7 @@ impl FlattenInner {
         // if the function returns a value, then we need to copy it out of the next block arguments
         let v_decl = if let Some(link_id) = r.link_id {
             let key = b.labels.fresh_key("r");
+            let s_name = b.labels.r(key.into());
             let ty = next_arg_ty.field_types().first().unwrap().clone();
             let decl_link_id = self.push_decl(ty.clone(), key, call_span_id);
             let entry = self.get_entry_mut(link_id);
@@ -1103,7 +1094,7 @@ impl FlattenInner {
         call_span_id: SpanId,
         def_func_type: AstFuncType,
         b: &mut NB,
-    ) -> Result<(BlockId, AstFuncType, AstType)> {
+    ) -> Result<(BlockId, AstFuncType)> {
         let a = self.abstractions.get(abstraction_id);
         let lookup_name = a.name;
         let def_span_id = a.def_span_id;
@@ -1112,102 +1103,86 @@ impl FlattenInner {
         let mem = VarDefinitionSpace::Reg;
 
         let call_func_type = def_func_type.clone().into();
-        let (_variant_id, fun_block_id, _fun_scope_id, _def_func_type, ret_block_ty, next_arg_ty) =
-            if let Some((variant_id, variant_ty, link_id, fun_scope_id)) =
-                self.resolve_function_name(scope_id, &lookup_name, &call_func_type, b)
-            {
-                let entry = self.get_entry(link_id);
-                let fun_block_id = entry.block_id;
+        let (fun_block_id, ret_block_ty) = if let Some((variant_ty, link_id, _fun_scope_id)) =
+            self.resolve_function_name(scope_id, &lookup_name, &call_func_type, b)
+        {
+            let entry = self.get_entry(link_id);
+            let fun_block_id = entry.block_id;
 
-                let ty = variant_ty.clone().into();
-                b.unify(&ty, call_span_id, &variant_ty, def_span_id);
-                let variant_ty = b.types.u.resolve(&variant_ty).unwrap();
-                let resolve_func_type = variant_ty.get_func().clone();
-                let ret_func_type = if let ReturnType::Single(ret) = resolve_func_type.ret {
-                    AstFuncType::new(
-                        AstType::build_struct(vec![ret]),
-                        ReturnType::Single(AstType::Unit),
-                    )
-                } else {
-                    unimplemented!();
-                };
-                let next_arg_ty = resolve_func_type.args.clone();
-                (
-                    variant_id,
-                    fun_block_id,
-                    fun_scope_id,
-                    variant_ty,
-                    ret_func_type,
-                    next_arg_ty,
+            let ty = variant_ty.clone().into();
+            b.unify(&ty, call_span_id, &variant_ty, def_span_id);
+            let variant_ty = b.types.u.resolve(&variant_ty).unwrap();
+            let resolve_func_type = variant_ty.get_func().clone();
+            let ret_func_type = if let ReturnType::Single(ret) = resolve_func_type.ret {
+                AstFuncType::new(
+                    AstType::build_struct(vec![ret]),
+                    ReturnType::Single(AstType::Unit),
                 )
             } else {
-                let body = a.def.body.clone().unwrap();
-
-                let scope = self.blocks.get_scope(scope_id);
-                let block_id = scope.entry_block();
-
-                // New Func Scope
-                let (fun_block_id, fun_scope_id) = self.blocks.new_scope_and_block(
-                    ScopeType::Function,
-                    // hack: we turn this into function scope later
-                    //ScopeState::function(next_block_id),
-                    ScopeState::block(),
-                    block_id,
-                    Successor::BlockScope,
-                );
-                self.blocks.control_flow(block_id, &[fun_block_id]);
-
-                // hack: this needs to be defined after fun_block, for some reason
-                // The ordering shouldn't matter
-                let next_block_id = self.blocks.new_block(block_id, fun_scope_id, succ_type);
-
-                let result = self.push_bake_lambda_and_update_next(
-                    lookup_name,
-                    lookup_name,
-                    fun_scope_id,
-                    fun_block_id,
-                    next_block_id,
-                    *body,
-                    def_func_type,
-                    def_span_id,
-                    call_span_id,
-                    scope_type,
-                    succ_type,
-                    mem,
-                    b,
-                )?;
-                let (
-                    variant_id,
-                    fun_scope_id,
-                    fun_block_id,
-                    _,
-                    next_arg_ty,
-                    call_values,
-                    ret_func_type,
-                    variant_ty,
-                    _,
-                    entry_args,
-                ) = result;
-                let arg = entry_args.last().unwrap();
-
-                let call_link_id = arg.1;
-
-                // complete the lambda bake with a jump to the continuation, this is the exit of
-                // the lambda.  The continuation is part of the signature, so we can call it again
-                let _goto_link_id =
-                    self.push_goto_link(call_link_id, call_values.clone(), call_span_id, b)?;
-
-                (
-                    variant_id,
-                    fun_block_id,
-                    fun_scope_id,
-                    variant_ty,
-                    ret_func_type,
-                    next_arg_ty,
-                )
+                unimplemented!();
             };
+            (fun_block_id, ret_func_type)
+        } else {
+            let body = a.def.body.clone().unwrap();
+
+            let scope = self.blocks.get_scope(scope_id);
+            let block_id = scope.entry_block();
+
+            // New Func Scope
+            let (fun_block_id, fun_scope_id) = self.blocks.new_scope_and_block(
+                ScopeType::Function,
+                // hack: we turn this into function scope later
+                //ScopeState::function(next_block_id),
+                ScopeState::block(),
+                block_id,
+                Successor::BlockScope,
+            );
+            self.blocks.control_flow(block_id, &[fun_block_id]);
+
+            // hack: this needs to be defined after fun_block, for some reason
+            // The ordering shouldn't matter
+            let next_block_id = self.blocks.new_block(block_id, fun_scope_id, succ_type);
+
+            let result = self.push_bake_lambda_and_update_next(
+                lookup_name,
+                lookup_name,
+                fun_scope_id,
+                fun_block_id,
+                next_block_id,
+                *body,
+                def_func_type,
+                def_span_id,
+                call_span_id,
+                scope_type,
+                succ_type,
+                mem,
+                b,
+            )?;
+            let (
+                _variant_id,
+                _fun_scope_id,
+                fun_block_id,
+                _,
+                _next_arg_ty,
+                call_values,
+                ret_func_type,
+                _variant_ty,
+                _,
+                entry_args,
+            ) = result;
+            let arg = entry_args.last().unwrap();
+
+            let call_link_id = arg.1;
+
+            // complete the lambda bake with a jump to the continuation, this is the exit of
+            // the lambda.  The continuation is part of the signature, so we can call it again
+            let _goto_link_id =
+                self.push_goto_link(call_link_id, call_values.clone(), call_span_id, b)?;
+
+            (fun_block_id, ret_func_type)
+        };
 
         // restore position back to where we started
-        Ok((fun_block_id, ret_block_ty, next_arg_ty))
+        Ok((fun_block_id, ret_block_ty))
     }
 }

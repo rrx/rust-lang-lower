@@ -53,7 +53,6 @@ impl CodeEntry {
             LCode::Extern => unimplemented!(),
             LCode::Store(_, _) => unreachable!(),
             LCode::Noop => unreachable!(),
-            LCode::DeclareTemplate(_) => unreachable!(),
             LCode::Return => unreachable!(),
             LCode::Yield => unreachable!(),
             LCode::Jump(_) => unreachable!(),

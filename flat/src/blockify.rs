@@ -86,7 +86,6 @@ pub enum LCode {
     Noop,
     Declare,
     DeclareFunction(Option<BlockId>), // optional entry block
-    DeclareTemplate(Option<BlockId>), // optional entry block
     Extern,                           // optional entry block
     //Value(LinkId),
     //ValueIndex(LinkId, u8), // index into a struct
@@ -279,24 +278,15 @@ pub trait ICodeModule {
         match code {
             LCode::Declare => {
                 let code_str = b.labels.r(self.get_name(v.into()).unwrap());
-                format!("declare {}: {:?}", code_str, self.get_type(v.into()))
+                format!("declare {}", code_str)
             }
 
             LCode::DeclareFunction(maybe_entry) => {
                 let code_str = b.labels.r(self.get_name(v.into()).unwrap());
                 if let Some(entry_id) = maybe_entry {
-                    format!("declare_function({},{:?})", code_str, entry_id)
+                    format!("declare_function({},{})", code_str, entry_id)
                 } else {
                     format!("declare_function({})", code_str)
-                }
-            }
-
-            LCode::DeclareTemplate(maybe_entry) => {
-                let code_str = b.labels.r(self.get_name(v.into()).unwrap());
-                if let Some(entry_id) = maybe_entry {
-                    format!("declare_template({},{:?})", code_str, entry_id)
-                } else {
-                    format!("declare_template({})", code_str)
                 }
             }
 
@@ -310,8 +300,7 @@ pub trait ICodeModule {
             }
 
             LCode::Jump(value_id) => {
-                //let values = self.get_previous_values(v);
-                format!("jump({:?})", value_id)
+                format!("jump({})", value_id)
             }
 
             LCode::Val(Literal::String(s)) => {
@@ -324,6 +313,14 @@ pub trait ICodeModule {
 
             LCode::Branch(c, x, y) => {
                 format!("Branch({:?},{},{})", c, x, y)
+            }
+
+            LCode::Switch(link_id, m) => {
+                let mut s = vec![];
+                for (k, v) in m {
+                    s.push(format!("{}->{}", k, v));
+                }
+                format!("switch({},{})", link_id, s.join(","))
             }
 
             _ => {
