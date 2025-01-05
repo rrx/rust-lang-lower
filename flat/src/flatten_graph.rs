@@ -383,8 +383,8 @@ impl Flatten<Module> {
                         // block marked dead
                         format!("label = \"B{:?}:dead\"", index.index(),)
                     } else {
-                        if let Some(link_id) = self.block_links.get(&block_id) {
-                            let entry = self.get_link_entry(*link_id);
+                        if let Some(v) = self.maybe_resolve_code_offset(block_id.into()) {
+                            let entry = self.get_entry(v);
                             if entry.value_id.is_some() {
                                 let v = self.resolve_code_offset(block_id.into());
                                 // block found
@@ -426,8 +426,8 @@ impl FlattenInner {
                 &|_, (_, c)| {
                     match c {
                         ContinuationFlow::Block(block_id) => {
-                            let entry =
-                                self.get_entry(self.block_links.get(block_id).unwrap().clone());
+                            let link_id = self.resolve_code_offset_link(block_id.into());
+                            let entry = self.get_entry(link_id);
                             let s_name = if let Some(name) = entry.name {
                                 b.labels.r(name.into())
                             } else {
@@ -436,8 +436,8 @@ impl FlattenInner {
                             format!("label = \"B.{}:{}\"", s_name, block_id)
                         }
                         ContinuationFlow::BlockArg(block_id, arg) => {
-                            let entry =
-                                self.get_entry(self.block_links.get(block_id).unwrap().clone());
+                            let link_id = self.resolve_code_offset_link(block_id.into());
+                            let entry = self.get_entry(link_id);
                             let s_name = if let Some(name) = entry.name {
                                 b.labels.r(name.into())
                             } else {

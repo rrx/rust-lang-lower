@@ -84,8 +84,8 @@ pub struct FlattenInner {
     pub blocks: BlockGraph,
     static_scope: ScopeId,
     static_block: BlockId,
-    pub(crate) current_block: BlockId,
-    pub(super) block_links: HashMap<BlockId, LinkId>,
+    current_block: BlockId,
+    block_links: HashMap<BlockId, LinkId>,
     pub(crate) open_identifiers: Vec<LinkId>,
     pub(crate) scoped_continuations: ScopedContinuations,
     pub(super) deferred_goto: DeferredGotoList,
@@ -175,11 +175,31 @@ impl Flatten<FirstPass> {
 }
 
 impl FlattenInner {
+    pub fn resolve_code_offset_link(&self, code_offset: CodeOffset) -> LinkId {
+        self.maybe_resolve_code_offset_link(code_offset)
+            .expect(&format!("Unable to resolve: {}", code_offset))
+    }
+
     pub fn resolve_code_offset(&self, code_offset: CodeOffset) -> ValueId {
         self.maybe_resolve_code_offset(code_offset)
             .expect(&format!("Unable to resolve: {}", code_offset))
     }
 
+    pub fn maybe_resolve_code_offset_link(&self, code_offset: CodeOffset) -> Option<LinkId> {
+        match code_offset {
+            CodeOffset::Value(_) => {
+                unreachable!()
+            }
+            CodeOffset::Link(link_id) => Some(link_id),
+            CodeOffset::Block(block_id) => {
+                if let Some(link_id) = self.block_links.get(&block_id) {
+                    Some(*link_id)
+                } else {
+                    None
+                }
+            }
+        }
+    }
     pub fn maybe_resolve_code_offset(&self, code_offset: CodeOffset) -> Option<ValueId> {
         match code_offset {
             CodeOffset::Value(v) => Some(v),
