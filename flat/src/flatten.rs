@@ -495,35 +495,32 @@ impl FlattenInner {
         link_id
     }
 
-    fn _push_entry_normal(&mut self, entry: CodeEntry) -> LinkId {
-        let block_id = entry.block_id;
-        let code = entry.code.clone();
-        let link_id = self.insert_entry(entry);
-        let block = self.blocks.get_block_mut(block_id);
-        block.push_link(link_id, code.is_term());
-        link_id
-    }
-
     pub fn push_entry_with_link(&mut self, mut entry: CodeEntry) -> LinkId {
         let code = entry.code.clone();
         let block_id = entry.block_id;
 
-        let v = match &code {
-            LCode::Label => {
-                let block = self.blocks.get_block(block_id);
-                assert!(block.last().is_none());
+        let v = match (code.is_term(), &code) {
+            (true, _) => {
+                let link_id = self.insert_entry(entry);
+                self.blocks.get_block_mut(block_id).terminate(link_id);
+                link_id
+            }
+
+            (_, LCode::Label) => {
                 let link_id = self.insert_entry(entry);
                 let block = self.blocks.get_block_mut(block_id);
                 block.push_label(link_id);
                 link_id
             }
-            LCode::Arg(_) => {
+
+            (_, LCode::Arg(_)) => {
                 let link_id = self.insert_entry(entry);
                 let block = self.blocks.get_block_mut(block_id);
                 block.push_arg(link_id);
                 link_id
             }
-            LCode::Declare | LCode::DeclareFunction(_) => {
+
+            (_, LCode::Declare | LCode::DeclareFunction(_)) => {
                 let block = self.blocks.get_block(block_id);
                 let scope_id = block.scope();
                 let scope = self.blocks.get_scope(scope_id);
@@ -533,28 +530,12 @@ impl FlattenInner {
                 link_id
             }
 
-            LCode::Switch(_, h) => {
-                for block_id in h.values() {
-                    self.blocks
-                        .block_succ(self.current_block_id(), *block_id, Successor::Jump);
-                    self.blocks.block_succ(
-                        self.current_block_id(),
-                        *block_id,
-                        Successor::BlockScope,
-                    );
-                }
-                self._push_entry_normal(entry)
+            _ => {
+                let link_id = self.insert_entry(entry);
+                let block = self.blocks.get_block_mut(block_id);
+                block.push_link(link_id);
+                link_id
             }
-
-            LCode::Jump(target) => {
-                self.blocks
-                    .block_succ(self.current_block_id(), *target, Successor::Jump);
-                self.blocks
-                    .block_succ(self.current_block_id(), *target, Successor::BlockScope);
-                self._push_entry_normal(entry)
-            }
-
-            _ => self._push_entry_normal(entry),
         };
         self.update_connections(v);
         v
@@ -571,6 +552,11 @@ impl FlattenInner {
 
             LCode::Switch(_, branches) => {
                 for b in branches.values() {
+                    self.blocks
+                        .block_succ(self.current_block_id(), *b, Successor::Jump);
+                    self.blocks
+                        .block_succ(self.current_block_id(), *b, Successor::BlockScope);
+
                     self.scoped_continuations.connect(
                         ContinuationFlow::Jump(link_id),
                         ContinuationFlow::Block(*b),
@@ -580,6 +566,13 @@ impl FlattenInner {
             }
 
             LCode::Branch(_, b1, b2) => {
+                for b in vec![b1, b2] {
+                    self.blocks
+                        .block_succ(self.current_block_id(), b, Successor::Jump);
+                    self.blocks
+                        .block_succ(self.current_block_id(), b, Successor::BlockScope);
+                }
+
                 self.scoped_continuations.connect(
                     ContinuationFlow::Jump(link_id),
                     ContinuationFlow::Block(b1),
@@ -592,6 +585,11 @@ impl FlattenInner {
                 );
             }
             LCode::Jump(b) => {
+                self.blocks
+                    .block_succ(self.current_block_id(), b, Successor::Jump);
+                self.blocks
+                    .block_succ(self.current_block_id(), b, Successor::BlockScope);
+
                 self.scoped_continuations.connect(
                     ContinuationFlow::Jump(link_id),
                     ContinuationFlow::Block(b),
@@ -1660,8 +1658,6 @@ impl FlattenInner {
                     current_block_id,
                     Successor::BlockScope,
                 );
-                self.blocks
-                    .control_flow(current_block_id, &[then_start_block_id]);
 
                 let then_span_id = then_expr.span_id;
 
@@ -1687,7 +1683,6 @@ impl FlattenInner {
                             current_block_id,
                             Successor::BlockScope,
                         );
-                        self.blocks.control_flow(current_block_id, &[else_block_id]);
 
                         let else_span_id = else_expr.span_id;
                         let name = b.labels.fresh_key("else");
@@ -1899,7 +1894,6 @@ impl FlattenInner {
                     current_block_id,
                     Successor::Operation,
                 );
-                self.blocks.control_flow(current_block_id, &[then_block_id]);
                 let then_span_id = x.span_id;
                 let then_ast = AstNode::make_yield(*x);
 
@@ -1921,7 +1915,6 @@ impl FlattenInner {
                     current_block_id,
                     Successor::Operation,
                 );
-                self.blocks.control_flow(current_block_id, &[else_block_id]);
                 let else_ast = AstNode::make_yield(*y);
 
                 self.switch_blocks(else_block_id);
@@ -2060,7 +2053,6 @@ impl FlattenInner {
                     current_block_id,
                     Successor::BlockScope,
                 );
-                self.blocks.control_flow(current_block_id, &[loop_block_id]);
 
                 let v_next =
                     self.blocks

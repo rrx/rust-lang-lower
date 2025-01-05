@@ -26,8 +26,6 @@ pub enum BlockStateEnum {
 pub struct IRBlock {
     scope_id: ScopeId,
     dead: bool,
-    term: bool,
-    size: usize,
     entry: Vec<LinkId>,
     terminal: Option<LinkId>,
     decls: Vec<LinkId>,
@@ -40,10 +38,8 @@ impl IRBlock {
         Self {
             scope_id,
             dead: false,
-            term: false,
             entry: vec![],
             terminal: None,
-            size: 0,
             links: vec![],
             decls: vec![],
             s: BlockStateEnum::Start,
@@ -75,6 +71,10 @@ impl IRBlock {
         self.dead
     }
 
+    pub fn is_term(&self) -> bool {
+        self.terminal.is_some()
+    }
+
     pub fn mark_dead(&mut self) {
         self.dead = true;
     }
@@ -84,28 +84,25 @@ impl IRBlock {
     }
 
     pub fn empty(&self) -> bool {
-        self.size == 0
+        self.iter().next().is_none()
     }
 
     pub fn len(&self) -> usize {
-        self.size
+        self.iter().count()
     }
 
     pub fn push_label(&mut self, link_id: LinkId) {
         assert_eq!(self.s, BlockStateEnum::Start);
         self.s = BlockStateEnum::Entry;
-        assert!(!self.term);
         assert!(self.entry.is_empty());
         assert!(self.last().is_none());
         self.entry.push(link_id);
-        self.size += 1;
     }
 
     pub fn push_arg(&mut self, link_id: LinkId) {
         assert_eq!(self.s, BlockStateEnum::Entry);
-        assert!(!self.term);
+        assert!(!self.is_term());
         assert!(!self.entry.is_empty());
-        self.size += 1;
         self.entry.push(link_id)
     }
 
@@ -115,28 +112,26 @@ impl IRBlock {
             self.s = BlockStateEnum::Body;
         }
         self.decls.push(link_id);
-        self.size += 1;
     }
 
     pub fn prepend_link(&mut self, link_id: LinkId) {
         self.links.insert(0, link_id);
-        self.size += 1;
     }
 
-    pub fn push_link(&mut self, link_id: LinkId, term: bool) {
+    pub fn terminate(&mut self, link_id: LinkId) {
         assert_ne!(self.s, BlockStateEnum::Term);
-        assert!(!self.term);
+        assert!(!self.is_term());
         assert!(!self.entry.is_empty());
+        self.s = BlockStateEnum::Term;
+        self.terminal = Some(link_id);
+    }
 
-        if term {
-            self.s = BlockStateEnum::Term;
-            self.terminal = Some(link_id);
-        } else {
-            self.s = BlockStateEnum::Body;
-            self.links.push(link_id)
-        }
-        self.term = term;
-        self.size += 1;
+    pub fn push_link(&mut self, link_id: LinkId) {
+        assert_ne!(self.s, BlockStateEnum::Term);
+        assert!(!self.is_term());
+        assert!(!self.entry.is_empty());
+        self.s = BlockStateEnum::Body;
+        self.links.push(link_id)
     }
 
     pub fn last_decl(&self) -> Option<LinkId> {
@@ -159,14 +154,9 @@ impl IRBlock {
         self.last_decl()
     }
 
-    pub fn is_term(&self) -> bool {
-        self.terminal.is_some()
-    }
-
     pub fn pop_terminal(&mut self) -> LinkId {
         assert_eq!(self.s, BlockStateEnum::Term);
         self.s = BlockStateEnum::Body;
-        self.term = false;
         self.terminal.take().unwrap();
         self.last().unwrap()
     }
