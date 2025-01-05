@@ -506,19 +506,15 @@ impl FlattenInner {
         ArgVec,        // entry args
     ) {
         let a = self.abstractions.get(abstraction_id);
-        let def_span_id = a.def_span_id;
-        let body = a.def.body.clone().unwrap();
         let local_name = a.name;
 
         let result = self.push_bake_lambda(
-            local_name,
+            abstraction_id,
             global_name,
             fun_scope_id,
             fun_block_id,
             next_block_id,
-            *body,
             def_func_type,
-            def_span_id,
             call_span_id,
             succ_type,
             mem,
@@ -571,14 +567,12 @@ impl FlattenInner {
 
     fn push_bake_lambda(
         &mut self,
-        local_name: StringKey,
+        abstraction_id: AbstractionId,
         global_name: StringKey,
         fun_scope_id: ScopeId,
         fun_block_id: BlockId,
         next_block_id: BlockId,
-        body: AstNode,
         def_func_type: AstFuncType,
-        def_span_id: SpanId,
         call_span_id: SpanId,
         succ_type: Successor,
         mem: VarDefinitionSpace,
@@ -596,6 +590,12 @@ impl FlattenInner {
         // build the function body in that scope and block
         // allow for recursion
         //
+        //
+        let a = self.abstractions.get(abstraction_id);
+        let def_span_id = a.def_span_id;
+        let body = *a.def.body.clone().unwrap();
+        let local_name = a.name;
+
         let current_block_id = self.current_block_id();
         let block = self.blocks.get_block(current_block_id);
         let scope_id = block.scope();
