@@ -534,7 +534,8 @@ impl FlattenInner {
             b,
         );
 
-        let (fun_block_id, entry_link_id, next_arg_ty, ret_block_ty, entry_args) = result;
+        let (fun_block_id, entry_link_id, ret_block_ty, entry_args) = result;
+        let next_arg_ty = ret_block_ty.args.clone();
 
         // push the continuation block to which the function returns control
         // this might just be the return block
@@ -595,7 +596,6 @@ impl FlattenInner {
     ) -> (
         BlockId,
         LinkId,
-        AstType,
         AstFuncType, // next block return type
         ArgVec,      // entry args
     ) {
@@ -655,13 +655,7 @@ impl FlattenInner {
             ret: ReturnType::Single(AstType::Unit).into(),
         };
 
-        (
-            fun_block_id,
-            entry_link_id,
-            next_arg_ty,
-            ret_block_ty,
-            entry_args,
-        )
+        (fun_block_id, entry_link_id, ret_block_ty, entry_args)
     }
 
     pub(super) fn push_call_arguments(
