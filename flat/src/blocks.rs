@@ -75,6 +75,10 @@ impl IRBlock {
         self.dead
     }
 
+    pub fn mark_dead(&mut self) {
+        self.dead = true;
+    }
+
     pub fn entry(&self) -> LinkId {
         self.entry.first().unwrap().clone()
     }
@@ -238,15 +242,16 @@ impl BlockGraph {
             let succ_type = edge.weight();
             let i = edge.target();
             let block = self.bg.node_weight(i).unwrap();
-            if !block.dead {
-                let block_id = BlockId::new(i.index()).into();
-                out.push((*succ_type, block_id));
+            if block.dead {
+                continue;
             }
+            let block_id = BlockId::new(i.index()).into();
+            out.push((*succ_type, block_id));
         }
         out
     }
 
-    pub fn find_dead_blocks_from_graph(&mut self) -> Vec<BlockId> {
+    pub fn find_dead_blocks_from_graph(&self) -> Vec<BlockId> {
         let entries = self
             .graph_get_entries()
             .into_iter()
@@ -288,17 +293,8 @@ impl BlockGraph {
                 }
             }
             let dead = all.difference(&reachable);
-            //println!("[{:?}] Dead: {:?}", entry, &dead);
-            //println!("[{:?}] All: {:?}", entry, &all);
-            //println!("[{:?}] Reachable: {:?}", entry, &reachable);
             for block_id in dead {
-                let index = NodeIndex::new((*block_id).index());
-                let block = self.bg.node_weight_mut(index).unwrap();
-                block.dead = true;
                 out.push(*block_id);
-                //let v = self.get_entry_id_from_block_id(*block_id);
-                //let span_id = self.get_span_id(v);
-                //b.push_warning(&format!("Dead Block: {}", block_id), span_id);
             }
         }
         out

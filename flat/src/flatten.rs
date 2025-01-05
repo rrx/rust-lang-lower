@@ -419,21 +419,8 @@ impl FlattenInner {
         self.resolve_open_identifiers(b)?;
         self.resolve_cps(b)?;
 
-        self.switch_blocks(self.static_block_id());
-
-        // DEAD BLOCKS
-        let dead_blocks = self.blocks.find_dead_blocks_from_graph();
-        for block_id in dead_blocks {
-            if let Some(link_id) = self.block_links.get(&block_id).cloned() {
-                let entry = self.get_entry(link_id);
-                b.push_warning(&format!("Dead Block: {}", block_id), entry.span_id);
-            } else {
-                let span_id = b.spans.get_span_unknown();
-                b.push_warning(&format!("Missing Block: {}", block_id), span_id);
-            }
-        }
-
         // declare functions
+        self.switch_blocks(self.static_block_id());
         for block_id in self.blocks.graph_get_entries() {
             let block = self.blocks.get_block(block_id);
             let label_link_id = block.entry();
@@ -452,6 +439,20 @@ impl FlattenInner {
                 entry.span_id,
                 entry.mem,
             );
+        }
+
+        // DEAD BLOCKS
+        let dead_blocks = self.blocks.find_dead_blocks_from_graph();
+        for block_id in dead_blocks {
+            self.blocks.get_block_mut(block_id).mark_dead();
+
+            if let Some(link_id) = self.block_links.get(&block_id).cloned() {
+                let entry = self.get_entry(link_id);
+                b.push_warning(&format!("Dead Block: {}", block_id), entry.span_id);
+            } else {
+                let span_id = b.spans.get_span_unknown();
+                b.push_warning(&format!("Missing Block: {}", block_id), span_id);
+            }
         }
 
         // the last thing we do is calculate the values, which is the post order traversal of the
