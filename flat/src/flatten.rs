@@ -1000,7 +1000,7 @@ impl FlattenInner {
     ) -> Result<FlattenResult> {
         let def_span_id = b.spans.get_span_unknown();
         let (args, func_type) =
-            Self::calculate_function_arguments(&def, &args, &[], def_span_id, call_span_id, b)?;
+            Self::calculate_function_arguments(&def, &args, &[], def_span_id, call_span_id, b);
         let call_values = self.push_call_arguments(args, call_span_id, b)?;
         self.push_call_values(&call_values, b);
 

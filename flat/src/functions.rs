@@ -178,7 +178,7 @@ impl FlattenInner {
         def_span_id: SpanId,
         call_span_id: SpanId,
         b: &mut NB,
-    ) -> Result<(Vec<Argument>, AstFuncType)> {
+    ) -> (Vec<Argument>, AstFuncType) {
         let func_arg = def.func_type.args.clone();
 
         // A rough outline of this large function
@@ -359,7 +359,7 @@ impl FlattenInner {
         let def_func_type =
             AstFuncType::new(AstType::Struct(fields_list), def.func_type.ret.clone());
 
-        Ok((args, def_func_type))
+        (args, def_func_type)
     }
 
     fn push_bake_static(
@@ -693,13 +693,11 @@ impl FlattenInner {
     pub(super) fn push_call_arguments(
         &mut self,
         args: Vec<Argument>,
-        //blocks: ArgVecRef,
         span_id: SpanId,
         b: &mut NB,
     ) -> Result<ArgVec> {
         let mut link_ids = vec![];
         let mut values = vec![];
-        //let block_id = self.current_block_id();
         for a in args.into_iter() {
             match a {
                 Argument::Positional(expr) => {
@@ -784,7 +782,7 @@ impl FlattenInner {
             def_span_id,
             call_span_id,
             b,
-        )?;
+        );
         let call_values = self.push_call_arguments(args.clone(), call_span_id, b)?;
         let call_ty = crate::argvec_type(&call_values);
         let def_func_type = self.refresh_func_type(&def_func_type, b);
@@ -1057,7 +1055,6 @@ impl FlattenInner {
         // if the function returns a value, then we need to copy it out of the next block arguments
         let v_decl = if let Some(link_id) = r.link_id {
             let key = b.labels.fresh_key("r");
-            let s_name = b.labels.r(key.into());
             let ty = next_arg_ty.field_types().first().unwrap().clone();
             let decl_link_id = self.push_decl(ty.clone(), key, call_span_id);
             let entry = self.get_entry_mut(link_id);

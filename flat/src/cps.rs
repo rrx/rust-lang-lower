@@ -283,15 +283,7 @@ impl FlattenInner {
         args: Vec<Argument>,
         call_span_id: SpanId,
         b: &mut NB,
-    ) -> Result<(
-        ScopeId,
-        BlockId,
-        AstType,
-        AstType,
-        ReturnType,
-        ArgVec,
-        LinkId, // return goto link
-    )> {
+    ) -> Result<LinkId> {
         // call in the context of the caller, which is a goto
         let a = self.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
@@ -302,14 +294,14 @@ impl FlattenInner {
         //
         // WRITE GOTO
         let (args, _) =
-            Self::calculate_function_arguments(&def, &args, &[], def_span_id, call_span_id, b)?;
+            Self::calculate_function_arguments(&def, &args, &[], def_span_id, call_span_id, b);
         let call_values = self.push_call_arguments(args, call_span_id, b)?;
         let goto_block_id = self.current_block_id();
         let call_arg_type = argvec_type(&call_values);
         let call_func_type =
             AstFuncType::new(call_arg_type.clone().into(), ReturnType::Never.into()).into();
 
-        let (fun_scope_id, fun_block_id, def_arg_type) = self.gen_cps_block_with_type(
+        let (_fun_scope_id, fun_block_id, _def_arg_type) = self.gen_cps_block_with_type(
             name,
             scope_id,
             abstraction_id,
@@ -339,19 +331,7 @@ impl FlattenInner {
         // What does it even mean that a CPS function never calls it's continuation?
 
         // control is returned to the goto
-
-        let def_func_type = AstFuncType::new(def_arg_type.clone(), ReturnType::Never).into();
-        let def_ret_type = ReturnType::Never;
-
-        return Ok((
-            fun_scope_id,
-            fun_block_id,
-            def_func_type,
-            def_arg_type,
-            def_ret_type,
-            call_values,
-            goto_link_id,
-        ));
+        Ok(goto_link_id)
     }
 
     pub fn push_placeholder_terminal(&mut self, ty: AstType, call_span_id: SpanId) -> LinkId {
@@ -532,15 +512,14 @@ impl FlattenInner {
 
                     // push and jump
                     // TODO: this function needs to handle unwind
-                    let (_fun_scope_id, _fun_block_id, _, _, _, _, _link_id) = self
-                        .push_cps_block(
-                            d.name.unwrap(),
-                            d.scope_id,
-                            abstraction_id,
-                            d.args.clone(),
-                            d.call_span_id,
-                            b,
-                        )?;
+                    let _link_id = self.push_cps_block(
+                        d.name.unwrap(),
+                        d.scope_id,
+                        abstraction_id,
+                        d.args.clone(),
+                        d.call_span_id,
+                        b,
+                    )?;
                     return Ok(true);
                 }
 
