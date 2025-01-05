@@ -346,21 +346,19 @@ impl FlattenInner {
         b: &mut NB,
     ) -> Result<()> {
         let current_block_id = self.current_block_id();
-        let entry = self.get_entry(link_id).clone();
-        let ty = self.get_type(link_id).clone();
+        let entry = self.get_entry(link_id);
+        let ty = &entry.ty.clone();
         let span_id = entry.span_id;
         let name = entry.name.unwrap();
-        let block_id = entry.block_id;
-        let block = self.blocks.get_block(block_id);
-        let scope_id = block.scope();
+        let scope_id = self.blocks.get_block(entry.block_id).scope();
 
         let fun_block_id =
-            self.gen_cps_block_with_type(name, scope_id, abstraction_id, &ty, span_id, false, b)?;
+            self.gen_cps_block_with_type(name, scope_id, abstraction_id, ty, span_id, false, b)?;
 
         // now replace the abstraction code
         let entry = self.get_entry_mut(link_id);
         entry.code = LCode::Val(Literal::Block(fun_block_id));
-        b.unify(&entry.ty, entry.span_id, &ty, span_id);
+        b.unify(&entry.ty, entry.span_id, ty, span_id);
         self.update_connections(link_id);
         self.switch_blocks(current_block_id);
         Ok(())
