@@ -124,8 +124,7 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
 
     let mut scopes_path = path.clone();
     scopes_path.set_extension("scopes.dot");
-    m.blocks
-        .gen_scope_graph(scopes_path.clone().to_str().unwrap());
+    m.gen_scope_graph(scopes_path.clone().to_str().unwrap());
 
     let mut cont_path = path.clone();
     cont_path.set_extension("cont.dot");
@@ -143,9 +142,7 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
     m.flow_graph(cfg_path.clone().to_str().unwrap(), &b)?;
 
     if config.verbose {
-        m.blocks.dump_scopes();
-        m.dump_variants(b);
-        m.blocks.dump(b);
+        m.dump(b);
     }
 
     if b.spans.has_errors {

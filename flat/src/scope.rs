@@ -225,7 +225,7 @@ pub struct ScopeLayer {
     entry_block: Option<BlockId>,
     return_block: Option<BlockId>,
     loop_block: Option<LoopScope>,
-    scope_type: ScopeType,
+    pub(super) scope_type: ScopeType,
     lambdas: HashMap<StringLabel, AbstractionId>,
     unclaimed_labels: HashMap<StringLabel, BlockId>,
     num_ret_args: HashSet<usize>,
@@ -564,29 +564,6 @@ impl BlockGraph {
         } else {
             None
         }
-    }
-
-    pub fn gen_scope_graph(&self, filename: &str) {
-        use petgraph::dot::{Config, Dot};
-        let s = format!(
-            "{:?}",
-            Dot::with_attr_getters(
-                &self.sg,
-                &[Config::EdgeNoLabel, Config::NodeNoLabel],
-                &|_, _er| String::new(),
-                &|_, (index, scope)| {
-                    format!(
-                        //"label = \"S{}:{:?}\" shape=\"{:?}\"",
-                        "label = \"S{}:{:?}\"",
-                        index.index(),
-                        &scope.scope_type,
-                        //&scope.scope_type
-                    )
-                }
-            )
-        );
-        println!("saved graph {:?}", filename);
-        std::fs::write(filename, s).unwrap();
     }
 
     pub fn define_lambda(

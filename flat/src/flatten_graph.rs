@@ -496,4 +496,27 @@ impl FlattenInner {
         println!("saved graph {:?}", filename);
         std::fs::write(filename, s).unwrap();
     }
+
+    pub fn gen_scope_graph(&self, filename: &str) {
+        use petgraph::dot::{Config, Dot};
+        let s = format!(
+            "{:?}",
+            Dot::with_attr_getters(
+                &self.blocks.sg,
+                &[Config::EdgeNoLabel, Config::NodeNoLabel],
+                &|_, _er| String::new(),
+                &|_, (index, scope)| {
+                    format!(
+                        //"label = \"S{}:{:?}\" shape=\"{:?}\"",
+                        "label = \"S{}:{:?}\"",
+                        index.index(),
+                        &scope.scope_type,
+                        //&scope.scope_type
+                    )
+                }
+            )
+        );
+        println!("saved graph {:?}", filename);
+        std::fs::write(filename, s).unwrap();
+    }
 }

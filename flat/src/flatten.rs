@@ -81,13 +81,13 @@ impl FlattenState for Module {}
 pub struct FlattenInner {
     pub(super) link: LinkOptions,
     entries: Vec<CodeEntry>,
-    pub blocks: BlockGraph,
+    pub(super) blocks: BlockGraph,
     static_scope: ScopeId,
     static_block: BlockId,
     current_block: BlockId,
     block_links: HashMap<BlockId, LinkId>,
-    pub(crate) open_identifiers: Vec<LinkId>,
-    pub(crate) scoped_continuations: ScopedContinuations,
+    pub(super) open_identifiers: Vec<LinkId>,
+    pub(super) scoped_continuations: ScopedContinuations,
     pub(super) deferred_goto: DeferredGotoList,
     pub(super) variants: FunctionVariantBuilder,
     pub(super) abstractions: AbstractionsBuilder,
@@ -177,6 +177,18 @@ impl Flatten<FirstPass> {
 impl Flatten<Module> {
     pub fn get_link_entry(&self, link_id: LinkId) -> &CodeEntry {
         self.entries.get(link_id.index()).unwrap()
+    }
+
+    pub fn entry_links(&self, block_id: BlockId) -> Vec<LinkId> {
+        let block = self.blocks.get_block(block_id);
+        let links: Vec<_> = block.iter().collect();
+        links
+    }
+
+    pub fn dump(&self, b: &NB) {
+        self.blocks.dump_scopes();
+        self.dump_variants(b);
+        self.blocks.dump(b);
     }
 }
 

@@ -1398,8 +1398,7 @@ impl<'c> MLIRGenerator<'c> {
     pub fn lower_block(&mut self, entry_id: ValueId) -> Result<()> {
         let entry = self.blockify.get_entry(entry_id);
         let block_id = entry.block_id;
-        let block = self.blockify.blocks.get_block(block_id);
-        let links: Vec<_> = block.iter().collect();
+        let links: Vec<_> = self.blockify.entry_links(block_id);
         for link_id in links {
             let entry = self.blockify.get_link_entry(link_id);
             let current = entry.value_id.unwrap();
@@ -1413,8 +1412,7 @@ impl<'c> MLIRGenerator<'c> {
         // reorder things, so we lower declarations last
         let entry = self.blockify.get_entry(module_block_id);
         let block_id = entry.block_id;
-        let block = self.blockify.blocks.get_block(block_id);
-        let links: Vec<_> = block.iter().collect();
+        let links: Vec<_> = self.blockify.entry_links(block_id);
 
         let mut values = VecDeque::new();
         for link_id in links {
