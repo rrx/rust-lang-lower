@@ -444,6 +444,8 @@ impl FlattenInner {
         global_name: StringKey,
         b: &mut NB,
     ) -> FlattenResult {
+        // returns the entry to the function
+
         let current_block_id = self.current_block_id();
         let a = self.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
@@ -470,7 +472,7 @@ impl FlattenInner {
             self.blocks
                 .new_block(current_block_id, fun_scope_id, Successor::BlockScope);
 
-        let (_scope, _block_id, entry_link_id, _, argvec, _, _, _, _entry_args) = self
+        let (_block_id, entry_link_id, _, argvec, _, _r, _entry_args) = self
             .push_bake_lambda_and_update_next(
                 name,
                 global_name,
@@ -509,15 +511,13 @@ impl FlattenInner {
         mem: VarDefinitionSpace,
         b: &mut NB,
     ) -> (
-        ScopeId,
         BlockId,
         LinkId,
-        AstType,     // next block arg type
-        ArgVec,      // return the argvec for the next block, which depends on the function
-        AstFuncType, // next block return type
-        AstType,     // variant type
-        FlattenResult,
-        ArgVec, // entry args
+        AstType,       // next block arg type
+        ArgVec,        // return the argvec for the next block, which depends on the function
+        AstFuncType,   // next block return type
+        FlattenResult, // return value if it exists
+        ArgVec,        // entry args
     ) {
         let result = self.push_bake_lambda(
             local_name,
@@ -534,15 +534,8 @@ impl FlattenInner {
             b,
         );
 
-        let (
-            fun_scope_id,
-            fun_block_id,
-            entry_link_id,
-            next_arg_ty,
-            ret_block_ty,
-            variant_ty,
-            entry_args,
-        ) = result;
+        let (fun_block_id, entry_link_id, next_arg_ty, ret_block_ty, variant_ty, entry_args) =
+            result;
 
         // push the continuation block to which the function returns control
         // this might just be the return block
@@ -568,6 +561,7 @@ impl FlattenInner {
             }
         };
 
+        // return a link to the return argument if it has one, otherwise return a statement
         let r = if let Some(link_id) = next_link_id {
             FlattenResult::link(link_id)
         } else {
@@ -575,13 +569,11 @@ impl FlattenInner {
         };
 
         (
-            fun_scope_id,
             fun_block_id,
             entry_link_id,
             next_arg_ty,
             v_args,
             ret_block_ty,
-            variant_ty,
             r,
             entry_args,
         )
@@ -602,7 +594,6 @@ impl FlattenInner {
         mem: VarDefinitionSpace,
         b: &mut NB,
     ) -> (
-        ScopeId,
         BlockId,
         LinkId,
         AstType,
@@ -667,7 +658,6 @@ impl FlattenInner {
         };
 
         (
-            fun_scope_id,
             fun_block_id,
             entry_link_id,
             next_arg_ty,
@@ -902,7 +892,7 @@ impl FlattenInner {
             b,
         );
 
-        let (_, fun_block_id, _, next_arg_ty, _, _, _, r, _entry_args) = result;
+        let (fun_block_id, _, next_arg_ty, _, _, r, _entry_args) = result;
 
         // now that we have the arguments calculated, and the lambda baked, jump!
 
@@ -1138,17 +1128,7 @@ impl FlattenInner {
                 mem,
                 b,
             );
-            let (
-                _fun_scope_id,
-                fun_block_id,
-                _,
-                _next_arg_ty,
-                call_values,
-                ret_func_type,
-                _variant_ty,
-                _,
-                entry_args,
-            ) = result;
+            let (fun_block_id, _, _next_arg_ty, call_values, ret_func_type, _, entry_args) = result;
             let arg = entry_args.last().unwrap();
 
             let call_link_id = arg.1;
