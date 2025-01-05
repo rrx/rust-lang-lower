@@ -470,7 +470,7 @@ impl FlattenInner {
             self.blocks
                 .new_block(current_block_id, fun_scope_id, Successor::BlockScope);
 
-        let (v_id, _scope, _block_id, entry_link_id, _, argvec, _, _, _, _entry_args) = self
+        let (_scope, _block_id, entry_link_id, _, argvec, _, _, _, _entry_args) = self
             .push_bake_lambda_and_update_next(
                 name,
                 global_name,
@@ -486,10 +486,6 @@ impl FlattenInner {
                 VarDefinitionSpace::Static,
                 b,
             );
-
-        let r_ty2 = b.types.u.resolve(&def_func_ty.clone().into()).unwrap();
-        // update the variant with the resolved type
-        self.variant_update(v_id, r_ty2.clone(), entry_link_id);
 
         self.push_return(argvec, def_span_id, b);
         // restore position back to where we started
@@ -513,7 +509,6 @@ impl FlattenInner {
         mem: VarDefinitionSpace,
         b: &mut NB,
     ) -> (
-        VariantId,
         ScopeId,
         BlockId,
         LinkId,
@@ -540,7 +535,6 @@ impl FlattenInner {
         );
 
         let (
-            variant_id,
             fun_scope_id,
             fun_block_id,
             entry_link_id,
@@ -581,7 +575,6 @@ impl FlattenInner {
         };
 
         (
-            variant_id,
             fun_scope_id,
             fun_block_id,
             entry_link_id,
@@ -609,7 +602,6 @@ impl FlattenInner {
         mem: VarDefinitionSpace,
         b: &mut NB,
     ) -> (
-        VariantId,
         ScopeId,
         BlockId,
         LinkId,
@@ -675,7 +667,6 @@ impl FlattenInner {
         };
 
         (
-            variant_id,
             fun_scope_id,
             fun_block_id,
             entry_link_id,
@@ -911,7 +902,7 @@ impl FlattenInner {
             b,
         );
 
-        let (_variant_id, _, fun_block_id, _, next_arg_ty, _, _, _, r, _entry_args) = result;
+        let (_, fun_block_id, _, next_arg_ty, _, _, _, r, _entry_args) = result;
 
         // now that we have the arguments calculated, and the lambda baked, jump!
 
@@ -1148,7 +1139,6 @@ impl FlattenInner {
                 b,
             );
             let (
-                _variant_id,
                 _fun_scope_id,
                 fun_block_id,
                 _,
