@@ -449,7 +449,6 @@ impl FlattenInner {
         let current_block_id = self.current_block_id();
         let a = self.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
-        let body = a.def.body.clone().unwrap();
 
         // create a next scope, that includes the function
         // when the function returns it jumps to the return block, which is the next function
@@ -474,16 +473,14 @@ impl FlattenInner {
 
         let (_block_id, entry_link_id, _, argvec, _, _r, _entry_args) = self
             .push_bake_lambda_and_update_next(
+                abstraction_id,
                 name,
                 global_name,
                 fun_scope_id,
                 fun_block_id,
                 next_block_id,
-                *body,
                 def_func_ty.clone(),
                 def_span_id,
-                def_span_id,
-                ScopeType::Function,
                 Successor::FunctionDeclaration,
                 VarDefinitionSpace::Static,
                 b,
@@ -497,16 +494,14 @@ impl FlattenInner {
 
     fn push_bake_lambda_and_update_next(
         &mut self,
+        abstraction_id: AbstractionId,
         local_name: StringKey,
         global_name: StringKey,
         fun_scope_id: ScopeId,
         fun_block_id: BlockId,
         next_block_id: BlockId,
-        body: AstNode,
         def_func_type: AstFuncType,
-        def_span_id: SpanId,
         call_span_id: SpanId,
-        _scope_type: ScopeType,
         succ_type: Successor,
         mem: VarDefinitionSpace,
         b: &mut NB,
@@ -519,13 +514,17 @@ impl FlattenInner {
         FlattenResult, // return value if it exists
         ArgVec,        // entry args
     ) {
+        let a = self.abstractions.get(abstraction_id);
+        let def_span_id = a.def_span_id;
+        let body = a.def.body.clone().unwrap();
+
         let result = self.push_bake_lambda(
             local_name,
             global_name,
             fun_scope_id,
             fun_block_id,
             next_block_id,
-            body,
+            *body,
             def_func_type,
             def_span_id,
             call_span_id,
@@ -538,7 +537,6 @@ impl FlattenInner {
         let next_arg_ty = ret_block_ty.args.clone();
 
         // push the continuation block to which the function returns control
-        // this might just be the return block
         let s_name = b.labels.r(local_name.into());
         let cont_name = format!("{}.next", s_name);
 
@@ -839,20 +837,16 @@ impl FlattenInner {
         let (call_values, _call_func_type, def_func_type) =
             self.push_function_call_arguments(abstraction_id, args, vec![], call_span_id, b);
 
-        // bookmark
-        let current_block_id = self.current_block_id();
-
         // bookmark this position, to continue later
-        //let current_block_id = self.current_block_id();
+        let current_block_id = self.current_block_id();
 
         let a = self.abstractions.get(abstraction_id);
         let name = a.name;
-        let body = a.def.body.clone().unwrap();
-        let def_span_id = a.def_span_id;
 
         let s_name = b.labels.r(name.into());
-        let global_name = b.labels.fresh_key(&s_name); //&format!("{}.call", s_name));
-                                                       // create a new block
+        let global_name = b.labels.fresh_key(&s_name);
+
+        // create a new block
         let scope = self.blocks.get_scope(scope_id);
         let scope_block_id = scope.entry_block();
         let next_block_id = self
@@ -868,16 +862,14 @@ impl FlattenInner {
         );
 
         let result = self.push_bake_lambda_and_update_next(
+            abstraction_id,
             name,
             global_name,
             fun_scope_id,
             fun_block_id,
             next_block_id,
-            *body,
             def_func_type.clone(),
-            def_span_id,
             call_span_id,
-            ScopeType::Function,
             Successor::BlockScope,
             VarDefinitionSpace::Reg,
             b,
@@ -1060,7 +1052,6 @@ impl FlattenInner {
         let a = self.abstractions.get(abstraction_id);
         let lookup_name = a.name;
         let def_span_id = a.def_span_id;
-        let scope_type = ScopeType::Function;
         let succ_type = Successor::BlockScope;
         let mem = VarDefinitionSpace::Reg;
 
@@ -1085,8 +1076,6 @@ impl FlattenInner {
             };
             (fun_block_id, ret_func_type)
         } else {
-            let body = a.def.body.clone().unwrap();
-
             let scope = self.blocks.get_scope(scope_id);
             let block_id = scope.entry_block();
 
@@ -1105,16 +1094,14 @@ impl FlattenInner {
             let next_block_id = self.blocks.new_block(block_id, fun_scope_id, succ_type);
 
             let result = self.push_bake_lambda_and_update_next(
+                abstraction_id,
                 lookup_name,
                 lookup_name,
                 fun_scope_id,
                 fun_block_id,
                 next_block_id,
-                *body,
                 def_func_type,
-                def_span_id,
                 call_span_id,
-                scope_type,
                 succ_type,
                 mem,
                 b,
