@@ -24,7 +24,7 @@ impl FlattenInner {
         call_span_id: SpanId,
         new_scope: bool,
         b: &mut NB,
-    ) -> Result<BlockId> {
+    ) -> BlockId {
         let s_name = b.labels.r(name.into());
         // call in the context of the caller, which is a goto
         let current_block_id = self.current_block_id();
@@ -99,7 +99,7 @@ impl FlattenInner {
 
             // flatten function, and switch to next
             // lower first, so we resolve types
-            let _ = self.push_node(*body, PushContext::Default, b)?;
+            let _ = self.push_node(*body, PushContext::Default, b);
 
             let r_ty2 = b
                 .types
@@ -120,7 +120,7 @@ impl FlattenInner {
 
         self.switch_blocks(current_block_id);
 
-        Ok(fun_block_id)
+        fun_block_id
     }
 
     pub(crate) fn gen_unwind_cps(
@@ -157,17 +157,15 @@ impl FlattenInner {
             };
 
             let abstraction_id = self.save_ast_template(block_id, &key, &lambda, call_span_id);
-            let block_id = self
-                .gen_cps_block_with_type(
-                    key,
-                    scope_id,
-                    abstraction_id,
-                    &ty.into(),
-                    call_span_id,
-                    false,
-                    b,
-                )
-                .unwrap();
+            let block_id = self.gen_cps_block_with_type(
+                key,
+                scope_id,
+                abstraction_id,
+                &ty.into(),
+                call_span_id,
+                false,
+                b,
+            );
             block_id
         }
     }
@@ -282,7 +280,7 @@ impl FlattenInner {
         args: Vec<Argument>,
         call_span_id: SpanId,
         b: &mut NB,
-    ) -> Result<LinkId> {
+    ) -> LinkId {
         // call in the context of the caller, which is a goto
         let a = self.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
@@ -294,7 +292,7 @@ impl FlattenInner {
         // WRITE GOTO
         let (args, _) =
             Self::calculate_function_arguments(&def, &args, &[], def_span_id, call_span_id, b);
-        let call_values = self.push_call_arguments(args, call_span_id, b)?;
+        let call_values = self.push_call_arguments(args, call_span_id, b);
         let goto_block_id = self.current_block_id();
         let call_arg_type = argvec_type(&call_values);
         let call_func_type =
@@ -308,7 +306,7 @@ impl FlattenInner {
             call_span_id,
             true,
             b,
-        )?;
+        );
 
         // NOW JUMP
         // now that we have the arguments calculated, and the lambda baked, jump!
@@ -330,7 +328,7 @@ impl FlattenInner {
         // What does it even mean that a CPS function never calls it's continuation?
 
         // control is returned to the goto
-        Ok(goto_link_id)
+        goto_link_id
     }
 
     pub fn push_placeholder_terminal(&mut self, ty: AstType, call_span_id: SpanId) -> LinkId {
@@ -377,7 +375,7 @@ impl FlattenInner {
         args: Vec<Argument>,
         call_span_id: SpanId,
         _b: &mut NB,
-    ) -> Result<FlattenResult> {
+    ) -> FlattenResult {
         // push a goto
         // to keep things simpler, we just defer all resolution of the gotos until the end
         // Goto is terminal, so we write out placeholders
@@ -402,7 +400,7 @@ impl FlattenInner {
                 DeferredType::Name(name_link_id),
             );
             self.deferred_goto.add_deferred(d);
-            return Ok(FlattenResult::statement());
+            return FlattenResult::statement();
         }
 
         // if we don't have a template or a label already, then we defer
@@ -419,14 +417,14 @@ impl FlattenInner {
                 DeferredType::Goto,
             );
             self.deferred_goto.add_deferred(d);
-            return Ok(FlattenResult::statement());
+            return FlattenResult::statement();
         } else {
             // goto without function scope
             unreachable!("goto without function scope")
         }
     }
 
-    fn resolve_deferred_single(&mut self, d: DeferredGoto, b: &mut NB) -> Result<bool> {
+    fn resolve_deferred_single(&mut self, d: DeferredGoto, b: &mut NB) -> bool {
         /*
          * name resolution should not be deferred as it can assume lexical scope
          * but since we can't actually lower a jump to a variable, we are going to
@@ -479,7 +477,7 @@ impl FlattenInner {
                 */
 
                 // calculate the type, so we can unify
-                let goto_values = self.push_call_arguments(d.args.clone(), d.call_span_id, b)?;
+                let goto_values = self.push_call_arguments(d.args.clone(), d.call_span_id, b);
                 let goto_arg_type = argvec_type(&goto_values);
                 let goto_func_type =
                     AstFuncType::new(goto_arg_type.clone(), ReturnType::Never).into();
@@ -497,7 +495,7 @@ impl FlattenInner {
                 self.push_placeholder_terminal(goto_func_type, d.call_span_id);
 
                 self.deferred_goto.add_cps(d);
-                return Ok(true);
+                return true;
             }
 
             DeferredType::Goto => {
@@ -518,8 +516,8 @@ impl FlattenInner {
                         d.args.clone(),
                         d.call_span_id,
                         b,
-                    )?;
-                    return Ok(true);
+                    );
+                    return true;
                 }
 
                 // is it a label?
@@ -534,7 +532,7 @@ impl FlattenInner {
 
                     // TODO: args should be unwound before jumping
                     // by replacing jumps out of scope to the unwind function
-                    let jump_args = self.push_call_arguments(d.args.clone(), d.call_span_id, b)?;
+                    let jump_args = self.push_call_arguments(d.args.clone(), d.call_span_id, b);
 
                     // TODO: we just have a label, so we need to handle unwind here.  We can't jump
                     // directly, we need to jump to the unwind function
@@ -544,7 +542,7 @@ impl FlattenInner {
                     let _ =
                         self.push_jump_direct(target_block_id.into(), jump_args, d.call_span_id, b);
 
-                    return Ok(true);
+                    return true;
                 }
 
                 // otherwise it's not defined, return an error
@@ -558,7 +556,7 @@ impl FlattenInner {
                 unimplemented!();
             }
         }
-        Ok(false)
+        false
     }
 
     fn resolve_cps_single(&mut self, d: DeferredGoto, b: &mut NB) -> Result<()> {
@@ -675,11 +673,11 @@ impl FlattenInner {
         }
 
         // we just pushed a bunch of unwind blocks, we need to start over on deferrals
-        self.resolve_deferred(b)?;
+        self.resolve_deferred(b);
         Ok(())
     }
 
-    pub(super) fn resolve_open_identifiers(&mut self, b: &mut NB) -> Result<()> {
+    pub(super) fn resolve_open_identifiers(&mut self, b: &mut NB) {
         let mut abstractions = vec![];
         let mut blocks = vec![];
         let mut errors = vec![];
@@ -719,7 +717,7 @@ impl FlattenInner {
         }
 
         for (link_id, abstraction_id) in abstractions {
-            self.resolve_open_abstractions(link_id, abstraction_id, b)?;
+            self.resolve_open_abstractions(link_id, abstraction_id, b);
         }
 
         for link_id in errors {
@@ -728,7 +726,6 @@ impl FlattenInner {
             let s_name = b.labels.r(name.into());
             b.push_error(&format!("Identifier not found: {}", s_name), entry.span_id);
         }
-        Ok(())
     }
 
     pub(super) fn resolve_cps(&mut self, b: &mut NB) -> Result<()> {
@@ -742,14 +739,13 @@ impl FlattenInner {
         Ok(())
     }
 
-    pub(super) fn resolve_deferred(&mut self, b: &mut NB) -> Result<()> {
+    pub(super) fn resolve_deferred(&mut self, b: &mut NB) {
         loop {
             if let Some(d) = self.deferred_goto.pop_deferred() {
-                let _ = self.resolve_deferred_single(d, b)?;
+                let _ = self.resolve_deferred_single(d, b);
             } else {
                 break;
             }
         }
-        Ok(())
     }
 }

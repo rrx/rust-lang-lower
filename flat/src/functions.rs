@@ -368,7 +368,7 @@ impl FlattenInner {
         call_func_type: AstFuncType,
         call_span_id: SpanId,
         b: &mut NB,
-    ) -> Result<(LinkId, AstType)> {
+    ) -> (LinkId, AstType) {
         let a = self.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
         let name = a.name;
@@ -397,20 +397,15 @@ impl FlattenInner {
             // if it's not already baked, we need to do that here
             self.switch_blocks(self.static_block_id());
 
-            let result = self.push_bake_function(
+            let r = self.push_bake_function(
                 abstraction_id,
                 call_func_type.clone(),
                 name,
                 global_key,
                 b,
             );
-            let (variant_id, r) = result?;
             let v_entry = r.link_id.unwrap();
             self.switch_blocks(current_block_id);
-            let r_ty2 = b.types.u.resolve(&call_func_type.clone().into()).unwrap();
-
-            // update the variant with the resolved type
-            self.variant_update(variant_id, r_ty2.clone(), v_entry);
             v_entry
         };
 
@@ -419,7 +414,7 @@ impl FlattenInner {
         // so our lookups should actually be resolved by the caller
         self.functions.insert(name, v_entry);
 
-        Ok((v_entry, call_func_type.into()))
+        (v_entry, call_func_type.into())
     }
 
     pub fn push_bake(
@@ -430,8 +425,7 @@ impl FlattenInner {
     ) -> Result<LinkId> {
         let current_block_id = self.current_block_id();
         if let Some((_, abstraction_id)) = self.blocks.resolve_lambda(current_block_id, name) {
-            let result = self.push_bake_function(abstraction_id, func_type, name, name, b);
-            let (_variant_id, r) = result?;
+            let r = self.push_bake_function(abstraction_id, func_type, name, name, b);
             self.switch_blocks(current_block_id);
             Ok(r.link_id.unwrap())
         } else {
@@ -449,7 +443,7 @@ impl FlattenInner {
         name: StringKey,
         global_name: StringKey,
         b: &mut NB,
-    ) -> Result<(VariantId, FlattenResult)> {
+    ) -> FlattenResult {
         let current_block_id = self.current_block_id();
         let a = self.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
@@ -484,19 +478,23 @@ impl FlattenInner {
                 fun_block_id,
                 next_block_id,
                 *body,
-                def_func_ty,
+                def_func_ty.clone(),
                 def_span_id,
                 def_span_id,
                 ScopeType::Function,
                 Successor::FunctionDeclaration,
                 VarDefinitionSpace::Static,
                 b,
-            )?;
+            );
+
+        let r_ty2 = b.types.u.resolve(&def_func_ty.clone().into()).unwrap();
+        // update the variant with the resolved type
+        self.variant_update(v_id, r_ty2.clone(), entry_link_id);
 
         self.push_return(argvec, def_span_id, b);
         // restore position back to where we started
         self.switch_blocks(current_block_id);
-        Ok((v_id, FlattenResult::link(entry_link_id)))
+        FlattenResult::link(entry_link_id)
     }
 
     fn push_bake_lambda_and_update_next(
@@ -514,7 +512,7 @@ impl FlattenInner {
         succ_type: Successor,
         mem: VarDefinitionSpace,
         b: &mut NB,
-    ) -> Result<(
+    ) -> (
         VariantId,
         ScopeId,
         BlockId,
@@ -525,7 +523,7 @@ impl FlattenInner {
         AstType,     // variant type
         FlattenResult,
         ArgVec, // entry args
-    )> {
+    ) {
         let result = self.push_bake_lambda(
             local_name,
             global_name,
@@ -539,7 +537,7 @@ impl FlattenInner {
             succ_type,
             mem,
             b,
-        )?;
+        );
 
         let (
             variant_id,
@@ -582,7 +580,7 @@ impl FlattenInner {
             FlattenResult::statement()
         };
 
-        Ok((
+        (
             variant_id,
             fun_scope_id,
             fun_block_id,
@@ -593,7 +591,7 @@ impl FlattenInner {
             variant_ty,
             r,
             entry_args,
-        ))
+        )
     }
 
     fn push_bake_lambda(
@@ -610,7 +608,7 @@ impl FlattenInner {
         succ_type: Successor,
         mem: VarDefinitionSpace,
         b: &mut NB,
-    ) -> Result<(
+    ) -> (
         VariantId,
         ScopeId,
         BlockId,
@@ -619,7 +617,7 @@ impl FlattenInner {
         AstFuncType, // next block return type
         AstType,     // variant type
         ArgVec,      // entry args
-    )> {
+    ) {
         // lower a function as an inline block
         // returning from the function passes control the next block which is static
         //
@@ -661,7 +659,7 @@ impl FlattenInner {
 
         // flatten function, and switch to next
         self.switch_blocks(fun_block_id);
-        let _ = self.push_node(body, PushContext::Default, b)?;
+        let _ = self.push_node(body, PushContext::Default, b);
         self.maybe_terminate_block(next_block_id, def_span_id, PushContext::Function, b);
 
         let variant_ty = b.types.u.resolve(&variant_ty).unwrap();
@@ -676,7 +674,7 @@ impl FlattenInner {
             ret: ReturnType::Single(AstType::Unit).into(),
         };
 
-        Ok((
+        (
             variant_id,
             fun_scope_id,
             fun_block_id,
@@ -685,7 +683,7 @@ impl FlattenInner {
             ret_block_ty,
             variant_ty,
             entry_args,
-        ))
+        )
     }
 
     pub(super) fn push_call_arguments(
@@ -693,13 +691,13 @@ impl FlattenInner {
         args: Vec<Argument>,
         span_id: SpanId,
         b: &mut NB,
-    ) -> Result<ArgVec> {
+    ) -> ArgVec {
         let mut link_ids = vec![];
         let mut values = vec![];
         for a in args.into_iter() {
             match a {
                 Argument::Positional(expr) => {
-                    let r = self.push_node(*expr, PushContext::Default, b)?;
+                    let r = self.push_node(*expr, PushContext::Default, b);
                     let link_id = r.link_id.unwrap();
                     let entry = self.get_entry(link_id);
                     values.push((entry.name, link_id, entry.ty.clone(), span_id));
@@ -707,7 +705,7 @@ impl FlattenInner {
                 }
 
                 Argument::Named(key, expr) | Argument::System(key, expr) => {
-                    let r = self.push_node(*expr, PushContext::Default, b)?;
+                    let r = self.push_node(*expr, PushContext::Default, b);
                     let link_id = r.link_id.unwrap();
                     let entry = self.get_entry(link_id);
                     values.push((Some(key), link_id, entry.ty.clone(), span_id));
@@ -718,7 +716,7 @@ impl FlattenInner {
                     let mut args_values = vec![];
                     for expr in exprs {
                         let span_id = expr.span_id;
-                        let r = self.push_node(expr, PushContext::Default, b)?;
+                        let r = self.push_node(expr, PushContext::Default, b);
                         let link_id = r.link_id.unwrap();
                         let ty = self.get_type(link_id).clone();
                         args_values.push((Some(key), link_id, ty, span_id));
@@ -745,7 +743,7 @@ impl FlattenInner {
 
                 Argument::KwArgs(key, _expr) => {
                     let node: AstNode = 1.into();
-                    let r = self.push_node(node, PushContext::Default, b)?;
+                    let r = self.push_node(node, PushContext::Default, b);
                     let link_id = r.link_id.unwrap();
                     let ty = self.get_type(link_id).clone();
                     values.push((Some(key), link_id, ty, span_id));
@@ -753,7 +751,7 @@ impl FlattenInner {
                 }
             }
         }
-        Ok(values)
+        values
     }
 
     pub fn push_function_call_arguments(
@@ -763,11 +761,11 @@ impl FlattenInner {
         system: Vec<Argument>,
         call_span_id: SpanId,
         b: &mut NB,
-    ) -> Result<(
+    ) -> (
         ArgVec,
         AstFuncType, // call_func_type
         AstFuncType, // def_func_type
-    )> {
+    ) {
         let a = self.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
 
@@ -781,7 +779,7 @@ impl FlattenInner {
             call_span_id,
             b,
         );
-        let call_values = self.push_call_arguments(args.clone(), call_span_id, b)?;
+        let call_values = self.push_call_arguments(args.clone(), call_span_id, b);
         let call_ty = crate::argvec_type(&call_values);
         let def_func_type = self.refresh_func_type(&def_func_type, b);
 
@@ -795,7 +793,7 @@ impl FlattenInner {
             &def_func_type.clone().into(),
             def_span_id,
         );
-        Ok((call_values, call_func_type, def_func_type))
+        (call_values, call_func_type, def_func_type)
     }
 
     pub(super) fn push_call(
@@ -805,7 +803,7 @@ impl FlattenInner {
         call_span_id: SpanId,
         args: Vec<Argument>,
         b: &mut NB,
-    ) -> Result<FlattenResult> {
+    ) -> FlattenResult {
         let current_block_id = self.current_block_id();
         // look up the lambda
         // If the lambda is in the static scope, we do a normal call
@@ -823,8 +821,8 @@ impl FlattenInner {
         //let blocks = vec![];
         if is_static {
             let (call_values, call_func_type, def_func_type) =
-                self.push_function_call_arguments(abstraction_id, args, vec![], call_span_id, b)?;
-            let r = self.push_bake_static(abstraction_id, call_func_type, call_span_id, b)?;
+                self.push_function_call_arguments(abstraction_id, args, vec![], call_span_id, b);
+            let r = self.push_bake_static(abstraction_id, call_func_type, call_span_id, b);
             let (fun_link_id, _bake_ty) = r;
             self.switch_blocks(current_block_id);
             self.push_function_call(
@@ -857,7 +855,7 @@ impl FlattenInner {
         args: Vec<Argument>,
         call_span_id: SpanId,
         b: &mut NB,
-    ) -> Result<FlattenResult> {
+    ) -> FlattenResult {
         // we inline here for nested functions
         // we bake the lambda, and then jump to it
         // This is a very simple inliner, that doesn't rewrite the function signature
@@ -867,7 +865,7 @@ impl FlattenInner {
         // start the call
         // calculate the arguments
         let (call_values, _call_func_type, def_func_type) =
-            self.push_function_call_arguments(abstraction_id, args, vec![], call_span_id, b)?;
+            self.push_function_call_arguments(abstraction_id, args, vec![], call_span_id, b);
 
         // bookmark
         let current_block_id = self.current_block_id();
@@ -911,7 +909,7 @@ impl FlattenInner {
             Successor::BlockScope,
             VarDefinitionSpace::Reg,
             b,
-        )?;
+        );
 
         let (_variant_id, _, fun_block_id, _, next_arg_ty, _, _, _, r, _entry_args) = result;
 
@@ -946,9 +944,9 @@ impl FlattenInner {
             // let mlir handle the rest
             let entry = self.get_entry_mut(arg_link_id);
             entry.mem = VarDefinitionSpace::Stack(decl_link_id);
-            Ok(FlattenResult::link(decl_link_id))
+            FlattenResult::link(decl_link_id)
         } else {
-            Ok(r)
+            r
         }
     }
 
@@ -959,7 +957,7 @@ impl FlattenInner {
         args: Vec<Argument>,
         call_span_id: SpanId,
         b: &mut NB,
-    ) -> Result<FlattenResult> {
+    ) -> FlattenResult {
         // create a new block static blocks, which is the final destination
         let scope = self.blocks.get_scope(scope_id);
         let scope_block_id = scope.entry_block();
@@ -980,7 +978,7 @@ impl FlattenInner {
         // Entry arguments, including continuation
         // calculate the arguments for the CPS function
         let (call_values, _call_func_type, top_def_func_type) =
-            self.push_function_call_arguments(abstraction_id, args, system, call_span_id, b)?;
+            self.push_function_call_arguments(abstraction_id, args, system, call_span_id, b);
 
         let arg = call_values.last().unwrap();
         let _arg_index = call_values.len() - 1;
@@ -1000,7 +998,7 @@ impl FlattenInner {
             call_span_id,
             top_def_func_type.clone(),
             b,
-        )?;
+        );
         let next_arg_ty = ret_block_ty.args.clone();
 
         b.unify(
@@ -1072,13 +1070,11 @@ impl FlattenInner {
         // r contains the link to the return value
         // r contains the return result link, which is part of the next block arguments.
         if let Some(decl_link_id) = v_decl {
-            Ok(FlattenResult::link(decl_link_id))
+            FlattenResult::link(decl_link_id)
         } else {
-            Ok(r)
+            // r contains the link to the return value
+            r
         }
-
-        // r contains the link to the return value
-        //Ok(r)
     }
 
     fn push_call_inline_cps_inner(
@@ -1088,7 +1084,7 @@ impl FlattenInner {
         call_span_id: SpanId,
         def_func_type: AstFuncType,
         b: &mut NB,
-    ) -> Result<(BlockId, AstFuncType)> {
+    ) -> (BlockId, AstFuncType) {
         let a = self.abstractions.get(abstraction_id);
         let lookup_name = a.name;
         let def_span_id = a.def_span_id;
@@ -1150,7 +1146,7 @@ impl FlattenInner {
                 succ_type,
                 mem,
                 b,
-            )?;
+            );
             let (
                 _variant_id,
                 _fun_scope_id,
@@ -1170,12 +1166,12 @@ impl FlattenInner {
             // complete the lambda bake with a jump to the continuation, this is the exit of
             // the lambda.  The continuation is part of the signature, so we can call it again
             let _goto_link_id =
-                self.push_goto_link(call_link_id, call_values.clone(), call_span_id, b)?;
+                self.push_goto_link(call_link_id, call_values.clone(), call_span_id, b);
 
             (fun_block_id, ret_func_type)
         };
 
         // restore position back to where we started
-        Ok((fun_block_id, ret_block_ty))
+        (fun_block_id, ret_block_ty)
     }
 }

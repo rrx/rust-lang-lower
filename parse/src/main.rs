@@ -103,11 +103,11 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
         b.dump_ast(&ast);
     }
 
-    let mut f = Flatten::flatten_module(ast, b)?;
+    let mut f = Flatten::flatten_module(ast, b);
 
     f.push_bake_main(b)?;
 
-    let m = f.finish(b)?;
+    let m = f.finish(b);
 
     let directory = std::path::Path::new(output_filename)
         .parent()
