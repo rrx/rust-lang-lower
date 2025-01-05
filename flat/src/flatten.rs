@@ -354,7 +354,7 @@ impl FlattenInner {
         let block = self.blocks.get_block(block_id);
         let scope_id = block.scope();
 
-        let (_fun_scope_id, fun_block_id, _) =
+        let fun_block_id =
             self.gen_cps_block_with_type(name, scope_id, abstraction_id, &ty, span_id, false, b)?;
 
         // now replace the abstraction code

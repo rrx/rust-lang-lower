@@ -24,7 +24,7 @@ impl FlattenInner {
         call_span_id: SpanId,
         new_scope: bool,
         b: &mut NB,
-    ) -> Result<(ScopeId, BlockId, AstType)> {
+    ) -> Result<BlockId> {
         let s_name = b.labels.r(name.into());
         // call in the context of the caller, which is a goto
         let current_block_id = self.current_block_id();
@@ -47,81 +47,80 @@ impl FlattenInner {
         let call_arg_type = AstType::Struct(call_func_type.fields());
         b.unify(&call_arg_type, call_span_id, &func_type.args, def_span_id);
 
-        let (fun_block_id, fun_scope_id, def_arg_type) =
-            if let Some((resolve_type, link_id, fun_scope_id)) =
-                self.resolve_function_name(scope_id, &name, &call_arg_type, b)
-            {
-                let entry = self.get_entry(link_id);
-                let fun_block_id = entry.block_id;
-                b.unify(&call_arg_type, call_span_id, &resolve_type, def_span_id);
-                (fun_block_id, fun_scope_id, resolve_type)
+        let fun_block_id = if let Some((resolve_type, link_id, _fun_scope_id)) =
+            self.resolve_function_name(scope_id, &name, &call_arg_type, b)
+        {
+            let entry = self.get_entry(link_id);
+            let fun_block_id = entry.block_id;
+            b.unify(&call_arg_type, call_span_id, &resolve_type, def_span_id);
+            fun_block_id
+        } else {
+            let scope = self.blocks.get_scope(scope_id);
+            let block_id = scope.entry_block();
+
+            let (fun_block_id, _) = if new_scope {
+                self.blocks.new_scope_and_block(
+                    ScopeType::Block,
+                    ScopeState::block(),
+                    block_id,
+                    Successor::BlockScope,
+                )
             } else {
-                let scope = self.blocks.get_scope(scope_id);
-                let block_id = scope.entry_block();
-
-                let (fun_block_id, fun_scope_id) = if new_scope {
-                    self.blocks.new_scope_and_block(
-                        ScopeType::Block,
-                        ScopeState::block(),
-                        block_id,
-                        Successor::BlockScope,
-                    )
-                } else {
-                    let fun_block_id =
-                        self.blocks
-                            .new_block(block_id, scope_id, Successor::BlockScope);
-                    (fun_block_id, scope_id)
-                };
-
-                // Start lambda block
-                let lambda_name = b.labels.fresh_key(&s_name);
-
-                // make a copy of the body
-                let a = self.abstractions.get(abstraction_id);
-                let body = a.def.body.clone().unwrap();
-
-                self.switch_blocks(fun_block_id);
-
-                let r_ty1 = b.types.u.resolve(&def_func_type.into()).unwrap();
-
-                let (entry_link_id, _) = self.push_start_block(
-                    r_ty1.clone().get_func().clone(),
-                    Some(lambda_name),
-                    def_span_id,
-                );
-                // add the name to scope
-                // do this early for recursive functions
-                // add entry to scope, for recursion
-                self.blocks
-                    .scope_define(scope_id, lambda_name, entry_link_id);
-
-                let variant_id =
-                    self.variant_add(scope_id, name, r_ty1.clone(), entry_link_id, fun_block_id);
-
-                // flatten function, and switch to next
-                // lower first, so we resolve types
-                let _ = self.push_node(*body, PushContext::Default, b)?;
-
-                let r_ty2 = b
-                    .types
-                    .u
-                    .resolve(&call_arg_type)
-                    .unwrap_or(call_arg_type.clone());
-                self.variant_update(variant_id, r_ty2.clone(), entry_link_id);
-
-                // terminate if not already terminated
-                // this is for dead code
-                let block = self.blocks.get_block(self.current_block_id());
-                if !block.is_term() {
-                    self.push_placeholder_terminal(r_ty1, def_span_id);
-                }
-
-                (fun_block_id, fun_scope_id, r_ty2)
+                let fun_block_id = self
+                    .blocks
+                    .new_block(block_id, scope_id, Successor::BlockScope);
+                (fun_block_id, scope_id)
             };
+
+            // Start lambda block
+            let lambda_name = b.labels.fresh_key(&s_name);
+
+            // make a copy of the body
+            let a = self.abstractions.get(abstraction_id);
+            let body = a.def.body.clone().unwrap();
+
+            self.switch_blocks(fun_block_id);
+
+            let r_ty1 = b.types.u.resolve(&def_func_type.into()).unwrap();
+
+            let (entry_link_id, _) = self.push_start_block(
+                r_ty1.clone().get_func().clone(),
+                Some(lambda_name),
+                def_span_id,
+            );
+            // add the name to scope
+            // do this early for recursive functions
+            // add entry to scope, for recursion
+            self.blocks
+                .scope_define(scope_id, lambda_name, entry_link_id);
+
+            let variant_id =
+                self.variant_add(scope_id, name, r_ty1.clone(), entry_link_id, fun_block_id);
+
+            // flatten function, and switch to next
+            // lower first, so we resolve types
+            let _ = self.push_node(*body, PushContext::Default, b)?;
+
+            let r_ty2 = b
+                .types
+                .u
+                .resolve(&call_arg_type)
+                .unwrap_or(call_arg_type.clone());
+            self.variant_update(variant_id, r_ty2.clone(), entry_link_id);
+
+            // terminate if not already terminated
+            // this is for dead code
+            let block = self.blocks.get_block(self.current_block_id());
+            if !block.is_term() {
+                self.push_placeholder_terminal(r_ty1, def_span_id);
+            }
+
+            fun_block_id
+        };
 
         self.switch_blocks(current_block_id);
 
-        Ok((fun_scope_id, fun_block_id, def_arg_type))
+        Ok(fun_block_id)
     }
 
     pub(crate) fn gen_unwind_cps(
@@ -158,7 +157,7 @@ impl FlattenInner {
             };
 
             let abstraction_id = self.save_ast_template(block_id, &key, &lambda, call_span_id);
-            let (_scope_id, block_id, _ty) = self
+            let block_id = self
                 .gen_cps_block_with_type(
                     key,
                     scope_id,
@@ -301,7 +300,7 @@ impl FlattenInner {
         let call_func_type =
             AstFuncType::new(call_arg_type.clone().into(), ReturnType::Never.into()).into();
 
-        let (_fun_scope_id, fun_block_id, _def_arg_type) = self.gen_cps_block_with_type(
+        let fun_block_id = self.gen_cps_block_with_type(
             name,
             scope_id,
             abstraction_id,
