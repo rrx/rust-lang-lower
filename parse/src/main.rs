@@ -105,7 +105,7 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
 
     let mut f = Flatten::flatten_module(ast, b);
 
-    f.push_bake_main(b)?;
+    let main_link_id = f.push_bake_main(b)?;
 
     let m = f.finish(b);
 
@@ -186,7 +186,14 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
     }
 
     let exit_code = if config.interp {
-        let exit_code = flat::interp::interp(&conf, &m.shared_libraries(), &m, "target/debug", b);
+        let exit_code = flat::interp::interp(
+            &conf,
+            &m.shared_libraries(),
+            &m,
+            "target/debug",
+            main_link_id,
+            b,
+        );
         exit_code
     } else if config.exec {
         log::info!("exec");

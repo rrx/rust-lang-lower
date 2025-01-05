@@ -1,4 +1,4 @@
-use compile_core::{AstType, SpanId, StringKey};
+use compile_core::{AstType, SpanId};
 use petgraph::graph::NodeIndex;
 
 use std::convert::Into;
@@ -18,10 +18,6 @@ impl ICodeModule for Flatten<Module> {
 
     fn shared_libraries(&self) -> Vec<String> {
         self.link.shared_libraries()
-    }
-
-    fn lookup_name(&self, name: &StringKey) -> Option<LinkId> {
-        self.functions.get(name).cloned()
     }
 
     fn get_span_id(&self, value_id: ValueId) -> SpanId {

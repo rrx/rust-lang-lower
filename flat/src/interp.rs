@@ -1,11 +1,11 @@
 use crate::{
-    Builtin, Config, Flatten, ICodeModule, LCode, Module, NodeBuilder, UseIndex, ValueId,
+    Builtin, Config, Flatten, ICodeModule, LCode, LinkId, Module, NodeBuilder, UseIndex, ValueId,
     VarDefinitionSpace,
 };
 use anyhow::Result;
 use std::collections::{HashMap, VecDeque};
 
-use compile_core::{BinaryOperation, Literal, NaryOperation, StringKey, UnaryOperation};
+use compile_core::{BinaryOperation, Literal, NaryOperation, UnaryOperation};
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -536,9 +536,8 @@ impl<'a> Interp<'a> {
         Ok(result)
     }
 
-    pub fn run(&mut self, name: StringKey) -> Vec<Value> {
-        let link_id = self.m.lookup_name(&name).unwrap();
-        let pos = self.m.resolve_code_offset(link_id.into());
+    pub fn run(&mut self, main_link_id: LinkId) -> Vec<Value> {
+        let pos = self.m.resolve_code_offset(main_link_id.into());
         self.return_link_id = None;
         self.jump_type = ScopeType::Function;
         self.pos = pos;
@@ -568,6 +567,7 @@ pub fn interp(
     shared: &[String],
     m: &Flatten<Module>,
     libpath: &str,
+    main_link_id: LinkId,
     b: &mut NodeBuilder,
 ) -> i32 {
     let paths = shared
@@ -581,9 +581,9 @@ pub fn interp(
 
     let _shared = paths.iter().map(|p| p.as_str()).collect::<Vec<_>>();
 
-    let main = b.labels.s("main");
+    //let main = b.labels.s("main");
     let mut interp = Interp::new(config, m, b);
-    let values = interp.run(main);
+    let values = interp.run(main_link_id.into());
 
     log::info!("exec: {:?}, {:?}", values, interp.stack);
     let result = if let Some(Value::Int(value)) = values.get(0) {

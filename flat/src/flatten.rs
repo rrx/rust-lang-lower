@@ -86,7 +86,6 @@ pub struct FlattenInner {
     static_block: BlockId,
     pub(crate) current_block: BlockId,
     pub(super) block_links: HashMap<BlockId, LinkId>,
-    pub(crate) functions: HashMap<StringKey, LinkId>,
     pub(crate) open_identifiers: Vec<LinkId>,
     pub(crate) scoped_continuations: ScopedContinuations,
     pub(super) deferred_goto: DeferredGotoList,
@@ -136,7 +135,6 @@ impl Flatten<Start> {
             static_block: static_block_id,
             current_block: static_block_id,
             block_links: HashMap::new(),
-            functions: HashMap::new(),
             open_identifiers: vec![],
             scoped_continuations: ScopedContinuations::new(),
             deferred_goto: DeferredGotoList::new(),
@@ -422,10 +420,6 @@ impl FlattenInner {
             let entry = self.get_entry(label_link_id).clone();
             let ty = self.get_type(label_link_id).clone();
             assert_eq!(entry.mem, VarDefinitionSpace::Static);
-
-            if let Some(key) = entry.name {
-                self.functions.insert(key, label_link_id);
-            }
 
             self.push_code(
                 LCode::DeclareFunction(Some(block_id)),

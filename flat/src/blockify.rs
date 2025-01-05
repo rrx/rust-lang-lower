@@ -140,7 +140,6 @@ impl LCode {
 
 pub trait ICodeModule {
     fn shared_libraries(&self) -> Vec<String>;
-    fn lookup_name(&self, name: &StringKey) -> Option<LinkId>;
     fn get_span_id(&self, value_id: ValueId) -> SpanId;
     fn get_name(&self, v: CodeOffset) -> Option<StringLabel>;
     fn get_code(&self, value_id: ValueId) -> &LCode;

@@ -403,11 +403,6 @@ impl FlattenInner {
             v_entry
         };
 
-        // we are keeping a list of function names so we can look them up later
-        // there's a better way to do this.  A function only makes sense in the context of a call
-        // so our lookups should actually be resolved by the caller
-        self.functions.insert(name, v_entry);
-
         (v_entry, call_func_type.into())
     }
 
