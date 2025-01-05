@@ -4,7 +4,7 @@ use petgraph::graph::NodeIndex;
 use std::convert::Into;
 
 use crate::{
-    CodeEntry, CodeOffset, CodeRow, Flatten, ICodeModule, LCode, LinkId, Module, NodeBuilder as NB,
+    CodeEntry, CodeOffset, CodeRow, Flatten, ICodeModule, LCode, Module, NodeBuilder as NB,
     StringLabel, Successor, ValueId, VarDefinitionSpace, VariantId,
 };
 
@@ -13,7 +13,7 @@ use tabled::{settings::Style, Table};
 impl ICodeModule for Flatten<Module> {
     fn get_entry(&self, value_id: ValueId) -> &CodeEntry {
         let link_id = self.state.values[value_id.index()];
-        self.entries.get(link_id.index()).unwrap()
+        self.get_link_entry(link_id)
     }
 
     fn shared_libraries(&self) -> Vec<String> {
@@ -83,10 +83,6 @@ impl ICodeModule for Flatten<Module> {
         self.inner.maybe_resolve_code_offset(code_offset)
     }
 
-    fn code_count(&self) -> usize {
-        self.entries.len()
-    }
-
     fn get_label_args(&self, v: ValueId) -> Vec<AstType> {
         let entry = self.get_entry(v);
         let block_id = entry.block_id;
@@ -106,10 +102,6 @@ impl ICodeModule for Flatten<Module> {
 }
 
 impl Flatten<Module> {
-    pub fn get_link_entry(&self, link_id: LinkId) -> &CodeEntry {
-        self.entries.get(link_id.index()).unwrap()
-    }
-
     pub fn get_code_row(&self, v: ValueId, b: &mut NB) -> Option<CodeRow> {
         let link_id = self.state.values[v.index()];
         let entry = self.get_link_entry(link_id);

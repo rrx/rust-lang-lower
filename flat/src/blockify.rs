@@ -327,7 +327,6 @@ pub trait ICodeModule {
             }
         }
     }
-    fn code_count(&self) -> usize;
 
     fn format_code(&self, v: ValueId) -> String {
         let code = self.get_code(v);

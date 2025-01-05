@@ -80,7 +80,7 @@ impl FlattenState for Module {}
 
 pub struct FlattenInner {
     pub(super) link: LinkOptions,
-    pub(super) entries: Vec<CodeEntry>,
+    entries: Vec<CodeEntry>,
     pub blocks: BlockGraph,
     static_scope: ScopeId,
     static_block: BlockId,
@@ -171,6 +171,12 @@ impl Flatten<FirstPass> {
             state: Module { values },
         };
         m
+    }
+}
+
+impl Flatten<Module> {
+    pub fn get_link_entry(&self, link_id: LinkId) -> &CodeEntry {
+        self.entries.get(link_id.index()).unwrap()
     }
 }
 
