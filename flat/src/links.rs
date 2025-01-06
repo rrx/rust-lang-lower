@@ -1,4 +1,4 @@
-use crate::BlockId;
+use crate::{BlockId, CodeEntry};
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 pub struct ValueId(pub(crate) u32);
@@ -88,5 +88,39 @@ impl From<BlockId> for CodeOffset {
 impl From<&BlockId> for CodeOffset {
     fn from(item: &BlockId) -> Self {
         Self::Block(*item)
+    }
+}
+
+pub struct Links {
+    links: Vec<CodeEntry>,
+}
+
+impl Links {
+    pub fn new() -> Self {
+        Self { links: Vec::new() }
+    }
+
+    pub fn get(&self, link_id: LinkId) -> &CodeEntry {
+        self.links.get(link_id.index()).unwrap()
+    }
+
+    pub fn get_mut(&mut self, link_id: LinkId) -> &mut CodeEntry {
+        self.links.get_mut(link_id.index()).unwrap()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = LinkId> + '_ {
+        self.links.iter().map(|entry| entry.link.unwrap())
+    }
+
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut CodeEntry> + '_ {
+        self.links.iter_mut()
+    }
+
+    pub fn insert(&mut self, mut entry: CodeEntry) -> LinkId {
+        let index = self.links.len();
+        let link_id = LinkId(index as u32);
+        entry.link = Some(link_id);
+        self.links.push(entry);
+        link_id
     }
 }

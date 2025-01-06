@@ -10,8 +10,9 @@ use std::convert::Into;
 
 use crate::{
     AbstractionsBuilder, BlockGraph, BlockId, Builtin, CodeEntry, CodeOffset, ContinuationFlow,
-    DeferredGotoList, FlowEdge, FunctionVariantBuilder, LCode, LinkId, NodeBuilder as NB, ScopeId,
-    ScopeState, ScopeType, ScopedContinuations, Successor, ValueId, VarDefinitionSpace, VariantId,
+    DeferredGotoList, FlowEdge, FunctionVariantBuilder, LCode, LinkId, Links, NodeBuilder as NB,
+    ScopeId, ScopeState, ScopeType, ScopedContinuations, Successor, ValueId, VarDefinitionSpace,
+    VariantId,
 };
 use std::ops::{Deref, DerefMut};
 
@@ -80,7 +81,7 @@ impl FlattenState for Module {}
 
 pub struct FlattenInner {
     pub(super) link: LinkOptions,
-    entries: Vec<CodeEntry>,
+    links: Links,
     pub(super) blocks: BlockGraph,
     static_scope: ScopeId,
     static_block: BlockId,
@@ -128,7 +129,7 @@ impl Flatten<Start> {
         let mut blocks = BlockGraph::new();
         let (static_block_id, static_scope_id) = blocks.root();
         let inner = FlattenInner {
-            entries: vec![],
+            links: Links::new(),
             blocks,
             link: LinkOptions::new(),
             static_scope: static_scope_id,
@@ -176,7 +177,7 @@ impl Flatten<FirstPass> {
 
 impl Flatten<Module> {
     pub fn get_link_entry(&self, link_id: LinkId) -> &CodeEntry {
-        self.entries.get(link_id.index()).unwrap()
+        self.links.get(link_id)
     }
 
     pub fn entry_links(&self, block_id: BlockId) -> Vec<LinkId> {
@@ -237,7 +238,7 @@ impl FlattenInner {
     }
 
     pub fn type_inference(&mut self, b: &mut NB) {
-        for entry in self.entries.iter_mut() {
+        for entry in self.links.iter_mut() {
             if !entry.ty.is_unknown() {
                 continue;
             }
@@ -247,7 +248,7 @@ impl FlattenInner {
 
     pub fn type_inference_enforce(&mut self, b: &mut NB) {
         //b.types.dump();
-        for entry in self.entries.iter_mut() {
+        for entry in self.links.iter_mut() {
             if !entry.ty.is_unknown() {
                 continue;
             }
@@ -488,12 +489,8 @@ impl FlattenInner {
         (self, values)
     }
 
-    fn insert_entry(&mut self, mut entry: CodeEntry) -> LinkId {
-        let index = self.entries.len();
-        let link_id = LinkId(index as u32);
-        entry.link = Some(link_id);
-        self.entries.push(entry);
-        link_id
+    fn insert_entry(&mut self, entry: CodeEntry) -> LinkId {
+        self.links.insert(entry)
     }
 
     fn insert_decl(&mut self, block_id: BlockId, entry: CodeEntry) -> LinkId {
@@ -653,7 +650,7 @@ impl FlattenInner {
     }
 
     pub fn get_entry(&self, link_id: LinkId) -> &CodeEntry {
-        self.entries.get(link_id.index()).unwrap()
+        self.links.get(link_id)
     }
 
     pub fn get_type(&self, link_id: LinkId) -> &AstType {
@@ -661,7 +658,7 @@ impl FlattenInner {
     }
 
     pub fn get_entry_mut(&mut self, link_id: LinkId) -> &mut CodeEntry {
-        self.entries.get_mut(link_id.index()).unwrap()
+        self.links.get_mut(link_id)
     }
 
     pub fn push_sequence(
