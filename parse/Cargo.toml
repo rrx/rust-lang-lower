@@ -7,7 +7,6 @@ edition = "2021"
 
 [dependencies]
 flat = { path = "../flat" }
-dump = { path = "../dump" }
 compile_core = { path = "../compile_core" }
 lower_mlir = { path = "../lower_mlir" }
 

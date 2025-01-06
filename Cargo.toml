@@ -4,7 +4,6 @@ members = [
   "lower_mlir",
   "parse",
   "flat",
-  "dump",
   "biunify",
   "hmunify",
   "compile_core"
