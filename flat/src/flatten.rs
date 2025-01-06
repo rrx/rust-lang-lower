@@ -80,7 +80,7 @@ impl FlattenState for Module {}
 
 pub struct FlattenInner {
     pub(super) link: LinkOptions,
-    links: Links,
+    pub(super) links: Links,
     pub(super) blocks: BlockGraph,
     static_scope: ScopeId,
     static_block: BlockId,
@@ -350,8 +350,6 @@ impl FlattenInner {
             let links = block.iter().collect::<Vec<_>>();
             for link_id in links {
                 let value_id = values.insert(link_id);
-                //let value_id = ValueId::new(values.len() as u32);
-                //values.push(link_id);
                 let entry = self.get_entry_mut(link_id);
                 entry.value_id = Some(value_id);
             }
@@ -424,12 +422,8 @@ impl FlattenInner {
         (self, values)
     }
 
-    fn insert_entry(&mut self, entry: CodeEntry) -> LinkId {
-        self.links.insert(entry)
-    }
-
     fn insert_decl(&mut self, block_id: BlockId, entry: CodeEntry) -> LinkId {
-        let link_id = self.insert_entry(entry);
+        let link_id = self.links.insert(entry);
         self.blocks.get_block_mut(block_id).push_decl(link_id);
         link_id
     }
@@ -460,20 +454,20 @@ impl FlattenInner {
 
         let v = match (code.is_term(), &code) {
             (true, _) => {
-                let link_id = self.insert_entry(entry);
+                let link_id = self.links.insert(entry);
                 self.blocks.get_block_mut(block_id).terminate(link_id);
                 link_id
             }
 
             (_, LCode::Label) => {
-                let link_id = self.insert_entry(entry);
+                let link_id = self.links.insert(entry);
                 let block = self.blocks.get_block_mut(block_id);
                 block.push_label(link_id);
                 link_id
             }
 
             (_, LCode::Arg(_)) => {
-                let link_id = self.insert_entry(entry);
+                let link_id = self.links.insert(entry);
                 let block = self.blocks.get_block_mut(block_id);
                 block.push_arg(link_id);
                 link_id
@@ -490,7 +484,7 @@ impl FlattenInner {
             }
 
             _ => {
-                let link_id = self.insert_entry(entry);
+                let link_id = self.links.insert(entry);
                 let block = self.blocks.get_block_mut(block_id);
                 block.push_link(link_id);
                 link_id
@@ -647,18 +641,13 @@ impl FlattenInner {
         )
     }
 
-    pub fn is_load_required(&mut self, v: LinkId) -> bool {
-        let entry = self.get_entry(v);
-        entry.is_load_required()
-    }
-
     pub fn push_loads_if_needed(
         &mut self,
         values: &[(Option<StringKey>, LinkId, AstType, SpanId)],
     ) -> Vec<LinkId> {
         let mut links = vec![];
         for (maybe_key, v, ty, span_id) in values {
-            let out = if self.is_load_required(*v) {
+            let out = if self.links.is_load_required(*v) {
                 let link_id = self.push_code(
                     LCode::Load(*v),
                     ty.clone(),
@@ -888,26 +877,6 @@ impl FlattenInner {
         }
 
         jump_link_id
-    }
-
-    pub fn resolve_value(&self, link_id: LinkId) -> LinkId {
-        let mut current = link_id;
-        loop {
-            let entry = self.get_entry(current);
-
-            if let LCode::CallValue(base) = &entry.code {
-                match base {
-                    CodeOffset::Link(next_link_id) => {
-                        current = *next_link_id;
-                        continue;
-                    }
-                    _ => unimplemented!(),
-                }
-            }
-
-            break;
-        }
-        current
     }
 
     pub fn push_code(

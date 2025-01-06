@@ -46,7 +46,6 @@ impl AbstractionsBuilder {
             def,
             def_span_id,
             name,
-            //caller_blocks: HashSet::new(),
         });
         AbstractionId::new(index)
     }

@@ -1,4 +1,4 @@
-use crate::{BlockId, CodeEntry};
+use crate::{BlockId, CodeEntry, LCode};
 use serde::Serialize;
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Serialize)]
@@ -155,4 +155,31 @@ impl Links {
         self.links.push(entry);
         link_id
     }
+
+    pub fn is_load_required(&mut self, v: LinkId) -> bool {
+        let entry = self.get(v);
+        entry.is_load_required()
+    }
+
+    /*
+    pub fn resolve_value(&self, link_id: LinkId) -> LinkId {
+        let mut current = link_id;
+        loop {
+            let entry = self.get(current);
+
+            if let LCode::CallValue(base) = &entry.code {
+                match base {
+                    CodeOffset::Link(next_link_id) => {
+                        current = *next_link_id;
+                        continue;
+                    }
+                    _ => unimplemented!(),
+                }
+            }
+
+            break;
+        }
+        current
+    }
+    */
 }

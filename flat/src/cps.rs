@@ -456,7 +456,7 @@ impl FlattenInner {
 
                 // Push load if required.  This is needed if the target is stored in memory,
                 // rather than a register
-                let load_link_id = if self.is_load_required(*def_target_link_id) {
+                let load_link_id = if self.links.is_load_required(*def_target_link_id) {
                     let entry = self.get_entry(*def_target_link_id).clone();
                     let link_id = self.push_code(
                         LCode::Load(*def_target_link_id),
