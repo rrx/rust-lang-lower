@@ -5,7 +5,7 @@ use std::convert::Into;
 
 use crate::{
     CodeEntry, CodeOffset, CodeRow, Flatten, ICodeModule, LCode, Module, NodeBuilder as NB,
-    StringLabel, Successor, ValueId, VarDefinitionSpace, VariantId,
+    StringLabel, Successor, ValueId, VarDefinitionSpace,
 };
 
 use tabled::{settings::Style, Table};
@@ -161,13 +161,5 @@ impl Flatten<Module> {
         println!("saved table {:?}", filename);
         std::fs::write(filename, s.clone()).unwrap();
         s
-    }
-
-    pub fn dump_variants(&self, b: &NB) {
-        for (index, v) in self.variants.variants.iter().enumerate() {
-            let variant_id = VariantId::new(index);
-            let name = b.labels.r(v.name.into());
-            println!("[{}] Variant: {:?}", variant_id, (name, v));
-        }
     }
 }

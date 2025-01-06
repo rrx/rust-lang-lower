@@ -220,7 +220,7 @@ impl<'a> TypedScope<'a, ScopeTypeStateLoop> {
 #[derive(Debug)]
 pub struct ScopeLayer {
     names: HashMap<StringKey, LinkId>,
-    entries: HashMap<StringKey, HashSet<VariantId>>,
+    variants: HashMap<StringKey, HashSet<VariantId>>,
     block_labels: HashMap<StringLabel, BlockId>,
     entry_block: Option<BlockId>,
     return_block: Option<BlockId>,
@@ -238,7 +238,7 @@ impl ScopeLayer {
         Self {
             block_labels: HashMap::new(),
             names: HashMap::new(),
-            entries: HashMap::new(),
+            variants: HashMap::new(),
             entry_block: None,
             return_block: None,
             loop_block: None,
@@ -280,12 +280,12 @@ impl ScopeLayer {
     }
 
     pub fn variant_link(&mut self, name: StringKey, variant_id: VariantId) {
-        if let Some(m) = self.entries.get_mut(&name) {
+        if let Some(m) = self.variants.get_mut(&name) {
             m.insert(variant_id);
         } else {
             let mut m = HashSet::new();
             m.insert(variant_id);
-            self.entries.insert(name, m);
+            self.variants.insert(name, m);
         }
     }
 
@@ -300,7 +300,7 @@ impl ScopeLayer {
 
     pub fn dump(&self, b: &NodeBuilder) {
         println!("Scope: {:?}", self.scope_type);
-        for (k, v) in self.entries.iter() {
+        for (k, v) in self.variants.iter() {
             let name = b.labels.r((*k).into());
             for variant_id in v.iter() {
                 println!("\tEntry: {}:{}", name, variant_id);
@@ -531,6 +531,8 @@ impl BlockGraph {
     }
 
     pub fn dump(&self, b: &NodeBuilder) {
+        self.dump_scopes();
+        self.variants.dump_variants(b);
         self.sg.node_indices().for_each(|index| {
             let scope_id: ScopeId = index.into();
             let scope = self.get_scope(scope_id);
@@ -631,7 +633,7 @@ impl BlockGraph {
         let mut out = vec![];
         for scope_id in self.walk_scopes(start_scope_id) {
             let scope = self.get_scope(scope_id);
-            if let Some(e) = scope.entries.get(name) {
+            if let Some(e) = scope.variants.get(name) {
                 for variant_id in e.iter() {
                     out.push(*variant_id);
                 }

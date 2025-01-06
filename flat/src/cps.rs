@@ -94,7 +94,7 @@ impl FlattenInner {
             self.blocks
                 .scope_define(scope_id, lambda_name, entry_link_id);
 
-            let variant_id = self.variant_add(
+            let variant_id = self.blocks.variant_add(
                 scope_id,
                 abstraction_id,
                 name,
@@ -112,7 +112,8 @@ impl FlattenInner {
                 .u
                 .resolve(&call_arg_type)
                 .unwrap_or(call_arg_type.clone());
-            self.variant_update(variant_id, r_ty2.clone(), entry_link_id);
+            self.blocks
+                .variant_update(variant_id, r_ty2.clone(), entry_link_id);
 
             // terminate if not already terminated
             // this is for dead code

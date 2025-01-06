@@ -3,7 +3,12 @@ use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
 use std::collections::HashSet;
 
-use crate::{BlockId, CodeOffset, LinkId, ScopeId, ScopeLayer};
+use crate::{
+    AbstractionId, BlockId, CodeOffset, FunctionVariantBuilder, LinkId, NodeBuilder, ScopeId,
+    ScopeLayer, VariantId,
+};
+
+use compile_core::{AstType, StringKey};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Successor {
@@ -165,6 +170,7 @@ impl IRBlock {
 pub struct BlockGraph {
     pub(super) bg: DiGraph<IRBlock, Successor>,
     pub(super) sg: DiGraph<ScopeLayer, ()>,
+    pub(super) variants: FunctionVariantBuilder,
 }
 
 impl BlockGraph {
@@ -172,6 +178,7 @@ impl BlockGraph {
         Self {
             bg: DiGraph::new(),
             sg: DiGraph::new(),
+            variants: FunctionVariantBuilder::new(),
         }
     }
 
@@ -341,5 +348,26 @@ impl BlockGraph {
             let block = bg.node_weight(node).unwrap();
             println!("[{}] Block: {:?}", block_id, block);
         }
+    }
+
+    pub fn variant_add(
+        &mut self,
+        scope_id: ScopeId,
+        abstraction_id: AbstractionId,
+        name: StringKey,
+        ty: AstType,
+        link_id: LinkId,
+        block_id: BlockId,
+    ) -> VariantId {
+        let variant_id = self.variants.add(ty, link_id, block_id, name);
+        let scope = self.get_scope_mut(scope_id);
+        scope.variant_link(name, variant_id);
+        variant_id
+    }
+
+    pub fn variant_update(&mut self, variant_id: VariantId, ty: AstType, link_id: LinkId) {
+        let v = self.variants.get_mut(variant_id);
+        v.link_id = link_id;
+        v.ty = ty;
     }
 }

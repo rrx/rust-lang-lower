@@ -18,6 +18,7 @@ pub mod interp;
 pub mod links;
 pub mod mem;
 pub mod scope;
+pub mod variants;
 
 pub use block_format::*;
 pub use blockify::{BlockifyError, ICodeModule, LCode, UseIndex, UseIndexList};
@@ -36,3 +37,4 @@ pub use interp::*;
 pub use links::*;
 pub use mem::*;
 pub use scope::*;
+pub use variants::*;

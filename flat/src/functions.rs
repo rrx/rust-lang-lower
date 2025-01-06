@@ -10,116 +10,11 @@ use compile_core::{
 };
 use std::collections::{HashMap, HashSet};
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-pub struct VariantId(u32);
-impl std::fmt::Display for VariantId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "V{}", self.0)
-    }
-}
-
-impl VariantId {
-    pub fn new(index: usize) -> Self {
-        Self(index as u32)
-    }
-    pub fn index(&self) -> usize {
-        self.0 as usize
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct Caller {
     pub block_id: BlockId,
     pub link_id: LinkId,
     pub args: Vec<LinkId>,
-}
-
-#[derive(Debug)]
-pub struct FunctionVariant {
-    pub ty: AstType,
-    pub link_id: LinkId,
-    pub block_id: BlockId,
-    pub name: StringKey,
-}
-
-#[derive(Debug)]
-pub struct VariantIterator {
-    index: usize,
-    len: usize,
-}
-
-impl VariantIterator {
-    pub fn new(len: usize) -> Self {
-        Self { index: 0, len }
-    }
-}
-
-impl Iterator for VariantIterator {
-    type Item = VariantId;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.index < self.len {
-            let index = self.index;
-            self.index += 1;
-            Some(VariantId::new(index))
-        } else {
-            None
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct FunctionVariantBuilder {
-    pub variants: Vec<FunctionVariant>,
-    pub block_lookup: HashMap<BlockId, VariantId>,
-}
-
-impl FunctionVariantBuilder {
-    pub fn new() -> Self {
-        Self {
-            variants: vec![],
-            block_lookup: HashMap::new(),
-        }
-    }
-
-    pub fn iter(&self) -> VariantIterator {
-        VariantIterator::new(self.variants.len())
-    }
-
-    pub fn get_by_block(&self, block_id: BlockId) -> Option<VariantId> {
-        if let Some(variant_id) = self.block_lookup.get(&block_id) {
-            Some(*variant_id)
-        } else {
-            None
-        }
-    }
-
-    pub fn get(&self, variant_id: VariantId) -> &FunctionVariant {
-        self.variants.get(variant_id.index()).unwrap()
-    }
-
-    pub fn get_mut(&mut self, variant_id: VariantId) -> &mut FunctionVariant {
-        self.variants.get_mut(variant_id.index()).unwrap()
-    }
-
-    pub fn add(
-        &mut self,
-        ty: AstType,
-        link_id: LinkId,
-        block_id: BlockId,
-        name: StringKey,
-    ) -> VariantId {
-        let index = self.variants.len();
-        self.variants.push(FunctionVariant {
-            ty,
-            link_id,
-            block_id,
-            name,
-        });
-        let variant_id = VariantId(index as u32);
-        self.block_lookup.insert(block_id, variant_id);
-        variant_id
-    }
 }
 
 #[derive(Debug)]
@@ -610,7 +505,7 @@ impl FlattenInner {
         // add entry to scope, for recursion
         let variant_ty = b.types.u.resolve(&def_func_type.clone().into()).unwrap();
         // we need to know the link
-        let variant_id = self.variant_add(
+        let variant_id = self.blocks.variant_add(
             scope_id,
             abstraction_id,
             local_name,
@@ -630,7 +525,8 @@ impl FlattenInner {
         self.maybe_terminate_block(next_block_id, def_span_id, PushContext::Function, b);
 
         let variant_ty = b.types.u.resolve(&variant_ty).unwrap();
-        self.variant_update(variant_id, variant_ty.clone(), entry_link_id);
+        self.blocks
+            .variant_update(variant_id, variant_ty.clone(), entry_link_id);
 
         let next_arg_ty =
             self.resolve_return_type(fun_block_id, def_func_type.into(), call_span_id, b);
