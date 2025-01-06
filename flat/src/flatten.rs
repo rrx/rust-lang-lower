@@ -1120,7 +1120,7 @@ impl FlattenInner {
         resolved_ret_ty
     }
 
-    pub(super) fn refresh_func_type(&self, def_func_type: &AstFuncType, b: &mut NB) -> AstFuncType {
+    pub(super) fn refresh_func_type(def_func_type: &AstFuncType, b: &mut NB) -> AstFuncType {
         // refresh variables
         match &def_func_type.ret {
             ReturnType::Single(ret_ty) => AstFuncType::new(

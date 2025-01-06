@@ -637,7 +637,7 @@ impl FlattenInner {
         );
         let call_values = self.push_call_arguments(args.clone(), call_span_id, b);
         let call_ty = crate::argvec_type(&call_values);
-        let def_func_type = self.refresh_func_type(&def_func_type, b);
+        let def_func_type = Self::refresh_func_type(&def_func_type, b);
 
         // construct call function type
         let call_func_type =
@@ -807,6 +807,9 @@ impl FlattenInner {
         call_span_id: SpanId,
         b: &mut NB,
     ) -> FlattenResult {
+        // transform a function into a continuation
+        // we do this by adding a parameter to the function, which points to the next block
+
         // create a new block static blocks, which is the final destination
         let scope = self.blocks.get_scope(scope_id);
         let scope_block_id = scope.entry_block();
@@ -814,6 +817,7 @@ impl FlattenInner {
             .blocks
             .new_block(scope_block_id, scope_id, Successor::BlockScope);
 
+        // create the continuation parameter
         let key = b.labels.fresh_key("b");
         let mut system = vec![];
         let arg = Argument::System(
@@ -829,12 +833,9 @@ impl FlattenInner {
         let (call_values, _call_func_type, top_def_func_type) =
             self.push_function_call_arguments(abstraction_id, args, system, call_span_id, b);
 
+        // hack, get the continuation argument
         let arg = call_values.last().unwrap();
-        let _arg_index = call_values.len() - 1;
-        let call_link_id = arg.1;
         let next_ty = arg.2.clone();
-
-        self.update_connections(call_link_id);
 
         // bookmark position
         let current_block_id = self.current_block_id();
@@ -859,16 +860,9 @@ impl FlattenInner {
 
         let a = self.blocks.abstractions.get(abstraction_id);
         // push the continuation block to which the function returns control
-        // this might just be the return block
         let s_name = b.labels.r(a.name.into());
         let cont_name = format!("{}.exit", s_name);
         let cont_key = b.labels.fresh_key(&cont_name);
-
-        // block graph
-        self.blocks
-            .block_succ(current_block_id, fun_block_id, Successor::BlockScope);
-        self.blocks
-            .block_succ(fun_block_id, exit_block_id, Successor::BlockScope);
 
         self.switch_blocks(exit_block_id);
         let (_v_block, v_args) =

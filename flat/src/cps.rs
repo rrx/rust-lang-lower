@@ -31,7 +31,7 @@ impl FlattenInner {
 
         let a = self.blocks.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
-        let mut func_type = self.refresh_func_type(&a.def.func_type, b);
+        let mut func_type = Self::refresh_func_type(&a.def.func_type, b);
         func_type.ret = ReturnType::Never;
 
         let def_func_type = func_type.clone().into();
