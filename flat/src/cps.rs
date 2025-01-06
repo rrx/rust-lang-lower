@@ -47,8 +47,9 @@ impl FlattenInner {
         let call_arg_type = AstType::Struct(call_func_type.fields());
         b.unify(&call_arg_type, call_span_id, &func_type.args, def_span_id);
 
-        let fun_block_id = if let Some((resolve_type, link_id, _fun_scope_id)) =
-            self.resolve_function_name(scope_id, &name, &call_arg_type, b)
+        let fun_block_id = if let Some((resolve_type, link_id, _fun_scope_id)) = self
+            .blocks
+            .resolve_function_name(scope_id, &name, &call_arg_type, b)
         {
             let entry = self.get_entry(link_id);
             let fun_block_id = entry.block_id;

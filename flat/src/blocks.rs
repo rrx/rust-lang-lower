@@ -370,4 +370,37 @@ impl BlockGraph {
         v.link_id = link_id;
         v.ty = ty;
     }
+
+    pub fn resolve_all_function_name(
+        &self,
+        start_scope_id: ScopeId,
+        name: &StringKey,
+    ) -> Vec<(AstType, LinkId, ScopeId)> {
+        let mut out = vec![];
+        for variant_id in self.list_variants_by_name(start_scope_id, name) {
+            let v = self.variants.get(variant_id);
+            out.push((v.ty.clone(), v.link_id, start_scope_id));
+        }
+        out
+    }
+
+    pub fn resolve_function_name(
+        &self,
+        start_scope_id: ScopeId,
+        name: &StringKey,
+        call_func_type: &AstType,
+        b: &mut NodeBuilder,
+    ) -> Option<(AstType, LinkId, ScopeId)> {
+        let mut result = None;
+        let snapshot = b.types.u.snapshot();
+        let ty = call_func_type.clone().into();
+        for (r_ty, link_id, scope_id) in self.resolve_all_function_name(start_scope_id, &name) {
+            if let Ok(_) = b.types.u.unify(&ty, &r_ty) {
+                result = Some((r_ty, link_id, scope_id));
+                break;
+            }
+        }
+        b.types.u.rollback_to(snapshot);
+        result
+    }
 }

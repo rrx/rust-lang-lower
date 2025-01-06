@@ -276,9 +276,12 @@ impl FlattenInner {
         let block = self.blocks.get_block(current_block_id);
 
         // if it's defined in static scope, just call it
-        let v_entry = if let Some((r_ty, v_entry, _scope_id)) =
-            self.resolve_function_name(block.scope(), &name, &call_func_type.clone().into(), b)
-        {
+        let v_entry = if let Some((r_ty, v_entry, _scope_id)) = self.blocks.resolve_function_name(
+            block.scope(),
+            &name,
+            &call_func_type.clone().into(),
+            b,
+        ) {
             // unify the resolved function with the caller
             // the function should be resolved, this resolves any thing missing in the caller
             b.unify(
@@ -939,8 +942,9 @@ impl FlattenInner {
         let mem = VarDefinitionSpace::Reg;
 
         let call_func_type = def_func_type.clone().into();
-        let (fun_block_id, ret_block_ty) = if let Some((variant_ty, link_id, _fun_scope_id)) =
-            self.resolve_function_name(scope_id, &lookup_name, &call_func_type, b)
+        let (fun_block_id, ret_block_ty) = if let Some((variant_ty, link_id, _fun_scope_id)) = self
+            .blocks
+            .resolve_function_name(scope_id, &lookup_name, &call_func_type, b)
         {
             let entry = self.get_entry(link_id);
             let fun_block_id = entry.block_id;
