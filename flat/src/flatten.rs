@@ -9,9 +9,9 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::convert::Into;
 
 use crate::{
-    AbstractionsBuilder, BlockGraph, BlockId, Builtin, CodeEntry, CodeOffset, ContinuationFlow,
-    DeferredGotoList, FlowEdge, LCode, LinkId, Links, NodeBuilder as NB, ScopeId, ScopeState,
-    ScopeType, ScopedContinuations, Successor, ValueId, Values, VarDefinitionSpace,
+    BlockGraph, BlockId, Builtin, CodeEntry, CodeOffset, ContinuationFlow, DeferredGotoList,
+    FlowEdge, LCode, LinkId, Links, NodeBuilder as NB, ScopeId, ScopeState, ScopeType,
+    ScopedContinuations, Successor, ValueId, Values, VarDefinitionSpace,
 };
 use std::ops::{Deref, DerefMut};
 
@@ -89,7 +89,6 @@ pub struct FlattenInner {
     pub(super) open_identifiers: Vec<LinkId>,
     pub(super) scoped_continuations: ScopedContinuations,
     pub(super) deferred_goto: DeferredGotoList,
-    pub(super) abstractions: AbstractionsBuilder,
 }
 
 pub struct Flatten<S: FlattenState> {
@@ -137,7 +136,6 @@ impl Flatten<Start> {
             open_identifiers: vec![],
             scoped_continuations: ScopedContinuations::new(),
             deferred_goto: DeferredGotoList::new(),
-            abstractions: AbstractionsBuilder::new(),
         };
 
         let mut f = Self {
@@ -1006,20 +1004,6 @@ impl FlattenInner {
         (block_link_id, v_args)
     }
 
-    pub fn save_ast_template(
-        &mut self,
-        block_id: BlockId,
-        name: &StringKey,
-        def: &Lambda,
-        span_id: SpanId,
-    ) -> AbstractionId {
-        let abstraction_id = self.abstractions.add(*name, def.clone(), span_id);
-        let block = self.blocks.get_block(block_id);
-        self.blocks
-            .define_lambda(block.scope(), name.into(), abstraction_id);
-        abstraction_id
-    }
-
     pub fn push_close_block(
         &mut self,
         span_id: SpanId,
@@ -1230,7 +1214,8 @@ impl FlattenInner {
                     Ast::Lambda(def) => {
                         // save template for later use
                         if def.body.is_some() {
-                            self.save_ast_template(current_block_id, &name, &def, span_id);
+                            self.blocks
+                                .save_abstraction(current_block_id, &name, &def, span_id);
                         }
 
                         // TODO: The function doesn't actually exist until we call it
@@ -1439,7 +1424,9 @@ impl FlattenInner {
 
                     // save the template
                     let def_span_id = expr.span_id;
-                    let _ = self.save_ast_template(current_block_id, &name, &def, def_span_id);
+                    let _ =
+                        self.blocks
+                            .save_abstraction(current_block_id, &name, &def, def_span_id);
                     self.switch_blocks(current_block_id);
                     return FlattenResult::statement();
                 }

@@ -263,7 +263,7 @@ impl FlattenInner {
         call_span_id: SpanId,
         b: &mut NB,
     ) -> (LinkId, AstType) {
-        let a = self.abstractions.get(abstraction_id);
+        let a = self.blocks.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
         let name = a.name;
 
@@ -332,7 +332,7 @@ impl FlattenInner {
         // returns the entry to the function
 
         let current_block_id = self.current_block_id();
-        let a = self.abstractions.get(abstraction_id);
+        let a = self.blocks.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
 
         // create a next scope, that includes the function
@@ -397,7 +397,7 @@ impl FlattenInner {
         FlattenResult, // return value if it exists
         ArgVec,        // entry args
     ) {
-        let a = self.abstractions.get(abstraction_id);
+        let a = self.blocks.abstractions.get(abstraction_id);
         let local_name = a.name;
 
         let result = self.push_bake_lambda(
@@ -483,7 +483,7 @@ impl FlattenInner {
         // allow for recursion
         //
         //
-        let a = self.abstractions.get(abstraction_id);
+        let a = self.blocks.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
         let body = *a.def.body.clone().unwrap();
         let local_name = a.name;
@@ -622,7 +622,7 @@ impl FlattenInner {
         AstFuncType, // call_func_type
         AstFuncType, // def_func_type
     ) {
-        let a = self.abstractions.get(abstraction_id);
+        let a = self.blocks.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
 
         // look up the prototype
@@ -726,7 +726,7 @@ impl FlattenInner {
         // bookmark this position, to continue later
         let current_block_id = self.current_block_id();
 
-        let a = self.abstractions.get(abstraction_id);
+        let a = self.blocks.abstractions.get(abstraction_id);
         let name = a.name;
 
         let s_name = b.labels.r(name.into());
@@ -857,7 +857,7 @@ impl FlattenInner {
             call_span_id,
         );
 
-        let a = self.abstractions.get(abstraction_id);
+        let a = self.blocks.abstractions.get(abstraction_id);
         // push the continuation block to which the function returns control
         // this might just be the return block
         let s_name = b.labels.r(a.name.into());
@@ -934,7 +934,7 @@ impl FlattenInner {
         def_func_type: AstFuncType,
         b: &mut NB,
     ) -> (BlockId, AstFuncType) {
-        let a = self.abstractions.get(abstraction_id);
+        let a = self.blocks.abstractions.get(abstraction_id);
         let lookup_name = a.name;
         let def_span_id = a.def_span_id;
         let succ_type = Successor::BlockScope;

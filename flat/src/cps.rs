@@ -29,7 +29,7 @@ impl FlattenInner {
         // call in the context of the caller, which is a goto
         let current_block_id = self.current_block_id();
 
-        let a = self.abstractions.get(abstraction_id);
+        let a = self.blocks.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
         let mut func_type = self.refresh_func_type(&a.def.func_type, b);
         func_type.ret = ReturnType::Never;
@@ -77,7 +77,7 @@ impl FlattenInner {
             let lambda_name = b.labels.fresh_key(&s_name);
 
             // make a copy of the body
-            let a = self.abstractions.get(abstraction_id);
+            let a = self.blocks.abstractions.get(abstraction_id);
             let body = a.def.body.clone().unwrap();
 
             self.switch_blocks(fun_block_id);
@@ -164,7 +164,9 @@ impl FlattenInner {
                 defaults: HashMap::new(),
             };
 
-            let abstraction_id = self.save_ast_template(block_id, &key, &lambda, call_span_id);
+            let abstraction_id =
+                self.blocks
+                    .save_abstraction(block_id, &key, &lambda, call_span_id);
             let block_id = self.gen_cps_block_with_type(
                 key,
                 scope_id,
@@ -290,7 +292,7 @@ impl FlattenInner {
         b: &mut NB,
     ) -> LinkId {
         // call in the context of the caller, which is a goto
-        let a = self.abstractions.get(abstraction_id);
+        let a = self.blocks.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
         let def = a.def.clone();
 

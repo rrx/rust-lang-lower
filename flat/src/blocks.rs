@@ -4,11 +4,11 @@ use petgraph::visit::EdgeRef;
 use std::collections::HashSet;
 
 use crate::{
-    AbstractionId, BlockId, CodeOffset, FunctionVariantBuilder, LinkId, NodeBuilder, ScopeId,
-    ScopeLayer, VariantId,
+    AbstractionId, AbstractionsBuilder, BlockId, CodeOffset, FunctionVariantBuilder, LinkId,
+    NodeBuilder, ScopeId, ScopeLayer, VariantId,
 };
 
-use compile_core::{AstType, StringKey};
+use compile_core::{AstType, Lambda, SpanId, StringKey};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Successor {
@@ -171,6 +171,7 @@ pub struct BlockGraph {
     pub(super) bg: DiGraph<IRBlock, Successor>,
     pub(super) sg: DiGraph<ScopeLayer, ()>,
     pub(super) variants: FunctionVariantBuilder,
+    pub(super) abstractions: AbstractionsBuilder,
 }
 
 impl BlockGraph {
@@ -179,6 +180,7 @@ impl BlockGraph {
             bg: DiGraph::new(),
             sg: DiGraph::new(),
             variants: FunctionVariantBuilder::new(),
+            abstractions: AbstractionsBuilder::new(),
         }
     }
 
@@ -402,5 +404,18 @@ impl BlockGraph {
         }
         b.types.u.rollback_to(snapshot);
         result
+    }
+
+    pub fn save_abstraction(
+        &mut self,
+        block_id: BlockId,
+        name: &StringKey,
+        def: &Lambda,
+        span_id: SpanId,
+    ) -> AbstractionId {
+        let abstraction_id = self.abstractions.add(*name, def.clone(), span_id);
+        let block = self.get_block(block_id);
+        self.define_lambda(block.scope(), name.into(), abstraction_id);
+        abstraction_id
     }
 }
