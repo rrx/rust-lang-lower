@@ -1,4 +1,4 @@
-use crate::{BlockId, CodeEntry, LCode};
+use crate::{BlockId, CodeEntry};
 use serde::Serialize;
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Serialize)]

@@ -930,7 +930,7 @@ impl FlattenInner {
         let abstraction_id = b.builtins.get_abstraction(bi);
         let (args, def_func_type) =
             self.calculate_function_arguments(abstraction_id, &args, &[], call_span_id, b);
-        let def_func_type = Self::refresh_func_type(&def_func_type, b);
+        let def_func_type = b.types.refresh_func_type(&def_func_type);
 
         let call_values = self.push_call_arguments(args, call_span_id, b);
         self.push_call_values(&call_values, b);
@@ -1128,21 +1128,6 @@ impl FlattenInner {
         resolved_ret_ty
     }
 
-    pub(super) fn refresh_func_type(def_func_type: &AstFuncType, b: &mut NB) -> AstFuncType {
-        // refresh variables
-        match &def_func_type.ret {
-            ReturnType::Single(ret_ty) => AstFuncType::new(
-                b.types.refresh(def_func_type.args.clone()),
-                ReturnType::Single(b.types.refresh(ret_ty.clone())),
-            ),
-            ReturnType::Never => AstFuncType::new(
-                b.types.refresh(def_func_type.args.clone()),
-                ReturnType::Never,
-            ),
-            _ => unreachable!(),
-        }
-    }
-
     pub fn remove_placeholder_terminal(&mut self, goto_block_id: BlockId) -> LinkId {
         let block = self.blocks.get_block(goto_block_id);
         let last_link_id = block.last().unwrap();
@@ -1150,6 +1135,8 @@ impl FlattenInner {
         if let LCode::PlaceholderTerminal = entry.code {
             let block = self.blocks.get_block_mut(goto_block_id);
             let _ = block.pop_terminal();
+        } else {
+            unreachable!()
         }
         last_link_id
     }

@@ -635,7 +635,7 @@ impl FlattenInner {
             self.calculate_function_arguments(abstraction_id, &args, &system, call_span_id, b);
         let call_values = self.push_call_arguments(args.clone(), call_span_id, b);
         let call_ty = crate::argvec_type(&call_values);
-        let def_func_type = Self::refresh_func_type(&def_func_type, b);
+        let def_func_type = b.types.refresh_func_type(&def_func_type);
 
         // construct call function type
         let call_func_type =

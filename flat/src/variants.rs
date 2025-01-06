@@ -1,4 +1,4 @@
-use crate::{BlockId, LinkId, NodeBuilder};
+use crate::{AbstractionId, BlockId, LinkId, NodeBuilder};
 use compile_core::{AstType, StringKey};
 
 use std::collections::HashMap;
@@ -22,6 +22,7 @@ impl VariantId {
 
 #[derive(Debug)]
 pub struct FunctionVariant {
+    pub abstraction_id: AbstractionId,
     pub ty: AstType,
     pub link_id: LinkId,
     pub block_id: BlockId,
@@ -90,6 +91,7 @@ impl FunctionVariantBuilder {
 
     pub fn add(
         &mut self,
+        abstraction_id: AbstractionId,
         ty: AstType,
         link_id: LinkId,
         block_id: BlockId,
@@ -97,6 +99,7 @@ impl FunctionVariantBuilder {
     ) -> VariantId {
         let index = self.variants.len();
         self.variants.push(FunctionVariant {
+            abstraction_id,
             ty,
             link_id,
             block_id,

@@ -361,7 +361,9 @@ impl BlockGraph {
         link_id: LinkId,
         block_id: BlockId,
     ) -> VariantId {
-        let variant_id = self.variants.add(ty, link_id, block_id, name);
+        let variant_id = self
+            .variants
+            .add(abstraction_id, ty, link_id, block_id, name);
         let scope = self.get_scope_mut(scope_id);
         scope.variant_link(name, variant_id);
         variant_id

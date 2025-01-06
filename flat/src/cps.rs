@@ -31,7 +31,7 @@ impl FlattenInner {
 
         let a = self.blocks.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
-        let mut func_type = Self::refresh_func_type(&a.def.func_type, b);
+        let mut func_type = b.types.refresh_func_type(&a.def.func_type);
         func_type.ret = ReturnType::Never;
 
         let def_func_type = func_type.clone().into();
@@ -291,7 +291,8 @@ impl FlattenInner {
         call_span_id: SpanId,
         b: &mut NB,
     ) -> LinkId {
-        // call in the context of the caller, which is a goto
+        // call in the context of the caller
+        // and push the args and a jump
 
         // we might want to handle this later
         // return in a CPS will return from the scoped function
@@ -300,7 +301,6 @@ impl FlattenInner {
         let (args, _) =
             self.calculate_function_arguments(abstraction_id, &args, &[], call_span_id, b);
         let call_values = self.push_call_arguments(args, call_span_id, b);
-        let goto_block_id = self.current_block_id();
         let call_arg_type = argvec_type(&call_values);
         let call_func_type =
             AstFuncType::new(call_arg_type.clone().into(), ReturnType::Never.into()).into();
@@ -317,13 +317,6 @@ impl FlattenInner {
 
         // NOW JUMP
         // now that we have the arguments calculated, and the lambda baked, jump!
-        self.remove_placeholder_terminal(goto_block_id);
-
-        let _call_links = call_values
-            .iter()
-            .map(|(_, link_id, _, _)| *link_id)
-            .collect::<Vec<_>>();
-
         let goto_link_id =
             self.push_jump(fun_block_id.into(), call_values.clone(), call_span_id, b);
 

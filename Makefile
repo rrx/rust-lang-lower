@@ -9,6 +9,7 @@ all:
 
 ninja:
 	cargo check
+	cargo fmt
 	cargo build
 	python3 build.py
 	#touch target/x86_64-unknown-linux-gnu/debug/parse
@@ -23,45 +24,50 @@ bare:
 	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/bare.star -o build/bare
 
 interp:
-	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/bare.star -o build/args3
-	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/test_local.star -o build/args3
-	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/recurse.star -o build/args3
-	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/test_recursive2.star -o build/args3
-	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/test_recursive.star -o build/args3
-	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/fix.star -o build/args3
-	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/loop.star -o build/args3
-	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/goto.star -o build/args3
-	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/test.star -o build/args3
-	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/dup_func.star -o build/args3
-	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/test_cond.star -o build/args3
-	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/monomorph.star -o build/args3
-	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/monomorph_static.star -o build/args3
-	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/star_args.star -o build/args3
-	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/test_float.star -o build/args3
-	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/nested_func.star -o build/args3
-	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/test_global.star -o build/args3
-	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/nested_loops.star -o build/args3
-	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/test_ternary.star -o build/args3
-	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/static.star -o build/args3
-	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/test_static.star -o build/args3
-	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/static_var.star -o build/args3
-	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/nested_goto.star -o build/args3
-	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/cps.star -o build/args3
-	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/cps_args.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -x -i tests/bin/bare.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -x -i tests/bin/test_local.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -x -i tests/bin/recurse.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -x -i tests/bin/test_recursive2.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -x -i tests/bin/test_recursive.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -x -i tests/bin/fix.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -x -i tests/bin/loop.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -x -i tests/bin/goto.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -x -i tests/bin/test.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -x -i tests/bin/dup_func.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -x -i tests/bin/test_cond.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -x -i tests/bin/monomorph.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -x -i tests/bin/monomorph_static.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -x -i tests/bin/star_args.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -x -i tests/bin/test_float.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -x -i tests/bin/nested_func.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -x -i tests/bin/nested_func_return.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -x -i tests/bin/test_global.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -x -i tests/bin/nested_loops.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -x -i tests/bin/test_ternary.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -x -i tests/bin/static.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -x -i tests/bin/test_static.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -x -i tests/bin/static_var.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -x -i tests/bin/nested_goto.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -x -i tests/bin/cps.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -x -i tests/bin/cps_args.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/cps_mono.star -o build/args3
-	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/cps_pass1.star -o build/args3
-	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/cps_pass2.star -o build/args3
-	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/cps_pass3.star -o build/args3
-	RUST_BACKTRACE=1 cargo run -- --interp -v -i tests/bin/cps_pass4.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -x -i tests/bin/cps_pass1.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -x -i tests/bin/cps_pass2.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -x -i tests/bin/cps_pass3.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -x -i tests/bin/cps_pass4.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- --interp -x -i tests/bin/cps_pass5.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- --interp -x -i tests/bin/cps_pass6.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -x -i tests/bin/defer.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -x -i tests/bin/cps_cyclic.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -x -i tests/bin/test_tuple.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- --interp -x -i tests/bin/cps_ret.star -o build/args3
 
 run:
 	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/bare.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/test_local.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/recurse.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/test_recursive2.star -o build/args3
-	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/test_recursive.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- -x -i tests/bin/test_recursive.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/fix.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/loop.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/goto.star -o build/args3
@@ -70,9 +76,10 @@ run:
 	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/test_cond.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/monomorph.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/monomorph_static.star -o build/args3
-	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/star_args.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- -x -v -O -i tests/bin/star_args.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/test_float.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/nested_func.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- -c -x -v -i tests/bin/nested_func_return.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/test_global.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/nested_loops.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/test_ternary.star -o build/args3
@@ -88,10 +95,11 @@ run:
 	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/cps_pass3.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/cps_pass4.star -o build/args3
 	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/cps_pass5.star -o build/args3
-	RUST_BACKTRACE=1 cargo run -- -x -i tests/bin/cps_pass6.star -o build/args3
-
-	#mmdc -t dark -o test.png -H 5000 -w 50000 -i build/tmp.cfg.mmd
-	#RUST_BACKTRACE=1 cargo run -- --interp -i tests/bin/test_tuple.star -o build/tmp
+	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/cps_pass6.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/defer.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/cps_cyclic.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/test_tuple.star -o build/args3
+	RUST_BACKTRACE=1 cargo run -- -x -v -i tests/bin/cps_ret.star -o build/args3
 	dot -Tpng build/args3.cont.dot -o cont.png
 
 run2:

@@ -96,17 +96,24 @@ impl TypeBuilder {
         AstType::KwArgs(t.into())
     }
 
+    pub(super) fn refresh_func_type(&mut self, def_func_type: &AstFuncType) -> AstFuncType {
+        // refresh variables
+        match &def_func_type.ret {
+            ReturnType::Single(ret_ty) => AstFuncType::new(
+                self.refresh(def_func_type.args.clone()),
+                ReturnType::Single(self.refresh(ret_ty.clone())),
+            ),
+            ReturnType::Never => {
+                AstFuncType::new(self.refresh(def_func_type.args.clone()), ReturnType::Never)
+            }
+            _ => unreachable!(),
+        }
+    }
+
     pub fn refresh(&mut self, ty: AstType) -> AstType {
         match ty {
             AstType::Variable(_) => self.fresh_unknown(),
-            AstType::Func(f) => {
-                let arg = self.refresh(f.args);
-                let ret = match f.ret {
-                    ReturnType::Single(ret) => ReturnType::Single(self.refresh(ret)),
-                    _ => unimplemented!(),
-                };
-                AstFuncType::new(arg, ret).into()
-            }
+            AstType::Func(f) => self.refresh_func_type(&f).into(),
             AstType::Struct(fields) => {
                 let fields = fields
                     .into_iter()
