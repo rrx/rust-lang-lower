@@ -141,8 +141,11 @@ impl Links {
         self.links.iter().map(|entry| entry.link.unwrap())
     }
 
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut CodeEntry> + '_ {
-        self.links.iter_mut()
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = (LinkId, &mut CodeEntry)> + '_ {
+        self.links.iter_mut().map(|entry| {
+            let link_id = entry.link.unwrap();
+            (link_id, entry)
+        })
     }
 
     pub fn insert(&mut self, mut entry: CodeEntry) -> LinkId {

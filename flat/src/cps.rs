@@ -94,8 +94,14 @@ impl FlattenInner {
             self.blocks
                 .scope_define(scope_id, lambda_name, entry_link_id);
 
-            let variant_id =
-                self.variant_add(scope_id, name, r_ty1.clone(), entry_link_id, fun_block_id);
+            let variant_id = self.variant_add(
+                scope_id,
+                abstraction_id,
+                name,
+                r_ty1.clone(),
+                entry_link_id,
+                fun_block_id,
+            );
 
             // flatten function, and switch to next
             // lower first, so we resolve types

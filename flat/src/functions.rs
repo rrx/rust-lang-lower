@@ -612,6 +612,7 @@ impl FlattenInner {
         // we need to know the link
         let variant_id = self.variant_add(
             scope_id,
+            abstraction_id,
             local_name,
             variant_ty.clone(),
             entry_link_id,

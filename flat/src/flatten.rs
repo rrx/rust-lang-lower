@@ -238,7 +238,7 @@ impl FlattenInner {
     }
 
     pub fn type_inference(&mut self, b: &mut NB) {
-        for entry in self.links.iter_mut() {
+        for (_link_id, entry) in self.links.iter_mut() {
             if !entry.ty.is_unknown() {
                 continue;
             }
@@ -247,28 +247,20 @@ impl FlattenInner {
     }
 
     pub fn type_inference_enforce(&mut self, b: &mut NB) {
-        //b.types.dump();
-        for entry in self.links.iter_mut() {
+        for (link_id, entry) in self.links.iter_mut() {
             if !entry.ty.is_unknown() {
                 continue;
             }
 
             if let Some(ty) = b.types.u.resolve(&entry.ty) {
-                /*
                 b.push_warning(
-                    &format!(
-                        "Late Unresolved Type: {}=>{} @ {}",
-                        &entry.ty,
-                        &ty,
-                        entry.link.unwrap()
-                    ),
+                    &format!("Late Unresolved Type: {}=>{} @ {}", &entry.ty, &ty, link_id,),
                     entry.span_id,
                 );
-                */
                 entry.ty = ty;
             } else {
                 b.push_error(
-                    &format!("Unresolved Type: {} @ {}", &entry.ty, entry.link.unwrap()),
+                    &format!("Unresolved Type: {} @ {}", &entry.ty, link_id),
                     entry.span_id,
                 );
             }
@@ -299,6 +291,7 @@ impl FlattenInner {
     pub fn variant_add(
         &mut self,
         scope_id: ScopeId,
+        abstraction_id: AbstractionId,
         name: StringKey,
         ty: AstType,
         link_id: LinkId,
