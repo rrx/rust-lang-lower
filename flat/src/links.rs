@@ -1,4 +1,5 @@
 use crate::{BlockId, CodeEntry};
+use serde::Serialize;
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 pub struct ValueId(pub(crate) u32);
@@ -21,14 +22,14 @@ impl std::fmt::Display for ValueId {
     }
 }
 
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Serialize)]
 pub struct LinkId(pub(crate) u32);
 
 impl LinkId {
-    pub fn new(index: usize) -> Self {
+    fn new(index: usize) -> Self {
         Self(index as u32)
     }
-    pub fn index(&self) -> usize {
+    fn index(&self) -> usize {
         self.0 as usize
     }
 }

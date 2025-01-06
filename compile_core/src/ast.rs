@@ -59,7 +59,6 @@ pub enum Literal {
     Bool(bool),
     Tuple(Vec<Literal>),
     Block(BlockId),
-    Link(usize),
     Abstraction(AbstractionId),
     Struct(Vec<(Option<StringKey>, Literal)>),
     Array(AstType, Vec<usize>), // Type and dimension, empty dimension is the same as a scalar
@@ -75,7 +74,6 @@ impl From<&Literal> for AstType {
     fn from(item: &Literal) -> Self {
         match item {
             Literal::Block(_) => unreachable!(),       //AstType::JumpTarget,
-            Literal::Link(_) => unreachable!(),        //AstType::JumpTarget,
             Literal::Abstraction(_) => unreachable!(), //AstType::JumpTarget,
             Literal::Int(_) => AstType::Int,
             Literal::Float(_) => AstType::Float,

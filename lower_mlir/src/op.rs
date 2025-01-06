@@ -327,13 +327,6 @@ impl<'c> MLIRGenerator<'c> {
                 // TODO, replace with dummy value
                 self.build_int_op(0, location)
             }
-            Literal::Link(index) => {
-                let link_id = LinkId::new(*index);
-                let v = self.blockify.resolve_code_offset(link_id.into());
-                let entry = self.blockify.get_entry(v);
-                let index = entry.block_id.index() as i64;
-                self.build_int_op(index as i64, location)
-            }
 
             Literal::Block(block_id) => {
                 // this is a variable passed into a jump statement

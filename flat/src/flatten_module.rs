@@ -129,7 +129,7 @@ impl Flatten<Module> {
 
         Some(CodeRow {
             pos: v.index(),
-            link: entry.link.unwrap().index(),
+            link: entry.link.unwrap(),
             value: self.code_to_string(v, b),
             ty: s_ty,
             mem: format!("{:?}", mem),

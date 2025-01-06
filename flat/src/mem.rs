@@ -38,7 +38,7 @@ impl std::fmt::Display for VarDefinitionSpace {
             VarDefinitionSpace::Arg => write!(f, "Marg"),
             VarDefinitionSpace::Reg => write!(f, "Mreg"),
             VarDefinitionSpace::Static => write!(f, "Mstatic"),
-            VarDefinitionSpace::Stack(x) => write!(f, "Mstack(L{})", x.index()),
+            VarDefinitionSpace::Stack(x) => write!(f, "Mstack({})", x),
             VarDefinitionSpace::Heap => write!(f, "Mheap"),
             VarDefinitionSpace::Default => write!(f, "Mdef"),
         }

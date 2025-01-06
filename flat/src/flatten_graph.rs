@@ -331,8 +331,8 @@ impl Flatten<Module> {
                         CodeOffset::Link(link_id) => {
                             format!(
                                 //"label = \"L{}:{}\" shape=\"{:?}\"",
-                                "label = \"L{}:{}\"",
-                                link_id.index(),
+                                "label = \"{}:{}\"",
+                                link_id,
                                 &data.name,
                                 //&data.ty.to_string()
                             )
@@ -340,8 +340,8 @@ impl Flatten<Module> {
                         CodeOffset::Value(value_id) => {
                             format!(
                                 //"label = \"V{}:{}\" shape={:?}",
-                                "label = \"V{}:{}\"",
-                                value_id.index(),
+                                "label = \"{}:{}\"",
+                                value_id,
                                 &data.name,
                                 //&data.ty.to_string()
                             )
@@ -349,8 +349,8 @@ impl Flatten<Module> {
                         CodeOffset::Block(block_id) => {
                             format!(
                                 //"label = \"B{}:{}\" shape={:?}",
-                                "label = \"B{}:{}\"",
-                                block_id.index(),
+                                "label = \"{}:{}\"",
+                                block_id,
                                 &data.name,
                                 //&data.ty.to_string()
                             )

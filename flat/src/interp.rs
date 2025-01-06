@@ -26,7 +26,6 @@ impl Value {
             Literal::Float(f) => Value::Float(*f),
             Literal::Bool(v) => Value::Bool(*v),
             Literal::Index(v) => Value::Index(*v),
-            Literal::Link(x) => Value::Link(*x),
             Literal::Block(_) => {
                 unreachable!("{:?}", lit);
             }

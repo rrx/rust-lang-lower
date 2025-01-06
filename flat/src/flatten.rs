@@ -1438,7 +1438,6 @@ impl FlattenInner {
                 // literal is expression, non-terminal
                 let ty: AstType = match &lit {
                     Literal::Block(_block_id) => b.types.fresh_unknown(),
-                    Literal::Link(_link_id) => b.types.fresh_unknown(),
                     _ => lit.clone().into(),
                 };
                 let mem = VarDefinitionSpace::Default;
