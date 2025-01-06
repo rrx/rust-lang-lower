@@ -13,7 +13,7 @@ use compile_core::{
     Label, Parameter, ReturnType, SpanId, StringKey,
 };
 
-use flat::{Flatten, Module, NodeBuilder, NodeBuilder as NB, ValueId};
+use flat::{NodeBuilder, NodeBuilder as NB};
 
 #[derive(Debug)]
 pub struct Environment {
@@ -501,16 +501,7 @@ impl Parser {
 pub struct StarlarkParser {}
 
 impl StarlarkParser {
-    pub fn new() -> Self {
-        Self {}
-    }
-
-    pub fn parse(
-        &mut self,
-        filename: &str,
-        b: &mut NodeBuilder,
-        _verbose: bool,
-    ) -> Result<AstNode> {
+    pub fn parse(filename: &str, b: &mut NodeBuilder, _verbose: bool) -> Result<AstNode> {
         log::debug!("parsing: {}", filename);
         let file_id = b
             .spans
@@ -520,19 +511,6 @@ impl StarlarkParser {
         let module_key = b.labels.s("module");
         let ast: AstNode = parser.parse(Path::new(filename), None, module_key, file_id, b)?;
         Ok(ast)
-    }
-
-    pub fn codegen<'c>(
-        &mut self,
-        config: &flat::Config,
-        blockify: &Flatten<Module>,
-        module_block_id: ValueId,
-        context: &'c lower_mlir::Context,
-        module: &mut lower_mlir::Module<'c>,
-        b: &mut NodeBuilder,
-    ) -> Result<()> {
-        lower_mlir::codegen(&config, blockify, module_block_id, context, module, b)?;
-        Ok(())
     }
 }
 

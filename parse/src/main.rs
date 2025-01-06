@@ -6,7 +6,7 @@ use std::io::Write;
 
 use lower_mlir::default_context;
 
-use flat::{BlockifyError, Flatten, ICodeModule, NodeBuilder, ValueId};
+use flat::{BlockifyError, Flatten, ICodeModule, NodeBuilder};
 use parse::starlark::StarlarkParser;
 use std::path::PathBuf;
 
@@ -96,9 +96,8 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
 
     let location = lower_mlir::Location::unknown(&context);
     let mut module = lower_mlir::Module::new(location);
-    let mut p: StarlarkParser = StarlarkParser::new();
 
-    let ast = p.parse(&config.input, b, config.verbose)?;
+    let ast = StarlarkParser::parse(&config.input, b, config.verbose)?;
     if config.verbose {
         b.dump_ast(&ast);
     }
@@ -154,7 +153,7 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
     };
 
     if !config.interp {
-        lower_mlir::codegen(&conf, &m, ValueId::new(0), &context, &mut module, b)?;
+        lower_mlir::codegen(&conf, &m, &context, &mut module, b)?;
         if config.verbose {
             module.as_operation().dump();
         }

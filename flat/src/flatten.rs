@@ -11,8 +11,8 @@ use std::convert::Into;
 use crate::{
     AbstractionsBuilder, BlockGraph, BlockId, Builtin, CodeEntry, CodeOffset, ContinuationFlow,
     DeferredGotoList, FlowEdge, FunctionVariantBuilder, LCode, LinkId, Links, NodeBuilder as NB,
-    ScopeId, ScopeState, ScopeType, ScopedContinuations, Successor, ValueId, VarDefinitionSpace,
-    VariantId,
+    ScopeId, ScopeState, ScopeType, ScopedContinuations, Successor, ValueId, Values,
+    VarDefinitionSpace, VariantId,
 };
 use std::ops::{Deref, DerefMut};
 
@@ -75,7 +75,7 @@ impl FlattenState for FirstPass {}
 
 #[derive(Debug, Clone)]
 pub struct Module {
-    pub values: Vec<LinkId>,
+    pub values: Values,
 }
 impl FlattenState for Module {}
 
@@ -396,9 +396,9 @@ impl FlattenInner {
         self.switch_blocks(current_block_id);
     }
 
-    pub(super) fn finish_values(&mut self, b: &mut NB) -> Vec<LinkId> {
+    pub(super) fn finish_values(&mut self, b: &mut NB) -> Values {
         let blocks = self.blocks.post_order_blocks();
-        let mut values = vec![];
+        let mut values = Values::new();
 
         for block_id in blocks.into_iter() {
             let block = self.blocks.get_block(block_id);
@@ -415,8 +415,9 @@ impl FlattenInner {
 
             let links = block.iter().collect::<Vec<_>>();
             for link_id in links {
-                let value_id = ValueId::new(values.len() as u32);
-                values.push(link_id);
+                let value_id = values.insert(link_id);
+                //let value_id = ValueId::new(values.len() as u32);
+                //values.push(link_id);
                 let entry = self.get_entry_mut(link_id);
                 entry.value_id = Some(value_id);
             }
@@ -424,7 +425,7 @@ impl FlattenInner {
         values
     }
 
-    fn _finish(mut self, b: &mut NB) -> (Self, Vec<LinkId>) {
+    fn _finish(mut self, b: &mut NB) -> (Self, Values) {
         self.switch_blocks(self.static_block_id());
         let _ = self.push_code(
             LCode::EndModule,

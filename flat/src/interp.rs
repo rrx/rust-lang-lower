@@ -125,7 +125,7 @@ impl<'a> Interp<'a> {
     }
 
     pub fn advance(&mut self) {
-        self.pos = ValueId::new(self.pos.index() as u32 + 1);
+        self.pos = self.pos.succ();
     }
 
     pub fn jump(&mut self, target: ValueId) {

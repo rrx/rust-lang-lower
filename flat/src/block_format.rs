@@ -1,11 +1,11 @@
 //use compile_core::AstType;
-use crate::LinkId;
+use crate::{LinkId, ValueId};
 use serde::Serialize;
 use tabled::Tabled;
 
 #[derive(Tabled, Serialize)]
 pub struct CodeRow {
-    pub pos: usize,
+    pub pos: ValueId,
     pub link: LinkId,
     pub value: String,
     pub ty: String,
@@ -14,7 +14,7 @@ pub struct CodeRow {
     pub span_id: usize,
     pub scope_id: usize,
     pub block_id: usize,
-    pub entry_id: usize,
+    pub entry_id: String,
     pub term: bool,
     pub dead: bool,
     pub unknown: bool,

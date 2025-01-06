@@ -163,12 +163,12 @@ impl<'c> OpCollection<'c> {
 pub fn codegen<'c>(
     config: &flat::Config,
     blockify: &Flatten<flat::Module>,
-    module_block_id: ValueId,
     context: &'c Context,
     module: &mut melior::ir::Module<'c>,
     b: &mut NodeBuilder,
 ) -> Result<()> {
-    let mut gen = MLIRGenerator::new(config, context, blockify, module_block_id, b);
+    let module_start = blockify.state.values.root();
+    let mut gen = MLIRGenerator::new(config, context, blockify, module_start, b);
     gen.lower_module(module)?;
     Ok(())
 }

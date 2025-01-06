@@ -319,7 +319,9 @@ impl Flatten<Module> {
 
     pub fn save_graph(&self, filename: &str, b: &NB) {
         use petgraph::dot::{Config, Dot};
-        let cfg = self.get_graph(ValueId::new(0), None, b);
+        let value_id = self.resolve_code_offset(self.static_block_id().into());
+
+        let cfg = self.get_graph(value_id, None, b);
         let s = format!(
             "{:?}",
             Dot::with_attr_getters(

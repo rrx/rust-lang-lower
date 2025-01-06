@@ -12,7 +12,7 @@ use tabled::{settings::Style, Table};
 
 impl ICodeModule for Flatten<Module> {
     fn get_entry(&self, value_id: ValueId) -> &CodeEntry {
-        let link_id = self.state.values[value_id.index()];
+        let link_id = self.state.values.get(value_id);
         self.get_link_entry(link_id)
     }
 
@@ -21,14 +21,14 @@ impl ICodeModule for Flatten<Module> {
     }
 
     fn get_span_id(&self, value_id: ValueId) -> SpanId {
-        let link_id = self.state.values[value_id.index()];
+        let link_id = self.state.values.get(value_id);
         let entry = self.get_link_entry(link_id);
         entry.span_id
     }
 
     fn get_name(&self, offset: CodeOffset) -> Option<StringLabel> {
         if let Some(value_id) = self.maybe_resolve_code_offset(offset) {
-            let link_id = self.state.values[value_id.index()];
+            let link_id = self.state.values.get(value_id);
             self.get_link_entry(link_id).name.map(|n| n.into())
         } else {
             None
@@ -36,12 +36,12 @@ impl ICodeModule for Flatten<Module> {
     }
 
     fn get_code(&self, value_id: ValueId) -> &LCode {
-        let link_id = self.state.values[value_id.index()];
+        let link_id = self.state.values.get(value_id);
         &self.get_link_entry(link_id).code
     }
 
     fn get_block_successors(&self, entry_id: ValueId) -> Vec<(Successor, CodeOffset)> {
-        let link_id = self.state.values[entry_id.index()];
+        let link_id = self.state.values.get(entry_id);
         let entry = self.get_link_entry(link_id);
         let block_id = entry.block_id;
         self.blocks.get_block_successors(block_id)
@@ -49,20 +49,20 @@ impl ICodeModule for Flatten<Module> {
 
     fn get_type(&self, v: CodeOffset) -> AstType {
         let value_id = self.resolve_code_offset(v);
-        let link_id = self.state.values[value_id.index()];
+        let link_id = self.state.values.get(value_id);
         let entry = self.get_link_entry(link_id);
         entry.clone().ty
     }
 
     fn get_entry_id(&self, value_id: ValueId) -> Option<ValueId> {
-        let link_id = self.state.values[value_id.index()];
+        let link_id = self.state.values.get(value_id);
         let block_id = self.get_link_entry(link_id).block_id;
         self.maybe_resolve_code_offset(block_id.into())
     }
 
     fn is_in_static_scope(&self, offset: CodeOffset) -> bool {
         let value_id = self.resolve_code_offset(offset);
-        let link_id = self.state.values[value_id.index()];
+        let link_id = self.state.values.get(value_id);
         let entry = self.get_link_entry(link_id);
         let block = self.blocks.get_block(entry.block_id);
         let scope = self.blocks.get_scope(block.scope());
@@ -71,7 +71,7 @@ impl ICodeModule for Flatten<Module> {
 
     fn get_mem(&self, offset: CodeOffset) -> &VarDefinitionSpace {
         let value_id = self.resolve_code_offset(offset);
-        let link_id = self.state.values[value_id.index()];
+        let link_id = self.state.values.get(value_id);
         &self.get_link_entry(link_id).mem
     }
 
@@ -103,7 +103,7 @@ impl ICodeModule for Flatten<Module> {
 
 impl Flatten<Module> {
     pub fn get_code_row(&self, v: ValueId, b: &mut NB) -> Option<CodeRow> {
-        let link_id = self.state.values[v.index()];
+        let link_id = self.state.values.get(v);
         let entry = self.get_link_entry(link_id);
         let code = self.get_code(v);
 
@@ -114,7 +114,7 @@ impl Flatten<Module> {
             .block_graph()
             .node_weight(NodeIndex::new(block_id.index()))
             .unwrap();
-        let entry_id = self.get_entry_id(v);
+        let entry_id = self.get_entry_id(v).map(|v| format!("{}", v));
 
         let r_ty = if let Some(r_ty) = b.types.u.resolve(&entry.ty) {
             r_ty
@@ -128,7 +128,7 @@ impl Flatten<Module> {
         let scope_id = block.scope();
 
         Some(CodeRow {
-            pos: v.index(),
+            pos: v,
             link: entry.link.unwrap(),
             value: self.code_to_string(v, b),
             ty: s_ty,
@@ -140,7 +140,7 @@ impl Flatten<Module> {
                 .to_string(),
             span_id: self.get_span_id(v).index(),
             scope_id: scope_id.index(),
-            entry_id: entry_id.map(|v| v.index()).unwrap_or(0),
+            entry_id: entry_id.map(|v| v).unwrap_or("".to_string()),
             block_id: block_id.index(),
             term: code.is_term(),
             dead: block.is_dead(),
@@ -150,8 +150,7 @@ impl Flatten<Module> {
 
     pub fn dump_code_table(&self, filename: &str, b: &mut NB) -> String {
         let mut rows = vec![];
-        for index in 0..self.state.values.len() {
-            let value_id = ValueId::new(index as u32);
+        for value_id in self.state.values.iter() {
             if let Some(row) = self.get_code_row(value_id, b) {
                 rows.push(row);
             } else {

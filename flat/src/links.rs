@@ -1,14 +1,14 @@
 use crate::{BlockId, CodeEntry};
 use serde::Serialize;
 
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Serialize)]
 pub struct ValueId(pub(crate) u32);
 
 impl ValueId {
-    pub fn new(index: u32) -> Self {
+    fn new(index: u32) -> Self {
         Self(index)
     }
-    pub fn index(&self) -> usize {
+    fn index(&self) -> usize {
         self.0 as usize
     }
     pub fn succ(&self) -> ValueId {
@@ -19,6 +19,37 @@ impl ValueId {
 impl std::fmt::Display for ValueId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "V{}", self.index())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Values {
+    values: Vec<LinkId>,
+}
+
+impl Values {
+    pub fn new() -> Self {
+        Self { values: Vec::new() }
+    }
+    pub fn get(&self, value_id: ValueId) -> LinkId {
+        self.values[value_id.index()]
+    }
+    pub fn len(&self) -> usize {
+        self.values.len()
+    }
+    pub fn insert(&mut self, link_id: LinkId) -> ValueId {
+        let index = self.values.len();
+        let value_id = ValueId::new(index as u32);
+        self.values.push(link_id);
+        value_id
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = ValueId> + '_ {
+        (0..self.values.len()).map(|index| ValueId::new(index as u32))
+    }
+
+    pub fn root(&self) -> ValueId {
+        ValueId::new(0)
     }
 }
 
