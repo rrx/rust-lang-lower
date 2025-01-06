@@ -1,7 +1,7 @@
 use super::resolve_attribute;
 use compile_core::{
     AbstractionId, Argument, AssignTarget, Ast, AstFuncType, AstNode, AstType, BuiltinId,
-    ControlFlowMarker, Lambda, LinkOptions, Literal, ReturnType, SpanId, StringKey,
+    ControlFlowMarker, LinkOptions, Literal, ReturnType, SpanId, StringKey,
 };
 
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -144,6 +144,12 @@ impl Flatten<Start> {
         };
 
         let static_block_id = f.static_block;
+
+        for bi in &[Builtin::Print, Builtin::Assert, Builtin::Import] {
+            let a = bi.make_abstraction(b);
+            let id = f.blocks.abstractions.insert(a);
+            b.builtins.add_abstraction(*bi, id);
+        }
 
         if let Ast::Module(key, body) = node.node {
             // start module block
@@ -915,15 +921,17 @@ impl FlattenInner {
 
     pub fn push_builtin_call(
         &mut self,
-        def: &Lambda,
         id: BuiltinId,
         args: Vec<Argument>,
         call_span_id: SpanId,
         b: &mut NB,
     ) -> FlattenResult {
-        let def_span_id = b.spans.get_span_unknown();
-        let (args, func_type) =
-            Self::calculate_function_arguments(&def, &args, &[], def_span_id, call_span_id, b);
+        let bi = b.builtins.get_enum(id);
+        let abstraction_id = b.builtins.get_abstraction(bi);
+        let (args, def_func_type) =
+            self.calculate_function_arguments(abstraction_id, &args, &[], call_span_id, b);
+        let def_func_type = Self::refresh_func_type(&def_func_type, b);
+
         let call_values = self.push_call_arguments(args, call_span_id, b);
         self.push_call_values(&call_values, b);
 
@@ -932,7 +940,7 @@ impl FlattenInner {
         // unify args
         // TODO: return type should also be unified
         b.unify(
-            &func_type.args,
+            &def_func_type.args,
             call_span_id,
             &AstType::build_struct(call_types),
             call_span_id,
@@ -940,7 +948,7 @@ impl FlattenInner {
 
         let link_id = self.push_code(
             LCode::Builtin(id),
-            func_type.into(),
+            def_func_type.into(),
             None,
             call_span_id,
             VarDefinitionSpace::Default,
@@ -1284,10 +1292,8 @@ impl FlattenInner {
                     _ => {
                         let args_size = args.len();
                         assert_eq!(args_size, bi.arity());
-
-                        let def = bi.get_lambda(b);
                         self.switch_blocks(current_block_id);
-                        self.push_builtin_call(&def, id, args, span_id, b)
+                        self.push_builtin_call(id, args, span_id, b)
                     }
                 }
             }

@@ -292,16 +292,13 @@ impl FlattenInner {
         b: &mut NB,
     ) -> LinkId {
         // call in the context of the caller, which is a goto
-        let a = self.blocks.abstractions.get(abstraction_id);
-        let def_span_id = a.def_span_id;
-        let def = a.def.clone();
 
         // we might want to handle this later
         // return in a CPS will return from the scoped function
         //
         // WRITE GOTO
         let (args, _) =
-            Self::calculate_function_arguments(&def, &args, &[], def_span_id, call_span_id, b);
+            self.calculate_function_arguments(abstraction_id, &args, &[], call_span_id, b);
         let call_values = self.push_call_arguments(args, call_span_id, b);
         let goto_block_id = self.current_block_id();
         let call_arg_type = argvec_type(&call_values);

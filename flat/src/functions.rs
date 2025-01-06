@@ -40,14 +40,17 @@ impl AbstractionsBuilder {
         self.0.get_mut(abstraction_id.index()).unwrap()
     }
 
-    pub fn add(&mut self, name: StringKey, def: Lambda, def_span_id: SpanId) -> AbstractionId {
+    pub fn insert(&mut self, abstraction: Abstraction) -> AbstractionId {
         let index = self.0.len();
-        self.0.push(Abstraction {
+        self.0.push(abstraction);
+        AbstractionId::new(index)
+    }
+    pub fn add(&mut self, name: StringKey, def: Lambda, def_span_id: SpanId) -> AbstractionId {
+        self.insert(Abstraction {
             def,
             def_span_id,
             name,
-        });
-        AbstractionId::new(index)
+        })
     }
 }
 
@@ -66,14 +69,16 @@ impl FlattenInner {
     }
 
     pub fn calculate_function_arguments(
-        def: &Lambda,
+        &self,
+        abstraction_id: AbstractionId,
         args: &[Argument],
         system: &[Argument],
-        def_span_id: SpanId,
         call_span_id: SpanId,
         b: &mut NB,
     ) -> (Vec<Argument>, AstFuncType) {
-        let func_arg = def.func_type.args.clone();
+        let a = self.blocks.abstractions.get(abstraction_id);
+        let def_span_id = a.def_span_id;
+        let func_arg = a.def.func_type.args.clone();
 
         // A rough outline of this large function
         // - We need to take in a list of calling args, and the function definition,
@@ -118,7 +123,7 @@ impl FlattenInner {
         //let mut def_has_kwargs = false;
 
         // copy defaults into value map
-        for (key, value) in def.defaults.iter() {
+        for (key, value) in a.def.defaults.iter() {
             value_map.insert(*key, value.clone());
         }
 
@@ -251,7 +256,7 @@ impl FlattenInner {
         }
 
         let def_func_type =
-            AstFuncType::new(AstType::Struct(fields_list), def.func_type.ret.clone());
+            AstFuncType::new(AstType::Struct(fields_list), a.def.func_type.ret.clone());
 
         (args, def_func_type)
     }
@@ -625,16 +630,9 @@ impl FlattenInner {
         let a = self.blocks.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
 
-        // look up the prototype
         // calculate the calling arguments
-        let (args, def_func_type) = Self::calculate_function_arguments(
-            &a.def,
-            &args,
-            &system,
-            def_span_id,
-            call_span_id,
-            b,
-        );
+        let (args, def_func_type) =
+            self.calculate_function_arguments(abstraction_id, &args, &system, call_span_id, b);
         let call_values = self.push_call_arguments(args.clone(), call_span_id, b);
         let call_ty = crate::argvec_type(&call_values);
         let def_func_type = Self::refresh_func_type(&def_func_type, b);

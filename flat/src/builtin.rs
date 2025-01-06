@@ -1,11 +1,11 @@
-use crate::NodeBuilder;
+use crate::{Abstraction, AbstractionId, NodeBuilder};
 use compile_core::{
     Argument, Ast, AstFuncType, AstNode, AstType, BuiltinId, BuiltinPool, ControlFlowMarker,
     Lambda, Literal, ReturnType, SpanId, StringKey,
 };
 use std::collections::{HashMap, VecDeque};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Builtin {
     Assert,
     Print,
@@ -141,6 +141,14 @@ impl Builtin {
         }
     }
 
+    pub fn name(&self) -> String {
+        match self {
+            Self::Assert => "check".into(),
+            Self::Print => "print".into(),
+            Self::Import => "use".into(),
+        }
+    }
+
     pub fn get_return_type(&self) -> AstType {
         AstType::Unit
     }
@@ -158,11 +166,21 @@ impl Builtin {
         };
         def
     }
+
+    pub fn make_abstraction(&self, b: &mut NodeBuilder) -> Abstraction {
+        let name = b.labels.s(&self.name());
+        Abstraction {
+            def: self.get_lambda(b),
+            def_span_id: b.spans.get_span_unknown(),
+            name,
+        }
+    }
 }
 
 pub struct BuiltinBuilder {
     pub pool: BuiltinPool,
     lookup: HashMap<String, BuiltinId>,
+    abstractions: HashMap<Builtin, AbstractionId>,
 }
 
 impl BuiltinBuilder {
@@ -170,6 +188,7 @@ impl BuiltinBuilder {
         let mut s = Self {
             pool: BuiltinPool::new(),
             lookup: HashMap::new(),
+            abstractions: HashMap::new(),
         };
         let b = compile_core::Builtin::new("check".into());
         s.insert(b);
@@ -180,7 +199,15 @@ impl BuiltinBuilder {
         s
     }
 
-    pub fn insert(&mut self, bi: compile_core::Builtin) {
+    pub fn add_abstraction(&mut self, b: Builtin, abstraction_id: AbstractionId) {
+        self.abstractions.insert(b, abstraction_id);
+    }
+
+    pub fn get_abstraction(&self, b: Builtin) -> AbstractionId {
+        *self.abstractions.get(&b).unwrap()
+    }
+
+    fn insert(&mut self, bi: compile_core::Builtin) {
         let name = bi.name.clone();
         let id = self.pool.intern(bi);
         self.lookup.insert(name, id);
