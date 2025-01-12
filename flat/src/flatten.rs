@@ -2331,7 +2331,8 @@ impl FlattenInner {
                 // resolve to an ast node, which we can then lower.
                 let node = attr;
                 if let Some(ast) = resolve_attribute(ident, &node, span_id, vec![], b) {
-                    self.push_node(ast, PushContext::Default, b)
+                    let (_, r) = self.safe_push_node_result(open, ast, PushContext::Default, b);
+                    r
                 } else {
                     unimplemented!();
                 }
