@@ -1841,7 +1841,7 @@ impl FlattenInner {
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::BlockReference(expr)) => {
-                let block_id = match &expr.node {
+                let (open, block_id) = match &expr.node {
                     Ast::Identifier(key) => {
                         let key = *key;
                         let ty = AstType::func(vec![], AstType::Unit);
@@ -1850,14 +1850,14 @@ impl FlattenInner {
                             self.blocks.resolve_function_name(scope_id, &key, &ty, b)
                         {
                             let entry = self.get_entry(link_id);
-                            entry.block_id
+                            (open, entry.block_id)
                         } else {
                             let link_id = self
                                 .push_node(*expr, PushContext::Default, b)
                                 .link_id
                                 .unwrap();
                             let entry = self.get_entry(link_id);
-                            match &entry.code {
+                            let block_id = match &entry.code {
                                 LCode::Label => entry.block_id,
                                 LCode::PlaceholderCodeReference => {
                                     let s_name = b.labels.r(key.into());
@@ -1866,14 +1866,23 @@ impl FlattenInner {
                                 _ => {
                                     unimplemented!("{:?}", entry);
                                 }
-                            }
+                            };
+                            (open, block_id)
                         }
                     }
                     _ => unimplemented!("{:?}", expr),
                 };
                 let ty = AstType::JumpTarget;
                 let code = LCode::Val(Literal::Block(block_id));
-                let link_id = self.push_code(code, ty, None, span_id, VarDefinitionSpace::Default);
+
+                let (open, link_id) = self.safe_push_code_open(
+                    open,
+                    code,
+                    ty,
+                    None,
+                    node.span_id,
+                    VarDefinitionSpace::Reg,
+                );
                 FlattenResult::link(link_id)
             }
 
