@@ -1019,17 +1019,17 @@ impl FlattenInner {
 
     pub fn push_function_call(
         &mut self,
+        open: SafeBlockOpen,
         v_fun: LinkId,
         values: ArgVec,
         ret_ty: ReturnType,
         span_id: SpanId,
         b: &mut NB,
-    ) -> FlattenResult {
-        let open = self.open();
+    ) -> (SafeBlockOpen, FlattenResult) {
         let (open, _) = self.safe_push_call_values(open, &values, b);
 
         if let ReturnType::Single(ty) = &ret_ty {
-            let (_, link_id) = self.safe_push_code_open(
+            let (open, link_id) = self.safe_push_code_open(
                 open,
                 LCode::Call(v_fun.into()),
                 ty.clone(),
@@ -1037,7 +1037,7 @@ impl FlattenInner {
                 span_id,
                 VarDefinitionSpace::Default,
             );
-            FlattenResult::link(link_id)
+            (open, FlattenResult::link(link_id))
         } else {
             unimplemented!()
         }

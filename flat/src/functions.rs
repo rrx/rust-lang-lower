@@ -690,13 +690,15 @@ impl FlattenInner {
         let open = self.open();
         let is_static = self.blocks.static_scope_id() == scope_id;
         //let blocks = vec![];
-        let r = if is_static {
+        let (open, r) = if is_static {
             let (open, call_values, call_func_type, def_func_type) = self
                 .push_function_call_arguments(open, abstraction_id, args, vec![], call_span_id, b);
             let r = self.push_bake_static(abstraction_id, call_func_type, call_span_id, b);
             let (fun_link_id, _bake_ty) = r;
             self.blocks.switch_blocks(current_block_id);
+            let open = self.open();
             self.push_function_call(
+                open,
                 fun_link_id,
                 call_values,
                 def_func_type.ret.clone(),
@@ -711,13 +713,14 @@ impl FlattenInner {
             // if it's void, then it's a statement
             // We want to support both of these options
             // TODO: break this out into a compile parameter for the function
-            if false {
+            let r = if false {
                 self.push_call_inline(abstraction_id, scope_id, args, call_span_id, b)
             } else {
                 self.push_call_inline_cps(abstraction_id, scope_id, args, call_span_id, b)
-            }
+            };
+            let open = self.open();
+            (open, r)
         };
-        let open = self.open();
         (open, r)
     }
 
