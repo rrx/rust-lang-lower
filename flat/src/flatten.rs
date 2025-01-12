@@ -922,9 +922,29 @@ impl FlattenInner {
         span_id: SpanId,
         mem: VarDefinitionSpace,
     ) -> (safe::SafeBlock<safe::Open>, LinkId) {
+        assert!(!code.is_term());
         let entry = CodeEntry::new(open.block_id, code, ty, name, span_id, mem);
         self.blocks.switch_blocks(open.block_id);
         (open, self.push_entry_with_link(entry))
+    }
+
+    pub fn safe_push_code_term(
+        &mut self,
+        open: safe::SafeBlock<safe::Open>,
+        code: LCode,
+        ty: AstType,
+        name: Option<StringKey>,
+        span_id: SpanId,
+        mem: VarDefinitionSpace,
+    ) -> (safe::SafeBlock<safe::Closed>, LinkId) {
+        assert!(code.is_term());
+        let entry = CodeEntry::new(open.block_id, code, ty, name, span_id, mem);
+        self.blocks.switch_blocks(open.block_id);
+        let closed = safe::SafeBlock {
+            block_id: self.blocks.current_block_id(),
+            extra: safe::Closed {},
+        };
+        (closed, self.push_entry_with_link(entry))
     }
 
     pub fn push_code(
@@ -1446,7 +1466,8 @@ impl FlattenInner {
                 if let Some(abstraction_id) = self.blocks.resolve_template(scope_id, key.into()) {
                     let code = LCode::Val(Literal::Abstraction(abstraction_id));
                     let ty = b.types.fresh_unknown();
-                    let link_id = self.push_code(
+                    let (_, link_id) = self.safe_push_code_open(
+                        open,
                         code,
                         ty,
                         Some(key),
@@ -1463,7 +1484,8 @@ impl FlattenInner {
                  */
                 let code = LCode::PlaceholderCodeReference;
                 let ty = b.types.fresh_unknown();
-                let link_id = self.push_code(
+                let (_, link_id) = self.safe_push_code_open(
+                    open,
                     code,
                     ty,
                     Some(key),
