@@ -11,8 +11,9 @@ use std::convert::Into;
 
 use crate::{
     safe, BlockGraph, BlockGraphStateOpen, BlockId, BlockifyError, Builtin, CodeEntry, CodeOffset,
-    ContinuationFlow, DeferredGotoList, FlowEdge, LCode, LinkId, NodeBuilder as NB, ScopeId,
-    ScopeState, ScopeType, ScopedContinuations, Successor, ValueId, Values, VarDefinitionSpace,
+    ContinuationFlow, DeferredGotoList, FlowEdge, LCode, LinkId, NodeBuilder as NB,
+    SafeBlockClosed, SafeBlockOpen, SafeBlockUnknown, ScopeId, ScopeState, ScopeType,
+    ScopedContinuations, Successor, ValueId, Values, VarDefinitionSpace,
 };
 use std::ops::{Deref, DerefMut};
 
@@ -152,7 +153,8 @@ impl Flatten<Start> {
                 VarDefinitionSpace::Default,
             );
 
-            let _ = f.push_node(*body, PushContext::Module, b);
+            let closed = f.safe_static();
+            f.safe_push_static_node(closed, *body, PushContext::Module, b);
 
             // return control to the root block
             f.blocks.switch_blocks(static_block_id);
@@ -578,12 +580,17 @@ impl FlattenInner {
 
     pub fn push_sequence(
         &mut self,
+        open: SafeBlockOpen,
         seq: Vec<AstNode>,
         span_id: SpanId,
         b: &mut NB,
-    ) -> FlattenResult {
-        let block = self.blocks.get_block(self.blocks.current_block_id());
-        let start_stack = self.blocks.walk_scopes(block.scope());
+    ) -> (SafeBlockUnknown, LinkId) {
+        self.blocks.switch_blocks(open.block_id);
+        let scope_id = self
+            .blocks
+            .get_block(self.blocks.current_block_id())
+            .scope();
+        let start_stack = self.blocks.walk_scopes(scope_id);
 
         let length = seq.len();
         for (i, expr) in seq.into_iter().enumerate() {
@@ -612,7 +619,37 @@ impl FlattenInner {
         let current_block_id = self.blocks.current_block_id();
         let block = self.blocks.get_block(current_block_id);
         let link_id = block.last().unwrap();
-        FlattenResult::link(link_id)
+        (self.blocks.safe_unknown(), link_id)
+    }
+
+    pub fn safe_push_static_node(
+        &mut self,
+        closed: SafeBlockClosed,
+        node: AstNode,
+        context: PushContext,
+        b: &mut NB,
+    ) -> SafeBlockClosed {
+        self.blocks.switch_blocks(closed.block_id);
+        // not everything can be added to static context
+        // we need to insert declarations for values and functions
+        node.to_vec().into_iter().for_each(|n| {
+            let _ = self.push_node(n, context, b);
+        });
+        self.blocks.switch_blocks(closed.block_id);
+        closed
+    }
+
+    pub fn safe_push_node(
+        &mut self,
+        open: SafeBlockOpen,
+        node: AstNode,
+        context: PushContext,
+        b: &mut NB,
+    ) -> (SafeBlockUnknown, LinkId) {
+        self.blocks.switch_blocks(open.block_id);
+        let r = self.push_node(node, context, b);
+        let link_id = r.link_id.unwrap();
+        (self.blocks.safe_unknown(), link_id)
     }
 
     pub fn push_return(&mut self, values: ArgVec, span_id: SpanId, b: &mut NB) -> LinkId {
@@ -1243,6 +1280,13 @@ impl FlattenInner {
         )
     }
 
+    pub fn safe_static(&mut self) -> SafeBlockClosed {
+        SafeBlockClosed {
+            block_id: self.blocks.static_block_id(),
+            extra: safe::Closed {},
+        }
+    }
+
     pub fn open(&mut self) -> safe::SafeBlock<safe::Open> {
         self.blocks
             .safe_switch_block(self.blocks.current_block_id())
@@ -1271,8 +1315,8 @@ impl FlattenInner {
             }
 
             Ast::Sequence(exprs) => {
-                self.blocks.switch_blocks(current_block_id);
-                self.push_sequence(exprs, span_id, b)
+                let (_, link_id) = self.push_sequence(open, exprs, span_id, b);
+                FlattenResult::link(link_id)
             }
 
             Ast::Global(name, ref expr) => {
@@ -2283,8 +2327,7 @@ impl FlattenInner {
 
             Ast::Defer(expr) => {
                 // defer is terminal
-                let r = self.push_node(*expr, PushContext::Default, b);
-                let func_link_id = r.link_id.unwrap();
+                let (_, func_link_id) = self.safe_push_expr(open, *expr, PushContext::Default, b);
                 // expression must be a function with no arguments.  We bake it here.
                 let ty = self.get_type(func_link_id).clone();
                 let entry = self.get_entry(func_link_id);

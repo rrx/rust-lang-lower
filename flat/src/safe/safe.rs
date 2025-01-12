@@ -9,17 +9,22 @@ pub trait SafeBlockState {}
 
 pub struct Empty {}
 impl SafeBlockState for Empty {}
-
 pub struct Open {}
 impl SafeBlockState for Open {}
-
 pub struct Closed {}
 impl SafeBlockState for Closed {}
+pub struct Unknown {}
+impl SafeBlockState for Unknown {}
 
 pub struct SafeBlock<S: SafeBlockState> {
     pub block_id: BlockId,
     pub extra: S,
 }
+
+pub type SafeBlockOpen = SafeBlock<Open>;
+pub type SafeBlockClosed = SafeBlock<Closed>;
+pub type SafeBlockEmpty = SafeBlock<Empty>;
+pub type SafeBlockUnknown = SafeBlock<Unknown>;
 
 impl BlockGraph<BlockGraphStateStart> {}
 
@@ -43,6 +48,25 @@ impl BlockGraph<BlockGraphStateOpen> {
     pub fn scope<B: SafeBlockState>(&self, block: &SafeBlock<B>) -> &ScopeLayer {
         let block = self.get_block(block.block_id);
         self.get_scope(block.scope())
+    }
+
+    pub fn safe_unknown(&self) -> SafeBlock<Unknown> {
+        SafeBlock {
+            block_id: self.current_block_id(),
+            extra: Unknown {},
+        }
+    }
+
+    fn safe_block_try_open(&mut self, block: SafeBlock<Unknown>) -> Option<SafeBlock<Open>> {
+        let block_id = block.block_id;
+        let block = self.get_block(block_id);
+        if block.is_term() {
+            return None;
+        }
+        Some(SafeBlock {
+            block_id,
+            extra: Open {},
+        })
     }
 }
 
