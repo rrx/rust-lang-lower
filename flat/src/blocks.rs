@@ -167,23 +167,77 @@ impl IRBlock {
     }
 }
 
-pub struct BlockGraph {
+pub trait BlockGraphState {}
+
+pub struct BlockGraphStateStart {}
+impl BlockGraphState for BlockGraphStateStart {}
+
+pub struct BlockGraphStateOpen {
+    static_scope: ScopeId,
+    static_block: BlockId,
+    current_block: BlockId,
+}
+impl BlockGraphState for BlockGraphStateOpen {}
+
+pub struct BlockGraph<S: BlockGraphState> {
     pub(super) bg: DiGraph<IRBlock, Successor>,
     pub(super) sg: DiGraph<ScopeLayer, ()>,
     pub(super) variants: FunctionVariantBuilder,
     pub(super) abstractions: AbstractionsBuilder,
+    extra: S,
 }
 
-impl BlockGraph {
-    pub fn new() -> Self {
+impl BlockGraph<BlockGraphStateStart> {
+    fn start() -> Self {
         Self {
             bg: DiGraph::new(),
             sg: DiGraph::new(),
             variants: FunctionVariantBuilder::new(),
             abstractions: AbstractionsBuilder::new(),
+            extra: BlockGraphStateStart {},
         }
     }
 
+    pub fn new() -> BlockGraph<BlockGraphStateOpen> {
+        let start = BlockGraph::start();
+        BlockGraph::open(start)
+    }
+}
+
+impl BlockGraph<BlockGraphStateOpen> {
+    fn open(mut g: BlockGraph<BlockGraphStateStart>) -> Self {
+        let (static_block_id, static_scope_id) = g.root();
+        BlockGraph {
+            bg: g.bg,
+            sg: g.sg,
+            variants: g.variants,
+            abstractions: g.abstractions,
+            extra: BlockGraphStateOpen {
+                static_scope: static_scope_id,
+                static_block: static_block_id,
+                current_block: static_block_id,
+            },
+        }
+    }
+
+    pub fn static_scope_id(&self) -> ScopeId {
+        self.extra.static_scope
+    }
+
+    pub fn static_block_id(&self) -> BlockId {
+        self.extra.static_block
+    }
+
+    pub fn switch_blocks(&mut self, block_id: BlockId) {
+        self.extra.current_block = block_id;
+    }
+
+    pub fn current_block_id(&self) -> BlockId {
+        self.extra.current_block
+    }
+}
+
+impl<S: BlockGraphState> BlockGraph<S> {
     pub fn new_block(
         &mut self,
         parent_block_id: BlockId,
@@ -201,12 +255,6 @@ impl BlockGraph {
         BlockId::new(index.index())
     }
 
-    pub fn control_flow(&mut self, source_block_id: BlockId, target_block_ids: &[BlockId]) {
-        for target_block_id in target_block_ids {
-            self.block_succ(source_block_id, *target_block_id, Successor::Jump);
-        }
-    }
-
     pub fn block_succ(
         &mut self,
         source_block_id: BlockId,
@@ -218,6 +266,14 @@ impl BlockGraph {
             NodeIndex::new(target_block_id.index()),
             succ_type,
         );
+    }
+}
+
+impl BlockGraph<BlockGraphStateOpen> {
+    pub fn control_flow(&mut self, source_block_id: BlockId, target_block_ids: &[BlockId]) {
+        for target_block_id in target_block_ids {
+            self.block_succ(source_block_id, *target_block_id, Successor::Jump);
+        }
     }
 
     pub fn get_block(&self, block_id: BlockId) -> &IRBlock {

@@ -56,15 +56,15 @@ impl AbstractionsBuilder {
 
 impl FlattenInner {
     pub fn push_bake_main(&mut self, b: &mut NB) -> Result<LinkId> {
-        let current_block_id = self.current_block_id();
+        let current_block_id = self.blocks.current_block_id();
         let name = b.labels.s("main");
         // reset the block position before each function
         // main is always static context
-        self.switch_blocks(self.static_block_id());
+        self.blocks.switch_blocks(self.blocks.static_block_id());
         let ty = AstType::func(vec![], AstType::Int);
         let r = self.push_bake(name, ty.get_func().clone(), b);
         // switch back after bake
-        self.switch_blocks(current_block_id);
+        self.blocks.switch_blocks(current_block_id);
         r
     }
 
@@ -275,8 +275,8 @@ impl FlattenInner {
         let s = b.labels.r(name.into());
         let global_key = b.labels.fresh_key(&s);
         //let s_global = b.labels.r(global_key.into());
-        let current_block_id = self.current_block_id();
-        self.switch_blocks(self.static_block_id());
+        let current_block_id = self.blocks.current_block_id();
+        self.blocks.switch_blocks(self.blocks.static_block_id());
         let block = self.blocks.get_block(current_block_id);
 
         // if it's defined in static scope, just call it
@@ -297,11 +297,11 @@ impl FlattenInner {
             v_entry
         } else {
             // if it's not already baked, we need to do that here
-            self.switch_blocks(self.static_block_id());
+            self.blocks.switch_blocks(self.blocks.static_block_id());
 
             let r = self.push_bake_function(abstraction_id, call_func_type.clone(), global_key, b);
             let v_entry = r.link_id.unwrap();
-            self.switch_blocks(current_block_id);
+            self.blocks.switch_blocks(current_block_id);
             v_entry
         };
 
@@ -314,10 +314,10 @@ impl FlattenInner {
         func_type: AstFuncType,
         b: &mut NB,
     ) -> Result<LinkId> {
-        let current_block_id = self.current_block_id();
+        let current_block_id = self.blocks.current_block_id();
         if let Some((_, abstraction_id)) = self.blocks.resolve_lambda(current_block_id, name) {
             let r = self.push_bake_function(abstraction_id, func_type, name, b);
-            self.switch_blocks(current_block_id);
+            self.blocks.switch_blocks(current_block_id);
             Ok(r.link_id.unwrap())
         } else {
             let s = b.labels.r(name.into());
@@ -336,7 +336,7 @@ impl FlattenInner {
     ) -> FlattenResult {
         // returns the entry to the function
 
-        let current_block_id = self.current_block_id();
+        let current_block_id = self.blocks.current_block_id();
         let a = self.blocks.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
 
@@ -377,7 +377,7 @@ impl FlattenInner {
 
         self.push_return(argvec, def_span_id, b);
         // restore position back to where we started
-        self.switch_blocks(current_block_id);
+        self.blocks.switch_blocks(current_block_id);
         FlattenResult::link(entry_link_id)
     }
 
@@ -425,7 +425,7 @@ impl FlattenInner {
         let s_name = b.labels.r(local_name.into());
         let cont_name = format!("{}.next", s_name);
 
-        self.switch_blocks(next_block_id);
+        self.blocks.switch_blocks(next_block_id);
 
         let (_v_block, v_args) = self.push_start_block(
             ret_block_ty.clone().into(),
@@ -493,7 +493,7 @@ impl FlattenInner {
         let body = *a.def.body.clone().unwrap();
         let local_name = a.name;
 
-        let current_block_id = self.current_block_id();
+        let current_block_id = self.blocks.current_block_id();
         let block = self.blocks.get_block(current_block_id);
         let scope_id = block.scope();
 
@@ -505,7 +505,7 @@ impl FlattenInner {
         self.blocks
             .block_succ(current_block_id, fun_block_id, succ_type);
 
-        self.switch_blocks(fun_block_id);
+        self.blocks.switch_blocks(fun_block_id);
         let (entry_link_id, entry_args) =
             self.push_start_block_mem(def_func_type.clone(), Some(global_name), def_span_id, mem);
 
@@ -527,7 +527,7 @@ impl FlattenInner {
             .scope_define(scope_id, global_name, entry_link_id);
 
         // flatten function, and switch to next
-        self.switch_blocks(fun_block_id);
+        self.blocks.switch_blocks(fun_block_id);
         let _ = self.push_node(body, PushContext::Default, b);
         self.maybe_terminate_block(next_block_id, def_span_id, PushContext::Function, b);
 
@@ -658,7 +658,7 @@ impl FlattenInner {
         args: Vec<Argument>,
         b: &mut NB,
     ) -> FlattenResult {
-        let current_block_id = self.current_block_id();
+        let current_block_id = self.blocks.current_block_id();
         // look up the lambda
         // If the lambda is in the static scope, we do a normal call
         // If it's in a non-static scope, then we bake a lambda and jump to it
@@ -671,14 +671,14 @@ impl FlattenInner {
         // - for lambdas and inline, it's easier, because we just write out the entire function
         // anyways
 
-        let is_static = self.static_scope_id() == scope_id;
+        let is_static = self.blocks.static_scope_id() == scope_id;
         //let blocks = vec![];
         if is_static {
             let (call_values, call_func_type, def_func_type) =
                 self.push_function_call_arguments(abstraction_id, args, vec![], call_span_id, b);
             let r = self.push_bake_static(abstraction_id, call_func_type, call_span_id, b);
             let (fun_link_id, _bake_ty) = r;
-            self.switch_blocks(current_block_id);
+            self.blocks.switch_blocks(current_block_id);
             self.push_function_call(
                 fun_link_id,
                 call_values,
@@ -687,7 +687,7 @@ impl FlattenInner {
                 b,
             )
         } else {
-            self.switch_blocks(current_block_id);
+            self.blocks.switch_blocks(current_block_id);
 
             // call the inline function
             // returns a link, which points to the result, which should be a single value
@@ -722,7 +722,7 @@ impl FlattenInner {
             self.push_function_call_arguments(abstraction_id, args, vec![], call_span_id, b);
 
         // bookmark this position, to continue later
-        let current_block_id = self.current_block_id();
+        let current_block_id = self.blocks.current_block_id();
 
         let a = self.blocks.abstractions.get(abstraction_id);
         let name = a.name;
@@ -763,7 +763,7 @@ impl FlattenInner {
         // now that we have the arguments calculated, and the lambda baked, jump!
 
         // Complete the call, returning cursor to the caller
-        self.switch_blocks(current_block_id);
+        self.blocks.switch_blocks(current_block_id);
 
         // DECLARE
         // if the function returns a value, then we need to copy it out of the next block arguments
@@ -781,7 +781,7 @@ impl FlattenInner {
         // jump into the the lambda
         self.push_jump(fun_block_id.into(), call_values, call_span_id, b);
 
-        self.switch_blocks(next_block_id);
+        self.blocks.switch_blocks(next_block_id);
 
         // STORE ARG
         // r contains the link to the return value
@@ -836,7 +836,7 @@ impl FlattenInner {
         let next_ty = arg.2.clone();
 
         // bookmark position
-        let current_block_id = self.current_block_id();
+        let current_block_id = self.blocks.current_block_id();
 
         // generate the CPS function, that's it
         // and jump to it, passing the exit continuation
@@ -862,7 +862,7 @@ impl FlattenInner {
         let cont_name = format!("{}.exit", s_name);
         let cont_key = b.labels.fresh_key(&cont_name);
 
-        self.switch_blocks(exit_block_id);
+        self.blocks.switch_blocks(exit_block_id);
         let (_v_block, v_args) =
             self.push_start_block(ret_block_ty.clone().into(), Some(cont_key), call_span_id);
 
@@ -885,7 +885,7 @@ impl FlattenInner {
 
         // Call the lambda that we just created
         // now that we have the arguments calculated, and the lambda baked, jump!
-        self.switch_blocks(current_block_id);
+        self.blocks.switch_blocks(current_block_id);
 
         // DECLARE
         // if the function returns a value, then we need to copy it out of the next block arguments
@@ -904,7 +904,7 @@ impl FlattenInner {
         let _goto_link_id =
             self.push_jump(fun_block_id.into(), call_values.clone(), call_span_id, b);
 
-        self.switch_blocks(exit_block_id);
+        self.blocks.switch_blocks(exit_block_id);
         // in the next block
 
         // STORE ARG

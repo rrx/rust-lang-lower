@@ -27,7 +27,7 @@ impl FlattenInner {
     ) -> BlockId {
         let s_name = b.labels.r(name.into());
         // call in the context of the caller, which is a goto
-        let current_block_id = self.current_block_id();
+        let current_block_id = self.blocks.current_block_id();
 
         let a = self.blocks.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
@@ -80,7 +80,7 @@ impl FlattenInner {
             let a = self.blocks.abstractions.get(abstraction_id);
             let body = a.def.body.clone().unwrap();
 
-            self.switch_blocks(fun_block_id);
+            self.blocks.switch_blocks(fun_block_id);
 
             let r_ty1 = b.types.u.resolve(&def_func_type.into()).unwrap();
 
@@ -118,7 +118,7 @@ impl FlattenInner {
 
             // terminate if not already terminated
             // this is for dead code
-            let block = self.blocks.get_block(self.current_block_id());
+            let block = self.blocks.get_block(self.blocks.current_block_id());
             if !block.is_term() {
                 self.push_placeholder_terminal(r_ty1, def_span_id);
             }
@@ -126,7 +126,7 @@ impl FlattenInner {
             fun_block_id
         };
 
-        self.switch_blocks(current_block_id);
+        self.blocks.switch_blocks(current_block_id);
 
         fun_block_id
     }
@@ -187,8 +187,8 @@ impl FlattenInner {
         call_span_id: SpanId,
         b: &mut NB,
     ) -> BlockId {
-        let save_block_id = self.current_block_id();
-        let current_block_id = self.current_block_id();
+        let save_block_id = self.blocks.current_block_id();
+        let current_block_id = self.blocks.current_block_id();
         let block = self.blocks.get_block(current_block_id);
         let goto_scope_id = block.scope();
 
@@ -205,7 +205,7 @@ impl FlattenInner {
         let start_block_id =
             self.blocks
                 .new_block(current_block_id, goto_scope_id, Successor::BlockScope);
-        self.switch_blocks(start_block_id);
+        self.blocks.switch_blocks(start_block_id);
         self.push_start_block(
             AstFuncType::new_void_void().into(),
             Some(start_key),
@@ -237,13 +237,13 @@ impl FlattenInner {
             let entry_block_id = scope.entry_block();
             let succ = Successor::BlockScope;
 
-            let current_block_id = self.current_block_id();
+            let current_block_id = self.blocks.current_block_id();
 
             let next_block_id = self.blocks.new_block(entry_block_id, scope_id, succ);
 
             // define new block
             let new_block_id = self.blocks.new_block(entry_block_id, scope_id, succ);
-            self.switch_blocks(new_block_id);
+            self.blocks.switch_blocks(new_block_id);
             let void_func_type = AstFuncType::new_void_void();
             let new_key = b.labels.fresh_key("unew");
             self.push_start_block(void_func_type.clone().into(), Some(new_key), call_span_id);
@@ -264,11 +264,11 @@ impl FlattenInner {
             );
 
             // jump to the new block
-            self.switch_blocks(current_block_id);
+            self.blocks.switch_blocks(current_block_id);
             self.push_jump_direct(new_block_id, vec![], call_span_id, b);
 
             // define next block
-            self.switch_blocks(next_block_id);
+            self.blocks.switch_blocks(next_block_id);
             let next_key = b.labels.fresh_key("unext");
             self.push_start_block(
                 AstFuncType::new_void_void().into(),
@@ -278,7 +278,7 @@ impl FlattenInner {
         }
         self.push_jump_direct(target_block_id, jump_args, call_span_id, b);
 
-        self.switch_blocks(save_block_id);
+        self.blocks.switch_blocks(save_block_id);
         start_block_id
     }
 
@@ -349,7 +349,7 @@ impl FlattenInner {
         _b: &mut NB,
     ) -> Result<FlattenResult> {
         // push a goto
-        let current_block_id = self.current_block_id();
+        let current_block_id = self.blocks.current_block_id();
         let block = self.blocks.get_block(current_block_id);
         let scope_id = block.scope();
         let ty = AstFuncType::new(argvec_type(&argvec), ReturnType::Never).into();
@@ -379,7 +379,7 @@ impl FlattenInner {
         // push a goto
         // to keep things simpler, we just defer all resolution of the gotos until the end
         // Goto is terminal, so we write out placeholders
-        let current_block_id = self.current_block_id();
+        let current_block_id = self.blocks.current_block_id();
         let block = self.blocks.get_block(current_block_id);
         let scope_id = block.scope();
 
@@ -443,7 +443,7 @@ impl FlattenInner {
                 // we type check and then add a placeholder jump, that will be replaced later
                 // based on the graph.
                 //
-                self.switch_blocks(d.block_id);
+                self.blocks.switch_blocks(d.block_id);
                 self.remove_placeholder_terminal(d.block_id);
 
                 // Push load if required.  This is needed if the target is stored in memory,
@@ -504,7 +504,7 @@ impl FlattenInner {
                     .blocks
                     .resolve_template(d.scope_id, d.name.unwrap().into())
                 {
-                    self.switch_blocks(d.block_id);
+                    self.blocks.switch_blocks(d.block_id);
                     self.remove_placeholder_terminal(d.block_id);
 
                     // push and jump
@@ -527,7 +527,7 @@ impl FlattenInner {
                 {
                     assert_eq!(d.args.len(), 0);
                     // not possible to pass args to a label, use a CPS function instead
-                    self.switch_blocks(d.block_id);
+                    self.blocks.switch_blocks(d.block_id);
                     self.remove_placeholder_terminal(d.block_id);
 
                     // TODO: args should be unwound before jumping
@@ -563,7 +563,7 @@ impl FlattenInner {
         // this is where we actually do the rewrite
         match d.deferred_type {
             DeferredType::Name(arg_link_id) => {
-                self.switch_blocks(d.block_id);
+                self.blocks.switch_blocks(d.block_id);
                 let last_link_id = self.remove_placeholder_terminal(d.block_id);
                 let mut last_entry = self.get_entry(last_link_id).clone();
 
@@ -629,7 +629,7 @@ impl FlattenInner {
                                 d.scope_id,
                                 Successor::BlockScope,
                             );
-                            self.switch_blocks(new_block_id);
+                            self.blocks.switch_blocks(new_block_id);
                             self.push_start_block(
                                 AstFuncType::new_void_void().into(),
                                 Some(key),
@@ -644,7 +644,7 @@ impl FlattenInner {
                             m.insert(target_block_id.index(), new_block_id);
                         }
 
-                        self.switch_blocks(d.block_id);
+                        self.blocks.switch_blocks(d.block_id);
 
                         let code = LCode::Switch(arg_link_id, m);
                         last_entry.code = code;
@@ -656,7 +656,7 @@ impl FlattenInner {
                         let mut targets = sources.into_iter().collect::<Vec<_>>();
                         targets.sort();
 
-                        self.switch_blocks(d.block_id);
+                        self.blocks.switch_blocks(d.block_id);
                         let code = self
                             .calc_jump_code(arg_link_id, targets, d.call_span_id, b)
                             .unwrap();
@@ -706,7 +706,7 @@ impl FlattenInner {
             let block_ty = block_entry.ty.clone();
             let block_span_id = block_entry.span_id;
 
-            self.switch_blocks(block_id);
+            self.blocks.switch_blocks(block_id);
 
             // now replace the abstraction code
             let entry = self.get_entry_mut(link_id);

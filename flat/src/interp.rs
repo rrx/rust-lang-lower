@@ -90,7 +90,7 @@ impl<'a> Interp<'a> {
     pub fn new(config: &'a Config, m: &'a Flatten<Module>, b: &'a mut NodeBuilder) -> Self {
         let scope = Scope::new(ScopeType::Static, None);
 
-        let block_id = m.static_block_id();
+        let block_id = m.blocks.static_block_id();
         let block = m.blocks.get_block(block_id);
         let links = block.iter().collect::<Vec<_>>();
         let mut values = HashMap::new();

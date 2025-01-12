@@ -6,7 +6,10 @@ use std::ops::Deref;
 
 use std::collections::{HashMap, HashSet};
 
-use crate::{ArgVec, BlockGraph, BlockId, LinkId, NodeBuilder, StringLabel, Successor, VariantId};
+use crate::{
+    ArgVec, BlockGraph, BlockGraphState, BlockGraphStateOpen, BlockId, LinkId, NodeBuilder,
+    StringLabel, Successor, VariantId,
+};
 use compile_core::{AbstractionId, Argument, AstType, Lambda, SpanId, StringKey};
 
 #[derive(Debug)]
@@ -313,7 +316,7 @@ impl ScopeLayer {
     }
 }
 
-impl BlockGraph {
+impl<S: BlockGraphState> BlockGraph<S> {
     pub fn root(&mut self) -> (BlockId, ScopeId) {
         let scope_id = self.new_scope(ScopeType::Static);
         let block_id = self.new_block_with_scope(scope_id);
@@ -322,6 +325,19 @@ impl BlockGraph {
         (block_id, scope_id)
     }
 
+    pub fn new_scope(&mut self, scope_type: ScopeType) -> ScopeId {
+        let scope = ScopeLayer::new(scope_type);
+        let index = self.sg.add_node(scope);
+        ScopeId(index.index() as u32)
+    }
+
+    pub fn get_scope_mut(&mut self, scope_id: ScopeId) -> &mut ScopeLayer {
+        let index = NodeIndex::new(scope_id.index());
+        self.sg.node_weight_mut(index).unwrap()
+    }
+}
+
+impl BlockGraph<BlockGraphStateOpen> {
     pub fn new_scope_and_block(
         &mut self,
         scope_type: ScopeType,
@@ -346,20 +362,9 @@ impl BlockGraph {
         &self.sg
     }
 
-    pub fn new_scope(&mut self, scope_type: ScopeType) -> ScopeId {
-        let scope = ScopeLayer::new(scope_type);
-        let index = self.sg.add_node(scope);
-        ScopeId(index.index() as u32)
-    }
-
     pub fn get_scope(&self, scope_id: ScopeId) -> &ScopeLayer {
         let index = NodeIndex::new(scope_id.index());
         self.sg.node_weight(index).unwrap()
-    }
-
-    pub fn get_scope_mut(&mut self, scope_id: ScopeId) -> &mut ScopeLayer {
-        let index = NodeIndex::new(scope_id.index());
-        self.sg.node_weight_mut(index).unwrap()
     }
 
     pub fn scope_define(&mut self, scope_id: ScopeId, name: StringKey, v: LinkId) {

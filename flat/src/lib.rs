@@ -17,6 +17,7 @@ pub mod graph;
 pub mod interp;
 pub mod links;
 pub mod mem;
+pub mod safe;
 pub mod scope;
 pub mod variants;
 
@@ -36,5 +37,6 @@ pub use graph::{Node, CFG};
 pub use interp::*;
 pub use links::*;
 pub use mem::*;
+pub use safe::*;
 pub use scope::*;
 pub use variants::*;
