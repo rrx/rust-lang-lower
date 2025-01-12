@@ -1,4 +1,5 @@
 use super::resolve_attribute;
+use anyhow::Result;
 use compile_core::{
     AbstractionId, Argument, AssignTarget, Ast, AstFuncType, AstNode, AstType, BuiltinId,
     ControlFlowMarker, LinkOptions, Literal, ReturnType, SpanId, StringKey,
@@ -9,9 +10,9 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::convert::Into;
 
 use crate::{
-    BlockGraph, BlockGraphStateOpen, BlockId, Builtin, CodeEntry, CodeOffset, ContinuationFlow,
-    DeferredGotoList, FlowEdge, LCode, LinkId, NodeBuilder as NB, ScopeId, ScopeState, ScopeType,
-    ScopedContinuations, Successor, ValueId, Values, VarDefinitionSpace,
+    safe, BlockGraph, BlockGraphStateOpen, BlockId, BlockifyError, Builtin, CodeEntry, CodeOffset,
+    ContinuationFlow, DeferredGotoList, FlowEdge, LCode, LinkId, NodeBuilder as NB, ScopeId,
+    ScopeState, ScopeType, ScopedContinuations, Successor, ValueId, Values, VarDefinitionSpace,
 };
 use std::ops::{Deref, DerefMut};
 
@@ -113,34 +114,34 @@ impl Flatten<Start> {
         }
     }
 
-    pub fn flatten_module(node: AstNode, b: &mut NB) -> Flatten<FirstPass> {
+    pub fn flatten_module(node: AstNode, b: &mut NB) -> Result<Flatten<FirstPass>> {
         // setup environment with static scope and block
         // blocks will be moved into environment eventually
         // FlattenEnvironment represents the module level structures
 
-        let blocks = BlockGraph::new();
-        let inner = FlattenInner {
-            blocks,
-            link: LinkOptions::new(),
-            open_identifiers: vec![],
-            scoped_continuations: ScopedContinuations::new(),
-            deferred_goto: DeferredGotoList::new(),
-        };
-
-        let mut f = Self {
-            inner: inner.into(),
-            state: Start {},
-        };
-
-        let static_block_id = f.blocks.static_block_id();
-
-        for bi in &[Builtin::Print, Builtin::Assert, Builtin::Import] {
-            let a = bi.make_abstraction(b);
-            let id = f.blocks.abstractions.insert(a);
-            b.builtins.add_abstraction(*bi, id);
-        }
-
         if let Ast::Module(key, body) = node.node {
+            let blocks = BlockGraph::new(key);
+            let inner = FlattenInner {
+                blocks,
+                link: LinkOptions::new(),
+                open_identifiers: vec![],
+                scoped_continuations: ScopedContinuations::new(),
+                deferred_goto: DeferredGotoList::new(),
+            };
+
+            let mut f = Self {
+                inner: inner.into(),
+                state: Start {},
+            };
+
+            let static_block_id = f.blocks.static_block_id();
+
+            for bi in &[Builtin::Print, Builtin::Assert, Builtin::Import] {
+                let a = bi.make_abstraction(b);
+                let id = f.blocks.abstractions.insert(a);
+                b.builtins.add_abstraction(*bi, id);
+            }
+
             // start module block
             f.push_start_block_static(AstFuncType::new_void_void().into(), Some(key), node.span_id);
             let _ = f.push_code(
@@ -155,10 +156,11 @@ impl Flatten<Start> {
 
             // return control to the root block
             f.blocks.switch_blocks(static_block_id);
+            Ok(f.next())
         } else {
             b.push_error("Not a module", node.span_id);
+            Err(BlockifyError::Invalid.into())
         }
-        f.next()
     }
 }
 
@@ -711,6 +713,22 @@ impl FlattenInner {
                 )
             })
             .collect::<Vec<_>>();
+    }
+
+    fn safe_jump(
+        &mut self,
+        block: safe::SafeBlock<safe::Open>,
+        target_block_id: BlockId,
+        jump_args: ArgVec,
+        span_id: SpanId,
+        b: &mut NB,
+    ) -> safe::SafeBlock<safe::Closed> {
+        self.blocks.switch_blocks(block.block_id);
+        self.push_jump(target_block_id, jump_args, span_id, b);
+        safe::SafeBlock {
+            block_id: self.blocks.current_block_id(),
+            extra: safe::Closed {},
+        }
     }
 
     pub fn push_jump(

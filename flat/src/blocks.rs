@@ -204,7 +204,7 @@ impl BlockGraph<BlockGraphStateStart> {
         }
     }
 
-    pub fn new() -> BlockGraph<BlockGraphStateOpen> {
+    pub fn new(key: StringKey) -> BlockGraph<BlockGraphStateOpen> {
         let start = BlockGraph::start();
         BlockGraph::open(start)
     }

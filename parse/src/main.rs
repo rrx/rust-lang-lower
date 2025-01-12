@@ -102,7 +102,7 @@ fn run(config: &Config, b: &mut NodeBuilder) -> Result<i32, Box<dyn Error>> {
         b.dump_ast(&ast);
     }
 
-    let mut f = Flatten::flatten_module(ast, b);
+    let mut f = Flatten::flatten_module(ast, b)?;
 
     let main_link_id = f.push_bake_main(b)?;
 
