@@ -10,8 +10,8 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::convert::Into;
 
 use crate::{
-    safe, BlockGraph, BlockGraphStateOpen, BlockId, BlockifyError, Builtin, CodeEntry, CodeOffset,
-    ContinuationFlow, DeferredGotoList, FlowEdge, LCode, LinkId, NodeBuilder as NB,
+    BlockGraph, BlockGraphStateOpen, BlockId, BlockifyError, Builtin, CodeEntry, CodeOffset,
+    ContinuationFlow, DeferredGotoList, FlowEdge, LCode, LinkId, NodeBuilder as NB, SafeBlock,
     SafeBlockClosed, SafeBlockOpen, SafeBlockUnknown, ScopeId, ScopeState, ScopeType,
     ScopedContinuations, Successor, ValueId, Values, VarDefinitionSpace,
 };
@@ -580,19 +580,18 @@ impl FlattenInner {
 
     pub fn push_sequence(
         &mut self,
-        open: SafeBlockOpen,
+        mut open: SafeBlockOpen,
         seq: Vec<AstNode>,
         span_id: SpanId,
         b: &mut NB,
     ) -> (SafeBlockUnknown, LinkId) {
         self.blocks.switch_blocks(open.block_id);
-        let scope_id = self
-            .blocks
-            .get_block(self.blocks.current_block_id())
-            .scope();
+        let scope_id = self.blocks.get_block(open.block_id).scope();
         let start_stack = self.blocks.walk_scopes(scope_id);
 
         let length = seq.len();
+
+        let mut unk_block = open.unknown();
         for (i, expr) in seq.into_iter().enumerate() {
             let context = if i == length - 1 {
                 PushContext::SeqLast
@@ -602,23 +601,25 @@ impl FlattenInner {
                 PushContext::Seq
             };
 
-            let _ = self.push_node(expr, context, b);
+            let span_id = expr.span_id;
+            open = self.ensure_open(span_id, b);
+            let (unk, _) = self.safe_push_node_result(open, expr, context, b);
+            unk_block = unk;
         }
 
         // ensure that we close any blocks that were opened
-        let current_block_id = self.blocks.current_block_id();
-        let block = self.blocks.get_block(current_block_id);
-        let scope_id = block.scope();
+        let scope_id = self.blocks.scope_id(&unk_block);
         let end_stack = self.blocks.walk_scopes(scope_id);
         for _ in 0..end_stack.len() - start_stack.len() {
             let ast: Ast = ControlFlowMarker::BlockEnd.into();
             let node = ast.node(span_id);
-            let _ = self.push_node(node, PushContext::BlockEnd, b);
+            open = self.ensure_open(span_id, b);
+            let (unk, _) = self.safe_push_node_result(open, node, PushContext::BlockEnd, b);
+            unk_block = unk;
         }
 
-        let current_block_id = self.blocks.current_block_id();
-        let block = self.blocks.get_block(current_block_id);
-        let link_id = block.last().unwrap();
+        self.blocks.switch_blocks(unk_block.block_id);
+        let link_id = self.blocks.get_block(unk_block.block_id).last().unwrap();
         (self.blocks.safe_unknown(), link_id)
     }
 
@@ -701,15 +702,15 @@ impl FlattenInner {
 
     pub fn safe_push_call_values(
         &mut self,
-        open: safe::SafeBlock<safe::Open>,
+        open: SafeBlockOpen,
         values: &[(Option<StringKey>, LinkId, AstType, SpanId)],
         b: &mut NB,
-    ) -> (safe::SafeBlock<safe::Open>, Vec<LinkId>) {
+    ) -> (SafeBlockOpen, Vec<LinkId>) {
         self.blocks.switch_blocks(open.block_id);
         let links = self.push_call_values(values, b);
-        let open = safe::SafeBlock {
+        let open = SafeBlock {
             block_id: self.blocks.current_block_id(),
-            extra: safe::Open {},
+            extra: crate::safe::Open {},
         };
         self.blocks.switch_blocks(open.block_id);
         (open, links)
@@ -782,34 +783,34 @@ impl FlattenInner {
 
     fn safe_push_expr(
         &mut self,
-        open: safe::SafeBlock<safe::Open>,
+        open: SafeBlockOpen,
         expr: AstNode,
         context: PushContext,
         b: &mut NB,
-    ) -> (safe::SafeBlock<safe::Open>, LinkId) {
+    ) -> (SafeBlockOpen, LinkId) {
         self.blocks.switch_blocks(open.block_id);
         let r = self.push_node(expr, context, b);
         let link_id = r.link_id.unwrap();
-        let open = safe::SafeBlock {
+        let open = SafeBlock {
             block_id: self.blocks.current_block_id(),
-            extra: safe::Open {},
+            extra: crate::safe::Open {},
         };
         (open, link_id)
     }
 
     fn safe_jump(
         &mut self,
-        block: safe::SafeBlock<safe::Open>,
+        block: SafeBlockOpen,
         target_block_id: BlockId,
         jump_args: ArgVec,
         span_id: SpanId,
         b: &mut NB,
-    ) -> safe::SafeBlock<safe::Closed> {
+    ) -> SafeBlockClosed {
         self.blocks.switch_blocks(block.block_id);
         self.push_jump(target_block_id, jump_args, span_id, b);
-        safe::SafeBlock {
+        SafeBlock {
             block_id: self.blocks.current_block_id(),
-            extra: safe::Closed {},
+            extra: crate::safe::Closed {},
         }
     }
 
@@ -963,13 +964,13 @@ impl FlattenInner {
 
     pub fn safe_push_code_open(
         &mut self,
-        open: safe::SafeBlock<safe::Open>,
+        open: SafeBlockOpen,
         code: LCode,
         ty: AstType,
         name: Option<StringKey>,
         span_id: SpanId,
         mem: VarDefinitionSpace,
-    ) -> (safe::SafeBlock<safe::Open>, LinkId) {
+    ) -> (SafeBlockOpen, LinkId) {
         assert!(!code.is_term());
         let entry = CodeEntry::new(open.block_id, code, ty, name, span_id, mem);
         self.blocks.switch_blocks(open.block_id);
@@ -978,19 +979,19 @@ impl FlattenInner {
 
     pub fn safe_push_code_term(
         &mut self,
-        open: safe::SafeBlock<safe::Open>,
+        open: SafeBlockOpen,
         code: LCode,
         ty: AstType,
         name: Option<StringKey>,
         span_id: SpanId,
         mem: VarDefinitionSpace,
-    ) -> (safe::SafeBlock<safe::Closed>, LinkId) {
+    ) -> (SafeBlockClosed, LinkId) {
         assert!(code.is_term());
         let entry = CodeEntry::new(open.block_id, code, ty, name, span_id, mem);
         self.blocks.switch_blocks(open.block_id);
-        let closed = safe::SafeBlock {
+        let closed = SafeBlock {
             block_id: self.blocks.current_block_id(),
-            extra: safe::Closed {},
+            extra: crate::safe::Closed {},
         };
         (closed, self.push_entry_with_link(entry))
     }
@@ -1294,11 +1295,11 @@ impl FlattenInner {
     pub fn safe_static(&mut self) -> SafeBlockClosed {
         SafeBlockClosed {
             block_id: self.blocks.static_block_id(),
-            extra: safe::Closed {},
+            extra: crate::safe::Closed {},
         }
     }
 
-    pub fn open(&mut self) -> safe::SafeBlock<safe::Open> {
+    pub fn open(&mut self) -> SafeBlockOpen {
         self.blocks
             .safe_switch_block(self.blocks.current_block_id())
     }
@@ -1754,7 +1755,7 @@ impl FlattenInner {
                 let then_is_term = self.blocks.get_block(then_end_block_id).is_term();
 
                 // ELSE Block
-                let (open, has_else, else_is_term, else_start_block_id, else_end_block_id) =
+                let (_, has_else, else_is_term, else_start_block_id, else_end_block_id) =
                     if let Some(else_expr) = maybe_else_expr {
                         let (else_block_id, _) = self.blocks.new_scope_and_block(
                             ScopeType::Block,
@@ -2383,7 +2384,7 @@ impl FlattenInner {
         }
     }
 
-    pub(super) fn ensure_open(&mut self, span_id: SpanId, b: &mut NB) {
+    pub(super) fn ensure_open(&mut self, span_id: SpanId, b: &mut NB) -> SafeBlockOpen {
         // we we want to add a node, and the current block is terminated
         // we create a new block for the dead code that follows.
         let block = self.blocks.get_block(self.blocks.current_block_id());
@@ -2400,6 +2401,7 @@ impl FlattenInner {
                 span_id,
             );
         }
+        self.open()
     }
 
     pub(super) fn maybe_terminate_block(

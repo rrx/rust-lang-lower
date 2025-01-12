@@ -21,6 +21,15 @@ pub struct SafeBlock<S: SafeBlockState> {
     pub extra: S,
 }
 
+impl SafeBlock<Open> {
+    pub fn unknown(self) -> SafeBlock<Unknown> {
+        SafeBlock {
+            block_id: self.block_id,
+            extra: Unknown {},
+        }
+    }
+}
+
 pub type SafeBlockOpen = SafeBlock<Open>;
 pub type SafeBlockClosed = SafeBlock<Closed>;
 pub type SafeBlockEmpty = SafeBlock<Empty>;
