@@ -1,6 +1,6 @@
 use crate::{
     ArgVec, BlockGraph, BlockGraphState, BlockGraphStateOpen, BlockGraphStateStart, BlockId,
-    NodeBuilder,
+    IRBlock, NodeBuilder, ScopeId, ScopeLayer,
 };
 
 use compile_core::SpanId;
@@ -29,6 +29,20 @@ impl BlockGraph<BlockGraphStateOpen> {
             block_id: self.static_block_id(),
             extra: Closed {},
         }
+    }
+
+    pub fn block<B: SafeBlockState>(&self, block: &SafeBlock<B>) -> &IRBlock {
+        self.get_block(block.block_id)
+    }
+
+    pub fn scope_id<B: SafeBlockState>(&self, block: &SafeBlock<B>) -> ScopeId {
+        let block = self.get_block(block.block_id);
+        block.scope()
+    }
+
+    pub fn scope<B: SafeBlockState>(&self, block: &SafeBlock<B>) -> &ScopeLayer {
+        let block = self.get_block(block.block_id);
+        self.get_scope(block.scope())
     }
 }
 

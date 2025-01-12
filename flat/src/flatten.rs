@@ -650,6 +650,22 @@ impl FlattenInner {
         links
     }
 
+    pub fn safe_push_call_values(
+        &mut self,
+        open: safe::SafeBlock<safe::Open>,
+        values: &[(Option<StringKey>, LinkId, AstType, SpanId)],
+        b: &mut NB,
+    ) -> (safe::SafeBlock<safe::Open>, Vec<LinkId>) {
+        self.blocks.switch_blocks(open.block_id);
+        let links = self.push_call_values(values, b);
+        let open = safe::SafeBlock {
+            block_id: self.blocks.current_block_id(),
+            extra: safe::Open {},
+        };
+        self.blocks.switch_blocks(open.block_id);
+        (open, links)
+    }
+
     pub fn push_call_values(
         &mut self,
         values: &[(Option<StringKey>, LinkId, AstType, SpanId)],
@@ -713,6 +729,24 @@ impl FlattenInner {
                 )
             })
             .collect::<Vec<_>>();
+    }
+
+    fn safe_push_expr(
+        &mut self,
+        open: safe::SafeBlock<safe::Open>,
+        expr: AstNode,
+        context: PushContext,
+        b: &mut NB,
+    ) -> (safe::SafeBlock<safe::Open>, LinkId) {
+        self.blocks.switch_blocks(open.block_id);
+        let r = self.push_node(expr, context, b);
+        let link_id = r.link_id.unwrap();
+        let open = safe::SafeBlock {
+            block_id: self.blocks.current_block_id(),
+            extra: safe::Open {},
+        };
+        self.blocks.switch_blocks(open.block_id);
+        (open, link_id)
     }
 
     fn safe_jump(
@@ -877,6 +911,20 @@ impl FlattenInner {
                 FlowEdge::JumpArgInline,
             );
         }
+    }
+
+    pub fn safe_push_code_open(
+        &mut self,
+        open: safe::SafeBlock<safe::Open>,
+        code: LCode,
+        ty: AstType,
+        name: Option<StringKey>,
+        span_id: SpanId,
+        mem: VarDefinitionSpace,
+    ) -> (safe::SafeBlock<safe::Open>, LinkId) {
+        let entry = CodeEntry::new(open.block_id, code, ty, name, span_id, mem);
+        self.blocks.switch_blocks(open.block_id);
+        (open, self.push_entry_with_link(entry))
     }
 
     pub fn push_code(
@@ -1175,6 +1223,11 @@ impl FlattenInner {
         )
     }
 
+    pub fn open(&mut self) -> safe::SafeBlock<safe::Open> {
+        self.blocks
+            .safe_switch_block(self.blocks.current_block_id())
+    }
+
     pub fn push_node(
         &mut self,
         node: AstNode,
@@ -1183,6 +1236,7 @@ impl FlattenInner {
     ) -> FlattenResult {
         // we can only push into an open block
         self.ensure_open(node.span_id, b);
+        let open = self.open();
 
         let current_block_id = self.blocks.current_block_id();
         let block = self.blocks.get_block_mut(current_block_id);
@@ -1287,21 +1341,20 @@ impl FlattenInner {
             }
 
             Ast::Return(maybe_expr) => {
-                let block = self.blocks.get_block(current_block_id);
+                let block = self.blocks.block(&open);
+
                 let fun_scope_id = self.blocks.get_function_scope_id(block.scope());
                 let fun_block_id = self.blocks.get_entry_block(fun_scope_id);
 
                 let mut jump_args = vec![];
-                let span_id = if let Some(expr) = maybe_expr {
+                let (open, span_id) = if let Some(expr) = maybe_expr {
                     let expr_span_id = expr.span_id;
-                    self.blocks.switch_blocks(current_block_id);
-                    let r = self.push_node(*expr, PushContext::Return, b);
-                    let link_id = r.link_id.unwrap();
+                    let (open, link_id) = self.safe_push_expr(open, *expr, PushContext::Return, b);
                     let entry = self.get_entry(link_id);
                     jump_args.push((None, link_id, entry.ty.clone(), span_id));
-                    expr_span_id
+                    (open, expr_span_id)
                 } else {
-                    node.span_id
+                    (open, node.span_id)
                 };
 
                 let fun_scope = self.blocks.get_scope_mut(fun_scope_id);
@@ -1314,10 +1367,7 @@ impl FlattenInner {
                 let scope = self.blocks.get_function_scope(fun_block_id);
                 let ret_block_id = scope.return_block();
 
-                let open = self
-                    .blocks
-                    .safe_switch_block(self.blocks.current_block_id());
-                let closed = self.safe_jump(open, ret_block_id, jump_args, span_id, b);
+                let _ = self.safe_jump(open, ret_block_id, jump_args, span_id, b);
                 //self.push_jump(ret_block_id, jump_args, span_id, b);
                 //self.blocks.switch_blocks(closed.block_id);
                 FlattenResult::statement()
@@ -1330,7 +1380,16 @@ impl FlattenInner {
                     _ => lit.clone().into(),
                 };
                 let mem = VarDefinitionSpace::Default;
-                let link_id = self.push_code(LCode::Val(lit), ty.clone(), None, node.span_id, mem);
+
+                let (_, link_id) = self.safe_push_code_open(
+                    open,
+                    LCode::Val(lit),
+                    ty.clone(),
+                    None,
+                    node.span_id,
+                    mem,
+                );
+                //let link_id = self.push_code(LCode::Val(lit), ty.clone(), None, node.span_id, mem);
                 FlattenResult::link(link_id)
             }
 
@@ -1338,7 +1397,7 @@ impl FlattenInner {
                 // expression, non-terminal
                 let x_span_id = x.span_id;
                 let y_span_id = y.span_id;
-                self.blocks.switch_blocks(current_block_id);
+                self.blocks.switch_blocks(open.block_id);
                 let rx = self.push_node(*x, PushContext::Default, b);
                 let ry = self.push_node(*y, PushContext::Default, b);
                 let vx = rx.link_id.unwrap();
@@ -1348,7 +1407,9 @@ impl FlattenInner {
 
                 b.unify(&rx_ty, x_span_id, &ry_ty, y_span_id);
 
-                let _ = self.push_call_values(
+                let open = self.open();
+                let (open, _) = self.safe_push_call_values(
+                    open,
                     &[
                         (None, vx, rx_ty.clone(), node.span_id),
                         (None, vy, ry_ty.clone(), node.span_id),
@@ -1357,13 +1418,16 @@ impl FlattenInner {
                 );
 
                 let ret_ty = op.node.get_type(&rx_ty, &ry_ty);
-                let link_id = self.push_code(
+                let (open, link_id) = self.safe_push_code_open(
+                    open,
                     LCode::Op2(op.node),
                     ret_ty.clone(),
                     None,
                     op.span_id,
                     VarDefinitionSpace::Default,
                 );
+
+                self.blocks.switch_blocks(open.block_id);
 
                 FlattenResult::link(link_id)
             }
