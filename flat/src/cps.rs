@@ -8,8 +8,8 @@ use std::convert::Into;
 
 use crate::{
     argvec_type, ArgVec, BlockId, ContinuationFlow, DeferredGoto, DeferredType, FlattenInner,
-    FlattenResult, LCode, LinkId, NodeBuilder as NB, PushContext, ScopeId, ScopeState, ScopeType,
-    Successor, VarDefinitionSpace,
+    FlattenResult, LCode, LinkId, NodeBuilder as NB, PushContext, SafeBlockClosed, SafeBlockOpen,
+    ScopeId, ScopeState, ScopeType, Successor, VarDefinitionSpace,
 };
 
 use std::collections::{HashMap, HashSet};
@@ -105,7 +105,7 @@ impl FlattenInner {
             // flatten function, and switch to next
             // lower first, so we resolve types
             let open = self.open_block(fun_block_id);
-            let (open, r) = self.safe_push_node_result(open, *body, PushContext::Default, b);
+            let (unk, _) = self.safe_push_node_result(open, *body, PushContext::Default, b);
 
             let r_ty2 = b
                 .types
@@ -115,11 +115,8 @@ impl FlattenInner {
             self.blocks
                 .variant_update(variant_id, r_ty2.clone(), entry_link_id);
 
-            // terminate if not already terminated
-            // this is for dead code
-            let block = self.blocks.get_block(self.blocks.current_block_id());
-            if !block.is_term() {
-                self.push_placeholder_terminal(r_ty1, def_span_id);
+            if let Some(open) = self.blocks.safe_block_try_open(unk) {
+                self.push_placeholder_terminal(open, r_ty1, def_span_id);
             }
 
             fun_block_id
@@ -328,8 +325,14 @@ impl FlattenInner {
         // control is returned to the goto
     }
 
-    pub fn push_placeholder_terminal(&mut self, ty: AstType, call_span_id: SpanId) -> LinkId {
-        self.push_code(
+    pub fn push_placeholder_terminal(
+        &mut self,
+        open: SafeBlockOpen,
+        ty: AstType,
+        call_span_id: SpanId,
+    ) -> (SafeBlockClosed, LinkId) {
+        self.safe_push_code_term(
+            open,
             LCode::PlaceholderTerminal,
             ty,
             None,
@@ -351,7 +354,8 @@ impl FlattenInner {
         let scope_id = block.scope();
         let ty = AstFuncType::new(argvec_type(&argvec), ReturnType::Never).into();
 
-        self.push_placeholder_terminal(ty, call_span_id);
+        let open = self.open();
+        self.push_placeholder_terminal(open, ty, call_span_id);
 
         let mut d = DeferredGoto::new(
             scope_id,
@@ -373,6 +377,8 @@ impl FlattenInner {
         call_span_id: SpanId,
         _b: &mut NB,
     ) -> FlattenResult {
+        let open = self.open();
+
         // push a goto
         // to keep things simpler, we just defer all resolution of the gotos until the end
         // Goto is terminal, so we write out placeholders
@@ -386,7 +392,7 @@ impl FlattenInner {
         // We will rewrite in a later step, this goto will become a select
 
         if let Some(name_link_id) = self.blocks.resolve_name_in_scope(scope_id, name.into()) {
-            self.push_placeholder_terminal(AstType::Unit, call_span_id);
+            self.push_placeholder_terminal(open, AstType::Unit, call_span_id);
 
             let d = DeferredGoto::new(
                 scope_id,
@@ -403,7 +409,7 @@ impl FlattenInner {
         // if we don't have a template or a label already, then we defer
         // ensure we are in function scope
         if self.blocks.in_function_scope(scope_id) {
-            self.push_placeholder_terminal(AstType::Unit, call_span_id);
+            self.push_placeholder_terminal(open, AstType::Unit, call_span_id);
 
             let d = DeferredGoto::new(
                 scope_id,
@@ -443,21 +449,25 @@ impl FlattenInner {
                 self.blocks.switch_blocks(d.block_id);
                 self.remove_placeholder_terminal(d.block_id);
 
+                let open = self.open();
+
                 // Push load if required.  This is needed if the target is stored in memory,
                 // rather than a register
-                let load_link_id = if self.blocks.links.is_load_required(*def_target_link_id) {
-                    let entry = self.get_entry(*def_target_link_id).clone();
-                    let link_id = self.push_code(
-                        LCode::Load(*def_target_link_id),
-                        entry.ty,
-                        entry.name,
-                        entry.span_id,
-                        VarDefinitionSpace::Default,
-                    );
-                    link_id
-                } else {
-                    *def_target_link_id
-                };
+                let (open, load_link_id) =
+                    if self.blocks.links.is_load_required(*def_target_link_id) {
+                        let entry = self.get_entry(*def_target_link_id).clone();
+                        let (open, link_id) = self.safe_push_code_open(
+                            open,
+                            LCode::Load(*def_target_link_id),
+                            entry.ty,
+                            entry.name,
+                            entry.span_id,
+                            VarDefinitionSpace::Default,
+                        );
+                        (open, link_id)
+                    } else {
+                        (open, *def_target_link_id)
+                    };
 
                 // we don't know the function yet, so we can't calculate the args
                 // For this reason we should consider moving the args calculation to the function
@@ -489,7 +499,8 @@ impl FlattenInner {
                 d.deferred_type = DeferredType::Name(load_link_id);
                 d.argvec = goto_values;
 
-                self.push_placeholder_terminal(goto_func_type, d.call_span_id);
+                let open = self.open();
+                self.push_placeholder_terminal(open, goto_func_type, d.call_span_id);
 
                 self.deferred_goto.add_cps(d);
                 return true;

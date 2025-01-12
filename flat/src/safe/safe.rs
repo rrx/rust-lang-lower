@@ -66,7 +66,7 @@ impl BlockGraph<BlockGraphStateOpen> {
         }
     }
 
-    fn safe_block_try_open(&mut self, block: SafeBlock<Unknown>) -> Option<SafeBlock<Open>> {
+    pub fn safe_block_try_open(&mut self, block: SafeBlock<Unknown>) -> Option<SafeBlock<Open>> {
         let block_id = block.block_id;
         let block = self.get_block(block_id);
         if block.is_term() {
