@@ -67,9 +67,7 @@ impl FlattenInner {
                     Successor::BlockScope,
                 )
             } else {
-                let fun_block_id = self
-                    .blocks
-                    .new_block(block_id, scope_id, Successor::BlockScope);
+                let fun_block_id = self.blocks.new_block(block_id, Successor::BlockScope);
                 (fun_block_id, scope_id)
             };
 
@@ -202,9 +200,9 @@ impl FlattenInner {
         println!("unwind scopes: {:?}", unwind_scopes);
 
         let start_key = b.labels.fresh_key("ustart");
-        let start_block_id =
-            self.blocks
-                .new_block(current_block_id, goto_scope_id, Successor::BlockScope);
+        let start_block_id = self
+            .blocks
+            .new_block(current_block_id, Successor::BlockScope);
         self.blocks.switch_blocks(start_block_id);
         self.push_start_block(
             AstFuncType::new_void_void().into(),
@@ -239,10 +237,10 @@ impl FlattenInner {
 
             let current_block_id = self.blocks.current_block_id();
 
-            let next_block_id = self.blocks.new_block(entry_block_id, scope_id, succ);
+            let next_block_id = self.blocks.new_block(entry_block_id, succ);
 
             // define new block
-            let new_block_id = self.blocks.new_block(entry_block_id, scope_id, succ);
+            let new_block_id = self.blocks.new_block(entry_block_id, succ);
             self.blocks.switch_blocks(new_block_id);
             let void_func_type = AstFuncType::new_void_void();
             let new_key = b.labels.fresh_key("unew");
@@ -624,11 +622,8 @@ impl FlattenInner {
                         let mut out = vec![];
                         for target_block_id in sources {
                             let key = b.labels.fresh_key(".sw");
-                            let new_block_id = self.blocks.new_block(
-                                d.block_id,
-                                d.scope_id,
-                                Successor::BlockScope,
-                            );
+                            let new_block_id =
+                                self.blocks.new_block(d.block_id, Successor::BlockScope);
                             self.blocks.switch_blocks(new_block_id);
                             self.push_start_block(
                                 AstFuncType::new_void_void().into(),

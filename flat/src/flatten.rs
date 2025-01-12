@@ -120,7 +120,7 @@ impl Flatten<Start> {
         // blocks will be moved into environment eventually
         // FlattenEnvironment represents the module level structures
 
-        let mut blocks = BlockGraph::new();
+        let blocks = BlockGraph::new();
         let inner = FlattenInner {
             links: Links::new(),
             blocks,
@@ -1552,12 +1552,10 @@ impl FlattenInner {
                 let block = self.blocks.get_block(current_block_id);
                 assert!(!block.is_term());
 
-                let parent_scope_id = block.scope();
-
                 // Start Next Block, we might not need this
-                let v_next =
-                    self.blocks
-                        .new_block(current_block_id, parent_scope_id, Successor::BlockScope);
+                let v_next = self
+                    .blocks
+                    .new_block(current_block_id, Successor::BlockScope);
 
                 // THEN Block
                 let (then_start_block_id, _) = self.blocks.new_scope_and_block(
@@ -1714,11 +1712,9 @@ impl FlattenInner {
 
                 // create a new block
                 assert_eq!(0, args.len());
-                let new_block_id = self.blocks.new_block(
-                    self.blocks.current_block_id(),
-                    scope_id,
-                    Successor::BlockScope,
-                );
+                let new_block_id = self
+                    .blocks
+                    .new_block(self.blocks.current_block_id(), Successor::BlockScope);
                 self.blocks.define_label(scope_id, new_block_id, name);
 
                 self.blocks.switch_blocks(current_block_id);
@@ -1884,8 +1880,6 @@ impl FlattenInner {
                 let argvec = self.push_call_arguments(args, span_id, b);
                 let mut argvec = VecDeque::from(argvec);
                 let mut acc = VecDeque::new();
-                let block = self.blocks.get_block(current_block_id);
-                let parent_scope_id = block.scope();
                 let current_block_id = self.blocks.current_block_id();
                 let mut out_link_id = None;
                 if argvec.is_empty() {
@@ -1912,11 +1906,9 @@ impl FlattenInner {
                             }
 
                             let label = b.labels.fresh_key("chain");
-                            let v_next = self.blocks.new_block(
-                                current_block_id,
-                                parent_scope_id,
-                                Successor::BlockScope,
-                            );
+                            let v_next = self
+                                .blocks
+                                .new_block(current_block_id, Successor::BlockScope);
                             self.blocks.switch_blocks(v_next);
                             self.push_start_block(
                                 AstFuncType::new(
@@ -1954,9 +1946,6 @@ impl FlattenInner {
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::LoopStart(maybe_key)) => {
-                let block = self.blocks.get_block(current_block_id);
-                let parent_scope_id = block.scope();
-
                 let (loop_block_id, loop_scope_id) = self.blocks.new_scope_and_block(
                     ScopeType::Region,
                     ScopeState::region(),
@@ -1964,9 +1953,9 @@ impl FlattenInner {
                     Successor::BlockScope,
                 );
 
-                let v_next =
-                    self.blocks
-                        .new_block(current_block_id, parent_scope_id, Successor::BlockScope);
+                let v_next = self
+                    .blocks
+                    .new_block(current_block_id, Successor::BlockScope);
                 self.blocks.switch_blocks(v_next);
                 self.push_start_block(
                     AstFuncType::new_void_void(),
@@ -2071,9 +2060,9 @@ impl FlattenInner {
                     let _link_id =
                         self.push_jump(loop_scope.next_block.into(), vec![], node.span_id, b);
 
-                    let v_next =
-                        self.blocks
-                            .new_block(current_block_id, scope_id, Successor::BlockScope);
+                    let v_next = self
+                        .blocks
+                        .new_block(current_block_id, Successor::BlockScope);
                     self.blocks.switch_blocks(v_next);
                     let (link_id, _) = self.push_start_block(
                         AstFuncType::new_void_void(),
@@ -2240,13 +2229,10 @@ impl FlattenInner {
         // we we want to add a node, and the current block is terminated
         // we create a new block for the dead code that follows.
         let block = self.blocks.get_block(self.blocks.current_block_id());
-        let scope_id = block.scope();
         if block.is_term() {
-            let new_block_id = self.blocks.new_block(
-                self.blocks.current_block_id(),
-                scope_id,
-                Successor::BlockScope,
-            );
+            let new_block_id = self
+                .blocks
+                .new_block(self.blocks.current_block_id(), Successor::BlockScope);
             let name = b.labels.fresh_key("dead");
 
             self.blocks.switch_blocks(new_block_id);

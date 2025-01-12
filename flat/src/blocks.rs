@@ -238,15 +238,9 @@ impl BlockGraph<BlockGraphStateOpen> {
 }
 
 impl<S: BlockGraphState> BlockGraph<S> {
-    pub fn new_block(
-        &mut self,
-        parent_block_id: BlockId,
-        scope_id: ScopeId,
-        succ: Successor,
-    ) -> BlockId {
+    pub fn new_block(&mut self, parent_block_id: BlockId, succ: Successor) -> BlockId {
         let parent = self.get_block(parent_block_id);
-        assert!(parent.scope() == scope_id);
-        self.new_block_different_scope(parent_block_id, scope_id, succ)
+        self.new_block_different_scope(parent_block_id, parent.scope(), succ)
     }
 
     pub fn new_block_different_scope(
