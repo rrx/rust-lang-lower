@@ -591,7 +591,8 @@ impl FlattenInner {
                         open = this_open;
                     }
 
-                    self.push_call_values(&args_values, b);
+                    let (this_open, _) = self.safe_push_call_values(open, &args_values, b);
+                    open = this_open;
 
                     let struct_ty = AstType::Struct(
                         args_values

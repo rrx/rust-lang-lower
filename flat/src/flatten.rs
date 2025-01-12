@@ -666,16 +666,24 @@ impl FlattenInner {
         (self.blocks.safe_unknown(), r)
     }
 
-    pub fn push_return(&mut self, values: ArgVec, span_id: SpanId, b: &mut NB) -> LinkId {
-        let _ = self.push_call_values(&values, b);
+    pub fn push_return(
+        &mut self,
+        values: ArgVec,
+        span_id: SpanId,
+        b: &mut NB,
+    ) -> (SafeBlockClosed, LinkId) {
+        let open = self.open();
+        let (open, _) = self.safe_push_call_values(open, &values, b);
 
-        self.push_code(
+        let (closed, link_id) = self.safe_push_code_term(
+            open,
             LCode::Return,
             AstType::Unit,
             None,
             span_id,
             VarDefinitionSpace::Reg,
-        )
+        );
+        (closed, link_id)
     }
 
     pub fn push_loads_if_needed(
@@ -708,7 +716,7 @@ impl FlattenInner {
         b: &mut NB,
     ) -> (SafeBlockOpen, Vec<LinkId>) {
         self.blocks.switch_blocks(open.block_id);
-        let links = self.push_call_values(values, b);
+        let links = self._push_call_values(values, b);
         let open = SafeBlock {
             block_id: self.blocks.current_block_id(),
             extra: crate::safe::Open {},
@@ -717,7 +725,7 @@ impl FlattenInner {
         (open, links)
     }
 
-    pub fn push_call_values(
+    fn _push_call_values(
         &mut self,
         values: &[(Option<StringKey>, LinkId, AstType, SpanId)],
         b: &mut NB,
@@ -918,7 +926,7 @@ impl FlattenInner {
         jump_args: ArgVec,
         span_id: SpanId,
         b: &mut NB,
-    ) {
+    ) -> SafeBlockClosed {
         // Construct the argument type
         let arg_ty = AstType::Struct(
             jump_args
@@ -929,7 +937,9 @@ impl FlattenInner {
 
         let var_link_ids = jump_args.iter().map(|j| j.1).collect::<Vec<_>>();
 
-        let _ = self.push_call_values(
+        let open = self.open();
+        let (open, _) = self.safe_push_call_values(
+            open,
             &jump_args
                 .into_iter()
                 .map(|(key, v, ty, span_id)| (key, v, ty, span_id))
@@ -937,7 +947,8 @@ impl FlattenInner {
             b,
         );
 
-        let jump_link_id = self.push_code(
+        let (closed, jump_link_id) = self.safe_push_code_term(
+            open,
             LCode::Jump(target_block_id.into()),
             AstFuncType::new(arg_ty, ReturnType::Single(AstType::Unit)).into(),
             None,
@@ -961,6 +972,7 @@ impl FlattenInner {
                 FlowEdge::JumpArgInline,
             );
         }
+        closed
     }
 
     pub fn safe_push_code_open(
@@ -1017,7 +1029,8 @@ impl FlattenInner {
         span_id: SpanId,
         b: &mut NB,
     ) -> FlattenResult {
-        self.push_call_values(&values, b);
+        let open = self.open();
+        let (open, _) = self.safe_push_call_values(open, &values, b);
 
         if let ReturnType::Single(ty) = &ret_ty {
             let link_id = self.push_code(
@@ -1048,7 +1061,7 @@ impl FlattenInner {
 
         let open = self.open();
         let (open, call_values) = self.push_call_arguments(open, args, call_span_id, b);
-        self.push_call_values(&call_values, b);
+        let (open, _) = self.safe_push_call_values(open, &call_values, b);
 
         let call_types = call_values.iter().map(|v| v.2.clone()).collect::<Vec<_>>();
 
