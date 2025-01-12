@@ -2168,23 +2168,6 @@ impl FlattenInner {
                 FlattenResult::statement()
             }
 
-            /*
-            Ast::Loop(name, body) => {
-                unimplemented!();
-                let scope_id = block.scope_id;
-                let ast: Ast = ControlFlowMarker::LoopStart(Some(name)).into();
-                let _ = self.push_node(ast.node(span_id), b);
-                let _ = self.push_node(*body, b)?;
-                // terminate block by looping
-                let scope = self.scopes.get_scope(scope_id);
-                let loop_block = scope.loop_block.unwrap();
-                self.maybe_terminate_block(loop_block.start_block, span_id);
-                self.switch_blocks(current_block_id);
-                self.maybe_terminate_block(loop_block.next_block, span_id);
-                self.switch_blocks(loop_block.next_block);
-                Ok(FlattenResult::statement())
-            }
-            */
             Ast::ControlFlowMarker(ControlFlowMarker::LoopContinue(maybe_key)) => {
                 let block = self.blocks.get_block(current_block_id);
                 let scope_id = block.scope();
@@ -2267,9 +2250,12 @@ impl FlattenInner {
 
             Ast::Array(_type_id, dims) => {
                 let mut link_ids = vec![];
+                let mut open = open;
                 for d in dims {
-                    let r = self.push_node(d, PushContext::Default, b);
-                    link_ids.push(r.link_id.unwrap());
+                    let (this_open, link_id) =
+                        self.safe_push_expr(open, d, PushContext::Default, b);
+                    open = this_open;
+                    link_ids.push(link_id);
                 }
                 b.push_error(&format!("AST Error"), node.span_id);
                 FlattenResult::link(self.push_noop(node.span_id))
