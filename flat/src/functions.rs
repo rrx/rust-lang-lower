@@ -1,6 +1,7 @@
 use crate::{
     ArgVec, BlockId, BlockifyError, FlattenInner, FlattenResult, LCode, LinkId, NodeBuilder as NB,
-    PushContext, ScopeId, ScopeState, ScopeStateFunction, ScopeType, Successor, VarDefinitionSpace,
+    PushContext, SafeBlockOpen, ScopeId, ScopeState, ScopeStateFunction, ScopeType, Successor,
+    VarDefinitionSpace,
 };
 use anyhow::Error;
 use anyhow::Result;
@@ -530,7 +531,8 @@ impl FlattenInner {
 
         // flatten function, and switch to next
         self.blocks.switch_blocks(fun_block_id);
-        let _ = self.push_node(body, PushContext::Default, b);
+        let open = self.open_block(fun_block_id);
+        let _ = self.push_node(open, body, PushContext::Default, b);
         self.maybe_terminate_block(next_block_id, def_span_id, PushContext::Function, b);
 
         let variant_ty = b.types.u.resolve(&variant_ty).unwrap();
@@ -551,38 +553,42 @@ impl FlattenInner {
 
     pub(super) fn push_call_arguments(
         &mut self,
+        mut open: SafeBlockOpen,
         args: Vec<Argument>,
         span_id: SpanId,
         b: &mut NB,
-    ) -> ArgVec {
+    ) -> (SafeBlockOpen, ArgVec) {
         let mut link_ids = vec![];
         let mut values = vec![];
         for a in args.into_iter() {
             match a {
                 Argument::Positional(expr) => {
-                    let r = self.push_node(*expr, PushContext::Default, b);
-                    let link_id = r.link_id.unwrap();
+                    let (this_open, link_id) =
+                        self.safe_push_expr(open, *expr, PushContext::Default, b);
                     let entry = self.get_entry(link_id);
                     values.push((entry.name, link_id, entry.ty.clone(), span_id));
                     link_ids.push(link_id);
+                    open = this_open;
                 }
 
                 Argument::Named(key, expr) | Argument::System(key, expr) => {
-                    let r = self.push_node(*expr, PushContext::Default, b);
-                    let link_id = r.link_id.unwrap();
+                    let (this_open, link_id) =
+                        self.safe_push_expr(open, *expr, PushContext::Default, b);
                     let entry = self.get_entry(link_id);
                     values.push((Some(key), link_id, entry.ty.clone(), span_id));
                     link_ids.push(link_id);
+                    open = this_open;
                 }
 
                 Argument::Args(key, exprs) => {
                     let mut args_values = vec![];
                     for expr in exprs {
                         let span_id = expr.span_id;
-                        let r = self.push_node(expr, PushContext::Default, b);
-                        let link_id = r.link_id.unwrap();
+                        let (this_open, link_id) =
+                            self.safe_push_expr(open, expr, PushContext::Default, b);
                         let ty = self.get_type(link_id).clone();
                         args_values.push((Some(key), link_id, ty, span_id));
+                        open = this_open;
                     }
 
                     self.push_call_values(&args_values, b);
@@ -593,7 +599,9 @@ impl FlattenInner {
                             .map(|(key, _, ty, _)| (*key, ty.clone()))
                             .collect::<Vec<_>>(),
                     );
-                    let link_id = self.push_code(
+
+                    let (this_open, link_id) = self.safe_push_code_open(
+                        open,
                         LCode::NaryOp(NaryOperation::Struct),
                         struct_ty.clone(),
                         None,
@@ -602,29 +610,33 @@ impl FlattenInner {
                     );
                     values.push((Some(key), link_id, struct_ty.clone(), span_id));
                     link_ids.push(link_id);
+                    open = this_open;
                 }
 
                 Argument::KwArgs(key, _expr) => {
                     let node: AstNode = 1.into();
-                    let r = self.push_node(node, PushContext::Default, b);
-                    let link_id = r.link_id.unwrap();
+                    let (this_open, link_id) =
+                        self.safe_push_expr(open, node, PushContext::Default, b);
                     let ty = self.get_type(link_id).clone();
                     values.push((Some(key), link_id, ty, span_id));
                     link_ids.push(link_id);
+                    open = this_open;
                 }
             }
         }
-        values
+        (open, values)
     }
 
     pub fn push_function_call_arguments(
         &mut self,
+        open: SafeBlockOpen,
         abstraction_id: AbstractionId,
         args: Vec<Argument>,
         system: Vec<Argument>,
         call_span_id: SpanId,
         b: &mut NB,
     ) -> (
+        SafeBlockOpen,
         ArgVec,
         AstFuncType, // call_func_type
         AstFuncType, // def_func_type
@@ -635,7 +647,8 @@ impl FlattenInner {
         // calculate the calling arguments
         let (args, def_func_type) =
             self.calculate_function_arguments(abstraction_id, &args, &system, call_span_id, b);
-        let call_values = self.push_call_arguments(args.clone(), call_span_id, b);
+
+        let (open, call_values) = self.push_call_arguments(open, args.clone(), call_span_id, b);
         let call_ty = crate::argvec_type(&call_values);
         let def_func_type = b.types.refresh_func_type(&def_func_type);
 
@@ -649,7 +662,7 @@ impl FlattenInner {
             &def_func_type.clone().into(),
             def_span_id,
         );
-        (call_values, call_func_type, def_func_type)
+        (open, call_values, call_func_type, def_func_type)
     }
 
     pub(super) fn push_call(
@@ -659,7 +672,7 @@ impl FlattenInner {
         call_span_id: SpanId,
         args: Vec<Argument>,
         b: &mut NB,
-    ) -> FlattenResult {
+    ) -> (SafeBlockOpen, FlattenResult) {
         let current_block_id = self.blocks.current_block_id();
         // look up the lambda
         // If the lambda is in the static scope, we do a normal call
@@ -673,11 +686,12 @@ impl FlattenInner {
         // - for lambdas and inline, it's easier, because we just write out the entire function
         // anyways
 
+        let open = self.open();
         let is_static = self.blocks.static_scope_id() == scope_id;
         //let blocks = vec![];
-        if is_static {
-            let (call_values, call_func_type, def_func_type) =
-                self.push_function_call_arguments(abstraction_id, args, vec![], call_span_id, b);
+        let r = if is_static {
+            let (open, call_values, call_func_type, def_func_type) = self
+                .push_function_call_arguments(open, abstraction_id, args, vec![], call_span_id, b);
             let r = self.push_bake_static(abstraction_id, call_func_type, call_span_id, b);
             let (fun_link_id, _bake_ty) = r;
             self.blocks.switch_blocks(current_block_id);
@@ -701,7 +715,9 @@ impl FlattenInner {
             } else {
                 self.push_call_inline_cps(abstraction_id, scope_id, args, call_span_id, b)
             }
-        }
+        };
+        let open = self.open();
+        (open, r)
     }
 
     fn push_call_inline(
@@ -720,8 +736,9 @@ impl FlattenInner {
 
         // start the call
         // calculate the arguments
-        let (call_values, _call_func_type, def_func_type) =
-            self.push_function_call_arguments(abstraction_id, args, vec![], call_span_id, b);
+        let open = self.open();
+        let (open, call_values, _call_func_type, def_func_type) =
+            self.push_function_call_arguments(open, abstraction_id, args, vec![], call_span_id, b);
 
         // bookmark this position, to continue later
         let current_block_id = self.blocks.current_block_id();
@@ -826,8 +843,9 @@ impl FlattenInner {
 
         // Entry arguments, including continuation
         // calculate the arguments for the CPS function
-        let (call_values, _call_func_type, top_def_func_type) =
-            self.push_function_call_arguments(abstraction_id, args, system, call_span_id, b);
+        let open = self.open();
+        let (open, call_values, _call_func_type, top_def_func_type) =
+            self.push_function_call_arguments(open, abstraction_id, args, system, call_span_id, b);
 
         // hack, get the continuation argument
         let arg = call_values.last().unwrap();

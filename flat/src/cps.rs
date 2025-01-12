@@ -296,7 +296,9 @@ impl FlattenInner {
         // WRITE GOTO
         let (args, _) =
             self.calculate_function_arguments(abstraction_id, &args, &[], call_span_id, b);
-        let call_values = self.push_call_arguments(args, call_span_id, b);
+
+        let open = self.open();
+        let (open, call_values) = self.push_call_arguments(open, args, call_span_id, b);
         let call_arg_type = argvec_type(&call_values);
         let call_func_type =
             AstFuncType::new(call_arg_type.clone().into(), ReturnType::Never.into()).into();
@@ -447,9 +449,7 @@ impl FlattenInner {
                 // based on the graph.
                 //
                 self.blocks.switch_blocks(d.block_id);
-                self.remove_placeholder_terminal(d.block_id);
-
-                let open = self.open();
+                let (open, _) = self.remove_placeholder_terminal(d.block_id);
 
                 // Push load if required.  This is needed if the target is stored in memory,
                 // rather than a register
@@ -484,7 +484,8 @@ impl FlattenInner {
                 */
 
                 // calculate the type, so we can unify
-                let goto_values = self.push_call_arguments(d.args.clone(), d.call_span_id, b);
+                let (open, goto_values) =
+                    self.push_call_arguments(open, d.args.clone(), d.call_span_id, b);
                 let goto_arg_type = argvec_type(&goto_values);
                 let goto_func_type =
                     AstFuncType::new(goto_arg_type.clone(), ReturnType::Never).into();
@@ -536,11 +537,12 @@ impl FlattenInner {
                     assert_eq!(d.args.len(), 0);
                     // not possible to pass args to a label, use a CPS function instead
                     self.blocks.switch_blocks(d.block_id);
-                    self.remove_placeholder_terminal(d.block_id);
+                    let (open, _) = self.remove_placeholder_terminal(d.block_id);
 
                     // TODO: args should be unwound before jumping
                     // by replacing jumps out of scope to the unwind function
-                    let jump_args = self.push_call_arguments(d.args.clone(), d.call_span_id, b);
+                    let (open, jump_args) =
+                        self.push_call_arguments(open, d.args.clone(), d.call_span_id, b);
 
                     // TODO: we just have a label, so we need to handle unwind here.  We can't jump
                     // directly, we need to jump to the unwind function
@@ -572,7 +574,7 @@ impl FlattenInner {
         match d.deferred_type {
             DeferredType::Name(arg_link_id) => {
                 self.blocks.switch_blocks(d.block_id);
-                let last_link_id = self.remove_placeholder_terminal(d.block_id);
+                let (open, last_link_id) = self.remove_placeholder_terminal(d.block_id);
                 let mut last_entry = self.get_entry(last_link_id).clone();
 
                 let entry = self.get_entry(arg_link_id).clone();

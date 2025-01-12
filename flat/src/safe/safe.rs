@@ -12,16 +12,23 @@ impl SafeBlockState for Empty {}
 pub struct Open {}
 impl SafeBlockState for Open {}
 pub struct Closed {}
+
+impl SafeBlock<Closed> {}
+
 impl SafeBlockState for Closed {}
+
 pub struct Unknown {}
 impl SafeBlockState for Unknown {}
+impl SafeBlock<Unknown> {}
 
 pub struct SafeBlock<S: SafeBlockState> {
     pub block_id: BlockId,
     pub extra: S,
 }
 
-impl SafeBlock<Open> {
+impl SafeBlock<Open> {}
+
+impl<S: SafeBlockState> SafeBlock<S> {
     pub fn unknown(self) -> SafeBlock<Unknown> {
         SafeBlock {
             block_id: self.block_id,
@@ -75,6 +82,21 @@ impl BlockGraph<BlockGraphStateOpen> {
         Some(SafeBlock {
             block_id,
             extra: Open {},
+        })
+    }
+
+    pub fn safe_block_try_closed(
+        &mut self,
+        block: SafeBlock<Unknown>,
+    ) -> Option<SafeBlock<Closed>> {
+        let block_id = block.block_id;
+        let block = self.get_block(block_id);
+        if !block.is_term() {
+            return None;
+        }
+        Some(SafeBlock {
+            block_id,
+            extra: Closed {},
         })
     }
 }
