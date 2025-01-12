@@ -2025,17 +2025,19 @@ impl FlattenInner {
             Ast::Yield(maybe_expr) => {
                 // yield is terminal
                 let mut ty = AstType::Unit;
-                if let Some(expr) = maybe_expr {
+                let open = if let Some(expr) = maybe_expr {
                     self.blocks.switch_blocks(current_block_id);
-                    let r = self.push_node(*expr, PushContext::Default, b);
-                    if let Some(v) = r.link_id {
-                        ty = self.get_type(v).clone();
-                        // push single arg
-                        self.push_call_values(&[(None, v.into(), ty.clone(), node.span_id)], b);
-                    }
-                }
+                    let (open, v) = self.safe_push_expr(open, *expr, PushContext::Default, b);
+                    ty = self.get_type(v).clone();
+                    // push single arg
+                    self.push_call_values(&[(None, v.into(), ty.clone(), node.span_id)], b);
+                    open
+                } else {
+                    open
+                };
 
-                let v = self.push_code(
+                let (_, v) = self.safe_push_code_term(
+                    open,
                     LCode::Yield,
                     ty.clone(),
                     None,
