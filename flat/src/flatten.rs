@@ -652,6 +652,18 @@ impl FlattenInner {
         (self.blocks.safe_unknown(), link_id)
     }
 
+    pub fn safe_push_node_result(
+        &mut self,
+        open: SafeBlockOpen,
+        node: AstNode,
+        context: PushContext,
+        b: &mut NB,
+    ) -> (SafeBlockUnknown, FlattenResult) {
+        self.blocks.switch_blocks(open.block_id);
+        let r = self.push_node(node, context, b);
+        (self.blocks.safe_unknown(), r)
+    }
+
     pub fn push_return(&mut self, values: ArgVec, span_id: SpanId, b: &mut NB) -> LinkId {
         let _ = self.push_call_values(&values, b);
 
@@ -1667,7 +1679,8 @@ impl FlattenInner {
                     Ast::Attribute(ident, attr) => {
                         let node = attr;
                         if let Some(ast) = resolve_attribute(*ident, &node, span_id, args, b) {
-                            self.push_node(ast, PushContext::Default, b)
+                            let (_, r) = self.safe_push_node_result(open, ast, push_context, b);
+                            r
                         } else {
                             let name = b.labels.r(ident.into());
                             b.push_error_labels(vec![b.primary_label(
