@@ -10,8 +10,8 @@ use std::convert::Into;
 
 use crate::{
     BlockGraph, BlockGraphStateOpen, BlockId, Builtin, CodeEntry, CodeOffset, ContinuationFlow,
-    DeferredGotoList, FlowEdge, LCode, LinkId, Links, NodeBuilder as NB, ScopeId, ScopeState,
-    ScopeType, ScopedContinuations, Successor, ValueId, Values, VarDefinitionSpace,
+    DeferredGotoList, FlowEdge, LCode, LinkId, NodeBuilder as NB, ScopeId, ScopeState, ScopeType,
+    ScopedContinuations, Successor, ValueId, Values, VarDefinitionSpace,
 };
 use std::ops::{Deref, DerefMut};
 
@@ -80,9 +80,7 @@ impl FlattenState for Module {}
 
 pub struct FlattenInner {
     pub(super) link: LinkOptions,
-    pub(super) links: Links,
     pub(super) blocks: BlockGraph<BlockGraphStateOpen>,
-    block_links: HashMap<BlockId, LinkId>,
     pub(super) open_identifiers: Vec<LinkId>,
     pub(super) scoped_continuations: ScopedContinuations,
     pub(super) deferred_goto: DeferredGotoList,
@@ -122,10 +120,8 @@ impl Flatten<Start> {
 
         let blocks = BlockGraph::new();
         let inner = FlattenInner {
-            links: Links::new(),
             blocks,
             link: LinkOptions::new(),
-            block_links: HashMap::new(),
             open_identifiers: vec![],
             scoped_continuations: ScopedContinuations::new(),
             deferred_goto: DeferredGotoList::new(),
@@ -147,6 +143,14 @@ impl Flatten<Start> {
         if let Ast::Module(key, body) = node.node {
             // start module block
             f.push_start_block_static(AstFuncType::new_void_void().into(), Some(key), node.span_id);
+            let _ = f.push_code(
+                LCode::EndModule,
+                AstType::Unit,
+                None,
+                b.spans.get_span_unknown(),
+                VarDefinitionSpace::Default,
+            );
+
             let _ = f.push_node(*body, PushContext::Module, b);
 
             // return control to the root block
@@ -171,7 +175,7 @@ impl Flatten<FirstPass> {
 
 impl Flatten<Module> {
     pub fn get_link_entry(&self, link_id: LinkId) -> &CodeEntry {
-        self.links.get(link_id)
+        self.blocks.links.get(link_id)
     }
 
     pub fn entry_links(&self, block_id: BlockId) -> Vec<LinkId> {
@@ -203,7 +207,7 @@ impl FlattenInner {
             }
             CodeOffset::Link(link_id) => Some(link_id),
             CodeOffset::Block(block_id) => {
-                if let Some(link_id) = self.block_links.get(&block_id) {
+                if let Some(link_id) = self.blocks.block_links.get(&block_id) {
                     Some(*link_id)
                 } else {
                     None
@@ -219,7 +223,7 @@ impl FlattenInner {
                 entry.value_id
             }
             CodeOffset::Block(block_id) => {
-                if let Some(link_id) = self.block_links.get(&block_id) {
+                if let Some(link_id) = self.blocks.block_links.get(&block_id) {
                     let entry = self.get_entry(*link_id);
                     entry.value_id
                 } else {
@@ -230,7 +234,7 @@ impl FlattenInner {
     }
 
     pub fn type_inference(&mut self, b: &mut NB) {
-        for (_link_id, entry) in self.links.iter_mut() {
+        for (_link_id, entry) in self.blocks.links.iter_mut() {
             if !entry.ty.is_unknown() {
                 continue;
             }
@@ -239,7 +243,7 @@ impl FlattenInner {
     }
 
     pub fn type_inference_enforce(&mut self, b: &mut NB) {
-        for (link_id, entry) in self.links.iter_mut() {
+        for (link_id, entry) in self.blocks.links.iter_mut() {
             if !entry.ty.is_unknown() {
                 continue;
             }
@@ -340,13 +344,6 @@ impl FlattenInner {
 
     fn _finish(mut self, b: &mut NB) -> (Self, Values) {
         self.blocks.switch_blocks(self.blocks.static_block_id());
-        let _ = self.push_code(
-            LCode::EndModule,
-            AstType::Unit,
-            None,
-            b.spans.get_span_unknown(),
-            VarDefinitionSpace::Default,
-        );
 
         // make sure all claims have been handled
         self.blocks.ensure_claims(b);
@@ -388,7 +385,7 @@ impl FlattenInner {
         for block_id in dead_blocks {
             self.blocks.get_block_mut(block_id).mark_dead();
 
-            if let Some(link_id) = self.block_links.get(&block_id).cloned() {
+            if let Some(link_id) = self.blocks.block_links.get(&block_id).cloned() {
                 let entry = self.get_entry(link_id);
                 b.push_warning(&format!("Dead Block: {}", block_id), entry.span_id);
             } else {
@@ -404,7 +401,7 @@ impl FlattenInner {
     }
 
     fn insert_decl(&mut self, block_id: BlockId, entry: CodeEntry) -> LinkId {
-        let link_id = self.links.insert(entry);
+        let link_id = self.blocks.links.insert(entry);
         self.blocks.get_block_mut(block_id).push_decl(link_id);
         link_id
     }
@@ -435,20 +432,20 @@ impl FlattenInner {
 
         let v = match (code.is_term(), &code) {
             (true, _) => {
-                let link_id = self.links.insert(entry);
+                let link_id = self.blocks.links.insert(entry);
                 self.blocks.get_block_mut(block_id).terminate(link_id);
                 link_id
             }
 
             (_, LCode::Label) => {
-                let link_id = self.links.insert(entry);
+                let link_id = self.blocks.links.insert(entry);
                 let block = self.blocks.get_block_mut(block_id);
                 block.push_label(link_id);
                 link_id
             }
 
             (_, LCode::Arg(_)) => {
-                let link_id = self.links.insert(entry);
+                let link_id = self.blocks.links.insert(entry);
                 let block = self.blocks.get_block_mut(block_id);
                 block.push_arg(link_id);
                 link_id
@@ -465,7 +462,7 @@ impl FlattenInner {
             }
 
             _ => {
-                let link_id = self.links.insert(entry);
+                let link_id = self.blocks.links.insert(entry);
                 let block = self.blocks.get_block_mut(block_id);
                 block.push_link(link_id);
                 link_id
@@ -566,7 +563,7 @@ impl FlattenInner {
     }
 
     pub fn get_entry(&self, link_id: LinkId) -> &CodeEntry {
-        self.links.get(link_id)
+        self.blocks.links.get(link_id)
     }
 
     pub fn get_type(&self, link_id: LinkId) -> &AstType {
@@ -574,7 +571,7 @@ impl FlattenInner {
     }
 
     pub fn get_entry_mut(&mut self, link_id: LinkId) -> &mut CodeEntry {
-        self.links.get_mut(link_id)
+        self.blocks.links.get_mut(link_id)
     }
 
     pub fn push_sequence(
@@ -634,7 +631,7 @@ impl FlattenInner {
     ) -> Vec<LinkId> {
         let mut links = vec![];
         for (maybe_key, v, ty, span_id) in values {
-            let out = if self.links.is_load_required(*v) {
+            let out = if self.blocks.links.is_load_required(*v) {
                 let link_id = self.push_code(
                     LCode::Load(*v),
                     ty.clone(),
@@ -990,7 +987,8 @@ impl FlattenInner {
         let block_link_id =
             self.push_code(LCode::Label, block_ty.clone().into(), name, span_id, mem);
         let v_args = self.push_start_block_args(block_ty, span_id);
-        self.block_links
+        self.blocks
+            .block_links
             .insert(self.blocks.current_block_id(), block_link_id);
         (block_link_id, v_args)
     }
@@ -1227,12 +1225,16 @@ impl FlattenInner {
 
                         let ast_ty: AstType = lit.clone().into();
                         self.blocks.switch_blocks(static_block_id);
-                        let link_id = self.push_code(
-                            LCode::Val(lit.clone()),
-                            ast_ty.clone(),
-                            Some(global_name_key),
-                            node.span_id,
-                            VarDefinitionSpace::Static,
+                        let link_id = self.insert_decl(
+                            static_block_id,
+                            CodeEntry::new(
+                                static_block_id,
+                                LCode::Val(lit.clone()),
+                                ast_ty.clone(),
+                                Some(global_name_key),
+                                node.span_id,
+                                VarDefinitionSpace::Static,
+                            ),
                         );
 
                         self.blocks.scope_define(scope_id, name, link_id.into());

@@ -4,9 +4,11 @@ use petgraph::visit::EdgeRef;
 use std::collections::HashSet;
 
 use crate::{
-    AbstractionId, AbstractionsBuilder, BlockId, CodeOffset, FunctionVariantBuilder, LinkId,
+    AbstractionId, AbstractionsBuilder, BlockId, CodeOffset, FunctionVariantBuilder, LinkId, Links,
     NodeBuilder, ScopeId, ScopeLayer, VariantId,
 };
+
+use std::collections::HashMap;
 
 use compile_core::{AstType, Lambda, SpanId, StringKey};
 
@@ -184,6 +186,8 @@ pub struct BlockGraph<S: BlockGraphState> {
     pub(super) sg: DiGraph<ScopeLayer, ()>,
     pub(super) variants: FunctionVariantBuilder,
     pub(super) abstractions: AbstractionsBuilder,
+    pub(super) links: Links,
+    pub(super) block_links: HashMap<BlockId, LinkId>,
     extra: S,
 }
 
@@ -194,6 +198,8 @@ impl BlockGraph<BlockGraphStateStart> {
             sg: DiGraph::new(),
             variants: FunctionVariantBuilder::new(),
             abstractions: AbstractionsBuilder::new(),
+            links: Links::new(),
+            block_links: HashMap::new(),
             extra: BlockGraphStateStart {},
         }
     }
@@ -212,6 +218,8 @@ impl BlockGraph<BlockGraphStateOpen> {
             sg: g.sg,
             variants: g.variants,
             abstractions: g.abstractions,
+            links: g.links,
+            block_links: g.block_links,
             extra: BlockGraphStateOpen {
                 static_scope: static_scope_id,
                 static_block: static_block_id,

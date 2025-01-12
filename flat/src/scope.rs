@@ -322,6 +322,7 @@ impl<S: BlockGraphState> BlockGraph<S> {
         let block_id = self.new_block_with_scope(scope_id);
         let static_scope = self.get_scope_mut(scope_id);
         static_scope.entry_block = Some(block_id);
+
         (block_id, scope_id)
     }
 

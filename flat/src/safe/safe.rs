@@ -1,4 +1,4 @@
-use crate::{BlockGraph, BlockGraphState, BlockId};
+use crate::{BlockGraph, BlockGraphState, BlockGraphStateOpen, BlockId};
 
 pub trait SafeBlockState {}
 
@@ -16,16 +16,16 @@ pub struct SafeBlock<S: SafeBlockState> {
     extra: S,
 }
 
-impl<S: BlockGraphState> BlockGraph<S> {
-    fn root_block(&mut self) -> SafeBlock<Empty> {
-        let (block_id, scope_id) = self.root();
-
+impl BlockGraph<BlockGraphStateOpen> {
+    fn root_block(&mut self) -> SafeBlock<Closed> {
         SafeBlock {
-            block_id,
-            extra: Empty {},
+            block_id: self.static_block_id(),
+            extra: Closed {},
         }
     }
+}
 
+impl<S: BlockGraphState> BlockGraph<S> {
     fn new_safe_block<B: SafeBlockState>(&mut self, block: SafeBlock<B>) -> SafeBlock<Empty> {
         //let block_id = self.new_block(block.block_id);
         SafeBlock {
@@ -64,6 +64,7 @@ mod tests {
     fn test_stuff1() {
         let mut g = BlockGraph::new();
         let b = g.root_block();
-        g.new_safe_block(b);
+        let empty = g.new_safe_block(b);
+        g.start_block(empty);
     }
 }
