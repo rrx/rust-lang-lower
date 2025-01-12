@@ -1516,8 +1516,7 @@ impl FlattenInner {
                 }
 
                 self.blocks.switch_blocks(current_block_id);
-                let r = self.push_node(*expr, PushContext::Default, b);
-                let v_expr = r.link_id.unwrap();
+                let (open, v_expr) = self.safe_push_expr(open, *expr, PushContext::Default, b);
                 let expr_entry = self.get_entry(v_expr);
                 let expr_ty = expr_entry.ty.clone();
                 let expr_span_id = expr_entry.span_id;
@@ -1526,18 +1525,19 @@ impl FlattenInner {
                 let block = self.blocks.get_block(block_id);
                 let scope_id = block.scope();
 
-                let offset_decl =
+                let (open, offset_decl) =
                     if let Some(v_decl) = self.blocks.resolve_name_in_scope(scope_id, name) {
                         // already declared
                         let decl_entry = self.get_entry(v_decl);
                         b.unify(&decl_entry.ty, decl_entry.span_id, &expr_ty, expr_span_id);
-                        v_decl
+                        (open, v_decl)
                     } else {
                         // need to declare it
                         let block = self.blocks.get_block(self.blocks.current_block_id());
                         let scope_id = block.scope();
 
-                        let link_id = self.push_code(
+                        let (open, link_id) = self.safe_push_code_open(
+                            open,
                             LCode::Declare,
                             expr_ty.clone(),
                             Some(name),
@@ -1545,11 +1545,12 @@ impl FlattenInner {
                             VarDefinitionSpace::Default,
                         );
                         self.blocks.scope_define(scope_id, name, link_id);
-                        link_id
+                        (open, link_id)
                     };
 
                 // explicit store for assign
-                self.push_code(
+                self.safe_push_code_open(
+                    open,
                     LCode::Store(offset_decl, v_expr),
                     AstType::Unit,
                     None,
