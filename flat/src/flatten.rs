@@ -1017,18 +1017,6 @@ impl FlattenInner {
         (closed, self.push_entry_with_link(entry))
     }
 
-    pub fn _push_code(
-        &mut self,
-        code: LCode,
-        ty: AstType,
-        name: Option<StringKey>,
-        span_id: SpanId,
-        mem: VarDefinitionSpace,
-    ) -> LinkId {
-        let entry = CodeEntry::new(self.blocks.current_block_id(), code, ty, name, span_id, mem);
-        self.push_entry_with_link(entry)
-    }
-
     pub fn push_function_call(
         &mut self,
         v_fun: LinkId,
@@ -1510,7 +1498,6 @@ impl FlattenInner {
                     node.span_id,
                     mem,
                 );
-                //let link_id = self.push_code(LCode::Val(lit), ty.clone(), None, node.span_id, mem);
                 (open.unknown(), FlattenResult::link(link_id))
             }
 
