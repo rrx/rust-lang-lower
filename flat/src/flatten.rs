@@ -1304,6 +1304,10 @@ impl FlattenInner {
             .safe_switch_block(self.blocks.current_block_id())
     }
 
+    pub fn open_block(&mut self, block_id: BlockId) -> SafeBlockOpen {
+        self.blocks.safe_switch_block(block_id)
+    }
+
     pub fn push_node(
         &mut self,
         node: AstNode,
@@ -1743,12 +1747,15 @@ impl FlattenInner {
                 self.blocks.switch_blocks(then_start_block_id);
                 self.push_start_block(branch_block_type.clone().into(), Some(name), then_span_id);
                 self.blocks.switch_blocks(then_start_block_id);
-                let _ = self.push_node(NB::ensure_seq(*then_expr), PushContext::CondThen, b);
-                let then_end_block_id = self.blocks.current_block_id();
+
+                let open = self.open_block(then_start_block_id);
+                let (open, _) =
+                    self.safe_push_node_result(open, *then_expr, PushContext::CondThen, b);
+                let then_end_block_id = open.block_id;
                 let then_is_term = self.blocks.get_block(then_end_block_id).is_term();
 
                 // ELSE Block
-                let (has_else, else_is_term, else_start_block_id, else_end_block_id) =
+                let (open, has_else, else_is_term, else_start_block_id, else_end_block_id) =
                     if let Some(else_expr) = maybe_else_expr {
                         let (else_block_id, _) = self.blocks.new_scope_and_block(
                             ScopeType::Block,
@@ -1764,17 +1771,18 @@ impl FlattenInner {
                         self.push_start_block(branch_block_type.into(), Some(name), else_span_id);
 
                         self.blocks.switch_blocks(else_block_id);
-                        let _ =
-                            self.push_node(NB::ensure_seq(*else_expr), PushContext::CondElse, b);
-                        let else_end_block_id = self.blocks.current_block_id();
+                        let open = self.open_block(else_block_id);
+                        let (open, _) =
+                            self.safe_push_node_result(open, *else_expr, PushContext::CondThen, b);
+                        let else_end_block_id = open.block_id;
                         let else_is_term = self.blocks.get_block(else_end_block_id).is_term();
-                        (true, else_is_term, else_block_id, else_end_block_id)
+                        (open, true, else_is_term, else_block_id, else_end_block_id)
                     } else {
                         self.blocks
                             .block_succ(current_block_id, v_next, Successor::BlockScope);
                         self.blocks
                             .block_succ(current_block_id, v_next, Successor::Jump);
-                        (false, false, v_next, v_next)
+                        (open, false, false, v_next, v_next)
                     };
 
                 // we only want to create a next block if either of the branches are not terminated
@@ -1808,11 +1816,14 @@ impl FlattenInner {
 
                 // condition
                 self.blocks.switch_blocks(current_block_id);
-                let r = self.push_node(*condition, PushContext::Default, b);
+                let open = self.open_block(current_block_id);
+                let (open, link_id) =
+                    self.safe_push_expr(open, *condition, PushContext::Default, b);
 
-                let v = self.push_code(
+                let (open, v) = self.safe_push_code_term(
+                    open,
                     LCode::Branch(
-                        r.link_id.unwrap().into(),
+                        link_id.into(),
                         then_start_block_id.into(),
                         else_start_block_id.into(),
                     ),
