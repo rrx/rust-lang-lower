@@ -2265,11 +2265,14 @@ impl FlattenInner {
                 let mut link_ids = vec![];
                 let mut types = vec![];
                 let mut values = vec![];
+
+                let mut open = open;
                 for e in exprs {
                     let span_id = e.span_id;
                     self.blocks.switch_blocks(current_block_id);
-                    let r = self.push_node(e, PushContext::Default, b);
-                    let link_id = r.link_id.unwrap();
+                    let (this_open, link_id) =
+                        self.safe_push_expr(open, e, PushContext::Default, b);
+                    open = this_open;
                     let ty = self.get_type(link_id).clone();
                     link_ids.push(link_id);
                     types.push(ty.clone());
@@ -2280,7 +2283,8 @@ impl FlattenInner {
 
                 let update_link_ids = self.push_loads_if_needed(&values);
 
-                let link_id = self.push_code(
+                let (_, link_id) = self.safe_push_code_open(
+                    open,
                     LCode::Tuple(update_link_ids),
                     ty,
                     None,
