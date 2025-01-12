@@ -288,7 +288,7 @@ impl FlattenInner {
         args: Vec<Argument>,
         call_span_id: SpanId,
         b: &mut NB,
-    ) -> LinkId {
+    ) {
         // call in the context of the caller
         // and push the args and a jump
 
@@ -315,8 +315,7 @@ impl FlattenInner {
 
         // NOW JUMP
         // now that we have the arguments calculated, and the lambda baked, jump!
-        let goto_link_id =
-            self.push_jump(fun_block_id.into(), call_values.clone(), call_span_id, b);
+        self.push_jump(fun_block_id.into(), call_values.clone(), call_span_id, b);
 
         // if this really is a CPS function, then it should never return
         // TODO: verify that it never returns, could be with the function signature
@@ -326,7 +325,6 @@ impl FlattenInner {
         // What does it even mean that a CPS function never calls it's continuation?
 
         // control is returned to the goto
-        goto_link_id
     }
 
     pub fn push_placeholder_terminal(&mut self, ty: AstType, call_span_id: SpanId) -> LinkId {

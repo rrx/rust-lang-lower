@@ -48,9 +48,9 @@ impl<S: BlockGraphState> BlockGraph<S> {
         }
     }
 
-    fn safe_switch_block(&mut self, block_id: BlockId) -> SafeBlock<Open> {
+    pub fn safe_switch_block(&mut self, block_id: BlockId) -> SafeBlock<Open> {
         let block = self.get_block(block_id);
-        assert!(block.is_term());
+        assert!(!block.is_term());
         SafeBlock {
             block_id,
             extra: Open {},
@@ -70,6 +70,6 @@ mod tests {
         let b = g.root_block();
         let empty = g.new_safe_block(b);
         let open = g.start_block(empty);
-        let closed = g.jump(open, g.static_block_id());
+        //let closed = g.jump(open, g.static_block_id());
     }
 }

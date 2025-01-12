@@ -737,10 +737,10 @@ impl FlattenInner {
         jump_args: ArgVec,
         span_id: SpanId,
         b: &mut NB,
-    ) -> LinkId {
+    ) {
         let (target_block_id, jump_args) =
             self.push_jump_unwind(target_block_id, jump_args, span_id, b);
-        self.push_jump_direct(target_block_id, jump_args, span_id, b)
+        self.push_jump_direct(target_block_id, jump_args, span_id, b);
     }
 
     pub fn push_store_args(
@@ -834,7 +834,7 @@ impl FlattenInner {
         jump_args: ArgVec,
         span_id: SpanId,
         b: &mut NB,
-    ) -> LinkId {
+    ) {
         // Construct the argument type
         let arg_ty = AstType::Struct(
             jump_args
@@ -877,8 +877,6 @@ impl FlattenInner {
                 FlowEdge::JumpArgInline,
             );
         }
-
-        jump_link_id
     }
 
     pub fn push_code(
@@ -1024,9 +1022,9 @@ impl FlattenInner {
         if let Some(scope) = self.blocks.try_loop_scope(scope_id) {
             let start_block = scope.start_block();
             let next_block = scope.next_block();
-            let link_id = self.maybe_terminate_block(start_block, span_id, push_context, b);
+            self.maybe_terminate_block(start_block, span_id, push_context, b);
             self.blocks.switch_blocks(next_block);
-            FlattenResult::link(link_id)
+            FlattenResult::statement()
         } else {
             unimplemented!();
         }
@@ -1315,7 +1313,13 @@ impl FlattenInner {
 
                 let scope = self.blocks.get_function_scope(fun_block_id);
                 let ret_block_id = scope.return_block();
-                self.push_jump(ret_block_id, jump_args, span_id, b);
+
+                let open = self
+                    .blocks
+                    .safe_switch_block(self.blocks.current_block_id());
+                let closed = self.safe_jump(open, ret_block_id, jump_args, span_id, b);
+                //self.push_jump(ret_block_id, jump_args, span_id, b);
+                //self.blocks.switch_blocks(closed.block_id);
                 FlattenResult::statement()
             }
 
@@ -1747,7 +1751,7 @@ impl FlattenInner {
                     let entry = self.get_entry(last_link_id);
                     if !entry.code.is_term() {
                         assert_eq!(args.len(), 0);
-                        let _link_id = self.push_jump(new_block_id, vec![], span_id, b);
+                        self.push_jump(new_block_id, vec![], span_id, b);
                     }
                 }
 
@@ -1757,7 +1761,7 @@ impl FlattenInner {
                 if let Some(last) = block.last() {
                     let entry = self.get_entry(last);
                     if !entry.code.is_term() {
-                        let _ = self.push_jump(new_block_id.into(), vec![], span_id, b);
+                        self.push_jump(new_block_id.into(), vec![], span_id, b);
                     }
                 }
 
@@ -1901,7 +1905,6 @@ impl FlattenInner {
                 let mut argvec = VecDeque::from(argvec);
                 let mut acc = VecDeque::new();
                 let current_block_id = self.blocks.current_block_id();
-                let mut out_link_id = None;
                 if argvec.is_empty() {
                     unreachable!();
                 }
@@ -1939,10 +1942,8 @@ impl FlattenInner {
                                 span_id,
                             );
                             let jump_args = acc.drain(..).collect::<Vec<_>>();
-                            let link_id =
-                                self.push_jump(block_id.into(), jump_args, node.span_id, b);
+                            self.push_jump(block_id.into(), jump_args, node.span_id, b);
                             acc.clear();
-                            out_link_id = Some(link_id);
                         }
                         LCode::PlaceholderCodeReference => {
                             acc.push_front((None, link_id, ty, span_id));
@@ -1958,7 +1959,7 @@ impl FlattenInner {
                     }
                 }
                 self.blocks.switch_blocks(current_block_id);
-                FlattenResult::link(out_link_id.unwrap())
+                FlattenResult::statement() //link(out_link_id.unwrap())
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::BlockEnd) | Ast::CloseBlock => {
@@ -2009,11 +2010,11 @@ impl FlattenInner {
                 );
 
                 self.blocks.switch_blocks(current_block_id);
-                let link_id = self.push_jump(loop_block_id.into(), vec![], node.span_id, b);
+                self.push_jump(loop_block_id.into(), vec![], node.span_id, b);
 
                 // open loop block
                 self.blocks.switch_blocks(loop_block_id);
-                FlattenResult::link(link_id)
+                FlattenResult::statement()
             }
 
             /*
@@ -2040,10 +2041,9 @@ impl FlattenInner {
                 // loop up loop blocks by name
                 if let Some(loop_scope) = self.blocks.get_loop_scope(scope_id, maybe_key) {
                     self.blocks.switch_blocks(current_block_id);
-                    let link_id =
-                        self.push_jump(loop_scope.start_block.into(), vec![], node.span_id, b);
+                    self.push_jump(loop_scope.start_block.into(), vec![], node.span_id, b);
                     self.blocks.switch_blocks(current_block_id);
-                    FlattenResult::link(link_id)
+                    FlattenResult::statement()
                 } else {
                     // mismatch name
                     b.push_error(&format!("Continue without loop"), node.span_id);
@@ -2060,10 +2060,9 @@ impl FlattenInner {
                 // loop up loop blocks by name
                 if let Some(loop_scope) = self.blocks.get_loop_scope(scope_id, maybe_name) {
                     self.blocks.switch_blocks(current_block_id);
-                    let link_id =
-                        self.push_jump(loop_scope.start_block.into(), vec![], node.span_id, b);
+                    self.push_jump(loop_scope.start_block.into(), vec![], node.span_id, b);
                     self.blocks.switch_blocks(current_block_id);
-                    FlattenResult::link(link_id)
+                    FlattenResult::statement()
                 } else {
                     // mismatch name
                     b.push_error(&format!("Continue without loop"), node.span_id);
@@ -2077,8 +2076,7 @@ impl FlattenInner {
                 // loop up loop blocks by name
                 if let Some(loop_scope) = self.blocks.get_loop_scope(scope_id, maybe_key) {
                     self.blocks.switch_blocks(current_block_id);
-                    let _link_id =
-                        self.push_jump(loop_scope.next_block.into(), vec![], node.span_id, b);
+                    self.push_jump(loop_scope.next_block.into(), vec![], node.span_id, b);
 
                     let v_next = self
                         .blocks
@@ -2106,10 +2104,9 @@ impl FlattenInner {
                 // loop up loop blocks by name
                 if let Some(loop_scope) = self.blocks.get_loop_scope(scope_id, maybe_name) {
                     self.blocks.switch_blocks(current_block_id);
-                    let link_id =
-                        self.push_jump(loop_scope.next_block.into(), vec![], node.span_id, b);
+                    self.push_jump(loop_scope.next_block.into(), vec![], node.span_id, b);
                     self.blocks.switch_blocks(current_block_id);
-                    FlattenResult::link(link_id)
+                    FlattenResult::statement()
                 } else {
                     // mismatch name
                     b.push_error(&format!("Break without loop"), node.span_id);
@@ -2270,16 +2267,14 @@ impl FlattenInner {
         span_id: SpanId,
         _push_context: PushContext,
         b: &mut NB,
-    ) -> LinkId {
+    ) {
         // is the block isn't terminated, terminate it with a jump to another block
         let current_block_id = self.blocks.current_block_id();
         let block = self.blocks.get_block(current_block_id);
-        //let block_len = block.len();
-        let mut link_id = block.last().unwrap().clone();
+        let link_id = block.last().unwrap().clone();
         let entry = self.get_entry(link_id);
         if !entry.code.is_term() {
-            link_id = self.push_jump(v_next, vec![], span_id, b);
+            self.push_jump(v_next, vec![], span_id, b);
         }
-        link_id
     }
 }
