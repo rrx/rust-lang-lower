@@ -2294,25 +2294,27 @@ impl FlattenInner {
             }
 
             Ast::Index(node, index) => {
-                let r_node = self.push_node(*node, PushContext::Default, b);
-                let r_index = self.push_node(*index, PushContext::Default, b);
+                let (open, v_node) = self.safe_push_expr(open, *node, PushContext::Default, b);
+                let (open, v_index) = self.safe_push_expr(open, *index, PushContext::Default, b);
 
-                let indicies = vec![r_index.link_id.unwrap().into()];
+                let indicies = vec![v_index.into()];
 
-                let entry = self.get_entry(r_index.link_id.unwrap());
+                let entry = self.get_entry(v_index);
                 let index = if let LCode::Val(Literal::Int(index)) = entry.code {
                     index as usize
                 } else {
                     unimplemented!()
                 };
-                let entry = self.get_entry_mut(r_index.link_id.unwrap());
+                let entry = self.get_entry_mut(v_index);
                 entry.code = LCode::Val(Literal::Index(index));
 
-                let ty = self.get_type(r_node.link_id.unwrap());
+                let ty = self.get_type(v_node);
                 let (_, ty_field) = ty.fields().get(index as usize).unwrap().clone();
 
-                let code = LCode::Use(r_node.link_id.unwrap().into(), indicies);
-                let link_id = self.push_code(
+                let code = LCode::Use(v_node.into(), indicies);
+
+                let (_, link_id) = self.safe_push_code_open(
+                    open,
                     code,
                     ty_field.clone(),
                     None,
