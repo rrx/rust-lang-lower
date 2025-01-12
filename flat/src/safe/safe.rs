@@ -26,9 +26,10 @@ impl<S: BlockGraphState> BlockGraph<S> {
         }
     }
 
-    fn new_safe_block(&mut self, block_id: BlockId) -> SafeBlock<Empty> {
+    fn new_safe_block<B: SafeBlockState>(&mut self, block: SafeBlock<B>) -> SafeBlock<Empty> {
+        //let block_id = self.new_block(block.block_id);
         SafeBlock {
-            block_id,
+            block_id: block.block_id,
             extra: Empty {},
         }
     }
@@ -63,6 +64,6 @@ mod tests {
     fn test_stuff1() {
         let mut g = BlockGraph::new();
         let b = g.root_block();
-        g.new_safe_block();
+        g.new_safe_block(b);
     }
 }

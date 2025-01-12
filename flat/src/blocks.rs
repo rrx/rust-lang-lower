@@ -244,9 +244,25 @@ impl<S: BlockGraphState> BlockGraph<S> {
         scope_id: ScopeId,
         succ: Successor,
     ) -> BlockId {
+        let parent = self.get_block(parent_block_id);
+        assert!(parent.scope() == scope_id);
+        self.new_block_different_scope(parent_block_id, scope_id, succ)
+    }
+
+    pub fn new_block_different_scope(
+        &mut self,
+        parent_block_id: BlockId,
+        scope_id: ScopeId,
+        succ: Successor,
+    ) -> BlockId {
         let block_id = self.new_block_with_scope(scope_id);
         self.block_succ(parent_block_id, block_id, succ);
         block_id
+    }
+
+    pub fn get_block(&self, block_id: BlockId) -> &IRBlock {
+        let index = NodeIndex::new(block_id.index());
+        self.bg.node_weight(index).unwrap()
     }
 
     pub fn new_block_with_scope(&mut self, scope_id: ScopeId) -> BlockId {
@@ -274,11 +290,6 @@ impl BlockGraph<BlockGraphStateOpen> {
         for target_block_id in target_block_ids {
             self.block_succ(source_block_id, *target_block_id, Successor::Jump);
         }
-    }
-
-    pub fn get_block(&self, block_id: BlockId) -> &IRBlock {
-        let index = NodeIndex::new(block_id.index());
-        self.bg.node_weight(index).unwrap()
     }
 
     pub fn get_block_mut(&mut self, block_id: BlockId) -> &mut IRBlock {

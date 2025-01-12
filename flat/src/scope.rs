@@ -347,7 +347,7 @@ impl BlockGraph<BlockGraphStateOpen> {
     ) -> (BlockId, ScopeId) {
         let parent_scope_id = self.get_block(parent_block_id).scope();
         let scope_id = self.new_scope(scope_type);
-        let block_id = self.new_block(parent_block_id, scope_id, succ_type);
+        let block_id = self.new_block_different_scope(parent_block_id, scope_id, succ_type);
         let scope = self.get_scope_mut(scope_id);
         scope.entry_block = Some(block_id);
         self.scope_succ(parent_scope_id, scope_id);

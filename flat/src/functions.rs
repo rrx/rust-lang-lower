@@ -357,9 +357,11 @@ impl FlattenInner {
             Successor::BlockScope,
         );
 
-        let next_block_id =
-            self.blocks
-                .new_block(current_block_id, fun_scope_id, Successor::BlockScope);
+        let next_block_id = self.blocks.new_block_different_scope(
+            current_block_id,
+            fun_scope_id,
+            Successor::BlockScope,
+        );
 
         let (_block_id, entry_link_id, _, argvec, _, _r, _entry_args) = self
             .push_bake_lambda_and_update_next(
@@ -969,7 +971,9 @@ impl FlattenInner {
 
             // hack: this needs to be defined after fun_block, for some reason
             // The ordering shouldn't matter
-            let next_block_id = self.blocks.new_block(block_id, fun_scope_id, succ_type);
+            let next_block_id =
+                self.blocks
+                    .new_block_different_scope(block_id, fun_scope_id, succ_type);
 
             let result = self.push_bake_lambda_and_update_next(
                 abstraction_id,
