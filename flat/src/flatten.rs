@@ -1696,14 +1696,15 @@ impl FlattenInner {
 
             Ast::UnaryOp(op, x) => {
                 // op1 is expression, non-terminal
+                let (open, link_id) = self.safe_push_expr(open, *x, PushContext::Default, b);
                 self.blocks.switch_blocks(current_block_id);
-                let r = self.push_node(*x, PushContext::Default, b);
-                let link_id = r.link_id.unwrap();
                 let ty = self.get_type(link_id).clone();
 
-                self.push_call_values(&[(None, link_id, ty.clone(), span_id)], b);
+                let (open, _) =
+                    self.safe_push_call_values(open, &[(None, link_id, ty.clone(), span_id)], b);
 
-                let link_id = self.push_code(
+                let (_, link_id) = self.safe_push_code_open(
+                    open,
                     LCode::Op1(op),
                     ty.clone(),
                     None,
