@@ -1397,17 +1397,15 @@ impl FlattenInner {
                 // expression, non-terminal
                 let x_span_id = x.span_id;
                 let y_span_id = y.span_id;
-                self.blocks.switch_blocks(open.block_id);
-                let rx = self.push_node(*x, PushContext::Default, b);
-                let ry = self.push_node(*y, PushContext::Default, b);
-                let vx = rx.link_id.unwrap();
-                let vy = ry.link_id.unwrap();
+
+                let (open, vx) = self.safe_push_expr(open, *x, PushContext::Default, b);
+                let (open, vy) = self.safe_push_expr(open, *y, PushContext::Default, b);
+
                 let rx_ty = self.get_type(vx).clone();
                 let ry_ty = self.get_type(vy).clone();
 
                 b.unify(&rx_ty, x_span_id, &ry_ty, y_span_id);
 
-                let open = self.open();
                 let (open, _) = self.safe_push_call_values(
                     open,
                     &[
