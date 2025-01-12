@@ -244,13 +244,16 @@ impl FlattenInner {
             let new_key = b.labels.fresh_key("unew");
             self.push_start_block(void_func_type.clone().into(), Some(new_key), call_span_id);
             let code = LCode::Val(Literal::Block(next_block_id));
-            let var_link_id = self.push_code(
+            let open = self.open();
+            let (open, var_link_id) = self.safe_push_code_open(
+                open,
                 code,
                 void_func_type.clone().into(),
                 None,
                 call_span_id,
                 VarDefinitionSpace::Default,
             );
+
             // jump to unwind block
             let _jump_link_id = self.push_jump_direct(
                 unwind_block_id,

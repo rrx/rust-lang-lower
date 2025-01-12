@@ -145,15 +145,16 @@ impl Flatten<Start> {
 
             // start module block
             f.push_start_block_static(AstFuncType::new_void_void().into(), Some(key), node.span_id);
-            let _ = f.push_code(
+            let closed = f.safe_static();
+            let entry = CodeEntry::new(
+                f.blocks.current_block_id(),
                 LCode::EndModule,
                 AstType::Unit,
                 None,
                 b.spans.get_span_unknown(),
-                VarDefinitionSpace::Default,
+                VarDefinitionSpace::Static,
             );
-
-            let closed = f.safe_static();
+            f.push_entry_with_link(entry);
             f.safe_push_static_node(closed, *body, PushContext::Module, b);
 
             // return control to the root block
@@ -285,13 +286,16 @@ impl FlattenInner {
         let unknown = b.spans.get_span_unknown();
         for (key, var_ty, ret_ty) in builtins {
             let func_ty = AstType::func(vec![var_ty], ret_ty);
-            self.push_code(
+            let closed = self.safe_static();
+            let entry = CodeEntry::new(
+                closed.block_id,
                 LCode::DeclareFunction(None),
                 func_ty,
                 Some(key),
                 unknown,
                 VarDefinitionSpace::Static,
             );
+            self.push_entry_with_link(entry);
         }
     }
 
@@ -375,13 +379,16 @@ impl FlattenInner {
             let ty = self.get_type(label_link_id).clone();
             assert_eq!(entry.mem, VarDefinitionSpace::Static);
 
-            self.push_code(
+            let closed = self.safe_static();
+            let entry = CodeEntry::new(
+                closed.block_id,
                 LCode::DeclareFunction(Some(block_id)),
                 ty,
                 entry.name,
                 entry.span_id,
-                entry.mem,
+                VarDefinitionSpace::Static,
             );
+            self.push_entry_with_link(entry);
         }
 
         // DEAD BLOCKS
@@ -699,7 +706,9 @@ impl FlattenInner {
         let mut links = vec![];
         for (maybe_key, v, ty, span_id) in values {
             let out = if self.blocks.links.is_load_required(*v) {
-                let link_id = self.push_code(
+                let open = self.open();
+                let (open, link_id) = self.safe_push_code_open(
+                    open,
                     LCode::Load(*v),
                     ty.clone(),
                     *maybe_key,
@@ -1008,7 +1017,7 @@ impl FlattenInner {
         (closed, self.push_entry_with_link(entry))
     }
 
-    pub fn push_code(
+    pub fn _push_code(
         &mut self,
         code: LCode,
         ty: AstType,
@@ -1088,18 +1097,21 @@ impl FlattenInner {
     fn push_start_block_args(&mut self, block_ty: AstFuncType, span_id: SpanId) -> ArgVec {
         assert!(block_ty.args.is_composite());
 
+        let mut open = self.open();
         let block_id = self.blocks.current_block_id();
         let scope_id = self.blocks.get_block(block_id).scope();
 
         let mut v_args = vec![];
         for (i, (name, ty)) in block_ty.args.fields().iter().enumerate() {
-            let link_id = self.push_code(
+            let (this_open, link_id) = self.safe_push_code_open(
+                open,
                 LCode::Arg(i as u8),
                 ty.clone(),
                 *name,
                 span_id,
                 VarDefinitionSpace::Arg,
             );
+            open = this_open;
             v_args.push((*name, link_id, ty.clone(), span_id));
             if let Some(name) = name {
                 self.blocks.scope_define(scope_id, *name, link_id.into());
@@ -1133,8 +1145,15 @@ impl FlattenInner {
         span_id: SpanId,
         mem: VarDefinitionSpace,
     ) -> (LinkId, ArgVec) {
-        let block_link_id =
-            self.push_code(LCode::Label, block_ty.clone().into(), name, span_id, mem);
+        let mut open = self.open();
+        let (open, block_link_id) = self.safe_push_code_open(
+            open,
+            LCode::Label,
+            block_ty.clone().into(),
+            name,
+            span_id,
+            mem,
+        );
         let v_args = self.push_start_block_args(block_ty, span_id);
         self.blocks
             .block_links
@@ -1307,13 +1326,16 @@ impl FlattenInner {
     }
 
     pub fn push_noop(&mut self, span_id: SpanId) -> LinkId {
-        self.push_code(
+        let open = self.open();
+        let (open, link_id) = self.safe_push_code_open(
+            open,
             LCode::Noop,
             AstType::Unit,
             None,
             span_id,
             VarDefinitionSpace::Default,
-        )
+        );
+        link_id
     }
 
     pub fn safe_static(&mut self) -> SafeBlockClosed {
