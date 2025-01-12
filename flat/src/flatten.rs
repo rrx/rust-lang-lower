@@ -794,7 +794,6 @@ impl FlattenInner {
             block_id: self.blocks.current_block_id(),
             extra: safe::Open {},
         };
-        self.blocks.switch_blocks(open.block_id);
         (open, link_id)
     }
 
@@ -1956,23 +1955,11 @@ impl FlattenInner {
                 FlattenResult::link(link_id)
             }
 
-            /*
-            Ast::Block(name, args, body) => {
-                unimplemented!();
-                let ast: Ast = ControlFlowMarker::BlockStart(Some(name), args).into();
-                self.push_node(ast.node(span_id), b)?;
-                self.push_node(NB::ensure_seq(*body), b)
-                //let _ = self.push_node(NB::ensure_seq(*body), b);
-                //self.switch_blocks(next_block_id);
-                //Ok(FlattenResult::link(next_link_id))
-            }
-            */
             Ast::Ternary(c, x, y) => {
                 // expression, non-terminal
 
                 // Condition
-                self.blocks.switch_blocks(current_block_id);
-                let rc = self.push_node(*c, PushContext::Default, b);
+                let (open, c_link_id) = self.safe_push_expr(open, *c, PushContext::Default, b);
                 let current_block_id = self.blocks.current_block_id();
 
                 let branch_block_type = AstFuncType {
@@ -1996,8 +1983,9 @@ impl FlattenInner {
                 self.push_start_block(branch_block_type.clone().into(), Some(name), then_span_id);
 
                 self.blocks.switch_blocks(then_block_id);
-                let r = self.push_node(then_ast, PushContext::Default, b);
-                let then_link_id = r.link_id.unwrap();
+                let then_open = self.open_block(then_block_id);
+                let (_, then_link_id) =
+                    self.safe_push_expr(then_open, then_ast, PushContext::Default, b);
                 let then_ty = self.get_type(then_link_id).clone();
 
                 // ELSE
@@ -2014,23 +2002,21 @@ impl FlattenInner {
                 self.push_start_block(branch_block_type.into(), Some(name), else_span_id);
 
                 self.blocks.switch_blocks(else_block_id);
-                let r = self.push_node(else_ast, PushContext::Default, b);
-                let else_link_id = r.link_id.unwrap();
+                let else_open = self.open_block(else_block_id);
+                let (_, else_link_id) =
+                    self.safe_push_expr(else_open, else_ast, PushContext::Default, b);
                 let else_ty = self.get_type(else_link_id).clone();
 
                 b.unify(&then_ty, then_span_id, &else_ty, else_span_id);
 
                 // switch back to the original block
                 self.blocks.switch_blocks(current_block_id);
-                let v = self.push_code(
-                    LCode::Ternary(
-                        rc.link_id.unwrap().into(),
-                        then_block_id.into(),
-                        else_block_id.into(),
-                    ),
-                    then_ty.clone(),
+                let (_, v) = self.safe_push_code_open(
+                    open,
+                    LCode::Ternary(c_link_id.into(), then_block_id.into(), else_block_id.into()),
+                    then_ty,
                     None,
-                    span_id,
+                    node.span_id,
                     VarDefinitionSpace::Reg,
                 );
                 FlattenResult::link(v)
