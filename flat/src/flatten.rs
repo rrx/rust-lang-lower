@@ -1819,7 +1819,7 @@ impl FlattenInner {
                 let (open, link_id) =
                     self.safe_push_expr(open, *condition, PushContext::Default, b);
 
-                let (open, v) = self.safe_push_code_term(
+                let (_, v) = self.safe_push_code_term(
                     open,
                     LCode::Branch(
                         link_id.into(),
@@ -1851,10 +1851,8 @@ impl FlattenInner {
                             let entry = self.get_entry(link_id);
                             (open, entry.block_id)
                         } else {
-                            let link_id = self
-                                .push_node(*expr, PushContext::Default, b)
-                                .link_id
-                                .unwrap();
+                            let (open, link_id) =
+                                self.safe_push_expr(open, *expr, PushContext::Default, b);
                             let entry = self.get_entry(link_id);
                             let block_id = match &entry.code {
                                 LCode::Label => entry.block_id,
@@ -1874,7 +1872,7 @@ impl FlattenInner {
                 let ty = AstType::JumpTarget;
                 let code = LCode::Val(Literal::Block(block_id));
 
-                let (open, link_id) = self.safe_push_code_open(
+                let (_, link_id) = self.safe_push_code_open(
                     open,
                     code,
                     ty,
