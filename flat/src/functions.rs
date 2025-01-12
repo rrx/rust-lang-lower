@@ -782,6 +782,7 @@ impl FlattenInner {
 
         // Complete the call, returning cursor to the caller
         self.blocks.switch_blocks(current_block_id);
+        let sblock = self.blocks.safe_unknown();
 
         // DECLARE
         // if the function returns a value, then we need to copy it out of the next block arguments
@@ -789,7 +790,8 @@ impl FlattenInner {
         let decl = if let Some(link_id) = r.link_id {
             let key = b.labels.fresh_key("r");
             let ty = next_arg_ty.field_types().first().unwrap().clone();
-            let decl_link_id = self.push_decl(ty.clone(), key, call_span_id);
+
+            let (_, decl_link_id) = self.push_decl(sblock, ty.clone(), key, call_span_id);
             Some((decl_link_id, link_id, ty, key))
         } else {
             None
@@ -903,13 +905,14 @@ impl FlattenInner {
         // Call the lambda that we just created
         // now that we have the arguments calculated, and the lambda baked, jump!
         self.blocks.switch_blocks(current_block_id);
+        let sblock = self.blocks.safe_unknown();
 
         // DECLARE
         // if the function returns a value, then we need to copy it out of the next block arguments
         let v_decl = if let Some(link_id) = r.link_id {
             let key = b.labels.fresh_key("r");
             let ty = next_arg_ty.field_types().first().unwrap().clone();
-            let decl_link_id = self.push_decl(ty.clone(), key, call_span_id);
+            let (_, decl_link_id) = self.push_decl(sblock, ty.clone(), key, call_span_id);
             let entry = self.get_entry_mut(link_id);
             entry.mem = VarDefinitionSpace::Stack(decl_link_id);
             Some(decl_link_id)

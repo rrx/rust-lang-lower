@@ -12,8 +12,8 @@ use std::convert::Into;
 use crate::{
     BlockGraph, BlockGraphStateOpen, BlockId, BlockifyError, Builtin, CodeEntry, CodeOffset,
     ContinuationFlow, DeferredGotoList, FlowEdge, LCode, LinkId, NodeBuilder as NB, SafeBlock,
-    SafeBlockClosed, SafeBlockOpen, SafeBlockUnknown, ScopeId, ScopeState, ScopeType,
-    ScopedContinuations, Successor, ValueId, Values, VarDefinitionSpace,
+    SafeBlockClosed, SafeBlockOpen, SafeBlockState, SafeBlockUnknown, ScopeId, ScopeState,
+    ScopeType, ScopedContinuations, Successor, ValueId, Values, VarDefinitionSpace,
 };
 use std::ops::{Deref, DerefMut};
 
@@ -410,7 +410,13 @@ impl FlattenInner {
         link_id
     }
 
-    pub fn push_decl(&mut self, ty: AstType, name: StringKey, span_id: SpanId) -> LinkId {
+    pub fn push_decl<S: SafeBlockState>(
+        &mut self,
+        sblock: SafeBlock<S>,
+        ty: AstType,
+        name: StringKey,
+        span_id: SpanId,
+    ) -> (SafeBlock<S>, LinkId) {
         let block_id = self.blocks.current_block_id();
         let block = self.blocks.get_block(block_id);
         let scope = self.blocks.get_scope(block.scope());
@@ -427,7 +433,7 @@ impl FlattenInner {
         self.blocks.switch_blocks(entry_block_id);
         let link_id = self.insert_decl(entry_block_id, entry);
         self.blocks.switch_blocks(block_id);
-        link_id
+        (sblock, link_id)
     }
 
     pub fn push_entry_with_link(&mut self, mut entry: CodeEntry) -> LinkId {
@@ -711,29 +717,13 @@ impl FlattenInner {
 
     pub fn safe_push_call_values(
         &mut self,
-        open: SafeBlockOpen,
+        mut open: SafeBlockOpen,
         values: &[(Option<StringKey>, LinkId, AstType, SpanId)],
         b: &mut NB,
     ) -> (SafeBlockOpen, Vec<LinkId>) {
         self.blocks.switch_blocks(open.block_id);
-        let links = self._push_call_values(values, b);
-        let open = SafeBlock {
-            block_id: self.blocks.current_block_id(),
-            extra: crate::safe::Open {},
-        };
-        self.blocks.switch_blocks(open.block_id);
-        (open, links)
-    }
-
-    fn _push_call_values(
-        &mut self,
-        values: &[(Option<StringKey>, LinkId, AstType, SpanId)],
-        b: &mut NB,
-    ) -> Vec<LinkId> {
         let mut updated_values = vec![];
-        let block_id = self.blocks.current_block_id();
-        let block = self.blocks.get_block(block_id);
-        let scope_id = block.scope();
+        let scope_id = self.blocks.get_block(open.block_id).scope();
         for (maybe_key, v, ty, span_id) in values {
             let mut v = *v;
             let entry = self.get_entry(v);
@@ -743,7 +733,7 @@ impl FlattenInner {
             let v_scope = self.blocks.get_scope(v_scope_id);
             let v_entry_block_id = v_scope.entry_block();
             let in_entry = v_entry_block_id == v_block_id;
-            let in_block = v_block_id == block_id;
+            let in_block = v_block_id == open.block_id;
 
             let is_decl = if let LCode::Declare = entry.code {
                 true
@@ -761,11 +751,12 @@ impl FlattenInner {
                 // get a link the value declaration in the scope entry
                 println!(
                     "@{}: {}{}=>{}{}, {}",
-                    v, block_id, scope_id, v_block_id, v_scope_id, ty
+                    v, open.block_id, scope_id, v_block_id, v_scope_id, ty
                 );
                 let key = b.labels.fresh_key("r");
                 // create space on the stack in the entry block
-                let decl_link_id = self.push_decl(ty.clone(), key, *span_id);
+                let (this_open, decl_link_id) = self.push_decl(open, ty.clone(), key, *span_id);
+                open = this_open;
                 let entry = self.get_entry_mut(v);
                 entry.mem = VarDefinitionSpace::Stack(decl_link_id);
                 v = decl_link_id;
@@ -776,18 +767,23 @@ impl FlattenInner {
             updated_values.push(out);
         }
 
-        return updated_values
-            .into_iter()
-            .map(|(maybe_key, v, ty, span_id)| {
-                self.push_code(
-                    LCode::CallValue(v.into()),
-                    ty.clone(),
-                    maybe_key,
-                    span_id,
-                    VarDefinitionSpace::Reg,
-                )
-            })
-            .collect::<Vec<_>>();
+        let mut links = vec![];
+        for (maybe_key, v, ty, span_id) in updated_values {
+            let (this_open, link_id) = self.safe_push_code_open(
+                open,
+                LCode::CallValue(v.into()),
+                ty.clone(),
+                maybe_key,
+                span_id,
+                VarDefinitionSpace::Reg,
+            );
+            open = this_open;
+            links.push(link_id);
+        }
+
+        assert_eq!(self.blocks.current_block_id(), open.block_id);
+        self.blocks.switch_blocks(open.block_id);
+        (open, links)
     }
 
     pub fn safe_push_expr(
@@ -857,11 +853,14 @@ impl FlattenInner {
 
             // switch to the target block, so we can create the declaration
             self.blocks.switch_blocks(decl_block_id);
-            let decl_link_id = self.push_decl(ty.clone(), key, span_id);
+            let sblock = self.blocks.safe_unknown();
+            let (_, decl_link_id) = self.push_decl(sblock, ty.clone(), key, span_id);
 
             // switch back to the start block, so we can store the value
             self.blocks.switch_blocks(start_block_id);
-            self.push_code(
+            let open = self.open_block(start_block_id);
+            self.safe_push_code_open(
+                open,
                 LCode::Store(decl_link_id, *link_id),
                 AstType::Unit,
                 None,
@@ -1033,7 +1032,8 @@ impl FlattenInner {
         let (open, _) = self.safe_push_call_values(open, &values, b);
 
         if let ReturnType::Single(ty) = &ret_ty {
-            let link_id = self.push_code(
+            let (_, link_id) = self.safe_push_code_open(
+                open,
                 LCode::Call(v_fun.into()),
                 ty.clone(),
                 None,
