@@ -706,13 +706,13 @@ impl FlattenInner {
 
     pub fn push_loads_if_needed(
         &mut self,
+        mut open: SafeBlockOpen,
         values: &[(Option<StringKey>, LinkId, AstType, SpanId)],
-    ) -> Vec<LinkId> {
+    ) -> (SafeBlockOpen, Vec<LinkId>) {
         let mut links = vec![];
         for (maybe_key, v, ty, span_id) in values {
             let out = if self.blocks.links.is_load_required(*v) {
-                let open = self.open();
-                let (open, link_id) = self.safe_push_code_open(
+                let (this_open, link_id) = self.safe_push_code_open(
                     open,
                     LCode::Load(*v),
                     ty.clone(),
@@ -720,13 +720,14 @@ impl FlattenInner {
                     *span_id,
                     VarDefinitionSpace::Reg,
                 );
+                open = this_open;
                 link_id
             } else {
                 *v
             };
             links.push(out);
         }
-        links
+        (open, links)
     }
 
     pub fn safe_push_call_values(
@@ -2052,9 +2053,8 @@ impl FlattenInner {
 
                 self.blocks.switch_blocks(then_block.block_id);
                 let then_open = self.open_block(then_block.block_id);
-                let (_, r) =
-                    self.safe_push_node_result(then_open, then_ast, PushContext::Default, b);
-                let then_link_id = r.link_id.unwrap();
+                let (_, then_link_id) =
+                    self.safe_push_node(then_open, then_ast, PushContext::Default, b);
                 let then_ty = self.get_type(then_link_id).clone();
 
                 // ELSE
@@ -2077,9 +2077,8 @@ impl FlattenInner {
 
                 self.blocks.switch_blocks(else_block.block_id);
                 let else_open = self.open_block(else_block.block_id);
-                let (_, r) =
-                    self.safe_push_node_result(else_open, else_ast, PushContext::Default, b);
-                let else_link_id = r.link_id.unwrap();
+                let (_, else_link_id) =
+                    self.safe_push_node(else_open, else_ast, PushContext::Default, b);
                 let else_ty = self.get_type(else_link_id).clone();
 
                 b.unify(&then_ty, then_span_id, &else_ty, else_span_id);
@@ -2392,7 +2391,7 @@ impl FlattenInner {
 
                 let ty = AstType::build_tuple(types);
 
-                let update_link_ids = self.push_loads_if_needed(&values);
+                let (open, update_link_ids) = self.push_loads_if_needed(open, &values);
 
                 let (open, link_id) = self.safe_push_code_open(
                     open,
