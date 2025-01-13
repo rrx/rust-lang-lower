@@ -431,7 +431,7 @@ impl FlattenInner {
 
         self.blocks.switch_blocks(next_block_id);
 
-        let (_v_block, v_args) = self.push_start_block(
+        let (open, _v_block, v_args) = self.push_start_block(
             ret_block_ty.clone().into(),
             Some(b.labels.fresh_key(&cont_name)),
             call_span_id,
@@ -510,7 +510,7 @@ impl FlattenInner {
             .block_succ(current_block_id, fun_block_id, succ_type);
 
         self.blocks.switch_blocks(fun_block_id);
-        let (entry_link_id, entry_args) =
+        let (entry, entry_link_id, entry_args) =
             self.push_start_block_mem(def_func_type.clone(), Some(global_name), def_span_id, mem);
 
         // add entry to scope, for recursion
@@ -531,7 +531,7 @@ impl FlattenInner {
             .scope_define(scope_id, global_name, entry_link_id);
 
         // flatten function, and switch to next
-        self.blocks.switch_blocks(fun_block_id);
+        self.blocks.switch_blocks(entry.block_id);
         let open = self.open_block(fun_block_id);
         let _ = self.push_node(open, body, PushContext::Default, b);
         self.maybe_terminate_block(next_block_id, def_span_id, PushContext::Function, b);
@@ -802,7 +802,8 @@ impl FlattenInner {
 
         // JUMP
         // jump into the the lambda
-        self.push_jump(fun_block_id.into(), call_values, call_span_id, b);
+        let open = self.open();
+        self.push_jump(open, fun_block_id.into(), call_values, call_span_id, b);
 
         self.blocks.switch_blocks(next_block.block_id);
 
@@ -885,7 +886,7 @@ impl FlattenInner {
         let cont_key = b.labels.fresh_key(&cont_name);
 
         self.blocks.switch_blocks(exit_block.block_id);
-        let (_v_block, v_args) =
+        let (open, _v_block, v_args) =
             self.push_start_block(ret_block_ty.clone().into(), Some(cont_key), call_span_id);
 
         let next_link_id = match &next_arg_ty {
@@ -924,8 +925,14 @@ impl FlattenInner {
         };
 
         // jump into the the lambda
-        let _goto_link_id =
-            self.push_jump(fun_block_id.into(), call_values.clone(), call_span_id, b);
+        let open = self.open();
+        let _goto_link_id = self.push_jump(
+            open,
+            fun_block_id.into(),
+            call_values.clone(),
+            call_span_id,
+            b,
+        );
 
         self.blocks.switch_blocks(exit_block.block_id);
         // in the next block

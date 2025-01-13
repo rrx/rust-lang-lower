@@ -814,14 +814,13 @@ impl FlattenInner {
 
     fn safe_jump(
         &mut self,
-        block: SafeBlockOpen,
+        open: SafeBlockOpen,
         target_block_id: BlockId,
         jump_args: ArgVec,
         span_id: SpanId,
         b: &mut NB,
     ) -> SafeBlockClosed {
-        self.blocks.switch_blocks(block.block_id);
-        self.push_jump(target_block_id, jump_args, span_id, b);
+        self.push_jump(open, target_block_id, jump_args, span_id, b);
         SafeBlock {
             block_id: self.blocks.current_block_id(),
             extra: crate::safe::Closed {},
@@ -830,14 +829,17 @@ impl FlattenInner {
 
     pub fn push_jump(
         &mut self,
+        open: SafeBlockOpen,
         target_block_id: BlockId,
         jump_args: ArgVec,
         span_id: SpanId,
         b: &mut NB,
-    ) {
+    ) -> SafeBlockClosed {
+        self.blocks.switch_blocks(open.block_id);
         let (target_block_id, jump_args) =
             self.push_jump_unwind(target_block_id, jump_args, span_id, b);
-        self.push_jump_direct(target_block_id, jump_args, span_id, b);
+        let open = self.open();
+        self.push_jump_direct(open, target_block_id, jump_args, span_id, b)
     }
 
     pub fn push_store_args(
@@ -930,6 +932,7 @@ impl FlattenInner {
 
     pub fn push_jump_direct(
         &mut self,
+        open: SafeBlockOpen,
         target_block_id: BlockId,
         jump_args: ArgVec,
         span_id: SpanId,
@@ -945,7 +948,6 @@ impl FlattenInner {
 
         let var_link_ids = jump_args.iter().map(|j| j.1).collect::<Vec<_>>();
 
-        let open = self.open();
         let (open, _) = self.safe_push_call_values(
             open,
             &jump_args
@@ -1113,7 +1115,7 @@ impl FlattenInner {
         block_ty: AstFuncType,
         name: Option<StringKey>,
         span_id: SpanId,
-    ) -> (LinkId, ArgVec) {
+    ) -> (SafeBlockOpen, LinkId, ArgVec) {
         self.push_start_block_mem(block_ty, name, span_id, VarDefinitionSpace::Static)
     }
 
@@ -1122,7 +1124,7 @@ impl FlattenInner {
         block_ty: AstFuncType,
         name: Option<StringKey>,
         span_id: SpanId,
-    ) -> (LinkId, ArgVec) {
+    ) -> (SafeBlockOpen, LinkId, ArgVec) {
         self.push_start_block_mem(block_ty, name, span_id, VarDefinitionSpace::Default)
     }
 
@@ -1132,8 +1134,8 @@ impl FlattenInner {
         name: Option<StringKey>,
         span_id: SpanId,
         mem: VarDefinitionSpace,
-    ) -> (LinkId, ArgVec) {
-        let mut open = self.open();
+    ) -> (SafeBlockOpen, LinkId, ArgVec) {
+        let open = self.open();
         let (open, block_link_id) = self.safe_push_code_open(
             open,
             LCode::Label,
@@ -1146,7 +1148,7 @@ impl FlattenInner {
         self.blocks
             .block_links
             .insert(self.blocks.current_block_id(), block_link_id);
-        (block_link_id, v_args)
+        (open, block_link_id, v_args)
     }
 
     pub fn push_close_block(
@@ -1945,6 +1947,7 @@ impl FlattenInner {
                 self.blocks.define_label(scope_id, new_block.block_id, name);
 
                 self.blocks.switch_blocks(current_block_id);
+                let open = self.open_block(current_block_id);
 
                 // start a new block.  If the last block isn't terminated, then we create a new
                 // block and jump to it.
@@ -1954,17 +1957,7 @@ impl FlattenInner {
                     let entry = self.get_entry(last_link_id);
                     if !entry.code.is_term() {
                         assert_eq!(args.len(), 0);
-                        self.push_jump(new_block.block_id, vec![], span_id, b);
-                    }
-                }
-
-                let block = self.blocks.get_block(current_block_id);
-                // this is a new block, check to make sure the last block terminated
-                // if not, we close it out with a jump to this block
-                if let Some(last) = block.last() {
-                    let entry = self.get_entry(last);
-                    if !entry.code.is_term() {
-                        self.push_jump(new_block.block_id.into(), vec![], span_id, b);
+                        self.push_jump(open, new_block.block_id, vec![], span_id, b);
                     }
                 }
 
@@ -1983,7 +1976,7 @@ impl FlattenInner {
                 );
 
                 self.blocks.switch_blocks(new_block.block_id);
-                let (link_id, _) = self.push_start_block(
+                let (open, link_id, _) = self.push_start_block(
                     AstFuncType {
                         args: arg_ty.clone().into(),
                         ret: ReturnType::Single(AstType::Unit).into(),
@@ -1992,7 +1985,7 @@ impl FlattenInner {
                     Some(name),
                     span_id,
                 );
-                self.blocks.switch_blocks(new_block.block_id);
+                self.blocks.switch_blocks(open.block_id);
                 let open = self.open();
                 (open.unknown(), FlattenResult::link(link_id))
             }
@@ -2139,8 +2132,9 @@ impl FlattenInner {
                                 Some(label),
                                 span_id,
                             );
+                            let open = self.open();
                             let jump_args = acc.drain(..).collect::<Vec<_>>();
-                            self.push_jump(block_id.into(), jump_args, node.span_id, b);
+                            self.push_jump(open, block_id.into(), jump_args, node.span_id, b);
                             acc.clear();
                         }
                         LCode::PlaceholderCodeReference => {
@@ -2210,7 +2204,8 @@ impl FlattenInner {
                 );
 
                 self.blocks.switch_blocks(current_block_id);
-                self.push_jump(loop_block_id.into(), vec![], node.span_id, b);
+                let open = self.open();
+                self.push_jump(open, loop_block_id.into(), vec![], node.span_id, b);
 
                 // open loop block
                 self.blocks.switch_blocks(loop_block_id);
@@ -2224,10 +2219,15 @@ impl FlattenInner {
 
                 // loop up loop blocks by name
                 if let Some(loop_scope) = self.blocks.get_loop_scope(scope_id, maybe_key) {
+                    let closed = self.push_jump(
+                        open,
+                        loop_scope.start_block.into(),
+                        vec![],
+                        node.span_id,
+                        b,
+                    );
                     self.blocks.switch_blocks(current_block_id);
-                    self.push_jump(loop_scope.start_block.into(), vec![], node.span_id, b);
-                    self.blocks.switch_blocks(current_block_id);
-                    (self.blocks.safe_unknown(), FlattenResult::statement())
+                    (closed.unknown(), FlattenResult::statement())
                 } else {
                     // mismatch name
                     b.push_error(&format!("Continue without loop"), node.span_id);
@@ -2246,11 +2246,15 @@ impl FlattenInner {
                 assert_eq!(args.len(), 0);
                 // loop up loop blocks by name
                 if let Some(loop_scope) = self.blocks.get_loop_scope(scope_id, maybe_name) {
+                    let closed = self.push_jump(
+                        open,
+                        loop_scope.start_block.into(),
+                        vec![],
+                        node.span_id,
+                        b,
+                    );
                     self.blocks.switch_blocks(current_block_id);
-                    self.push_jump(loop_scope.start_block.into(), vec![], node.span_id, b);
-                    self.blocks.switch_blocks(current_block_id);
-                    let open = self.open();
-                    (open.unknown(), FlattenResult::statement())
+                    (closed.unknown(), FlattenResult::statement())
                 } else {
                     // mismatch name
                     b.push_error(&format!("Continue without loop"), node.span_id);
@@ -2267,18 +2271,17 @@ impl FlattenInner {
                 // loop up loop blocks by name
                 if let Some(loop_scope) = self.blocks.get_loop_scope(scope_id, maybe_key) {
                     self.blocks.switch_blocks(current_block_id);
-                    self.push_jump(loop_scope.next_block.into(), vec![], node.span_id, b);
+                    self.push_jump(open, loop_scope.next_block.into(), vec![], node.span_id, b);
 
                     let v_next = self
                         .blocks
                         .new_block(current_block_id, Successor::BlockScope);
                     self.blocks.switch_blocks(v_next.block_id);
-                    let (link_id, _) = self.push_start_block(
+                    let (open, link_id, _) = self.push_start_block(
                         AstFuncType::new_void_void(),
                         Some(b.labels.fresh_key("postloopbreak")),
                         span_id,
                     );
-                    let open = self.open();
                     (open.unknown(), FlattenResult::link(link_id))
                 } else {
                     // mismatch name
@@ -2299,7 +2302,7 @@ impl FlattenInner {
                 // loop up loop blocks by name
                 if let Some(loop_scope) = self.blocks.get_loop_scope(scope_id, maybe_name) {
                     self.blocks.switch_blocks(current_block_id);
-                    self.push_jump(loop_scope.next_block.into(), vec![], node.span_id, b);
+                    self.push_jump(open, loop_scope.next_block.into(), vec![], node.span_id, b);
                     self.blocks.switch_blocks(current_block_id);
                     let open = self.open();
                     (open.unknown(), FlattenResult::statement())
@@ -2491,7 +2494,8 @@ impl FlattenInner {
         let link_id = block.last().unwrap().clone();
         let entry = self.get_entry(link_id);
         if !entry.code.is_term() {
-            self.push_jump(v_next, vec![], span_id, b);
+            let open = self.open();
+            self.push_jump(open, v_next, vec![], span_id, b);
         }
     }
 }

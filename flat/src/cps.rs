@@ -83,7 +83,7 @@ impl FlattenInner {
 
             let r_ty1 = b.types.u.resolve(&def_func_type.into()).unwrap();
 
-            let (entry_link_id, _) = self.push_start_block(
+            let (open, entry_link_id, _) = self.push_start_block(
                 r_ty1.clone().get_func().clone(),
                 Some(lambda_name),
                 def_span_id,
@@ -105,7 +105,6 @@ impl FlattenInner {
 
             // flatten function, and switch to next
             // lower first, so we resolve types
-            let open = self.open_block(empty.block_id);
             let (unk, _) = self.safe_push_node_result(open, *body, PushContext::Default, b);
 
             let r_ty2 = b
@@ -256,7 +255,8 @@ impl FlattenInner {
             );
 
             // jump to unwind block
-            let _jump_link_id = self.push_jump_direct(
+            let _ = self.push_jump_direct(
+                open,
                 unwind_block_id,
                 vec![(None, var_link_id, void_func_type.into(), call_span_id)],
                 call_span_id,
@@ -265,7 +265,8 @@ impl FlattenInner {
 
             // jump to the new block
             self.blocks.switch_blocks(current_block_id);
-            self.push_jump_direct(new_block.block_id, vec![], call_span_id, b);
+            let open = self.open();
+            self.push_jump_direct(open, new_block.block_id, vec![], call_span_id, b);
 
             // define next block
             self.blocks.switch_blocks(next_block.block_id);
@@ -276,7 +277,8 @@ impl FlattenInner {
                 call_span_id,
             );
         }
-        self.push_jump_direct(target_block_id, jump_args, call_span_id, b);
+        let open = self.open();
+        self.push_jump_direct(open, target_block_id, jump_args, call_span_id, b);
 
         self.blocks.switch_blocks(save_block_id);
         start_block.block_id
@@ -319,7 +321,13 @@ impl FlattenInner {
 
         // NOW JUMP
         // now that we have the arguments calculated, and the lambda baked, jump!
-        self.push_jump(fun_block_id.into(), call_values.clone(), call_span_id, b);
+        self.push_jump(
+            open,
+            fun_block_id.into(),
+            call_values.clone(),
+            call_span_id,
+            b,
+        );
 
         // if this really is a CPS function, then it should never return
         // TODO: verify that it never returns, could be with the function signature
@@ -553,8 +561,13 @@ impl FlattenInner {
                     //let unwind_target_block_id =
                     //self.push_unwind(target_block_id, jump_args, d.call_span_id, b);
 
-                    let _ =
-                        self.push_jump_direct(target_block_id.into(), jump_args, d.call_span_id, b);
+                    let _ = self.push_jump_direct(
+                        open,
+                        target_block_id.into(),
+                        jump_args,
+                        d.call_span_id,
+                        b,
+                    );
 
                     return true;
                 }
@@ -619,6 +632,7 @@ impl FlattenInner {
 
                 if sources.len() == 1 {
                     self.push_jump(
+                        open,
                         sources.iter().next().unwrap().clone(),
                         d.argvec,
                         d.call_span_id,
@@ -640,14 +654,21 @@ impl FlattenInner {
                             let key = b.labels.fresh_key(".sw");
                             let new_block =
                                 self.blocks.new_block(d.block_id, Successor::BlockScope);
-                            self.blocks.switch_blocks(new_block.block_id);
-                            self.push_start_block(
+                            let block_id = new_block.block_id;
+                            self.blocks.switch_blocks(block_id);
+                            let (new_block, _, _) = self.push_start_block(
                                 AstFuncType::new_void_void().into(),
                                 Some(key),
                                 d.call_span_id,
                             );
-                            self.push_jump(target_block_id, d.argvec.clone(), d.call_span_id, b);
-                            out.push((target_block_id, new_block.block_id));
+                            self.push_jump(
+                                new_block,
+                                target_block_id,
+                                d.argvec.clone(),
+                                d.call_span_id,
+                                b,
+                            );
+                            out.push((target_block_id, block_id));
                         }
                         let mut m = HashMap::new();
                         for (target_block_id, new_block_id) in out {
