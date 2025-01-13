@@ -1,4 +1,3 @@
-use anyhow::Result;
 use compile_core::{
     AbstractionId, Argument, AstFuncType, AstType, ControlFlowMarker, Lambda, Literal, ReturnType,
     SpanId, StringKey,
@@ -525,7 +524,6 @@ impl FlattenInner {
                 d.deferred_type = DeferredType::Name(load_link_id);
                 d.argvec = goto_values;
 
-                let open = self.open();
                 self.push_placeholder_terminal(open, goto_func_type, d.call_span_id);
 
                 self.deferred_goto.add_cps(d);

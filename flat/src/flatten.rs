@@ -429,11 +429,11 @@ impl FlattenInner {
 
     pub fn push_decl<S: SafeBlockState>(
         &mut self,
-        sblock: SafeBlock<S>,
+        sblock: &SafeBlock<S>,
         ty: AstType,
         name: StringKey,
         span_id: SpanId,
-    ) -> (SafeBlock<S>, LinkId) {
+    ) -> LinkId {
         let block_id = self.blocks.current_block_id();
         let block = self.blocks.get_block(block_id);
         let scope = self.blocks.get_scope(block.scope());
@@ -450,7 +450,7 @@ impl FlattenInner {
         self.blocks.switch_blocks(entry_block_id);
         let link_id = self.insert_decl(entry_block_id, entry);
         self.blocks.switch_blocks(block_id);
-        (sblock, link_id)
+        link_id
     }
 
     pub fn push_entry_with_link(&mut self, mut entry: CodeEntry) -> LinkId {
@@ -774,8 +774,7 @@ impl FlattenInner {
                 );
                 let key = b.labels.fresh_key("r");
                 // create space on the stack in the entry block
-                let (this_open, decl_link_id) = self.push_decl(open, ty.clone(), key, *span_id);
-                open = this_open;
+                let decl_link_id = self.push_decl(&open, ty.clone(), key, *span_id);
                 let entry = self.get_entry_mut(v);
                 entry.mem = VarDefinitionSpace::Stack(decl_link_id);
                 v = decl_link_id;
@@ -875,7 +874,7 @@ impl FlattenInner {
             // switch to the target block, so we can create the declaration
             self.blocks.switch_blocks(decl_block_id);
             let sblock = self.blocks.safe_unknown();
-            let (_, decl_link_id) = self.push_decl(sblock, ty.clone(), key, span_id);
+            let decl_link_id = self.push_decl(&sblock, ty.clone(), key, span_id);
 
             // switch back to the start block, so we can store the value
             self.blocks.switch_blocks(start_block_id);
@@ -1332,8 +1331,7 @@ impl FlattenInner {
         }
     }
 
-    pub fn push_noop(&mut self, span_id: SpanId) -> LinkId {
-        let open = self.open();
+    pub fn push_noop(&mut self, open: SafeBlockOpen, span_id: SpanId) -> (SafeBlockOpen, LinkId) {
         let (open, link_id) = self.safe_push_code_open(
             open,
             LCode::Noop,
@@ -1342,7 +1340,7 @@ impl FlattenInner {
             span_id,
             VarDefinitionSpace::Default,
         );
-        link_id
+        (open, link_id)
     }
 
     pub fn safe_static(&mut self) -> SafeBlockClosed {
@@ -1729,7 +1727,8 @@ impl FlattenInner {
                         } else {
                             let name = b.labels.r(ident.into());
                             b.push_error(&format!("Call name not found: {}", name), span_id);
-                            (open.unknown(), FlattenResult::link(self.push_noop(span_id)))
+                            let (open, link_id) = self.push_noop(open, span_id);
+                            (open.unknown(), FlattenResult::link(link_id))
                         }
                     }
                     Ast::Attribute(ident, attr) => {
@@ -1743,7 +1742,8 @@ impl FlattenInner {
                                 &format!("Builtin not found: {}", name),
                                 attr.span_id,
                             )]);
-                            (open.unknown(), FlattenResult::link(self.push_noop(span_id)))
+                            let (open, link_id) = self.push_noop(open, span_id);
+                            (open.unknown(), FlattenResult::link(link_id))
                         }
                     }
                     _ => unimplemented!("{:?}", expr.node),
@@ -2189,7 +2189,8 @@ impl FlattenInner {
                         }
                         _ => {
                             b.push_error(&format!("Invalid goto: {:?}", code), span_id);
-                            return (open.unknown(), FlattenResult::link(self.push_noop(span_id)));
+                            let (open, link_id) = self.push_noop(open, span_id);
+                            return (open.unknown(), FlattenResult::link(link_id));
                         }
                     }
 
@@ -2284,10 +2285,8 @@ impl FlattenInner {
                 } else {
                     // mismatch name
                     b.push_error(&format!("Continue without loop"), node.span_id);
-                    (
-                        open.unknown(),
-                        FlattenResult::link(self.push_noop(node.span_id)),
-                    )
+                    let (open, link_id) = self.push_noop(open, node.span_id);
+                    (open.unknown(), FlattenResult::link(link_id))
                 }
             }
 
@@ -2311,10 +2310,8 @@ impl FlattenInner {
                 } else {
                     // mismatch name
                     b.push_error(&format!("Continue without loop"), node.span_id);
-                    (
-                        open.unknown(),
-                        FlattenResult::link(self.push_noop(node.span_id)),
-                    )
+                    let (open, link_id) = self.push_noop(open, node.span_id);
+                    (open.unknown(), FlattenResult::link(link_id))
                 }
             }
 
@@ -2340,10 +2337,8 @@ impl FlattenInner {
                 } else {
                     // mismatch name
                     b.push_error(&format!("Break without loop"), node.span_id);
-                    (
-                        open.unknown(),
-                        FlattenResult::link(self.push_noop(node.span_id)),
-                    )
+                    let (open, link_id) = self.push_noop(open, node.span_id);
+                    (open.unknown(), FlattenResult::link(link_id))
                 }
             }
 
@@ -2363,10 +2358,8 @@ impl FlattenInner {
                 } else {
                     // mismatch name
                     b.push_error(&format!("Break without loop"), node.span_id);
-                    (
-                        open.unknown(),
-                        FlattenResult::link(self.push_noop(node.span_id)),
-                    )
+                    let (open, link_id) = self.push_noop(open, node.span_id);
+                    (open.unknown(), FlattenResult::link(link_id))
                 }
             }
 
@@ -2380,10 +2373,8 @@ impl FlattenInner {
                     link_ids.push(link_id);
                 }
                 b.push_error(&format!("AST Error"), node.span_id);
-                (
-                    open.unknown(),
-                    FlattenResult::link(self.push_noop(node.span_id)),
-                )
+                let (open, link_id) = self.push_noop(open, node.span_id);
+                (open.unknown(), FlattenResult::link(link_id))
             }
 
             Ast::Tuple(exprs) => {
@@ -2478,10 +2469,8 @@ impl FlattenInner {
                             &format!("Defer must be a function with no arguments"),
                             node.span_id,
                         );
-                        return (
-                            open.unknown(),
-                            FlattenResult::link(self.push_noop(node.span_id)),
-                        );
+                        let (open, link_id) = self.push_noop(open, node.span_id);
+                        return (open.unknown(), FlattenResult::link(link_id));
                     }
                 };
 
@@ -2502,10 +2491,8 @@ impl FlattenInner {
 
             Ast::Error => {
                 b.push_error(&format!("AST Error"), node.span_id);
-                (
-                    open.unknown(),
-                    FlattenResult::link(self.push_noop(node.span_id)),
-                )
+                let (open, link_id) = self.push_noop(open, node.span_id);
+                (open.unknown(), FlattenResult::link(link_id))
             }
 
             _ => {

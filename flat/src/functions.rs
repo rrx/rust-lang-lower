@@ -706,7 +706,6 @@ impl FlattenInner {
         // anyways
 
         let is_static = self.blocks.static_scope_id() == scope_id;
-        //let blocks = vec![];
         let (open, r) = if is_static {
             let (open, call_values, call_func_type, def_func_type) = self
                 .push_function_call_arguments(open, abstraction_id, args, vec![], call_span_id, b);
@@ -728,13 +727,11 @@ impl FlattenInner {
             // if it's void, then it's a statement
             // We want to support both of these options
             // TODO: break this out into a compile parameter for the function
-            let r = if false {
+            if false {
                 self.push_call_inline(open, abstraction_id, scope_id, args, call_span_id, b)
             } else {
                 self.push_call_inline_cps(open, abstraction_id, scope_id, args, call_span_id, b)
-            };
-            let open = self.open();
-            (open, r)
+            }
         };
         (open, r)
     }
@@ -747,7 +744,7 @@ impl FlattenInner {
         args: Vec<Argument>,
         call_span_id: SpanId,
         b: &mut NB,
-    ) -> FlattenResult {
+    ) -> (SafeBlockOpen, FlattenResult) {
         // we inline here for nested functions
         // we bake the lambda, and then jump to it
         // This is a very simple inliner, that doesn't rewrite the function signature
@@ -806,7 +803,7 @@ impl FlattenInner {
             let ty = next_arg_ty.field_types().first().unwrap().clone();
 
             // push declaration into the call arguments scope
-            let (_, decl_link_id) = self.push_decl(open.unknown(), ty.clone(), key, call_span_id);
+            let decl_link_id = self.push_decl(&open, ty.clone(), key, call_span_id);
             Some((decl_link_id, link_id, ty, key))
         } else {
             None
@@ -832,9 +829,9 @@ impl FlattenInner {
             // let mlir handle the rest
             let entry = self.get_entry_mut(arg_link_id);
             entry.mem = VarDefinitionSpace::Stack(decl_link_id);
-            FlattenResult::link(decl_link_id)
+            (next_block, FlattenResult::link(decl_link_id))
         } else {
-            r
+            (next_block, r)
         }
     }
 
@@ -846,7 +843,7 @@ impl FlattenInner {
         args: Vec<Argument>,
         call_span_id: SpanId,
         b: &mut NB,
-    ) -> FlattenResult {
+    ) -> (SafeBlockOpen, FlattenResult) {
         // transform a function into a continuation
         // we do this by adding a parameter to the function, which points to the next block
 
@@ -882,9 +879,6 @@ impl FlattenInner {
         let arg = call_values.last().unwrap();
         let next_ty = arg.2.clone();
 
-        // bookmark position
-        let current_block_id = self.blocks.current_block_id();
-
         // generate the CPS function, that's it
         // and jump to it, passing the exit continuation
         let (fun_block_id, ret_block_ty) = self.push_call_inline_cps_inner(
@@ -909,7 +903,6 @@ impl FlattenInner {
         let cont_name = format!("{}.exit", s_name);
         let cont_key = b.labels.fresh_key(&cont_name);
 
-        self.blocks.switch_blocks(exit_block.block_id);
         let (exit_block, _v_block, v_args) = self.push_start_block(
             exit_block,
             ret_block_ty.clone().into(),
@@ -934,17 +927,12 @@ impl FlattenInner {
             FlattenResult::statement()
         };
 
-        // Call the lambda that we just created
-        // now that we have the arguments calculated, and the lambda baked, jump!
-        self.blocks.switch_blocks(current_block_id);
-        let sblock = self.blocks.safe_unknown();
-
         // DECLARE
         // if the function returns a value, then we need to copy it out of the next block arguments
         let v_decl = if let Some(link_id) = r.link_id {
             let key = b.labels.fresh_key("r");
             let ty = next_arg_ty.field_types().first().unwrap().clone();
-            let (_, decl_link_id) = self.push_decl(sblock, ty.clone(), key, call_span_id);
+            let decl_link_id = self.push_decl(&call_block, ty.clone(), key, call_span_id);
             let entry = self.get_entry_mut(link_id);
             entry.mem = VarDefinitionSpace::Stack(decl_link_id);
             Some(decl_link_id)
@@ -952,8 +940,8 @@ impl FlattenInner {
             None
         };
 
-        // jump into the the lambda
-        let _goto_link_id = self.push_jump(
+        // JUMP into the the lambda
+        let _closed = self.push_jump(
             call_block,
             fun_block_id.into(),
             call_values.clone(),
@@ -968,10 +956,10 @@ impl FlattenInner {
         // r contains the link to the return value
         // r contains the return result link, which is part of the next block arguments.
         if let Some(decl_link_id) = v_decl {
-            FlattenResult::link(decl_link_id)
+            (exit_block, FlattenResult::link(decl_link_id))
         } else {
             // r contains the link to the return value
-            r
+            (exit_block, r)
         }
     }
 
