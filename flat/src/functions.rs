@@ -881,7 +881,7 @@ impl FlattenInner {
 
         // generate the CPS function, that's it
         // and jump to it, passing the exit continuation
-        let (fun_block_id, ret_block_ty) = self.push_call_inline_cps_inner(
+        let (fun_block_id, ret_block_ty) = self.gen_call_inline_cps_inner(
             abstraction_id,
             scope_id,
             call_span_id,
@@ -963,7 +963,7 @@ impl FlattenInner {
         }
     }
 
-    fn push_call_inline_cps_inner(
+    fn gen_call_inline_cps_inner(
         &mut self,
         abstraction_id: AbstractionId,
         scope_id: ScopeId,
@@ -971,6 +971,8 @@ impl FlattenInner {
         def_func_type: AstFuncType,
         b: &mut NB,
     ) -> (BlockId, AstFuncType) {
+        // generate a CPS function
+        // This creates a complete function.  The continuation is passed as an argument
         let a = self.blocks.abstractions.get(abstraction_id);
         let lookup_name = a.name;
         let def_span_id = a.def_span_id;
