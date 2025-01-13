@@ -348,19 +348,15 @@ impl BlockGraph<BlockGraphStateOpen> {
     ) -> (SafeBlockEmpty, BlockId, ScopeId) {
         let parent_scope_id = self.get_block(parent_block_id).scope();
         let scope_id = self.new_scope(scope_type);
-        let block_id = self.new_block_different_scope(parent_block_id, scope_id, succ_type);
+        let empty = self.new_block_different_scope(parent_block_id, scope_id, succ_type);
+        let block_id = empty.block_id;
         let scope = self.get_scope_mut(scope_id);
-        scope.entry_block = Some(block_id);
+        scope.entry_block = Some(empty.block_id);
         self.scope_succ(parent_scope_id, scope_id);
         if let ScopeState::Function(state) = scope_state {
             let scope = self.get_scope_mut(scope_id);
             scope.make_function_scope(state);
         }
-        let empty = SafeBlockEmpty {
-            block_id,
-            extra: crate::safe::Empty {},
-        };
-
         (empty, block_id, scope_id)
     }
 

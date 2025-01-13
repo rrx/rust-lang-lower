@@ -12,8 +12,8 @@ use std::convert::Into;
 use crate::{
     BlockGraph, BlockGraphStateOpen, BlockId, BlockifyError, Builtin, CodeEntry, CodeOffset,
     ContinuationFlow, DeferredGotoList, FlowEdge, LCode, LinkId, NodeBuilder as NB, SafeBlock,
-    SafeBlockClosed, SafeBlockOpen, SafeBlockState, SafeBlockUnknown, ScopeId, ScopeState,
-    ScopeType, ScopedContinuations, Successor, ValueId, Values, VarDefinitionSpace,
+    SafeBlockClosed, SafeBlockEmpty, SafeBlockOpen, SafeBlockState, SafeBlockUnknown, ScopeId,
+    ScopeState, ScopeType, ScopedContinuations, Successor, ValueId, Values, VarDefinitionSpace,
 };
 use std::ops::{Deref, DerefMut};
 
@@ -143,8 +143,18 @@ impl Flatten<Start> {
                 b.builtins.add_abstraction(*bi, id);
             }
 
+            let empty = SafeBlock {
+                block_id: static_block_id,
+                extra: crate::safe::Empty {},
+            };
+
             // start module block
-            f.push_start_block_static(AstFuncType::new_void_void().into(), Some(key), node.span_id);
+            f.push_start_block_static(
+                empty,
+                AstFuncType::new_void_void().into(),
+                Some(key),
+                node.span_id,
+            );
             let closed = f.safe_static();
             let entry = CodeEntry::new(
                 f.blocks.current_block_id(),
@@ -1112,42 +1122,48 @@ impl FlattenInner {
 
     pub(super) fn push_start_block_static(
         &mut self,
+        empty: SafeBlockEmpty,
         block_ty: AstFuncType,
         name: Option<StringKey>,
         span_id: SpanId,
     ) -> (SafeBlockOpen, LinkId, ArgVec) {
-        self.push_start_block_mem(block_ty, name, span_id, VarDefinitionSpace::Static)
+        self.push_start_block_mem(empty, block_ty, name, span_id, VarDefinitionSpace::Static)
     }
 
     pub(super) fn push_start_block(
         &mut self,
+        empty: SafeBlockEmpty,
         block_ty: AstFuncType,
         name: Option<StringKey>,
         span_id: SpanId,
     ) -> (SafeBlockOpen, LinkId, ArgVec) {
-        self.push_start_block_mem(block_ty, name, span_id, VarDefinitionSpace::Default)
+        self.push_start_block_mem(empty, block_ty, name, span_id, VarDefinitionSpace::Default)
     }
 
     pub(super) fn push_start_block_mem(
         &mut self,
+        empty: SafeBlockEmpty,
         block_ty: AstFuncType,
         name: Option<StringKey>,
         span_id: SpanId,
         mem: VarDefinitionSpace,
     ) -> (SafeBlockOpen, LinkId, ArgVec) {
-        let open = self.open();
-        let (open, block_link_id) = self.safe_push_code_open(
-            open,
+        let entry = CodeEntry::new(
+            empty.block_id,
             LCode::Label,
             block_ty.clone().into(),
             name,
             span_id,
             mem,
         );
+        self.blocks.switch_blocks(empty.block_id);
+        let block_link_id = self.push_entry_with_link(entry);
         let v_args = self.push_start_block_args(block_ty, span_id);
         self.blocks
             .block_links
             .insert(self.blocks.current_block_id(), block_link_id);
+
+        let open = self.open();
         (open, block_link_id, v_args)
     }
 
@@ -1759,12 +1775,12 @@ impl FlattenInner {
                 assert!(!block.is_term());
 
                 // Start Next Block, we might not need this
-                let v_next = self
+                let next_block = self
                     .blocks
                     .new_block(current_block_id, Successor::BlockScope);
 
                 // THEN Block
-                let (empty, then_start_block_id, _) = self.blocks.new_scope_and_block(
+                let (then_block, then_start_block_id, _) = self.blocks.new_scope_and_block(
                     ScopeType::Block,
                     ScopeState::block(),
                     current_block_id,
@@ -1780,19 +1796,22 @@ impl FlattenInner {
 
                 let name = b.labels.fresh_key("then");
                 self.blocks.switch_blocks(then_start_block_id);
-                self.push_start_block(branch_block_type.clone().into(), Some(name), then_span_id);
-                self.blocks.switch_blocks(then_start_block_id);
-
-                let open = self.open_block(then_start_block_id);
-                let (open, _) =
-                    self.safe_push_node_result(open, *then_expr, PushContext::CondThen, b);
-                let then_end_block_id = open.block_id;
-                let then_is_term = self.blocks.get_block(then_end_block_id).is_term();
+                let (then_block, _, _) = self.push_start_block(
+                    then_block,
+                    branch_block_type.clone().into(),
+                    Some(name),
+                    then_span_id,
+                );
+                self.blocks.switch_blocks(then_block.block_id);
+                let (then_block, _) =
+                    self.safe_push_node_result(then_block, *then_expr, PushContext::CondThen, b);
+                let then_end_block_id = then_block.block_id;
+                let then_is_term = self.blocks.get_block(then_block.block_id).is_term();
 
                 // ELSE Block
-                let (_, has_else, else_is_term, else_start_block_id, else_end_block_id) =
+                let (has_else, else_is_term, else_start_block_id, else_end_block_id) =
                     if let Some(else_expr) = maybe_else_expr {
-                        let (else_block, _, _) = self.blocks.new_scope_and_block(
+                        let (else_block, else_start_block_id, _) = self.blocks.new_scope_and_block(
                             ScopeType::Block,
                             ScopeState::block(),
                             current_block_id,
@@ -1803,30 +1822,35 @@ impl FlattenInner {
                         let name = b.labels.fresh_key("else");
 
                         self.blocks.switch_blocks(else_block.block_id);
-                        self.push_start_block(branch_block_type.into(), Some(name), else_span_id);
+                        let (else_block, _, _) = self.push_start_block(
+                            else_block,
+                            branch_block_type.into(),
+                            Some(name),
+                            else_span_id,
+                        );
 
                         self.blocks.switch_blocks(else_block.block_id);
-                        let open = self.open_block(else_block.block_id);
-                        let (open, _) =
-                            self.safe_push_node_result(open, *else_expr, PushContext::CondThen, b);
-                        let else_end_block_id = open.block_id;
+                        let (else_block, _) = self.safe_push_node_result(
+                            else_block,
+                            *else_expr,
+                            PushContext::CondThen,
+                            b,
+                        );
+                        let else_end_block_id = else_block.block_id;
                         let else_is_term = self.blocks.get_block(else_end_block_id).is_term();
-                        (
-                            open,
-                            true,
-                            else_is_term,
-                            else_block.block_id,
-                            else_end_block_id,
-                        )
+                        (true, else_is_term, else_start_block_id, else_end_block_id)
                     } else {
                         self.blocks.block_succ(
                             current_block_id,
-                            v_next.block_id,
+                            next_block.block_id,
                             Successor::BlockScope,
                         );
-                        self.blocks
-                            .block_succ(current_block_id, v_next.block_id, Successor::Jump);
-                        (open, false, false, v_next.block_id, v_next.block_id)
+                        self.blocks.block_succ(
+                            current_block_id,
+                            next_block.block_id,
+                            Successor::Jump,
+                        );
+                        (false, false, next_block.block_id, next_block.block_id)
                     };
 
                 // we only want to create a next block if either of the branches are not terminated
@@ -1839,21 +1863,22 @@ impl FlattenInner {
                 let v_next = if is_next_needed {
                     if has_else {
                         self.blocks.switch_blocks(else_end_block_id);
-                        self.maybe_terminate_block(v_next.block_id, span_id, push_context, b);
+                        self.maybe_terminate_block(next_block.block_id, span_id, push_context, b);
                     }
 
                     self.blocks.switch_blocks(then_end_block_id);
-                    self.maybe_terminate_block(v_next.block_id, span_id, push_context, b);
+                    self.maybe_terminate_block(next_block.block_id, span_id, push_context, b);
 
                     // start the next block
-                    self.blocks.switch_blocks(v_next.block_id);
-                    self.push_start_block(
+                    self.blocks.switch_blocks(next_block.block_id);
+                    let (next_block, _, _) = self.push_start_block(
+                        next_block,
                         AstFuncType::new_void_void(),
                         Some(b.labels.fresh_key("cond_next")),
                         span_id,
                     );
 
-                    Some(v_next.block_id)
+                    Some(next_block.block_id)
                 } else {
                     None
                 };
@@ -1977,6 +2002,7 @@ impl FlattenInner {
 
                 self.blocks.switch_blocks(new_block.block_id);
                 let (open, link_id, _) = self.push_start_block(
+                    new_block,
                     AstFuncType {
                         args: arg_ty.clone().into(),
                         ret: ReturnType::Single(AstType::Unit).into(),
@@ -2015,10 +2041,15 @@ impl FlattenInner {
                 let name = b.labels.fresh_key("t_then");
 
                 self.blocks.switch_blocks(then_block_id);
-                self.push_start_block(branch_block_type.clone().into(), Some(name), then_span_id);
+                let (then_block, _, _) = self.push_start_block(
+                    empty,
+                    branch_block_type.clone().into(),
+                    Some(name),
+                    then_span_id,
+                );
 
-                self.blocks.switch_blocks(then_block_id);
-                let then_open = self.open_block(then_block_id);
+                self.blocks.switch_blocks(then_block.block_id);
+                let then_open = self.open_block(then_block.block_id);
                 let (_, then_link_id) =
                     self.safe_push_expr(then_open, then_ast, PushContext::Default, b);
                 let then_ty = self.get_type(then_link_id).clone();
@@ -2034,10 +2065,15 @@ impl FlattenInner {
                 let else_ast = AstNode::make_yield(*y);
 
                 self.blocks.switch_blocks(else_block_id);
-                self.push_start_block(branch_block_type.into(), Some(name), else_span_id);
+                let (else_block, _, _) = self.push_start_block(
+                    empty,
+                    branch_block_type.into(),
+                    Some(name),
+                    else_span_id,
+                );
 
-                self.blocks.switch_blocks(else_block_id);
-                let else_open = self.open_block(else_block_id);
+                self.blocks.switch_blocks(else_block.block_id);
+                let else_open = self.open_block(else_block.block_id);
                 let (_, else_link_id) =
                     self.safe_push_expr(else_open, else_ast, PushContext::Default, b);
                 let else_ty = self.get_type(else_link_id).clone();
@@ -2124,15 +2160,17 @@ impl FlattenInner {
                                 .blocks
                                 .new_block(current_block_id, Successor::BlockScope);
                             self.blocks.switch_blocks(v_next.block_id);
-                            self.push_start_block(
-                                AstFuncType::new(
-                                    AstType::Struct(acc_types).into(),
-                                    ReturnType::Single(AstType::Unit),
-                                ),
-                                Some(label),
-                                span_id,
-                            );
-                            let open = self.open();
+                            let open = self
+                                .push_start_block(
+                                    v_next,
+                                    AstFuncType::new(
+                                        AstType::Struct(acc_types).into(),
+                                        ReturnType::Single(AstType::Unit),
+                                    ),
+                                    Some(label),
+                                    span_id,
+                                )
+                                .0;
                             let jump_args = acc.drain(..).collect::<Vec<_>>();
                             self.push_jump(open, block_id.into(), jump_args, node.span_id, b);
                             acc.clear();
@@ -2161,7 +2199,7 @@ impl FlattenInner {
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::LoopStart(maybe_key)) => {
-                let (empty, loop_block_id, loop_scope_id) = self.blocks.new_scope_and_block(
+                let (loop_block, loop_block_id, loop_scope_id) = self.blocks.new_scope_and_block(
                     ScopeType::Region,
                     ScopeState::region(),
                     current_block_id,
@@ -2172,17 +2210,21 @@ impl FlattenInner {
                     .blocks
                     .new_block(current_block_id, Successor::BlockScope);
                 self.blocks.switch_blocks(v_next.block_id);
-                self.push_start_block(
-                    AstFuncType::new_void_void(),
-                    Some(b.labels.fresh_key("postloop")),
-                    span_id,
-                );
+                let open = self
+                    .push_start_block(
+                        v_next,
+                        AstFuncType::new_void_void(),
+                        Some(b.labels.fresh_key("postloop")),
+                        span_id,
+                    )
+                    .0;
+
                 self.blocks.switch_blocks(current_block_id);
 
                 self.blocks.update_loop_blocks(
                     loop_scope_id,
                     maybe_key,
-                    v_next.block_id.into(),
+                    open.block_id.into(),
                     loop_block_id.into(),
                 );
 
@@ -2193,15 +2235,18 @@ impl FlattenInner {
                 };
 
                 self.blocks.switch_blocks(loop_block_id);
-                self.push_start_block(
-                    AstFuncType {
-                        args: AstType::Struct(vec![]).into(),
-                        ret: ReturnType::Single(AstType::Unit).into(),
-                    }
-                    .into(),
-                    Some(key),
-                    span_id,
-                );
+                let loop_block = self
+                    .push_start_block(
+                        loop_block,
+                        AstFuncType {
+                            args: AstType::Struct(vec![]).into(),
+                            ret: ReturnType::Single(AstType::Unit).into(),
+                        }
+                        .into(),
+                        Some(key),
+                        span_id,
+                    )
+                    .0;
 
                 self.blocks.switch_blocks(current_block_id);
                 let open = self.open();
@@ -2209,8 +2254,7 @@ impl FlattenInner {
 
                 // open loop block
                 self.blocks.switch_blocks(loop_block_id);
-                let open = self.open();
-                (open.unknown(), FlattenResult::statement())
+                (loop_block.unknown(), FlattenResult::statement())
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::LoopContinue(maybe_key)) => {
@@ -2278,6 +2322,7 @@ impl FlattenInner {
                         .new_block(current_block_id, Successor::BlockScope);
                     self.blocks.switch_blocks(v_next.block_id);
                     let (open, link_id, _) = self.push_start_block(
+                        v_next,
                         AstFuncType::new_void_void(),
                         Some(b.labels.fresh_key("postloopbreak")),
                         span_id,
@@ -2473,6 +2518,7 @@ impl FlattenInner {
 
             self.blocks.switch_blocks(new_block.block_id);
             self.push_start_block(
+                new_block,
                 AstFuncType::new(AstType::Struct(vec![]), ReturnType::Single(AstType::Unit)).into(),
                 Some(name),
                 span_id,

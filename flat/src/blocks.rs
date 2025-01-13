@@ -248,11 +248,7 @@ impl BlockGraph<BlockGraphStateOpen> {
 impl<S: BlockGraphState> BlockGraph<S> {
     pub fn new_block(&mut self, parent_block_id: BlockId, succ: Successor) -> SafeBlockEmpty {
         let parent = self.get_block(parent_block_id);
-        let block_id = self.new_block_different_scope(parent_block_id, parent.scope(), succ);
-        SafeBlock {
-            block_id,
-            extra: crate::safe::Empty {},
-        }
+        self.new_block_different_scope(parent_block_id, parent.scope(), succ)
     }
 
     pub fn new_block_different_scope(
@@ -260,10 +256,13 @@ impl<S: BlockGraphState> BlockGraph<S> {
         parent_block_id: BlockId,
         scope_id: ScopeId,
         succ: Successor,
-    ) -> BlockId {
+    ) -> SafeBlockEmpty {
         let block_id = self.new_block_with_scope(scope_id);
         self.block_succ(parent_block_id, block_id, succ);
-        block_id
+        SafeBlock {
+            block_id,
+            extra: crate::safe::Empty {},
+        }
     }
 
     pub fn get_block(&self, block_id: BlockId) -> &IRBlock {
