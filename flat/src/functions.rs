@@ -366,7 +366,7 @@ impl FlattenInner {
             Successor::BlockScope,
         );
 
-        let (_block_id, entry_link_id, _, argvec, _, _r, _entry_args) = self
+        let (_block_id, next_block, entry_link_id, _, argvec, _, _r, _entry_args) = self
             .push_bake_lambda_and_update_next(
                 abstraction_id,
                 global_name,
@@ -398,6 +398,7 @@ impl FlattenInner {
         b: &mut NB,
     ) -> (
         SafeBlockClosed,
+        SafeBlockOpen,
         LinkId,
         AstType,       // next block arg type
         ArgVec,        // return the argvec for the next block, which depends on the function
@@ -458,6 +459,7 @@ impl FlattenInner {
 
         (
             fun_block,
+            next_block,
             entry_link_id,
             next_arg_ty,
             v_args,
@@ -781,7 +783,6 @@ impl FlattenInner {
             Successor::BlockScope,
         );
 
-        let next_block_id = next_block.block_id;
         let result = self.push_bake_lambda_and_update_next(
             abstraction_id,
             global_name,
@@ -794,7 +795,7 @@ impl FlattenInner {
             b,
         );
 
-        let (fun_block, _, next_arg_ty, _, _, r, _entry_args) = result;
+        let (fun_block, next_block, _, next_arg_ty, _, _, r, _entry_args) = result;
 
         // now that we have the arguments calculated, and the lambda baked, jump!
 
@@ -826,7 +827,7 @@ impl FlattenInner {
             b,
         );
 
-        self.blocks.switch_blocks(next_block_id);
+        self.blocks.switch_blocks(next_block.block_id);
         // STORE ARG
         // r contains the link to the return value
         // r contains the return result link, which is part of the next block arguments.
@@ -1038,7 +1039,16 @@ impl FlattenInner {
                 mem,
                 b,
             );
-            let (fun_block, _, _next_arg_ty, call_values, ret_func_type, _, entry_args) = result;
+            let (
+                fun_block,
+                _next_block,
+                _,
+                _next_arg_ty,
+                call_values,
+                ret_func_type,
+                _,
+                entry_args,
+            ) = result;
             let arg = entry_args.last().unwrap();
 
             let call_link_id = arg.1;
