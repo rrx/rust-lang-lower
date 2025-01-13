@@ -313,7 +313,6 @@ impl FlattenInner {
         abstraction_id: AbstractionId,
         b: &mut NB,
     ) {
-        let current_block_id = self.blocks.current_block_id();
         let entry = self.get_entry(link_id);
         let ty = &entry.ty.clone();
         let span_id = entry.span_id;
@@ -328,7 +327,6 @@ impl FlattenInner {
         entry.code = LCode::Val(Literal::Block(fun_block_id));
         b.unify(&entry.ty, entry.span_id, ty, span_id);
         self.update_connections(link_id);
-        self.blocks.switch_blocks(current_block_id);
     }
 
     pub(super) fn finish_values(&mut self, b: &mut NB) -> Values {
@@ -378,7 +376,8 @@ impl FlattenInner {
         self.resolve_open_identifiers(b);
         self.resolve_cps(b);
 
-        // declare functions
+        // declare static functions
+        // TODO: we can move this into the static function generator
         self.blocks.switch_blocks(self.blocks.static_block_id());
         for block_id in self.blocks.graph_get_entries() {
             let block = self.blocks.get_block(block_id);
@@ -650,8 +649,13 @@ impl FlattenInner {
         // not everything can be added to static context
         // we need to insert declarations for values and functions
         node.to_vec().into_iter().for_each(|n| {
+            // hack. handle this better.  static is closed, but we still need to add things
+            // maybe we should end the block as part of the final step.
+            // we don't actually want to ensure open here.  It's creating dead blocks?
             let open = self.ensure_open(n.span_id, b);
-            let _ = self.push_node(open, n, context, b);
+            b.dump_ast(&n);
+            self.push_node(open, n, context, b);
+            //self.push_node_in_static(n, context, b);
         });
         self.blocks.switch_blocks(closed.block_id);
         closed
@@ -1349,6 +1353,22 @@ impl FlattenInner {
 
     pub fn open_block(&mut self, block_id: BlockId) -> SafeBlockOpen {
         self.blocks.safe_switch_block(block_id)
+    }
+
+    pub fn push_node_in_static(
+        &mut self,
+        node: AstNode,
+        push_context: PushContext,
+        b: &mut NB,
+    ) -> FlattenResult {
+        let block = self.safe_static();
+        let open = SafeBlock {
+            block_id: block.block_id,
+            extra: crate::safe::Open {},
+        };
+
+        let (_, r) = self.push_node(open, node, push_context, b);
+        r
     }
 
     pub fn push_node(
