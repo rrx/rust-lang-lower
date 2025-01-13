@@ -421,24 +421,22 @@ impl FlattenInner {
         (self, values)
     }
 
-    fn insert_decl(&mut self, block_id: BlockId, entry: CodeEntry) -> LinkId {
+    fn insert_decl_entry(&mut self, block_id: BlockId, entry: CodeEntry) -> LinkId {
         let link_id = self.blocks.links.insert(entry);
         self.blocks.get_block_mut(block_id).push_decl(link_id);
         link_id
     }
 
-    pub fn push_decl<S: SafeBlockState>(
+    pub fn insert_decl<S: SafeBlockState>(
         &mut self,
         sblock: &SafeBlock<S>,
         ty: AstType,
         name: StringKey,
         span_id: SpanId,
     ) -> LinkId {
-        let block_id = self.blocks.current_block_id();
-        let block = self.blocks.get_block(block_id);
+        let block = self.blocks.get_block(sblock.block_id);
         let scope = self.blocks.get_scope(block.scope());
         let entry_block_id = scope.entry_block();
-
         let entry = CodeEntry::new(
             entry_block_id,
             LCode::Declare,
@@ -447,10 +445,7 @@ impl FlattenInner {
             span_id,
             VarDefinitionSpace::Default,
         );
-        self.blocks.switch_blocks(entry_block_id);
-        let link_id = self.insert_decl(entry_block_id, entry);
-        self.blocks.switch_blocks(block_id);
-        link_id
+        self.insert_decl_entry(entry_block_id, entry)
     }
 
     pub fn push_entry_with_link(&mut self, mut entry: CodeEntry) -> LinkId {
@@ -484,7 +479,7 @@ impl FlattenInner {
                 let scope = self.blocks.get_scope(scope_id);
                 let entry_block_id = scope.entry_block();
                 entry.block_id = entry_block_id;
-                let link_id = self.insert_decl(entry_block_id, entry);
+                let link_id = self.insert_decl_entry(entry_block_id, entry);
                 link_id
             }
 
@@ -774,7 +769,7 @@ impl FlattenInner {
                 );
                 let key = b.labels.fresh_key("r");
                 // create space on the stack in the entry block
-                let decl_link_id = self.push_decl(&open, ty.clone(), key, *span_id);
+                let decl_link_id = self.insert_decl(&open, ty.clone(), key, *span_id);
                 let entry = self.get_entry_mut(v);
                 entry.mem = VarDefinitionSpace::Stack(decl_link_id);
                 v = decl_link_id;
@@ -874,7 +869,7 @@ impl FlattenInner {
             // switch to the target block, so we can create the declaration
             self.blocks.switch_blocks(decl_block_id);
             let sblock = self.blocks.safe_unknown();
-            let decl_link_id = self.push_decl(&sblock, ty.clone(), key, span_id);
+            let decl_link_id = self.insert_decl(&sblock, ty.clone(), key, span_id);
 
             // switch back to the start block, so we can store the value
             self.blocks.switch_blocks(start_block_id);
@@ -1421,7 +1416,7 @@ impl FlattenInner {
 
                         let ast_ty: AstType = lit.clone().into();
                         self.blocks.switch_blocks(static_block_id);
-                        let link_id = self.insert_decl(
+                        let link_id = self.insert_decl_entry(
                             static_block_id,
                             CodeEntry::new(
                                 static_block_id,
@@ -2532,14 +2527,6 @@ impl FlattenInner {
         b: &mut NB,
     ) -> SafeBlockClosed {
         // is the block isn't terminated, terminate it with a jump to another block
-        let current_block_id = self.blocks.current_block_id();
-        let link_id = self
-            .blocks
-            .get_block(current_block_id)
-            .last()
-            .unwrap()
-            .clone();
-        let entry = self.get_entry(link_id);
         if let Some(closed) = self.blocks.safe_block_try_closed(block) {
             closed
         } else {

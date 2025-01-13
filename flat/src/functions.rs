@@ -803,7 +803,7 @@ impl FlattenInner {
             let ty = next_arg_ty.field_types().first().unwrap().clone();
 
             // push declaration into the call arguments scope
-            let decl_link_id = self.push_decl(&open, ty.clone(), key, call_span_id);
+            let decl_link_id = self.insert_decl(&open, ty.clone(), key, call_span_id);
             Some((decl_link_id, link_id, ty, key))
         } else {
             None
@@ -932,7 +932,7 @@ impl FlattenInner {
         let v_decl = if let Some(link_id) = r.link_id {
             let key = b.labels.fresh_key("r");
             let ty = next_arg_ty.field_types().first().unwrap().clone();
-            let decl_link_id = self.push_decl(&call_block, ty.clone(), key, call_span_id);
+            let decl_link_id = self.insert_decl(&call_block, ty.clone(), key, call_span_id);
             let entry = self.get_entry_mut(link_id);
             entry.mem = VarDefinitionSpace::Stack(decl_link_id);
             Some(decl_link_id)
