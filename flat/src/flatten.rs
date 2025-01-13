@@ -669,7 +669,7 @@ impl FlattenInner {
         self.blocks.switch_blocks(open.block_id);
         let (unk, r) = self.push_node(open, node, context, b);
         let link_id = r.link_id.unwrap();
-        (self.blocks.safe_unknown(), link_id)
+        (unk, link_id)
     }
 
     pub fn safe_push_node_result(
@@ -681,7 +681,7 @@ impl FlattenInner {
     ) -> (SafeBlockUnknown, FlattenResult) {
         self.blocks.switch_blocks(open.block_id);
         let (unk, r) = self.push_node(open, node, context, b);
-        (self.blocks.safe_unknown(), r)
+        (unk, r)
     }
 
     pub fn push_return(
@@ -807,12 +807,10 @@ impl FlattenInner {
         b: &mut NB,
     ) -> (SafeBlockOpen, LinkId) {
         self.blocks.switch_blocks(open.block_id);
+        b.dump_ast(&expr);
         let (unk, r) = self.push_node(open, expr, context, b);
         let link_id = r.link_id.unwrap();
-        let open = SafeBlock {
-            block_id: self.blocks.current_block_id(),
-            extra: crate::safe::Open {},
-        };
+        let open = self.blocks.safe_block_try_open(&unk).unwrap();
         (open, link_id)
     }
 
@@ -2054,8 +2052,9 @@ impl FlattenInner {
 
                 self.blocks.switch_blocks(then_block.block_id);
                 let then_open = self.open_block(then_block.block_id);
-                let (_, then_link_id) =
-                    self.safe_push_expr(then_open, then_ast, PushContext::Default, b);
+                let (_, r) =
+                    self.safe_push_node_result(then_open, then_ast, PushContext::Default, b);
+                let then_link_id = r.link_id.unwrap();
                 let then_ty = self.get_type(then_link_id).clone();
 
                 // ELSE
@@ -2078,8 +2077,9 @@ impl FlattenInner {
 
                 self.blocks.switch_blocks(else_block.block_id);
                 let else_open = self.open_block(else_block.block_id);
-                let (_, else_link_id) =
-                    self.safe_push_expr(else_open, else_ast, PushContext::Default, b);
+                let (_, r) =
+                    self.safe_push_node_result(else_open, else_ast, PushContext::Default, b);
+                let else_link_id = r.link_id.unwrap();
                 let else_ty = self.get_type(else_link_id).clone();
 
                 b.unify(&then_ty, then_span_id, &else_ty, else_span_id);
