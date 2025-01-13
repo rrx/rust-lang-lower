@@ -691,11 +691,11 @@ impl FlattenInner {
 
     pub fn push_return(
         &mut self,
+        open: SafeBlockOpen,
         values: ArgVec,
         span_id: SpanId,
         b: &mut NB,
     ) -> (SafeBlockClosed, LinkId) {
-        let open = self.open();
         let (open, _) = self.safe_push_call_values(open, &values, b);
 
         let (closed, link_id) = self.safe_push_code_term(

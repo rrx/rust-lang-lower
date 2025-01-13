@@ -372,31 +372,29 @@ impl FlattenInner {
 
     pub fn push_goto_link(
         &mut self,
+        open: SafeBlockOpen,
         goto_link_id: LinkId,
         argvec: ArgVec,
         call_span_id: SpanId,
         _b: &mut NB,
-    ) -> Result<FlattenResult> {
+    ) -> (SafeBlockClosed, FlattenResult) {
         // push a goto
-        let current_block_id = self.blocks.current_block_id();
-        let block = self.blocks.get_block(current_block_id);
-        let scope_id = block.scope();
+        let scope_id = self.blocks.get_block(open.block_id).scope();
         let ty = AstFuncType::new(argvec_type(&argvec), ReturnType::Never).into();
 
-        let open = self.open();
-        self.push_placeholder_terminal(open, ty, call_span_id);
+        let (closed, _) = self.push_placeholder_terminal(open, ty, call_span_id);
 
         let mut d = DeferredGoto::new(
             scope_id,
             None,
             vec![],
             call_span_id,
-            current_block_id,
+            closed.block_id,
             DeferredType::Name(goto_link_id),
         );
         d.argvec = argvec;
         self.deferred_goto.add_cps(d);
-        return Ok(FlattenResult::statement());
+        (closed, FlattenResult::statement())
     }
 
     pub fn push_goto(

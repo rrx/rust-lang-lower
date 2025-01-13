@@ -262,7 +262,7 @@ impl FlattenInner {
         (args, def_func_type)
     }
 
-    fn push_bake_static(
+    fn gen_bake_static(
         &mut self,
         abstraction_id: AbstractionId,
         call_func_type: AstFuncType,
@@ -300,12 +300,12 @@ impl FlattenInner {
             // if it's not already baked, we need to do that here
             self.blocks.switch_blocks(self.blocks.static_block_id());
 
-            let r = self.push_bake_function(abstraction_id, call_func_type.clone(), global_key, b);
+            let r = self.gen_bake_function(abstraction_id, call_func_type.clone(), global_key, b);
             let v_entry = r.link_id.unwrap();
-            self.blocks.switch_blocks(current_block_id);
             v_entry
         };
 
+        self.blocks.switch_blocks(current_block_id);
         (v_entry, call_func_type.into())
     }
 
@@ -315,10 +315,11 @@ impl FlattenInner {
         func_type: AstFuncType,
         b: &mut NB,
     ) -> Result<LinkId> {
-        let current_block_id = self.blocks.current_block_id();
-        if let Some((_, abstraction_id)) = self.blocks.resolve_lambda(current_block_id, name) {
-            let r = self.push_bake_function(abstraction_id, func_type, name, b);
-            self.blocks.switch_blocks(current_block_id);
+        if let Some((_, abstraction_id)) = self
+            .blocks
+            .resolve_lambda(self.blocks.current_block_id(), name)
+        {
+            let r = self.gen_bake_function(abstraction_id, func_type, name, b);
             Ok(r.link_id.unwrap())
         } else {
             let s = b.labels.r(name.into());
@@ -328,7 +329,7 @@ impl FlattenInner {
         }
     }
 
-    fn push_bake_function(
+    fn gen_bake_function(
         &mut self,
         abstraction_id: AbstractionId,
         def_func_ty: AstFuncType,
@@ -379,7 +380,7 @@ impl FlattenInner {
                 b,
             );
 
-        self.push_return(argvec, def_span_id, b);
+        let (_closed, _) = self.push_return(next_block, argvec, def_span_id, b);
         // restore position back to where we started
         self.blocks.switch_blocks(current_block_id);
         FlattenResult::link(entry_link_id)
@@ -692,7 +693,6 @@ impl FlattenInner {
         args: Vec<Argument>,
         b: &mut NB,
     ) -> (SafeBlockOpen, FlattenResult) {
-        let current_block_id = self.blocks.current_block_id();
         // look up the lambda
         // If the lambda is in the static scope, we do a normal call
         // If it's in a non-static scope, then we bake a lambda and jump to it
@@ -710,10 +710,10 @@ impl FlattenInner {
         let (open, r) = if is_static {
             let (open, call_values, call_func_type, def_func_type) = self
                 .push_function_call_arguments(open, abstraction_id, args, vec![], call_span_id, b);
-            let r = self.push_bake_static(abstraction_id, call_func_type, call_span_id, b);
+
+            let r = self.gen_bake_static(abstraction_id, call_func_type, call_span_id, b);
+
             let (fun_link_id, _bake_ty) = r;
-            self.blocks.switch_blocks(current_block_id);
-            let open = self.open();
             self.push_function_call(
                 open,
                 fun_link_id,
@@ -731,7 +731,7 @@ impl FlattenInner {
             let r = if false {
                 self.push_call_inline(open, abstraction_id, scope_id, args, call_span_id, b)
             } else {
-                self.push_call_inline_cps(abstraction_id, scope_id, args, call_span_id, b)
+                self.push_call_inline_cps(open, abstraction_id, scope_id, args, call_span_id, b)
             };
             let open = self.open();
             (open, r)
@@ -796,10 +796,7 @@ impl FlattenInner {
         let (fun_block, next_block, _, next_arg_ty, _, _, r, _entry_args) = result;
 
         // now that we have the arguments calculated, and the lambda baked, jump!
-
         // Complete the call, returning cursor to the caller
-        //self.blocks.switch_blocks(current_block_id);
-        //let sblock = self.blocks.safe_unknown();
 
         // DECLARE
         // if the function returns a value, then we need to copy it out of the next block arguments
@@ -843,6 +840,7 @@ impl FlattenInner {
 
     fn push_call_inline_cps(
         &mut self,
+        call_block: SafeBlockOpen,
         abstraction_id: AbstractionId,
         scope_id: ScopeId,
         args: Vec<Argument>,
@@ -870,9 +868,15 @@ impl FlattenInner {
 
         // Entry arguments, including continuation
         // calculate the arguments for the CPS function
-        let open = self.open();
-        let (open, call_values, _call_func_type, top_def_func_type) =
-            self.push_function_call_arguments(open, abstraction_id, args, system, call_span_id, b);
+        let (call_block, call_values, _call_func_type, top_def_func_type) = self
+            .push_function_call_arguments(
+                call_block,
+                abstraction_id,
+                args,
+                system,
+                call_span_id,
+                b,
+            );
 
         // hack, get the continuation argument
         let arg = call_values.last().unwrap();
@@ -949,9 +953,8 @@ impl FlattenInner {
         };
 
         // jump into the the lambda
-        let open = self.open();
         let _goto_link_id = self.push_jump(
-            open,
+            call_block,
             fun_block_id.into(),
             call_values.clone(),
             call_span_id,
@@ -1023,10 +1026,13 @@ impl FlattenInner {
 
             // hack: this needs to be defined after fun_block, for some reason
             // The ordering shouldn't matter
+            // next scope is defined in the function scope, but this is also strange.
+            // We should define next outside of the function scope.
             let next_block =
                 self.blocks
                     .new_block_different_scope(block_id, fun_scope_id, succ_type);
 
+            // return an open block, which we will complete with a placeholder
             let result = self.push_bake_lambda_and_update_next(
                 abstraction_id,
                 lookup_name,
@@ -1038,24 +1044,22 @@ impl FlattenInner {
                 mem,
                 b,
             );
-            let (
-                fun_block,
-                _next_block,
-                _,
-                _next_arg_ty,
-                call_values,
-                ret_func_type,
-                _,
-                entry_args,
-            ) = result;
+            let (fun_block, next_block, _, _next_arg_ty, call_values, ret_func_type, _, entry_args) =
+                result;
             let arg = entry_args.last().unwrap();
 
             let call_link_id = arg.1;
 
             // complete the lambda bake with a jump to the continuation, this is the exit of
             // the lambda.  The continuation is part of the signature, so we can call it again
-            let _goto_link_id =
-                self.push_goto_link(call_link_id, call_values.clone(), call_span_id, b);
+            // The placeholder gets replaced with a switch after everything is built
+            let (_closed, _) = self.push_goto_link(
+                next_block,
+                call_link_id,
+                call_values.clone(),
+                call_span_id,
+                b,
+            );
 
             (fun_block.block_id, ret_func_type)
         };
