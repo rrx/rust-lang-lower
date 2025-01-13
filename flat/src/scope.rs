@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     ArgVec, BlockGraph, BlockGraphState, BlockGraphStateOpen, BlockId, LinkId, NodeBuilder,
-    StringLabel, Successor, VariantId,
+    SafeBlockEmpty, StringLabel, Successor, VariantId,
 };
 use compile_core::{AbstractionId, Argument, AstType, Lambda, SpanId, StringKey};
 
@@ -345,7 +345,7 @@ impl BlockGraph<BlockGraphStateOpen> {
         scope_state: ScopeState,
         parent_block_id: BlockId,
         succ_type: Successor,
-    ) -> (BlockId, ScopeId) {
+    ) -> (SafeBlockEmpty, BlockId, ScopeId) {
         let parent_scope_id = self.get_block(parent_block_id).scope();
         let scope_id = self.new_scope(scope_type);
         let block_id = self.new_block_different_scope(parent_block_id, scope_id, succ_type);
@@ -356,7 +356,12 @@ impl BlockGraph<BlockGraphStateOpen> {
             let scope = self.get_scope_mut(scope_id);
             scope.make_function_scope(state);
         }
-        (block_id, scope_id)
+        let empty = SafeBlockEmpty {
+            block_id,
+            extra: crate::safe::Empty {},
+        };
+
+        (empty, block_id, scope_id)
     }
 
     pub fn scope_graph(&self) -> &DiGraph<ScopeLayer, ()> {

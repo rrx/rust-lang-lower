@@ -59,7 +59,7 @@ impl FlattenInner {
             let scope = self.blocks.get_scope(scope_id);
             let block_id = scope.entry_block();
 
-            let (fun_block_id, _) = if new_scope {
+            let (empty, _, _) = if new_scope {
                 self.blocks.new_scope_and_block(
                     ScopeType::Block,
                     ScopeState::block(),
@@ -67,8 +67,9 @@ impl FlattenInner {
                     Successor::BlockScope,
                 )
             } else {
-                let fun_block_id = self.blocks.new_block(block_id, Successor::BlockScope);
-                (fun_block_id, scope_id)
+                let fun_block = self.blocks.new_block(block_id, Successor::BlockScope);
+                let block_id = fun_block.block_id;
+                (fun_block, block_id, scope_id)
             };
 
             // Start lambda block
@@ -78,7 +79,7 @@ impl FlattenInner {
             let a = self.blocks.abstractions.get(abstraction_id);
             let body = a.def.body.clone().unwrap();
 
-            self.blocks.switch_blocks(fun_block_id);
+            self.blocks.switch_blocks(empty.block_id);
 
             let r_ty1 = b.types.u.resolve(&def_func_type.into()).unwrap();
 
@@ -99,12 +100,12 @@ impl FlattenInner {
                 name,
                 r_ty1.clone(),
                 entry_link_id,
-                fun_block_id,
+                empty.block_id,
             );
 
             // flatten function, and switch to next
             // lower first, so we resolve types
-            let open = self.open_block(fun_block_id);
+            let open = self.open_block(empty.block_id);
             let (unk, _) = self.safe_push_node_result(open, *body, PushContext::Default, b);
 
             let r_ty2 = b
@@ -119,7 +120,7 @@ impl FlattenInner {
                 self.push_placeholder_terminal(open, r_ty1, def_span_id);
             }
 
-            fun_block_id
+            empty.block_id
         };
 
         self.blocks.switch_blocks(current_block_id);
@@ -198,10 +199,10 @@ impl FlattenInner {
         println!("unwind scopes: {:?}", unwind_scopes);
 
         let start_key = b.labels.fresh_key("ustart");
-        let start_block_id = self
+        let start_block = self
             .blocks
             .new_block(current_block_id, Successor::BlockScope);
-        self.blocks.switch_blocks(start_block_id);
+        self.blocks.switch_blocks(start_block.block_id);
         self.push_start_block(
             AstFuncType::new_void_void().into(),
             Some(start_key),
@@ -235,15 +236,15 @@ impl FlattenInner {
 
             let current_block_id = self.blocks.current_block_id();
 
-            let next_block_id = self.blocks.new_block(entry_block_id, succ);
+            let next_block = self.blocks.new_block(entry_block_id, succ);
 
             // define new block
-            let new_block_id = self.blocks.new_block(entry_block_id, succ);
-            self.blocks.switch_blocks(new_block_id);
+            let new_block = self.blocks.new_block(entry_block_id, succ);
+            self.blocks.switch_blocks(new_block.block_id);
             let void_func_type = AstFuncType::new_void_void();
             let new_key = b.labels.fresh_key("unew");
             self.push_start_block(void_func_type.clone().into(), Some(new_key), call_span_id);
-            let code = LCode::Val(Literal::Block(next_block_id));
+            let code = LCode::Val(Literal::Block(next_block.block_id));
             let open = self.open();
             let (open, var_link_id) = self.safe_push_code_open(
                 open,
@@ -264,10 +265,10 @@ impl FlattenInner {
 
             // jump to the new block
             self.blocks.switch_blocks(current_block_id);
-            self.push_jump_direct(new_block_id, vec![], call_span_id, b);
+            self.push_jump_direct(new_block.block_id, vec![], call_span_id, b);
 
             // define next block
-            self.blocks.switch_blocks(next_block_id);
+            self.blocks.switch_blocks(next_block.block_id);
             let next_key = b.labels.fresh_key("unext");
             self.push_start_block(
                 AstFuncType::new_void_void().into(),
@@ -278,7 +279,7 @@ impl FlattenInner {
         self.push_jump_direct(target_block_id, jump_args, call_span_id, b);
 
         self.blocks.switch_blocks(save_block_id);
-        start_block_id
+        start_block.block_id
     }
 
     pub(super) fn push_cps_block(
@@ -637,16 +638,16 @@ impl FlattenInner {
                         let mut out = vec![];
                         for target_block_id in sources {
                             let key = b.labels.fresh_key(".sw");
-                            let new_block_id =
+                            let new_block =
                                 self.blocks.new_block(d.block_id, Successor::BlockScope);
-                            self.blocks.switch_blocks(new_block_id);
+                            self.blocks.switch_blocks(new_block.block_id);
                             self.push_start_block(
                                 AstFuncType::new_void_void().into(),
                                 Some(key),
                                 d.call_span_id,
                             );
                             self.push_jump(target_block_id, d.argvec.clone(), d.call_span_id, b);
-                            out.push((target_block_id, new_block_id));
+                            out.push((target_block_id, new_block.block_id));
                         }
                         let mut m = HashMap::new();
                         for (target_block_id, new_block_id) in out {

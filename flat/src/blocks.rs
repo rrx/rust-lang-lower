@@ -5,7 +5,7 @@ use std::collections::HashSet;
 
 use crate::{
     AbstractionId, AbstractionsBuilder, BlockId, CodeOffset, FunctionVariantBuilder, LinkId, Links,
-    NodeBuilder, ScopeId, ScopeLayer, VariantId,
+    NodeBuilder, SafeBlock, SafeBlockEmpty, ScopeId, ScopeLayer, VariantId,
 };
 
 use std::collections::HashMap;
@@ -246,9 +246,13 @@ impl BlockGraph<BlockGraphStateOpen> {
 }
 
 impl<S: BlockGraphState> BlockGraph<S> {
-    pub fn new_block(&mut self, parent_block_id: BlockId, succ: Successor) -> BlockId {
+    pub fn new_block(&mut self, parent_block_id: BlockId, succ: Successor) -> SafeBlockEmpty {
         let parent = self.get_block(parent_block_id);
-        self.new_block_different_scope(parent_block_id, parent.scope(), succ)
+        let block_id = self.new_block_different_scope(parent_block_id, parent.scope(), succ);
+        SafeBlock {
+            block_id,
+            extra: crate::safe::Empty {},
+        }
     }
 
     pub fn new_block_different_scope(
