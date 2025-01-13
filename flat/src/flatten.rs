@@ -1724,7 +1724,7 @@ impl FlattenInner {
                             self.blocks.resolve_lambda(current_block_id, *ident)
                         {
                             let (open, r) =
-                                self.push_call(scope_id, abstraction_id, span_id, args, b);
+                                self.push_call(open, scope_id, abstraction_id, span_id, args, b);
                             (open.unknown(), r)
                         } else {
                             let name = b.labels.r(ident.into());

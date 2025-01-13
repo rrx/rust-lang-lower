@@ -685,6 +685,7 @@ impl FlattenInner {
 
     pub(super) fn push_call(
         &mut self,
+        open: SafeBlockOpen,
         scope_id: ScopeId,
         abstraction_id: AbstractionId,
         call_span_id: SpanId,
@@ -704,7 +705,6 @@ impl FlattenInner {
         // - for lambdas and inline, it's easier, because we just write out the entire function
         // anyways
 
-        let open = self.open();
         let is_static = self.blocks.static_scope_id() == scope_id;
         //let blocks = vec![];
         let (open, r) = if is_static {
@@ -723,15 +723,13 @@ impl FlattenInner {
                 b,
             )
         } else {
-            self.blocks.switch_blocks(current_block_id);
-
             // call the inline function
             // returns a link, which points to the result, which should be a single value
             // if it's void, then it's a statement
             // We want to support both of these options
             // TODO: break this out into a compile parameter for the function
             let r = if false {
-                self.push_call_inline(abstraction_id, scope_id, args, call_span_id, b)
+                self.push_call_inline(open, abstraction_id, scope_id, args, call_span_id, b)
             } else {
                 self.push_call_inline_cps(abstraction_id, scope_id, args, call_span_id, b)
             };
@@ -743,6 +741,7 @@ impl FlattenInner {
 
     fn push_call_inline(
         &mut self,
+        open: SafeBlockOpen,
         abstraction_id: AbstractionId,
         scope_id: ScopeId,
         args: Vec<Argument>,
@@ -757,7 +756,6 @@ impl FlattenInner {
 
         // start the call
         // calculate the arguments
-        let open = self.open();
         let (open, call_values, _call_func_type, def_func_type) =
             self.push_function_call_arguments(open, abstraction_id, args, vec![], call_span_id, b);
 
@@ -800,8 +798,8 @@ impl FlattenInner {
         // now that we have the arguments calculated, and the lambda baked, jump!
 
         // Complete the call, returning cursor to the caller
-        self.blocks.switch_blocks(current_block_id);
-        let sblock = self.blocks.safe_unknown();
+        //self.blocks.switch_blocks(current_block_id);
+        //let sblock = self.blocks.safe_unknown();
 
         // DECLARE
         // if the function returns a value, then we need to copy it out of the next block arguments
@@ -810,7 +808,8 @@ impl FlattenInner {
             let key = b.labels.fresh_key("r");
             let ty = next_arg_ty.field_types().first().unwrap().clone();
 
-            let (_, decl_link_id) = self.push_decl(sblock, ty.clone(), key, call_span_id);
+            // push declaration into the call arguments scope
+            let (_, decl_link_id) = self.push_decl(open.unknown(), ty.clone(), key, call_span_id);
             Some((decl_link_id, link_id, ty, key))
         } else {
             None
