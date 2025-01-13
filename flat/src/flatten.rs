@@ -1180,7 +1180,8 @@ impl FlattenInner {
         if let Some(scope) = self.blocks.try_loop_scope(scope_id) {
             let start_block = scope.start_block();
             let next_block = scope.next_block();
-            self.maybe_terminate_block(start_block, span_id, push_context, b);
+            let unk = self.blocks.safe_unknown();
+            self.maybe_terminate_block(unk, start_block, span_id, push_context, b);
             self.blocks.switch_blocks(next_block);
             let closed = SafeBlock {
                 block_id: self.blocks.current_block_id(),
@@ -1863,11 +1864,19 @@ impl FlattenInner {
                 let v_next = if is_next_needed {
                     if has_else {
                         self.blocks.switch_blocks(else_end_block_id);
-                        self.maybe_terminate_block(next_block.block_id, span_id, push_context, b);
+                        let unk = self.blocks.safe_unknown();
+                        self.maybe_terminate_block(
+                            unk,
+                            next_block.block_id,
+                            span_id,
+                            push_context,
+                            b,
+                        );
                     }
 
                     self.blocks.switch_blocks(then_end_block_id);
-                    self.maybe_terminate_block(next_block.block_id, span_id, push_context, b);
+                    let unk = self.blocks.safe_unknown();
+                    self.maybe_terminate_block(unk, next_block.block_id, span_id, push_context, b);
 
                     // start the next block
                     self.blocks.switch_blocks(next_block.block_id);
@@ -2529,19 +2538,26 @@ impl FlattenInner {
 
     pub(super) fn maybe_terminate_block(
         &mut self,
+        block: SafeBlockUnknown,
         v_next: BlockId,
         span_id: SpanId,
         _push_context: PushContext,
         b: &mut NB,
-    ) {
+    ) -> SafeBlockClosed {
         // is the block isn't terminated, terminate it with a jump to another block
         let current_block_id = self.blocks.current_block_id();
-        let block = self.blocks.get_block(current_block_id);
-        let link_id = block.last().unwrap().clone();
+        let link_id = self
+            .blocks
+            .get_block(current_block_id)
+            .last()
+            .unwrap()
+            .clone();
         let entry = self.get_entry(link_id);
-        if !entry.code.is_term() {
+        if let Some(closed) = self.blocks.safe_block_try_closed(block) {
+            closed
+        } else {
             let open = self.open();
-            self.push_jump(open, v_next, vec![], span_id, b);
+            self.push_jump(open, v_next, vec![], span_id, b)
         }
     }
 }

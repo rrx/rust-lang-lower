@@ -1,7 +1,7 @@
 use crate::{
     ArgVec, BlockId, BlockifyError, FlattenInner, FlattenResult, LCode, LinkId, NodeBuilder as NB,
-    PushContext, SafeBlockEmpty, SafeBlockOpen, ScopeId, ScopeState, ScopeStateFunction, ScopeType,
-    Successor, VarDefinitionSpace,
+    PushContext, SafeBlockClosed, SafeBlockEmpty, SafeBlockOpen, ScopeId, ScopeState,
+    ScopeStateFunction, ScopeType, Successor, VarDefinitionSpace,
 };
 use anyhow::Error;
 use anyhow::Result;
@@ -397,7 +397,7 @@ impl FlattenInner {
         mem: VarDefinitionSpace,
         b: &mut NB,
     ) -> (
-        BlockId,
+        SafeBlockClosed,
         LinkId,
         AstType,       // next block arg type
         ArgVec,        // return the argvec for the next block, which depends on the function
@@ -423,7 +423,7 @@ impl FlattenInner {
             b,
         );
 
-        let (fun_block_id, entry_link_id, ret_block_ty, entry_args) = result;
+        let (fun_block, _, entry_link_id, ret_block_ty, entry_args) = result;
         let next_arg_ty = ret_block_ty.args.clone();
 
         // push the continuation block to which the function returns control
@@ -457,7 +457,7 @@ impl FlattenInner {
         };
 
         (
-            fun_block_id,
+            fun_block,
             entry_link_id,
             next_arg_ty,
             v_args,
@@ -480,6 +480,7 @@ impl FlattenInner {
         mem: VarDefinitionSpace,
         b: &mut NB,
     ) -> (
+        SafeBlockClosed,
         BlockId,
         LinkId,
         AstFuncType, // next block return type
@@ -539,8 +540,9 @@ impl FlattenInner {
         // flatten function, and switch to next
         self.blocks.switch_blocks(fun_block.block_id);
         let fun_block_id = fun_block.block_id;
-        let _ = self.push_node(fun_block, body, PushContext::Default, b);
-        self.maybe_terminate_block(next_block_id, def_span_id, PushContext::Function, b);
+        let (unk, _) = self.push_node(fun_block, body, PushContext::Default, b);
+        let closed =
+            self.maybe_terminate_block(unk, next_block_id, def_span_id, PushContext::Function, b);
 
         let variant_ty = b.types.u.resolve(&variant_ty).unwrap();
         self.blocks
@@ -555,7 +557,13 @@ impl FlattenInner {
             ret: ReturnType::Single(AstType::Unit).into(),
         };
 
-        (fun_block_id, entry_link_id, ret_block_ty, entry_args)
+        (
+            closed,
+            fun_block_id,
+            entry_link_id,
+            ret_block_ty,
+            entry_args,
+        )
     }
 
     pub(super) fn push_call_arguments(
@@ -786,7 +794,7 @@ impl FlattenInner {
             b,
         );
 
-        let (fun_block_id, _, next_arg_ty, _, _, r, _entry_args) = result;
+        let (fun_block, _, next_arg_ty, _, _, r, _entry_args) = result;
 
         // now that we have the arguments calculated, and the lambda baked, jump!
 
@@ -810,7 +818,13 @@ impl FlattenInner {
         // JUMP
         // jump into the the lambda
         let open = self.open();
-        self.push_jump(open, fun_block_id.into(), call_values, call_span_id, b);
+        self.push_jump(
+            open,
+            fun_block.block_id.into(),
+            call_values,
+            call_span_id,
+            b,
+        );
 
         self.blocks.switch_blocks(next_block_id);
         // STORE ARG
@@ -1024,7 +1038,7 @@ impl FlattenInner {
                 mem,
                 b,
             );
-            let (fun_block_id, _, _next_arg_ty, call_values, ret_func_type, _, entry_args) = result;
+            let (fun_block, _, _next_arg_ty, call_values, ret_func_type, _, entry_args) = result;
             let arg = entry_args.last().unwrap();
 
             let call_link_id = arg.1;
@@ -1034,7 +1048,7 @@ impl FlattenInner {
             let _goto_link_id =
                 self.push_goto_link(call_link_id, call_values.clone(), call_span_id, b);
 
-            (fun_block_id, ret_func_type)
+            (fun_block.block_id, ret_func_type)
         };
 
         // restore position back to where we started
