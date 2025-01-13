@@ -1,9 +1,7 @@
 use crate::{
-    ArgVec, BlockGraph, BlockGraphState, BlockGraphStateOpen, BlockGraphStateStart, BlockId,
-    IRBlock, NodeBuilder, ScopeId, ScopeLayer,
+    BlockGraph, BlockGraphState, BlockGraphStateOpen, BlockGraphStateStart, BlockId, IRBlock,
+    ScopeId, ScopeLayer,
 };
-
-use compile_core::SpanId;
 
 pub trait SafeBlockState {}
 
@@ -45,13 +43,6 @@ pub type SafeBlockUnknown = SafeBlock<Unknown>;
 impl BlockGraph<BlockGraphStateStart> {}
 
 impl BlockGraph<BlockGraphStateOpen> {
-    fn root_block(&mut self) -> SafeBlock<Closed> {
-        SafeBlock {
-            block_id: self.static_block_id(),
-            extra: Closed {},
-        }
-    }
-
     pub fn block<B: SafeBlockState>(&self, block: &SafeBlock<B>) -> &IRBlock {
         self.get_block(block.block_id)
     }
@@ -71,6 +62,25 @@ impl BlockGraph<BlockGraphStateOpen> {
             block_id: self.current_block_id(),
             extra: Unknown {},
         }
+    }
+
+    pub fn safe_block_unknown(&self, block_id: BlockId) -> SafeBlock<Unknown> {
+        SafeBlock {
+            block_id,
+            extra: Unknown {},
+        }
+    }
+
+    pub fn safe_block_try_empty(&mut self, block: &SafeBlock<Unknown>) -> Option<SafeBlock<Empty>> {
+        let block_id = block.block_id;
+        let block = self.get_block(block_id);
+        if !block.empty() {
+            return None;
+        }
+        Some(SafeBlock {
+            block_id,
+            extra: Empty {},
+        })
     }
 
     pub fn safe_block_try_open(&mut self, block: &SafeBlock<Unknown>) -> Option<SafeBlock<Open>> {
@@ -102,21 +112,6 @@ impl BlockGraph<BlockGraphStateOpen> {
 }
 
 impl<S: BlockGraphState> BlockGraph<S> {
-    fn new_safe_block<B: SafeBlockState>(&mut self, block: SafeBlock<B>) -> SafeBlock<Empty> {
-        //let block_id = self.new_block(block.block_id);
-        SafeBlock {
-            block_id: block.block_id,
-            extra: Empty {},
-        }
-    }
-
-    fn start_block(&mut self, block: SafeBlock<Empty>) -> SafeBlock<Open> {
-        SafeBlock {
-            block_id: block.block_id,
-            extra: Open {},
-        }
-    }
-
     pub fn safe_switch_block(&mut self, block_id: BlockId) -> SafeBlock<Open> {
         let block = self.get_block(block_id);
         assert!(!block.is_term());
@@ -136,9 +131,6 @@ mod tests {
         let mut b = NodeBuilder::new();
         let key = b.labels.s("module");
         let mut g = BlockGraph::new(key);
-        let b = g.root_block();
-        let empty = g.new_safe_block(b);
-        let open = g.start_block(empty);
-        //let closed = g.jump(open, g.static_block_id());
+        let _ = g.root_block();
     }
 }

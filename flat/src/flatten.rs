@@ -143,10 +143,8 @@ impl Flatten<Start> {
                 b.builtins.add_abstraction(*bi, id);
             }
 
-            let empty = SafeBlock {
-                block_id: static_block_id,
-                extra: crate::safe::Empty {},
-            };
+            let unk = f.blocks.safe_block_unknown(static_block_id);
+            let empty = f.blocks.safe_block_try_empty(&unk).unwrap();
 
             // start module block
             f.push_start_block_static(
