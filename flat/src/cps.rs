@@ -693,7 +693,7 @@ impl FlattenInner {
                         let code = LCode::Switch(arg_link_id, m);
                         last_entry.code = code;
                         last_entry.ty = AstFuncType::new_void_void().into();
-                        self.push_entry_with_link(last_entry);
+                        self.insert_entry_with_link(last_entry);
                     } else {
                         // TODO: this code doesn't handle unwind yet.
                         // if we rewrite the jump targets, everything get's messed up
@@ -707,7 +707,7 @@ impl FlattenInner {
                         last_entry.code = code;
                         let open = self.open();
                         let _ = self.safe_push_call_values(open, &d.argvec, b);
-                        self.push_entry_with_link(last_entry);
+                        self.insert_entry_with_link(last_entry);
                     }
                 }
             }

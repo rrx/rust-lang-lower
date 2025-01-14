@@ -289,7 +289,7 @@ impl FlattenInner {
                 unknown,
                 VarDefinitionSpace::Static,
             );
-            self.push_entry_with_link(entry);
+            self.insert_entry_with_link(entry);
         }
     }
 
@@ -378,7 +378,7 @@ impl FlattenInner {
                 entry.span_id,
                 VarDefinitionSpace::Static,
             );
-            self.push_entry_with_link(entry);
+            self.insert_entry_with_link(entry);
         }
 
         // DEAD BLOCKS
@@ -404,7 +404,7 @@ impl FlattenInner {
             b.spans.get_span_unknown(),
             VarDefinitionSpace::Static,
         );
-        self.push_entry_with_link(entry);
+        self.insert_entry_with_link(entry);
 
         // the last thing we do is calculate the values, which is the post order traversal of the
         // blocks.
@@ -439,7 +439,7 @@ impl FlattenInner {
         self.insert_decl_entry(entry_block_id, entry)
     }
 
-    pub fn push_entry_with_link(&mut self, mut entry: CodeEntry) -> LinkId {
+    pub fn insert_entry_with_link(&mut self, mut entry: CodeEntry) -> LinkId {
         let code = entry.code.clone();
         let block_id = entry.block_id;
 
@@ -951,7 +951,7 @@ impl FlattenInner {
         assert!(!code.is_term());
         let entry = CodeEntry::new(open.block_id, code, ty, name, span_id, mem);
         self.blocks.switch_blocks(open.block_id);
-        (open, self.push_entry_with_link(entry))
+        (open, self.insert_entry_with_link(entry))
     }
 
     pub fn safe_push_code_term(
@@ -970,7 +970,7 @@ impl FlattenInner {
             block_id: self.blocks.current_block_id(),
             extra: crate::safe::Closed {},
         };
-        (closed, self.push_entry_with_link(entry))
+        (closed, self.insert_entry_with_link(entry))
     }
 
     pub fn push_function_call(
@@ -1101,7 +1101,7 @@ impl FlattenInner {
             mem,
         );
         self.blocks.switch_blocks(empty.block_id);
-        let block_link_id = self.push_entry_with_link(entry);
+        let block_link_id = self.insert_entry_with_link(entry);
         let v_args = self.push_start_block_args(block_ty, span_id);
         self.blocks
             .block_links
