@@ -183,7 +183,7 @@ impl FlattenInner {
         jump_args: ArgVec,
         call_span_id: SpanId,
         b: &mut NB,
-    ) -> SafeBlockOpen {
+    ) -> SafeBlockClosed {
         // returns the entry to the unwind, which we will want to jump to
         let save_block_id = self.blocks.current_block_id();
         let block = self.blocks.get_block(open.block_id);
@@ -273,8 +273,7 @@ impl FlattenInner {
 
             // jump to the new block
             // we close the starting block here.  So start_block is actually closed
-            let x_open = self.open_block(open.block_id);
-            self.push_jump_direct(x_open, new_block_id, vec![], call_span_id, b);
+            self.push_jump_direct(open, new_block_id, vec![], call_span_id, b);
 
             // define next block
             let next_key = b.labels.fresh_key("unext");
@@ -289,7 +288,12 @@ impl FlattenInner {
         self.push_jump_direct(open, target_block_id, jump_args, call_span_id, b);
 
         self.blocks.switch_blocks(save_block_id);
-        start_block
+        // we know start_block is closed
+        if let Some(closed) = self.blocks.safe_block_try_closed(&start_block.unknown()) {
+            closed
+        } else {
+            unreachable!();
+        }
     }
 
     pub(super) fn push_cps_block(
