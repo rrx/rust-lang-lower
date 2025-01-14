@@ -707,15 +707,13 @@ impl FlattenInner {
         values: &[(Option<StringKey>, LinkId, AstType, SpanId)],
         b: &mut NB,
     ) -> (SafeBlockOpen, Vec<LinkId>) {
-        self.blocks.switch_blocks(open.block_id);
         let mut updated_values = vec![];
         let scope_id = self.blocks.get_block(open.block_id).scope();
         for (maybe_key, v, ty, span_id) in values {
             let mut v = *v;
             let entry = self.get_entry(v);
             let v_block_id = entry.block_id;
-            let v_block = self.blocks.get_block(v_block_id);
-            let v_scope_id = v_block.scope();
+            let v_scope_id = self.blocks.get_block(v_block_id).scope();
             let v_scope = self.blocks.get_scope(v_scope_id);
             let v_entry_block_id = v_scope.entry_block();
             let in_entry = v_entry_block_id == v_block_id;
@@ -766,8 +764,6 @@ impl FlattenInner {
             links.push(link_id);
         }
 
-        assert_eq!(self.blocks.current_block_id(), open.block_id);
-        self.blocks.switch_blocks(open.block_id);
         (open, links)
     }
 
