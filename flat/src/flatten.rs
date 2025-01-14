@@ -153,9 +153,6 @@ impl Flatten<Start> {
             );
             let open = f.open_block(static_block_id);
             f.push_node(open, *body, PushContext::Module, b);
-
-            // return control to the root block
-            f.blocks.switch_blocks(static_block_id);
             Ok(f.next())
         } else {
             b.push_error("Not a module", node.span_id);
