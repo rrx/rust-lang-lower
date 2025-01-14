@@ -794,21 +794,6 @@ impl FlattenInner {
         (open, link_id)
     }
 
-    fn safe_jump(
-        &mut self,
-        open: SafeBlockOpen,
-        target_block_id: BlockId,
-        jump_args: ArgVec,
-        span_id: SpanId,
-        b: &mut NB,
-    ) -> SafeBlockClosed {
-        self.push_jump(open, target_block_id, jump_args, span_id, b);
-        SafeBlock {
-            block_id: self.blocks.current_block_id(),
-            extra: crate::safe::Closed {},
-        }
-    }
-
     pub fn push_jump(
         &mut self,
         open: SafeBlockOpen,
@@ -1484,7 +1469,7 @@ impl FlattenInner {
                 let scope = self.blocks.get_function_scope(fun_block_id);
                 let ret_block_id = scope.return_block();
 
-                let closed = self.safe_jump(open, ret_block_id, jump_args, span_id, b);
+                let closed = self.push_jump(open, ret_block_id, jump_args, span_id, b);
                 (closed.unknown(), FlattenResult::statement())
             }
 
