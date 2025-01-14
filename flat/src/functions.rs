@@ -257,6 +257,7 @@ impl FlattenInner {
 
     fn gen_bake_static(
         &mut self,
+        start_scope_id: ScopeId,
         abstraction_id: AbstractionId,
         call_func_type: AstFuncType,
         call_span_id: SpanId,
@@ -269,13 +270,10 @@ impl FlattenInner {
         let s = b.labels.r(name.into());
         let global_key = b.labels.fresh_key(&s);
         //let s_global = b.labels.r(global_key.into());
-        let current_block_id = self.blocks.current_block_id();
-        self.blocks.switch_blocks(self.blocks.static_block_id());
-        let block = self.blocks.get_block(current_block_id);
 
         // if it's defined in static scope, just call it
         let v_entry = if let Some((r_ty, v_entry, _scope_id)) = self.blocks.resolve_function_name(
-            block.scope(),
+            start_scope_id,
             &name,
             &call_func_type.clone().into(),
             b,
@@ -290,15 +288,12 @@ impl FlattenInner {
             );
             v_entry
         } else {
-            // if it's not already baked, we need to do that here
             self.blocks.switch_blocks(self.blocks.static_block_id());
-
+            // if it's not already baked, we need to do that here
             let r = self.gen_bake_function(abstraction_id, call_func_type.clone(), global_key, b);
             let v_entry = r.link_id.unwrap();
             v_entry
         };
-
-        self.blocks.switch_blocks(current_block_id);
         (v_entry, call_func_type.into())
     }
 
@@ -699,7 +694,14 @@ impl FlattenInner {
             let (open, call_values, call_func_type, def_func_type) = self
                 .push_function_call_arguments(open, abstraction_id, args, vec![], call_span_id, b);
 
-            let r = self.gen_bake_static(abstraction_id, call_func_type, call_span_id, b);
+            let start_scope_id = self.blocks.get_block(open.block_id).scope();
+            let r = self.gen_bake_static(
+                start_scope_id,
+                abstraction_id,
+                call_func_type,
+                call_span_id,
+                b,
+            );
 
             let (fun_link_id, _bake_ty) = r;
             self.push_function_call(
