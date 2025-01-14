@@ -285,7 +285,6 @@ impl FlattenInner {
             );
             open = next_block;
         }
-        let open = self.open();
         self.push_jump_direct(open, target_block_id, jump_args, call_span_id, b);
 
         self.blocks.switch_blocks(save_block_id);
