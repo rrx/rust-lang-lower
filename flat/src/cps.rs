@@ -271,18 +271,19 @@ impl FlattenInner {
             );
 
             // jump to the new block
-            let open = self.open_block(current_block_id);
-            self.push_jump_direct(open, new_block_id, vec![], call_span_id, b);
+            let x_open = self.open_block(current_block_id);
+            self.push_jump_direct(x_open, new_block_id, vec![], call_span_id, b);
 
             // define next block
             self.blocks.switch_blocks(next_block.block_id);
             let next_key = b.labels.fresh_key("unext");
-            self.push_start_block(
+            let (next_block, _, _) = self.push_start_block(
                 next_block,
                 AstFuncType::new_void_void().into(),
                 Some(next_key),
                 call_span_id,
             );
+            open = next_block;
         }
         let open = self.open();
         self.push_jump_direct(open, target_block_id, jump_args, call_span_id, b);
