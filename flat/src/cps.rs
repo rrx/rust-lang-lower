@@ -184,6 +184,7 @@ impl FlattenInner {
         call_span_id: SpanId,
         b: &mut NB,
     ) -> SafeBlockOpen {
+        // returns the entry to the unwind, which we will want to jump to
         let save_block_id = self.blocks.current_block_id();
         let block = self.blocks.get_block(open.block_id);
         let goto_scope_id = block.scope();
@@ -228,12 +229,12 @@ impl FlattenInner {
 
         println!("unwind blocks: {:?}", unwind_block_ids);
 
+        let mut open = self.open_block(start_block.block_id);
+
         for (scope_id, unwind_block_id) in unwind_block_ids {
             let scope = self.blocks.get_scope(scope_id);
             let entry_block_id = scope.entry_block();
             let succ = Successor::BlockScope;
-
-            let current_block_id = self.blocks.current_block_id();
 
             let next_block = self.blocks.new_block(entry_block_id, succ);
 
@@ -271,7 +272,8 @@ impl FlattenInner {
             );
 
             // jump to the new block
-            let x_open = self.open_block(current_block_id);
+            // we close the starting block here.  So start_block is actually closed
+            let x_open = self.open_block(open.block_id);
             self.push_jump_direct(x_open, new_block_id, vec![], call_span_id, b);
 
             // define next block
