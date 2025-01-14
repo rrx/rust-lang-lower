@@ -1598,18 +1598,14 @@ impl FlattenInner {
 
                 // push the definition into the lambda list
                 if let Ast::Lambda(def) = expr.node {
-                    self.blocks.switch_blocks(current_block_id);
-
                     // save the template
                     let def_span_id = expr.span_id;
                     let _ =
                         self.blocks
                             .save_abstraction(current_block_id, &name, &def, def_span_id);
-                    self.blocks.switch_blocks(current_block_id);
                     return (open.unknown(), FlattenResult::statement());
                 }
 
-                self.blocks.switch_blocks(current_block_id);
                 let (open, v_expr) = self.safe_push_expr(open, *expr, PushContext::Default, b);
                 let expr_entry = self.get_entry(v_expr);
                 let expr_ty = expr_entry.ty.clone();
