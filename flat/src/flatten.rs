@@ -1969,24 +1969,18 @@ impl FlattenInner {
                     .new_block(self.blocks.current_block_id(), Successor::BlockScope);
                 self.blocks.define_label(scope_id, new_block.block_id, name);
 
-                self.blocks.switch_blocks(current_block_id);
-                let open = self.open_block(current_block_id);
-
                 // start a new block.  If the last block isn't terminated, then we create a new
                 // block and jump to it.
                 // TODO: We can also check if the previous block was empty and compatible, and reuse it.
-                let block = self.blocks.get_block(current_block_id);
-                if let Some(last_link_id) = block.last() {
-                    let entry = self.get_entry(last_link_id);
-                    if !entry.code.is_term() {
-                        assert_eq!(args.len(), 0);
-                        self.push_jump(open, new_block.block_id, vec![], span_id, b);
-                    }
+                if let Some(open) = self.blocks.safe_block_try_open(&open.unknown()) {
+                    assert_eq!(args.len(), 0);
+                    self.push_jump(open, new_block.block_id, vec![], span_id, b);
+                } else {
+                    unreachable!();
                 }
 
-                let scope = self.blocks.get_scope(scope_id);
-
                 // ensure this block is not an entry block, this should never happen.
+                let scope = self.blocks.get_scope(scope_id);
                 assert!(scope.entry_block() != new_block.block_id);
 
                 let arg_ty = AstType::Struct(
@@ -1998,8 +1992,7 @@ impl FlattenInner {
                         .collect::<Vec<_>>(),
                 );
 
-                self.blocks.switch_blocks(new_block.block_id);
-                let (open, link_id, _) = self.push_start_block(
+                let (new_block, link_id, _) = self.push_start_block(
                     new_block,
                     AstFuncType {
                         args: arg_ty.clone().into(),
@@ -2009,9 +2002,8 @@ impl FlattenInner {
                     Some(name),
                     span_id,
                 );
-                self.blocks.switch_blocks(open.block_id);
-                let open = self.open();
-                (open.unknown(), FlattenResult::link(link_id))
+                self.blocks.switch_blocks(new_block.block_id);
+                (new_block.unknown(), FlattenResult::link(link_id))
             }
 
             Ast::Ternary(c, x, y) => {
@@ -2513,7 +2505,7 @@ impl FlattenInner {
         b: &mut NB,
     ) -> SafeBlockClosed {
         // is the block isn't terminated, terminate it with a jump to another block
-        if let Some(closed) = self.blocks.safe_block_try_closed(block) {
+        if let Some(closed) = self.blocks.safe_block_try_closed(&block) {
             closed
         } else {
             let open = self.open();

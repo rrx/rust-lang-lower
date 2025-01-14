@@ -97,7 +97,7 @@ impl BlockGraph<BlockGraphStateOpen> {
 
     pub fn safe_block_try_closed(
         &mut self,
-        block: SafeBlock<Unknown>,
+        block: &SafeBlock<Unknown>,
     ) -> Option<SafeBlock<Closed>> {
         let block_id = block.block_id;
         let block = self.get_block(block_id);
