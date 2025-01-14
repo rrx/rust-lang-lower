@@ -135,17 +135,15 @@ impl Flatten<Start> {
                 state: Start {},
             };
 
-            let static_block_id = f.blocks.static_block_id();
-
             for bi in &[Builtin::Print, Builtin::Assert, Builtin::Import] {
                 let a = bi.make_abstraction(b);
                 let id = f.blocks.abstractions.insert(a);
                 b.builtins.add_abstraction(*bi, id);
             }
 
+            let static_block_id = f.blocks.static_block_id();
             let unk = f.blocks.safe_block_unknown(static_block_id);
             let empty = f.blocks.safe_block_try_empty(&unk).unwrap();
-
             // start module block
             f.push_start_block_static(
                 empty,
@@ -153,17 +151,8 @@ impl Flatten<Start> {
                 Some(key),
                 node.span_id,
             );
-            let closed = f.safe_static();
-            let entry = CodeEntry::new(
-                f.blocks.current_block_id(),
-                LCode::EndModule,
-                AstType::Unit,
-                None,
-                b.spans.get_span_unknown(),
-                VarDefinitionSpace::Static,
-            );
-            f.push_entry_with_link(entry);
-            f.safe_push_static_node(closed, *body, PushContext::Module, b);
+            let open = f.open_block(static_block_id);
+            f.push_node(open, *body, PushContext::Module, b);
 
             // return control to the root block
             f.blocks.switch_blocks(static_block_id);
@@ -412,6 +401,17 @@ impl FlattenInner {
             }
         }
 
+        let static_block_id = self.blocks.static_block_id();
+        let entry = CodeEntry::new(
+            static_block_id,
+            LCode::EndModule,
+            AstType::Unit,
+            None,
+            b.spans.get_span_unknown(),
+            VarDefinitionSpace::Static,
+        );
+        self.push_entry_with_link(entry);
+
         // the last thing we do is calculate the values, which is the post order traversal of the
         // blocks.
         let values = self.finish_values(b);
@@ -636,29 +636,6 @@ impl FlattenInner {
         self.blocks.switch_blocks(unk_block.block_id);
         let link_id = self.blocks.get_block(unk_block.block_id).last().unwrap();
         (self.blocks.safe_unknown(), link_id)
-    }
-
-    pub fn safe_push_static_node(
-        &mut self,
-        closed: SafeBlockClosed,
-        node: AstNode,
-        context: PushContext,
-        b: &mut NB,
-    ) -> SafeBlockClosed {
-        self.blocks.switch_blocks(closed.block_id);
-        // not everything can be added to static context
-        // we need to insert declarations for values and functions
-        node.to_vec().into_iter().for_each(|n| {
-            // hack. handle this better.  static is closed, but we still need to add things
-            // maybe we should end the block as part of the final step.
-            // we don't actually want to ensure open here.  It's creating dead blocks?
-            let open = self.ensure_open(n.span_id, b);
-            b.dump_ast(&n);
-            self.push_node(open, n, context, b);
-            //self.push_node_in_static(n, context, b);
-        });
-        self.blocks.switch_blocks(closed.block_id);
-        closed
     }
 
     pub fn safe_push_node(
@@ -1339,10 +1316,10 @@ impl FlattenInner {
         (open, link_id)
     }
 
-    pub fn safe_static(&mut self) -> SafeBlockClosed {
-        SafeBlockClosed {
+    pub fn safe_static(&mut self) -> SafeBlockOpen {
+        SafeBlock {
             block_id: self.blocks.static_block_id(),
-            extra: crate::safe::Closed {},
+            extra: crate::safe::Open {},
         }
     }
 
@@ -2042,7 +2019,6 @@ impl FlattenInner {
 
                 // Condition
                 let (open, c_link_id) = self.safe_push_expr(open, *c, PushContext::Default, b);
-                let current_block_id = self.blocks.current_block_id();
 
                 let branch_block_type = AstFuncType {
                     args: AstType::Struct(vec![]).into(),
@@ -2050,7 +2026,7 @@ impl FlattenInner {
                 };
 
                 // THEN
-                let (empty, then_block_id, _) = self.blocks.new_scope_and_block(
+                let (then_block, then_block_id, _) = self.blocks.new_scope_and_block(
                     ScopeType::Region,
                     ScopeState::region(),
                     current_block_id,
@@ -2061,23 +2037,20 @@ impl FlattenInner {
 
                 let name = b.labels.fresh_key("t_then");
 
-                self.blocks.switch_blocks(then_block_id);
                 let (then_block, _, _) = self.push_start_block(
-                    empty,
+                    then_block,
                     branch_block_type.clone().into(),
                     Some(name),
                     then_span_id,
                 );
 
-                self.blocks.switch_blocks(then_block.block_id);
-                let then_open = self.open_block(then_block.block_id);
                 let (_, then_link_id) =
-                    self.safe_push_node(then_open, then_ast, PushContext::Default, b);
+                    self.safe_push_node(then_block, then_ast, PushContext::Default, b);
                 let then_ty = self.get_type(then_link_id).clone();
 
                 // ELSE
                 let else_span_id = y.span_id;
-                let (empty, else_block_id, _) = self.blocks.new_scope_and_block(
+                let (else_block, else_block_id, _) = self.blocks.new_scope_and_block(
                     ScopeType::Region,
                     ScopeState::region(),
                     current_block_id,
@@ -2085,24 +2058,20 @@ impl FlattenInner {
                 );
                 let else_ast = AstNode::make_yield(*y);
 
-                self.blocks.switch_blocks(else_block_id);
                 let (else_block, _, _) = self.push_start_block(
-                    empty,
+                    else_block,
                     branch_block_type.into(),
                     Some(name),
                     else_span_id,
                 );
 
-                self.blocks.switch_blocks(else_block.block_id);
-                let else_open = self.open_block(else_block.block_id);
                 let (_, else_link_id) =
-                    self.safe_push_node(else_open, else_ast, PushContext::Default, b);
+                    self.safe_push_node(else_block, else_ast, PushContext::Default, b);
                 let else_ty = self.get_type(else_link_id).clone();
 
                 b.unify(&then_ty, then_span_id, &else_ty, else_span_id);
 
                 // switch back to the original block
-                self.blocks.switch_blocks(current_block_id);
                 let (open, v) = self.safe_push_code_open(
                     open,
                     LCode::Ternary(c_link_id.into(), then_block_id.into(), else_block_id.into()),
