@@ -5,20 +5,25 @@ use crate::{
 
 pub trait SafeBlockState {}
 
+#[derive(Debug)]
 pub struct Empty {}
 impl SafeBlockState for Empty {}
+#[derive(Debug)]
 pub struct Open {}
 impl SafeBlockState for Open {}
+#[derive(Debug)]
 pub struct Closed {}
 
 impl SafeBlock<Closed> {}
 
 impl SafeBlockState for Closed {}
 
+#[derive(Debug)]
 pub struct Unknown {}
 impl SafeBlockState for Unknown {}
 impl SafeBlock<Unknown> {}
 
+#[derive(Debug)]
 pub struct SafeBlock<S: SafeBlockState> {
     pub block_id: BlockId,
     pub extra: S,

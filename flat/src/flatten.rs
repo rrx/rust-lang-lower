@@ -1231,18 +1231,18 @@ impl FlattenInner {
 
     pub fn remove_placeholder_terminal(
         &mut self,
-        goto_block_id: BlockId,
+        goto_block: SafeBlockClosed,
     ) -> (SafeBlockOpen, LinkId) {
-        let block = self.blocks.get_block(goto_block_id);
+        let block = self.blocks.get_block(goto_block.block_id);
         let last_link_id = block.last().unwrap();
         let entry = self.get_entry(last_link_id);
         if let LCode::PlaceholderTerminal = entry.code {
-            let block = self.blocks.get_block_mut(goto_block_id);
+            let block = self.blocks.get_block_mut(goto_block.block_id);
             let _ = block.pop_terminal();
         } else {
             unreachable!()
         }
-        let open = self.open_block(goto_block_id);
+        let open = self.open_block(goto_block.block_id);
         (open, last_link_id)
     }
 

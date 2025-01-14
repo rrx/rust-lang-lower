@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     ArgVec, BlockGraph, BlockGraphState, BlockGraphStateOpen, BlockId, LinkId, NodeBuilder,
-    SafeBlockEmpty, StringLabel, Successor, VariantId,
+    SafeBlockClosed, SafeBlockEmpty, StringLabel, Successor, VariantId,
 };
 use compile_core::{AbstractionId, Argument, AstType, Lambda, SpanId, StringKey};
 
@@ -60,10 +60,10 @@ pub enum DeferredType {
     Ident(LinkId),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct DeferredGoto {
     pub scope_id: ScopeId,
-    pub block_id: BlockId,
+    pub block: SafeBlockClosed,
     pub deferred_type: DeferredType,
     pub name: Option<StringKey>,
     pub call_span_id: SpanId,
@@ -77,7 +77,7 @@ impl DeferredGoto {
         name: Option<StringKey>,
         args: Vec<Argument>,
         call_span_id: SpanId,
-        block_id: BlockId,
+        block: SafeBlockClosed,
         deferred_type: DeferredType,
     ) -> Self {
         Self {
@@ -85,14 +85,14 @@ impl DeferredGoto {
             name,
             args,
             call_span_id,
-            block_id,
+            block,
             deferred_type,
             argvec: vec![],
         }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct DeferredGotoList {
     h: Vec<DeferredGoto>,
     cps: Vec<DeferredGoto>,
