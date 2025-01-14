@@ -798,7 +798,7 @@ impl FlattenInner {
 
     pub fn push_store_args(
         &mut self,
-        open: SafeBlockOpen,
+        mut open: SafeBlockOpen,
         decl_scope_id: ScopeId,
         jump_args: ArgVec,
         span_id: SpanId,
@@ -808,7 +808,6 @@ impl FlattenInner {
         // Anything we are referencing here is potentially going to be destroyed
         // We copy everything for now, but don't need to do this in all circumstances
         // For example, if the value is already in the target scope, or it's on the heap.
-        let start_block_id = open.block_id; //self.blocks.current_block_id();
         let scope = self.blocks.get_scope(decl_scope_id);
         let decl_block_id = scope.entry_block();
         let mut copied_link_ids = vec![];
@@ -817,15 +816,12 @@ impl FlattenInner {
             let ty = entry.ty.clone();
             let key = b.labels.fresh_key("r");
 
-            // switch to the target block, so we can create the declaration
-            self.blocks.switch_blocks(decl_block_id);
-            let sblock = self.blocks.safe_unknown();
+            // insert declaration
+            let sblock = self.blocks.safe_block_unknown(decl_block_id);
             let decl_link_id = self.insert_decl(&sblock, ty.clone(), key, span_id);
 
-            // switch back to the start block, so we can store the value
-            self.blocks.switch_blocks(start_block_id);
-            let open = self.open_block(start_block_id);
-            self.safe_push_code_open(
+            // push save into the open block
+            let (this_open, _) = self.safe_push_code_open(
                 open,
                 LCode::Store(decl_link_id, *link_id),
                 AstType::Unit,
@@ -833,6 +829,7 @@ impl FlattenInner {
                 span_id,
                 VarDefinitionSpace::Default,
             );
+            open = this_open;
             copied_link_ids.push((None, decl_link_id, ty, span_id));
         }
         (open, copied_link_ids)
