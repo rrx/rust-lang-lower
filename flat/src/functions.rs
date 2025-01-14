@@ -293,7 +293,6 @@ impl FlattenInner {
             );
             v_entry
         } else {
-            self.blocks.switch_blocks(self.blocks.static_block_id());
             // if it's not already baked, we need to do that here
             let r = self.gen_bake_function(
                 self.blocks.static_block_id(),
