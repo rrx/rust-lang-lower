@@ -275,7 +275,6 @@ impl FlattenInner {
             self.push_jump_direct(x_open, new_block_id, vec![], call_span_id, b);
 
             // define next block
-            self.blocks.switch_blocks(next_block.block_id);
             let next_key = b.labels.fresh_key("unext");
             let (next_block, _, _) = self.push_start_block(
                 next_block,
