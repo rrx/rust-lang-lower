@@ -1723,8 +1723,7 @@ impl FlattenInner {
                     Ast::Attribute(ident, attr) => {
                         let node = attr;
                         if let Some(ast) = resolve_attribute(*ident, &node, span_id, args, b) {
-                            let (unk, r) = self.safe_push_node_result(open, ast, push_context, b);
-                            (unk, r)
+                            self.push_node(open, ast, push_context, b)
                         } else {
                             let name = b.labels.r(ident.into());
                             b.push_error_labels(vec![b.primary_label(
@@ -1742,7 +1741,6 @@ impl FlattenInner {
             Ast::UnaryOp(op, x) => {
                 // op1 is expression, non-terminal
                 let (open, link_id) = self.safe_push_expr(open, *x, PushContext::Default, b);
-                self.blocks.switch_blocks(current_block_id);
                 let ty = self.get_type(link_id).clone();
 
                 let (open, _) =
