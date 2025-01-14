@@ -343,8 +343,6 @@ impl FlattenInner {
     }
 
     fn _finish(mut self, b: &mut NB) -> (Self, Values) {
-        self.blocks.switch_blocks(self.blocks.static_block_id());
-
         // make sure all claims have been handled
         self.blocks.ensure_claims(b);
 
@@ -364,7 +362,6 @@ impl FlattenInner {
 
         // declare static functions
         // TODO: we can move this into the static function generator
-        self.blocks.switch_blocks(self.blocks.static_block_id());
         for block_id in self.blocks.graph_get_entries() {
             let block = self.blocks.get_block(block_id);
             let label_link_id = block.entry();
@@ -597,7 +594,6 @@ impl FlattenInner {
         span_id: SpanId,
         b: &mut NB,
     ) -> (SafeBlockUnknown, LinkId) {
-        self.blocks.switch_blocks(open.block_id);
         let scope_id = self.blocks.get_block(open.block_id).scope();
         let start_stack = self.blocks.walk_scopes(scope_id);
 
@@ -630,7 +626,6 @@ impl FlattenInner {
             unk_block = unk;
         }
 
-        self.blocks.switch_blocks(unk_block.block_id);
         let link_id = self.blocks.get_block(unk_block.block_id).last().unwrap();
         (self.blocks.safe_unknown(), link_id)
     }
