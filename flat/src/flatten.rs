@@ -2247,8 +2247,7 @@ impl FlattenInner {
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::LoopBreak(maybe_key)) => {
-                let block = self.blocks.get_block(current_block_id);
-                let scope_id = block.scope();
+                let scope_id = self.blocks.get_block(current_block_id).scope();
                 // loop up loop blocks by name
                 if let Some(loop_scope) = self.blocks.get_loop_scope(scope_id, maybe_key) {
                     self.push_jump(open, loop_scope.next_block.into(), vec![], node.span_id, b);
@@ -2272,18 +2271,15 @@ impl FlattenInner {
             }
 
             Ast::Break(maybe_name, args) => {
-                let block = self.blocks.get_block(current_block_id);
-                let scope_id = block.scope();
+                let scope_id = self.blocks.get_block(current_block_id).scope();
 
                 // args not implemented yet
                 assert_eq!(args.len(), 0);
                 // loop up loop blocks by name
                 if let Some(loop_scope) = self.blocks.get_loop_scope(scope_id, maybe_name) {
-                    self.blocks.switch_blocks(current_block_id);
-                    self.push_jump(open, loop_scope.next_block.into(), vec![], node.span_id, b);
-                    self.blocks.switch_blocks(current_block_id);
-                    let open = self.open();
-                    (open.unknown(), FlattenResult::statement())
+                    let closed =
+                        self.push_jump(open, loop_scope.next_block.into(), vec![], node.span_id, b);
+                    (closed.unknown(), FlattenResult::statement())
                 } else {
                     // mismatch name
                     b.push_error(&format!("Break without loop"), node.span_id);
