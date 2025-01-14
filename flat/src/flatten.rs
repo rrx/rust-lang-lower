@@ -2458,12 +2458,11 @@ impl FlattenInner {
         _push_context: PushContext,
         b: &mut NB,
     ) -> SafeBlockClosed {
-        self.blocks.switch_blocks(block.block_id);
         // is the block isn't terminated, terminate it with a jump to another block
         if let Some(closed) = self.blocks.safe_block_try_closed(&block) {
             closed
         } else {
-            let open = self.open();
+            let open = self.open_block(block.block_id);
             self.push_jump(open, v_next, vec![], span_id, b)
         }
     }
