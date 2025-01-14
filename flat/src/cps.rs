@@ -178,14 +178,14 @@ impl FlattenInner {
 
     pub(crate) fn push_unwind(
         &mut self,
+        open: SafeBlockOpen,
         target_block_id: BlockId,
         jump_args: ArgVec,
         call_span_id: SpanId,
         b: &mut NB,
-    ) -> BlockId {
+    ) -> SafeBlockOpen {
         let save_block_id = self.blocks.current_block_id();
-        let current_block_id = self.blocks.current_block_id();
-        let block = self.blocks.get_block(current_block_id);
+        let block = self.blocks.get_block(open.block_id);
         let goto_scope_id = block.scope();
 
         let block = self.blocks.get_block(target_block_id);
@@ -198,9 +198,7 @@ impl FlattenInner {
         println!("unwind scopes: {:?}", unwind_scopes);
 
         let start_key = b.labels.fresh_key("ustart");
-        let start_block = self
-            .blocks
-            .new_block(current_block_id, Successor::BlockScope);
+        let start_block = self.blocks.new_block(open.block_id, Successor::BlockScope);
         let start_block = self
             .push_start_block(
                 start_block,
@@ -273,7 +271,6 @@ impl FlattenInner {
 
             // jump to the new block
             let open = self.open_block(current_block_id);
-            //let open = self.open();
             self.push_jump_direct(open, new_block.block_id, vec![], call_span_id, b);
 
             // define next block
@@ -290,7 +287,7 @@ impl FlattenInner {
         self.push_jump_direct(open, target_block_id, jump_args, call_span_id, b);
 
         self.blocks.switch_blocks(save_block_id);
-        start_block.block_id
+        start_block
     }
 
     pub(super) fn push_cps_block(
