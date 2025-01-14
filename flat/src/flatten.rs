@@ -617,7 +617,7 @@ impl FlattenInner {
             };
 
             let span_id = expr.span_id;
-            open = self.ensure_open(span_id, b);
+            open = self.ensure_open(unk_block, span_id, b);
             let (unk, _) = self.safe_push_node_result(open, expr, context, b);
             unk_block = unk;
         }
@@ -628,7 +628,7 @@ impl FlattenInner {
         for _ in 0..end_stack.len() - start_stack.len() {
             let ast: Ast = ControlFlowMarker::BlockEnd.into();
             let node = ast.node(span_id);
-            open = self.ensure_open(span_id, b);
+            open = self.ensure_open(unk_block, span_id, b);
             let (unk, _) = self.safe_push_node_result(open, node, PushContext::BlockEnd, b);
             unk_block = unk;
         }
@@ -2426,11 +2426,17 @@ impl FlattenInner {
         }
     }
 
-    pub(super) fn ensure_open(&mut self, span_id: SpanId, b: &mut NB) -> SafeBlockOpen {
+    pub(super) fn ensure_open(
+        &mut self,
+        unk: SafeBlockUnknown,
+        span_id: SpanId,
+        b: &mut NB,
+    ) -> SafeBlockOpen {
         // we we want to add a node, and the current block is terminated
         // we create a new block for the dead code that follows.
-        let block = self.blocks.get_block(self.blocks.current_block_id());
-        if block.is_term() {
+        if let Some(open) = self.blocks.safe_block_try_open(&unk) {
+            open
+        } else {
             let new_block = self
                 .blocks
                 .new_block(self.blocks.current_block_id(), Successor::BlockScope);
@@ -2444,8 +2450,6 @@ impl FlattenInner {
                 span_id,
             );
             new_block
-        } else {
-            self.open()
         }
     }
 
