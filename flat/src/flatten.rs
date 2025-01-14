@@ -637,7 +637,6 @@ impl FlattenInner {
         context: PushContext,
         b: &mut NB,
     ) -> (SafeBlockUnknown, LinkId) {
-        self.blocks.switch_blocks(open.block_id);
         let (unk, r) = self.push_node(open, node, context, b);
         let link_id = r.link_id.unwrap();
         (unk, link_id)
@@ -650,7 +649,6 @@ impl FlattenInner {
         context: PushContext,
         b: &mut NB,
     ) -> (SafeBlockUnknown, FlattenResult) {
-        self.blocks.switch_blocks(open.block_id);
         let (unk, r) = self.push_node(open, node, context, b);
         (unk, r)
     }
@@ -2294,7 +2292,6 @@ impl FlattenInner {
                 let mut open = open;
                 for e in exprs {
                     let span_id = e.span_id;
-                    self.blocks.switch_blocks(current_block_id);
                     let (this_open, link_id) =
                         self.safe_push_expr(open, e, PushContext::Default, b);
                     open = this_open;
