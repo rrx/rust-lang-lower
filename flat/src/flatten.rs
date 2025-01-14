@@ -2108,7 +2108,6 @@ impl FlattenInner {
                             let v_next = self
                                 .blocks
                                 .new_block(current_block_id, Successor::BlockScope);
-                            self.blocks.switch_blocks(v_next.block_id);
                             let open = self
                                 .push_start_block(
                                     v_next,
@@ -2138,7 +2137,6 @@ impl FlattenInner {
                         break;
                     }
                 }
-                self.blocks.switch_blocks(current_block_id);
                 let open = self.open();
                 (open.unknown(), FlattenResult::statement())
             }
