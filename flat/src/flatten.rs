@@ -1760,9 +1760,9 @@ impl FlattenInner {
             }
 
             Ast::Conditional(condition, then_expr, maybe_else_expr) => {
-                let current_block_id = self.blocks.current_block_id();
-                let block = self.blocks.get_block(current_block_id);
-                assert!(!block.is_term());
+                // result is unknown
+                // If both clauses are terminal, then this block is terminal
+                // otherwise, we need to create a next block
 
                 // Start Next Block, we might not need this
                 let next_block = self
@@ -1785,14 +1785,12 @@ impl FlattenInner {
                 };
 
                 let name = b.labels.fresh_key("then");
-                self.blocks.switch_blocks(then_start_block_id);
                 let (then_block, _, _) = self.push_start_block(
                     then_block,
                     branch_block_type.clone().into(),
                     Some(name),
                     then_span_id,
                 );
-                self.blocks.switch_blocks(then_block.block_id);
                 let (then_block, _) =
                     self.safe_push_node_result(then_block, *then_expr, PushContext::CondThen, b);
                 let then_end_block_id = then_block.block_id;
@@ -1811,7 +1809,6 @@ impl FlattenInner {
                         let else_span_id = else_expr.span_id;
                         let name = b.labels.fresh_key("else");
 
-                        self.blocks.switch_blocks(else_block.block_id);
                         let (else_block, _, _) = self.push_start_block(
                             else_block,
                             branch_block_type.into(),
@@ -1819,7 +1816,6 @@ impl FlattenInner {
                             else_span_id,
                         );
 
-                        self.blocks.switch_blocks(else_block.block_id);
                         let (else_block, _) = self.safe_push_node_result(
                             else_block,
                             *else_expr,
@@ -1852,7 +1848,6 @@ impl FlattenInner {
 
                 let v_next = if is_next_needed {
                     if has_else {
-                        self.blocks.switch_blocks(else_end_block_id);
                         let unk = self.blocks.safe_unknown();
                         self.maybe_terminate_block(
                             unk,
@@ -1863,12 +1858,10 @@ impl FlattenInner {
                         );
                     }
 
-                    self.blocks.switch_blocks(then_end_block_id);
-                    let unk = self.blocks.safe_unknown();
+                    let unk = self.blocks.safe_block_unknown(then_end_block_id);
                     self.maybe_terminate_block(unk, next_block.block_id, span_id, push_context, b);
 
                     // start the next block
-                    self.blocks.switch_blocks(next_block.block_id);
                     let (next_block, _, _) = self.push_start_block(
                         next_block,
                         AstFuncType::new_void_void(),
@@ -1882,12 +1875,11 @@ impl FlattenInner {
                 };
 
                 // condition
-                self.blocks.switch_blocks(current_block_id);
                 let open = self.open_block(current_block_id);
                 let (open, link_id) =
                     self.safe_push_expr(open, *condition, PushContext::Default, b);
 
-                let (_, v) = self.safe_push_code_term(
+                let (closed, v) = self.safe_push_code_term(
                     open,
                     LCode::Branch(
                         link_id.into(),
@@ -1900,11 +1892,16 @@ impl FlattenInner {
                     VarDefinitionSpace::Reg,
                 );
 
-                if let Some(v_next) = v_next {
+                let block = if let Some(v_next) = v_next {
                     // if next is used, leave the block open
                     self.blocks.switch_blocks(v_next);
-                }
-                (self.blocks.safe_unknown(), FlattenResult::link(v))
+                    self.blocks.safe_block_unknown(v_next)
+                } else {
+                    closed.unknown()
+                };
+
+                // get the resulting block
+                (block, FlattenResult::link(v))
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::BlockReference(expr)) => {
@@ -2504,6 +2501,7 @@ impl FlattenInner {
         _push_context: PushContext,
         b: &mut NB,
     ) -> SafeBlockClosed {
+        self.blocks.switch_blocks(block.block_id);
         // is the block isn't terminated, terminate it with a jump to another block
         if let Some(closed) = self.blocks.safe_block_try_closed(&block) {
             closed
