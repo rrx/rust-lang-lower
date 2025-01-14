@@ -178,7 +178,7 @@ impl FlattenInner {
 
     pub(crate) fn push_unwind(
         &mut self,
-        open: SafeBlockOpen,
+        mut open: SafeBlockOpen,
         target_block_id: BlockId,
         jump_args: ArgVec,
         call_span_id: SpanId,
@@ -249,10 +249,11 @@ impl FlattenInner {
                     call_span_id,
                 )
                 .0;
+            let new_block_id = new_block.block_id;
+
             let code = LCode::Val(Literal::Block(next_block.block_id));
-            let open = self.open();
-            let (open, var_link_id) = self.safe_push_code_open(
-                open,
+            let (new_block, var_link_id) = self.safe_push_code_open(
+                new_block,
                 code,
                 void_func_type.clone().into(),
                 None,
@@ -262,7 +263,7 @@ impl FlattenInner {
 
             // jump to unwind block
             let _ = self.push_jump_direct(
-                open,
+                new_block,
                 unwind_block_id,
                 vec![(None, var_link_id, void_func_type.into(), call_span_id)],
                 call_span_id,
@@ -271,7 +272,7 @@ impl FlattenInner {
 
             // jump to the new block
             let open = self.open_block(current_block_id);
-            self.push_jump_direct(open, new_block.block_id, vec![], call_span_id, b);
+            self.push_jump_direct(open, new_block_id, vec![], call_span_id, b);
 
             // define next block
             self.blocks.switch_blocks(next_block.block_id);
