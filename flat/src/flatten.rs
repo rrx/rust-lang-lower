@@ -2406,8 +2406,7 @@ impl FlattenInner {
                 b.unify(&ty, node.span_id, &required_ty.into(), node.span_id);
 
                 let current_block_id = self.blocks.current_block_id();
-                let block = self.blocks.get_block(current_block_id);
-                let scope_id = block.scope();
+                let scope_id = self.blocks.get_block(current_block_id).scope();
                 let scope = self.blocks.get_scope_mut(scope_id);
                 scope.prepend_deferral(func_block_id);
 
@@ -2437,15 +2436,17 @@ impl FlattenInner {
                 .new_block(self.blocks.current_block_id(), Successor::BlockScope);
             let name = b.labels.fresh_key("dead");
 
-            self.blocks.switch_blocks(new_block.block_id);
-            self.push_start_block(
+            //self.blocks.switch_blocks(new_block.block_id);
+            let (new_block, _, _) = self.push_start_block(
                 new_block,
                 AstFuncType::new(AstType::Struct(vec![]), ReturnType::Single(AstType::Unit)).into(),
                 Some(name),
                 span_id,
             );
+            new_block
+        } else {
+            self.open()
         }
-        self.open()
     }
 
     pub(super) fn maybe_terminate_block(
