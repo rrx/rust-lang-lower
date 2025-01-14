@@ -178,7 +178,7 @@ impl FlattenInner {
 
     pub(crate) fn push_unwind(
         &mut self,
-        mut open: SafeBlockOpen,
+        start_block: SafeBlockOpen,
         target_block_id: BlockId,
         jump_args: ArgVec,
         call_span_id: SpanId,
@@ -186,7 +186,7 @@ impl FlattenInner {
     ) -> SafeBlockClosed {
         // returns the entry to the unwind, which we will want to jump to
         let save_block_id = self.blocks.current_block_id();
-        let block = self.blocks.get_block(open.block_id);
+        let block = self.blocks.get_block(start_block.block_id);
         let goto_scope_id = block.scope();
 
         let block = self.blocks.get_block(target_block_id);
@@ -199,7 +199,9 @@ impl FlattenInner {
         println!("unwind scopes: {:?}", unwind_scopes);
 
         let start_key = b.labels.fresh_key("ustart");
-        let start_block = self.blocks.new_block(open.block_id, Successor::BlockScope);
+        let start_block = self
+            .blocks
+            .new_block(start_block.block_id, Successor::BlockScope);
         let start_block = self
             .push_start_block(
                 start_block,
