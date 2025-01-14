@@ -2251,15 +2251,13 @@ impl FlattenInner {
                 let scope_id = block.scope();
                 // loop up loop blocks by name
                 if let Some(loop_scope) = self.blocks.get_loop_scope(scope_id, maybe_key) {
-                    self.blocks.switch_blocks(current_block_id);
                     self.push_jump(open, loop_scope.next_block.into(), vec![], node.span_id, b);
 
-                    let v_next = self
+                    let next_block = self
                         .blocks
                         .new_block(current_block_id, Successor::BlockScope);
-                    self.blocks.switch_blocks(v_next.block_id);
                     let (open, link_id, _) = self.push_start_block(
-                        v_next,
+                        next_block,
                         AstFuncType::new_void_void(),
                         Some(b.labels.fresh_key("postloopbreak")),
                         span_id,
