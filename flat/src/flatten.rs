@@ -1971,7 +1971,6 @@ impl FlattenInner {
                     Some(name),
                     span_id,
                 );
-                self.blocks.switch_blocks(new_block.block_id);
                 (new_block.unknown(), FlattenResult::link(link_id))
             }
 
@@ -2048,7 +2047,6 @@ impl FlattenInner {
                 // yield is terminal
                 let mut ty = AstType::Unit;
                 let open = if let Some(expr) = maybe_expr {
-                    self.blocks.switch_blocks(current_block_id);
                     let (open, v) = self.safe_push_expr(open, *expr, PushContext::Default, b);
                     ty = self.get_type(v).clone();
                     // push single arg
