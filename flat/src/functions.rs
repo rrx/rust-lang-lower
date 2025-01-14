@@ -505,7 +505,6 @@ impl FlattenInner {
         self.blocks
             .block_succ(current_block_id, fun_block.block_id, succ_type);
 
-        self.blocks.switch_blocks(fun_block.block_id);
         let (fun_block, entry_link_id, entry_args) = self.push_start_block_mem(
             fun_block,
             def_func_type.clone(),
@@ -532,7 +531,6 @@ impl FlattenInner {
             .scope_define(scope_id, global_name, entry_link_id);
 
         // flatten function, and switch to next
-        self.blocks.switch_blocks(fun_block.block_id);
         let fun_block_id = fun_block.block_id;
         let (unk, _) = self.push_node(fun_block, body, PushContext::Default, b);
         let closed =
