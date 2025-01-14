@@ -201,7 +201,6 @@ impl FlattenInner {
         let start_block = self
             .blocks
             .new_block(current_block_id, Successor::BlockScope);
-        self.blocks.switch_blocks(start_block.block_id);
         let start_block = self
             .push_start_block(
                 start_block,
@@ -242,7 +241,6 @@ impl FlattenInner {
 
             // define new block
             let new_block = self.blocks.new_block(entry_block_id, succ);
-            self.blocks.switch_blocks(new_block.block_id);
             let void_func_type = AstFuncType::new_void_void();
             let new_key = b.labels.fresh_key("unew");
             let new_block = self
@@ -274,7 +272,6 @@ impl FlattenInner {
             );
 
             // jump to the new block
-            self.blocks.switch_blocks(current_block_id);
             let open = self.open_block(current_block_id);
             //let open = self.open();
             self.push_jump_direct(open, new_block.block_id, vec![], call_span_id, b);
