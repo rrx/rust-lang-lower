@@ -1014,6 +1014,7 @@ impl FlattenInner {
 
     pub fn push_builtin_call(
         &mut self,
+        open: SafeBlockOpen,
         id: BuiltinId,
         args: Vec<Argument>,
         call_span_id: SpanId,
@@ -1025,7 +1026,6 @@ impl FlattenInner {
             self.calculate_function_arguments(abstraction_id, &args, &[], call_span_id, b);
         let def_func_type = b.types.refresh_func_type(&def_func_type);
 
-        let open = self.open();
         let (open, call_values) = self.push_call_arguments(open, args, call_span_id, b);
         let (open, _) = self.safe_push_call_values(open, &call_values, b);
 
@@ -1435,8 +1435,7 @@ impl FlattenInner {
                     _ => {
                         let args_size = args.len();
                         assert_eq!(args_size, bi.arity());
-                        self.blocks.switch_blocks(current_block_id);
-                        let (open, r) = self.push_builtin_call(id, args, span_id, b);
+                        let (open, r) = self.push_builtin_call(open, id, args, span_id, b);
                         (open.unknown(), r)
                     }
                 }
