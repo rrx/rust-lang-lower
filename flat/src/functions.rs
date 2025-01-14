@@ -370,6 +370,7 @@ impl FlattenInner {
 
         let (_block_id, next_block, entry_link_id, _, argvec, _, _r, _entry_args) = self
             .push_bake_lambda_and_update_next(
+                start_block_id,
                 abstraction_id,
                 global_name,
                 fun_block,
@@ -388,6 +389,7 @@ impl FlattenInner {
 
     fn push_bake_lambda_and_update_next(
         &mut self,
+        start_block_id: BlockId,
         abstraction_id: AbstractionId,
         global_name: StringKey,
         fun_block: SafeBlockEmpty,
@@ -413,6 +415,7 @@ impl FlattenInner {
         let fun_scope_id = self.blocks.get_block(fun_block.block_id).scope();
         let next_block_id = next_block.block_id;
         let result = self.push_bake_lambda(
+            start_block_id,
             abstraction_id,
             global_name,
             fun_scope_id,
@@ -471,6 +474,7 @@ impl FlattenInner {
 
     fn push_bake_lambda(
         &mut self,
+        start_block_id: BlockId,
         abstraction_id: AbstractionId,
         global_name: StringKey,
         fun_scope_id: ScopeId,
@@ -496,14 +500,11 @@ impl FlattenInner {
         // allow for recursion
         //
         //
+        let start_scope_id = self.blocks.get_block(start_block_id).scope();
         let a = self.blocks.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
         let body = *a.def.body.clone().unwrap();
         let local_name = a.name;
-
-        let current_block_id = self.blocks.current_block_id();
-        let block = self.blocks.get_block(current_block_id);
-        let scope_id = block.scope();
 
         let fun_scope = self.blocks.get_scope_mut(fun_scope_id);
         //fun_scope.return_block = Some(next_block_id);
@@ -511,7 +512,7 @@ impl FlattenInner {
 
         // block graph
         self.blocks
-            .block_succ(current_block_id, fun_block.block_id, succ_type);
+            .block_succ(start_block_id, fun_block.block_id, succ_type);
 
         let (fun_block, entry_link_id, entry_args) = self.push_start_block_mem(
             fun_block,
@@ -525,7 +526,7 @@ impl FlattenInner {
         let variant_ty = b.types.u.resolve(&def_func_type.clone().into()).unwrap();
         // we need to know the link
         let variant_id = self.blocks.variant_add(
-            scope_id,
+            start_scope_id,
             abstraction_id,
             local_name,
             variant_ty.clone(),
@@ -536,7 +537,7 @@ impl FlattenInner {
         // add the name to scope
         // do this early for recursive functions
         self.blocks
-            .scope_define(scope_id, global_name, entry_link_id);
+            .scope_define(start_scope_id, global_name, entry_link_id);
 
         // flatten function, and switch to next
         let fun_block_id = fun_block.block_id;
@@ -783,6 +784,7 @@ impl FlattenInner {
         );
 
         let result = self.push_bake_lambda_and_update_next(
+            open.block_id,
             abstraction_id,
             global_name,
             fun_block,
@@ -884,6 +886,7 @@ impl FlattenInner {
         // generate the CPS function, that's it
         // and jump to it, passing the exit continuation
         let (fun_block_id, ret_block_ty) = self.gen_call_inline_cps_inner(
+            call_block.block_id,
             abstraction_id,
             scope_id,
             call_span_id,
@@ -964,6 +967,7 @@ impl FlattenInner {
 
     fn gen_call_inline_cps_inner(
         &mut self,
+        start_block_id: BlockId,
         abstraction_id: AbstractionId,
         scope_id: ScopeId,
         call_span_id: SpanId,
@@ -1023,6 +1027,7 @@ impl FlattenInner {
 
             // return an open block, which we will complete with a placeholder
             let result = self.push_bake_lambda_and_update_next(
+                start_block_id,
                 abstraction_id,
                 lookup_name,
                 fun_block,
