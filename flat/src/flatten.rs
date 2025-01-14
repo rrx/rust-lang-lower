@@ -1539,8 +1539,6 @@ impl FlattenInner {
                     VarDefinitionSpace::Default,
                 );
 
-                self.blocks.switch_blocks(open.block_id);
-
                 (open.unknown(), FlattenResult::link(link_id))
             }
 
