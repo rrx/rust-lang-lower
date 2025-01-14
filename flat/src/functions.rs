@@ -800,7 +800,6 @@ impl FlattenInner {
 
         // JUMP
         // jump into the the lambda
-        let open = self.open();
         self.push_jump(
             open,
             fun_block.block_id.into(),
@@ -809,7 +808,6 @@ impl FlattenInner {
             b,
         );
 
-        self.blocks.switch_blocks(next_block.block_id);
         // STORE ARG
         // r contains the link to the return value
         // r contains the return result link, which is part of the next block arguments.
