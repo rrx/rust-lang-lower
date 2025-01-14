@@ -774,7 +774,6 @@ impl FlattenInner {
         context: PushContext,
         b: &mut NB,
     ) -> (SafeBlockOpen, LinkId) {
-        self.blocks.switch_blocks(open.block_id);
         b.dump_ast(&expr);
         let (unk, r) = self.push_node(open, expr, context, b);
         let link_id = r.link_id.unwrap();
@@ -799,16 +798,17 @@ impl FlattenInner {
 
     pub fn push_store_args(
         &mut self,
+        open: SafeBlockOpen,
         decl_scope_id: ScopeId,
         jump_args: ArgVec,
         span_id: SpanId,
         b: &mut NB,
-    ) -> ArgVec {
+    ) -> (SafeBlockOpen, ArgVec) {
         // for all of the return links, copy them into the target scope
         // Anything we are referencing here is potentially going to be destroyed
         // We copy everything for now, but don't need to do this in all circumstances
         // For example, if the value is already in the target scope, or it's on the heap.
-        let start_block_id = self.blocks.current_block_id();
+        let start_block_id = open.block_id; //self.blocks.current_block_id();
         let scope = self.blocks.get_scope(decl_scope_id);
         let decl_block_id = scope.entry_block();
         let mut copied_link_ids = vec![];
@@ -835,7 +835,7 @@ impl FlattenInner {
             );
             copied_link_ids.push((None, decl_link_id, ty, span_id));
         }
-        copied_link_ids
+        (open, copied_link_ids)
     }
 
     pub fn push_jump_unwind(
@@ -875,7 +875,9 @@ impl FlattenInner {
                 (target_block_id, jump_args)
             } else {
                 log::debug!("unwind: {:?}", unwind);
-                let copied_link_ids = self.push_store_args(target_scope_id, jump_args, span_id, b);
+                let open = self.open();
+                let (open, copied_link_ids) =
+                    self.push_store_args(open, target_scope_id, jump_args, span_id, b);
                 let target = self.push_unwind(target_block_id, copied_link_ids, span_id, b);
                 (target, vec![])
             }
@@ -1758,47 +1760,45 @@ impl FlattenInner {
                 let then_is_term = self.blocks.get_block(then_block.block_id).is_term();
 
                 // ELSE Block
-                let (has_else, else_is_term, else_start_block_id, else_end_block_id) =
-                    if let Some(else_expr) = maybe_else_expr {
-                        let (else_block, else_start_block_id, _) = self.blocks.new_scope_and_block(
-                            ScopeType::Block,
-                            ScopeState::block(),
-                            current_block_id,
-                            Successor::BlockScope,
-                        );
+                let (has_else, else_is_term, else_start_block_id, _) = if let Some(else_expr) =
+                    maybe_else_expr
+                {
+                    let (else_block, else_start_block_id, _) = self.blocks.new_scope_and_block(
+                        ScopeType::Block,
+                        ScopeState::block(),
+                        current_block_id,
+                        Successor::BlockScope,
+                    );
 
-                        let else_span_id = else_expr.span_id;
-                        let name = b.labels.fresh_key("else");
+                    let else_span_id = else_expr.span_id;
+                    let name = b.labels.fresh_key("else");
 
-                        let (else_block, _, _) = self.push_start_block(
-                            else_block,
-                            branch_block_type.into(),
-                            Some(name),
-                            else_span_id,
-                        );
+                    let (else_block, _, _) = self.push_start_block(
+                        else_block,
+                        branch_block_type.into(),
+                        Some(name),
+                        else_span_id,
+                    );
 
-                        let (else_block, _) = self.safe_push_node_result(
-                            else_block,
-                            *else_expr,
-                            PushContext::CondThen,
-                            b,
-                        );
-                        let else_end_block_id = else_block.block_id;
-                        let else_is_term = self.blocks.get_block(else_end_block_id).is_term();
-                        (true, else_is_term, else_start_block_id, else_end_block_id)
-                    } else {
-                        self.blocks.block_succ(
-                            current_block_id,
-                            next_block.block_id,
-                            Successor::BlockScope,
-                        );
-                        self.blocks.block_succ(
-                            current_block_id,
-                            next_block.block_id,
-                            Successor::Jump,
-                        );
-                        (false, false, next_block.block_id, next_block.block_id)
-                    };
+                    let (else_block, _) = self.safe_push_node_result(
+                        else_block,
+                        *else_expr,
+                        PushContext::CondThen,
+                        b,
+                    );
+                    let else_end_block_id = else_block.block_id;
+                    let else_is_term = self.blocks.get_block(else_end_block_id).is_term();
+                    (true, else_is_term, else_start_block_id, else_end_block_id)
+                } else {
+                    self.blocks.block_succ(
+                        current_block_id,
+                        next_block.block_id,
+                        Successor::BlockScope,
+                    );
+                    self.blocks
+                        .block_succ(current_block_id, next_block.block_id, Successor::Jump);
+                    (false, false, next_block.block_id, next_block.block_id)
+                };
 
                 // we only want to create a next block if either of the branches are not terminated
                 // Otherwise we need it
