@@ -1394,7 +1394,6 @@ impl FlattenInner {
                         let global_name_key = b.labels.s(&global_name);
 
                         let ast_ty: AstType = lit.clone().into();
-                        self.blocks.switch_blocks(static_block_id);
                         let link_id = self.insert_decl_entry(
                             static_block_id,
                             CodeEntry::new(
@@ -1409,8 +1408,6 @@ impl FlattenInner {
 
                         self.blocks.scope_define(scope_id, name, link_id.into());
 
-                        self.blocks.switch_blocks(current_block_id);
-                        let open = self.open();
                         (open.unknown(), FlattenResult::link(link_id))
                     }
                     _ => {
@@ -1429,7 +1426,6 @@ impl FlattenInner {
                         } else {
                             b.push_error("Expected string", span_id);
                         }
-                        self.blocks.switch_blocks(current_block_id);
                         (open.unknown(), FlattenResult::statement())
                     }
                     _ => {
