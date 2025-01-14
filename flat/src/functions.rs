@@ -375,7 +375,6 @@ impl FlattenInner {
 
         let (_closed, _) = self.push_return(next_block, argvec, def_span_id, b);
         // restore position back to where we started
-        self.blocks.switch_blocks(current_block_id);
         FlattenResult::link(entry_link_id)
     }
 
@@ -425,7 +424,6 @@ impl FlattenInner {
         let s_name = b.labels.r(local_name.into());
         let cont_name = format!("{}.next", s_name);
 
-        self.blocks.switch_blocks(next_block_id);
         let (next_block, _v_block, v_args) = self.push_start_block(
             next_block,
             ret_block_ty.clone().into(),
