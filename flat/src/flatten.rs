@@ -1340,6 +1340,7 @@ impl FlattenInner {
         push_context: PushContext,
         b: &mut NB,
     ) -> (SafeBlockUnknown, FlattenResult) {
+        self.blocks.switch_blocks(open.block_id);
         let current_block_id = open.block_id;
         let block = self.blocks.get_block_mut(current_block_id);
         let span_id = node.span_id;
@@ -2154,25 +2155,22 @@ impl FlattenInner {
                     Successor::BlockScope,
                 );
 
-                let v_next = self
+                let next_block = self
                     .blocks
                     .new_block(current_block_id, Successor::BlockScope);
-                self.blocks.switch_blocks(v_next.block_id);
-                let open = self
+                let next_block = self
                     .push_start_block(
-                        v_next,
+                        next_block,
                         AstFuncType::new_void_void(),
                         Some(b.labels.fresh_key("postloop")),
                         span_id,
                     )
                     .0;
 
-                self.blocks.switch_blocks(current_block_id);
-
                 self.blocks.update_loop_blocks(
                     loop_scope_id,
                     maybe_key,
-                    open.block_id.into(),
+                    next_block.block_id.into(),
                     loop_block_id.into(),
                 );
 
@@ -2182,7 +2180,6 @@ impl FlattenInner {
                     b.labels.fresh_key("default_loop")
                 };
 
-                self.blocks.switch_blocks(loop_block_id);
                 let loop_block = self
                     .push_start_block(
                         loop_block,
@@ -2196,8 +2193,6 @@ impl FlattenInner {
                     )
                     .0;
 
-                self.blocks.switch_blocks(current_block_id);
-                let open = self.open();
                 self.push_jump(open, loop_block_id.into(), vec![], node.span_id, b);
 
                 // open loop block
