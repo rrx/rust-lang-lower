@@ -2213,7 +2213,6 @@ impl FlattenInner {
                         node.span_id,
                         b,
                     );
-                    self.blocks.switch_blocks(current_block_id);
                     (closed.unknown(), FlattenResult::statement())
                 } else {
                     // mismatch name
@@ -2238,7 +2237,6 @@ impl FlattenInner {
                         node.span_id,
                         b,
                     );
-                    self.blocks.switch_blocks(current_block_id);
                     (closed.unknown(), FlattenResult::statement())
                 } else {
                     // mismatch name
