@@ -936,9 +936,6 @@ impl FlattenInner {
             b,
         );
 
-        self.blocks.switch_blocks(exit_block.block_id);
-        // in the next block
-
         // STORE ARG
         // r contains the link to the return value
         // r contains the return result link, which is part of the next block arguments.
