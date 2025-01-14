@@ -59,7 +59,12 @@ impl FlattenInner {
     pub fn gen_bake_main(&mut self, b: &mut NB) -> Result<LinkId> {
         let name = b.labels.s("main");
         let ty = AstType::func(vec![], AstType::Int);
-        self.gen_bake(name, ty.get_func().clone(), b)
+        self.gen_bake(
+            self.blocks.static_block_id(),
+            name,
+            ty.get_func().clone(),
+            b,
+        )
     }
 
     pub fn calculate_function_arguments(
@@ -290,7 +295,13 @@ impl FlattenInner {
         } else {
             self.blocks.switch_blocks(self.blocks.static_block_id());
             // if it's not already baked, we need to do that here
-            let r = self.gen_bake_function(abstraction_id, call_func_type.clone(), global_key, b);
+            let r = self.gen_bake_function(
+                self.blocks.static_block_id(),
+                abstraction_id,
+                call_func_type.clone(),
+                global_key,
+                b,
+            );
             let v_entry = r.link_id.unwrap();
             v_entry
         };
@@ -299,6 +310,7 @@ impl FlattenInner {
 
     pub fn gen_bake(
         &mut self,
+        start_block_id: BlockId,
         name: StringKey,
         func_type: AstFuncType,
         b: &mut NB,
@@ -307,7 +319,7 @@ impl FlattenInner {
             .blocks
             .resolve_lambda(self.blocks.current_block_id(), name)
         {
-            let r = self.gen_bake_function(abstraction_id, func_type, name, b);
+            let r = self.gen_bake_function(start_block_id, abstraction_id, func_type, name, b);
             Ok(r.link_id.unwrap())
         } else {
             let s = b.labels.r(name.into());
@@ -319,6 +331,7 @@ impl FlattenInner {
 
     fn gen_bake_function(
         &mut self,
+        start_block_id: BlockId,
         abstraction_id: AbstractionId,
         def_func_ty: AstFuncType,
         global_name: StringKey,
@@ -326,7 +339,7 @@ impl FlattenInner {
     ) -> FlattenResult {
         // returns the entry to the function
 
-        let current_block_id = self.blocks.current_block_id();
+        //let current_block_id = self.blocks.current_block_id();
         let a = self.blocks.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
 
@@ -343,14 +356,14 @@ impl FlattenInner {
             ScopeType::Function,
             // hack: return block is set in the bake
             ScopeState::block(),
-            current_block_id,
+            start_block_id,
             Successor::BlockScope,
         );
 
         // we put the return block in a different scope, so it's clear we need to unwind before
         // jumping to it.
         let next_block = self.blocks.new_block_different_scope(
-            current_block_id,
+            start_block_id,
             fun_scope_id,
             Successor::BlockScope,
         );
