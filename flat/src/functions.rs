@@ -56,17 +56,10 @@ impl AbstractionsBuilder {
 }
 
 impl FlattenInner {
-    pub fn push_bake_main(&mut self, b: &mut NB) -> Result<LinkId> {
-        let current_block_id = self.blocks.current_block_id();
+    pub fn gen_bake_main(&mut self, b: &mut NB) -> Result<LinkId> {
         let name = b.labels.s("main");
-        // reset the block position before each function
-        // main is always static context
-        self.blocks.switch_blocks(self.blocks.static_block_id());
         let ty = AstType::func(vec![], AstType::Int);
-        let r = self.push_bake(name, ty.get_func().clone(), b);
-        // switch back after bake
-        self.blocks.switch_blocks(current_block_id);
-        r
+        self.gen_bake(name, ty.get_func().clone(), b)
     }
 
     pub fn calculate_function_arguments(
@@ -309,7 +302,7 @@ impl FlattenInner {
         (v_entry, call_func_type.into())
     }
 
-    pub fn push_bake(
+    pub fn gen_bake(
         &mut self,
         name: StringKey,
         func_type: AstFuncType,
