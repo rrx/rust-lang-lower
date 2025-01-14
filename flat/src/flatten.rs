@@ -2437,12 +2437,9 @@ impl FlattenInner {
         if let Some(open) = self.blocks.safe_block_try_open(&unk) {
             open
         } else {
-            let new_block = self
-                .blocks
-                .new_block(self.blocks.current_block_id(), Successor::BlockScope);
+            let new_block = self.blocks.new_block(unk.block_id, Successor::BlockScope);
             let name = b.labels.fresh_key("dead");
 
-            //self.blocks.switch_blocks(new_block.block_id);
             let (new_block, _, _) = self.push_start_block(
                 new_block,
                 AstFuncType::new(AstType::Struct(vec![]), ReturnType::Single(AstType::Unit)).into(),
