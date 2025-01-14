@@ -79,8 +79,6 @@ impl FlattenInner {
             let a = self.blocks.abstractions.get(abstraction_id);
             let body = a.def.body.clone().unwrap();
 
-            self.blocks.switch_blocks(empty.block_id);
-
             let r_ty1 = b.types.u.resolve(&def_func_type.into()).unwrap();
 
             let (open, entry_link_id, _) = self.push_start_block(
@@ -750,8 +748,6 @@ impl FlattenInner {
             let block_entry = self.get_entry(block_entry_id);
             let block_ty = block_entry.ty.clone();
             let block_span_id = block_entry.span_id;
-
-            self.blocks.switch_blocks(block_id);
 
             // now replace the abstraction code
             let entry = self.get_entry_mut(link_id);
