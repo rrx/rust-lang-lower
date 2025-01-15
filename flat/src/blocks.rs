@@ -235,10 +235,6 @@ impl BlockGraph<BlockGraphStateOpen> {
     pub fn static_block_id(&self) -> BlockId {
         self.extra.static_block
     }
-
-    pub fn switch_blocks(&mut self, block_id: BlockId) {
-        self.extra.current_block = block_id;
-    }
 }
 
 impl<S: BlockGraphState> BlockGraph<S> {
