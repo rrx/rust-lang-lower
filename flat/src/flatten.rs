@@ -1038,30 +1038,35 @@ impl FlattenInner {
         (open, FlattenResult::link(link_id))
     }
 
-    fn push_start_block_args(&mut self, block_ty: AstFuncType, span_id: SpanId) -> ArgVec {
+    fn push_start_block_args(
+        &mut self,
+        empty: SafeBlockEmpty,
+        block_ty: AstFuncType,
+        span_id: SpanId,
+    ) -> (SafeBlockOpen, ArgVec) {
         assert!(block_ty.args.is_composite());
 
-        let mut open = self.open();
         let block_id = self.blocks.current_block_id();
         let scope_id = self.blocks.get_block(block_id).scope();
 
         let mut v_args = vec![];
         for (i, (name, ty)) in block_ty.args.fields().iter().enumerate() {
-            let (this_open, link_id) = self.safe_push_code_open(
-                open,
+            let entry = CodeEntry::new(
+                empty.block_id,
                 LCode::Arg(i as u8),
                 ty.clone(),
                 *name,
                 span_id,
                 VarDefinitionSpace::Arg,
             );
-            open = this_open;
+            let link_id = self.insert_entry_with_link(entry);
             v_args.push((*name, link_id, ty.clone(), span_id));
             if let Some(name) = name {
                 self.blocks.scope_define(scope_id, *name, link_id.into());
             }
         }
-        v_args
+        let open = self.open_block(empty.block_id);
+        (open, v_args)
     }
 
     pub(super) fn push_start_block_static(
@@ -1102,12 +1107,8 @@ impl FlattenInner {
         );
         self.blocks.switch_blocks(empty.block_id);
         let block_link_id = self.insert_entry_with_link(entry);
-        let v_args = self.push_start_block_args(block_ty, span_id);
-        self.blocks
-            .block_links
-            .insert(self.blocks.current_block_id(), block_link_id);
-
-        let open = self.open();
+        let (open, v_args) = self.push_start_block_args(empty, block_ty, span_id);
+        self.blocks.block_links.insert(open.block_id, block_link_id);
         (open, block_link_id, v_args)
     }
 
