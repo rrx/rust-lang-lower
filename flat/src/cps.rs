@@ -26,7 +26,6 @@ impl FlattenInner {
     ) -> BlockId {
         let s_name = b.labels.r(name.into());
         // call in the context of the caller, which is a goto
-        let current_block_id = self.blocks.current_block_id();
 
         let a = self.blocks.abstractions.get(abstraction_id);
         let def_span_id = a.def_span_id;
@@ -121,8 +120,6 @@ impl FlattenInner {
             // return the new_block_id, which is the function block_id
             new_block_id
         };
-
-        self.blocks.switch_blocks(current_block_id);
 
         fun_block_id
     }
