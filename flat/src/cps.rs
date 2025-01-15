@@ -405,12 +405,10 @@ impl FlattenInner {
         call_span_id: SpanId,
         _b: &mut NB,
     ) -> FlattenResult {
-        let open = self.open();
-
         // push a goto
         // to keep things simpler, we just defer all resolution of the gotos until the end
         // Goto is terminal, so we write out placeholders
-        let current_block_id = self.blocks.current_block_id();
+        let current_block_id = open.block_id;
         let block = self.blocks.get_block(current_block_id);
         let scope_id = block.scope();
 
