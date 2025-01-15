@@ -345,7 +345,6 @@ impl FlattenInner {
 
     fn _finish(mut self, b: &mut NB) -> (Self, Values) {
         // make sure all claims have been handled
-        self.blocks.switch_blocks(self.blocks.static_block_id());
         self.blocks.ensure_claims(b);
 
         // add prototypes for builtins
@@ -359,10 +358,8 @@ impl FlattenInner {
 
         self.cont_graph("cont.dot", b);
 
-        self.blocks.switch_blocks(self.blocks.static_block_id());
         self.resolve_open_identifiers(b);
         self.resolve_cps(b);
-        self.blocks.switch_blocks(self.blocks.static_block_id());
 
         // declare static functions
         // TODO: we can move this into the static function generator

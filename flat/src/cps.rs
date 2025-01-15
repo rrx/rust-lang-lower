@@ -690,8 +690,6 @@ impl FlattenInner {
                             m.insert(target_block_id.index(), new_block_id);
                         }
 
-                        self.blocks.switch_blocks(d_block_id);
-
                         let code = LCode::Switch(arg_link_id, m);
                         last_entry.code = code;
                         last_entry.ty = AstFuncType::new_void_void().into();
