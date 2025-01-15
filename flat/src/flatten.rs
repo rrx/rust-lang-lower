@@ -1138,11 +1138,10 @@ impl FlattenInner {
         }
     }
 
-    pub fn dump_position(&self) {
-        let block_id = self.blocks.current_block_id();
-        let block = self.blocks.get_block(block_id);
+    pub fn dump_position(&self, unk: SafeBlockUnknown) {
+        let block = self.blocks.get_block(unk.block_id);
         let scope_id = block.scope();
-        println!("pos: {}{}", scope_id, block_id);
+        println!("pos: {}{}", scope_id, unk.block_id);
     }
 
     pub(super) fn resolve_return_type(
@@ -1324,8 +1323,7 @@ impl FlattenInner {
         b: &mut NB,
     ) -> (SafeBlockUnknown, FlattenResult) {
         self.blocks.switch_blocks(open.block_id);
-        let current_block_id = open.block_id;
-        let block = self.blocks.get_block_mut(current_block_id);
+        let block = self.blocks.get_block_mut(open.block_id);
         let span_id = node.span_id;
         let ast = node.node;
 
@@ -1345,7 +1343,7 @@ impl FlattenInner {
                         // save template for later use
                         if def.body.is_some() {
                             self.blocks
-                                .save_abstraction(current_block_id, &name, &def, span_id);
+                                .save_abstraction(open.block_id, &name, &def, span_id);
                         }
 
                         // TODO: The function doesn't actually exist until we call it
@@ -1511,7 +1509,7 @@ impl FlattenInner {
                 let scope_id = block.scope();
 
                 // resolve identifier lexically
-                if let Some(def_link_id) = self.blocks.resolve_name(current_block_id, key) {
+                if let Some(def_link_id) = self.blocks.resolve_name(open.block_id, key) {
                     let link_id = def_link_id;
                     return (open.unknown(), FlattenResult::link(link_id));
                 }
@@ -1562,9 +1560,9 @@ impl FlattenInner {
                 if let Ast::Lambda(def) = expr.node {
                     // save the template
                     let def_span_id = expr.span_id;
-                    let _ =
-                        self.blocks
-                            .save_abstraction(current_block_id, &name, &def, def_span_id);
+                    let _ = self
+                        .blocks
+                        .save_abstraction(open.block_id, &name, &def, def_span_id);
                     return (open.unknown(), FlattenResult::statement());
                 }
 
@@ -1573,8 +1571,8 @@ impl FlattenInner {
                 let expr_ty = expr_entry.ty.clone();
                 let expr_span_id = expr_entry.span_id;
 
-                let block_id = self.blocks.current_block_id();
-                let block = self.blocks.get_block(block_id);
+                //let block_id = self.blocks.current_block_id();
+                let block = self.blocks.get_block(open.block_id);
                 let scope_id = block.scope();
 
                 let (open, offset_decl) =
@@ -1585,7 +1583,7 @@ impl FlattenInner {
                         (open, v_decl)
                     } else {
                         // need to declare it
-                        let block = self.blocks.get_block(self.blocks.current_block_id());
+                        let block = self.blocks.get_block(open.block_id); //self.blocks.current_block_id());
                         let scope_id = block.scope();
 
                         let (open, link_id) = self.safe_push_code_open(
@@ -1666,7 +1664,7 @@ impl FlattenInner {
                     // lambdas should also be non-terminal
                     Ast::Identifier(ident) => {
                         if let Some((scope_id, abstraction_id)) =
-                            self.blocks.resolve_lambda(current_block_id, *ident)
+                            self.blocks.resolve_lambda(open.block_id, *ident)
                         {
                             let (open, r) =
                                 self.push_call(open, scope_id, abstraction_id, span_id, args, b);
@@ -1721,15 +1719,13 @@ impl FlattenInner {
                 // otherwise, we need to create a next block
 
                 // Start Next Block, we might not need this
-                let next_block = self
-                    .blocks
-                    .new_block(current_block_id, Successor::BlockScope);
+                let next_block = self.blocks.new_block(open.block_id, Successor::BlockScope);
 
                 // THEN Block
                 let (then_block, then_start_block_id, _) = self.blocks.new_scope_and_block(
                     ScopeType::Block,
                     ScopeState::block(),
-                    current_block_id,
+                    open.block_id,
                     Successor::BlockScope,
                 );
 
@@ -1758,7 +1754,7 @@ impl FlattenInner {
                         let (else_block, else_start_block_id, _) = self.blocks.new_scope_and_block(
                             ScopeType::Block,
                             ScopeState::block(),
-                            current_block_id,
+                            open.block_id,
                             Successor::BlockScope,
                         );
 
@@ -1783,15 +1779,12 @@ impl FlattenInner {
                         (true, else_is_term, else_start_block_id, else_end_block_id)
                     } else {
                         self.blocks.block_succ(
-                            current_block_id,
+                            open.block_id,
                             next_block.block_id,
                             Successor::BlockScope,
                         );
-                        self.blocks.block_succ(
-                            current_block_id,
-                            next_block.block_id,
-                            Successor::Jump,
-                        );
+                        self.blocks
+                            .block_succ(open.block_id, next_block.block_id, Successor::Jump);
                         (false, false, next_block.block_id, next_block.block_id)
                     };
 
@@ -1831,7 +1824,7 @@ impl FlattenInner {
                 };
 
                 // condition
-                let open = self.open_block(current_block_id);
+                let open = self.open_block(open.block_id);
                 let (open, link_id) =
                     self.safe_push_expr(open, *condition, PushContext::Default, b);
 
@@ -1972,7 +1965,7 @@ impl FlattenInner {
                 let (then_block, then_block_id, _) = self.blocks.new_scope_and_block(
                     ScopeType::Region,
                     ScopeState::region(),
-                    current_block_id,
+                    open.block_id,
                     Successor::Operation,
                 );
                 let then_span_id = x.span_id;
@@ -1996,7 +1989,7 @@ impl FlattenInner {
                 let (else_block, else_block_id, _) = self.blocks.new_scope_and_block(
                     ScopeType::Region,
                     ScopeState::region(),
-                    current_block_id,
+                    open.block_id,
                     Successor::Operation,
                 );
                 let else_ast = AstNode::make_yield(*y);
@@ -2134,13 +2127,11 @@ impl FlattenInner {
                 let (loop_block, loop_block_id, loop_scope_id) = self.blocks.new_scope_and_block(
                     ScopeType::Region,
                     ScopeState::region(),
-                    current_block_id,
+                    open.block_id,
                     Successor::BlockScope,
                 );
 
-                let next_block = self
-                    .blocks
-                    .new_block(current_block_id, Successor::BlockScope);
+                let next_block = self.blocks.new_block(open.block_id, Successor::BlockScope);
                 let next_block = self
                     .push_start_block(
                         next_block,
@@ -2183,7 +2174,7 @@ impl FlattenInner {
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::LoopContinue(maybe_key)) => {
-                let block = self.blocks.get_block(current_block_id);
+                let block = self.blocks.get_block(open.block_id);
                 let scope_id = block.scope();
 
                 // loop up loop blocks by name
@@ -2205,7 +2196,7 @@ impl FlattenInner {
             }
 
             Ast::Continue(maybe_name, args) => {
-                let block = self.blocks.get_block(current_block_id);
+                let block = self.blocks.get_block(open.block_id);
                 let scope_id = block.scope();
 
                 // args not implemented yet
@@ -2229,14 +2220,13 @@ impl FlattenInner {
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::LoopBreak(maybe_key)) => {
-                let scope_id = self.blocks.get_block(current_block_id).scope();
+                let start_block_id = open.block_id;
+                let scope_id = self.blocks.get_block(open.block_id).scope();
                 // loop up loop blocks by name
                 if let Some(loop_scope) = self.blocks.get_loop_scope(scope_id, maybe_key) {
                     self.push_jump(open, loop_scope.next_block.into(), vec![], node.span_id, b);
 
-                    let next_block = self
-                        .blocks
-                        .new_block(current_block_id, Successor::BlockScope);
+                    let next_block = self.blocks.new_block(start_block_id, Successor::BlockScope);
                     let (open, link_id, _) = self.push_start_block(
                         next_block,
                         AstFuncType::new_void_void(),
@@ -2253,7 +2243,7 @@ impl FlattenInner {
             }
 
             Ast::Break(maybe_name, args) => {
-                let scope_id = self.blocks.get_block(current_block_id).scope();
+                let scope_id = self.blocks.get_block(open.block_id).scope();
 
                 // args not implemented yet
                 assert_eq!(args.len(), 0);
