@@ -610,7 +610,7 @@ impl FlattenInner {
                             .collect::<Vec<_>>(),
                     );
 
-                    let (this_open, link_id) = self.safe_push_code_open(
+                    let (this_open, link_id) = self.push_code_open(
                         open,
                         LCode::NaryOp(NaryOperation::Struct),
                         struct_ty.clone(),

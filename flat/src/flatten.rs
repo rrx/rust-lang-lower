@@ -643,7 +643,7 @@ impl FlattenInner {
     ) -> (SafeBlockClosed, LinkId) {
         let (open, _) = self.push_call_values(open, &values, b);
 
-        let (closed, link_id) = self.safe_push_code_term(
+        let (closed, link_id) = self.push_code_term(
             open,
             LCode::Return,
             AstType::Unit,
@@ -662,7 +662,7 @@ impl FlattenInner {
         let mut links = vec![];
         for (maybe_key, v, ty, span_id) in values {
             let out = if self.blocks.links.is_load_required(*v) {
-                let (this_open, link_id) = self.safe_push_code_open(
+                let (this_open, link_id) = self.push_code_open(
                     open,
                     LCode::Load(*v),
                     ty.clone(),
@@ -731,7 +731,7 @@ impl FlattenInner {
 
         let mut links = vec![];
         for (maybe_key, v, ty, span_id) in updated_values {
-            let (this_open, link_id) = self.safe_push_code_open(
+            let (this_open, link_id) = self.push_code_open(
                 open,
                 LCode::CallValue(v.into()),
                 ty.clone(),
@@ -800,7 +800,7 @@ impl FlattenInner {
             let decl_link_id = self.insert_decl(&sblock, ty.clone(), key, span_id);
 
             // push save into the open block
-            let (this_open, _) = self.safe_push_code_open(
+            let (this_open, _) = self.push_code_open(
                 open,
                 LCode::Store(decl_link_id, *link_id),
                 AstType::Unit,
@@ -890,7 +890,7 @@ impl FlattenInner {
             b,
         );
 
-        let (closed, jump_link_id) = self.safe_push_code_term(
+        let (closed, jump_link_id) = self.push_code_term(
             open,
             LCode::Jump(target_block_id.into()),
             AstFuncType::new(arg_ty, ReturnType::Single(AstType::Unit)).into(),
@@ -918,7 +918,7 @@ impl FlattenInner {
         closed
     }
 
-    pub fn safe_push_code_open(
+    pub fn push_code_open(
         &mut self,
         open: SafeBlockOpen,
         code: LCode,
@@ -932,7 +932,7 @@ impl FlattenInner {
         (open, self.insert_entry_with_link(entry))
     }
 
-    pub fn safe_push_code_term(
+    pub fn push_code_term(
         &mut self,
         open: SafeBlockOpen,
         code: LCode,
@@ -962,7 +962,7 @@ impl FlattenInner {
         let (open, _) = self.push_call_values(open, &values, b);
 
         if let ReturnType::Single(ty) = &ret_ty {
-            let (open, link_id) = self.safe_push_code_open(
+            let (open, link_id) = self.push_code_open(
                 open,
                 LCode::Call(v_fun.into()),
                 ty.clone(),
@@ -1004,7 +1004,7 @@ impl FlattenInner {
             call_span_id,
         );
 
-        let (open, link_id) = self.safe_push_code_open(
+        let (open, link_id) = self.push_code_open(
             open,
             LCode::Builtin(id),
             def_func_type.into(),
@@ -1255,7 +1255,7 @@ impl FlattenInner {
     }
 
     pub fn push_noop(&mut self, open: SafeBlockOpen, span_id: SpanId) -> (SafeBlockOpen, LinkId) {
-        let (open, link_id) = self.safe_push_code_open(
+        let (open, link_id) = self.push_code_open(
             open,
             LCode::Noop,
             AstType::Unit,
@@ -1283,12 +1283,7 @@ impl FlattenInner {
         push_context: PushContext,
         b: &mut NB,
     ) -> FlattenResult {
-        let block = self.safe_static();
-        let open = SafeBlock {
-            block_id: block.block_id,
-            extra: crate::safe::Open {},
-        };
-
+        let open = self.safe_static();
         let (_, r) = self.push_node(open, node, push_context, b);
         r
     }
@@ -1300,7 +1295,6 @@ impl FlattenInner {
         push_context: PushContext,
         b: &mut NB,
     ) -> (SafeBlockUnknown, FlattenResult) {
-        let block = self.blocks.get_block_mut(open.block_id);
         let span_id = node.span_id;
         let ast = node.node;
 
@@ -1336,7 +1330,7 @@ impl FlattenInner {
                     }
 
                     Ast::Literal(lit) => {
-                        let scope_id = block.scope();
+                        let scope_id = self.blocks.get_block(open.block_id).scope();
                         let scope = self.blocks.get_scope(scope_id);
 
                         let static_block_id = self.blocks.static_block_id();
@@ -1435,14 +1429,8 @@ impl FlattenInner {
                 };
                 let mem = VarDefinitionSpace::Default;
 
-                let (open, link_id) = self.safe_push_code_open(
-                    open,
-                    LCode::Val(lit),
-                    ty.clone(),
-                    None,
-                    node.span_id,
-                    mem,
-                );
+                let (open, link_id) =
+                    self.push_code_open(open, LCode::Val(lit), ty.clone(), None, node.span_id, mem);
                 (open.unknown(), FlattenResult::link(link_id))
             }
 
@@ -1469,7 +1457,7 @@ impl FlattenInner {
                 );
 
                 let ret_ty = op.node.get_type(&rx_ty, &ry_ty);
-                let (open, link_id) = self.safe_push_code_open(
+                let (open, link_id) = self.push_code_open(
                     open,
                     LCode::Op2(op.node),
                     ret_ty.clone(),
@@ -1483,7 +1471,7 @@ impl FlattenInner {
 
             Ast::Identifier(key) => {
                 // identifier is expression, non-terminal
-                let scope_id = block.scope();
+                let scope_id = self.blocks.get_block(open.block_id).scope();
 
                 // resolve identifier lexically
                 if let Some(def_link_id) = self.blocks.resolve_name(open.block_id, key) {
@@ -1497,7 +1485,7 @@ impl FlattenInner {
                 if let Some(abstraction_id) = self.blocks.resolve_template(scope_id, key.into()) {
                     let code = LCode::Val(Literal::Abstraction(abstraction_id));
                     let ty = b.types.fresh_unknown();
-                    let (open, link_id) = self.safe_push_code_open(
+                    let (open, link_id) = self.push_code_open(
                         open,
                         code,
                         ty,
@@ -1515,7 +1503,7 @@ impl FlattenInner {
                  */
                 let code = LCode::PlaceholderCodeReference;
                 let ty = b.types.fresh_unknown();
-                let (open, link_id) = self.safe_push_code_open(
+                let (open, link_id) = self.push_code_open(
                     open,
                     code,
                     ty,
@@ -1548,8 +1536,7 @@ impl FlattenInner {
                 let expr_ty = expr_entry.ty.clone();
                 let expr_span_id = expr_entry.span_id;
 
-                let block = self.blocks.get_block(open.block_id);
-                let scope_id = block.scope();
+                let scope_id = self.blocks.get_block(open.block_id).scope();
 
                 let (open, offset_decl) =
                     if let Some(v_decl) = self.blocks.resolve_name_in_scope(scope_id, name) {
@@ -1559,10 +1546,7 @@ impl FlattenInner {
                         (open, v_decl)
                     } else {
                         // need to declare it
-                        let block = self.blocks.get_block(open.block_id);
-                        let scope_id = block.scope();
-
-                        let (open, link_id) = self.safe_push_code_open(
+                        let (open, link_id) = self.push_code_open(
                             open,
                             LCode::Declare,
                             expr_ty.clone(),
@@ -1575,7 +1559,7 @@ impl FlattenInner {
                     };
 
                 // explicit store for assign
-                let (open, _) = self.safe_push_code_open(
+                let (open, _) = self.push_code_open(
                     open,
                     LCode::Store(offset_decl, v_expr),
                     AstType::Unit,
@@ -1588,7 +1572,7 @@ impl FlattenInner {
 
             Ast::Import(module_key, args) => {
                 let module_name = b.labels.r(module_key.into());
-                let scope_id = block.scope();
+                let scope_id = self.blocks.get_block(open.block_id).scope();
 
                 let open = if &module_name == "prelude" {
                     let print = b.labels.s("print");
@@ -1607,7 +1591,7 @@ impl FlattenInner {
                         ),
                     ]);
 
-                    let (open, link_id) = self.safe_push_code_open(
+                    let (open, link_id) = self.push_code_open(
                         open,
                         LCode::Extern,
                         ty,
@@ -1678,7 +1662,7 @@ impl FlattenInner {
                 let (open, _) =
                     self.push_call_values(open, &[(None, link_id, ty.clone(), span_id)], b);
 
-                let (open, link_id) = self.safe_push_code_open(
+                let (open, link_id) = self.push_code_open(
                     open,
                     LCode::Op1(op),
                     ty.clone(),
@@ -1799,7 +1783,7 @@ impl FlattenInner {
                 let open = self.open_block(open.block_id);
                 let (open, link_id) = self.push_expr(open, *condition, PushContext::Default, b);
 
-                let (closed, v) = self.safe_push_code_term(
+                let (closed, v) = self.push_code_term(
                     open,
                     LCode::Branch(
                         link_id.into(),
@@ -1828,7 +1812,7 @@ impl FlattenInner {
                     Ast::Identifier(key) => {
                         let key = *key;
                         let ty = AstType::func(vec![], AstType::Unit);
-                        let scope_id = block.scope();
+                        let scope_id = self.blocks.get_block(open.block_id).scope();
                         if let Some((_resolve_type, link_id, _scope_id)) =
                             self.blocks.resolve_function_name(scope_id, &key, &ty, b)
                         {
@@ -1856,7 +1840,7 @@ impl FlattenInner {
                 let ty = AstType::JumpTarget;
                 let code = LCode::Val(Literal::Block(block_id));
 
-                let (open, link_id) = self.safe_push_code_open(
+                let (open, link_id) = self.push_code_open(
                     open,
                     code,
                     ty,
@@ -1871,7 +1855,7 @@ impl FlattenInner {
                 // LABEL
                 let name = name.unwrap();
                 // push a new block.  But check to make sure the previous block was closed
-                let scope_id = block.scope();
+                let scope_id = self.blocks.get_block(open.block_id).scope();
 
                 // check for duplicates
                 if let Some(block_id) = self.blocks.resolve_label(scope_id, name.into()) {
@@ -1977,7 +1961,7 @@ impl FlattenInner {
                 b.unify(&then_ty, then_span_id, &else_ty, else_span_id);
 
                 // switch back to the original block
-                let (open, v) = self.safe_push_code_open(
+                let (open, v) = self.push_code_open(
                     open,
                     LCode::Ternary(c_link_id.into(), then_block_id.into(), else_block_id.into()),
                     then_ty,
@@ -2005,7 +1989,7 @@ impl FlattenInner {
                     open
                 };
 
-                let (closed, v) = self.safe_push_code_term(
+                let (closed, v) = self.push_code_term(
                     open,
                     LCode::Yield,
                     ty.clone(),
@@ -2260,7 +2244,7 @@ impl FlattenInner {
 
                 let (open, update_link_ids) = self.push_loads_if_needed(open, &values);
 
-                let (open, link_id) = self.safe_push_code_open(
+                let (open, link_id) = self.push_code_open(
                     open,
                     LCode::Tuple(update_link_ids),
                     ty,
@@ -2291,7 +2275,7 @@ impl FlattenInner {
 
                 let code = LCode::Use(v_node.into(), indicies);
 
-                let (open, link_id) = self.safe_push_code_open(
+                let (open, link_id) = self.push_code_open(
                     open,
                     code,
                     ty_field.clone(),

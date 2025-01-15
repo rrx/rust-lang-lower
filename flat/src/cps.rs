@@ -247,7 +247,7 @@ impl FlattenInner {
             let new_block_id = new_block.block_id;
 
             let code = LCode::Val(Literal::Block(next_block.block_id));
-            let (new_block, var_link_id) = self.safe_push_code_open(
+            let (new_block, var_link_id) = self.push_code_open(
                 new_block,
                 code,
                 void_func_type.clone().into(),
@@ -350,7 +350,7 @@ impl FlattenInner {
         ty: AstType,
         call_span_id: SpanId,
     ) -> (SafeBlockClosed, LinkId) {
-        self.safe_push_code_term(
+        self.push_code_term(
             open,
             LCode::PlaceholderTerminal,
             ty,
@@ -474,7 +474,7 @@ impl FlattenInner {
                 let (open, load_link_id) =
                     if self.blocks.links.is_load_required(*def_target_link_id) {
                         let entry = self.get_entry(*def_target_link_id).clone();
-                        let (open, link_id) = self.safe_push_code_open(
+                        let (open, link_id) = self.push_code_open(
                             open,
                             LCode::Load(*def_target_link_id),
                             entry.ty,
