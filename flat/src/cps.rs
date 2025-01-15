@@ -399,6 +399,7 @@ impl FlattenInner {
 
     pub fn push_goto(
         &mut self,
+        open: SafeBlockOpen,
         name: StringKey,
         args: Vec<Argument>,
         call_span_id: SpanId,
