@@ -1039,7 +1039,7 @@ impl FlattenInner {
     ) -> (SafeBlockOpen, ArgVec) {
         assert!(block_ty.args.is_composite());
 
-        let block_id = self.blocks.current_block_id();
+        let block_id = empty.block_id;
         let scope_id = self.blocks.get_block(block_id).scope();
 
         let mut v_args = vec![];
@@ -1566,7 +1566,6 @@ impl FlattenInner {
                 let expr_ty = expr_entry.ty.clone();
                 let expr_span_id = expr_entry.span_id;
 
-                //let block_id = self.blocks.current_block_id();
                 let block = self.blocks.get_block(open.block_id);
                 let scope_id = block.scope();
 
@@ -1578,7 +1577,7 @@ impl FlattenInner {
                         (open, v_decl)
                     } else {
                         // need to declare it
-                        let block = self.blocks.get_block(open.block_id); //self.blocks.current_block_id());
+                        let block = self.blocks.get_block(open.block_id);
                         let scope_id = block.scope();
 
                         let (open, link_id) = self.safe_push_code_open(
@@ -1904,9 +1903,7 @@ impl FlattenInner {
 
                 // create a new block
                 assert_eq!(0, args.len());
-                let new_block = self
-                    .blocks
-                    .new_block(self.blocks.current_block_id(), Successor::BlockScope);
+                let new_block = self.blocks.new_block(open.block_id, Successor::BlockScope);
                 self.blocks.define_label(scope_id, new_block.block_id, name);
 
                 // start a new block.  If the last block isn't terminated, then we create a new
@@ -2053,7 +2050,6 @@ impl FlattenInner {
                 let (open, argvec) = self.push_call_arguments(open, args, span_id, b);
                 let mut argvec = VecDeque::from(argvec);
                 let mut acc = VecDeque::new();
-                let current_block_id = self.blocks.current_block_id();
                 if argvec.is_empty() {
                     unreachable!();
                 }
@@ -2078,9 +2074,8 @@ impl FlattenInner {
                             }
 
                             let label = b.labels.fresh_key("chain");
-                            let next_block = self
-                                .blocks
-                                .new_block(current_block_id, Successor::BlockScope);
+                            let next_block =
+                                self.blocks.new_block(open.block_id, Successor::BlockScope);
                             let next_block = self
                                 .push_start_block(
                                     next_block,
