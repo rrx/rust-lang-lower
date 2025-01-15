@@ -603,7 +603,7 @@ impl FlattenInner {
 
             let span_id = expr.span_id;
             open = self.ensure_open(unk_block, span_id, b);
-            let (unk, _) = self.safe_push_node_result(open, expr, context, b);
+            let (unk, _) = self.push_node(open, expr, context, b);
             unk_block = unk;
         }
 
@@ -614,7 +614,7 @@ impl FlattenInner {
             let ast: Ast = ControlFlowMarker::BlockEnd.into();
             let node = ast.node(span_id);
             open = self.ensure_open(unk_block, span_id, b);
-            let (unk, _) = self.safe_push_node_result(open, node, PushContext::BlockEnd, b);
+            let (unk, _) = self.push_node(open, node, PushContext::BlockEnd, b);
             unk_block = unk;
         }
 
@@ -632,17 +632,6 @@ impl FlattenInner {
         let (unk, r) = self.push_node(open, node, context, b);
         let link_id = r.link_id.unwrap();
         (unk, link_id)
-    }
-
-    pub fn safe_push_node_result(
-        &mut self,
-        open: SafeBlockOpen,
-        node: AstNode,
-        context: PushContext,
-        b: &mut NB,
-    ) -> (SafeBlockUnknown, FlattenResult) {
-        let (unk, r) = self.push_node(open, node, context, b);
-        (unk, r)
     }
 
     pub fn push_return(
@@ -1731,7 +1720,7 @@ impl FlattenInner {
                     then_span_id,
                 );
                 let (then_block, _) =
-                    self.safe_push_node_result(then_block, *then_expr, PushContext::CondThen, b);
+                    self.push_node(then_block, *then_expr, PushContext::CondThen, b);
                 let then_end_block_id = then_block.block_id;
                 let then_is_term = self.blocks.get_block(then_block.block_id).is_term();
 
@@ -1755,12 +1744,8 @@ impl FlattenInner {
                             else_span_id,
                         );
 
-                        let (else_block, _) = self.safe_push_node_result(
-                            else_block,
-                            *else_expr,
-                            PushContext::CondThen,
-                            b,
-                        );
+                        let (else_block, _) =
+                            self.push_node(else_block, *else_expr, PushContext::CondThen, b);
                         let else_end_block_id = else_block.block_id;
                         let else_is_term = self.blocks.get_block(else_end_block_id).is_term();
                         (true, else_is_term, else_start_block_id, else_end_block_id)
@@ -2323,7 +2308,7 @@ impl FlattenInner {
                 // resolve to an ast node, which we can then lower.
                 let node = attr;
                 if let Some(ast) = resolve_attribute(ident, &node, span_id, vec![], b) {
-                    let (open, r) = self.safe_push_node_result(open, ast, PushContext::Default, b);
+                    let (open, r) = self.push_node(open, ast, PushContext::Default, b);
                     (open.unknown(), r)
                 } else {
                     unimplemented!();

@@ -103,7 +103,7 @@ impl FlattenInner {
 
             // flatten function, and switch to next
             // lower first, so we resolve types
-            let (unk, _) = self.safe_push_node_result(open, *body, PushContext::Default, b);
+            let (unk, _) = self.push_node(open, *body, PushContext::Default, b);
 
             let r_ty2 = b
                 .types
