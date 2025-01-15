@@ -788,7 +788,6 @@ impl FlattenInner {
         b: &mut NB,
     ) -> SafeBlockClosed {
         let block_id = open.block_id;
-        self.blocks.switch_blocks(open.block_id);
         let (target_block_id, jump_args) =
             self.push_jump_unwind(open, target_block_id, jump_args, span_id, b);
         let open = self.open_block(block_id);
