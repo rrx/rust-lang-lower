@@ -567,7 +567,6 @@ impl FlattenInner {
                     assert_eq!(d.args.len(), 0);
                     // not possible to pass args to a label, use a CPS function instead
                     let (open, _) = self.remove_placeholder_terminal(d.block);
-                    self.blocks.switch_blocks(open.block_id);
 
                     // TODO: args should be unwound before jumping
                     // by replacing jumps out of scope to the unwind function
