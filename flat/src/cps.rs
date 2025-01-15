@@ -144,7 +144,6 @@ impl FlattenInner {
             let arg_key = b.labels.s("u");
 
             let target_type = AstFuncType::new_void_void();
-            //let params = vec![(arg_key, AstType::Func(target_type.clone().into()))];
             let ty = AstFuncType::new(
                 AstType::Struct(vec![(Some(arg_key), target_type.into())]),
                 ReturnType::Never,
@@ -178,19 +177,16 @@ impl FlattenInner {
 
     pub(crate) fn push_unwind(
         &mut self,
-        start_block: SafeBlockOpen,
+        open_block: SafeBlockOpen,
         target_block_id: BlockId,
         jump_args: ArgVec,
         call_span_id: SpanId,
         b: &mut NB,
     ) -> SafeBlockClosed {
         // returns the entry to the unwind, which we will want to jump to
-        let save_block_id = self.blocks.current_block_id();
-        let block = self.blocks.get_block(start_block.block_id);
-        let goto_scope_id = block.scope();
-
-        let block = self.blocks.get_block(target_block_id);
-        let target_scope_id = block.scope();
+        let save_block_id = open_block.block_id;
+        let goto_scope_id = self.blocks.get_block(open_block.block_id).scope();
+        let target_scope_id = self.blocks.get_block(target_block_id).scope();
 
         // TODO: now that we know the target, we need to replace any call values with unwind
         // functions. We also need to do this for the goto_block_id.
@@ -201,7 +197,7 @@ impl FlattenInner {
         let start_key = b.labels.fresh_key("ustart");
         let start_block = self
             .blocks
-            .new_block(start_block.block_id, Successor::BlockScope);
+            .new_block(open_block.block_id, Successor::BlockScope);
         let start_block = self
             .push_start_block(
                 start_block,
