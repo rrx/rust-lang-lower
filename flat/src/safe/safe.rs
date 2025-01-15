@@ -62,13 +62,6 @@ impl BlockGraph<BlockGraphStateOpen> {
         self.get_scope(block.scope())
     }
 
-    pub fn safe_unknown(&self) -> SafeBlock<Unknown> {
-        SafeBlock {
-            block_id: self.current_block_id(),
-            extra: Unknown {},
-        }
-    }
-
     pub fn safe_block_unknown(&self, block_id: BlockId) -> SafeBlock<Unknown> {
         SafeBlock {
             block_id,
