@@ -613,7 +613,6 @@ impl FlattenInner {
         match d.deferred_type {
             DeferredType::Name(arg_link_id) => {
                 let d_block_id = d.block.block_id;
-                self.blocks.switch_blocks(d_block_id);
                 let (open, last_link_id) = self.remove_placeholder_terminal(d.block);
                 let mut last_entry = self.get_entry(last_link_id).clone();
 
@@ -678,7 +677,6 @@ impl FlattenInner {
                             let new_block =
                                 self.blocks.new_block(d_block_id, Successor::BlockScope);
                             let block_id = new_block.block_id;
-                            self.blocks.switch_blocks(block_id);
                             let (new_block, _, _) = self.push_start_block(
                                 new_block,
                                 AstFuncType::new_void_void().into(),
@@ -712,12 +710,10 @@ impl FlattenInner {
                         let mut targets = sources.into_iter().collect::<Vec<_>>();
                         targets.sort();
 
-                        self.blocks.switch_blocks(d_block_id);
                         let code = self
                             .calc_jump_code(arg_link_id, targets, d.call_span_id, b)
                             .unwrap();
                         last_entry.code = code;
-                        let open = self.open();
                         let _ = self.safe_push_call_values(open, &d.argvec, b);
                         self.insert_entry_with_link(last_entry);
                     }
