@@ -544,7 +544,6 @@ impl FlattenInner {
                     .resolve_template(d.scope_id, d.name.unwrap().into())
                 {
                     let (block, _) = self.remove_placeholder_terminal(d.block);
-                    self.blocks.switch_blocks(block.block_id);
 
                     // push and jump
                     // TODO: this function needs to handle unwind
