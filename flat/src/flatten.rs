@@ -1113,21 +1113,27 @@ impl FlattenInner {
 
     pub fn push_close_block(
         &mut self,
+        open: SafeBlockOpen,
         span_id: SpanId,
         push_context: PushContext,
         b: &mut NB,
     ) -> (SafeBlockUnknown, FlattenResult) {
-        let current_block_id = self.blocks.current_block_id();
-        let block = self.blocks.get_block(current_block_id);
-        let scope_id = block.scope();
+        let current_block_id = open.block_id; //self.blocks.current_block_id();
+        let scope_id = self.blocks.get_block(current_block_id).scope();
 
         if let Some(scope) = self.blocks.try_loop_scope(scope_id) {
             let start_block_id = scope.start_block();
             let next_block_id = scope.next_block();
 
             // terminate the open block
-            let unk = self.blocks.safe_unknown();
-            let _ = self.maybe_terminate_block(unk, start_block_id, span_id, push_context, b);
+            //let unk = self.blocks.safe_unknown();
+            let _ = self.maybe_terminate_block(
+                open.unknown(),
+                start_block_id,
+                span_id,
+                push_context,
+                b,
+            );
 
             let next_block = self.blocks.safe_block_unknown(next_block_id);
             (next_block, FlattenResult::statement())
@@ -2123,7 +2129,7 @@ impl FlattenInner {
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::BlockEnd) | Ast::CloseBlock => {
-                let (closed, r) = self.push_close_block(span_id, push_context, b);
+                let (closed, r) = self.push_close_block(open, span_id, push_context, b);
                 (closed.unknown(), r)
             }
 
