@@ -2376,8 +2376,7 @@ impl FlattenInner {
                 );
                 b.unify(&ty, node.span_id, &required_ty.into(), node.span_id);
 
-                let current_block_id = self.blocks.current_block_id();
-                let scope_id = self.blocks.get_block(current_block_id).scope();
+                let scope_id = self.blocks.get_block(open.block_id).scope();
                 let scope = self.blocks.get_scope_mut(scope_id);
                 scope.prepend_deferral(func_block_id);
 
