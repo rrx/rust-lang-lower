@@ -873,7 +873,9 @@ impl FlattenInner {
                 let open = self.open();
                 let (open, copied_link_ids) =
                     self.push_store_args(open, target_scope_id, jump_args, span_id, b);
+                let save_block_id = open.block_id;
                 let target = self.push_unwind(open, target_block_id, copied_link_ids, span_id, b);
+                self.blocks.switch_blocks(save_block_id);
                 (target.block_id, vec![])
             }
         } else {

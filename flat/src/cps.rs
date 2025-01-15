@@ -183,8 +183,7 @@ impl FlattenInner {
         call_span_id: SpanId,
         b: &mut NB,
     ) -> SafeBlockClosed {
-        // returns the entry to the unwind, which we will want to jump to
-        let save_block_id = open_block.block_id;
+        // returns the closed entry to the unwind, which we will want to jump to
         let goto_scope_id = self.blocks.get_block(open_block.block_id).scope();
         let target_scope_id = self.blocks.get_block(target_block_id).scope();
 
@@ -285,7 +284,6 @@ impl FlattenInner {
         }
         self.push_jump_direct(open, target_block_id, jump_args, call_span_id, b);
 
-        self.blocks.switch_blocks(save_block_id);
         // we know start_block is closed
         if let Some(closed) = self.blocks.safe_block_try_closed(&start_block.unknown()) {
             closed
@@ -475,7 +473,6 @@ impl FlattenInner {
                 // we type check and then add a placeholder jump, that will be replaced later
                 // based on the graph.
                 //
-                self.blocks.switch_blocks(d.block.block_id);
                 let (open, _) = self.remove_placeholder_terminal(d.block);
 
                 // Push load if required.  This is needed if the target is stored in memory,
