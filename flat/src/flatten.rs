@@ -2092,12 +2092,12 @@ impl FlattenInner {
                             }
 
                             let label = b.labels.fresh_key("chain");
-                            let v_next = self
+                            let next_block = self
                                 .blocks
                                 .new_block(current_block_id, Successor::BlockScope);
-                            let open = self
+                            let next_block = self
                                 .push_start_block(
-                                    v_next,
+                                    next_block,
                                     AstFuncType::new(
                                         AstType::Struct(acc_types).into(),
                                         ReturnType::Single(AstType::Unit),
@@ -2107,7 +2107,7 @@ impl FlattenInner {
                                 )
                                 .0;
                             let jump_args = acc.drain(..).collect::<Vec<_>>();
-                            self.push_jump(open, block_id.into(), jump_args, node.span_id, b);
+                            self.push_jump(next_block, block_id.into(), jump_args, node.span_id, b);
                             acc.clear();
                         }
                         LCode::PlaceholderCodeReference => {
@@ -2124,7 +2124,6 @@ impl FlattenInner {
                         break;
                     }
                 }
-                let open = self.open();
                 (open.unknown(), FlattenResult::statement())
             }
 
