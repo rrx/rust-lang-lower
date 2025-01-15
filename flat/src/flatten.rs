@@ -940,7 +940,6 @@ impl FlattenInner {
     ) -> (SafeBlockOpen, LinkId) {
         assert!(!code.is_term());
         let entry = CodeEntry::new(open.block_id, code, ty, name, span_id, mem);
-        self.blocks.switch_blocks(open.block_id);
         (open, self.insert_entry_with_link(entry))
     }
 
@@ -955,7 +954,6 @@ impl FlattenInner {
     ) -> (SafeBlockClosed, LinkId) {
         assert!(code.is_term());
         let entry = CodeEntry::new(open.block_id, code, ty, name, span_id, mem);
-        self.blocks.switch_blocks(open.block_id);
         let closed = SafeBlock {
             block_id: open.block_id,
             extra: crate::safe::Closed {},
@@ -1095,7 +1093,6 @@ impl FlattenInner {
             span_id,
             mem,
         );
-        self.blocks.switch_blocks(empty.block_id);
         let block_link_id = self.insert_entry_with_link(entry);
         let (open, v_args) = self.push_start_block_args(empty, block_ty, span_id);
         self.blocks.block_links.insert(open.block_id, block_link_id);
@@ -1314,7 +1311,6 @@ impl FlattenInner {
         push_context: PushContext,
         b: &mut NB,
     ) -> (SafeBlockUnknown, FlattenResult) {
-        self.blocks.switch_blocks(open.block_id);
         let block = self.blocks.get_block_mut(open.block_id);
         let span_id = node.span_id;
         let ast = node.node;
