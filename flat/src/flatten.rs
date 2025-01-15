@@ -627,7 +627,7 @@ impl FlattenInner {
         }
 
         let link_id = self.blocks.get_block(unk_block.block_id).last().unwrap();
-        (self.blocks.safe_unknown(), link_id)
+        (unk_block, link_id)
     }
 
     pub fn safe_push_node(
@@ -1292,11 +1292,6 @@ impl FlattenInner {
             block_id: self.blocks.static_block_id(),
             extra: crate::safe::Open {},
         }
-    }
-
-    pub fn open(&mut self) -> SafeBlockOpen {
-        self.blocks
-            .safe_switch_block(self.blocks.current_block_id())
     }
 
     pub fn open_block(&mut self, block_id: BlockId) -> SafeBlockOpen {
