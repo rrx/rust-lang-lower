@@ -301,7 +301,7 @@ impl FlattenInner {
         args: Vec<Argument>,
         call_span_id: SpanId,
         b: &mut NB,
-    ) {
+    ) -> SafeBlockClosed {
         // call in the context of the caller
         // and push the args and a jump
 
@@ -335,7 +335,7 @@ impl FlattenInner {
             call_values.clone(),
             call_span_id,
             b,
-        );
+        )
 
         // if this really is a CPS function, then it should never return
         // TODO: verify that it never returns, could be with the function signature
