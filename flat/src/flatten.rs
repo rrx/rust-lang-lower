@@ -1754,45 +1754,47 @@ impl FlattenInner {
                 let then_is_term = self.blocks.get_block(then_block.block_id).is_term();
 
                 // ELSE Block
-                let (has_else, else_is_term, else_start_block_id, _) = if let Some(else_expr) =
-                    maybe_else_expr
-                {
-                    let (else_block, else_start_block_id, _) = self.blocks.new_scope_and_block(
-                        ScopeType::Block,
-                        ScopeState::block(),
-                        current_block_id,
-                        Successor::BlockScope,
-                    );
+                let (has_else, else_is_term, else_start_block_id, else_end_block_id) =
+                    if let Some(else_expr) = maybe_else_expr {
+                        let (else_block, else_start_block_id, _) = self.blocks.new_scope_and_block(
+                            ScopeType::Block,
+                            ScopeState::block(),
+                            current_block_id,
+                            Successor::BlockScope,
+                        );
 
-                    let else_span_id = else_expr.span_id;
-                    let name = b.labels.fresh_key("else");
+                        let else_span_id = else_expr.span_id;
+                        let name = b.labels.fresh_key("else");
 
-                    let (else_block, _, _) = self.push_start_block(
-                        else_block,
-                        branch_block_type.into(),
-                        Some(name),
-                        else_span_id,
-                    );
+                        let (else_block, _, _) = self.push_start_block(
+                            else_block,
+                            branch_block_type.into(),
+                            Some(name),
+                            else_span_id,
+                        );
 
-                    let (else_block, _) = self.safe_push_node_result(
-                        else_block,
-                        *else_expr,
-                        PushContext::CondThen,
-                        b,
-                    );
-                    let else_end_block_id = else_block.block_id;
-                    let else_is_term = self.blocks.get_block(else_end_block_id).is_term();
-                    (true, else_is_term, else_start_block_id, else_end_block_id)
-                } else {
-                    self.blocks.block_succ(
-                        current_block_id,
-                        next_block.block_id,
-                        Successor::BlockScope,
-                    );
-                    self.blocks
-                        .block_succ(current_block_id, next_block.block_id, Successor::Jump);
-                    (false, false, next_block.block_id, next_block.block_id)
-                };
+                        let (else_block, _) = self.safe_push_node_result(
+                            else_block,
+                            *else_expr,
+                            PushContext::CondThen,
+                            b,
+                        );
+                        let else_end_block_id = else_block.block_id;
+                        let else_is_term = self.blocks.get_block(else_end_block_id).is_term();
+                        (true, else_is_term, else_start_block_id, else_end_block_id)
+                    } else {
+                        self.blocks.block_succ(
+                            current_block_id,
+                            next_block.block_id,
+                            Successor::BlockScope,
+                        );
+                        self.blocks.block_succ(
+                            current_block_id,
+                            next_block.block_id,
+                            Successor::Jump,
+                        );
+                        (false, false, next_block.block_id, next_block.block_id)
+                    };
 
                 // we only want to create a next block if either of the branches are not terminated
                 // Otherwise we need it
@@ -1803,7 +1805,7 @@ impl FlattenInner {
 
                 let v_next = if is_next_needed {
                     if has_else {
-                        let unk = self.blocks.safe_unknown();
+                        let unk = self.blocks.safe_block_unknown(else_end_block_id);
                         self.maybe_terminate_block(
                             unk,
                             next_block.block_id,
