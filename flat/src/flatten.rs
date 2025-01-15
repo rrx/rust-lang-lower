@@ -491,7 +491,6 @@ impl FlattenInner {
 
     pub(super) fn update_connections(&mut self, start_block_id: BlockId, link_id: LinkId) {
         let code = self.get_entry(link_id).code.clone();
-        //assert_eq!(start_block_id, self.blocks.current_block_id());
         match code {
             LCode::Arg(i) => self.scoped_continuations.connect(
                 ContinuationFlow::BlockArg(start_block_id, i),
@@ -961,7 +960,7 @@ impl FlattenInner {
         let entry = CodeEntry::new(open.block_id, code, ty, name, span_id, mem);
         self.blocks.switch_blocks(open.block_id);
         let closed = SafeBlock {
-            block_id: self.blocks.current_block_id(),
+            block_id: open.block_id,
             extra: crate::safe::Closed {},
         };
         (closed, self.insert_entry_with_link(entry))
