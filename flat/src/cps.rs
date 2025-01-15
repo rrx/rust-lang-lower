@@ -294,6 +294,7 @@ impl FlattenInner {
 
     pub(super) fn push_cps_block(
         &mut self,
+        open: SafeBlockOpen,
         name: StringKey,
         scope_id: ScopeId,
         abstraction_id: AbstractionId,
@@ -311,7 +312,6 @@ impl FlattenInner {
         let (args, _) =
             self.calculate_function_arguments(abstraction_id, &args, &[], call_span_id, b);
 
-        let open = self.open();
         let (open, call_values) = self.push_call_arguments(open, args, call_span_id, b);
         let call_arg_type = argvec_type(&call_values);
         let call_func_type =
@@ -543,12 +543,13 @@ impl FlattenInner {
                     .blocks
                     .resolve_template(d.scope_id, d.name.unwrap().into())
                 {
-                    self.blocks.switch_blocks(d.block.block_id);
-                    self.remove_placeholder_terminal(d.block);
+                    let (block, _) = self.remove_placeholder_terminal(d.block);
+                    self.blocks.switch_blocks(block.block_id);
 
                     // push and jump
                     // TODO: this function needs to handle unwind
                     let _link_id = self.push_cps_block(
+                        block,
                         d.name.unwrap(),
                         d.scope_id,
                         abstraction_id,
