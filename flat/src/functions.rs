@@ -760,9 +760,6 @@ impl FlattenInner {
         let (open, call_values, _call_func_type, def_func_type) =
             self.push_function_call_arguments(open, abstraction_id, args, vec![], call_span_id, b);
 
-        // bookmark this position, to continue later
-        let current_block_id = self.blocks.current_block_id();
-
         let a = self.blocks.abstractions.get(abstraction_id);
         let name = a.name;
 
@@ -778,7 +775,7 @@ impl FlattenInner {
         let (fun_block, _, _) = self.blocks.new_scope_and_block(
             ScopeType::Function,
             ScopeState::function(next_block.block_id),
-            current_block_id,
+            open.block_id,
             Successor::BlockScope,
         );
 
