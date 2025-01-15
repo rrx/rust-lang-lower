@@ -401,7 +401,7 @@ impl FlattenInner {
         args: Vec<Argument>,
         call_span_id: SpanId,
         _b: &mut NB,
-    ) -> FlattenResult {
+    ) {
         // push a goto
         // to keep things simpler, we just defer all resolution of the gotos until the end
         // Goto is terminal, so we write out placeholders
@@ -424,7 +424,7 @@ impl FlattenInner {
                 DeferredType::Name(name_link_id),
             );
             self.deferred_goto.add_deferred(d);
-            return FlattenResult::statement();
+            return;
         }
 
         // if we don't have a template or a label already, then we defer
@@ -441,7 +441,7 @@ impl FlattenInner {
                 DeferredType::Goto,
             );
             self.deferred_goto.add_deferred(d);
-            return FlattenResult::statement();
+            return;
         } else {
             // goto without function scope
             unreachable!("goto without function scope")

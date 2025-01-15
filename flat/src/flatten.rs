@@ -2034,9 +2034,9 @@ impl FlattenInner {
 
             Ast::ControlFlowMarker(ControlFlowMarker::Goto(label, args)) => {
                 let block_id = open.block_id;
-                let r = self.push_goto(open, label, args, span_id, b);
+                self.push_goto(open, label, args, span_id, b);
                 let unk = self.blocks.safe_block_unknown(block_id);
-                (unk, r)
+                (unk, FlattenResult::statement())
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::GotoChain(args)) => {
