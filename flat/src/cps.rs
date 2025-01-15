@@ -408,9 +408,7 @@ impl FlattenInner {
         // push a goto
         // to keep things simpler, we just defer all resolution of the gotos until the end
         // Goto is terminal, so we write out placeholders
-        let current_block_id = open.block_id;
-        let block = self.blocks.get_block(current_block_id);
-        let scope_id = block.scope();
+        let scope_id = self.blocks.get_block(open.block_id).scope();
 
         // if this is a name, we can resolve now, no need to defer
         // this happens in a CPS function, where we try to jump to a variable.
