@@ -787,10 +787,11 @@ impl FlattenInner {
         span_id: SpanId,
         b: &mut NB,
     ) -> SafeBlockClosed {
+        let block_id = open.block_id;
         self.blocks.switch_blocks(open.block_id);
         let (target_block_id, jump_args) =
             self.push_jump_unwind(open, target_block_id, jump_args, span_id, b);
-        let open = self.open();
+        let open = self.open_block(block_id);
         self.push_jump_direct(open, target_block_id, jump_args, span_id, b)
     }
 
@@ -849,15 +850,15 @@ impl FlattenInner {
         let start_block_id = open.block_id; //self.blocks.current_block_id();
         let start_scope_id = self.blocks.get_block(start_block_id).scope();
         let target_scope_id = self.blocks.get_block(target_block_id).scope();
-        //assert_ne!(start_block_id, target_block_id);
+        assert_ne!(start_block_id, target_block_id);
 
-        //log::debug!(
-        //"jump: {}{}=>{}{}",
-        //start_block_id,
-        //start_scope_id,
-        //target_block_id,
-        //target_scope_id
-        //);
+        log::debug!(
+            "jump: {}{}=>{}{}",
+            start_block_id,
+            start_scope_id,
+            target_block_id,
+            target_scope_id
+        );
 
         let scope_changed = start_scope_id != target_scope_id;
         if scope_changed {
@@ -874,9 +875,7 @@ impl FlattenInner {
                 let open = self.open();
                 let (open, copied_link_ids) =
                     self.push_store_args(open, target_scope_id, jump_args, span_id, b);
-                let save_block_id = open.block_id;
                 let target = self.push_unwind(open, target_block_id, copied_link_ids, span_id, b);
-                self.blocks.switch_blocks(save_block_id);
                 (target.block_id, vec![])
             }
         } else {
