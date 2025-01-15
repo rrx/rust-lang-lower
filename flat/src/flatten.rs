@@ -1851,7 +1851,6 @@ impl FlattenInner {
 
                 let block = if let Some(v_next) = v_next {
                     // if next is used, leave the block open
-                    self.blocks.switch_blocks(v_next);
                     self.blocks.safe_block_unknown(v_next)
                 } else {
                     closed.unknown()
@@ -2181,7 +2180,6 @@ impl FlattenInner {
                 self.push_jump(open, loop_block_id.into(), vec![], node.span_id, b);
 
                 // open loop block
-                self.blocks.switch_blocks(loop_block_id);
                 (loop_block.unknown(), FlattenResult::statement())
             }
 
