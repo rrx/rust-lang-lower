@@ -622,7 +622,7 @@ impl FlattenInner {
         (unk_block, link_id)
     }
 
-    pub fn safe_push_node(
+    pub fn push_node_unknown(
         &mut self,
         open: SafeBlockOpen,
         node: AstNode,
@@ -1950,7 +1950,7 @@ impl FlattenInner {
                 );
 
                 let (_, then_link_id) =
-                    self.safe_push_node(then_block, then_ast, PushContext::Default, b);
+                    self.push_node_unknown(then_block, then_ast, PushContext::Default, b);
                 let then_ty = self.get_type(then_link_id).clone();
 
                 // ELSE
@@ -1971,7 +1971,7 @@ impl FlattenInner {
                 );
 
                 let (_, else_link_id) =
-                    self.safe_push_node(else_block, else_ast, PushContext::Default, b);
+                    self.push_node_unknown(else_block, else_ast, PushContext::Default, b);
                 let else_ty = self.get_type(else_link_id).clone();
 
                 b.unify(&then_ty, then_span_id, &else_ty, else_span_id);
