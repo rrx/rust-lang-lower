@@ -574,8 +574,7 @@ impl FlattenInner {
         for a in args.into_iter() {
             match a {
                 Argument::Positional(expr) => {
-                    let (this_open, link_id) =
-                        self.safe_push_expr(open, *expr, PushContext::Default, b);
+                    let (this_open, link_id) = self.push_expr(open, *expr, PushContext::Default, b);
                     let entry = self.get_entry(link_id);
                     values.push((entry.name, link_id, entry.ty.clone(), span_id));
                     link_ids.push(link_id);
@@ -583,8 +582,7 @@ impl FlattenInner {
                 }
 
                 Argument::Named(key, expr) | Argument::System(key, expr) => {
-                    let (this_open, link_id) =
-                        self.safe_push_expr(open, *expr, PushContext::Default, b);
+                    let (this_open, link_id) = self.push_expr(open, *expr, PushContext::Default, b);
                     let entry = self.get_entry(link_id);
                     values.push((Some(key), link_id, entry.ty.clone(), span_id));
                     link_ids.push(link_id);
@@ -596,7 +594,7 @@ impl FlattenInner {
                     for expr in exprs {
                         let span_id = expr.span_id;
                         let (this_open, link_id) =
-                            self.safe_push_expr(open, expr, PushContext::Default, b);
+                            self.push_expr(open, expr, PushContext::Default, b);
                         let ty = self.get_type(link_id).clone();
                         args_values.push((Some(key), link_id, ty, span_id));
                         open = this_open;
@@ -627,8 +625,7 @@ impl FlattenInner {
 
                 Argument::KwArgs(key, _expr) => {
                     let node: AstNode = 1.into();
-                    let (this_open, link_id) =
-                        self.safe_push_expr(open, node, PushContext::Default, b);
+                    let (this_open, link_id) = self.push_expr(open, node, PushContext::Default, b);
                     let ty = self.get_type(link_id).clone();
                     values.push((Some(key), link_id, ty, span_id));
                     link_ids.push(link_id);

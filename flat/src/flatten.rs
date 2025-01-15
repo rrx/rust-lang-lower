@@ -757,7 +757,7 @@ impl FlattenInner {
         (open, links)
     }
 
-    pub fn safe_push_expr(
+    pub fn push_expr(
         &mut self,
         open: SafeBlockOpen,
         expr: AstNode,
@@ -1416,7 +1416,7 @@ impl FlattenInner {
                 let mut jump_args = vec![];
                 let (open, span_id) = if let Some(expr) = maybe_expr {
                     let expr_span_id = expr.span_id;
-                    let (open, link_id) = self.safe_push_expr(open, *expr, PushContext::Return, b);
+                    let (open, link_id) = self.push_expr(open, *expr, PushContext::Return, b);
                     let entry = self.get_entry(link_id);
                     jump_args.push((None, link_id, entry.ty.clone(), span_id));
                     (open, expr_span_id)
@@ -1462,8 +1462,8 @@ impl FlattenInner {
                 let x_span_id = x.span_id;
                 let y_span_id = y.span_id;
 
-                let (open, vx) = self.safe_push_expr(open, *x, PushContext::Default, b);
-                let (open, vy) = self.safe_push_expr(open, *y, PushContext::Default, b);
+                let (open, vx) = self.push_expr(open, *x, PushContext::Default, b);
+                let (open, vy) = self.push_expr(open, *y, PushContext::Default, b);
 
                 let rx_ty = self.get_type(vx).clone();
                 let ry_ty = self.get_type(vy).clone();
@@ -1554,7 +1554,7 @@ impl FlattenInner {
                     return (open.unknown(), FlattenResult::statement());
                 }
 
-                let (open, v_expr) = self.safe_push_expr(open, *expr, PushContext::Default, b);
+                let (open, v_expr) = self.push_expr(open, *expr, PushContext::Default, b);
                 let expr_entry = self.get_entry(v_expr);
                 let expr_ty = expr_entry.ty.clone();
                 let expr_span_id = expr_entry.span_id;
@@ -1683,7 +1683,7 @@ impl FlattenInner {
 
             Ast::UnaryOp(op, x) => {
                 // op1 is expression, non-terminal
-                let (open, link_id) = self.safe_push_expr(open, *x, PushContext::Default, b);
+                let (open, link_id) = self.push_expr(open, *x, PushContext::Default, b);
                 let ty = self.get_type(link_id).clone();
 
                 let (open, _) =
@@ -1812,8 +1812,7 @@ impl FlattenInner {
 
                 // condition
                 let open = self.open_block(open.block_id);
-                let (open, link_id) =
-                    self.safe_push_expr(open, *condition, PushContext::Default, b);
+                let (open, link_id) = self.push_expr(open, *condition, PushContext::Default, b);
 
                 let (closed, v) = self.safe_push_code_term(
                     open,
@@ -1852,7 +1851,7 @@ impl FlattenInner {
                             (open, entry.block_id)
                         } else {
                             let (open, link_id) =
-                                self.safe_push_expr(open, *expr, PushContext::Default, b);
+                                self.push_expr(open, *expr, PushContext::Default, b);
                             let entry = self.get_entry(link_id);
                             let block_id = match &entry.code {
                                 LCode::Label => entry.block_id,
@@ -1939,7 +1938,7 @@ impl FlattenInner {
                 // expression, non-terminal
 
                 // Condition
-                let (open, c_link_id) = self.safe_push_expr(open, *c, PushContext::Default, b);
+                let (open, c_link_id) = self.push_expr(open, *c, PushContext::Default, b);
 
                 let branch_block_type = AstFuncType {
                     args: AstType::Struct(vec![]).into(),
@@ -2008,7 +2007,7 @@ impl FlattenInner {
                 // yield is terminal
                 let mut ty = AstType::Unit;
                 let open = if let Some(expr) = maybe_expr {
-                    let (open, v) = self.safe_push_expr(open, *expr, PushContext::Default, b);
+                    let (open, v) = self.push_expr(open, *expr, PushContext::Default, b);
                     ty = self.get_type(v).clone();
                     // push single arg
                     let (open, _) = self.push_call_values(
@@ -2247,8 +2246,7 @@ impl FlattenInner {
                 let mut link_ids = vec![];
                 let mut open = open;
                 for d in dims {
-                    let (this_open, link_id) =
-                        self.safe_push_expr(open, d, PushContext::Default, b);
+                    let (this_open, link_id) = self.push_expr(open, d, PushContext::Default, b);
                     open = this_open;
                     link_ids.push(link_id);
                 }
@@ -2265,8 +2263,7 @@ impl FlattenInner {
                 let mut open = open;
                 for e in exprs {
                     let span_id = e.span_id;
-                    let (this_open, link_id) =
-                        self.safe_push_expr(open, e, PushContext::Default, b);
+                    let (this_open, link_id) = self.push_expr(open, e, PushContext::Default, b);
                     open = this_open;
                     let ty = self.get_type(link_id).clone();
                     link_ids.push(link_id);
@@ -2290,8 +2287,8 @@ impl FlattenInner {
             }
 
             Ast::Index(node, index) => {
-                let (open, v_node) = self.safe_push_expr(open, *node, PushContext::Default, b);
-                let (open, v_index) = self.safe_push_expr(open, *index, PushContext::Default, b);
+                let (open, v_node) = self.push_expr(open, *node, PushContext::Default, b);
+                let (open, v_index) = self.push_expr(open, *index, PushContext::Default, b);
 
                 let indicies = vec![v_index.into()];
 
@@ -2335,8 +2332,7 @@ impl FlattenInner {
 
             Ast::Defer(expr) => {
                 // defer is terminal
-                let (open, func_link_id) =
-                    self.safe_push_expr(open, *expr, PushContext::Default, b);
+                let (open, func_link_id) = self.push_expr(open, *expr, PushContext::Default, b);
                 // expression must be a function with no arguments.  We bake it here.
                 let ty = self.get_type(func_link_id).clone();
                 let entry = self.get_entry(func_link_id);
