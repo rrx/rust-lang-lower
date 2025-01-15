@@ -121,7 +121,7 @@ impl Flatten<Start> {
         // FlattenEnvironment represents the module level structures
 
         if let Ast::Module(key, body) = node.node {
-            let blocks = BlockGraph::new(key);
+            let blocks = BlockGraph::new();
             let inner = FlattenInner {
                 blocks,
                 link: LinkOptions::new(),
@@ -144,6 +144,7 @@ impl Flatten<Start> {
             let static_block_id = f.blocks.static_block_id();
             let unk = f.blocks.safe_block_unknown(static_block_id);
             let empty = f.blocks.safe_block_try_empty(&unk).unwrap();
+
             // start module block
             f.push_start_block_static(
                 empty,
@@ -164,11 +165,10 @@ impl Flatten<Start> {
 impl Flatten<FirstPass> {
     pub fn finish(self, b: &mut NB) -> Flatten<Module> {
         let (f, values) = self.inner._finish(b);
-        let m = Flatten {
+        Flatten {
             inner: f.into(),
             state: Module { values },
-        };
-        m
+        }
     }
 }
 
@@ -652,7 +652,7 @@ impl FlattenInner {
         span_id: SpanId,
         b: &mut NB,
     ) -> (SafeBlockClosed, LinkId) {
-        let (open, _) = self.safe_push_call_values(open, &values, b);
+        let (open, _) = self.push_call_values(open, &values, b);
 
         let (closed, link_id) = self.safe_push_code_term(
             open,
@@ -691,7 +691,7 @@ impl FlattenInner {
         (open, links)
     }
 
-    pub fn safe_push_call_values(
+    pub fn push_call_values(
         &mut self,
         mut open: SafeBlockOpen,
         values: &[(Option<StringKey>, LinkId, AstType, SpanId)],
@@ -892,7 +892,7 @@ impl FlattenInner {
 
         let var_link_ids = jump_args.iter().map(|j| j.1).collect::<Vec<_>>();
 
-        let (open, _) = self.safe_push_call_values(
+        let (open, _) = self.push_call_values(
             open,
             &jump_args
                 .into_iter()
@@ -970,7 +970,7 @@ impl FlattenInner {
         span_id: SpanId,
         b: &mut NB,
     ) -> (SafeBlockOpen, FlattenResult) {
-        let (open, _) = self.safe_push_call_values(open, &values, b);
+        let (open, _) = self.push_call_values(open, &values, b);
 
         if let ReturnType::Single(ty) = &ret_ty {
             let (open, link_id) = self.safe_push_code_open(
@@ -1002,7 +1002,7 @@ impl FlattenInner {
         let def_func_type = b.types.refresh_func_type(&def_func_type);
 
         let (open, call_values) = self.push_call_arguments(open, args, call_span_id, b);
-        let (open, _) = self.safe_push_call_values(open, &call_values, b);
+        let (open, _) = self.push_call_values(open, &call_values, b);
 
         let call_types = call_values.iter().map(|v| v.2.clone()).collect::<Vec<_>>();
 
@@ -1470,7 +1470,7 @@ impl FlattenInner {
 
                 b.unify(&rx_ty, x_span_id, &ry_ty, y_span_id);
 
-                let (open, _) = self.safe_push_call_values(
+                let (open, _) = self.push_call_values(
                     open,
                     &[
                         (None, vx, rx_ty.clone(), node.span_id),
@@ -1687,7 +1687,7 @@ impl FlattenInner {
                 let ty = self.get_type(link_id).clone();
 
                 let (open, _) =
-                    self.safe_push_call_values(open, &[(None, link_id, ty.clone(), span_id)], b);
+                    self.push_call_values(open, &[(None, link_id, ty.clone(), span_id)], b);
 
                 let (open, link_id) = self.safe_push_code_open(
                     open,
@@ -2011,7 +2011,7 @@ impl FlattenInner {
                     let (open, v) = self.safe_push_expr(open, *expr, PushContext::Default, b);
                     ty = self.get_type(v).clone();
                     // push single arg
-                    let (open, _) = self.safe_push_call_values(
+                    let (open, _) = self.push_call_values(
                         open,
                         &[(None, v.into(), ty.clone(), node.span_id)],
                         b,

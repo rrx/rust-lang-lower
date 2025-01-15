@@ -704,7 +704,7 @@ impl FlattenInner {
                             .calc_jump_code(arg_link_id, targets, d.call_span_id, b)
                             .unwrap();
                         last_entry.code = code;
-                        let _ = self.safe_push_call_values(open, &d.argvec, b);
+                        let _ = self.push_call_values(open, &d.argvec, b);
                         self.insert_entry_with_link(last_entry);
                     }
                 }

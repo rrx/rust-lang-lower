@@ -177,7 +177,6 @@ impl BlockGraphState for BlockGraphStateStart {}
 pub struct BlockGraphStateOpen {
     static_scope: ScopeId,
     static_block: BlockId,
-    current_block: BlockId,
 }
 impl BlockGraphState for BlockGraphStateOpen {}
 
@@ -204,7 +203,7 @@ impl BlockGraph<BlockGraphStateStart> {
         }
     }
 
-    pub fn new(key: StringKey) -> BlockGraph<BlockGraphStateOpen> {
+    pub fn new() -> BlockGraph<BlockGraphStateOpen> {
         let start = BlockGraph::start();
         BlockGraph::open(start)
     }
@@ -223,7 +222,6 @@ impl BlockGraph<BlockGraphStateOpen> {
             extra: BlockGraphStateOpen {
                 static_scope: static_scope_id,
                 static_block: static_block_id,
-                current_block: static_block_id,
             },
         }
     }
