@@ -1118,16 +1118,13 @@ impl FlattenInner {
         push_context: PushContext,
         b: &mut NB,
     ) -> (SafeBlockUnknown, FlattenResult) {
-        let current_block_id = open.block_id; //self.blocks.current_block_id();
-        let scope_id = self.blocks.get_block(current_block_id).scope();
-
+        let scope_id = self.blocks.get_block(open.block_id).scope();
         if let Some(scope) = self.blocks.try_loop_scope(scope_id) {
             let start_block_id = scope.start_block();
             let next_block_id = scope.next_block();
 
             // terminate the open block
-            //let unk = self.blocks.safe_unknown();
-            let _ = self.maybe_terminate_block(
+            let _closed = self.maybe_terminate_block(
                 open.unknown(),
                 start_block_id,
                 span_id,
