@@ -311,8 +311,9 @@ impl FlattenInner {
         // now replace the abstraction code
         let entry = self.get_entry_mut(link_id);
         entry.code = LCode::Val(Literal::Block(fun_block_id));
+        let start_block_id = entry.block_id;
         b.unify(&entry.ty, entry.span_id, ty, span_id);
-        self.update_connections(link_id);
+        self.update_connections(start_block_id, link_id);
     }
 
     pub(super) fn finish_values(&mut self, b: &mut NB) -> Values {
@@ -344,6 +345,7 @@ impl FlattenInner {
 
     fn _finish(mut self, b: &mut NB) -> (Self, Values) {
         // make sure all claims have been handled
+        self.blocks.switch_blocks(self.blocks.static_block_id());
         self.blocks.ensure_claims(b);
 
         // add prototypes for builtins
@@ -357,8 +359,10 @@ impl FlattenInner {
 
         self.cont_graph("cont.dot", b);
 
+        self.blocks.switch_blocks(self.blocks.static_block_id());
         self.resolve_open_identifiers(b);
         self.resolve_cps(b);
+        self.blocks.switch_blocks(self.blocks.static_block_id());
 
         // declare static functions
         // TODO: we can move this into the static function generator
@@ -481,28 +485,25 @@ impl FlattenInner {
                 link_id
             }
         };
-        self.update_connections(v);
+        self.update_connections(block_id, v);
         v
     }
 
-    pub(super) fn update_connections(&mut self, link_id: LinkId) {
+    pub(super) fn update_connections(&mut self, start_block_id: BlockId, link_id: LinkId) {
         let code = self.get_entry(link_id).code.clone();
+        //assert_eq!(start_block_id, self.blocks.current_block_id());
         match code {
             LCode::Arg(i) => self.scoped_continuations.connect(
-                ContinuationFlow::BlockArg(self.blocks.current_block_id(), i),
+                ContinuationFlow::BlockArg(start_block_id, i),
                 ContinuationFlow::Variable(link_id),
                 FlowEdge::BlockArg,
             ),
 
             LCode::Switch(_, branches) => {
                 for b in branches.values() {
+                    self.blocks.block_succ(start_block_id, *b, Successor::Jump);
                     self.blocks
-                        .block_succ(self.blocks.current_block_id(), *b, Successor::Jump);
-                    self.blocks.block_succ(
-                        self.blocks.current_block_id(),
-                        *b,
-                        Successor::BlockScope,
-                    );
+                        .block_succ(start_block_id, *b, Successor::BlockScope);
 
                     self.scoped_continuations.connect(
                         ContinuationFlow::Jump(link_id),
@@ -514,13 +515,9 @@ impl FlattenInner {
 
             LCode::Branch(_, b1, b2) => {
                 for b in vec![b1, b2] {
+                    self.blocks.block_succ(start_block_id, b, Successor::Jump);
                     self.blocks
-                        .block_succ(self.blocks.current_block_id(), b, Successor::Jump);
-                    self.blocks.block_succ(
-                        self.blocks.current_block_id(),
-                        b,
-                        Successor::BlockScope,
-                    );
+                        .block_succ(start_block_id, b, Successor::BlockScope);
                 }
 
                 self.scoped_continuations.connect(
@@ -535,10 +532,9 @@ impl FlattenInner {
                 );
             }
             LCode::Jump(b) => {
+                self.blocks.block_succ(start_block_id, b, Successor::Jump);
                 self.blocks
-                    .block_succ(self.blocks.current_block_id(), b, Successor::Jump);
-                self.blocks
-                    .block_succ(self.blocks.current_block_id(), b, Successor::BlockScope);
+                    .block_succ(start_block_id, b, Successor::BlockScope);
 
                 self.scoped_continuations.connect(
                     ContinuationFlow::Jump(link_id),
@@ -846,7 +842,7 @@ impl FlattenInner {
         // We unwind at the caller.
 
         // TODO: unwind when leaving this scope
-        let start_block_id = open.block_id; //self.blocks.current_block_id();
+        let start_block_id = open.block_id;
         let start_scope_id = self.blocks.get_block(start_block_id).scope();
         let target_scope_id = self.blocks.get_block(target_block_id).scope();
         assert_ne!(start_block_id, target_block_id);

@@ -758,7 +758,7 @@ impl FlattenInner {
             let entry = self.get_entry_mut(link_id);
             entry.code = LCode::Val(Literal::Block(block_id));
             b.unify(&entry.ty, entry.span_id, &block_ty, block_span_id);
-            self.update_connections(link_id);
+            self.update_connections(block_id, link_id);
         }
 
         for (link_id, abstraction_id) in abstractions {
