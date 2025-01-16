@@ -85,19 +85,7 @@ impl ICodeModule for Flatten<Module> {
 
     fn get_label_args(&self, v: ValueId) -> Vec<AstType> {
         let entry = self.get_entry(v);
-        let block_id = entry.block_id;
-        let block = self.blocks.get_block(block_id);
-        let args: Vec<_> = block.iter_args().collect();
-        let mut out = vec![];
-        for current in args {
-            let entry = self.get_link_entry(current);
-            if let LCode::Arg(_) = &entry.code {
-                out.push(entry.ty.clone());
-            } else {
-                unreachable!()
-            }
-        }
-        out
+        self.inner.get_label_args(entry.link.unwrap())
     }
 }
 
@@ -126,11 +114,12 @@ impl Flatten<Module> {
         let s_ty = format!("{}", &r_ty);
 
         let scope_id = block.scope();
+        let link_id = entry.link.unwrap();
 
         Some(CodeRow {
             pos: v,
-            link: entry.link.unwrap(),
-            value: self.code_to_string(v, b),
+            link: link_id,
+            value: self.inner.code_to_string(link_id, b),
             ty: s_ty,
             mem: format!("{:?}", mem),
             name: self
@@ -161,5 +150,57 @@ impl Flatten<Module> {
         println!("saved table {:?}", filename);
         std::fs::write(filename, s.clone()).unwrap();
         s
+    }
+
+    pub fn resolve_declaration<'c>(&self, offset: CodeOffset) -> Option<CodeOffset> {
+        let mut current = offset;
+        loop {
+            let value_id = self.resolve_code_offset(current);
+            let code = self.get_code(value_id);
+            if let LCode::CallValue(base) = code {
+                //current = inds.clone().offset();
+                current = *base;
+                continue;
+            }
+
+            if let LCode::Use(base, _inds) = code {
+                current = *base;
+                continue;
+
+                /*
+                if _inds.len() == 0 {
+                    current = *base;
+                    continue;
+                }
+
+                assert_eq!(_inds.len(), 1);
+
+                //let value_id = self.resolve_code_offset(*base);
+                //let code = self.get_code(value_id);
+                let ty = self.get_type(*base);
+                assert!(ty.is_composite());
+                let index = _inds.get(0).unwrap().clone();
+                //let (_, field_type) = ty.fields().get(inds.get(0).unwrap()));
+                current = match index {
+                    UseIndex::Use(offset) => {
+                        let v = self.resolve_code_offset(offset);
+                        let code = self.get_code(v);
+                        let pos = match code {
+                            LCode::Val(Literal::Int(i)) => *i as usize,
+                            _ => unimplemented!(),
+                        };
+                        let (_, _field_type) = ty.fields().get(pos).unwrap().clone();
+                        v.into()
+                    }
+                    _ => unimplemented!(),
+                };
+                //let base = self.resolve_declaration(base).unwrap();
+                //current = *base;
+                return Some(current);
+                */
+            }
+
+            return Some(current);
+        }
     }
 }

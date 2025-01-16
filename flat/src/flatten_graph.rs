@@ -134,7 +134,8 @@ impl Flatten<Module> {
                 if cfg.ids.contains_key(&entry_id) {
                     continue;
                 }
-                let name = self.code_to_string(entry_id, b);
+                let link_id = self.state.values.get(entry_id);
+                let name = self.code_to_string(link_id, b);
                 let c = cfg.g.add_node(Node::new_block(name, entry_id.into()));
                 cfg.ids.insert(entry_id, c);
                 for (succ_type, next_code_offset) in self.get_block_successors(entry_id) {
@@ -182,7 +183,7 @@ impl Flatten<Module> {
             let entry = self.get_link_entry(v);
             if let LCode::Val(_) = entry.code {
                 ng.sources.push((module, value_id));
-                let s = format!("{}:{}", v, self.code_to_string(value_id, b));
+                let s = format!("{}:{}", v, self.inner.code_to_string(v, b));
                 block_group.push_value(GroupValue::new(format!("{}", v), s));
             } else {
                 continue;
@@ -273,7 +274,7 @@ impl Flatten<Module> {
                                         {
                                             ng.edges.push((v, v_target));
                                         }
-                                        format!("{}:{}", v, self.code_to_string(v, b))
+                                        format!("{}:{}", v, self.inner.code_to_string(link_id, b))
                                     }
                                     LCode::Switch(link_id, cases) => {
                                         let v_link = self.resolve_code_offset(link_id.into());
@@ -292,7 +293,7 @@ impl Flatten<Module> {
                                         ng.edges.push((v, v_target));
                                         let v_target = self.resolve_code_offset(b2.into());
                                         ng.edges.push((v, v_target));
-                                        format!("{}:{}", v, self.code_to_string(v, b))
+                                        format!("{}:{}", v, self.code_to_string(link_id, b))
                                     }
                                     LCode::CallValue(offset) => {
                                         let v_target = self.resolve_code_offset(*offset);
@@ -320,7 +321,7 @@ impl Flatten<Module> {
                                     LCode::Call(offset) => {
                                         let v_target = self.resolve_code_offset(*offset);
                                         ng.sources.push((v, v_target));
-                                        format!("{}:{}", v, self.code_to_string(v, b))
+                                        format!("{}:{}", v, self.code_to_string(link_id, b))
                                     }
                                     LCode::Arg(num) => {
                                         format!(
@@ -343,11 +344,11 @@ impl Flatten<Module> {
                                             format!(
                                                 "{}:{} => {}",
                                                 v,
-                                                self.code_to_string(v, b),
+                                                self.code_to_string(link_id, b),
                                                 v_decl
                                             )
                                         } else {
-                                            format!("{}:{}", v, self.code_to_string(v, b))
+                                            format!("{}:{}", v, self.code_to_string(link_id, b))
                                         }
                                     }
                                 };
