@@ -22,7 +22,7 @@ pub mod scope;
 pub mod variants;
 
 pub use block_format::*;
-pub use blockify::{BlockifyError, LCode, UseIndex, UseIndexList};
+pub use blockify::*;
 pub use blocks::*;
 pub use builder::*;
 pub use builtin::*;

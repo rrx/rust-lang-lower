@@ -1,5 +1,67 @@
-use crate::{BlockId, LCode, LinkId, ValueId, VarDefinitionSpace};
-use compile_core::{AstType, SpanId, StringKey};
+use crate::{BlockId, CodeOffset, LinkId, UseIndex, ValueId, VarDefinitionSpace};
+use compile_core::{
+    AstType, BinaryOperation, BuiltinId, Literal, NaryOperation, SpanId, StringKey, UnaryOperation,
+};
+use std::collections::HashMap;
+
+#[derive(Debug, Clone)]
+pub enum LCode {
+    EndModule,
+    Label, // number of positional arguments, number of named arguments
+    Noop,
+    Declare,
+    DeclareFunction(Option<BlockId>), // optional entry block
+    Extern,                           // optional entry block
+    //Value(LinkId),
+    //ValueIndex(LinkId, u8), // index into a struct
+    //
+    CallValue(CodeOffset),
+    Call(CodeOffset),
+
+    Arg(u8), // get the value of a positional arg
+    Val(Literal),
+    Use(CodeOffset, Vec<UseIndex>),
+    Tuple(Vec<LinkId>),
+    Op1(UnaryOperation),
+    Op2(BinaryOperation),
+    NaryOp(NaryOperation),
+    Load(LinkId),          // memref
+    Store(LinkId, LinkId), // memref, value to store
+    Return,                // return values
+    Yield,                 // yield values
+
+    // jump to block, with num args
+    Jump(BlockId),
+    Switch(LinkId, HashMap<usize, BlockId>),
+    PlaceholderTerminal,
+    PlaceholderCodeReference,
+
+    Branch(CodeOffset, BlockId, BlockId),
+    Ternary(CodeOffset, BlockId, BlockId), // condition, then_entry, else_entry
+    Builtin(BuiltinId),
+}
+
+impl LCode {
+    pub fn is_start(&self) -> bool {
+        match self {
+            Self::Label => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_term(&self) -> bool {
+        match self {
+            Self::Jump(_) => true,
+            Self::Switch(_, _) => true,
+            Self::PlaceholderTerminal => true,
+            Self::Branch(_, _, _) => true,
+            Self::Return => true,
+            Self::Yield => true,
+            Self::EndModule => true,
+            _ => false,
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct CodeEntry {
