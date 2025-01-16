@@ -4,48 +4,38 @@ use petgraph::graph::NodeIndex;
 use std::convert::Into;
 
 use crate::{
-    CodeEntry, CodeOffset, CodeRow, Flatten, ICodeModule, LCode, Module, NodeBuilder as NB,
+    CodeEntry, CodeOffset, CodeRow, Flatten, ICodeModule, LCode, LinkId, Module, NodeBuilder as NB,
     StringLabel, Successor, ValueId, VarDefinitionSpace,
 };
 
 use tabled::{settings::Style, Table};
 
-impl ICodeModule for Flatten<Module> {
-    fn get_name(&self, offset: CodeOffset) -> Option<StringLabel> {
-        if let Some(value_id) = self.maybe_resolve_code_offset(offset) {
-            let link_id = self.state.values.get(value_id);
-            self.get_link_entry(link_id).name.map(|n| n.into())
-        } else {
-            None
-        }
+impl Flatten<Module> {
+    pub fn shared_libraries(&self) -> Vec<String> {
+        self.link.shared_libraries()
     }
 
-    fn get_code(&self, value_id: ValueId) -> &LCode {
-        let link_id = self.state.values.get(value_id);
-        &self.get_link_entry(link_id).code
-    }
-
-    fn get_block_successors(&self, entry_id: ValueId) -> Vec<(Successor, CodeOffset)> {
+    pub fn get_block_successors(&self, entry_id: ValueId) -> Vec<(Successor, CodeOffset)> {
         let link_id = self.state.values.get(entry_id);
         let entry = self.get_link_entry(link_id);
         let block_id = entry.block_id;
         self.blocks.get_block_successors(block_id)
     }
 
-    fn get_type(&self, v: CodeOffset) -> AstType {
+    pub fn get_type(&self, v: CodeOffset) -> AstType {
         let value_id = self.resolve_code_offset(v);
         let link_id = self.state.values.get(value_id);
         let entry = self.get_link_entry(link_id);
         entry.clone().ty
     }
 
-    fn get_entry_id(&self, value_id: ValueId) -> Option<ValueId> {
+    pub fn get_entry_id(&self, value_id: ValueId) -> Option<ValueId> {
         let link_id = self.state.values.get(value_id);
         let block_id = self.get_link_entry(link_id).block_id;
         self.maybe_resolve_code_offset(block_id.into())
     }
 
-    fn is_in_static_scope(&self, offset: CodeOffset) -> bool {
+    pub fn is_in_static_scope(&self, offset: CodeOffset) -> bool {
         let value_id = self.resolve_code_offset(offset);
         let link_id = self.state.values.get(value_id);
         let entry = self.get_link_entry(link_id);
@@ -67,11 +57,23 @@ impl ICodeModule for Flatten<Module> {
     fn maybe_resolve_code_offset(&self, code_offset: CodeOffset) -> Option<ValueId> {
         self.inner.maybe_resolve_code_offset(code_offset)
     }
-}
 
-impl Flatten<Module> {
-    pub fn shared_libraries(&self) -> Vec<String> {
-        self.link.shared_libraries()
+    pub fn link(&self, value_id: ValueId) -> LinkId {
+        self.state.values.get(value_id)
+    }
+
+    pub fn get_code(&self, value_id: ValueId) -> &LCode {
+        let link_id = self.state.values.get(value_id);
+        &self.get_link_entry(link_id).code
+    }
+
+    pub fn get_name(&self, offset: CodeOffset) -> Option<StringLabel> {
+        if let Some(value_id) = self.maybe_resolve_code_offset(offset) {
+            let link_id = self.state.values.get(value_id);
+            self.get_link_entry(link_id).name.map(|n| n.into())
+        } else {
+            None
+        }
     }
 
     fn get_entry(&self, value_id: ValueId) -> &CodeEntry {

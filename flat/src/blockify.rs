@@ -138,14 +138,4 @@ impl LCode {
     }
 }
 
-pub trait ICodeModule {
-    fn get_name(&self, v: CodeOffset) -> Option<StringLabel>;
-    fn get_code(&self, value_id: ValueId) -> &LCode;
-    fn get_block_successors(&self, entry_id: ValueId) -> Vec<(Successor, CodeOffset)>;
-    fn get_type(&self, v: CodeOffset) -> AstType;
-    fn get_entry_id(&self, value_id: ValueId) -> Option<ValueId>;
-    fn is_in_static_scope(&self, v: CodeOffset) -> bool;
-    fn get_mem(&self, offset: CodeOffset) -> &VarDefinitionSpace;
-    fn resolve_code_offset(&self, code_offset: CodeOffset) -> ValueId;
-    fn maybe_resolve_code_offset(&self, code_offset: CodeOffset) -> Option<ValueId>;
-}
+pub trait ICodeModule {}
