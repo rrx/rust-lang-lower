@@ -585,18 +585,6 @@ impl BlockGraph<BlockGraphStateOpen> {
         scope.lambdas.insert(name, abstraction_id);
     }
 
-    pub fn resolve_lambda_scope(&self, block_id: BlockId, name: StringLabel) -> Option<ScopeId> {
-        // resolve scope through the tree, starting at the current scope
-        let block = self.get_block(block_id);
-        for scope_id in self.walk_scopes(block.scope()) {
-            let scope = self.get_scope(scope_id);
-            if let Some(_template_id) = scope.lambdas.get(&name) {
-                return Some(scope_id);
-            }
-        }
-        None
-    }
-
     pub fn resolve_template(
         &self,
         start_scope_id: ScopeId,
