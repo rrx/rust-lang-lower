@@ -191,13 +191,6 @@ impl<'a, S: ScopeTypeState> Deref for TypedScope<'a, S> {
         self.inner
     }
 }
-/*
-impl<'a, S: ScopeTypeState> DerefMut for TypedScope<'a, S> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.inner
-    }
-}
-*/
 
 impl<'a> TypedScope<'a, ScopeTypeStateFunction> {
     pub fn return_block(&self) -> BlockId {
@@ -453,6 +446,14 @@ impl BlockGraph<BlockGraphStateOpen> {
             .map(|n| (n).into())
     }
 
+    pub fn step_down(&self, start_scope_id: ScopeId, target_scope_id: ScopeId) -> Option<ScopeId> {
+        self.sg
+            .neighbors_directed(start_scope_id.into(), petgraph::Direction::Outgoing)
+            .into_iter()
+            .find(|x| *x == target_scope_id.into())
+            .map(|x| x.into())
+    }
+
     pub fn walk_scopes(&self, scope_id: ScopeId) -> Vec<ScopeId> {
         let mut out = vec![];
         let mut current = scope_id;
@@ -465,18 +466,6 @@ impl BlockGraph<BlockGraphStateOpen> {
             }
         }
         out
-    }
-
-    pub fn find_scope_next_down(
-        &self,
-        start_scope_id: ScopeId,
-        target_scope_id: ScopeId,
-    ) -> Option<ScopeId> {
-        self.sg
-            .neighbors_directed(start_scope_id.into(), petgraph::Direction::Outgoing)
-            .into_iter()
-            .find(|x| *x == target_scope_id.into())
-            .map(|x| x.into())
     }
 
     pub fn find_scopes(&self, scope_id: ScopeId) -> Vec<ScopeId> {

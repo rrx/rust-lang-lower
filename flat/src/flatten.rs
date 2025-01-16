@@ -846,7 +846,7 @@ impl FlattenInner {
             if unwind.is_empty() {
                 let down = self
                     .blocks
-                    .find_scope_next_down(start_scope_id, target_scope_id)
+                    .step_down(start_scope_id, target_scope_id)
                     .unwrap();
                 log::debug!("down: {:?}", down);
                 (target_block_id, jump_args)
@@ -1331,12 +1331,11 @@ impl FlattenInner {
 
                     Ast::Literal(lit) => {
                         let scope_id = self.blocks.get_block(open.block_id).scope();
-                        let scope = self.blocks.get_scope(scope_id);
-
+                        let is_static = self.blocks.get_scope(scope_id).is_static();
                         let static_block_id = self.blocks.static_block_id();
 
                         // Generate the global name, unique if it's local
-                        let global_name = if scope.is_static() {
+                        let global_name = if is_static {
                             b.labels.r(name.into()).to_string()
                         } else {
                             // static var with local name
@@ -1346,7 +1345,7 @@ impl FlattenInner {
                         };
                         let global_name_key = b.labels.s(&global_name);
 
-                        let ast_ty: AstType = lit.clone().into();
+                        let ast_ty: AstType = lit.into();
                         let link_id = self.insert_decl_entry(
                             static_block_id,
                             CodeEntry::new(
@@ -1520,7 +1519,7 @@ impl FlattenInner {
             Ast::Assign(target, expr) => {
                 // assign is expression, non-terminal
                 let name = match target {
-                    AssignTarget::Identifier(name) | AssignTarget::Alloca(name) => name,
+                    AssignTarget::Identifier(name) => name,
                 };
 
                 // push the definition into the lambda list

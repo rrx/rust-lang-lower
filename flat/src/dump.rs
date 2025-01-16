@@ -198,10 +198,6 @@ impl NodeBuilder {
                         let s = format!("target identifier: {}", self.labels.r(key.into()),);
                         out.push((depth + 1, s, node.span_id));
                     }
-                    AssignTarget::Alloca(key) => {
-                        let s = format!("target alloca: {}", self.labels.r(key.into()),);
-                        out.push((depth + 1, s, node.span_id));
-                    }
                 }
                 self.dump_strings(value, out, depth + 1);
             }

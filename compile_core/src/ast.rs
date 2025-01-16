@@ -229,7 +229,6 @@ pub enum DerefTarget {
 #[derive(Debug, Clone)]
 pub enum AssignTarget {
     Identifier(StringKey),
-    Alloca(StringKey),
 }
 
 #[derive(Debug, Clone)]

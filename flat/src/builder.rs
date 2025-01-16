@@ -347,10 +347,6 @@ impl NodeBuilder {
         Ast::Assign(AssignTarget::Identifier(name), rhs.into()).into()
     }
 
-    pub fn alloca(name: StringKey, rhs: AstNode) -> AstNode {
-        Ast::Assign(AssignTarget::Alloca(name), rhs.into()).into()
-    }
-
     pub fn cond(condition: AstNode, then: AstNode, else_block: Option<AstNode>) -> AstNode {
         Ast::Conditional(condition.into(), then.into(), else_block.map(|x| x.into())).into()
     }
