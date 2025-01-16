@@ -589,11 +589,7 @@ impl BlockGraph<BlockGraphStateOpen> {
         None
     }
 
-    pub fn list_variants_by_name(
-        &self,
-        start_scope_id: ScopeId,
-        name: &StringKey,
-    ) -> Vec<VariantId> {
+    pub fn list_variants(&self, start_scope_id: ScopeId, name: &StringKey) -> Vec<VariantId> {
         let mut out = vec![];
         for scope_id in self.walk_scopes(start_scope_id) {
             let scope = self.get_scope(scope_id);

@@ -202,14 +202,14 @@ impl BlockGraph<BlockGraphStateStart> {
             extra: BlockGraphStateStart {},
         }
     }
+}
 
+impl BlockGraph<BlockGraphStateOpen> {
     pub fn new() -> BlockGraph<BlockGraphStateOpen> {
         let start = BlockGraph::start();
         BlockGraph::open(start)
     }
-}
 
-impl BlockGraph<BlockGraphStateOpen> {
     fn open(mut g: BlockGraph<BlockGraphStateStart>) -> Self {
         let (static_block_id, static_scope_id) = g.root();
         BlockGraph {
@@ -312,7 +312,7 @@ impl BlockGraph<BlockGraphStateOpen> {
         out
     }
 
-    pub fn find_dead_blocks_from_graph(&self) -> Vec<BlockId> {
+    pub fn find_dead_blocks(&self) -> Vec<BlockId> {
         let entries = self
             .graph_get_entries()
             .into_iter()
@@ -443,7 +443,7 @@ impl BlockGraph<BlockGraphStateOpen> {
         name: &StringKey,
     ) -> Vec<(AstType, LinkId, ScopeId)> {
         let mut out = vec![];
-        for variant_id in self.list_variants_by_name(start_scope_id, name) {
+        for variant_id in self.list_variants(start_scope_id, name) {
             let v = self.variants.get(variant_id);
             out.push((v.ty.clone(), v.link_id, start_scope_id));
         }

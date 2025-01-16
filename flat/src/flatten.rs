@@ -383,7 +383,7 @@ impl FlattenInner {
         }
 
         // DEAD BLOCKS
-        let dead_blocks = self.blocks.find_dead_blocks_from_graph();
+        let dead_blocks = self.blocks.find_dead_blocks();
         for block_id in dead_blocks {
             self.blocks.get_block_mut(block_id).mark_dead();
 
