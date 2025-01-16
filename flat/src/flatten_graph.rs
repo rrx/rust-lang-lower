@@ -438,7 +438,8 @@ impl Flatten<Module> {
                         format!("label = \"B{:?}:dead\"", index.index(),)
                     } else {
                         if let Some(v) = self.maybe_resolve_code_offset(block_id.into()) {
-                            let entry = self.get_entry(v);
+                            let link_id = self.state.values.get(v);
+                            let entry = self.get_entry(link_id);
                             if entry.value_id.is_some() {
                                 let v = self.resolve_code_offset(block_id.into());
                                 // block found

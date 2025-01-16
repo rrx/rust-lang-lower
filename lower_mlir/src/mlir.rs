@@ -327,7 +327,8 @@ impl<'c> LowerIR<'c> for MLIRGenerator<'c> {
 
 impl<'c> MLIRGenerator<'c> {
     pub fn get_location(&self, value_id: ValueId) -> Location<'c> {
-        let entry = self.blockify.get_entry(value_id);
+        let link_id = self.link(value_id);
+        let entry = self.blockify.get_entry(link_id);
         let span = self.b.spans.lookup(entry.span_id);
         let location = self.diagnostics_location(&span);
         location
@@ -654,7 +655,7 @@ impl<'c> MLIRGenerator<'c> {
 
         // resolve value
         let value_index = if value_is_static {
-            let v_entry = self.blockify.get_entry(v_value);
+            let v_entry = self.blockify.get_entry(self.link(v_value));
             let static_name = self.b.labels.r(v_entry.name.unwrap().into());
             let (lower_ty, dims) = self.from_type(&v_entry.ty);
             assert_eq!(dims.len(), 0);
@@ -734,7 +735,7 @@ impl<'c> MLIRGenerator<'c> {
                 let value_index = SymIndex::Arg(block_id, *pos as usize);
                 self.index.insert(v, value_index);
 
-                let entry = self.blockify.get_entry(v);
+                let entry = self.blockify.get_entry(self.link(v));
                 if let VarDefinitionSpace::Stack(decl_link_id) = entry.mem {
                     let v_decl = self.blockify.resolve_code_offset(decl_link_id.into());
                     let addr_index = self.resolve_value(v_decl.into()).unwrap();
@@ -1096,8 +1097,8 @@ impl<'c> MLIRGenerator<'c> {
                 let vx = values.pop().unwrap();
 
                 let block_id = self.blockify.get_entry_id(v).unwrap();
-                let x_entry = self.blockify.get_entry(vx);
-                let y_entry = self.blockify.get_entry(vy);
+                let x_entry = self.blockify.get_entry(self.link(vx));
+                let y_entry = self.blockify.get_entry(self.link(vy));
                 let x_index = self.resolve_value_lower_load(block_id, vx.into()).unwrap();
 
                 let y_index = self.resolve_value_lower_load(block_id, vy.into()).unwrap();
@@ -1408,7 +1409,7 @@ impl<'c> MLIRGenerator<'c> {
     }
 
     pub fn lower_block(&mut self, entry_id: ValueId) -> Result<()> {
-        let entry = self.blockify.get_entry(entry_id);
+        let entry = self.blockify.get_entry(self.link(entry_id));
         let block_id = entry.block_id;
         let links: Vec<_> = self.blockify.entry_links(block_id);
         for link_id in links {
@@ -1422,7 +1423,7 @@ impl<'c> MLIRGenerator<'c> {
 
     pub fn lower_static_block(&mut self, module_block_id: ValueId) -> Result<()> {
         // reorder things, so we lower declarations last
-        let entry = self.blockify.get_entry(module_block_id);
+        let entry = self.blockify.get_entry(self.link(module_block_id));
         let block_id = entry.block_id;
         let links: Vec<_> = self.blockify.entry_links(block_id);
 

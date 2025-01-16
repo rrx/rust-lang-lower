@@ -129,7 +129,8 @@ impl<'a> Interp<'a> {
     }
 
     pub fn jump(&mut self, target: ValueId) {
-        let entry = self.m.get_entry(self.pos);
+        let link_id = self.link(self.pos);
+        let entry = self.m.get_entry(link_id);
         let ty = &entry.ty;
         // ensure arity match
         assert_eq!(ty.fields().len(), self.call_args.len());
@@ -160,7 +161,8 @@ impl<'a> Interp<'a> {
     }
 
     fn get_value(&self, v: ValueId) -> Option<Value> {
-        let entry = self.m.get_entry(v);
+        let link_id = self.link(self.pos);
+        let entry = self.m.get_entry(link_id);
         let v = if let VarDefinitionSpace::Stack(decl_link_id) = entry.mem {
             let v_decl = self.m.resolve_code_offset(decl_link_id.into());
             v_decl
@@ -172,7 +174,8 @@ impl<'a> Interp<'a> {
     }
 
     pub fn resolve_value(&mut self, v: ValueId) -> Result<Value> {
-        let entry = self.m.get_entry(v);
+        let link_id = self.link(v);
+        let entry = self.m.get_entry(link_id);
         let code = &entry.code;
 
         match code {
@@ -237,7 +240,8 @@ impl<'a> Interp<'a> {
 
     fn store_value(&mut self, value: Value) {
         let v = self.pos;
-        let entry = self.m.get_entry(v);
+        let link_id = self.link(self.pos);
+        let entry = self.m.get_entry(link_id);
         let v_decl = if let VarDefinitionSpace::Stack(decl_link_id) = entry.mem {
             let v_decl = self.m.resolve_code_offset(decl_link_id.into());
             v_decl
@@ -249,7 +253,8 @@ impl<'a> Interp<'a> {
 
     pub fn step(&mut self) -> Result<bool> {
         let pos = self.pos;
-        let entry = self.m.get_entry(pos);
+        let link_id = self.link(self.pos);
+        let entry = self.m.get_entry(link_id);
         let code = &entry.code;
         let result = match code {
             LCode::DeclareFunction(_) => {
@@ -364,7 +369,8 @@ impl<'a> Interp<'a> {
                         Value::Float(i1 - i2)
                     }
                     _ => {
-                        let entry = self.m.get_entry(pos);
+                        let link_id = self.link(self.pos);
+                        let entry = self.m.get_entry(link_id);
                         self.b.push_error_labels(vec![self.b.primary_label(
                             &format!("Not implemented: {:?}", (op, v1, v2)),
                             entry.span_id,
@@ -480,7 +486,8 @@ impl<'a> Interp<'a> {
                         match value {
                             Value::Bool(condition) => {
                                 if !condition {
-                                    let entry = self.m.get_entry(pos);
+                                    let link_id = self.link(self.pos);
+                                    let entry = self.m.get_entry(link_id);
                                     self.b.push_error_labels(vec![self
                                         .b
                                         .primary_label(&format!("Check Failed"), entry.span_id)]);
@@ -535,6 +542,10 @@ impl<'a> Interp<'a> {
         Ok(result)
     }
 
+    pub fn link(&self, pos: ValueId) -> LinkId {
+        self.m.state.values.get(pos)
+    }
+
     pub fn run(&mut self, main_link_id: LinkId) -> Vec<Value> {
         let pos = self.m.resolve_code_offset(main_link_id.into());
         self.return_link_id = None;
@@ -542,9 +553,10 @@ impl<'a> Interp<'a> {
         self.pos = pos;
         loop {
             let pos = self.pos;
+            let link_id = self.link(self.pos);
             let r = self.step();
             if self.config.verbose {
-                let entry = self.m.get_entry(pos);
+                let entry = self.m.get_entry(link_id);
                 log::debug!("step: {}, {:?}", pos, entry.code);
                 log::debug!("\tcall_args: {:?}", self.call_args);
             }

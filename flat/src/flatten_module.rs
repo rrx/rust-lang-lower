@@ -1,4 +1,4 @@
-use compile_core::{AstType, SpanId};
+use compile_core::AstType;
 use petgraph::graph::NodeIndex;
 
 use std::convert::Into;
@@ -11,11 +11,6 @@ use crate::{
 use tabled::{settings::Style, Table};
 
 impl ICodeModule for Flatten<Module> {
-    fn get_entry(&self, value_id: ValueId) -> &CodeEntry {
-        let link_id = self.state.values.get(value_id);
-        self.get_link_entry(link_id)
-    }
-
     fn get_name(&self, offset: CodeOffset) -> Option<StringLabel> {
         if let Some(value_id) = self.maybe_resolve_code_offset(offset) {
             let link_id = self.state.values.get(value_id);
@@ -77,6 +72,11 @@ impl ICodeModule for Flatten<Module> {
 impl Flatten<Module> {
     pub fn shared_libraries(&self) -> Vec<String> {
         self.link.shared_libraries()
+    }
+
+    fn get_entry(&self, value_id: ValueId) -> &CodeEntry {
+        let link_id = self.state.values.get(value_id);
+        self.get_link_entry(link_id)
     }
 
     pub fn get_code_row(&self, v: ValueId, b: &mut NB) -> Option<CodeRow> {
