@@ -327,8 +327,8 @@ impl<'c> LowerIR<'c> for MLIRGenerator<'c> {
 
 impl<'c> MLIRGenerator<'c> {
     pub fn get_location(&self, value_id: ValueId) -> Location<'c> {
-        let span_id = self.blockify.get_span_id(value_id);
-        let span = self.b.spans.lookup(span_id);
+        let entry = self.blockify.get_entry(value_id);
+        let span = self.b.spans.lookup(entry.span_id);
         let location = self.diagnostics_location(&span);
         location
     }
@@ -427,8 +427,13 @@ impl<'c> MLIRGenerator<'c> {
         //}
     }
 
+    pub fn link(&self, v: ValueId) -> LinkId {
+        self.blockify.state.values.get(v)
+    }
+
     pub fn get_label_args(&self, v: ValueId) -> Vec<(Type<'c>, Location<'c>)> {
-        let types = self.blockify.get_label_args(v);
+        let link_id = self.link(v);
+        let types = self.blockify.get_label_args(link_id);
         if types == vec![AstType::Unit] {
             vec![]
         } else {
@@ -1091,8 +1096,8 @@ impl<'c> MLIRGenerator<'c> {
                 let vx = values.pop().unwrap();
 
                 let block_id = self.blockify.get_entry_id(v).unwrap();
-                let x_span_id = self.blockify.get_span_id(vx);
-                let y_span_id = self.blockify.get_span_id(vy);
+                let x_entry = self.blockify.get_entry(vx);
+                let y_entry = self.blockify.get_entry(vy);
                 let x_index = self.resolve_value_lower_load(block_id, vx.into()).unwrap();
 
                 let y_index = self.resolve_value_lower_load(block_id, vy.into()).unwrap();
@@ -1100,7 +1105,14 @@ impl<'c> MLIRGenerator<'c> {
                 let r_x = self.value0(x_index);
                 let r_y = self.value0(y_index);
 
-                let r = self.build_binop(op.clone(), r_x, &x_span_id, r_y, &y_span_id, location);
+                let r = self.build_binop(
+                    op.clone(),
+                    r_x,
+                    &x_entry.span_id,
+                    r_y,
+                    &y_entry.span_id,
+                    location,
+                );
                 assert!(r.is_ok());
                 // if we throw the error, we get strange behavior from MLIR, so asserting instead
                 let (op, _ast_ty) = r?;

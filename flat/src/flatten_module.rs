@@ -16,16 +16,6 @@ impl ICodeModule for Flatten<Module> {
         self.get_link_entry(link_id)
     }
 
-    fn shared_libraries(&self) -> Vec<String> {
-        self.link.shared_libraries()
-    }
-
-    fn get_span_id(&self, value_id: ValueId) -> SpanId {
-        let link_id = self.state.values.get(value_id);
-        let entry = self.get_link_entry(link_id);
-        entry.span_id
-    }
-
     fn get_name(&self, offset: CodeOffset) -> Option<StringLabel> {
         if let Some(value_id) = self.maybe_resolve_code_offset(offset) {
             let link_id = self.state.values.get(value_id);
@@ -82,14 +72,13 @@ impl ICodeModule for Flatten<Module> {
     fn maybe_resolve_code_offset(&self, code_offset: CodeOffset) -> Option<ValueId> {
         self.inner.maybe_resolve_code_offset(code_offset)
     }
-
-    fn get_label_args(&self, v: ValueId) -> Vec<AstType> {
-        let entry = self.get_entry(v);
-        self.inner.get_label_args(entry.link.unwrap())
-    }
 }
 
 impl Flatten<Module> {
+    pub fn shared_libraries(&self) -> Vec<String> {
+        self.link.shared_libraries()
+    }
+
     pub fn get_code_row(&self, v: ValueId, b: &mut NB) -> Option<CodeRow> {
         let link_id = self.state.values.get(v);
         let entry = self.get_link_entry(link_id);
@@ -127,7 +116,7 @@ impl Flatten<Module> {
                 .map(|key| b.labels.r(key))
                 .unwrap_or("".to_string())
                 .to_string(),
-            span_id: self.get_span_id(v).index(),
+            span_id: entry.span_id.index(),
             scope_id: scope_id.index(),
             entry_id: entry_id.map(|v| v).unwrap_or("".to_string()),
             block_id: block_id.index(),

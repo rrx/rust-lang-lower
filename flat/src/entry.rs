@@ -9,7 +9,7 @@ pub struct CodeEntry {
     pub value_id: Option<ValueId>,
     pub block_id: BlockId,
     pub ty: AstType,
-    pub(super) span_id: SpanId,
+    pub span_id: SpanId,
     pub mem: VarDefinitionSpace,
 }
 

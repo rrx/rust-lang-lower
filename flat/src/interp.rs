@@ -364,10 +364,10 @@ impl<'a> Interp<'a> {
                         Value::Float(i1 - i2)
                     }
                     _ => {
-                        let span_id = self.m.get_span_id(pos);
+                        let entry = self.m.get_entry(pos);
                         self.b.push_error_labels(vec![self.b.primary_label(
                             &format!("Not implemented: {:?}", (op, v1, v2)),
-                            span_id,
+                            entry.span_id,
                         )]);
                         return Ok(false);
                     }
@@ -480,10 +480,10 @@ impl<'a> Interp<'a> {
                         match value {
                             Value::Bool(condition) => {
                                 if !condition {
-                                    let span_id = self.m.get_span_id(pos);
+                                    let entry = self.m.get_entry(pos);
                                     self.b.push_error_labels(vec![self
                                         .b
-                                        .primary_label(&format!("Check Failed"), span_id)]);
+                                        .primary_label(&format!("Check Failed"), entry.span_id)]);
                                 }
                                 condition
                             }
