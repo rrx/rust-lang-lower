@@ -247,7 +247,7 @@ impl<S: BlockGraphState> BlockGraph<S> {
         scope_id: ScopeId,
         succ: Successor,
     ) -> SafeBlockEmpty {
-        let block_id = self.new_block_with_scope(scope_id);
+        let block_id = self.insert_new_block(scope_id);
         self.block_succ(parent_block_id, block_id, succ);
         SafeBlock {
             block_id,
@@ -260,7 +260,7 @@ impl<S: BlockGraphState> BlockGraph<S> {
         self.bg.node_weight(index).unwrap()
     }
 
-    pub fn new_block_with_scope(&mut self, scope_id: ScopeId) -> BlockId {
+    pub fn insert_new_block(&mut self, scope_id: ScopeId) -> BlockId {
         let ir_block = IRBlock::new(scope_id);
         let index = self.bg.add_node(ir_block);
         BlockId::new(index.index())

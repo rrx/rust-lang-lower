@@ -312,7 +312,7 @@ impl ScopeLayer {
 impl<S: BlockGraphState> BlockGraph<S> {
     pub fn root(&mut self) -> (BlockId, ScopeId) {
         let scope_id = self.new_scope(ScopeType::Static);
-        let block_id = self.new_block_with_scope(scope_id);
+        let block_id = self.insert_new_block(scope_id);
         let static_scope = self.get_scope_mut(scope_id);
         static_scope.entry_block = Some(block_id);
 
