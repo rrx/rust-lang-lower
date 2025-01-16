@@ -110,8 +110,8 @@ impl FlattenInner {
                 .u
                 .resolve(&call_arg_type)
                 .unwrap_or(call_arg_type.clone());
-            self.blocks
-                .variant_update(variant_id, r_ty2.clone(), entry_link_id);
+            let v = self.blocks.variants.get_mut(variant_id);
+            v.ty = r_ty2.clone();
 
             if let Some(open) = self.blocks.safe_block_try_open(&unk) {
                 let (_, _) = self.push_placeholder_terminal(open, r_ty1, def_span_id);

@@ -425,12 +425,6 @@ impl BlockGraph<BlockGraphStateOpen> {
         variant_id
     }
 
-    pub fn variant_update(&mut self, variant_id: VariantId, ty: AstType, link_id: LinkId) {
-        let v = self.variants.get_mut(variant_id);
-        v.link_id = link_id;
-        v.ty = ty;
-    }
-
     pub fn resolve_function_name(
         &self,
         start_scope_id: ScopeId,

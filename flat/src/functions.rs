@@ -542,8 +542,8 @@ impl FlattenInner {
             self.maybe_terminate_block(unk, next_block_id, def_span_id, PushContext::Function, b);
 
         let variant_ty = b.types.u.resolve(&variant_ty).unwrap();
-        self.blocks
-            .variant_update(variant_id, variant_ty.clone(), entry_link_id);
+        let v = self.blocks.variants.get_mut(variant_id);
+        v.ty = variant_ty.clone();
 
         let next_arg_ty =
             self.resolve_return_type(fun_block_id, def_func_type.into(), call_span_id, b);
