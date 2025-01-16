@@ -606,7 +606,7 @@ impl BlockGraph<BlockGraphStateOpen> {
         out
     }
 
-    pub fn resolve_name_in_scope(&self, scope_id: ScopeId, name: StringKey) -> Option<LinkId> {
+    pub fn resolve_name(&self, scope_id: ScopeId, name: StringKey) -> Option<LinkId> {
         // resolve scope through the tree, starting at the current scope
         for scope_id in self.walk_scopes(scope_id) {
             let scope = self.get_scope(scope_id);
@@ -615,12 +615,6 @@ impl BlockGraph<BlockGraphStateOpen> {
             }
         }
         None
-    }
-
-    pub fn resolve_name(&self, block_id: BlockId, name: StringKey) -> Option<LinkId> {
-        // resolve scope through the tree, starting at the current scope
-        let block = self.get_block(block_id);
-        self.resolve_name_in_scope(block.scope(), name)
     }
 
     pub fn define_label(&mut self, scope_id: ScopeId, block_id: BlockId, name: StringKey) {

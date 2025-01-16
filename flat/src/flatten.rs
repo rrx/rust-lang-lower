@@ -1473,7 +1473,7 @@ impl FlattenInner {
                 let scope_id = self.blocks.get_block(open.block_id).scope();
 
                 // resolve identifier lexically
-                if let Some(def_link_id) = self.blocks.resolve_name(open.block_id, key) {
+                if let Some(def_link_id) = self.blocks.resolve_name(scope_id, key) {
                     let link_id = def_link_id;
                     return (open.unknown(), FlattenResult::link(link_id));
                 }
@@ -1540,7 +1540,7 @@ impl FlattenInner {
                 let scope_id = self.blocks.get_block(open.block_id).scope();
 
                 let (open, offset_decl) =
-                    if let Some(v_decl) = self.blocks.resolve_name_in_scope(scope_id, name) {
+                    if let Some(v_decl) = self.blocks.resolve_name(scope_id, name) {
                         // already declared
                         let decl_entry = self.get_entry(v_decl);
                         b.unify(&decl_entry.ty, decl_entry.span_id, &expr_ty, expr_span_id);

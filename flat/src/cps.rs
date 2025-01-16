@@ -412,7 +412,7 @@ impl FlattenInner {
         // we don't need to defer because we know the target
         // We will rewrite in a later step, this goto will become a select
 
-        if let Some(name_link_id) = self.blocks.resolve_name_in_scope(scope_id, name.into()) {
+        if let Some(name_link_id) = self.blocks.resolve_name(scope_id, name.into()) {
             let (closed, _) = self.push_placeholder_terminal(open, AstType::Unit, call_span_id);
 
             let d = DeferredGoto::new(
