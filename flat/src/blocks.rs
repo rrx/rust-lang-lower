@@ -281,12 +281,6 @@ impl<S: BlockGraphState> BlockGraph<S> {
 }
 
 impl BlockGraph<BlockGraphStateOpen> {
-    pub fn control_flow(&mut self, source_block_id: BlockId, target_block_ids: &[BlockId]) {
-        for target_block_id in target_block_ids {
-            self.block_succ(source_block_id, *target_block_id, Successor::Jump);
-        }
-    }
-
     pub fn get_block_mut(&mut self, block_id: BlockId) -> &mut IRBlock {
         let index = NodeIndex::new(block_id.index());
         self.bg.node_weight_mut(index).unwrap()
