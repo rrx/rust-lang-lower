@@ -1,14 +1,8 @@
-use std::collections::VecDeque;
 use thiserror::Error;
 
-use compile_core::{
-    AstType, BinaryOperation, BuiltinId, Literal, NaryOperation, SpanId, StringKey, UnaryOperation,
-};
+use compile_core::{BinaryOperation, BuiltinId, Literal, NaryOperation, StringKey, UnaryOperation};
 
-use crate::{
-    BlockId, CodeEntry, CodeOffset, LinkId, Node, NodeBuilder, StringLabel, Successor, ValueId,
-    VarDefinitionSpace, CFG,
-};
+use crate::{BlockId, CodeOffset, LinkId};
 
 use std::collections::HashMap;
 

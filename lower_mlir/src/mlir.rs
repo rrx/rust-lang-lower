@@ -1,7 +1,7 @@
 use anyhow::Result;
 use flat::{
-    Builtin, CodeOffset, Flatten, ICodeModule, LCode, LinkId, Module, NodeBuilder, StringLabel,
-    UseIndex, ValueId, VarDefinitionSpace,
+    Builtin, CodeOffset, Flatten, LCode, LinkId, Module, NodeBuilder, StringLabel, UseIndex,
+    ValueId, VarDefinitionSpace,
 };
 use indexmap::IndexMap;
 use melior::ir::Location;

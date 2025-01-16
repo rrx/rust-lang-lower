@@ -4,8 +4,8 @@ use petgraph::graph::NodeIndex;
 use std::convert::Into;
 
 use crate::{
-    CodeEntry, CodeOffset, CodeRow, Flatten, ICodeModule, LCode, LinkId, Module, NodeBuilder as NB,
-    StringLabel, Successor, ValueId, VarDefinitionSpace,
+    CodeOffset, CodeRow, Flatten, LCode, LinkId, Module, NodeBuilder as NB, StringLabel, Successor,
+    ValueId,
 };
 
 use tabled::{settings::Style, Table};
@@ -44,20 +44,6 @@ impl Flatten<Module> {
         scope.is_static()
     }
 
-    fn get_mem(&self, offset: CodeOffset) -> &VarDefinitionSpace {
-        let value_id = self.resolve_code_offset(offset);
-        let link_id = self.state.values.get(value_id);
-        &self.get_link_entry(link_id).mem
-    }
-
-    fn resolve_code_offset(&self, code_offset: CodeOffset) -> ValueId {
-        self.inner.resolve_code_offset(code_offset)
-    }
-
-    fn maybe_resolve_code_offset(&self, code_offset: CodeOffset) -> Option<ValueId> {
-        self.inner.maybe_resolve_code_offset(code_offset)
-    }
-
     pub fn link(&self, value_id: ValueId) -> LinkId {
         self.state.values.get(value_id)
     }
@@ -76,17 +62,11 @@ impl Flatten<Module> {
         }
     }
 
-    fn get_entry(&self, value_id: ValueId) -> &CodeEntry {
-        let link_id = self.state.values.get(value_id);
-        self.get_link_entry(link_id)
-    }
-
     pub fn get_code_row(&self, v: ValueId, b: &mut NB) -> Option<CodeRow> {
         let link_id = self.state.values.get(v);
         let entry = self.get_link_entry(link_id);
         let code = self.get_code(v);
 
-        let mem = self.get_mem(v.into());
         let block_id = entry.block_id;
         let block = self
             .blocks
@@ -112,7 +92,7 @@ impl Flatten<Module> {
             link: link_id,
             value: self.inner.code_to_string(link_id, b),
             ty: s_ty,
-            mem: format!("{:?}", mem),
+            mem: format!("{:?}", entry.mem),
             name: self
                 .get_name(v.into())
                 .map(|key| b.labels.r(key))

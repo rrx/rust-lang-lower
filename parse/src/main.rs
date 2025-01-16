@@ -6,7 +6,7 @@ use std::io::Write;
 
 use lower_mlir::default_context;
 
-use flat::{BlockifyError, Flatten, ICodeModule, NodeBuilder};
+use flat::{BlockifyError, Flatten, NodeBuilder};
 use parse::starlark::StarlarkParser;
 use std::path::PathBuf;
 

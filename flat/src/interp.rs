@@ -1,5 +1,5 @@
 use crate::{
-    Builtin, Config, Flatten, ICodeModule, LCode, LinkId, Module, NodeBuilder, UseIndex, ValueId,
+    Builtin, Config, Flatten, LCode, LinkId, Module, NodeBuilder, UseIndex, ValueId,
     VarDefinitionSpace,
 };
 use anyhow::Result;

@@ -1,5 +1,5 @@
 use crate::{
-    BlockId, CodeOffset, ContinuationFlow, Flatten, FlattenInner, ICodeModule, LCode, Module, Node,
+    BlockId, CodeOffset, ContinuationFlow, Flatten, FlattenInner, LCode, Module, Node,
     NodeBuilder as NB, NodeBuilder, Successor, ValueId, VarDefinitionSpace, CFG,
 };
 use anyhow::Result;
