@@ -131,5 +131,3 @@ impl LCode {
         }
     }
 }
-
-pub trait ICodeModule {}
