@@ -1,10 +1,10 @@
 use crate::{
-    BlockId, CodeOffset, ContinuationFlow, Flatten, FlattenInner, ICodeModule, LCode, Module,
-    NodeBuilder as NB, Successor, ValueId, VarDefinitionSpace,
+    BlockId, CodeOffset, ContinuationFlow, Flatten, FlattenInner, ICodeModule, LCode, Module, Node,
+    NodeBuilder as NB, NodeBuilder, Successor, ValueId, VarDefinitionSpace, CFG,
 };
 use anyhow::Result;
 use petgraph::visit::EdgeRef;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs::File;
 use std::io::Write;
 
@@ -113,6 +113,57 @@ graph TD\n\
 }
 
 impl Flatten<Module> {
+    pub fn blocks(&self, block_id: BlockId, v: ValueId, b: &NodeBuilder) -> Vec<CodeOffset> {
+        let cfg = self.get_cfg(block_id, b);
+        cfg.blocks(v)
+    }
+
+    fn get_cfg(&self, block_id: BlockId, b: &NodeBuilder) -> CFG {
+        let entry_id = self.resolve_code_offset(block_id.into());
+        self.get_graph(entry_id, Some(Successor::BlockScope), b)
+    }
+
+    fn get_graph(&self, entry_id: ValueId, scope: Option<Successor>, b: &NodeBuilder) -> CFG {
+        let mut cfg = CFG::new();
+
+        let mut stack = VecDeque::new();
+        stack.push_back(entry_id);
+
+        loop {
+            if let Some(entry_id) = stack.pop_front() {
+                if cfg.ids.contains_key(&entry_id) {
+                    continue;
+                }
+                let name = self.code_to_string(entry_id, b);
+                let c = cfg.g.add_node(Node::new_block(name, entry_id.into()));
+                cfg.ids.insert(entry_id, c);
+                for (succ_type, next_code_offset) in self.get_block_successors(entry_id) {
+                    if let Some(v) = self.maybe_resolve_code_offset(next_code_offset) {
+                        if scope.is_none() || scope == Some(succ_type) {
+                            stack.push_back(v);
+                        }
+                    }
+                }
+            } else {
+                break;
+            }
+        }
+
+        for entry_id in cfg.ids.keys() {
+            //let block = self.env.get_block(*entry_id);
+            let id = cfg.ids.get(entry_id).unwrap();
+            for (succ_type, next_code_offset) in self.get_block_successors(*entry_id) {
+                if let Successor::BlockScope = succ_type {
+                    if let Some(v) = self.maybe_resolve_code_offset(next_code_offset) {
+                        let child_id = cfg.ids.get(&v).unwrap();
+                        cfg.g.add_edge(*id, *child_id, ());
+                    }
+                }
+            }
+        }
+        cfg
+    }
+
     pub fn flow_graph(&self, filename: &str, b: &NB) -> Result<()> {
         let entries = self.blocks.graph_get_entries();
         let mut ng = NestedGraph::new();

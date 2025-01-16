@@ -143,54 +143,7 @@ pub trait ICodeModule {
     fn get_span_id(&self, value_id: ValueId) -> SpanId;
     fn get_name(&self, v: CodeOffset) -> Option<StringLabel>;
     fn get_code(&self, value_id: ValueId) -> &LCode;
-
-    fn get_cfg(&self, block_id: BlockId, b: &NodeBuilder) -> CFG {
-        let entry_id = self.resolve_code_offset(block_id.into());
-        self.get_graph(entry_id, Some(Successor::BlockScope), b)
-    }
-
     fn get_block_successors(&self, entry_id: ValueId) -> Vec<(Successor, CodeOffset)>;
-
-    fn get_graph(&self, entry_id: ValueId, scope: Option<Successor>, b: &NodeBuilder) -> CFG {
-        let mut cfg = CFG::new();
-
-        let mut stack = VecDeque::new();
-        stack.push_back(entry_id);
-
-        loop {
-            if let Some(entry_id) = stack.pop_front() {
-                if cfg.ids.contains_key(&entry_id) {
-                    continue;
-                }
-                let name = self.code_to_string(entry_id, b);
-                let c = cfg.g.add_node(Node::new_block(name, entry_id.into()));
-                cfg.ids.insert(entry_id, c);
-                for (succ_type, next_code_offset) in self.get_block_successors(entry_id) {
-                    if let Some(v) = self.maybe_resolve_code_offset(next_code_offset) {
-                        if scope.is_none() || scope == Some(succ_type) {
-                            stack.push_back(v);
-                        }
-                    }
-                }
-            } else {
-                break;
-            }
-        }
-
-        for entry_id in cfg.ids.keys() {
-            //let block = self.env.get_block(*entry_id);
-            let id = cfg.ids.get(entry_id).unwrap();
-            for (succ_type, next_code_offset) in self.get_block_successors(*entry_id) {
-                if let Successor::BlockScope = succ_type {
-                    if let Some(v) = self.maybe_resolve_code_offset(next_code_offset) {
-                        let child_id = cfg.ids.get(&v).unwrap();
-                        cfg.g.add_edge(*id, *child_id, ());
-                    }
-                }
-            }
-        }
-        cfg
-    }
 
     fn resolve_declaration<'c>(&self, offset: CodeOffset) -> Option<CodeOffset> {
         let mut current = offset;
@@ -252,10 +205,6 @@ pub trait ICodeModule {
     fn resolve_code_offset(&self, code_offset: CodeOffset) -> ValueId;
     fn maybe_resolve_code_offset(&self, code_offset: CodeOffset) -> Option<ValueId>;
 
-    fn blocks(&self, block_id: BlockId, v: ValueId, b: &NodeBuilder) -> Vec<CodeOffset> {
-        let cfg = self.get_cfg(block_id, b);
-        cfg.blocks(v)
-    }
     fn get_label_args(&self, v: ValueId) -> Vec<AstType>;
 
     fn mem_to_string(&self, mem: VarDefinitionSpace, _b: &NodeBuilder) -> String {
