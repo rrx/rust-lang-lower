@@ -314,7 +314,8 @@ impl FlattenInner {
         func_type: AstFuncType,
         b: &mut NB,
     ) -> Result<LinkId> {
-        if let Some((_, abstraction_id)) = self.blocks.resolve_lambda(start_block_id, name) {
+        let start_scope_id = self.blocks.get_block(start_block_id).scope();
+        if let Some((_, abstraction_id)) = self.blocks.resolve_template(start_scope_id, name) {
             let r = self.gen_bake_function(start_block_id, abstraction_id, func_type, name, b);
             Ok(r.link_id.unwrap())
         } else {

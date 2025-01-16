@@ -1482,7 +1482,9 @@ impl FlattenInner {
                 // we are resolving the abstraction lexically here, but it could also be defined
                 // later.  TODO: if we don't find it, it might be defined later, so we should defer
                 // and throw the error later if it's not found.
-                if let Some(abstraction_id) = self.blocks.resolve_template(scope_id, key.into()) {
+                if let Some((_, abstraction_id)) =
+                    self.blocks.resolve_template(scope_id, key.into())
+                {
                     let code = LCode::Val(Literal::Abstraction(abstraction_id));
                     let ty = b.types.fresh_unknown();
                     let (open, link_id) = self.push_code_open(
@@ -1623,8 +1625,9 @@ impl FlattenInner {
                     // call is an expression, it's non-terminal
                     // lambdas should also be non-terminal
                     Ast::Identifier(ident) => {
+                        let scope_id = self.blocks.get_block(open.block_id).scope();
                         if let Some((scope_id, abstraction_id)) =
-                            self.blocks.resolve_lambda(open.block_id, *ident)
+                            self.blocks.resolve_template(scope_id, *ident)
                         {
                             let (open, r) =
                                 self.push_call(open, scope_id, abstraction_id, span_id, args, b);

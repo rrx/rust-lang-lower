@@ -597,36 +597,16 @@ impl BlockGraph<BlockGraphStateOpen> {
         None
     }
 
-    pub fn resolve_lambda(
-        &self,
-        block_id: BlockId,
-        name: StringKey,
-    ) -> Option<(ScopeId, AbstractionId)> {
-        match self.resolve_lambda_scope(block_id, name.into()) {
-            Some(scope_id) => {
-                let scope = self.get_scope(scope_id);
-                if let Some(abstraction_id) = scope.lambdas.get(&name.into()).cloned() {
-                    //let a = self.abstractions.get(template_id);
-                    //let (def, span_id, _) = self.get_ast_template(template_id).clone();
-                    Some((scope_id, abstraction_id))
-                } else {
-                    None
-                }
-            }
-            None => None,
-        }
-    }
-
     pub fn resolve_template(
         &self,
         start_scope_id: ScopeId,
-        name: StringLabel,
-    ) -> Option<AbstractionId> {
+        name: StringKey,
+    ) -> Option<(ScopeId, AbstractionId)> {
         // search scopes to find a template
         for scope_id in self.walk_scopes(start_scope_id) {
             let scope = self.get_scope(scope_id);
-            if let Some(template_id) = scope.lambdas.get(&name).cloned() {
-                return Some(template_id);
+            if let Some(template_id) = scope.lambdas.get(&name.into()).cloned() {
+                return Some((scope_id, template_id));
             }
         }
         None

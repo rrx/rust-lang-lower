@@ -533,7 +533,7 @@ impl FlattenInner {
 
             DeferredType::Goto => {
                 // are we jumping to an abstraction?
-                if let Some(abstraction_id) = self
+                if let Some((_, abstraction_id)) = self
                     .blocks
                     .resolve_template(d.scope_id, d.name.unwrap().into())
                 {
@@ -734,7 +734,8 @@ impl FlattenInner {
             let key = entry.name.unwrap();
             if let Some(label_block_id) = self.blocks.resolve_label(scope_id, key.into()) {
                 blocks.push((link_id, label_block_id));
-            } else if let Some(abstraction_id) = self.blocks.resolve_template(scope_id, key.into())
+            } else if let Some((_, abstraction_id)) =
+                self.blocks.resolve_template(scope_id, key.into())
             {
                 abstractions.push((link_id, abstraction_id));
             } else {
