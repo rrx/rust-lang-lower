@@ -1397,12 +1397,12 @@ impl<'c> MLIRGenerator<'c> {
                         let c = self.blocks.get_mut(&block_id).unwrap();
                         let index = c.push(op);
                         self.index.insert(v, index);
-                    } //_ => unreachable!("{:?}", bi),
+                    }
                 }
             }
             LCode::EndModule => {
                 self.ensure_call_args_empty();
-            } //_ => unimplemented!("{:?}", (v, code)),
+            }
         }
         Ok(())
     }
