@@ -1,8 +1,8 @@
 use super::resolve_attribute;
 use anyhow::Result;
 use compile_core::{
-    AbstractionId, Argument, AssignTarget, Ast, AstFuncType, AstNode, AstType, BuiltinId,
-    ControlFlowMarker, LinkOptions, Literal, ReturnType, SpanId, StringKey,
+    AbstractionId, Argument, AssignTarget, Ast, AstFuncType, AstNode, AstType, ControlFlowMarker,
+    LinkOptions, Literal, ReturnType, SpanId, StringKey,
 };
 
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -979,12 +979,11 @@ impl FlattenInner {
     pub fn push_builtin_call(
         &mut self,
         open: SafeBlockOpen,
-        id: BuiltinId,
+        bi: Builtin,
         args: Vec<Argument>,
         call_span_id: SpanId,
         b: &mut NB,
     ) -> (SafeBlockOpen, FlattenResult) {
-        let bi = b.builtins.get_enum(id);
         let abstraction_id = b.builtins.get_abstraction(bi);
         let (args, def_func_type) =
             self.calculate_function_arguments(abstraction_id, &args, &[], call_span_id, b);
@@ -1006,7 +1005,7 @@ impl FlattenInner {
 
         let (open, link_id) = self.push_code_open(
             open,
-            LCode::Builtin(id),
+            LCode::Builtin(bi),
             def_func_type.into(),
             None,
             call_span_id,
@@ -1368,25 +1367,45 @@ impl FlattenInner {
                 }
             }
 
-            Ast::Builtin(id, mut args) => {
-                let bi = b.builtins.get_enum(id);
-                match bi {
-                    Builtin::Import => {
-                        let arg = args.pop().unwrap();
-                        if let Some(s) = arg.try_string() {
-                            self.link.add_library(&s);
-                        } else {
-                            b.push_error("Expected string", span_id);
+            Ast::Builtin(key, mut args) => {
+                let s_name = b.labels.r(key.into());
+                if let Some(bi) = Builtin::lookup(&s_name) {
+                    let arity = bi.arity();
+                    if arity != args.len() {
+                        b.push_error(
+                            &format!("Builtin Call arity mismatch: {}<=>{}", arity, args.len()),
+                            span_id,
+                        );
+                    }
+
+                    return match bi {
+                        Builtin::Import => {
+                            let arg = args.pop().unwrap();
+                            if let Some(s) = arg.try_string() {
+                                self.link.add_library(&s);
+                            } else {
+                                b.push_error("Expected string", span_id);
+                            }
+                            (open.unknown(), FlattenResult::statement())
                         }
-                        (open.unknown(), FlattenResult::statement())
-                    }
-                    _ => {
-                        let args_size = args.len();
-                        assert_eq!(args_size, bi.arity());
-                        let (open, r) = self.push_builtin_call(open, id, args, span_id, b);
-                        (open.unknown(), r)
-                    }
+                        _ => {
+                            let args_size = args.len();
+                            assert_eq!(args_size, bi.arity());
+                            let (open, r) = self.push_builtin_call(open, bi, args, span_id, b);
+                            (open.unknown(), r)
+                        }
+                    };
                 }
+
+                if let Some(ast) = crate::builtin_from_name(&s_name, args, node.span_id, b) {
+                    return self.push_node(open, ast, push_context, b);
+                }
+
+                b.push_error_labels(vec![
+                    b.primary_label(&format!("Builtin not found1: {}", s_name), node.span_id)
+                ]);
+                let (open, link_id) = self.push_noop(open, span_id);
+                (open.unknown(), FlattenResult::link(link_id))
             }
 
             Ast::Return(maybe_expr) => {
@@ -1645,7 +1664,7 @@ impl FlattenInner {
                         } else {
                             let name = b.labels.r(ident.into());
                             b.push_error_labels(vec![b.primary_label(
-                                &format!("Builtin not found: {}", name),
+                                &format!("Builtin not found2: {}", name),
                                 attr.span_id,
                             )]);
                             let (open, link_id) = self.push_noop(open, span_id);

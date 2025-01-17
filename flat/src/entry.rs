@@ -1,6 +1,6 @@
-use crate::{BlockId, CodeOffset, LinkId, UseIndex, ValueId, VarDefinitionSpace};
+use crate::{BlockId, Builtin, CodeOffset, LinkId, UseIndex, ValueId, VarDefinitionSpace};
 use compile_core::{
-    AstType, BinaryOperation, BuiltinId, Literal, NaryOperation, SpanId, StringKey, UnaryOperation,
+    AstType, BinaryOperation, Literal, NaryOperation, SpanId, StringKey, UnaryOperation,
 };
 use std::collections::HashMap;
 
@@ -38,7 +38,7 @@ pub enum LCode {
 
     Branch(CodeOffset, BlockId, BlockId),
     Ternary(CodeOffset, BlockId, BlockId), // condition, then_entry, else_entry
-    Builtin(BuiltinId),
+    Builtin(Builtin),
 }
 
 impl LCode {

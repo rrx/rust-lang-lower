@@ -1,4 +1,4 @@
-use crate::NodeBuilder;
+use crate::{Builtin, NodeBuilder};
 use compile_core::{Argument, AssignTarget, Ast, AstNode, ControlFlowMarker, Literal, SpanId};
 
 pub fn print_with_indent(s: &str, span_id: SpanId, depth: usize) {
@@ -104,9 +104,10 @@ impl NodeBuilder {
                 }
             }
 
-            Ast::Builtin(bi, args) => {
-                let bb = self.builtins.pool.resolve(bi);
-                let s = format!("builtin({})", bb.name);
+            Ast::Builtin(key, args) => {
+                let s_name = self.labels.r(key.into());
+                let bi = Builtin::lookup(&s_name).unwrap();
+                let s = format!("builtin({:?})", bi);
                 out.push((depth, s, node.span_id));
                 for (index, a) in args.iter().enumerate() {
                     self.dump_argument(index, a, out, depth + 1);

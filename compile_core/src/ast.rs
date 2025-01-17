@@ -1,4 +1,4 @@
-use crate::{AstFuncType, AstNode, AstType, BuiltinId, SpanId, StringKey, TypeId};
+use crate::{AstFuncType, AstNode, AstType, SpanId, StringKey, TypeId};
 use petgraph::graph::NodeIndex;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -291,7 +291,7 @@ pub enum Ast {
     CloseBlock, // implicit close has different meaning depending on the context
     Yield(Option<Box<AstNode>>),
     While(Box<AstNode>, Box<AstNode>),
-    Builtin(BuiltinId, Vec<Argument>),
+    Builtin(StringKey, Vec<Argument>),
     Module(StringKey, Box<AstNode>),
     ControlFlowMarker(ControlFlowMarker),
     Loop(StringKey, Box<AstNode>),

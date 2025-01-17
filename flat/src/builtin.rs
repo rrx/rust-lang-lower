@@ -12,6 +12,17 @@ pub enum Builtin {
     Import,
 }
 
+impl Builtin {
+    pub fn lookup(name: &str) -> Option<Self> {
+        match name {
+            "check" => Some(Builtin::Assert),
+            "print" => Some(Builtin::Print),
+            "use" => Some(Builtin::Import),
+            _ => None,
+        }
+    }
+}
+
 fn get_string_arg(args: &[Argument], b: &mut NodeBuilder) -> Option<StringKey> {
     if args.len() == 0 {
         None
@@ -119,6 +130,7 @@ pub fn builtin_from_name(
                 "use" => Builtin::Import,
                 _ => unimplemented!("builtin not found: {}", name),
             };
+            let key = b.labels.s(name);
             let arity = bb.arity();
             if arity != args.len() {
                 b.push_error(
@@ -126,7 +138,7 @@ pub fn builtin_from_name(
                     span_id,
                 );
             }
-            Some(Ast::Builtin(b.builtins.get_id(bb), args.to_vec()).node(span_id))
+            Some(Ast::Builtin(key, args.to_vec()).node(span_id))
         }
         _ => None,
     }

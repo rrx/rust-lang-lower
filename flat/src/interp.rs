@@ -475,7 +475,6 @@ impl<'a> Interp<'a> {
             }
 
             LCode::Builtin(bi) => {
-                let bi = self.b.builtins.get_enum(*bi);
                 let result = match bi {
                     Builtin::Import => {
                         unreachable!()

@@ -238,9 +238,9 @@ impl NodeBuilder {
         )
     }
 
-    pub fn import_prelude(&self) -> AstNode {
-        let id = self.builtins.get_id(crate::Builtin::Import);
-        Ast::Builtin(id, vec![Argument::Positional(Box::new("prelude".into()))]).into()
+    pub fn import_prelude(&mut self) -> AstNode {
+        let key = self.labels.s("use".into());
+        Ast::Builtin(key, vec![Argument::Positional(Box::new("prelude".into()))]).into()
     }
 
     pub fn prelude(&mut self) -> Vec<AstNode> {

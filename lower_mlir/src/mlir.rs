@@ -1339,9 +1339,8 @@ impl<'c> MLIRGenerator<'c> {
                 self.ensure_call_args_empty();
             }
 
-            LCode::Builtin(id) => {
+            LCode::Builtin(bi) => {
                 let values = self.take_call_args();
-                let bi = self.b.builtins.get_enum(*id);
                 let block_id = self.blockify.get_entry_id(v).unwrap();
                 match bi {
                     Builtin::Import => {
