@@ -1,5 +1,4 @@
-pub mod ast;
-mod builtin;
+mod ast;
 mod intern;
 mod link;
 mod node;
@@ -7,7 +6,6 @@ mod span;
 mod types;
 
 pub use ast::*;
-pub use builtin::*;
 pub use intern::*;
 pub use link::*;
 pub use node::*;

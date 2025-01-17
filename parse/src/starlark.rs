@@ -9,8 +9,8 @@ use starlark_syntax::syntax;
 use starlark_syntax::syntax::module::AstModuleFields;
 
 use compile_core::{
-    ast, AssignTarget, Ast, AstFuncType, AstNode, AstType, BinOpNode, CodeLocation, Diagnostic,
-    Label, Parameter, ReturnType, SpanId, StringKey,
+    AssignTarget, Ast, AstFuncType, AstNode, AstType, BinOpNode, CodeLocation, Diagnostic, Label,
+    Parameter, ReturnType, SpanId, StringKey,
 };
 
 use flat::{NodeBuilder, NodeBuilder as NB};
@@ -83,12 +83,12 @@ fn from_literal(
         AstLiteral::Int(x) => {
             use lexer::TokenInt;
             match x.node {
-                TokenInt::I32(y) => ast::Literal::Int(y as i64),
+                TokenInt::I32(y) => compile_core::Literal::Int(y as i64),
                 _ => unimplemented!("{:?}", item),
             }
         }
-        AstLiteral::Float(x) => ast::Literal::Float(x.node),
-        AstLiteral::String(x) => ast::Literal::String(x.node.clone()),
+        AstLiteral::Float(x) => compile_core::Literal::Float(x.node),
+        AstLiteral::String(x) => compile_core::Literal::String(x.node.clone()),
         _ => unimplemented!("{:?}", item),
     };
 
@@ -96,17 +96,17 @@ fn from_literal(
     Ast::Literal(lit).node(span_id)
 }
 
-fn from_binop(item: syntax::ast::BinOp) -> ast::BinaryOperation {
+fn from_binop(item: syntax::ast::BinOp) -> compile_core::BinaryOperation {
     use syntax::ast::BinOp;
     match item {
-        BinOp::Add => ast::BinaryOperation::Add,
-        BinOp::Subtract => ast::BinaryOperation::Subtract,
-        BinOp::Multiply => ast::BinaryOperation::Multiply,
-        BinOp::Divide => ast::BinaryOperation::Divide,
-        BinOp::Equal => ast::BinaryOperation::EQ,
-        BinOp::NotEqual => ast::BinaryOperation::NE,
-        BinOp::Greater => ast::BinaryOperation::GT,
-        BinOp::GreaterOrEqual => ast::BinaryOperation::GTE,
+        BinOp::Add => compile_core::BinaryOperation::Add,
+        BinOp::Subtract => compile_core::BinaryOperation::Subtract,
+        BinOp::Multiply => compile_core::BinaryOperation::Multiply,
+        BinOp::Divide => compile_core::BinaryOperation::Divide,
+        BinOp::Equal => compile_core::BinaryOperation::EQ,
+        BinOp::NotEqual => compile_core::BinaryOperation::NE,
+        BinOp::Greater => compile_core::BinaryOperation::GT,
+        BinOp::GreaterOrEqual => compile_core::BinaryOperation::GTE,
         _ => unimplemented!("{:?}", item),
     }
 }
@@ -159,7 +159,7 @@ impl Parser {
         item: &syntax::ast::AstParameterP<P>,
         env: &mut Environment,
         b: &mut NodeBuilder,
-    ) -> ast::ParameterNode {
+    ) -> compile_core::ParameterNode {
         use syntax::ast::ParameterP;
         let span_id = env.span_id(item.span, b);
 
@@ -170,10 +170,10 @@ impl Parser {
                 } else {
                     Some(b.types.fresh_unknown())
                 };
-                ast::ParameterNode {
+                compile_core::ParameterNode {
                     name: b.labels.s(&ident.node.ident),
                     ty: b.types.s(&ty.unwrap()),
-                    node: ast::Parameter::Normal,
+                    node: compile_core::Parameter::Normal,
                     span_id,
                 }
             }
@@ -186,10 +186,10 @@ impl Parser {
                 } else {
                     Some(b.types.fresh_args())
                 };
-                ast::ParameterNode {
+                compile_core::ParameterNode {
                     name: b.labels.s(&ident.node.ident),
                     ty: b.types.s(&ty.unwrap()),
-                    node: ast::Parameter::Args,
+                    node: compile_core::Parameter::Args,
                     span_id,
                 }
             }
@@ -202,10 +202,10 @@ impl Parser {
                 } else {
                     Some(b.types.fresh_kwargs())
                 };
-                ast::ParameterNode {
+                compile_core::ParameterNode {
                     name: b.labels.s(&ident.node.ident),
                     ty: b.types.s(&ty.unwrap()),
-                    node: ast::Parameter::KwArgs,
+                    node: compile_core::Parameter::KwArgs,
                     span_id,
                 }
             }
@@ -217,10 +217,10 @@ impl Parser {
                     Some(b.types.fresh_unknown())
                 };
                 let default = self.from_expr(expr, env, b).unwrap();
-                ast::ParameterNode {
+                compile_core::ParameterNode {
                     name: b.labels.s(&ident.node.ident),
                     ty: b.types.s(&ty.unwrap()),
-                    node: ast::Parameter::WithDefault(default.into()),
+                    node: compile_core::Parameter::WithDefault(default.into()),
                     span_id,
                 }
             }
@@ -307,7 +307,7 @@ impl Parser {
 
                 let fun_type = AstFuncType::new(arg_type, ReturnType::Single(return_type.clone()));
 
-                let def_ast = Ast::Lambda(ast::Lambda {
+                let def_ast = Ast::Lambda(compile_core::Lambda {
                     func_type: fun_type.clone(),
                     body: Some(body),
                     defaults,
@@ -452,7 +452,7 @@ impl Parser {
 
             ExprP::Minus(expr) => {
                 let ast = Ast::UnaryOp(
-                    ast::UnaryOperation::Minus,
+                    compile_core::UnaryOperation::Minus,
                     self.from_expr(&expr, env, b)?.into(),
                 );
                 Ok(ast.node(span_id))
@@ -482,14 +482,14 @@ impl Parser {
         item: &syntax::ast::AstArgumentP<P>,
         env: &mut Environment,
         b: &mut NodeBuilder,
-    ) -> Result<ast::Argument> {
+    ) -> Result<compile_core::Argument> {
         use syntax::ast::ArgumentP;
         match &item.node {
             ArgumentP::Positional(expr) => Ok(self.from_expr(expr, env, b)?.into()),
             ArgumentP::Named(name, expr) => {
                 let node = self.from_expr(expr, env, b)?;
                 let key = b.labels.s(name);
-                Ok(ast::Argument::Named(key, node.into()))
+                Ok(compile_core::Argument::Named(key, node.into()))
             }
             ArgumentP::Args(expr) => Ok(self.from_expr(expr, env, b)?.into()),
             ArgumentP::KwArgs(expr) => Ok(self.from_expr(expr, env, b)?.into()),

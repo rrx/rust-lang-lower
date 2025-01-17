@@ -1,9 +1,11 @@
 use crate::{Abstraction, AbstractionId, NodeBuilder};
 use compile_core::{
-    Argument, Ast, AstFuncType, AstNode, AstType, BuiltinId, BuiltinPool, ControlFlowMarker,
-    Lambda, Literal, ReturnType, SpanId, StringKey,
+    Argument, Ast, AstFuncType, AstNode, AstType, ControlFlowMarker, InternKey, InternPool,
+    InternValue, Lambda, Literal, ReturnType, SpanId, StringKey,
 };
 use std::collections::{HashMap, VecDeque};
+#[derive(Debug, Clone, Copy)]
+pub struct BuiltinId(u32);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Builtin {
@@ -22,6 +24,19 @@ impl Builtin {
         }
     }
 }
+
+impl InternValue for Builtin {}
+
+impl InternKey for BuiltinId {
+    fn index(&self) -> usize {
+        self.0 as usize
+    }
+    fn new(index: usize) -> Self {
+        Self(index as u32)
+    }
+}
+
+pub type BuiltinPool = InternPool<BuiltinId, Builtin>;
 
 fn get_string_arg(args: &[Argument], b: &mut NodeBuilder) -> Option<StringKey> {
     if args.len() == 0 {
@@ -197,18 +212,11 @@ pub struct BuiltinBuilder {
 
 impl BuiltinBuilder {
     pub fn new() -> Self {
-        let mut s = Self {
+        Self {
             pool: BuiltinPool::new(),
             lookup: HashMap::new(),
             abstractions: HashMap::new(),
-        };
-        let b = compile_core::Builtin::new("check".into());
-        s.insert(b);
-        let b = compile_core::Builtin::new("use".into());
-        s.insert(b);
-        let b = compile_core::Builtin::new("print".into());
-        s.insert(b);
-        s
+        }
     }
 
     pub fn add_abstraction(&mut self, b: Builtin, abstraction_id: AbstractionId) {
@@ -217,22 +225,6 @@ impl BuiltinBuilder {
 
     pub fn get_abstraction(&self, b: Builtin) -> AbstractionId {
         *self.abstractions.get(&b).unwrap()
-    }
-
-    fn insert(&mut self, bi: compile_core::Builtin) {
-        let name = bi.name.clone();
-        let id = self.pool.intern(bi);
-        self.lookup.insert(name, id);
-    }
-
-    pub fn get_enum(&self, id: BuiltinId) -> Builtin {
-        let b = self.pool.resolve(&id);
-        match b.name.as_str() {
-            "check" => Builtin::Assert,
-            "print" => Builtin::Print,
-            "use" => Builtin::Import,
-            _ => unimplemented!("{}", &b.name),
-        }
     }
 
     pub fn get_id(&self, b: Builtin) -> BuiltinId {
