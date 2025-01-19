@@ -1,4 +1,4 @@
-use crate::{BlockId, CodeOffset, LinkId};
+use crate::BlockId;
 use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::Bfs;

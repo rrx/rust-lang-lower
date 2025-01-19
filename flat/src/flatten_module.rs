@@ -213,7 +213,8 @@ impl Flatten<Module> {
 
     pub fn code_to_string(&self, link_id: LinkId, b: &NB) -> String {
         let entry = self.get_entry(link_id);
-        match &entry.code {
+
+        let s = match &entry.code {
             LCode::Declare => {
                 let code_str = b.labels.r(entry.name.unwrap().into());
                 format!("declare {}", code_str)
@@ -238,7 +239,7 @@ impl Flatten<Module> {
             }
 
             LCode::Arg(num) => {
-                format!("arg({}) => {}", num, self.mem_to_string(entry.mem, b))
+                format!("arg({})", num)
             }
 
             LCode::CallValue(offset) => {
@@ -251,7 +252,15 @@ impl Flatten<Module> {
             }
 
             LCode::Val(Literal::String(s)) => {
-                format!("String({})", s)
+                format!("string({})", s)
+            }
+
+            LCode::Val(Literal::Int(s)) => {
+                format!("int({})", s)
+            }
+
+            LCode::Val(Literal::Bool(s)) => {
+                format!("bool({})", s)
             }
 
             LCode::Load(decl) => {
@@ -269,11 +278,13 @@ impl Flatten<Module> {
             }
 
             LCode::Ternary(c, x, y) => {
-                format!("Ternary({:?},{},{})", c, x, y)
+                let c = self.value(c);
+                format!("ternary({},{},{})", c, x, y)
             }
 
             LCode::Branch(c, x, y) => {
-                format!("Branch({:?},{},{})", c, x, y)
+                let c = self.value(c);
+                format!("branch({},{},{})", c, x, y)
             }
 
             LCode::Block(block_id) => {
@@ -291,6 +302,19 @@ impl Flatten<Module> {
             _ => {
                 format!("{:?}", entry.code)
             }
+        };
+
+        let show_mem = match entry.mem {
+            VarDefinitionSpace::Stack(_) => true,
+            VarDefinitionSpace::Static => true,
+            VarDefinitionSpace::Heap => true,
+            _ => false,
+        };
+
+        if show_mem {
+            format!("{} => {}", s, self.mem_to_string(entry.mem, b))
+        } else {
+            format!("{}", s)
         }
     }
 

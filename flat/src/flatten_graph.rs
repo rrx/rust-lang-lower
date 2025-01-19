@@ -1,6 +1,6 @@
 use crate::{
     BlockId, CodeOffset, ContinuationFlow, Flatten, FlattenInner, LCode, Module, Node,
-    NodeBuilder as NB, NodeBuilder, Successor, ValueId, VarDefinitionSpace, CFG,
+    NodeBuilder as NB, NodeBuilder, Successor, ValueId, CFG,
 };
 use anyhow::Result;
 use petgraph::visit::EdgeRef;
@@ -245,14 +245,6 @@ impl Flatten<Module> {
                                 let entry = self.get_entry(link_id);
                                 let v = entry.value_id.unwrap();
                                 let code = &entry.code;
-                                let v_decl = match entry.mem {
-                                    VarDefinitionSpace::Stack(x) => {
-                                        let v_source = self.value(x);
-                                        ng.sources.push((v, v_source));
-                                        Some(v_source)
-                                    }
-                                    _ => None,
-                                };
 
                                 // connect sequential values
                                 if let Some(v_last) = last {
@@ -260,12 +252,11 @@ impl Flatten<Module> {
                                 }
                                 last = Some(v);
 
-                                let s = match code {
+                                match code {
                                     LCode::Jump(offset) => {
                                         if let Some(v_target) = self.blocks.maybe_value(offset) {
                                             ng.edges.push((v, v_target));
                                         }
-                                        format!("{}:{}", v, self.code_to_string(link_id, b))
                                     }
 
                                     LCode::Switch(condition_link_id, cases) => {
@@ -275,13 +266,11 @@ impl Flatten<Module> {
                                             let v_target = self.value(block_id);
                                             ng.edges.push((v, v_target));
                                         }
-                                        format!("{}:{}", v, self.code_to_string(link_id, b))
                                     }
 
                                     LCode::Block(block_id) => {
                                         let v_target = self.value(block_id);
                                         ng.sources.push((v, v_target));
-                                        format!("{}:{}", v, self.code_to_string(link_id, b))
                                     }
 
                                     LCode::Branch(c, b1, b2) => {
@@ -291,19 +280,16 @@ impl Flatten<Module> {
                                         ng.edges.push((v, v_target));
                                         let v_target = self.value(b2);
                                         ng.edges.push((v, v_target));
-                                        format!("{}:{}", v, self.code_to_string(link_id, b))
                                     }
 
                                     LCode::CallValue(offset) => {
                                         let v_target = self.value(offset);
                                         ng.sources.push((v, v_target));
-                                        format!("{}:{}", v, self.code_to_string(link_id, b))
                                     }
 
                                     LCode::Load(decl) => {
                                         let v_decl = self.value(decl);
                                         ng.sources.push((v, v_decl));
-                                        format!("{}:{}", v, self.code_to_string(link_id, b))
                                     }
 
                                     LCode::Store(decl, source) => {
@@ -312,40 +298,17 @@ impl Flatten<Module> {
                                         if let Some(v_decl) = self.blocks.maybe_value(decl) {
                                             ng.sources.push((v, v_decl));
                                         }
-                                        format!("{}:{}", v, self.code_to_string(link_id, b))
                                     }
 
                                     LCode::Call(offset) => {
                                         let v_target = self.value(offset);
                                         ng.sources.push((v, v_target));
-                                        format!("{}:{}", v, self.code_to_string(link_id, b))
                                     }
+                                    _ => (),
+                                }
 
-                                    LCode::Arg(_) => {
-                                        format!("{}:{}", v, self.code_to_string(link_id, b))
-                                    }
+                                let s = format!("{}:{}", v, self.code_to_string(link_id, b));
 
-                                    LCode::Label => {
-                                        let s_name = if let Some(name) = entry.name {
-                                            b.labels.r(name.into())
-                                        } else {
-                                            "?".to_string()
-                                        };
-                                        format!("{}:{}:label({})", v, entry.block_id, s_name)
-                                    }
-                                    _ => {
-                                        if let Some(v_decl) = v_decl {
-                                            format!(
-                                                "{}:{} => {}",
-                                                v,
-                                                self.code_to_string(link_id, b),
-                                                v_decl
-                                            )
-                                        } else {
-                                            format!("{}:{}", v, self.code_to_string(link_id, b))
-                                        }
-                                    }
-                                };
                                 block_group.push_value(GroupValue::new(format!("{}", v), s));
                             }
                             scope_group.push_group(block_group);
