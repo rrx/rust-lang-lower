@@ -152,7 +152,7 @@ impl Flatten<Start> {
                 Some(key),
                 node.span_id,
             );
-            let open = f.open_block(static_block_id);
+            let open = f.blocks.open_block(static_block_id);
             f.push_node(open, *body, PushContext::Module, b);
             Ok(f.next())
         } else {
@@ -280,7 +280,7 @@ impl FlattenInner {
         let unknown = b.spans.get_span_unknown();
         for (key, var_ty, ret_ty) in builtins {
             let func_ty = AstType::func(vec![var_ty], ret_ty);
-            let closed = self.safe_static();
+            let closed = self.blocks.safe_static();
             let entry = CodeEntry::new(
                 closed.block_id,
                 LCode::DeclareFunction(None),
@@ -370,7 +370,7 @@ impl FlattenInner {
             let ty = self.get_type(label_link_id).clone();
             assert_eq!(entry.mem, VarDefinitionSpace::Static);
 
-            let closed = self.safe_static();
+            let closed = self.blocks.safe_static();
             let entry = CodeEntry::new(
                 closed.block_id,
                 LCode::DeclareFunction(Some(block_id)),
@@ -771,7 +771,7 @@ impl FlattenInner {
         let block_id = open.block_id;
         let (target_block_id, jump_args) =
             self.push_jump_unwind(open, target_block_id, jump_args, span_id, b);
-        let open = self.open_block(block_id);
+        let open = self.blocks.open_block(block_id);
         self.push_jump_direct(open, target_block_id, jump_args, span_id, b)
     }
 
@@ -1049,7 +1049,7 @@ impl FlattenInner {
                 self.blocks.scope_define(scope_id, *name, link_id.into());
             }
         }
-        let open = self.open_block(empty.block_id);
+        let open = self.blocks.open_block(empty.block_id);
         (open, v_args)
     }
 
@@ -1230,7 +1230,7 @@ impl FlattenInner {
         } else {
             unreachable!()
         }
-        let open = self.open_block(goto_block.block_id);
+        let open = self.blocks.open_block(goto_block.block_id);
         (open, last_link_id)
     }
 
@@ -1273,24 +1273,13 @@ impl FlattenInner {
         (open, link_id)
     }
 
-    pub fn safe_static(&mut self) -> SafeBlockOpen {
-        SafeBlock {
-            block_id: self.blocks.static_block_id(),
-            extra: crate::safe::Open {},
-        }
-    }
-
-    pub fn open_block(&mut self, block_id: BlockId) -> SafeBlockOpen {
-        self.blocks.safe_switch_block(block_id)
-    }
-
     pub fn push_node_in_static(
         &mut self,
         node: AstNode,
         push_context: PushContext,
         b: &mut NB,
     ) -> FlattenResult {
-        let open = self.safe_static();
+        let open = self.blocks.safe_static();
         let (_, r) = self.push_node(open, node, push_context, b);
         r
     }
@@ -1811,7 +1800,7 @@ impl FlattenInner {
                 };
 
                 // condition
-                let open = self.open_block(open.block_id);
+                let open = self.blocks.open_block(open.block_id);
                 let (open, link_id) = self.push_expr(open, *condition, PushContext::Default, b);
 
                 let (closed, v) = self.push_code_term(
@@ -2410,22 +2399,8 @@ impl FlattenInner {
         if let Some(closed) = self.blocks.safe_block_try_closed(&block) {
             closed
         } else {
-            let open = self.open_block(block.block_id);
+            let open = self.blocks.open_block(block.block_id);
             self.push_jump(open, v_next, vec![], span_id, b)
-        }
-    }
-
-    pub fn mem_to_string(&self, mem: VarDefinitionSpace, _b: &NB) -> String {
-        match mem {
-            VarDefinitionSpace::Arg => format!("Marg"),
-            VarDefinitionSpace::Reg => format!("Mreg"),
-            VarDefinitionSpace::Static => format!("Mstatic"),
-            VarDefinitionSpace::Stack(x) => {
-                let v = self.resolve_code_offset(x.into());
-                format!("Mstack({})", v)
-            }
-            VarDefinitionSpace::Heap => format!("Mheap"),
-            VarDefinitionSpace::Default => format!("Mdef"),
         }
     }
 }

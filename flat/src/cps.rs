@@ -221,7 +221,7 @@ impl FlattenInner {
 
         println!("unwind blocks: {:?}", unwind_block_ids);
 
-        let mut open = self.open_block(start_block.block_id);
+        let mut open = self.blocks.open_block(start_block.block_id);
 
         for (scope_id, unwind_block_id) in unwind_block_ids {
             let scope = self.blocks.get_scope(scope_id);

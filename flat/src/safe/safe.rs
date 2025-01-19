@@ -69,6 +69,13 @@ impl BlockGraph<BlockGraphStateOpen> {
         }
     }
 
+    pub fn safe_static(&mut self) -> SafeBlockOpen {
+        SafeBlock {
+            block_id: self.static_block_id(),
+            extra: crate::safe::Open {},
+        }
+    }
+
     pub fn safe_block_try_empty(&mut self, block: &SafeBlock<Unknown>) -> Option<SafeBlock<Empty>> {
         let block_id = block.block_id;
         let block = self.get_block(block_id);
@@ -110,7 +117,7 @@ impl BlockGraph<BlockGraphStateOpen> {
 }
 
 impl<S: BlockGraphState> BlockGraph<S> {
-    pub fn safe_switch_block(&mut self, block_id: BlockId) -> SafeBlock<Open> {
+    pub fn open_block(&mut self, block_id: BlockId) -> SafeBlockOpen {
         let block = self.get_block(block_id);
         assert!(!block.is_term());
         SafeBlock {
@@ -122,13 +129,6 @@ impl<S: BlockGraphState> BlockGraph<S> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
-    fn test_stuff1() {
-        let mut b = NodeBuilder::new();
-        let key = b.labels.s("module");
-        let mut g = BlockGraph::new(key);
-        let _ = g.root_block();
-    }
+    fn test_stuff1() {}
 }

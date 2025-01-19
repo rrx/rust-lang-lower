@@ -5,7 +5,7 @@ use std::convert::Into;
 
 use crate::{
     CodeOffset, CodeRow, Flatten, LCode, LinkId, Module, NodeBuilder as NB, StringLabel, Successor,
-    ValueId,
+    ValueId, VarDefinitionSpace,
 };
 
 use tabled::{settings::Style, Table};
@@ -245,6 +245,20 @@ impl Flatten<Module> {
             _ => {
                 format!("{:?}", entry.code)
             }
+        }
+    }
+
+    pub fn mem_to_string(&self, mem: VarDefinitionSpace, _b: &NB) -> String {
+        match mem {
+            VarDefinitionSpace::Arg => format!("Marg"),
+            VarDefinitionSpace::Reg => format!("Mreg"),
+            VarDefinitionSpace::Static => format!("Mstatic"),
+            VarDefinitionSpace::Stack(x) => {
+                let v = self.resolve_code_offset(x.into());
+                format!("Mstack({})", v)
+            }
+            VarDefinitionSpace::Heap => format!("Mheap"),
+            VarDefinitionSpace::Default => format!("Mdef"),
         }
     }
 }
