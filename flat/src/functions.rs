@@ -1,13 +1,13 @@
 use crate::{
-    ArgVec, BlockId, BlockifyError, FlattenInner, FlattenResult, LCode, LinkId, NodeBuilder as NB,
-    PushContext, SafeBlockClosed, SafeBlockEmpty, SafeBlockOpen, ScopeId, ScopeState,
-    ScopeStateFunction, ScopeType, Successor, VarDefinitionSpace,
+    ArgVec, BlockId, BlockifyError, CodeEntry, FlattenInner, FlattenResult, LCode, LinkId,
+    NodeBuilder as NB, PushContext, SafeBlockClosed, SafeBlockEmpty, SafeBlockOpen, ScopeId,
+    ScopeState, ScopeStateFunction, ScopeType, Successor, VarDefinitionSpace,
 };
 use anyhow::Error;
 use anyhow::Result;
 use compile_core::{
-    AbstractionId, Argument, Ast, AstFuncType, AstNode, AstType, Lambda, Literal, NaryOperation,
-    ReturnType, SpanId, StringKey,
+    AbstractionId, Argument, AstFuncType, AstNode, AstType, Lambda, NaryOperation, ReturnType,
+    SpanId, StringKey,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -72,6 +72,7 @@ impl FlattenInner {
         abstraction_id: AbstractionId,
         args: &[Argument],
         system: &[Argument],
+        extra_args: &Vec<CodeEntry>,
         call_span_id: SpanId,
         b: &mut NB,
     ) -> (Vec<Argument>, AstFuncType) {
@@ -113,6 +114,11 @@ impl FlattenInner {
         let mut fields_list = func_arg.fields();
         let size = fields_list.len() + system.len();
 
+        enum ExtraArg {
+            Node(AstNode),
+            Entry(CodeEntry),
+        }
+
         let mut value_map = HashMap::with_capacity(size);
         let mut populated_set = HashSet::with_capacity(size);
         let mut args_seq = vec![];
@@ -123,7 +129,7 @@ impl FlattenInner {
 
         // copy defaults into value map
         for (key, value) in a.def.defaults.iter() {
-            value_map.insert(*key, value.clone());
+            value_map.insert(*key, ExtraArg::Node(value.clone()));
         }
 
         for arg in system.iter() {
@@ -131,6 +137,11 @@ impl FlattenInner {
                 let ty = b.types.fresh_unknown();
                 fields_list.push((Some(*key), ty.clone()));
             }
+        }
+
+        for entry in extra_args {
+            fields_list.push((entry.name, entry.ty.clone()));
+            value_map.insert(entry.name.unwrap(), ExtraArg::Entry(entry.clone()));
         }
 
         for (index, arg) in args.iter().chain(system.iter()).enumerate() {
@@ -163,7 +174,7 @@ impl FlattenInner {
                                 }
                                 _ => {
                                     // just add to the value map
-                                    value_map.insert(key, *(*expr).clone());
+                                    value_map.insert(key, ExtraArg::Node(*(*expr).clone()));
                                     populated_set.insert(key);
                                 }
                             }
@@ -187,7 +198,7 @@ impl FlattenInner {
                         );
                     }
                     //assert!(!populated_set.contains(key));
-                    value_map.insert(*key, *(*expr).clone());
+                    value_map.insert(*key, ExtraArg::Node(*(*expr).clone()));
                     populated_set.insert(*key);
                 }
                 Argument::Args(_key, expr) => {
@@ -224,22 +235,27 @@ impl FlattenInner {
                     AstType::Args(_) => Some(Argument::Args(field_key, args_seq.clone())),
                     AstType::KwArgs(_) => Some(Argument::KwArgs(field_key, kwargs_map.clone())),
                     _ => {
-                        if let Some(v) = value_map.remove(&field_key) {
-                            Some(Argument::Named(field_key, v.into()))
-                        } else {
-                            let s_name = b.labels.r(field_key.into());
-                            b.push_error(
-                                &format!("caller missing named field: {}", s_name),
-                                call_span_id,
-                            );
-                            None
+                        match value_map.remove(&field_key) {
+                            Some(ExtraArg::Node(v)) => Some(Argument::Named(field_key, v.into())),
+                            Some(ExtraArg::Entry(_entry)) => {
+                                //Some(Argument::Named(field_key, entry.node.clone()))
+                                None
+                            }
+                            _ => {
+                                let s_name = b.labels.r(field_key.into());
+                                b.push_error(
+                                    &format!("caller missing named field: {}", s_name),
+                                    call_span_id,
+                                );
+                                None
+                            }
                         }
                     }
                 }
             })
             .collect();
 
-        if fields_list.len() != args.len() {
+        if fields_list.len() != args.len() + extra_args.len() {
             b.push_error_labels(vec![
                 b.primary_label(&format!("Call arity mismatch: call"), call_span_id),
                 b.secondary_label(&format!("function"), def_span_id),
@@ -257,6 +273,10 @@ impl FlattenInner {
         let def_func_type =
             AstFuncType::new(AstType::Struct(fields_list), a.def.func_type.ret.clone());
 
+        assert_eq!(
+            args.len() + extra_args.len(),
+            def_func_type.args.fields().len()
+        );
         (args, def_func_type)
     }
 
@@ -510,6 +530,7 @@ impl FlattenInner {
         self.blocks
             .block_succ(start_block_id, fun_block.block_id, succ_type);
 
+        println!("X: {}", def_func_type);
         let (fun_block, entry_link_id, entry_args) = self.push_start_block_mem(
             fun_block,
             def_func_type.clone(),
@@ -567,6 +588,7 @@ impl FlattenInner {
         &mut self,
         mut open: SafeBlockOpen,
         args: Vec<Argument>,
+        extra_args: &Vec<CodeEntry>,
         span_id: SpanId,
         b: &mut NB,
     ) -> (SafeBlockOpen, ArgVec) {
@@ -634,6 +656,13 @@ impl FlattenInner {
                 }
             }
         }
+        for entry in extra_args {
+            let ty = entry.ty.clone();
+            let link_id = self.insert_entry_with_link(entry.clone());
+            values.push((None, link_id, ty.clone(), span_id));
+            link_ids.push(link_id);
+        }
+
         (open, values)
     }
 
@@ -643,6 +672,7 @@ impl FlattenInner {
         abstraction_id: AbstractionId,
         args: Vec<Argument>,
         system: Vec<Argument>,
+        extra_args: Vec<CodeEntry>,
         call_span_id: SpanId,
         b: &mut NB,
     ) -> (
@@ -655,12 +685,25 @@ impl FlattenInner {
         let def_span_id = a.def_span_id;
 
         // calculate the calling arguments
-        let (args, def_func_type) =
-            self.calculate_function_arguments(abstraction_id, &args, &system, call_span_id, b);
+        let (args, def_func_type) = self.calculate_function_arguments(
+            abstraction_id,
+            &args,
+            &system,
+            &extra_args,
+            call_span_id,
+            b,
+        );
+        assert_eq!(
+            args.len() + extra_args.len(),
+            def_func_type.args.fields().len()
+        );
 
-        let (open, call_values) = self.push_call_arguments(open, args.clone(), call_span_id, b);
+        let (open, call_values) =
+            self.push_call_arguments(open, args.clone(), &extra_args, call_span_id, b);
         let call_ty = crate::argvec_type(&call_values);
         let def_func_type = b.types.refresh_func_type(&def_func_type);
+
+        assert_eq!(call_values.len(), def_func_type.args.fields().len());
 
         // construct call function type
         let call_func_type =
@@ -672,6 +715,14 @@ impl FlattenInner {
             &def_func_type.clone().into(),
             def_span_id,
         );
+
+        println!("call_func_type: {}", call_func_type);
+        println!("def_func_type: {}", def_func_type);
+        assert_eq!(
+            call_func_type.args.fields().len(),
+            def_func_type.args.fields().len()
+        );
+
         (open, call_values, call_func_type, def_func_type)
     }
 
@@ -699,7 +750,15 @@ impl FlattenInner {
         let is_static = self.blocks.static_scope_id() == scope_id;
         let (open, r) = if is_static {
             let (open, call_values, call_func_type, def_func_type) = self
-                .push_function_call_arguments(open, abstraction_id, args, vec![], call_span_id, b);
+                .push_function_call_arguments(
+                    open,
+                    abstraction_id,
+                    args,
+                    vec![],
+                    vec![],
+                    call_span_id,
+                    b,
+                );
 
             let start_scope_id = self.blocks.get_block(open.block_id).scope();
             let r = self.gen_bake_static(
@@ -751,8 +810,16 @@ impl FlattenInner {
 
         // start the call
         // calculate the arguments
-        let (open, call_values, _call_func_type, def_func_type) =
-            self.push_function_call_arguments(open, abstraction_id, args, vec![], call_span_id, b);
+        let (open, call_values, _call_func_type, def_func_type) = self
+            .push_function_call_arguments(
+                open,
+                abstraction_id,
+                args,
+                vec![],
+                vec![],
+                call_span_id,
+                b,
+            );
 
         let a = self.blocks.abstractions.get(abstraction_id);
         let name = a.name;
@@ -848,14 +915,26 @@ impl FlattenInner {
 
         // create the continuation parameter
         let key = b.labels.fresh_key("b");
+        let ty = b.types.fresh_unknown();
         let mut system = vec![];
+        let extra_args = vec![CodeEntry::new(
+            call_block.block_id,
+            LCode::Block(exit_block.block_id),
+            ty,
+            Some(key),
+            call_span_id,
+            VarDefinitionSpace::Default,
+        )];
+
+        /*
         let arg = Argument::System(
             key,
             Ast::Literal(Literal::Block(exit_block.block_id))
                 .node(call_span_id)
                 .into(),
         );
-        system.push(arg);
+        */
+        //system.push(arg);
 
         // Entry arguments, including continuation
         // calculate the arguments for the CPS function
@@ -865,13 +944,23 @@ impl FlattenInner {
                 abstraction_id,
                 args,
                 system,
+                extra_args,
                 call_span_id,
                 b,
             );
 
+        assert_eq!(call_values.len(), top_def_func_type.args.fields().len());
+
         // hack, get the continuation argument
         let arg = call_values.last().unwrap();
         let next_ty = arg.2.clone();
+
+        println!("Y: {}", top_def_func_type);
+        println!(
+            "Z: {}, {}",
+            call_values.len(),
+            top_def_func_type.args.fields().len()
+        );
 
         // generate the CPS function, that's it
         // and jump to it, passing the exit continuation

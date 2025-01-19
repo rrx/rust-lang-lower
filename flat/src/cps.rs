@@ -1,6 +1,6 @@
 use compile_core::{
-    AbstractionId, Argument, AstFuncType, AstType, ControlFlowMarker, Lambda, Literal, ReturnType,
-    SpanId, StringKey,
+    AbstractionId, Argument, AstFuncType, AstType, ControlFlowMarker, Lambda, ReturnType, SpanId,
+    StringKey,
 };
 
 use std::convert::Into;
@@ -246,7 +246,8 @@ impl FlattenInner {
                 .0;
             let new_block_id = new_block.block_id;
 
-            let code = LCode::Val(Literal::Block(next_block.block_id));
+            //let code = LCode::Val(Literal::Block(next_block.block_id));
+            let code = LCode::Block(next_block.block_id);
             let (new_block, var_link_id) = self.push_code_open(
                 new_block,
                 code,
@@ -307,9 +308,9 @@ impl FlattenInner {
         //
         // WRITE GOTO
         let (args, _) =
-            self.calculate_function_arguments(abstraction_id, &args, &[], call_span_id, b);
+            self.calculate_function_arguments(abstraction_id, &args, &[], &vec![], call_span_id, b);
 
-        let (open, call_values) = self.push_call_arguments(open, args, call_span_id, b);
+        let (open, call_values) = self.push_call_arguments(open, args, &vec![], call_span_id, b);
         let call_arg_type = argvec_type(&call_values);
         let call_func_type =
             AstFuncType::new(call_arg_type.clone().into(), ReturnType::Never.into()).into();
@@ -503,7 +504,7 @@ impl FlattenInner {
 
                 // calculate the type, so we can unify
                 let (open, goto_values) =
-                    self.push_call_arguments(open, d.args.clone(), d.call_span_id, b);
+                    self.push_call_arguments(open, d.args.clone(), &vec![], d.call_span_id, b);
                 let goto_arg_type = argvec_type(&goto_values);
                 let goto_func_type =
                     AstFuncType::new(goto_arg_type.clone(), ReturnType::Never).into();
@@ -565,7 +566,7 @@ impl FlattenInner {
                     // TODO: args should be unwound before jumping
                     // by replacing jumps out of scope to the unwind function
                     let (open, jump_args) =
-                        self.push_call_arguments(open, d.args.clone(), d.call_span_id, b);
+                        self.push_call_arguments(open, d.args.clone(), &vec![], d.call_span_id, b);
 
                     // TODO: we just have a label, so we need to handle unwind here.  We can't jump
                     // directly, we need to jump to the unwind function
@@ -623,7 +624,8 @@ impl FlattenInner {
                             .find_source_blocks(ContinuationFlow::Variable(arg_link_id))
                     }
 
-                    LCode::Val(Literal::Block(block_id)) => {
+                    LCode::Block(block_id) => {
+                        //LCode::Val(Literal::Block(block_id)) => {
                         let sink = self
                             .scoped_continuations
                             .find_sink_block(ContinuationFlow::Variable(arg_link_id))
@@ -752,7 +754,8 @@ impl FlattenInner {
 
             // now replace the abstraction code
             let entry = self.get_entry_mut(link_id);
-            entry.code = LCode::Val(Literal::Block(block_id));
+            entry.code = LCode::Block(block_id);
+            //entry.code = LCode::Val(Literal::Block(block_id));
             b.unify(&entry.ty, entry.span_id, &block_ty, block_span_id);
             self.update_connections(block_id, link_id);
         }

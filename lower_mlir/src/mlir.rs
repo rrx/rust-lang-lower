@@ -491,7 +491,16 @@ impl<'c> MLIRGenerator<'c> {
             .collect();
         let rs = self.values(indicies);
 
+        let link_id = self.link(v);
+        let entry = self.blockify.get_entry(link_id);
+        println!("{}: jump ty: {}", v, entry.ty);
+        assert_eq!(entry.ty.fields().len(), arity);
+
         let target_value_id = self.blockify.resolve_code_offset(target.into());
+        let link_id = self.link(v);
+        let entry = self.blockify.get_entry(link_id);
+        println!("{}: jump target ty: {}", v, entry.ty);
+        assert_eq!(entry.ty.fields().len(), arity);
 
         let c = self
             .blocks
@@ -769,6 +778,32 @@ impl<'c> MLIRGenerator<'c> {
             }
             LCode::PlaceholderCodeReference => {
                 unreachable!("Placeholder Code Reference")
+            }
+
+            LCode::Block(block_id) => {
+                // this is a variable passed into a jump statement
+                // We are keeping this very simple and just passing the block_id index
+                // as the argument.  This is unique in the module.  It's not dense, but it's
+                // much easier to debug.
+                let index = block_id.index() as i64;
+                let op = self.build_int_op(index as i64, location);
+
+                let block_id = self.blockify.get_entry_id(v).unwrap();
+                let c = self
+                    .blocks
+                    .get_mut(&block_id)
+                    .expect(&format!("block not found: {}", block_id));
+                let index = c.push(op);
+                self.index.insert(v, index);
+
+                /*
+                let ty = llvm::r#type::pointer(self.context, 0);
+                arith::constant(
+                    self.context,
+                    IntegerAttribute::new(ty, block_id.index() as i64).into(),
+                    location,
+                )
+                */
             }
 
             LCode::Val(lit) => {

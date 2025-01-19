@@ -26,9 +26,9 @@ impl Value {
             Literal::Float(f) => Value::Float(*f),
             Literal::Bool(v) => Value::Bool(*v),
             Literal::Index(v) => Value::Index(*v),
-            Literal::Block(_) => {
-                unreachable!("{:?}", lit);
-            }
+            //Literal::Block(_) => {
+            //unreachable!("{:?}", lit);
+            //}
             _ => unimplemented!("{:?}", lit),
         }
     }
@@ -180,6 +180,7 @@ impl<'a> Interp<'a> {
 
         match code {
             LCode::Val(_)
+            | LCode::Block(_)
             | LCode::Load(_)
             | LCode::Arg(_)
             | LCode::Call(_)
@@ -383,7 +384,7 @@ impl<'a> Interp<'a> {
                 true
             }
 
-            LCode::Val(Literal::Block(block_id)) => {
+            LCode::Block(block_id) => {
                 // the index is actually the block_id
                 let index = block_id.index() as i64;
                 let value = Value::Int(index);

@@ -19,6 +19,7 @@ pub enum LCode {
     Call(CodeOffset),
 
     Arg(u8), // get the value of a positional arg
+    Block(BlockId),
     Val(Literal),
     Use(CodeOffset, Vec<UseIndex>),
     Tuple(Vec<LinkId>),
@@ -99,6 +100,7 @@ impl CodeEntry {
     pub fn is_load_required(&self) -> bool {
         match self.code {
             LCode::Val(_) => self.mem.is_static(),
+            LCode::Block(_) => self.mem.is_static(),
             LCode::Declare => true,
             LCode::Arg(_) => false,
             LCode::Load(_) => false,

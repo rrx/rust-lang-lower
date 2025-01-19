@@ -327,22 +327,24 @@ impl<'c> MLIRGenerator<'c> {
                 self.build_int_op(0, location)
             }
 
-            Literal::Block(block_id) => {
-                // this is a variable passed into a jump statement
-                // We are keeping this very simple and just passing the block_id index
-                // as the argument.  This is unique in the module.  It's not dense, but it's
-                // much easier to debug.
-                let index = block_id.index() as i64;
-                self.build_int_op(index as i64, location)
-                /*
-                let ty = llvm::r#type::pointer(self.context, 0);
-                arith::constant(
-                    self.context,
-                    IntegerAttribute::new(ty, block_id.index() as i64).into(),
-                    location,
-                )
-                */
-            }
+            /*
+                Literal::Block(block_id) => {
+                    // this is a variable passed into a jump statement
+                    // We are keeping this very simple and just passing the block_id index
+                    // as the argument.  This is unique in the module.  It's not dense, but it's
+                    // much easier to debug.
+                    let index = block_id.index() as i64;
+                    self.build_int_op(index as i64, location)
+                    /*
+                    let ty = llvm::r#type::pointer(self.context, 0);
+                    arith::constant(
+                        self.context,
+                        IntegerAttribute::new(ty, block_id.index() as i64).into(),
+                        location,
+                    )
+                    */
+                }
+            */
             _ => unimplemented!("{:?}", lit),
         }
     }

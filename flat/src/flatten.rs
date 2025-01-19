@@ -310,7 +310,8 @@ impl FlattenInner {
 
         // now replace the abstraction code
         let entry = self.get_entry_mut(link_id);
-        entry.code = LCode::Val(Literal::Block(fun_block_id));
+        entry.code = LCode::Block(fun_block_id);
+        //entry.code = LCode::Val(Literal::Block(fun_block_id));
         let start_block_id = entry.block_id;
         b.unify(&entry.ty, entry.span_id, ty, span_id);
         self.update_connections(start_block_id, link_id);
@@ -555,7 +556,8 @@ impl FlattenInner {
                 );
             }
 
-            LCode::Val(Literal::Block(fun_block_id)) => {
+            LCode::Block(fun_block_id) => {
+                //LCode::Val(Literal::Block(fun_block_id)) => {
                 self.scoped_continuations.connect(
                     ContinuationFlow::Block(fun_block_id),
                     ContinuationFlow::Variable(link_id),
@@ -986,10 +988,10 @@ impl FlattenInner {
     ) -> (SafeBlockOpen, FlattenResult) {
         let abstraction_id = b.builtins.get_abstraction(bi);
         let (args, def_func_type) =
-            self.calculate_function_arguments(abstraction_id, &args, &[], call_span_id, b);
+            self.calculate_function_arguments(abstraction_id, &args, &[], &vec![], call_span_id, b);
         let def_func_type = b.types.refresh_func_type(&def_func_type);
 
-        let (open, call_values) = self.push_call_arguments(open, args, call_span_id, b);
+        let (open, call_values) = self.push_call_arguments(open, args, &vec![], call_span_id, b);
         let (open, _) = self.push_call_values(open, &call_values, b);
 
         let call_types = call_values.iter().map(|v| v.2.clone()).collect::<Vec<_>>();
@@ -1025,6 +1027,14 @@ impl FlattenInner {
         let block_id = empty.block_id;
         let scope_id = self.blocks.get_block(block_id).scope();
 
+        let entry_id = self.blocks.get_block(block_id).entry();
+        let entry = self.get_entry(entry_id);
+        println!("entry_ty: {}", entry.ty);
+        println!(
+            "push_start_block_args: block_id: {}, ty: {}",
+            empty.block_id, block_ty.args
+        );
+        //assert_ne!(format!("{}", block_id ), "B4");
         let mut v_args = vec![];
         for (i, (name, ty)) in block_ty.args.fields().iter().enumerate() {
             let entry = CodeEntry::new(
@@ -1442,7 +1452,7 @@ impl FlattenInner {
             Ast::Literal(lit) => {
                 // literal is expression, non-terminal
                 let ty: AstType = match &lit {
-                    Literal::Block(_block_id) => b.types.fresh_unknown(),
+                    //Literal::Block(_block_id) => b.types.fresh_unknown(),
                     _ => lit.clone().into(),
                 };
                 let mem = VarDefinitionSpace::Default;
@@ -1859,7 +1869,8 @@ impl FlattenInner {
                     _ => unimplemented!("{:?}", expr),
                 };
                 let ty = AstType::JumpTarget;
-                let code = LCode::Val(Literal::Block(block_id));
+                //let code = LCode::Val(Literal::Block(block_id));
+                let code = LCode::Block(block_id);
 
                 let (open, link_id) = self.push_code_open(
                     open,
@@ -2029,7 +2040,7 @@ impl FlattenInner {
             }
 
             Ast::ControlFlowMarker(ControlFlowMarker::GotoChain(args)) => {
-                let (open, argvec) = self.push_call_arguments(open, args, span_id, b);
+                let (open, argvec) = self.push_call_arguments(open, args, &vec![], span_id, b);
                 let mut argvec = VecDeque::from(argvec);
                 let mut acc = VecDeque::new();
                 if argvec.is_empty() {
@@ -2041,7 +2052,8 @@ impl FlattenInner {
                     let entry = self.get_entry(link_id);
                     let code = entry.code.clone();
                     match &code {
-                        LCode::Val(Literal::Block(block_id)) => {
+                        LCode::Block(block_id) => {
+                            //LCode::Val(Literal::Block(block_id)) => {
                             let block_id = *block_id;
                             let arg_types = ty.fields();
                             // lengths should match
@@ -2328,7 +2340,8 @@ impl FlattenInner {
                 let entry = self.get_entry(func_link_id);
 
                 let func_block_id = match &entry.code {
-                    LCode::Val(Literal::Block(block_id)) => *block_id,
+                    LCode::Block(block_id) => *block_id,
+                    //LCode::Val(Literal::Block(block_id)) => *block_id,
                     _ => {
                         b.push_error(
                             &format!("Defer must be a function with no arguments"),
