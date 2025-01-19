@@ -222,8 +222,7 @@ impl<'c> MLIRGenerator<'c> {
 
     pub fn op_ref(&mut self, index: SymIndex) -> &mut Operation<'c> {
         let c = self.blocks.get_mut(&index.block()).unwrap();
-        let op = c.op_ref(index);
-        op
+        c.op_ref(index)
     }
 
     pub fn append_op(&mut self, index: SymIndex, block_id: BlockId, region_index: usize) {
@@ -257,7 +256,6 @@ impl<'c> MLIRGenerator<'c> {
 impl<'c> MLIRGenerator<'c> {
     fn lower_literal<T: Copy + Into<CodeOffset>>(&mut self, offset: T, lit: &Literal) {
         let link_id = self.link(offset);
-        //let block_id = self.blockify.get_entry_id(offset).unwrap();
         let block_id = self.blockify.get_block_id(offset);
         let location = self.get_location(offset);
         let v = self.blockify.value(offset);
@@ -287,7 +285,6 @@ impl<'c> MLIRGenerator<'c> {
                 location,
             );
 
-            //let ty = self.from_type(&ast_ty, b);
             let attribute =
                 DenseElementsAttribute::new(RankedTensorType::new(&[], ty, None).into(), &[value])
                     .unwrap();
@@ -355,10 +352,8 @@ impl<'c> MLIRGenerator<'c> {
     }
 
     pub fn resolve_value<T: Copy + Into<CodeOffset>>(&self, offset: T) -> Option<SymIndex> {
-        //if let Some(offset_decl) = self.blockify.resolve_declaration(offset) {
         let mut current = offset.into();
         loop {
-            //println!("resolve: {:?}", (offset, current));
             let v_decl = self.blockify.value(current);
             let code = self.blockify.get_code(v_decl);
             /*
@@ -415,9 +410,6 @@ impl<'c> MLIRGenerator<'c> {
         }
         let v = self.blockify.link(current);
         self.index.get(&v).cloned()
-        //} else {
-        //None
-        //}
     }
 
     pub fn link<T: Copy + Into<CodeOffset>>(&self, offset: T) -> LinkId {
@@ -455,22 +447,12 @@ impl<'c> MLIRGenerator<'c> {
         }
     }
 
-    pub fn create_block<T: Copy + Into<CodeOffset>>(&mut self, offset: T) {
-        let entry_id = self.blockify.value(offset);
-        let link_id = self.blockify.link(offset);
-        let block_id = self.blockify.get_block_id(link_id);
-        //println!("create block: {}", entry_id);
-        let code = self.blockify.get_code(entry_id);
-        if let LCode::Label = code {
-            let entry_link_id = self.blockify.link(offset);
-            let args = self.get_label_args(entry_link_id);
-            //println!("create block: {:?}", (code, &args));
-            let block = Block::new(&args);
-            let c = OpCollection::new(block_id, block);
-            self.blocks.insert(block_id, c);
-        } else {
-            unreachable!("{:?}", code)
-        }
+    pub fn create_block(&mut self, block_id: BlockId) {
+        let entry_link_id = self.blockify.link(block_id);
+        let args = self.get_label_args(entry_link_id);
+        let block = Block::new(&args);
+        let c = OpCollection::new(block_id, block);
+        self.blocks.insert(block_id, c);
     }
 
     pub fn lower_jump(&mut self, link_id: LinkId, target: BlockId) -> Result<()> {
@@ -629,7 +611,6 @@ impl<'c> MLIRGenerator<'c> {
     }
 
     fn lower_load<T: Copy + Into<CodeOffset>>(&mut self, v: T, v_decl: ValueId) -> SymIndex {
-        //let block_id = self.blockify.get_entry_id(v).unwrap();
         let link_id = self.link(v);
         let block_id = self.blockify.get_block_id(link_id);
         let location = self.get_location(v_decl);
@@ -897,7 +878,7 @@ impl<'c> MLIRGenerator<'c> {
 
                     // create blocks
                     for block_id in block_ids.iter() {
-                        self.create_block(block_id);
+                        self.create_block(*block_id);
                     }
 
                     // lower
@@ -1303,12 +1284,10 @@ impl<'c> MLIRGenerator<'c> {
             LCode::Ternary(condition, then_block_id, else_block_id) => {
                 self.ensure_call_args_empty();
                 // THEN
-                let v_then = self.blockify.value(then_block_id);
                 let then_block_ids = self.blockify.blocks(*then_block_id, self.b);
 
                 for block_id in then_block_ids.iter() {
-                    let entry_id = self.blockify.value(block_id);
-                    self.create_block(entry_id);
+                    self.create_block(*block_id);
                 }
                 for block_id in then_block_ids.iter() {
                     let entry_id = self.blockify.value(block_id);
@@ -1321,12 +1300,10 @@ impl<'c> MLIRGenerator<'c> {
                 let then_ty = r2.r#type();
 
                 // ELSE
-                let v_else = self.blockify.blocks.value(else_block_id);
                 let else_block_ids = self.blockify.blocks(*else_block_id, self.b);
 
                 for block_id in else_block_ids.iter() {
-                    let entry_id = self.blockify.blocks.value(block_id);
-                    self.create_block(entry_id);
+                    self.create_block(*block_id);
                 }
                 for block_id in else_block_ids.iter() {
                     let entry_id = self.blockify.value(block_id);
@@ -1477,8 +1454,7 @@ impl<'c> MLIRGenerator<'c> {
     pub fn lower_static_block(&mut self) -> Result<()> {
         // reorder things, so we lower declarations last
         let static_block_id = self.blockify.blocks.static_block_id();
-        let value_id = self.blockify.value(static_block_id);
-        self.create_block(value_id);
+        self.create_block(static_block_id);
 
         let entry = self.blockify.get_entry(self.link(static_block_id));
         let block_id = entry.block_id;
