@@ -174,7 +174,7 @@ impl Flatten<FirstPass> {
 
 impl Flatten<Module> {
     pub fn get_link_entry(&self, link_id: LinkId) -> &CodeEntry {
-        self.blocks.links.get(link_id)
+        self.blocks.get_entry(link_id)
     }
 
     pub fn entry_links(&self, block_id: BlockId) -> Vec<LinkId> {
@@ -228,36 +228,6 @@ impl FlattenInner {
                 } else {
                     None
                 }
-            }
-        }
-    }
-
-    pub fn type_inference(&mut self, b: &mut NB) {
-        for (_link_id, entry) in self.blocks.links.iter_mut() {
-            if !entry.ty.is_unknown() {
-                continue;
-            }
-            b.types.u.resolve(&entry.ty);
-        }
-    }
-
-    pub fn type_inference_enforce(&mut self, b: &mut NB) {
-        for (link_id, entry) in self.blocks.links.iter_mut() {
-            if !entry.ty.is_unknown() {
-                continue;
-            }
-
-            if let Some(ty) = b.types.u.resolve(&entry.ty) {
-                b.push_warning(
-                    &format!("Late Unresolved Type: {}=>{} @ {}", &entry.ty, &ty, link_id,),
-                    entry.span_id,
-                );
-                entry.ty = ty;
-            } else {
-                b.push_error(
-                    &format!("Unresolved Type: {} @ {}", &entry.ty, link_id),
-                    entry.span_id,
-                );
             }
         }
     }
@@ -354,7 +324,7 @@ impl FlattenInner {
         assert!(self.deferred_goto.is_empty());
 
         // ensure types are resolved
-        self.type_inference_enforce(b);
+        self.blocks.type_inference_enforce(b);
 
         self.cont_graph("cont.dot", b);
 
@@ -413,12 +383,6 @@ impl FlattenInner {
         (self, values)
     }
 
-    fn insert_decl_entry(&mut self, block_id: BlockId, entry: CodeEntry) -> LinkId {
-        let link_id = self.blocks.links.insert(entry);
-        self.blocks.get_block_mut(block_id).push_decl(link_id);
-        link_id
-    }
-
     pub fn insert_decl<S: SafeBlockState>(
         &mut self,
         sblock: &SafeBlock<S>,
@@ -437,7 +401,7 @@ impl FlattenInner {
             span_id,
             VarDefinitionSpace::Default,
         );
-        self.insert_decl_entry(entry_block_id, entry)
+        self.blocks.insert_decl_entry(entry_block_id, entry)
     }
 
     pub fn insert_entry_with_link(&mut self, mut entry: CodeEntry) -> LinkId {
@@ -446,20 +410,20 @@ impl FlattenInner {
 
         let v = match (code.is_term(), &code) {
             (true, _) => {
-                let link_id = self.blocks.links.insert(entry);
+                let link_id = self.blocks.insert_entry(entry);
                 self.blocks.get_block_mut(block_id).terminate(link_id);
                 link_id
             }
 
             (_, LCode::Label) => {
-                let link_id = self.blocks.links.insert(entry);
+                let link_id = self.blocks.insert_entry(entry);
                 let block = self.blocks.get_block_mut(block_id);
                 block.push_label(link_id);
                 link_id
             }
 
             (_, LCode::Arg(_)) => {
-                let link_id = self.blocks.links.insert(entry);
+                let link_id = self.blocks.insert_entry(entry);
                 let block = self.blocks.get_block_mut(block_id);
                 block.push_arg(link_id);
                 link_id
@@ -471,12 +435,12 @@ impl FlattenInner {
                 let scope = self.blocks.get_scope(scope_id);
                 let entry_block_id = scope.entry_block();
                 entry.block_id = entry_block_id;
-                let link_id = self.insert_decl_entry(entry_block_id, entry);
+                let link_id = self.blocks.insert_decl_entry(entry_block_id, entry);
                 link_id
             }
 
             _ => {
-                let link_id = self.blocks.links.insert(entry);
+                let link_id = self.blocks.insert_entry(entry);
                 let block = self.blocks.get_block_mut(block_id);
                 block.push_link(link_id);
                 link_id
@@ -568,15 +532,15 @@ impl FlattenInner {
     }
 
     pub fn get_entry(&self, link_id: LinkId) -> &CodeEntry {
-        self.blocks.links.get(link_id)
+        self.blocks.get_entry(link_id)
     }
 
     pub fn get_type(&self, link_id: LinkId) -> &AstType {
-        &self.get_entry(link_id).ty
+        &self.blocks.get_entry(link_id).ty
     }
 
     pub fn get_entry_mut(&mut self, link_id: LinkId) -> &mut CodeEntry {
-        self.blocks.links.get_mut(link_id)
+        self.blocks.get_entry_mut(link_id)
     }
 
     pub fn push_sequence(
@@ -661,7 +625,8 @@ impl FlattenInner {
     ) -> (SafeBlockOpen, Vec<LinkId>) {
         let mut links = vec![];
         for (maybe_key, v, ty, span_id) in values {
-            let out = if self.blocks.links.is_load_required(*v) {
+            let entry = self.get_entry(*v);
+            let out = if entry.is_load_required() {
                 let (this_open, link_id) = self.push_code_open(
                     open,
                     LCode::Load(*v),
@@ -830,6 +795,8 @@ impl FlattenInner {
         let start_block_id = open.block_id;
         let start_scope_id = self.blocks.get_block(start_block_id).scope();
         let target_scope_id = self.blocks.get_block(target_block_id).scope();
+
+        // can't jump to self
         assert_ne!(start_block_id, target_block_id);
 
         log::debug!(
@@ -1123,12 +1090,6 @@ impl FlattenInner {
         }
     }
 
-    pub fn dump_position(&self, unk: SafeBlockUnknown) {
-        let block = self.blocks.get_block(unk.block_id);
-        let scope_id = block.scope();
-        println!("pos: {}{}", scope_id, unk.block_id);
-    }
-
     pub(super) fn resolve_return_type(
         &self,
         fun_block_id: BlockId,
@@ -1342,7 +1303,7 @@ impl FlattenInner {
                         let global_name_key = b.labels.s(&global_name);
 
                         let ast_ty: AstType = lit.into();
-                        let link_id = self.insert_decl_entry(
+                        let link_id = self.blocks.insert_decl_entry(
                             static_block_id,
                             CodeEntry::new(
                                 static_block_id,

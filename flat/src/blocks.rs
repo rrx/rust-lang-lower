@@ -4,8 +4,8 @@ use petgraph::visit::EdgeRef;
 use std::collections::HashSet;
 
 use crate::{
-    AbstractionId, AbstractionsBuilder, BlockId, CodeOffset, FunctionVariantBuilder, LinkId, Links,
-    NodeBuilder, SafeBlock, SafeBlockEmpty, ScopeId, ScopeLayer, VariantId,
+    AbstractionId, AbstractionsBuilder, BlockId, CodeEntry, CodeOffset, FunctionVariantBuilder,
+    LinkId, Links, NodeBuilder, SafeBlock, SafeBlockEmpty, ScopeId, ScopeLayer, VariantId,
 };
 
 use std::collections::HashMap;
@@ -185,7 +185,7 @@ pub struct BlockGraph<S: BlockGraphState> {
     pub(super) sg: DiGraph<ScopeLayer, ()>,
     pub(super) variants: FunctionVariantBuilder,
     pub(super) abstractions: AbstractionsBuilder,
-    pub(super) links: Links,
+    links: Links,
     pub(super) block_links: HashMap<BlockId, LinkId>,
     extra: S,
 }
@@ -236,6 +236,14 @@ impl BlockGraph<BlockGraphStateOpen> {
 }
 
 impl<S: BlockGraphState> BlockGraph<S> {
+    pub fn get_entry(&self, link_id: LinkId) -> &CodeEntry {
+        self.links.get(link_id)
+    }
+
+    pub fn get_entry_mut(&mut self, link_id: LinkId) -> &mut CodeEntry {
+        self.links.get_mut(link_id)
+    }
+
     pub fn new_block(&mut self, parent_block_id: BlockId) -> SafeBlockEmpty {
         let parent = self.get_block(parent_block_id);
         self.new_block_different_scope(parent_block_id, parent.scope(), Successor::BlockScope)
@@ -281,6 +289,16 @@ impl<S: BlockGraphState> BlockGraph<S> {
 }
 
 impl BlockGraph<BlockGraphStateOpen> {
+    pub fn insert_decl_entry(&mut self, block_id: BlockId, entry: CodeEntry) -> LinkId {
+        let link_id = self.links.insert(entry);
+        self.get_block_mut(block_id).push_decl(link_id);
+        link_id
+    }
+
+    pub fn insert_entry(&mut self, entry: CodeEntry) -> LinkId {
+        self.links.insert(entry)
+    }
+
     pub fn get_block_mut(&mut self, block_id: BlockId) -> &mut IRBlock {
         let index = NodeIndex::new(block_id.index());
         self.bg.node_weight_mut(index).unwrap()
@@ -457,5 +475,35 @@ impl BlockGraph<BlockGraphStateOpen> {
         let block = self.get_block(block_id);
         self.define_lambda(block.scope(), name.into(), abstraction_id);
         abstraction_id
+    }
+
+    pub fn type_inference(&mut self, b: &mut NodeBuilder) {
+        for (_link_id, entry) in self.links.iter_mut() {
+            if !entry.ty.is_unknown() {
+                continue;
+            }
+            b.types.u.resolve(&entry.ty);
+        }
+    }
+
+    pub fn type_inference_enforce(&mut self, b: &mut NodeBuilder) {
+        for (link_id, entry) in self.links.iter_mut() {
+            if !entry.ty.is_unknown() {
+                continue;
+            }
+
+            if let Some(ty) = b.types.u.resolve(&entry.ty) {
+                b.push_warning(
+                    &format!("Late Unresolved Type: {}=>{} @ {}", &entry.ty, &ty, link_id,),
+                    entry.span_id,
+                );
+                entry.ty = ty;
+            } else {
+                b.push_error(
+                    &format!("Unresolved Type: {} @ {}", &entry.ty, link_id),
+                    entry.span_id,
+                );
+            }
+        }
     }
 }

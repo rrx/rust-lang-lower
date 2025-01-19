@@ -467,21 +467,21 @@ impl FlattenInner {
 
                 // Push load if required.  This is needed if the target is stored in memory,
                 // rather than a register
-                let (open, load_link_id) =
-                    if self.blocks.links.is_load_required(*def_target_link_id) {
-                        let entry = self.get_entry(*def_target_link_id).clone();
-                        let (open, link_id) = self.push_code_open(
-                            open,
-                            LCode::Load(*def_target_link_id),
-                            entry.ty,
-                            entry.name,
-                            entry.span_id,
-                            VarDefinitionSpace::Default,
-                        );
-                        (open, link_id)
-                    } else {
-                        (open, *def_target_link_id)
-                    };
+                let entry = self.blocks.get_entry(*def_target_link_id);
+                let (open, load_link_id) = if entry.is_load_required() {
+                    let entry = self.get_entry(*def_target_link_id).clone();
+                    let (open, link_id) = self.push_code_open(
+                        open,
+                        LCode::Load(*def_target_link_id),
+                        entry.ty,
+                        entry.name,
+                        entry.span_id,
+                        VarDefinitionSpace::Default,
+                    );
+                    (open, link_id)
+                } else {
+                    (open, *def_target_link_id)
+                };
 
                 // we don't know the function yet, so we can't calculate the args
                 // For this reason we should consider moving the args calculation to the function
