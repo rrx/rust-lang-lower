@@ -174,7 +174,7 @@ pub struct MLIRGenerator<'c> {
     pub(crate) blockify: &'c Flatten<Module>,
     index: IndexMap<LinkId, SymIndex>,
     blocks: HashMap<ValueId, OpCollection<'c>>,
-    call_args: Vec<ValueId>,
+    call_args: Vec<LinkId>,
     b: &'c NodeBuilder,
 }
 
@@ -208,7 +208,7 @@ impl<'c> MLIRGenerator<'c> {
         Ok(())
     }
 
-    pub fn take_call_args(&mut self) -> Vec<ValueId> {
+    pub fn take_call_args(&mut self) -> Vec<LinkId> {
         self.call_args.drain(..).collect()
     }
 
@@ -1361,7 +1361,7 @@ impl<'c> MLIRGenerator<'c> {
             //LCode::Value(_) => (),
             //LCode::ValueIndex(_, _) => (),
             LCode::CallValue(_) => {
-                self.call_args.push(v);
+                self.call_args.push(link_id);
             }
             LCode::Noop => {
                 self.ensure_call_args_empty();
