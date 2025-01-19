@@ -335,15 +335,11 @@ impl<'c> MLIRGenerator<'c> {
         }
     }
 
-    pub fn resolve_value_lower_load(
-        &mut self,
-        block_id: ValueId,
-        offset: CodeOffset,
-    ) -> Option<SymIndex> {
+    pub fn resolve_value_lower_load(&mut self, v: ValueId, offset: CodeOffset) -> Option<SymIndex> {
         if let Some(index) = self.resolve_value(offset) {
             match index {
-                SymIndex::Static(_, _, v_decl) => Some(self.lower_load(block_id, v_decl)),
-                SymIndex::Def(_, _, v_decl) => Some(self.lower_load(block_id, v_decl)),
+                SymIndex::Static(_, _, v_decl) => Some(self.lower_load(v, v_decl)),
+                SymIndex::Def(_, _, v_decl) => Some(self.lower_load(v, v_decl)),
                 _ => Some(index),
             }
         } else {
@@ -474,10 +470,7 @@ impl<'c> MLIRGenerator<'c> {
         let arity = values.len();
         let indicies = values
             .into_iter()
-            .map(|value_id| {
-                self.resolve_value_lower_load(block_id, value_id.into())
-                    .unwrap()
-            })
+            .map(|value_id| self.resolve_value_lower_load(v, value_id.into()).unwrap())
             .collect();
         let rs = self.values(indicies);
 
@@ -609,7 +602,8 @@ impl<'c> MLIRGenerator<'c> {
         (ptr_type, tuple_type)
     }
 
-    fn lower_load(&mut self, block_id: ValueId, v_decl: ValueId) -> SymIndex {
+    fn lower_load(&mut self, v: ValueId, v_decl: ValueId) -> SymIndex {
+        let block_id = self.blockify.get_entry_id(v).unwrap();
         let location = self.get_location(v_decl);
         let v_decl = self.blockify.resolve_declaration(v_decl.into()).unwrap();
         if self.blockify.is_in_static_scope(v_decl) {
