@@ -178,7 +178,7 @@ impl Flatten<Module> {
         block_group.push_value(GroupValue::new("V0".into(), "module".into()));
         for v in links {
             let value_id = self.value(v);
-            let entry = self.get_link_entry(v);
+            let entry = self.get_entry(v);
             if let LCode::Val(_) = entry.code {
                 ng.sources.push((module, value_id));
                 let s = format!("{}:{}", v, self.code_to_string(v, b));
@@ -247,7 +247,7 @@ impl Flatten<Module> {
 
                             let mut last = None;
                             for link_id in block.iter() {
-                                let entry = self.get_link_entry(link_id);
+                                let entry = self.get_entry(link_id);
                                 let v = entry.value_id.unwrap();
                                 let code = &entry.code;
                                 let v_decl = match entry.mem {

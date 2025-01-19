@@ -236,8 +236,8 @@ impl BlockGraph<BlockGraphStateOpen> {
 }
 
 impl<S: BlockGraphState> BlockGraph<S> {
-    pub fn get_entry(&self, link_id: LinkId) -> &CodeEntry {
-        self.links.get(link_id)
+    pub fn get_entry<T: Copy + Into<CodeOffset>>(&self, offset: T) -> &CodeEntry {
+        self.links.get(self.link(offset))
     }
 
     pub fn get_entry_mut(&mut self, link_id: LinkId) -> &mut CodeEntry {

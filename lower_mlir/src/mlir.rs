@@ -1440,7 +1440,7 @@ impl<'c> MLIRGenerator<'c> {
         let block_id = entry.block_id;
         let links: Vec<_> = self.blockify.entry_links(block_id);
         for link_id in links {
-            let entry = self.blockify.get_link_entry(link_id);
+            let entry = self.blockify.get_entry(link_id);
             let current = entry.value_id.unwrap();
             self.lower_code(current)?;
         }
@@ -1456,7 +1456,7 @@ impl<'c> MLIRGenerator<'c> {
 
         let mut values = VecDeque::new();
         for link_id in links {
-            let entry = self.blockify.get_link_entry(link_id);
+            let entry = self.blockify.get_entry(link_id);
             let current = entry.value_id.unwrap();
             let code = self.blockify.get_code(current);
             if let LCode::DeclareFunction(Some(_)) = code {

@@ -17,7 +17,7 @@ impl Flatten<Module> {
 
     pub fn get_block_successors(&self, entry_id: ValueId) -> Vec<(Successor, CodeOffset)> {
         let link_id = self.link(entry_id);
-        let entry = self.get_link_entry(link_id);
+        let entry = self.get_entry(link_id);
         let block_id = entry.block_id;
         self.blocks.get_block_successors(block_id)
     }
@@ -25,42 +25,42 @@ impl Flatten<Module> {
     pub fn get_type(&self, v: CodeOffset) -> AstType {
         let value_id = self.value(v);
         let link_id = self.link(value_id);
-        let entry = self.get_link_entry(link_id);
+        let entry = self.get_entry(link_id);
         entry.clone().ty
     }
 
     pub fn get_entry_id(&self, value_id: ValueId) -> Option<ValueId> {
         let link_id = self.link(value_id);
-        let block_id = self.get_link_entry(link_id).block_id;
+        let block_id = self.get_entry(link_id).block_id;
         self.blocks.maybe_value(block_id)
     }
 
     pub fn is_in_static_scope(&self, offset: CodeOffset) -> bool {
         let value_id = self.value(offset);
         let link_id = self.link(value_id);
-        let entry = self.get_link_entry(link_id);
+        let entry = self.get_entry(link_id);
         let block = self.blocks.get_block(entry.block_id);
         let scope = self.blocks.get_scope(block.scope());
         scope.is_static()
     }
 
     pub fn value<T: Copy + Into<CodeOffset>>(&self, offset: T) -> ValueId {
-        self.blocks.value(offset.into())
+        self.blocks.value(offset)
     }
 
-    pub fn link(&self, value_id: ValueId) -> LinkId {
-        self.state.values.get(value_id)
+    pub fn link<T: Copy + Into<CodeOffset>>(&self, offset: T) -> LinkId {
+        self.state.values.get(self.value(offset))
     }
 
-    pub fn get_code(&self, value_id: ValueId) -> &LCode {
-        let link_id = self.link(value_id);
-        &self.get_link_entry(link_id).code
+    pub fn get_code<T: Copy + Into<CodeOffset>>(&self, offset: T) -> &LCode {
+        let link_id = self.link(offset);
+        &self.get_entry(link_id).code
     }
 
     pub fn get_name(&self, offset: CodeOffset) -> Option<StringLabel> {
         if let Some(value_id) = self.blocks.maybe_value(offset) {
             let link_id = self.state.values.get(value_id);
-            self.get_link_entry(link_id).name.map(|n| n.into())
+            self.get_entry(link_id).name.map(|n| n.into())
         } else {
             None
         }
@@ -68,7 +68,7 @@ impl Flatten<Module> {
 
     pub fn get_code_row(&self, v: ValueId, b: &mut NB) -> Option<CodeRow> {
         let link_id = self.link(v);
-        let entry = self.get_link_entry(link_id);
+        let entry = self.get_entry(link_id);
         let block = self
             .blocks
             .block_graph()

@@ -96,7 +96,7 @@ impl<'a> Interp<'a> {
 
         // statics
         for link_id in links {
-            let entry = m.get_link_entry(link_id);
+            let entry = m.get_entry(link_id);
             let code = &entry.code;
             let value_id = entry.value_id.unwrap();
             match code {

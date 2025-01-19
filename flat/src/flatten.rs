@@ -10,10 +10,10 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::convert::Into;
 
 use crate::{
-    BlockGraph, BlockGraphStateOpen, BlockId, BlockifyError, Builtin, CodeEntry, CodeOffset,
-    ContinuationFlow, DeferredGotoList, FlowEdge, LCode, LinkId, NodeBuilder as NB, SafeBlock,
-    SafeBlockClosed, SafeBlockEmpty, SafeBlockOpen, SafeBlockState, SafeBlockUnknown, ScopeId,
-    ScopeState, ScopeType, ScopedContinuations, Successor, ValueId, Values, VarDefinitionSpace,
+    BlockGraph, BlockGraphStateOpen, BlockId, BlockifyError, Builtin, CodeEntry, ContinuationFlow,
+    DeferredGotoList, FlowEdge, LCode, LinkId, NodeBuilder as NB, SafeBlock, SafeBlockClosed,
+    SafeBlockEmpty, SafeBlockOpen, SafeBlockState, SafeBlockUnknown, ScopeId, ScopeState,
+    ScopeType, ScopedContinuations, Successor, Values, VarDefinitionSpace,
 };
 use std::ops::{Deref, DerefMut};
 
@@ -173,10 +173,6 @@ impl Flatten<FirstPass> {
 }
 
 impl Flatten<Module> {
-    pub fn get_link_entry(&self, link_id: LinkId) -> &CodeEntry {
-        self.blocks.get_entry(link_id)
-    }
-
     pub fn entry_links(&self, block_id: BlockId) -> Vec<LinkId> {
         let block = self.blocks.get_block(block_id);
         let links: Vec<_> = block.iter().collect();
