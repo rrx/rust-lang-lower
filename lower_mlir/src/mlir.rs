@@ -873,8 +873,7 @@ impl<'c> MLIRGenerator<'c> {
 
                     // lower
                     for block_id in block_ids.iter() {
-                        let entry_id = self.blockify.value(block_id);
-                        self.lower_block(entry_id)?;
+                        self.lower_block(*block_id)?;
                     }
 
                     // append blocks to region
@@ -1266,8 +1265,7 @@ impl<'c> MLIRGenerator<'c> {
                     self.create_block(*block_id);
                 }
                 for block_id in then_block_ids.iter() {
-                    let entry_id = self.blockify.value(block_id);
-                    self.lower_block(entry_id)?;
+                    self.lower_block(*block_id)?;
                 }
 
                 // yield the last value
@@ -1282,8 +1280,7 @@ impl<'c> MLIRGenerator<'c> {
                     self.create_block(*block_id);
                 }
                 for block_id in else_block_ids.iter() {
-                    let entry_id = self.blockify.value(block_id);
-                    self.lower_block(entry_id)?;
+                    self.lower_block(*block_id)?;
                 }
 
                 // yield the last value
@@ -1409,12 +1406,8 @@ impl<'c> MLIRGenerator<'c> {
         Ok(())
     }
 
-    pub fn lower_block<T: Copy + Into<CodeOffset>>(&mut self, offset: T) -> Result<()> {
-        let link_id = self.link(offset);
-        let entry = self.blockify.get_entry(link_id);
-        let block_id = entry.block_id;
-        let links: Vec<_> = self.blockify.entry_links(block_id);
-        for link_id in links {
+    pub fn lower_block(&mut self, block_id: BlockId) -> Result<()> {
+        for link_id in self.blockify.entry_links(block_id) {
             self.lower_code(link_id)?;
         }
         self.blocks.get_mut(&block_id).unwrap().complete = true;
