@@ -16,7 +16,7 @@ impl Flatten<Module> {
     }
 
     pub fn get_block_successors(&self, entry_id: ValueId) -> Vec<(Successor, CodeOffset)> {
-        let link_id = self.state.values.get(entry_id);
+        let link_id = self.link(entry_id);
         let entry = self.get_link_entry(link_id);
         let block_id = entry.block_id;
         self.blocks.get_block_successors(block_id)
@@ -24,20 +24,20 @@ impl Flatten<Module> {
 
     pub fn get_type(&self, v: CodeOffset) -> AstType {
         let value_id = self.value(v);
-        let link_id = self.state.values.get(value_id);
+        let link_id = self.link(value_id);
         let entry = self.get_link_entry(link_id);
         entry.clone().ty
     }
 
     pub fn get_entry_id(&self, value_id: ValueId) -> Option<ValueId> {
-        let link_id = self.state.values.get(value_id);
+        let link_id = self.link(value_id);
         let block_id = self.get_link_entry(link_id).block_id;
         self.blocks.maybe_value(block_id)
     }
 
     pub fn is_in_static_scope(&self, offset: CodeOffset) -> bool {
         let value_id = self.value(offset);
-        let link_id = self.state.values.get(value_id);
+        let link_id = self.link(value_id);
         let entry = self.get_link_entry(link_id);
         let block = self.blocks.get_block(entry.block_id);
         let scope = self.blocks.get_scope(block.scope());
@@ -53,7 +53,7 @@ impl Flatten<Module> {
     }
 
     pub fn get_code(&self, value_id: ValueId) -> &LCode {
-        let link_id = self.state.values.get(value_id);
+        let link_id = self.link(value_id);
         &self.get_link_entry(link_id).code
     }
 
@@ -67,15 +67,12 @@ impl Flatten<Module> {
     }
 
     pub fn get_code_row(&self, v: ValueId, b: &mut NB) -> Option<CodeRow> {
-        let link_id = self.state.values.get(v);
+        let link_id = self.link(v);
         let entry = self.get_link_entry(link_id);
-        let code = self.get_code(v);
-
-        let block_id = entry.block_id;
         let block = self
             .blocks
             .block_graph()
-            .node_weight(NodeIndex::new(block_id.index()))
+            .node_weight(NodeIndex::new(entry.block_id.index()))
             .unwrap();
         let entry_id = self.get_entry_id(v).map(|v| format!("{}", v));
 
@@ -105,8 +102,8 @@ impl Flatten<Module> {
             span_id: entry.span_id.index(),
             scope_id: scope_id.index(),
             entry_id: entry_id.map(|v| v).unwrap_or("".to_string()),
-            block_id: block_id.index(),
-            term: code.is_term(),
+            block_id: entry.block_id.index(),
+            term: entry.code.is_term(),
             dead: block.is_dead(),
             unknown: is_unknown,
         })
