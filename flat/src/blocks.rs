@@ -338,6 +338,13 @@ impl BlockGraph<BlockGraphStateOpen> {
         link_id
     }
 
+    pub fn insert_label(&mut self, entry: CodeEntry) -> LinkId {
+        let block_id = entry.block_id;
+        let link_id = self.links.insert(entry);
+        self.block_links.insert(block_id, link_id);
+        link_id
+    }
+
     pub fn insert_entry(&mut self, entry: CodeEntry) -> LinkId {
         self.links.insert(entry)
     }

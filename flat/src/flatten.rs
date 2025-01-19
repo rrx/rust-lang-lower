@@ -310,7 +310,7 @@ impl FlattenInner {
         for block_id in dead_blocks {
             self.blocks.get_block_mut(block_id).mark_dead();
 
-            if let Some(link_id) = self.blocks.block_links.get(&block_id).cloned() {
+            if let Some(link_id) = self.blocks.maybe_link(block_id) {
                 let entry = self.get_entry(link_id);
                 b.push_warning(&format!("Dead Block: {}", block_id), entry.span_id);
             } else {
@@ -369,7 +369,8 @@ impl FlattenInner {
             }
 
             (_, LCode::Label) => {
-                let link_id = self.blocks.insert_entry(entry);
+                let block_id = entry.block_id;
+                let link_id = self.blocks.insert_label(entry);
                 let block = self.blocks.get_block_mut(block_id);
                 block.push_label(link_id);
                 link_id
@@ -1011,7 +1012,6 @@ impl FlattenInner {
         );
         let block_link_id = self.insert_entry_with_link(entry);
         let (open, v_args) = self.push_start_block_args(empty, block_ty, span_id);
-        self.blocks.block_links.insert(open.block_id, block_link_id);
         (open, block_link_id, v_args)
     }
 
