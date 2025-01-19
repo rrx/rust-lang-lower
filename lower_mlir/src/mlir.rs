@@ -581,7 +581,6 @@ impl<'c> MLIRGenerator<'c> {
         let (ptr_type, tuple_type) = self.build_struct_type(values);
         let location = self.get_location(link_id);
         // construct a sized struct memref and store it somewhere
-        //let block_id = self.blockify.get_entry_id(link_id).unwrap();
         let block_id = self.blockify.get_block_id(link_id);
         //let op = memref::alloca(self.context, memref_ty, &[], &[], None, location);
         let op = self.build_int_op(1, location);
@@ -598,9 +597,7 @@ impl<'c> MLIRGenerator<'c> {
         (ptr_type, tuple_type)
     }
 
-    fn lower_load<T: Copy + Into<CodeOffset>>(&mut self, v: T, v_decl: LinkId) -> SymIndex {
-        let link_id = self.link(v);
-        let block_id = self.blockify.get_block_id(link_id);
+    fn lower_load(&mut self, block_id: BlockId, v_decl: LinkId) -> SymIndex {
         let location = self.get_location(v_decl);
         let v_decl = self.blockify.resolve_declaration(v_decl.into()).unwrap();
         if self.blockify.is_in_static_scope(v_decl) {
@@ -1049,7 +1046,7 @@ impl<'c> MLIRGenerator<'c> {
 
             LCode::Load(v_decl) => {
                 self.ensure_call_args_empty();
-                let block_id = self.blockify.get_entry_id(link_id).unwrap();
+                let block_id = self.blockify.get_block_id(link_id);
                 let v_decl = self.blockify.resolve_declaration(v_decl.into()).unwrap();
                 let v_decl = self.blockify.link(v_decl);
                 let index = self.lower_load(block_id, v_decl);
