@@ -33,8 +33,8 @@ use std::collections::HashMap;
 pub enum SymIndex {
     Op(BlockId, usize),
     Arg(BlockId, usize),
-    Def(BlockId, usize, ValueId),
-    Static(BlockId, usize, ValueId),
+    Def(BlockId, usize, LinkId),
+    Static(BlockId, usize, LinkId),
 }
 
 impl SymIndex {
@@ -104,13 +104,13 @@ impl<'c> OpCollection<'c> {
         SymIndex::Op(self.block_id, offset)
     }
 
-    pub fn push_static(&mut self, op: Operation<'c>, v: ValueId) -> SymIndex {
+    pub fn push_static(&mut self, op: Operation<'c>, v: LinkId) -> SymIndex {
         let offset = self.op_count;
         self.ops.push(op);
         self.op_count += 1;
         SymIndex::Def(self.block_id, offset, v)
     }
-    pub fn push_decl(&mut self, op: Operation<'c>, v: ValueId) -> SymIndex {
+    pub fn push_decl(&mut self, op: Operation<'c>, v: LinkId) -> SymIndex {
         let offset = self.op_count;
         self.ops.push(op);
         self.op_count += 1;
@@ -295,7 +295,7 @@ impl<'c> MLIRGenerator<'c> {
             //let current = blocks.blocks.get_mut(&block_index).unwrap();
             //let op = current.op_ref(sym_index);
             op.set_attribute("initial_value", attribute.into());
-            let index = c.push_static(op, v);
+            let index = c.push_static(op, link_id);
             //if !is_current_static {
             // STATIC VARIABLE IN FUNCTION CONTEXT
             // TODO: FIXME
@@ -608,7 +608,7 @@ impl<'c> MLIRGenerator<'c> {
         (ptr_type, tuple_type)
     }
 
-    fn lower_load<T: Copy + Into<CodeOffset>>(&mut self, v: T, v_decl: ValueId) -> SymIndex {
+    fn lower_load<T: Copy + Into<CodeOffset>>(&mut self, v: T, v_decl: LinkId) -> SymIndex {
         let link_id = self.link(v);
         let block_id = self.blockify.get_block_id(link_id);
         let location = self.get_location(v_decl);
@@ -992,7 +992,7 @@ impl<'c> MLIRGenerator<'c> {
                 let op = llvm::alloca(self.context, r_size, ptr_type, location, options);
                 */
                 let c = self.blocks.get_mut(&block_id).unwrap();
-                let index = c.push_decl(op, v);
+                let index = c.push_decl(op, link_id);
                 self.index.insert(link_id, index);
             }
 
@@ -1058,7 +1058,7 @@ impl<'c> MLIRGenerator<'c> {
                 self.ensure_call_args_empty();
                 let block_id = self.blockify.get_entry_id(link_id).unwrap();
                 let v_decl = self.blockify.resolve_declaration(v_decl.into()).unwrap();
-                let v_decl = self.blockify.value(v_decl);
+                let v_decl = self.blockify.link(v_decl);
                 let index = self.lower_load(block_id, v_decl);
                 self.index.insert(link_id, index);
             }
@@ -1146,7 +1146,6 @@ impl<'c> MLIRGenerator<'c> {
                 match op {
                     NaryOperation::Struct => {
                         // construct a sized struct memref and store it somewhere
-                        //let block_id = self.blockify.get_entry_id(link_id).unwrap();
                         let block_id = self.blockify.get_block_id(link_id);
 
                         //let op = memref::alloca(self.context, memref_ty, &[], &[], None, location);
