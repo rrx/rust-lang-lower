@@ -172,7 +172,7 @@ pub struct MLIRGenerator<'c> {
     config: &'c flat::Config,
     pub(crate) context: &'c Context,
     pub(crate) blockify: &'c Flatten<Module>,
-    index: IndexMap<ValueId, SymIndex>,
+    index: IndexMap<LinkId, SymIndex>,
     blocks: HashMap<ValueId, OpCollection<'c>>,
     call_args: Vec<ValueId>,
     b: &'c NodeBuilder,
@@ -256,11 +256,12 @@ impl<'c> MLIRGenerator<'c> {
 
 impl<'c> MLIRGenerator<'c> {
     fn lower_literal<T: Copy + Into<CodeOffset>>(&mut self, offset: T, lit: &Literal) {
+        let link_id = self.link(offset);
         let block_id = self.blockify.get_entry_id(offset).unwrap();
         let location = self.get_location(offset);
         let v = self.blockify.value(offset);
 
-        if self.blockify.is_in_static_scope(offset.into()) {
+        let index = if self.blockify.is_in_static_scope(offset.into()) {
             let (value, ast_ty) = self.build_static_attribute(lit);
 
             let name = self.blockify.get_name(offset.into()).unwrap();
@@ -304,7 +305,7 @@ impl<'c> MLIRGenerator<'c> {
             //.insert(sym_index, b.strings.intern(global_name.clone()));
             //}
             //Ok(index)
-            self.index.insert(v, index);
+            index
         } else {
             let op = self.emit_literal_const(lit, location);
             let c = self
@@ -312,8 +313,9 @@ impl<'c> MLIRGenerator<'c> {
                 .get_mut(&block_id)
                 .expect(&format!("block not found: {}", block_id));
             let index = c.push(op);
-            self.index.insert(v, index);
-        }
+            index
+        };
+        self.index.insert(link_id, index);
     }
 }
 
@@ -410,7 +412,7 @@ impl<'c> MLIRGenerator<'c> {
             */
             break;
         }
-        let v = self.blockify.value(current);
+        let v = self.blockify.link(current);
         self.index.get(&v).cloned()
         //} else {
         //None
@@ -507,7 +509,7 @@ impl<'c> MLIRGenerator<'c> {
         let c = self.blocks.get_mut(&block_id).unwrap();
 
         let index = c.push(op);
-        self.index.insert(v, index);
+        self.index.insert(link_id, index);
         Ok(())
     }
 
@@ -572,7 +574,7 @@ impl<'c> MLIRGenerator<'c> {
 
         let c = self.blocks.get_mut(&block_id).unwrap();
         let index = c.push(op);
-        self.index.insert(self.blockify.value(link_id), index);
+        self.index.insert(link_id, index);
         Ok(())
     }
 
@@ -597,11 +599,15 @@ impl<'c> MLIRGenerator<'c> {
     }
     */
 
-    pub fn build_struct(&mut self, v: ValueId, values: Vec<CodeOffset>) -> (Type<'c>, Type<'c>) {
+    pub fn build_struct(
+        &mut self,
+        link_id: LinkId,
+        values: Vec<CodeOffset>,
+    ) -> (Type<'c>, Type<'c>) {
         let (ptr_type, tuple_type) = self.build_struct_type(values);
-        let location = self.get_location(v);
+        let location = self.get_location(link_id);
         // construct a sized struct memref and store it somewhere
-        let block_id = self.blockify.get_entry_id(v).unwrap();
+        let block_id = self.blockify.get_entry_id(link_id).unwrap();
         //let op = memref::alloca(self.context, memref_ty, &[], &[], None, location);
         let op = self.build_int_op(1, location);
         let c = self.blocks.get_mut(&block_id).unwrap();
@@ -613,7 +619,7 @@ impl<'c> MLIRGenerator<'c> {
         let op = llvm::alloca(self.context, r_size, tuple_type, location, options);
         let c = self.blocks.get_mut(&block_id).unwrap();
         let index = c.push(op);
-        self.index.insert(v, index);
+        self.index.insert(link_id, index);
         (ptr_type, tuple_type)
     }
 
@@ -672,7 +678,7 @@ impl<'c> MLIRGenerator<'c> {
             let c = self.blocks.get_mut(&entry_id).unwrap();
             let index = c.push(op);
             let v = self.blockify.value(link_id);
-            self.index.insert(v, index);
+            self.index.insert(link_id, index);
             index
         } else {
             self.resolve_value(v_value).unwrap()
@@ -740,7 +746,7 @@ impl<'c> MLIRGenerator<'c> {
                 self.ensure_call_args_empty();
                 let block_id = self.blockify.get_entry_id(link_id).unwrap();
                 let value_index = SymIndex::Arg(block_id, *pos as usize);
-                self.index.insert(v, value_index);
+                self.index.insert(link_id, value_index);
 
                 let entry = self.blockify.get_entry(link_id);
                 if let VarDefinitionSpace::Stack(decl_link_id) = entry.mem {
@@ -762,9 +768,9 @@ impl<'c> MLIRGenerator<'c> {
                     let entry_id = self.blockify.get_entry_id(link_id).unwrap();
                     let c = self.blocks.get_mut(&entry_id).unwrap();
                     let _index = c.push(op);
-                    self.index.insert(v, addr_index);
+                    self.index.insert(link_id, addr_index);
                 } else {
-                    self.index.insert(v, value_index);
+                    self.index.insert(link_id, value_index);
                 }
             }
 
@@ -792,7 +798,7 @@ impl<'c> MLIRGenerator<'c> {
                     .get_mut(&block_id)
                     .expect(&format!("block not found: {}", block_id));
                 let index = c.push(op);
-                self.index.insert(v, index);
+                self.index.insert(link_id, index);
 
                 /*
                 let ty = llvm::r#type::pointer(self.context, 0);
@@ -832,7 +838,7 @@ impl<'c> MLIRGenerator<'c> {
                 let block_id = self.blockify.get_entry_id(link_id).unwrap();
                 let c = self.blocks.get_mut(&block_id).unwrap();
                 let load_index = c.push(op);
-                self.index.insert(v, load_index);
+                self.index.insert(link_id, load_index);
 
                 //self.index.insert(v, index);
             }
@@ -848,7 +854,7 @@ impl<'c> MLIRGenerator<'c> {
                 let block_id = self.blockify.get_entry_id(link_id).unwrap();
                 let c = self.blocks.get_mut(&block_id).unwrap();
                 let index = c.push(op);
-                self.index.insert(v, index);
+                self.index.insert(link_id, index);
             }
 
             LCode::DeclareFunction(maybe_block_id) => {
@@ -868,7 +874,7 @@ impl<'c> MLIRGenerator<'c> {
                 let op = self.build_declare_function(key, ty, location, visibility)?;
                 let c = self.blocks.get_mut(&static_block_id).unwrap();
                 let index = c.push(op);
-                self.index.insert(v, index);
+                self.index.insert(link_id, index);
 
                 if let Some(block_id) = maybe_block_id.clone() {
                     let attribute = Attribute::unit(self.context);
@@ -958,7 +964,7 @@ impl<'c> MLIRGenerator<'c> {
 
                     let c = self.blocks.get_mut(&block_id).unwrap();
                     let index = c.push(op);
-                    self.index.insert(v, index);
+                    self.index.insert(link_id, index);
                 } else {
                     unimplemented!("calling non function type: {:?}", ty);
                 }
@@ -1008,7 +1014,7 @@ impl<'c> MLIRGenerator<'c> {
                 */
                 let c = self.blocks.get_mut(&block_id).unwrap();
                 let index = c.push_decl(op, v);
-                self.index.insert(v, index);
+                self.index.insert(link_id, index);
             }
 
             LCode::Tuple(link_ids) => {
@@ -1041,7 +1047,7 @@ impl<'c> MLIRGenerator<'c> {
                 let op = memref::alloca(self.context, memref_ty, &[], &[], None, location);
                 let c = self.blocks.get_mut(&block_id).unwrap();
                 let v_alloc = c.push(op);
-                self.index.insert(v, v_alloc);
+                self.index.insert(link_id, v_alloc);
 
                 for (i, (_v, sym)) in syms.iter().enumerate() {
                     let op = self.emit_literal_const(&Literal::Index(i), location);
@@ -1068,7 +1074,7 @@ impl<'c> MLIRGenerator<'c> {
                 let v_decl = self.blockify.value(v_decl);
                 let v_value = self.blockify.value(v_value);
                 let index = self.lower_store(link_id, v_decl, v_value);
-                self.index.insert(v, index);
+                self.index.insert(link_id, index);
             }
 
             LCode::Load(v_decl) => {
@@ -1077,7 +1083,7 @@ impl<'c> MLIRGenerator<'c> {
                 let v_decl = self.blockify.resolve_declaration(v_decl.into()).unwrap();
                 let v_decl = self.blockify.value(v_decl);
                 let index = self.lower_load(block_id, v_decl);
-                self.index.insert(v, index);
+                self.index.insert(link_id, index);
             }
 
             LCode::Op1(op) => {
@@ -1104,14 +1110,14 @@ impl<'c> MLIRGenerator<'c> {
                             let op = arith::muli(r, r_x, location);
                             let c = self.blocks.get_mut(&block_id).unwrap();
                             let index = c.push(op);
-                            self.index.insert(v, index);
+                            self.index.insert(link_id, index);
                         } else if ty.is_f64() || ty.is_f32() || ty.is_f16() {
                             // arith has an op for negation
                             let r_x = self.value0(x_index);
                             let op = arith::negf(r_x, location);
                             let c = self.blocks.get_mut(&block_id).unwrap();
                             let index = c.push(op);
-                            self.index.insert(v, index);
+                            self.index.insert(link_id, index);
                         } else {
                             unimplemented!()
                         }
@@ -1147,7 +1153,7 @@ impl<'c> MLIRGenerator<'c> {
                 let (op, _ast_ty) = r?;
                 let c = self.blocks.get_mut(&block_id).unwrap();
                 let index = c.push(op);
-                self.index.insert(v, index);
+                self.index.insert(link_id, index);
             }
 
             LCode::NaryOp(op) => {
@@ -1200,7 +1206,7 @@ impl<'c> MLIRGenerator<'c> {
                                 llvm::alloca(self.context, r_size, ptr_type, location, options);
                             let c = self.blocks.get_mut(&block_id).unwrap();
                             let index = c.push(op);
-                            self.index.insert(v, index);
+                            self.index.insert(link_id, index);
                         }
 
                         /*
@@ -1272,7 +1278,7 @@ impl<'c> MLIRGenerator<'c> {
                 );
                 let c = self.blocks.get_mut(&block_id).unwrap();
                 let index = c.push(op);
-                self.index.insert(v, index);
+                self.index.insert(link_id, index);
             }
 
             LCode::Ternary(condition, then_block_id, else_block_id) => {
@@ -1337,7 +1343,7 @@ impl<'c> MLIRGenerator<'c> {
                 let block_id = self.blockify.get_entry_id(link_id).unwrap();
                 let c = self.blocks.get_mut(&block_id).unwrap();
                 let index = c.push(op);
-                self.index.insert(v, index);
+                self.index.insert(link_id, index);
             }
 
             LCode::Yield => {
@@ -1388,7 +1394,7 @@ impl<'c> MLIRGenerator<'c> {
                         let op = cf::assert(self.context, rs[0], &msg, location);
                         let c = self.blocks.get_mut(&block_id).unwrap();
                         let index = c.push(op);
-                        self.index.insert(v, index);
+                        self.index.insert(link_id, index);
                     }
                     Builtin::Print => {
                         let indicies = values
@@ -1423,7 +1429,7 @@ impl<'c> MLIRGenerator<'c> {
                         let block_id = self.blockify.get_entry_id(link_id).unwrap();
                         let c = self.blocks.get_mut(&block_id).unwrap();
                         let index = c.push(op);
-                        self.index.insert(v, index);
+                        self.index.insert(link_id, index);
                     }
                 }
             }
