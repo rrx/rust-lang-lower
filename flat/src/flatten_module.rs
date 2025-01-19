@@ -140,19 +140,21 @@ impl Flatten<Module> {
         s
     }
 
-    pub fn resolve_declaration<'c>(&self, offset: CodeOffset) -> Option<CodeOffset> {
-        let mut current = offset;
+    pub fn resolve_declaration<'c, T: Copy + Into<LinkId>>(&self, link_id: T) -> Option<LinkId> {
+        let mut current = link_id.into();
         loop {
             let value_id = self.value(current);
             let code = self.get_code(value_id);
             if let LCode::CallValue(base) = code {
+                let base = self.link(base);
                 //current = inds.clone().offset();
-                current = *base;
+                current = base;
                 continue;
             }
 
             if let LCode::Use(base, _inds) = code {
-                current = *base;
+                let base = self.link(base);
+                current = base;
                 continue;
 
                 /*

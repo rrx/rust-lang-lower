@@ -599,7 +599,7 @@ impl<'c> MLIRGenerator<'c> {
 
     fn lower_load(&mut self, block_id: BlockId, v_decl: LinkId) -> SymIndex {
         let location = self.get_location(v_decl);
-        let v_decl = self.blockify.resolve_declaration(v_decl.into()).unwrap();
+        let v_decl = self.blockify.resolve_declaration(v_decl).unwrap();
         if self.blockify.is_in_static_scope(v_decl) {
             let ast_ty = self.blockify.get_type(v_decl);
             let (lower_ty, dims) = self.from_type(&ast_ty);
@@ -1047,7 +1047,7 @@ impl<'c> MLIRGenerator<'c> {
             LCode::Load(v_decl) => {
                 self.ensure_call_args_empty();
                 let block_id = self.blockify.get_block_id(link_id);
-                let v_decl = self.blockify.resolve_declaration(v_decl.into()).unwrap();
+                let v_decl = self.blockify.resolve_declaration(v_decl).unwrap();
                 let v_decl = self.blockify.link(v_decl);
                 let index = self.lower_load(block_id, v_decl);
                 self.index.insert(link_id, index);
