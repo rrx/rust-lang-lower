@@ -1451,8 +1451,14 @@ impl FlattenInner {
                 // literal is expression, non-terminal
                 let mem = VarDefinitionSpace::Default;
 
-                let (open, link_id) =
-                    self.push_code_open(open, LCode::Val(lit.clone()), lit.into(), None, node.span_id, mem);
+                let (open, link_id) = self.push_code_open(
+                    open,
+                    LCode::Val(lit.clone()),
+                    lit.into(),
+                    None,
+                    node.span_id,
+                    mem,
+                );
                 (open.unknown(), FlattenResult::link(link_id))
             }
 
@@ -1704,7 +1710,7 @@ impl FlattenInner {
                 // otherwise, we need to create a next block
 
                 // Start Next Block, we might not need this
-                let next_block = self.blocks.new_block(open.block_id, Successor::BlockScope);
+                let next_block = self.blocks.new_block(open.block_id);
 
                 // THEN Block
                 let (then_block, then_start_block_id, _) = self.blocks.new_scope_and_block(
@@ -1889,7 +1895,7 @@ impl FlattenInner {
 
                 // create a new block
                 assert_eq!(0, args.len());
-                let new_block = self.blocks.new_block(open.block_id, Successor::BlockScope);
+                let new_block = self.blocks.new_block(open.block_id);
                 self.blocks.define_label(scope_id, new_block.block_id, name);
 
                 // start a new block.  If the last block isn't terminated, then we create a new
@@ -2060,8 +2066,7 @@ impl FlattenInner {
                             }
 
                             let label = b.labels.fresh_key("chain");
-                            let next_block =
-                                self.blocks.new_block(open.block_id, Successor::BlockScope);
+                            let next_block = self.blocks.new_block(open.block_id);
                             let next_block = self
                                 .push_start_block(
                                     next_block,
@@ -2107,7 +2112,7 @@ impl FlattenInner {
                     Successor::BlockScope,
                 );
 
-                let next_block = self.blocks.new_block(open.block_id, Successor::BlockScope);
+                let next_block = self.blocks.new_block(open.block_id);
                 let next_block = self
                     .push_start_block(
                         next_block,
@@ -2202,7 +2207,7 @@ impl FlattenInner {
                 if let Some(loop_scope) = self.blocks.get_loop_scope(scope_id, maybe_key) {
                     self.push_jump(open, loop_scope.next_block.into(), vec![], node.span_id, b);
 
-                    let next_block = self.blocks.new_block(start_block_id, Successor::BlockScope);
+                    let next_block = self.blocks.new_block(start_block_id);
                     let (open, link_id, _) = self.push_start_block(
                         next_block,
                         AstFuncType::new_void_void(),
@@ -2380,7 +2385,7 @@ impl FlattenInner {
         if let Some(open) = self.blocks.safe_block_try_open(&unk) {
             open
         } else {
-            let new_block = self.blocks.new_block(unk.block_id, Successor::BlockScope);
+            let new_block = self.blocks.new_block(unk.block_id);
             let name = b.labels.fresh_key("dead");
 
             let (new_block, _, _) = self.push_start_block(

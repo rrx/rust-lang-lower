@@ -827,7 +827,7 @@ impl FlattenInner {
         // create a new block
         let scope = self.blocks.get_scope(scope_id);
         let scope_block_id = scope.entry_block();
-        let next_block = self.blocks.new_block(scope_block_id, Successor::BlockScope);
+        let next_block = self.blocks.new_block(scope_block_id);
 
         // New Func Scope
         let (fun_block, _, _) = self.blocks.new_scope_and_block(
@@ -908,7 +908,7 @@ impl FlattenInner {
         // create a new block static blocks, which is the final destination
         let scope = self.blocks.get_scope(scope_id);
         let scope_block_id = scope.entry_block();
-        let exit_block = self.blocks.new_block(scope_block_id, Successor::BlockScope);
+        let exit_block = self.blocks.new_block(scope_block_id);
 
         // create the continuation parameter
         let key = b.labels.fresh_key("b");

@@ -236,9 +236,9 @@ impl BlockGraph<BlockGraphStateOpen> {
 }
 
 impl<S: BlockGraphState> BlockGraph<S> {
-    pub fn new_block(&mut self, parent_block_id: BlockId, succ: Successor) -> SafeBlockEmpty {
+    pub fn new_block(&mut self, parent_block_id: BlockId) -> SafeBlockEmpty {
         let parent = self.get_block(parent_block_id);
-        self.new_block_different_scope(parent_block_id, parent.scope(), succ)
+        self.new_block_different_scope(parent_block_id, parent.scope(), Successor::BlockScope)
     }
 
     pub fn new_block_different_scope(

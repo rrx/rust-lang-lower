@@ -67,7 +67,7 @@ impl FlattenInner {
                     )
                     .0
             } else {
-                self.blocks.new_block(block_id, Successor::BlockScope)
+                self.blocks.new_block(block_id)
             };
             let new_block_id = empty.block_id;
 
@@ -191,9 +191,7 @@ impl FlattenInner {
         println!("unwind scopes: {:?}", unwind_scopes);
 
         let start_key = b.labels.fresh_key("ustart");
-        let start_block = self
-            .blocks
-            .new_block(open_block.block_id, Successor::BlockScope);
+        let start_block = self.blocks.new_block(open_block.block_id);
         let start_block = self
             .push_start_block(
                 start_block,
@@ -228,12 +226,10 @@ impl FlattenInner {
         for (scope_id, unwind_block_id) in unwind_block_ids {
             let scope = self.blocks.get_scope(scope_id);
             let entry_block_id = scope.entry_block();
-            let succ = Successor::BlockScope;
-
-            let next_block = self.blocks.new_block(entry_block_id, succ);
+            let next_block = self.blocks.new_block(entry_block_id);
 
             // define new block
-            let new_block = self.blocks.new_block(entry_block_id, succ);
+            let new_block = self.blocks.new_block(entry_block_id);
             let void_func_type = AstFuncType::new_void_void();
             let new_key = b.labels.fresh_key("unew");
             let new_block = self
@@ -666,8 +662,7 @@ impl FlattenInner {
                         let mut out = vec![];
                         for target_block_id in sources {
                             let key = b.labels.fresh_key(".sw");
-                            let new_block =
-                                self.blocks.new_block(d_block_id, Successor::BlockScope);
+                            let new_block = self.blocks.new_block(d_block_id);
                             let block_id = new_block.block_id;
                             let (new_block, _, _) = self.push_start_block(
                                 new_block,
