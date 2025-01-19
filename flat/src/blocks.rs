@@ -292,7 +292,7 @@ impl<S: BlockGraphState> BlockGraph<S> {
             .expect(&format!("Unable to resolve: {}", code_offset))
     }
 
-    pub fn resolve_code_offset<T: Copy + Into<CodeOffset>>(&self, code_offset: T) -> ValueId {
+    pub fn value<T: Copy + Into<CodeOffset>>(&self, code_offset: T) -> ValueId {
         self.maybe_resolve_code_offset(code_offset.into())
             .expect(&format!("Unable to resolve: {}", code_offset.into()))
     }

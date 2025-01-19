@@ -1,5 +1,5 @@
 use crate::{
-    Builtin, Config, Flatten, LCode, LinkId, Module, NodeBuilder, UseIndex, ValueId,
+    Builtin, CodeOffset, Config, Flatten, LCode, LinkId, Module, NodeBuilder, UseIndex, ValueId,
     VarDefinitionSpace,
 };
 use anyhow::Result;
@@ -92,7 +92,7 @@ impl<'a> Interp<'a> {
         let links = block.iter().collect::<Vec<_>>();
         let mut values = HashMap::new();
 
-        let module = m.blocks.resolve_code_offset(links.first().unwrap());
+        let module = m.value(links.first().unwrap());
 
         // statics
         for link_id in links {
@@ -199,7 +199,7 @@ impl<'a> Interp<'a> {
             }
 
             LCode::Use(base, inds) => {
-                let v = self.m.blocks.resolve_code_offset(*base);
+                let v = self.value(base);
                 let value = self.values.get(&v).unwrap().clone();
                 //let value = scope.values.get(&v).unwrap().clone();
                 let inds = inds
@@ -207,7 +207,7 @@ impl<'a> Interp<'a> {
                     .cloned()
                     .map(|i| match i {
                         UseIndex::Use(offset) => {
-                            let v = self.m.blocks.resolve_code_offset(offset);
+                            let v = self.value(offset);
                             let v = self.resolve_value(v).unwrap();
                             match v {
                                 Value::Int(i) => UseIndex::Pos(i as usize),
@@ -307,7 +307,7 @@ impl<'a> Interp<'a> {
             }
 
             LCode::Call(f) => {
-                let v_func = self.m.blocks.resolve_code_offset(f);
+                let v_func = self.value(f);
                 self.call(v_func);
                 true
             }
@@ -403,7 +403,7 @@ impl<'a> Interp<'a> {
             }
 
             LCode::CallValue(base) => {
-                let base = self.m.blocks.resolve_code_offset(*base);
+                let base = self.value(base);
                 let value = self.resolve_value(base)?;
                 self.call_args.push_back(value);
                 self.advance();
@@ -412,21 +412,21 @@ impl<'a> Interp<'a> {
 
             LCode::Jump(target) => {
                 // push args
-                let v = self.m.blocks.resolve_code_offset(target);
+                let v = self.value(target);
                 self.jump(v);
                 true
             }
 
             LCode::Switch(link_id, m) => {
                 // push args
-                let base = self.value(*link_id);
+                let base = self.value(link_id);
                 let value = self.resolve_value(base)?;
 
                 match value {
                     Value::Int(i) => {
                         // lookup the block_id in the switch map
                         let block_id = m.get(&(i as usize)).unwrap();
-                        let target = self.m.blocks.resolve_code_offset(block_id);
+                        let target = self.value(block_id);
                         self.jump(target);
                     }
                     _ => unreachable!(),
@@ -435,16 +435,16 @@ impl<'a> Interp<'a> {
             }
 
             LCode::Ternary(condition, then_target, else_target) => {
-                let v = self.m.blocks.resolve_code_offset(*condition);
+                let v = self.value(condition);
                 let c = self.resolve_value(v)?;
 
                 match c {
                     Value::Bool(cond) => {
                         if cond {
-                            let target = self.m.blocks.resolve_code_offset(then_target);
+                            let target = self.value(then_target);
                             self.call(target);
                         } else {
-                            let target = self.m.blocks.resolve_code_offset(else_target);
+                            let target = self.value(else_target);
                             self.call(target);
                         }
                     }
@@ -454,16 +454,16 @@ impl<'a> Interp<'a> {
             }
 
             LCode::Branch(condition, then_target, else_target) => {
-                let v = self.m.blocks.resolve_code_offset(*condition);
+                let v = self.value(condition);
                 let c = self.resolve_value(v)?;
 
                 match c {
                     Value::Bool(cond) => {
                         if cond {
-                            let target = self.m.blocks.resolve_code_offset(then_target);
+                            let target = self.value(then_target);
                             self.jump(target);
                         } else {
-                            let target = self.m.blocks.resolve_code_offset(else_target);
+                            let target = self.value(else_target);
                             self.jump(target);
                         }
                     }
@@ -543,12 +543,12 @@ impl<'a> Interp<'a> {
         self.m.state.values.get(pos)
     }
 
-    pub fn value(&self, link_id: LinkId) -> ValueId {
-        self.m.blocks.resolve_code_offset(link_id)
+    pub fn value<T: Copy + Into<CodeOffset>>(&self, offset: T) -> ValueId {
+        self.m.value(offset.into())
     }
 
     pub fn run(&mut self, main_link_id: LinkId) -> Vec<Value> {
-        let pos = self.m.blocks.resolve_code_offset(main_link_id);
+        let pos = self.value(main_link_id);
         self.return_link_id = None;
         self.jump_type = ScopeType::Function;
         self.pos = pos;

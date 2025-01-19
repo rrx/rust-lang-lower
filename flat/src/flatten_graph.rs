@@ -119,7 +119,7 @@ impl Flatten<Module> {
     }
 
     fn get_cfg(&self, block_id: BlockId, b: &NodeBuilder) -> CFG {
-        let entry_id = self.blocks.resolve_code_offset(block_id);
+        let entry_id = self.value(block_id);
         self.get_graph(entry_id, Some(Successor::BlockScope), b)
     }
 
@@ -281,34 +281,33 @@ impl Flatten<Module> {
                                         let v_link = self.value(*link_id);
                                         ng.sources.push((v, v_link));
                                         for (_index, block_id) in cases.iter() {
-                                            let v_target =
-                                                self.blocks.resolve_code_offset(block_id);
+                                            let v_target = self.value(block_id);
                                             ng.edges.push((v, v_target));
                                         }
                                         format!("{}:switch({},{:?})", v, v_link, cases)
                                     }
                                     LCode::Branch(c, b1, b2) => {
-                                        let v_target = self.blocks.resolve_code_offset(*c);
+                                        let v_target = self.value(c);
                                         ng.sources.push((v, v_target));
-                                        let v_target = self.blocks.resolve_code_offset(b1);
+                                        let v_target = self.value(b1);
                                         ng.edges.push((v, v_target));
-                                        let v_target = self.blocks.resolve_code_offset(b2);
+                                        let v_target = self.value(b2);
                                         ng.edges.push((v, v_target));
                                         format!("{}:{}", v, self.code_to_string(link_id, b))
                                     }
                                     LCode::CallValue(offset) => {
-                                        let v_target = self.blocks.resolve_code_offset(*offset);
+                                        let v_target = self.value(offset);
                                         ng.sources.push((v, v_target));
                                         format!("{}:callvalue({})", v, v_target)
                                     }
                                     LCode::Load(decl) => {
-                                        let v_decl = self.value(*decl);
+                                        let v_decl = self.value(decl);
                                         ng.sources.push((v, v_decl));
                                         format!("{}:load({})", v, v_decl)
                                     }
 
                                     LCode::Store(decl, source) => {
-                                        let v_source = self.value(*source);
+                                        let v_source = self.value(source);
                                         ng.sources.push((v, v_source));
                                         if let Some(v_decl) =
                                             self.blocks.maybe_resolve_code_offset(decl.into())
@@ -320,7 +319,7 @@ impl Flatten<Module> {
                                         }
                                     }
                                     LCode::Call(offset) => {
-                                        let v_target = self.blocks.resolve_code_offset(*offset);
+                                        let v_target = self.value(offset);
                                         ng.sources.push((v, v_target));
                                         format!("{}:{}", v, self.code_to_string(link_id, b))
                                     }
@@ -372,9 +371,7 @@ impl Flatten<Module> {
 
     pub fn save_graph(&self, filename: &str, b: &NB) {
         use petgraph::dot::{Config, Dot};
-        let value_id = self
-            .blocks
-            .resolve_code_offset(self.blocks.static_block_id());
+        let value_id = self.value(self.blocks.static_block_id());
 
         let cfg = self.get_graph(value_id, None, b);
         let s = format!(
@@ -444,7 +441,7 @@ impl Flatten<Module> {
                             let link_id = self.state.values.get(v);
                             let entry = self.get_entry(link_id);
                             if entry.value_id.is_some() {
-                                let v = self.blocks.resolve_code_offset(block_id);
+                                let v = self.value(block_id);
                                 // block found
                                 format!("label = \"B{:?}:{}\"", index.index(), v)
                             } else {

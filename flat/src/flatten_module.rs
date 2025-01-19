@@ -23,7 +23,7 @@ impl Flatten<Module> {
     }
 
     pub fn get_type(&self, v: CodeOffset) -> AstType {
-        let value_id = self.blocks.resolve_code_offset(v);
+        let value_id = self.value(v);
         let link_id = self.state.values.get(value_id);
         let entry = self.get_link_entry(link_id);
         entry.clone().ty
@@ -36,7 +36,7 @@ impl Flatten<Module> {
     }
 
     pub fn is_in_static_scope(&self, offset: CodeOffset) -> bool {
-        let value_id = self.blocks.resolve_code_offset(offset);
+        let value_id = self.value(offset);
         let link_id = self.state.values.get(value_id);
         let entry = self.get_link_entry(link_id);
         let block = self.blocks.get_block(entry.block_id);
@@ -44,8 +44,8 @@ impl Flatten<Module> {
         scope.is_static()
     }
 
-    pub fn value<T: Copy + Into<CodeOffset>>(&self, link_id: T) -> ValueId {
-        self.blocks.resolve_code_offset(link_id.into())
+    pub fn value<T: Copy + Into<CodeOffset>>(&self, offset: T) -> ValueId {
+        self.blocks.value(offset.into())
     }
 
     pub fn link(&self, value_id: ValueId) -> LinkId {
@@ -130,7 +130,7 @@ impl Flatten<Module> {
     pub fn resolve_declaration<'c>(&self, offset: CodeOffset) -> Option<CodeOffset> {
         let mut current = offset;
         loop {
-            let value_id = self.blocks.resolve_code_offset(current);
+            let value_id = self.value(current);
             let code = self.get_code(value_id);
             if let LCode::CallValue(base) = code {
                 //current = inds.clone().offset();
@@ -258,7 +258,7 @@ impl Flatten<Module> {
             VarDefinitionSpace::Reg => format!("Mreg"),
             VarDefinitionSpace::Static => format!("Mstatic"),
             VarDefinitionSpace::Stack(x) => {
-                let v = self.blocks.resolve_code_offset(x);
+                let v = self.value(x);
                 format!("Mstack({})", v)
             }
             VarDefinitionSpace::Heap => format!("Mheap"),
