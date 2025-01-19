@@ -15,8 +15,8 @@ pub enum LCode {
     //Value(LinkId),
     //ValueIndex(LinkId, u8), // index into a struct
     //
-    CallValue(CodeOffset),
-    Call(CodeOffset),
+    CallValue(LinkId),
+    Call(LinkId),
 
     Arg(u8), // get the value of a positional arg
     Block(BlockId),
