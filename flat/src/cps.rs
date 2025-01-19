@@ -246,7 +246,6 @@ impl FlattenInner {
                 .0;
             let new_block_id = new_block.block_id;
 
-            //let code = LCode::Val(Literal::Block(next_block.block_id));
             let code = LCode::Block(next_block.block_id);
             let (new_block, var_link_id) = self.push_code_open(
                 new_block,
@@ -625,7 +624,6 @@ impl FlattenInner {
                     }
 
                     LCode::Block(block_id) => {
-                        //LCode::Val(Literal::Block(block_id)) => {
                         let sink = self
                             .scoped_continuations
                             .find_sink_block(ContinuationFlow::Variable(arg_link_id))
@@ -755,7 +753,6 @@ impl FlattenInner {
             // now replace the abstraction code
             let entry = self.get_entry_mut(link_id);
             entry.code = LCode::Block(block_id);
-            //entry.code = LCode::Val(Literal::Block(block_id));
             b.unify(&entry.ty, entry.span_id, &block_ty, block_span_id);
             self.update_connections(block_id, link_id);
         }

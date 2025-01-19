@@ -530,7 +530,6 @@ impl FlattenInner {
         self.blocks
             .block_succ(start_block_id, fun_block.block_id, succ_type);
 
-        println!("X: {}", def_func_type);
         let (fun_block, entry_link_id, entry_args) = self.push_start_block_mem(
             fun_block,
             def_func_type.clone(),
@@ -716,8 +715,6 @@ impl FlattenInner {
             def_span_id,
         );
 
-        println!("call_func_type: {}", call_func_type);
-        println!("def_func_type: {}", def_func_type);
         assert_eq!(
             call_func_type.args.fields().len(),
             def_func_type.args.fields().len()
@@ -916,7 +913,7 @@ impl FlattenInner {
         // create the continuation parameter
         let key = b.labels.fresh_key("b");
         let ty = b.types.fresh_unknown();
-        let mut system = vec![];
+        let system = vec![];
         let extra_args = vec![CodeEntry::new(
             call_block.block_id,
             LCode::Block(exit_block.block_id),
@@ -925,16 +922,6 @@ impl FlattenInner {
             call_span_id,
             VarDefinitionSpace::Default,
         )];
-
-        /*
-        let arg = Argument::System(
-            key,
-            Ast::Literal(Literal::Block(exit_block.block_id))
-                .node(call_span_id)
-                .into(),
-        );
-        */
-        //system.push(arg);
 
         // Entry arguments, including continuation
         // calculate the arguments for the CPS function
@@ -954,13 +941,6 @@ impl FlattenInner {
         // hack, get the continuation argument
         let arg = call_values.last().unwrap();
         let next_ty = arg.2.clone();
-
-        println!("Y: {}", top_def_func_type);
-        println!(
-            "Z: {}, {}",
-            call_values.len(),
-            top_def_func_type.args.fields().len()
-        );
 
         // generate the CPS function, that's it
         // and jump to it, passing the exit continuation

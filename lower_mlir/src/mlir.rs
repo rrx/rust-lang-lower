@@ -397,9 +397,6 @@ impl<'c> MLIRGenerator<'c> {
                 continue;
             }
 
-            //if let LCode::Val(Literal::Block(block_id)) = code {
-            //}
-
             /*
                 if let LCode::ValueIndex(link_id, index) = code {
                     let v = self.blockify.resolve_code_offset(link_id.into());
