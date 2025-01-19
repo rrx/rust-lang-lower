@@ -186,7 +186,7 @@ pub struct BlockGraph<S: BlockGraphState> {
     pub(super) variants: FunctionVariantBuilder,
     pub(super) abstractions: AbstractionsBuilder,
     links: Links,
-    pub(super) block_links: HashMap<BlockId, LinkId>,
+    block_links: HashMap<BlockId, LinkId>,
     extra: S,
 }
 
