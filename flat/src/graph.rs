@@ -48,9 +48,9 @@ impl CFG {
         }
     }
 
-    pub fn leafs(&self, entry_id: LinkId) -> Vec<CodeOffset> {
+    pub fn leafs(&self, link_id: LinkId) -> Vec<CodeOffset> {
         let mut out = vec![];
-        let mut bfs = Bfs::new(&self.g, *self.ids.get(&entry_id).unwrap());
+        let mut bfs = Bfs::new(&self.g, *self.ids.get(&link_id).unwrap());
         while let Some(nx) = bfs.next(&self.g) {
             let outgoing = self
                 .g
@@ -64,9 +64,9 @@ impl CFG {
         out
     }
 
-    pub fn blocks(&self, entry_id: LinkId) -> Vec<CodeOffset> {
+    pub fn blocks(&self, link_id: LinkId) -> Vec<CodeOffset> {
         let mut blocks = vec![];
-        let mut bfs = Bfs::new(&self.g, *self.ids.get(&entry_id).unwrap());
+        let mut bfs = Bfs::new(&self.g, *self.ids.get(&link_id).unwrap());
         while let Some(nx) = bfs.next(&self.g) {
             let node = self.g.node_weight(nx).unwrap();
             blocks.push(node.code_offset);

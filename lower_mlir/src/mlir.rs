@@ -29,10 +29,6 @@ use compile_core::{AstType, BlockId, Literal, NaryOperation, ReturnType, Span, U
 
 use std::collections::HashMap;
 
-pub trait LowerIR<'c> {
-    fn lower_literal(&mut self, v: ValueId, lit: &compile_core::Literal);
-}
-
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum SymIndex {
     Op(ValueId, usize),
@@ -258,15 +254,16 @@ impl<'c> MLIRGenerator<'c> {
     }
 }
 
-impl<'c> LowerIR<'c> for MLIRGenerator<'c> {
-    fn lower_literal(&mut self, v: ValueId, lit: &Literal) {
-        let block_id = self.blockify.get_entry_id(v).unwrap();
-        let location = self.get_location(v);
+impl<'c> MLIRGenerator<'c> {
+    fn lower_literal<T: Copy + Into<CodeOffset>>(&mut self, offset: T, lit: &Literal) {
+        let block_id = self.blockify.get_entry_id(offset).unwrap();
+        let location = self.get_location(offset);
+        let v = self.blockify.value(offset);
 
-        if self.blockify.is_in_static_scope(v.into()) {
+        if self.blockify.is_in_static_scope(offset.into()) {
             let (value, ast_ty) = self.build_static_attribute(lit);
 
-            let name = self.blockify.get_name(v.into()).unwrap();
+            let name = self.blockify.get_name(offset.into()).unwrap();
 
             // declare
             let integer_type = IntegerType::new(self.context, 64).into();
@@ -456,7 +453,8 @@ impl<'c> MLIRGenerator<'c> {
         }
     }
 
-    pub fn create_block(&mut self, entry_id: ValueId) {
+    pub fn create_block<T: Copy + Into<CodeOffset>>(&mut self, offset: T) {
+        let entry_id = self.blockify.value(offset);
         //println!("create block: {}", entry_id);
         let code = self.blockify.get_code(entry_id);
         if let LCode::Label = code {
@@ -874,8 +872,7 @@ impl<'c> MLIRGenerator<'c> {
 
                     // create blocks
                     for block_id in block_ids.iter() {
-                        let entry_id = self.blockify.value(block_id);
-                        self.create_block(entry_id);
+                        self.create_block(block_id);
                     }
 
                     // lower
@@ -1431,14 +1428,16 @@ impl<'c> MLIRGenerator<'c> {
         Ok(())
     }
 
-    pub fn lower_block(&mut self, entry_id: ValueId) -> Result<()> {
-        let entry = self.blockify.get_entry(self.link(entry_id));
+    pub fn lower_block<T: Copy + Into<CodeOffset>>(&mut self, offset: T) -> Result<()> {
+        let link_id = self.link(offset);
+        let entry = self.blockify.get_entry(link_id);
         let block_id = entry.block_id;
         let links: Vec<_> = self.blockify.entry_links(block_id);
         for link_id in links {
             self.lower_code(link_id)?;
         }
-        self.blocks.get_mut(&entry_id).unwrap().complete = true;
+        let v = self.blockify.value(link_id);
+        self.blocks.get_mut(&v).unwrap().complete = true;
         Ok(())
     }
 

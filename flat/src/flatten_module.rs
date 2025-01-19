@@ -28,8 +28,8 @@ impl Flatten<Module> {
         entry.clone().ty
     }
 
-    pub fn get_entry_id(&self, value_id: ValueId) -> Option<ValueId> {
-        let link_id = self.link(value_id);
+    pub fn get_entry_id<T: Copy + Into<CodeOffset>>(&self, offset: T) -> Option<ValueId> {
+        let link_id = self.link(offset);
         let block_id = self.get_entry(link_id).block_id;
         self.blocks.maybe_value(block_id)
     }
