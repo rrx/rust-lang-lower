@@ -62,6 +62,12 @@ impl LinkId {
     }
 }
 
+impl From<&LinkId> for LinkId {
+    fn from(item: &LinkId) -> Self {
+        *item
+    }
+}
+
 impl std::fmt::Display for LinkId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "L{}", self.index())

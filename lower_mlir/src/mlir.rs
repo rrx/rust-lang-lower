@@ -345,8 +345,8 @@ impl<'c> MLIRGenerator<'c> {
         }
     }
 
-    pub fn resolve_value<T: Copy + Into<CodeOffset>>(&self, offset: T) -> Option<SymIndex> {
-        let mut current = offset.into();
+    pub fn resolve_value<T: Copy + Into<LinkId>>(&self, link_id: T) -> Option<SymIndex> {
+        let mut current = link_id.into();
         loop {
             let v_decl = self.blockify.value(current);
             let code = self.blockify.get_code(v_decl);
@@ -376,7 +376,8 @@ impl<'c> MLIRGenerator<'c> {
             */
 
             if let LCode::CallValue(base) = code {
-                current = *base;
+                let link_id = self.link(base);
+                current = link_id;
                 //current = indicies.clone().offset();
                 continue;
             }
@@ -509,8 +510,7 @@ impl<'c> MLIRGenerator<'c> {
             .collect();
         let rs = self.values(indicies);
 
-        let arg_value_id = self.blockify.value(arg);
-        let i_arg = self.resolve_value(arg_value_id).unwrap();
+        let i_arg = self.resolve_value(arg).unwrap();
         let v_arg = self.value0(i_arg);
         let flag_type = IntegerType::new(self.context, 64).into();
 
@@ -620,6 +620,7 @@ impl<'c> MLIRGenerator<'c> {
             let index = c.push(op);
             index
         } else {
+            let v_decl = self.blockify.link(v_decl);
             let decl_index = self.resolve_value(v_decl).expect(&format!(
                 "Unable to resolve declaration {} for load {}",
                 v_decl, block_id
@@ -725,8 +726,7 @@ impl<'c> MLIRGenerator<'c> {
 
                 let entry = self.blockify.get_entry(link_id);
                 if let VarDefinitionSpace::Stack(decl_link_id) = entry.mem {
-                    let v_decl = self.blockify.value(decl_link_id);
-                    let addr_index = self.resolve_value(v_decl).unwrap();
+                    let addr_index = self.resolve_value(decl_link_id).unwrap();
                     let r_addr = self.value0(addr_index);
                     let r_value = self.value0(value_index);
 
@@ -792,12 +792,15 @@ impl<'c> MLIRGenerator<'c> {
 
             LCode::Use(base, indicies) => {
                 self.ensure_call_args_empty();
-                //assert!(false);
+                let base = self.blockify.link(base);
                 let addr = self.resolve_value(base).unwrap();
 
                 let index = indicies.get(0).unwrap().clone();
                 let v_index = match index {
-                    UseIndex::Use(offset) => self.resolve_value(offset).unwrap(),
+                    UseIndex::Use(offset) => {
+                        let offset = self.blockify.link(offset);
+                        self.resolve_value(offset).unwrap()
+                    }
                     _ => unimplemented!(),
                 };
 
@@ -821,7 +824,7 @@ impl<'c> MLIRGenerator<'c> {
                 let values = self.take_call_args();
                 let indicies = values
                     .iter()
-                    .map(|value_id| self.resolve_value(value_id).unwrap())
+                    .map(|call_value_id| self.resolve_value(*call_value_id).unwrap())
                     .collect();
                 let rs = self.values(indicies);
                 let op = func::r#return(&rs, location);

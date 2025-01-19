@@ -38,7 +38,7 @@ pub enum LCode {
     PlaceholderCodeReference,
 
     Branch(LinkId, BlockId, BlockId),
-    Ternary(CodeOffset, BlockId, BlockId), // condition, then_entry, else_entry
+    Ternary(LinkId, BlockId, BlockId), // condition, then_entry, else_entry
     Builtin(Builtin),
 }
 
