@@ -1,5 +1,5 @@
 use crate::{
-    BlockId, CodeOffset, ContinuationFlow, Flatten, FlattenInner, LCode, Module, Node,
+    BlockId, CodeOffset, ContinuationFlow, Flatten, FlattenInner, LCode, LinkId, Module, Node,
     NodeBuilder as NB, NodeBuilder, Successor, ValueId, VarDefinitionSpace, CFG,
 };
 use anyhow::Result;
@@ -113,33 +113,38 @@ graph TD\n\
 }
 
 impl Flatten<Module> {
-    pub fn blocks(&self, block_id: BlockId, v: ValueId, b: &NodeBuilder) -> Vec<CodeOffset> {
+    pub fn blocks<T: Copy + Into<CodeOffset>>(
+        &self,
+        block_id: BlockId,
+        offset: T,
+        b: &NodeBuilder,
+    ) -> Vec<CodeOffset> {
         let cfg = self.get_cfg(block_id, b);
-        cfg.blocks(v)
+        let link_id = self.link(offset);
+        cfg.blocks(link_id)
     }
 
     fn get_cfg(&self, block_id: BlockId, b: &NodeBuilder) -> CFG {
-        let entry_id = self.value(block_id);
-        self.get_graph(entry_id, Some(Successor::BlockScope), b)
+        let entry_link_id = self.link(block_id);
+        self.get_graph(entry_link_id, Some(Successor::BlockScope), b)
     }
 
-    fn get_graph(&self, entry_id: ValueId, scope: Option<Successor>, b: &NodeBuilder) -> CFG {
+    fn get_graph(&self, entry_link_id: LinkId, scope: Option<Successor>, b: &NodeBuilder) -> CFG {
         let mut cfg = CFG::new();
 
         let mut stack = VecDeque::new();
-        stack.push_back(entry_id);
+        stack.push_back(entry_link_id);
 
         loop {
-            if let Some(entry_id) = stack.pop_front() {
-                if cfg.ids.contains_key(&entry_id) {
+            if let Some(link_id) = stack.pop_front() {
+                if cfg.ids.contains_key(&link_id) {
                     continue;
                 }
-                let link_id = self.state.values.get(entry_id);
                 let name = self.code_to_string(link_id, b);
-                let c = cfg.g.add_node(Node::new_block(name, entry_id.into()));
-                cfg.ids.insert(entry_id, c);
-                for (succ_type, next_code_offset) in self.get_block_successors(entry_id) {
-                    if let Some(v) = self.blocks.maybe_value(next_code_offset) {
+                let c = cfg.g.add_node(Node::new_block(name, link_id.into()));
+                cfg.ids.insert(link_id, c);
+                for (succ_type, next_code_offset) in self.get_block_successors(link_id) {
+                    if let Some(v) = self.blocks.maybe_link(next_code_offset) {
                         if scope.is_none() || scope == Some(succ_type) {
                             stack.push_back(v);
                         }
@@ -155,7 +160,7 @@ impl Flatten<Module> {
             let id = cfg.ids.get(entry_id).unwrap();
             for (succ_type, next_code_offset) in self.get_block_successors(*entry_id) {
                 if let Successor::BlockScope = succ_type {
-                    if let Some(v) = self.blocks.maybe_value(next_code_offset) {
+                    if let Some(v) = self.blocks.maybe_link(next_code_offset) {
                         let child_id = cfg.ids.get(&v).unwrap();
                         cfg.g.add_edge(*id, *child_id, ());
                     }
@@ -364,7 +369,7 @@ impl Flatten<Module> {
 
     pub fn save_graph(&self, filename: &str, b: &NB) {
         use petgraph::dot::{Config, Dot};
-        let value_id = self.value(self.blocks.static_block_id());
+        let value_id = self.link(self.blocks.static_block_id());
 
         let cfg = self.get_graph(value_id, None, b);
         let s = format!(

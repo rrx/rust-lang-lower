@@ -322,7 +322,8 @@ impl<'c> LowerIR<'c> for MLIRGenerator<'c> {
 
 impl<'c> MLIRGenerator<'c> {
     pub fn get_location<T: Copy + Into<CodeOffset>>(&self, offset: T) -> Location<'c> {
-        let entry = self.blockify.get_entry(offset);
+        let link_id = self.link(offset);
+        let entry = self.blockify.get_entry(link_id);
         let span = self.b.spans.lookup(entry.span_id);
         let location = self.diagnostics_location(&span);
         location

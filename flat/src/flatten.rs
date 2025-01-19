@@ -10,10 +10,10 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::convert::Into;
 
 use crate::{
-    BlockGraph, BlockGraphStateOpen, BlockId, BlockifyError, Builtin, CodeEntry, ContinuationFlow,
-    DeferredGotoList, FlowEdge, LCode, LinkId, NodeBuilder as NB, SafeBlock, SafeBlockClosed,
-    SafeBlockEmpty, SafeBlockOpen, SafeBlockState, SafeBlockUnknown, ScopeId, ScopeState,
-    ScopeType, ScopedContinuations, Successor, Values, VarDefinitionSpace, CodeOffset,
+    BlockGraph, BlockGraphStateOpen, BlockId, BlockifyError, Builtin, CodeEntry, CodeOffset,
+    ContinuationFlow, DeferredGotoList, FlowEdge, LCode, LinkId, NodeBuilder as NB, SafeBlock,
+    SafeBlockClosed, SafeBlockEmpty, SafeBlockOpen, SafeBlockState, SafeBlockUnknown, ScopeId,
+    ScopeState, ScopeType, ScopedContinuations, Successor, Values, VarDefinitionSpace,
 };
 use std::ops::{Deref, DerefMut};
 

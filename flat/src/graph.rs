@@ -1,4 +1,4 @@
-use crate::{CodeOffset, ValueId};
+use crate::{CodeOffset, LinkId};
 use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::Bfs;
@@ -36,7 +36,7 @@ impl Node {
 pub type CFGGraph = DiGraph<Node, ()>;
 
 pub struct CFG {
-    pub ids: HashMap<ValueId, NodeIndex>,
+    pub ids: HashMap<LinkId, NodeIndex>,
     pub g: CFGGraph,
 }
 
@@ -48,7 +48,7 @@ impl CFG {
         }
     }
 
-    pub fn leafs(&self, entry_id: ValueId) -> Vec<CodeOffset> {
+    pub fn leafs(&self, entry_id: LinkId) -> Vec<CodeOffset> {
         let mut out = vec![];
         let mut bfs = Bfs::new(&self.g, *self.ids.get(&entry_id).unwrap());
         while let Some(nx) = bfs.next(&self.g) {
@@ -64,7 +64,7 @@ impl CFG {
         out
     }
 
-    pub fn blocks(&self, entry_id: ValueId) -> Vec<CodeOffset> {
+    pub fn blocks(&self, entry_id: LinkId) -> Vec<CodeOffset> {
         let mut blocks = vec![];
         let mut bfs = Bfs::new(&self.g, *self.ids.get(&entry_id).unwrap());
         while let Some(nx) = bfs.next(&self.g) {

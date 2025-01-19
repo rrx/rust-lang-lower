@@ -15,8 +15,7 @@ impl Flatten<Module> {
         self.link.shared_libraries()
     }
 
-    pub fn get_block_successors(&self, entry_id: ValueId) -> Vec<(Successor, CodeOffset)> {
-        let link_id = self.link(entry_id);
+    pub fn get_block_successors(&self, link_id: LinkId) -> Vec<(Successor, CodeOffset)> {
         let entry = self.get_entry(link_id);
         let block_id = entry.block_id;
         self.blocks.get_block_successors(block_id)
@@ -33,6 +32,20 @@ impl Flatten<Module> {
         let link_id = self.link(value_id);
         let block_id = self.get_entry(link_id).block_id;
         self.blocks.maybe_value(block_id)
+    }
+
+    pub fn maybe_link<T: Copy + Into<CodeOffset>>(&self, code_offset: T) -> Option<LinkId> {
+        match code_offset.into() {
+            CodeOffset::Value(v) => Some(self.state.values.get(v)),
+            CodeOffset::Link(link_id) => Some(link_id),
+            CodeOffset::Block(block_id) => {
+                if let Some(link_id) = self.blocks.maybe_link(block_id) {
+                    Some(link_id)
+                } else {
+                    None
+                }
+            }
+        }
     }
 
     pub fn is_in_static_scope(&self, offset: CodeOffset) -> bool {
