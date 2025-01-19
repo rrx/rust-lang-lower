@@ -1,7 +1,7 @@
 use anyhow::Result;
 use flat::{
     Builtin, CodeOffset, Flatten, LCode, LinkId, Module, NodeBuilder, StringLabel, UseIndex,
-    ValueId, VarDefinitionSpace,
+    VarDefinitionSpace,
 };
 use indexmap::IndexMap;
 use melior::ir::Location;
@@ -642,7 +642,7 @@ impl<'c> MLIRGenerator<'c> {
         }
     }
 
-    fn lower_store(&mut self, link_id: LinkId, v_decl: ValueId, v_value: ValueId) -> SymIndex {
+    fn lower_store(&mut self, link_id: LinkId, v_decl: LinkId, v_value: LinkId) -> SymIndex {
         let location = self.get_location(link_id);
         let entry_id = self.blockify.get_block_id(link_id);
         let decl_is_static = self.blockify.is_in_static_scope(v_decl.into());
@@ -1048,9 +1048,9 @@ impl<'c> MLIRGenerator<'c> {
 
             LCode::Store(v_decl, v_value) => {
                 self.ensure_call_args_empty();
-                let v_decl = self.blockify.value(v_decl);
-                let v_value = self.blockify.value(v_value);
-                let index = self.lower_store(link_id, v_decl, v_value);
+                //let v_decl = self.blockify.value(v_decl);
+                //let v_value = self.blockify.value(v_value);
+                let index = self.lower_store(link_id, *v_decl, *v_value);
                 self.index.insert(link_id, index);
             }
 
