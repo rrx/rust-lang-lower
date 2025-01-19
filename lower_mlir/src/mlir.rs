@@ -31,14 +31,14 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum SymIndex {
-    Op(ValueId, usize),
-    Arg(ValueId, usize),
-    Def(ValueId, usize, ValueId),
-    Static(ValueId, usize, ValueId),
+    Op(BlockId, usize),
+    Arg(BlockId, usize),
+    Def(BlockId, usize, ValueId),
+    Static(BlockId, usize, ValueId),
 }
 
 impl SymIndex {
-    pub fn block(&self) -> ValueId {
+    pub fn block(&self) -> BlockId {
         match self {
             SymIndex::Op(block_index, _)
             | SymIndex::Arg(block_index, _)
@@ -75,7 +75,7 @@ impl SymIndex {
 
 #[derive(Debug)]
 pub struct OpCollection<'c> {
-    block_id: ValueId,
+    block_id: BlockId,
     op_count: usize,
     block: Option<Block<'c>>,
     ops: Vec<Operation<'c>>,
@@ -83,7 +83,7 @@ pub struct OpCollection<'c> {
 }
 
 impl<'c> OpCollection<'c> {
-    pub fn new(block_id: ValueId, block: Block<'c>) -> Self {
+    pub fn new(block_id: BlockId, block: Block<'c>) -> Self {
         Self {
             block_id,
             op_count: 0,
@@ -173,7 +173,7 @@ pub struct MLIRGenerator<'c> {
     pub(crate) context: &'c Context,
     pub(crate) blockify: &'c Flatten<Module>,
     index: IndexMap<LinkId, SymIndex>,
-    blocks: HashMap<ValueId, OpCollection<'c>>,
+    blocks: HashMap<BlockId, OpCollection<'c>>,
     call_args: Vec<LinkId>,
     b: &'c NodeBuilder,
 }
@@ -216,7 +216,7 @@ impl<'c> MLIRGenerator<'c> {
         assert_eq!(self.call_args.len(), 0);
     }
 
-    pub fn take_block(&mut self, block_id: ValueId) -> Block<'c> {
+    pub fn take_block(&mut self, block_id: BlockId) -> Block<'c> {
         self.blocks.get_mut(&block_id).unwrap().take_block()
     }
 
@@ -226,7 +226,7 @@ impl<'c> MLIRGenerator<'c> {
         op
     }
 
-    pub fn append_op(&mut self, index: SymIndex, block_id: ValueId, region_index: usize) {
+    pub fn append_op(&mut self, index: SymIndex, block_id: BlockId, region_index: usize) {
         let block = self.blocks.get_mut(&block_id).unwrap().take_block();
         let op = self.blocks.get_mut(&index.block()).unwrap().op_ref(index);
         op.region(region_index).unwrap().append_block(block);
@@ -257,7 +257,8 @@ impl<'c> MLIRGenerator<'c> {
 impl<'c> MLIRGenerator<'c> {
     fn lower_literal<T: Copy + Into<CodeOffset>>(&mut self, offset: T, lit: &Literal) {
         let link_id = self.link(offset);
-        let block_id = self.blockify.get_entry_id(offset).unwrap();
+        //let block_id = self.blockify.get_entry_id(offset).unwrap();
+        let block_id = self.blockify.get_block_id(offset);
         let location = self.get_location(offset);
         let v = self.blockify.value(offset);
 
@@ -456,6 +457,8 @@ impl<'c> MLIRGenerator<'c> {
 
     pub fn create_block<T: Copy + Into<CodeOffset>>(&mut self, offset: T) {
         let entry_id = self.blockify.value(offset);
+        let link_id = self.blockify.link(offset);
+        let block_id = self.blockify.get_block_id(link_id);
         //println!("create block: {}", entry_id);
         let code = self.blockify.get_code(entry_id);
         if let LCode::Label = code {
@@ -463,15 +466,16 @@ impl<'c> MLIRGenerator<'c> {
             let args = self.get_label_args(entry_link_id);
             //println!("create block: {:?}", (code, &args));
             let block = Block::new(&args);
-            let c = OpCollection::new(entry_id, block);
-            self.blocks.insert(entry_id, c);
+            let c = OpCollection::new(block_id, block);
+            self.blocks.insert(block_id, c);
         } else {
             unreachable!("{:?}", code)
         }
     }
 
     pub fn lower_jump(&mut self, link_id: LinkId, target: BlockId) -> Result<()> {
-        let block_id = self.blockify.get_entry_id(link_id).unwrap();
+        //let block_id = self.blockify.get_entry_id(link_id).unwrap();
+        let block_id = self.blockify.get_block_id(link_id);
         let values = self.take_call_args();
         let arity = values.len();
         let indicies = values
@@ -487,14 +491,14 @@ impl<'c> MLIRGenerator<'c> {
         let entry = self.blockify.get_entry(link_id);
         assert_eq!(entry.ty.fields().len(), arity);
 
-        let target_value_id = self.blockify.value(target);
+        //let target_value_id = self.blockify.value(target);
         let entry = self.blockify.get_entry(link_id);
         assert_eq!(entry.ty.fields().len(), arity);
 
         let c = self
             .blocks
-            .get(&target_value_id)
-            .expect(&format!("missing block at {}", target_value_id));
+            .get(&target)
+            .expect(&format!("missing block at {}", target));
         let arg_count = c.block.as_ref().unwrap().argument_count();
         assert_eq!(
             arg_count,
@@ -518,7 +522,8 @@ impl<'c> MLIRGenerator<'c> {
         arg: LinkId,
         m: &HashMap<usize, BlockId>,
     ) -> Result<()> {
-        let block_id = self.blockify.get_entry_id(link_id).unwrap();
+        //let block_id = self.blockify.get_entry_id(link_id).unwrap();
+        let block_id = self.blockify.get_block_id(link_id);
         let values = self.take_call_args();
         let arity = values.len();
         let indicies = values
@@ -541,12 +546,12 @@ impl<'c> MLIRGenerator<'c> {
         let case_destinations = case_values
             .iter()
             .map(|i| {
-                let block_id = m.get(&(*i as usize)).unwrap();
-                let target_value_id = self.blockify.value(block_id);
+                let target_block_id = m.get(&(*i as usize)).unwrap();
+                //let target_value_id = self.blockify.value(block_id);
                 let c = self
                     .blocks
-                    .get(&target_value_id)
-                    .expect(&format!("missing block at {}", target_value_id));
+                    .get(&target_block_id)
+                    .expect(&format!("missing block at {}", target_block_id));
                 let arg_count = c.block.as_ref().unwrap().argument_count();
                 assert_eq!(
                     arg_count,
@@ -606,7 +611,8 @@ impl<'c> MLIRGenerator<'c> {
         let (ptr_type, tuple_type) = self.build_struct_type(values);
         let location = self.get_location(link_id);
         // construct a sized struct memref and store it somewhere
-        let block_id = self.blockify.get_entry_id(link_id).unwrap();
+        //let block_id = self.blockify.get_entry_id(link_id).unwrap();
+        let block_id = self.blockify.get_block_id(link_id);
         //let op = memref::alloca(self.context, memref_ty, &[], &[], None, location);
         let op = self.build_int_op(1, location);
         let c = self.blocks.get_mut(&block_id).unwrap();
@@ -623,7 +629,9 @@ impl<'c> MLIRGenerator<'c> {
     }
 
     fn lower_load<T: Copy + Into<CodeOffset>>(&mut self, v: T, v_decl: ValueId) -> SymIndex {
-        let block_id = self.blockify.get_entry_id(v).unwrap();
+        //let block_id = self.blockify.get_entry_id(v).unwrap();
+        let link_id = self.link(v);
+        let block_id = self.blockify.get_block_id(link_id);
         let location = self.get_location(v_decl);
         let v_decl = self.blockify.resolve_declaration(v_decl.into()).unwrap();
         if self.blockify.is_in_static_scope(v_decl) {
@@ -657,7 +665,8 @@ impl<'c> MLIRGenerator<'c> {
 
     fn lower_store(&mut self, link_id: LinkId, v_decl: ValueId, v_value: ValueId) -> SymIndex {
         let location = self.get_location(link_id);
-        let entry_id = self.blockify.get_entry_id(link_id).unwrap();
+        //let entry_id = self.blockify.get_entry_id(link_id).unwrap();
+        let entry_id = self.blockify.get_block_id(link_id);
         let decl_is_static = self.blockify.is_in_static_scope(v_decl.into());
 
         let value_is_static = self.blockify.is_in_static_scope(v_value.into());
@@ -737,12 +746,14 @@ impl<'c> MLIRGenerator<'c> {
             LCode::Label => {
                 self.ensure_call_args_empty();
                 // should already exist
-                assert!(self.blocks.get(&v).is_some());
+                let block_id = self.blockify.get_block_id(link_id);
+                assert!(self.blocks.get(&block_id).is_some());
             }
 
             LCode::Arg(pos) => {
                 self.ensure_call_args_empty();
-                let block_id = self.blockify.get_entry_id(link_id).unwrap();
+                //let block_id = self.blockify.get_entry_id(link_id).unwrap();
+                let block_id = self.blockify.get_block_id(link_id);
                 let value_index = SymIndex::Arg(block_id, *pos as usize);
                 self.index.insert(link_id, value_index);
 
@@ -763,8 +774,8 @@ impl<'c> MLIRGenerator<'c> {
                     } else {
                         memref::store(r_value, r_addr, &[], location)
                     };
-                    let entry_id = self.blockify.get_entry_id(link_id).unwrap();
-                    let c = self.blocks.get_mut(&entry_id).unwrap();
+                    //let entry_id = self.blockify.get_entry_id(link_id).unwrap();
+                    let c = self.blocks.get_mut(&block_id).unwrap();
                     let _index = c.push(op);
                     self.index.insert(link_id, addr_index);
                 } else {
@@ -790,7 +801,8 @@ impl<'c> MLIRGenerator<'c> {
                 let index = block_id.index() as i64;
                 let op = self.build_int_op(index as i64, location);
 
-                let block_id = self.blockify.get_entry_id(link_id).unwrap();
+                //let block_id = self.blockify.get_entry_id(link_id).unwrap();
+                let block_id = self.blockify.get_block_id(link_id);
                 let c = self
                     .blocks
                     .get_mut(&block_id)
@@ -833,7 +845,8 @@ impl<'c> MLIRGenerator<'c> {
                 let r_index = self.value0(v_index);
                 let op = memref::load(r_addr, &[r_index], location);
                 //let op = memref::store(r_index, r_addr, &[r_index], location);
-                let block_id = self.blockify.get_entry_id(link_id).unwrap();
+                //let block_id = self.blockify.get_entry_id(link_id).unwrap();
+                let block_id = self.blockify.get_block_id(link_id);
                 let c = self.blocks.get_mut(&block_id).unwrap();
                 let load_index = c.push(op);
                 self.index.insert(link_id, load_index);
@@ -849,7 +862,8 @@ impl<'c> MLIRGenerator<'c> {
                     .collect();
                 let rs = self.values(indicies);
                 let op = func::r#return(&rs, location);
-                let block_id = self.blockify.get_entry_id(link_id).unwrap();
+                //let block_id = self.blockify.get_entry_id(link_id).unwrap();
+                let block_id = self.blockify.get_block_id(link_id);
                 let c = self.blocks.get_mut(&block_id).unwrap();
                 let index = c.push(op);
                 self.index.insert(link_id, index);
@@ -857,7 +871,8 @@ impl<'c> MLIRGenerator<'c> {
 
             LCode::DeclareFunction(maybe_block_id) => {
                 self.ensure_call_args_empty();
-                let static_block_id = self.blockify.value(self.blockify.blocks.static_block_id());
+                //let static_block_id = self.blockify.value(self.blockify.blocks.static_block_id());
+                let static_block_id = self.blockify.blocks.static_block_id();
                 let key = self.blockify.get_name(link_id.into()).unwrap();
                 let ty = self.blockify.get_type(link_id.into());
 
@@ -893,8 +908,8 @@ impl<'c> MLIRGenerator<'c> {
 
                     // append blocks to region
                     for block_id in block_ids.iter() {
-                        let entry_id = self.blockify.value(block_id);
-                        self.append_op(index, entry_id, 0);
+                        //let entry_id = self.blockify.value(block_id);
+                        self.append_op(index, *block_id, 0);
                     }
                 }
 
@@ -940,7 +955,8 @@ impl<'c> MLIRGenerator<'c> {
                     let (ret_type, dims) = self.from_type(&ret_ty);
                     assert_eq!(dims.len(), 0);
                     // handle call arguments
-                    let block_id = self.blockify.get_entry_id(link_id).unwrap();
+                    //let block_id = self.blockify.get_entry_id(link_id).unwrap();
+                    let block_id = self.blockify.get_block_id(link_id);
 
                     let indicies = values
                         .into_iter()
@@ -971,7 +987,8 @@ impl<'c> MLIRGenerator<'c> {
                 self.ensure_call_args_empty();
                 //if let Some(name) = self.blockify.get_name(v.into()) {
                 //let s = self.b.labels.r(name);
-                let block_id = self.blockify.get_entry_id(link_id).unwrap();
+                //let block_id = self.blockify.get_entry_id(link_id).unwrap();
+                let block_id = self.blockify.get_block_id(link_id);
                 let ast_ty = self.blockify.get_type(link_id.into());
                 let (ty, dims) = self.from_type(&ast_ty);
                 let memref_ty = MemRefType::new(ty.into(), &dims, None, None);
@@ -1016,7 +1033,8 @@ impl<'c> MLIRGenerator<'c> {
 
             LCode::Tuple(link_ids) => {
                 self.ensure_call_args_empty();
-                let block_id = self.blockify.get_entry_id(link_id).unwrap();
+                //let block_id = self.blockify.get_entry_id(link_id).unwrap();
+                let block_id = self.blockify.get_block_id(link_id);
                 let ast_ty = self.blockify.get_type(link_id.into());
                 let (ty, dims) = self.from_type(&ast_ty);
                 //println!("tuple: {:?}", (&ast_ty, ty, &dims));
@@ -1087,7 +1105,8 @@ impl<'c> MLIRGenerator<'c> {
                 let mut values = self.take_call_args();
                 let x = values.pop().unwrap().into();
 
-                let block_id = self.blockify.get_entry_id(link_id).unwrap();
+                //let block_id = self.blockify.get_entry_id(link_id).unwrap();
+                let block_id = self.blockify.get_block_id(link_id);
                 let x_index = self.resolve_value_lower_load(block_id, x).unwrap();
                 let ast_ty = self.blockify.get_type(x);
                 let (ty, dims) = self.from_type(&ast_ty);
@@ -1127,7 +1146,8 @@ impl<'c> MLIRGenerator<'c> {
                 let vy = values.pop().unwrap();
                 let vx = values.pop().unwrap();
 
-                let block_id = self.blockify.get_entry_id(link_id).unwrap();
+                //let block_id = self.blockify.get_entry_id(link_id).unwrap();
+                let block_id = self.blockify.get_block_id(link_id);
                 let x_entry = self.blockify.get_entry(self.link(vx));
                 let y_entry = self.blockify.get_entry(self.link(vy));
                 let x_index = self.resolve_value_lower_load(block_id, vx.into()).unwrap();
@@ -1166,7 +1186,8 @@ impl<'c> MLIRGenerator<'c> {
                 match op {
                     NaryOperation::Struct => {
                         // construct a sized struct memref and store it somewhere
-                        let block_id = self.blockify.get_entry_id(link_id).unwrap();
+                        //let block_id = self.blockify.get_entry_id(link_id).unwrap();
+                        let block_id = self.blockify.get_block_id(link_id);
 
                         //let op = memref::alloca(self.context, memref_ty, &[], &[], None, location);
                         if true {
@@ -1249,18 +1270,19 @@ impl<'c> MLIRGenerator<'c> {
                 let v_then = self.blockify.value(then_block_id);
                 let v_else = self.blockify.value(else_block_id);
 
-                let block_id = self.blockify.get_entry_id(link_id).unwrap();
+                //let block_id = self.blockify.get_entry_id(link_id).unwrap();
+                let block_id = self.blockify.get_block_id(link_id);
                 let c_index = self
-                    .resolve_value_lower_load(block_id, (*condition).into())
+                    .resolve_value_lower_load(block_id, condition.into())
                     .unwrap();
                 let r_c = self.value0(c_index);
 
-                let c = self.blocks.get(&v_then).unwrap();
+                let c = self.blocks.get(then_block_id).unwrap();
                 let then_block = c.block.as_ref().unwrap();
 
                 let c = self
                     .blocks
-                    .get(&v_else)
+                    .get(else_block_id)
                     .expect(&format!("missing else block in branch: {}", v_else));
                 let else_block = c.block.as_ref().unwrap();
 
@@ -1294,7 +1316,7 @@ impl<'c> MLIRGenerator<'c> {
                 }
 
                 // yield the last value
-                let c = self.blocks.get_mut(&v_then).unwrap();
+                let c = self.blocks.get_mut(&then_block_id).unwrap();
                 let r2: Value<'c, '_> = c.ops.last().unwrap().operand(0).unwrap().into();
                 let then_ty = r2.r#type();
 
@@ -1312,21 +1334,21 @@ impl<'c> MLIRGenerator<'c> {
                 }
 
                 // yield the last value
-                let c = self.blocks.get_mut(&v_else).unwrap();
+                let c = self.blocks.get_mut(&else_block_id).unwrap();
                 let r: Value<'c, '_> = c.ops.last().unwrap().operand(0).unwrap().into();
                 let else_ty = r.r#type();
 
                 let then_region = Region::new();
                 for block_id in then_block_ids.iter() {
-                    let entry_id = self.blockify.value(block_id);
-                    let block = self.take_block(entry_id);
+                    //let entry_id = self.blockify.value(block_id);
+                    let block = self.take_block(*block_id);
                     then_region.append_block(block);
                 }
 
                 let else_region = Region::new();
                 for block_id in else_block_ids.iter() {
-                    let entry_id = self.blockify.value(block_id);
-                    let block = self.take_block(entry_id);
+                    //let entry_id = self.blockify.value(block_id);
+                    let block = self.take_block(*block_id);
                     else_region.append_block(block);
                 }
 
@@ -1337,14 +1359,14 @@ impl<'c> MLIRGenerator<'c> {
                 let r_types = &[then_ty];
 
                 let op = scf::r#if(r_c, r_types, then_region, else_region, location);
-                let block_id = self.blockify.get_entry_id(link_id).unwrap();
+                //let block_id = self.blockify.get_entry_id(link_id).unwrap();
+                let block_id = self.blockify.get_block_id(link_id);
                 let c = self.blocks.get_mut(&block_id).unwrap();
                 let index = c.push(op);
                 self.index.insert(link_id, index);
             }
 
             LCode::Yield => {
-                let block_id = self.blockify.get_entry_id(link_id).unwrap();
                 let values = self.take_call_args();
                 let indicies = values
                     .iter()
@@ -1353,6 +1375,7 @@ impl<'c> MLIRGenerator<'c> {
                 let rs = self.values(indicies);
                 let r = rs[0];
                 let op = scf::r#yield(&[r], location);
+                let block_id = self.blockify.get_block_id(link_id);
                 let c = self.blocks.get_mut(&block_id).unwrap();
                 c.push(op);
             }
@@ -1371,7 +1394,8 @@ impl<'c> MLIRGenerator<'c> {
 
             LCode::Builtin(bi) => {
                 let values = self.take_call_args();
-                let block_id = self.blockify.get_entry_id(link_id).unwrap();
+                //let block_id = self.blockify.get_entry_id(link_id).unwrap();
+                let block_id = self.blockify.get_block_id(link_id);
                 match bi {
                     Builtin::Import => {
                         unreachable!()
@@ -1423,7 +1447,7 @@ impl<'c> MLIRGenerator<'c> {
 
                         let f = FlatSymbolRefAttribute::new(self.context, ident);
                         let op = func::call(self.context, f, &[r], &[], location);
-                        let block_id = self.blockify.get_entry_id(link_id).unwrap();
+                        //let block_id = self.blockify.get_entry_id(link_id).unwrap();
                         let c = self.blocks.get_mut(&block_id).unwrap();
                         let index = c.push(op);
                         self.index.insert(link_id, index);
@@ -1445,8 +1469,8 @@ impl<'c> MLIRGenerator<'c> {
         for link_id in links {
             self.lower_code(link_id)?;
         }
-        let v = self.blockify.value(link_id);
-        self.blocks.get_mut(&v).unwrap().complete = true;
+        //let v = self.blockify.value(link_id);
+        self.blocks.get_mut(&block_id).unwrap().complete = true;
         Ok(())
     }
 
@@ -1475,15 +1499,15 @@ impl<'c> MLIRGenerator<'c> {
             self.lower_code(current)?;
         }
 
-        self.blocks.get_mut(&value_id).unwrap().complete = true;
+        self.blocks.get_mut(&static_block_id).unwrap().complete = true;
         Ok(())
     }
 
     pub fn lower_module(&mut self, module: &mut melior::ir::Module) -> Result<()> {
         self.lower_static_block()?;
         let static_block_id = self.blockify.blocks.static_block_id();
-        let value_id = self.blockify.value(static_block_id);
-        let block = self.blocks.get_mut(&value_id).unwrap();
+        //let value_id = self.blockify.value(static_block_id);
+        let block = self.blocks.get_mut(&static_block_id).unwrap();
         for op in block.take_ops() {
             module.body().append_operation(op);
         }
