@@ -139,7 +139,7 @@ impl Flatten<Module> {
                 let c = cfg.g.add_node(Node::new_block(name, entry_id.into()));
                 cfg.ids.insert(entry_id, c);
                 for (succ_type, next_code_offset) in self.get_block_successors(entry_id) {
-                    if let Some(v) = self.blocks.maybe_resolve_code_offset(next_code_offset) {
+                    if let Some(v) = self.blocks.maybe_value(next_code_offset) {
                         if scope.is_none() || scope == Some(succ_type) {
                             stack.push_back(v);
                         }
@@ -155,7 +155,7 @@ impl Flatten<Module> {
             let id = cfg.ids.get(entry_id).unwrap();
             for (succ_type, next_code_offset) in self.get_block_successors(*entry_id) {
                 if let Successor::BlockScope = succ_type {
-                    if let Some(v) = self.blocks.maybe_resolve_code_offset(next_code_offset) {
+                    if let Some(v) = self.blocks.maybe_value(next_code_offset) {
                         let child_id = cfg.ids.get(&v).unwrap();
                         cfg.g.add_edge(*id, *child_id, ());
                     }
@@ -171,10 +171,7 @@ impl Flatten<Module> {
 
         let mut scope_group = Group::new("static scope".into(), "".into());
         let static_block_id = BlockId::new(0);
-        let module = self
-            .blocks
-            .maybe_resolve_code_offset(static_block_id.into())
-            .unwrap();
+        let module = self.blocks.maybe_value(static_block_id).unwrap();
         let static_block = self.blocks.get_block(static_block_id);
         let links: Vec<_> = static_block.iter().collect();
         let mut block_group = Group::new("static block".into(), "".into());
@@ -270,9 +267,7 @@ impl Flatten<Module> {
 
                                 let s = match code {
                                     LCode::Jump(offset) => {
-                                        if let Some(v_target) =
-                                            self.blocks.maybe_resolve_code_offset(offset.into())
-                                        {
+                                        if let Some(v_target) = self.blocks.maybe_value(offset) {
                                             ng.edges.push((v, v_target));
                                         }
                                         format!("{}:{}", v, self.code_to_string(link_id, b))
@@ -309,9 +304,7 @@ impl Flatten<Module> {
                                     LCode::Store(decl, source) => {
                                         let v_source = self.value(source);
                                         ng.sources.push((v, v_source));
-                                        if let Some(v_decl) =
-                                            self.blocks.maybe_resolve_code_offset(decl.into())
-                                        {
+                                        if let Some(v_decl) = self.blocks.maybe_value(decl) {
                                             ng.sources.push((v, v_decl));
                                             format!("{}:store({},{})", v, v_decl, v_source)
                                         } else {
@@ -437,7 +430,7 @@ impl Flatten<Module> {
                         // block marked dead
                         format!("label = \"B{:?}:dead\"", index.index(),)
                     } else {
-                        if let Some(v) = self.blocks.maybe_resolve_code_offset(block_id.into()) {
+                        if let Some(v) = self.blocks.maybe_value(block_id) {
                             let link_id = self.state.values.get(v);
                             let entry = self.get_entry(link_id);
                             if entry.value_id.is_some() {
@@ -481,7 +474,7 @@ impl FlattenInner {
                 &|_, (_, c)| {
                     match c {
                         ContinuationFlow::Block(block_id) => {
-                            let link_id = self.blocks.resolve_code_offset_link(block_id.into());
+                            let link_id = self.blocks.link(block_id);
                             let entry = self.get_entry(link_id);
                             let s_name = if let Some(name) = entry.name {
                                 b.labels.r(name.into())
@@ -491,7 +484,7 @@ impl FlattenInner {
                             format!("label = \"B.{}:{}\"", s_name, block_id)
                         }
                         ContinuationFlow::BlockArg(block_id, arg) => {
-                            let link_id = self.blocks.resolve_code_offset_link(block_id.into());
+                            let link_id = self.blocks.link(block_id);
                             let entry = self.get_entry(link_id);
                             let s_name = if let Some(name) = entry.name {
                                 b.labels.r(name.into())
@@ -501,21 +494,21 @@ impl FlattenInner {
                             format!("label = \"BA.{}:{}:{}\"", s_name, block_id, arg)
                         }
                         ContinuationFlow::Jump(link_id) => {
-                            if let Some(v) = self.blocks.maybe_resolve_code_offset(link_id.into()) {
+                            if let Some(v) = self.blocks.maybe_value(link_id) {
                                 format!("label = \"JUMP:{}\"", v)
                             } else {
                                 format!("label = \"JUMP:?{}\"", link_id)
                             }
                         }
                         ContinuationFlow::JumpArg(link_id, arg) => {
-                            if let Some(v) = self.blocks.maybe_resolve_code_offset(link_id.into()) {
+                            if let Some(v) = self.blocks.maybe_value(link_id) {
                                 format!("label = \"JUMP:{}:{}\"", v, arg)
                             } else {
                                 format!("label = \"JUMP:?{}:{}\"", link_id, arg)
                             }
                         }
                         ContinuationFlow::Variable(link_id) => {
-                            if let Some(v) = self.blocks.maybe_resolve_code_offset(link_id.into()) {
+                            if let Some(v) = self.blocks.maybe_value(link_id) {
                                 format!("label = \"VAR:{}\"", v)
                             } else {
                                 format!("label = \"VAR:?\"")

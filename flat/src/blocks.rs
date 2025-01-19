@@ -287,20 +287,17 @@ impl<S: BlockGraphState> BlockGraph<S> {
         );
     }
 
-    pub fn resolve_code_offset_link(&self, code_offset: CodeOffset) -> LinkId {
-        self.maybe_resolve_code_offset_link(code_offset)
-            .expect(&format!("Unable to resolve: {}", code_offset))
-    }
-
-    pub fn value<T: Copy + Into<CodeOffset>>(&self, code_offset: T) -> ValueId {
-        self.maybe_resolve_code_offset(code_offset.into())
+    pub fn link<T: Copy + Into<CodeOffset>>(&self, code_offset: T) -> LinkId {
+        self.maybe_link(code_offset.into())
             .expect(&format!("Unable to resolve: {}", code_offset.into()))
     }
 
-    pub fn maybe_resolve_code_offset_link<T: Copy + Into<CodeOffset>>(
-        &self,
-        code_offset: T,
-    ) -> Option<LinkId> {
+    pub fn value<T: Copy + Into<CodeOffset>>(&self, code_offset: T) -> ValueId {
+        self.maybe_value(code_offset.into())
+            .expect(&format!("Unable to resolve: {}", code_offset.into()))
+    }
+
+    pub fn maybe_link<T: Copy + Into<CodeOffset>>(&self, code_offset: T) -> Option<LinkId> {
         match code_offset.into() {
             CodeOffset::Value(_) => {
                 unreachable!()
@@ -315,8 +312,8 @@ impl<S: BlockGraphState> BlockGraph<S> {
             }
         }
     }
-    pub fn maybe_resolve_code_offset(&self, code_offset: CodeOffset) -> Option<ValueId> {
-        match code_offset {
+    pub fn maybe_value<T: Copy + Into<CodeOffset>>(&self, code_offset: T) -> Option<ValueId> {
+        match code_offset.into() {
             CodeOffset::Value(v) => Some(v),
             CodeOffset::Link(link_id) => {
                 let entry = self.get_entry(link_id);

@@ -32,7 +32,7 @@ impl Flatten<Module> {
     pub fn get_entry_id(&self, value_id: ValueId) -> Option<ValueId> {
         let link_id = self.state.values.get(value_id);
         let block_id = self.get_link_entry(link_id).block_id;
-        self.blocks.maybe_resolve_code_offset(block_id.into())
+        self.blocks.maybe_value(block_id)
     }
 
     pub fn is_in_static_scope(&self, offset: CodeOffset) -> bool {
@@ -58,7 +58,7 @@ impl Flatten<Module> {
     }
 
     pub fn get_name(&self, offset: CodeOffset) -> Option<StringLabel> {
-        if let Some(value_id) = self.blocks.maybe_resolve_code_offset(offset) {
+        if let Some(value_id) = self.blocks.maybe_value(offset) {
             let link_id = self.state.values.get(value_id);
             self.get_link_entry(link_id).name.map(|n| n.into())
         } else {
