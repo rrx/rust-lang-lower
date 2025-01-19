@@ -167,8 +167,7 @@ pub fn codegen<'c>(
     module: &mut melior::ir::Module<'c>,
     b: &mut NodeBuilder,
 ) -> Result<()> {
-    let module_start = blockify.state.values.root();
-    let mut gen = MLIRGenerator::new(config, context, blockify, module_start, b);
+    let mut gen = MLIRGenerator::new(config, context, blockify, b);
     gen.lower_module(module)?;
     Ok(())
 }
@@ -189,15 +188,15 @@ impl<'c> MLIRGenerator<'c> {
         config: &'c flat::Config,
         context: &'c Context,
         blockify: &'c Flatten<Module>,
-        module_block_id: ValueId,
         b: &'c NodeBuilder,
     ) -> Self {
+        let module_start = blockify.state.values.root();
         Self {
             config,
             context,
             blockify,
             index: IndexMap::new(),
-            module_block_id,
+            module_block_id: module_start,
             blocks: HashMap::new(),
             call_args: vec![],
             b,
@@ -207,12 +206,11 @@ impl<'c> MLIRGenerator<'c> {
     pub fn codegen(
         config: &'c flat::Config,
         blockify: &'c Flatten<Module>,
-        module_block_id: ValueId,
         context: &'c Context,
         module: &'c mut melior::ir::Module<'c>,
         b: &'c mut NodeBuilder,
     ) -> Result<()> {
-        let mut gen = Self::new(config, context, blockify, module_block_id, b);
+        let mut gen = Self::new(config, context, blockify, b);
         gen.lower_module(module)?;
         Ok(())
     }
@@ -425,8 +423,8 @@ impl<'c> MLIRGenerator<'c> {
         //}
     }
 
-    pub fn link(&self, v: ValueId) -> LinkId {
-        self.blockify.state.values.get(v)
+    pub fn link<T: Copy + Into<CodeOffset>>(&self, offset: T) -> LinkId {
+        self.blockify.link(offset)
     }
 
     pub fn get_label_args(&self, v: ValueId) -> Vec<(Type<'c>, Location<'c>)> {
@@ -852,7 +850,7 @@ impl<'c> MLIRGenerator<'c> {
 
             LCode::DeclareFunction(maybe_block_id) => {
                 self.ensure_call_args_empty();
-                let static_block_id = self.module_block_id;
+                let static_block_id = self.blockify.value(self.blockify.blocks.static_block_id());
                 let key = self.blockify.get_name(v.into()).unwrap();
                 let ty = self.blockify.get_type(v.into());
 
@@ -1448,9 +1446,13 @@ impl<'c> MLIRGenerator<'c> {
         Ok(())
     }
 
-    pub fn lower_static_block(&mut self, module_block_id: ValueId) -> Result<()> {
+    pub fn lower_static_block(&mut self) -> Result<()> {
         // reorder things, so we lower declarations last
-        let entry = self.blockify.get_entry(self.link(module_block_id));
+        let static_block_id = self.blockify.blocks.static_block_id();
+        let value_id = self.blockify.value(static_block_id);
+        self.create_block(value_id);
+
+        let entry = self.blockify.get_entry(self.link(static_block_id));
         let block_id = entry.block_id;
         let links: Vec<_> = self.blockify.entry_links(block_id);
 
@@ -1470,15 +1472,15 @@ impl<'c> MLIRGenerator<'c> {
             self.lower_code(current)?;
         }
 
-        self.blocks.get_mut(&module_block_id).unwrap().complete = true;
+        self.blocks.get_mut(&value_id).unwrap().complete = true;
         Ok(())
     }
 
     pub fn lower_module(&mut self, module: &mut melior::ir::Module) -> Result<()> {
-        let module_block_id = self.module_block_id;
-        self.create_block(module_block_id);
-        self.lower_static_block(module_block_id)?;
-        let block = self.blocks.get_mut(&module_block_id).unwrap();
+        self.lower_static_block()?;
+        let static_block_id = self.blockify.blocks.static_block_id();
+        let value_id = self.blockify.value(static_block_id);
+        let block = self.blocks.get_mut(&value_id).unwrap();
         for op in block.take_ops() {
             module.body().append_operation(op);
         }
