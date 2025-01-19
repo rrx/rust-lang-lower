@@ -423,13 +423,12 @@ impl<'c> MLIRGenerator<'c> {
         self.blockify.link(offset)
     }
 
-    pub fn get_label_args(&self, v: ValueId) -> Vec<(Type<'c>, Location<'c>)> {
-        let link_id = self.link(v);
+    pub fn get_label_args(&self, link_id: LinkId) -> Vec<(Type<'c>, Location<'c>)> {
         let types = self.blockify.get_label_args(link_id);
         if types == vec![AstType::Unit] {
             vec![]
         } else {
-            let location = self.get_location(v);
+            let location = self.get_location(link_id);
             types
                 .into_iter()
                 .map(|ty| {
@@ -460,7 +459,8 @@ impl<'c> MLIRGenerator<'c> {
         //println!("create block: {}", entry_id);
         let code = self.blockify.get_code(entry_id);
         if let LCode::Label = code {
-            let args = self.get_label_args(entry_id);
+            let entry_link_id = self.blockify.link(offset);
+            let args = self.get_label_args(entry_link_id);
             //println!("create block: {:?}", (code, &args));
             let block = Block::new(&args);
             let c = OpCollection::new(entry_id, block);
@@ -471,7 +471,6 @@ impl<'c> MLIRGenerator<'c> {
     }
 
     pub fn lower_jump(&mut self, link_id: LinkId, target: BlockId) -> Result<()> {
-        let v = self.blockify.value(link_id);
         let block_id = self.blockify.get_entry_id(link_id).unwrap();
         let values = self.take_call_args();
         let arity = values.len();
@@ -677,7 +676,6 @@ impl<'c> MLIRGenerator<'c> {
             let op = memref::get_global(self.context, &static_name, memref_ty, location);
             let c = self.blocks.get_mut(&entry_id).unwrap();
             let index = c.push(op);
-            let v = self.blockify.value(link_id);
             self.index.insert(link_id, index);
             index
         } else {
