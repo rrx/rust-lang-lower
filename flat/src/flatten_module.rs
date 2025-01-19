@@ -51,7 +51,7 @@ impl Flatten<Module> {
         }
     }
 
-    pub fn is_in_static_scope(&self, offset: CodeOffset) -> bool {
+    pub fn is_in_static_scope<T: Copy + Into<CodeOffset>>(&self, offset: T) -> bool {
         let value_id = self.value(offset);
         let link_id = self.link(value_id);
         let entry = self.get_entry(link_id);
@@ -73,7 +73,7 @@ impl Flatten<Module> {
         &self.get_entry(link_id).code
     }
 
-    pub fn get_name(&self, offset: CodeOffset) -> Option<StringLabel> {
+    pub fn get_name<T: Copy + Into<CodeOffset>>(&self, offset: T) -> Option<StringLabel> {
         if let Some(value_id) = self.blocks.maybe_value(offset) {
             let link_id = self.state.values.get(value_id);
             self.get_entry(link_id).name.map(|n| n.into())
@@ -111,7 +111,7 @@ impl Flatten<Module> {
             ty: s_ty,
             mem: format!("{:?}", entry.mem),
             name: self
-                .get_name(v.into())
+                .get_name(v)
                 .map(|key| b.labels.r(key))
                 .unwrap_or("".to_string())
                 .to_string(),

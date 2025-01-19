@@ -187,7 +187,7 @@ impl Flatten<Module> {
 
         for entry in entries {
             let fun_block_id: BlockId = entry.into();
-            let fun_key = self.get_name(fun_block_id.into()).unwrap();
+            let fun_key = self.get_name(fun_block_id).unwrap();
             let fun_name = b.labels.r(fun_key);
             let mut fun_group = Group::new(fun_name.clone(), "".to_string());
             let mut h = HashMap::new();
@@ -232,7 +232,7 @@ impl Flatten<Module> {
                                 continue;
                             }
                             let block_name = format!("{}", block_id);
-                            let block_body = if let Some(key) = self.get_name(block_id.into()) {
+                            let block_body = if let Some(key) = self.get_name(block_id) {
                                 b.labels.r(key)
                             } else {
                                 "".into()

@@ -254,15 +254,14 @@ impl<'c> MLIRGenerator<'c> {
 }
 
 impl<'c> MLIRGenerator<'c> {
-    fn lower_literal<T: Copy + Into<CodeOffset>>(&mut self, offset: T, lit: &Literal) {
-        let link_id = self.link(offset);
-        let block_id = self.blockify.get_block_id(offset);
-        let location = self.get_location(offset);
+    fn lower_literal(&mut self, link_id: LinkId, lit: &Literal) {
+        let block_id = self.blockify.get_block_id(link_id);
+        let location = self.get_location(link_id);
 
-        let index = if self.blockify.is_in_static_scope(offset.into()) {
+        let index = if self.blockify.is_in_static_scope(link_id) {
             let (value, ast_ty) = self.build_static_attribute(lit);
 
-            let name = self.blockify.get_name(offset.into()).unwrap();
+            let name = self.blockify.get_name(link_id).unwrap();
 
             // declare
             let integer_type = IntegerType::new(self.context, 64).into();
@@ -640,9 +639,9 @@ impl<'c> MLIRGenerator<'c> {
     fn lower_store(&mut self, link_id: LinkId, v_decl: LinkId, v_value: LinkId) -> SymIndex {
         let location = self.get_location(link_id);
         let entry_id = self.blockify.get_block_id(link_id);
-        let decl_is_static = self.blockify.is_in_static_scope(v_decl.into());
+        let decl_is_static = self.blockify.is_in_static_scope(v_decl);
 
-        let value_is_static = self.blockify.is_in_static_scope(v_value.into());
+        let value_is_static = self.blockify.is_in_static_scope(v_value);
         //println!(
         //"store: {}, {}, {}, {}",
         //v_decl, v_value, decl_is_static, value_is_static
@@ -666,7 +665,7 @@ impl<'c> MLIRGenerator<'c> {
 
         // resolve address
         let addr_index = if decl_is_static {
-            let name = self.blockify.get_name(v_decl.into()).unwrap();
+            let name = self.blockify.get_name(v_decl).unwrap();
             let lhs_ty = self.blockify.get_type(v_decl.into());
             let rhs_ty = self.blockify.get_type(v_value.into());
             assert_eq!(lhs_ty, rhs_ty);
@@ -839,7 +838,7 @@ impl<'c> MLIRGenerator<'c> {
             LCode::DeclareFunction(maybe_block_id) => {
                 self.ensure_call_args_empty();
                 let static_block_id = self.blockify.blocks.static_block_id();
-                let key = self.blockify.get_name(link_id.into()).unwrap();
+                let key = self.blockify.get_name(link_id).unwrap();
                 let ty = self.blockify.get_type(link_id.into());
 
                 //if static_block_id == block_id {
@@ -893,7 +892,7 @@ impl<'c> MLIRGenerator<'c> {
                 // TODO: ensure calling static
 
                 // function to call
-                let key = self.blockify.get_name((*v_f).into()).unwrap();
+                let key = self.blockify.get_name(v_f).unwrap();
                 let name = self.b.labels.r(key);
                 let ty = self.blockify.get_type((*v_f).into());
                 let f = FlatSymbolRefAttribute::new(self.context, &name);
