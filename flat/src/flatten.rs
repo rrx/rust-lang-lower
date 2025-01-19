@@ -13,7 +13,7 @@ use crate::{
     BlockGraph, BlockGraphStateOpen, BlockId, BlockifyError, Builtin, CodeEntry, ContinuationFlow,
     DeferredGotoList, FlowEdge, LCode, LinkId, NodeBuilder as NB, SafeBlock, SafeBlockClosed,
     SafeBlockEmpty, SafeBlockOpen, SafeBlockState, SafeBlockUnknown, ScopeId, ScopeState,
-    ScopeType, ScopedContinuations, Successor, Values, VarDefinitionSpace,
+    ScopeType, ScopedContinuations, Successor, Values, VarDefinitionSpace, CodeOffset,
 };
 use std::ops::{Deref, DerefMut};
 
@@ -485,8 +485,8 @@ impl FlattenInner {
         }
     }
 
-    pub fn get_entry(&self, link_id: LinkId) -> &CodeEntry {
-        self.blocks.get_entry(link_id)
+    pub fn get_entry<T: Copy + Into<CodeOffset>>(&self, offset: T) -> &CodeEntry {
+        self.blocks.get_entry(offset)
     }
 
     pub fn get_type(&self, link_id: LinkId) -> &AstType {

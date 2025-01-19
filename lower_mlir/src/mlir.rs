@@ -177,7 +177,6 @@ pub struct MLIRGenerator<'c> {
     pub(crate) context: &'c Context,
     pub(crate) blockify: &'c Flatten<Module>,
     index: IndexMap<ValueId, SymIndex>,
-    module_block_id: ValueId,
     blocks: HashMap<ValueId, OpCollection<'c>>,
     call_args: Vec<ValueId>,
     b: &'c NodeBuilder,
@@ -190,13 +189,11 @@ impl<'c> MLIRGenerator<'c> {
         blockify: &'c Flatten<Module>,
         b: &'c NodeBuilder,
     ) -> Self {
-        let module_start = blockify.state.values.root();
         Self {
             config,
             context,
             blockify,
             index: IndexMap::new(),
-            module_block_id: module_start,
             blocks: HashMap::new(),
             call_args: vec![],
             b,
@@ -324,9 +321,8 @@ impl<'c> LowerIR<'c> for MLIRGenerator<'c> {
 }
 
 impl<'c> MLIRGenerator<'c> {
-    pub fn get_location(&self, value_id: ValueId) -> Location<'c> {
-        let link_id = self.link(value_id);
-        let entry = self.blockify.get_entry(link_id);
+    pub fn get_location<T: Copy + Into<CodeOffset>>(&self, offset: T) -> Location<'c> {
+        let entry = self.blockify.get_entry(offset);
         let span = self.b.spans.lookup(entry.span_id);
         let location = self.diagnostics_location(&span);
         location
@@ -719,9 +715,10 @@ impl<'c> MLIRGenerator<'c> {
         index
     }
 
-    pub fn lower_code(&mut self, v: ValueId) -> Result<()> {
-        let code = self.blockify.get_code(v);
-        let location = self.get_location(v);
+    pub fn lower_code(&mut self, link_id: LinkId) -> Result<()> {
+        let code = self.blockify.get_code(link_id);
+        let location = self.get_location(link_id);
+        let v = self.blockify.value(link_id);
 
         match code {
             LCode::Label => {
@@ -1438,9 +1435,7 @@ impl<'c> MLIRGenerator<'c> {
         let block_id = entry.block_id;
         let links: Vec<_> = self.blockify.entry_links(block_id);
         for link_id in links {
-            let entry = self.blockify.get_entry(link_id);
-            let current = entry.value_id.unwrap();
-            self.lower_code(current)?;
+            self.lower_code(link_id)?;
         }
         self.blocks.get_mut(&entry_id).unwrap().complete = true;
         Ok(())
@@ -1458,8 +1453,7 @@ impl<'c> MLIRGenerator<'c> {
 
         let mut values = VecDeque::new();
         for link_id in links {
-            let entry = self.blockify.get_entry(link_id);
-            let current = entry.value_id.unwrap();
+            let current = link_id;
             let code = self.blockify.get_code(current);
             if let LCode::DeclareFunction(Some(_)) = code {
                 values.push_back(current);
