@@ -1,4 +1,4 @@
-use crate::{BlockId, Builtin, CodeOffset, LinkId, UseIndex, ValueId, VarDefinitionSpace};
+use crate::{BlockId, Builtin, LinkId, UseIndex, ValueId, VarDefinitionSpace};
 use compile_core::{
     AstType, BinaryOperation, Literal, NaryOperation, SpanId, StringKey, UnaryOperation,
 };
@@ -21,7 +21,7 @@ pub enum LCode {
     Arg(u8), // get the value of a positional arg
     Block(BlockId),
     Val(Literal),
-    Use(CodeOffset, Vec<UseIndex>),
+    Use(LinkId, Vec<UseIndex>),
     Tuple(Vec<LinkId>),
     Op1(UnaryOperation),
     Op2(BinaryOperation),
