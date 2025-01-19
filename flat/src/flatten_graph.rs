@@ -267,15 +267,23 @@ impl Flatten<Module> {
                                         }
                                         format!("{}:{}", v, self.code_to_string(link_id, b))
                                     }
-                                    LCode::Switch(link_id, cases) => {
-                                        let v_link = self.value(*link_id);
+
+                                    LCode::Switch(condition_link_id, cases) => {
+                                        let v_link = self.value(*condition_link_id);
                                         ng.sources.push((v, v_link));
                                         for (_index, block_id) in cases.iter() {
                                             let v_target = self.value(block_id);
                                             ng.edges.push((v, v_target));
                                         }
-                                        format!("{}:switch({},{:?})", v, v_link, cases)
+                                        format!("{}:{}", v, self.code_to_string(link_id, b))
                                     }
+
+                                    LCode::Block(block_id) => {
+                                        let v_target = self.value(block_id);
+                                        ng.sources.push((v, v_target));
+                                        format!("{}:{}", v, self.code_to_string(link_id, b))
+                                    }
+
                                     LCode::Branch(c, b1, b2) => {
                                         let v_target = self.value(c);
                                         ng.sources.push((v, v_target));
@@ -285,15 +293,17 @@ impl Flatten<Module> {
                                         ng.edges.push((v, v_target));
                                         format!("{}:{}", v, self.code_to_string(link_id, b))
                                     }
+
                                     LCode::CallValue(offset) => {
                                         let v_target = self.value(offset);
                                         ng.sources.push((v, v_target));
-                                        format!("{}:callvalue({})", v, v_target)
+                                        format!("{}:{}", v, self.code_to_string(link_id, b))
                                     }
+
                                     LCode::Load(decl) => {
                                         let v_decl = self.value(decl);
                                         ng.sources.push((v, v_decl));
-                                        format!("{}:load({})", v, v_decl)
+                                        format!("{}:{}", v, self.code_to_string(link_id, b))
                                     }
 
                                     LCode::Store(decl, source) => {
@@ -301,24 +311,20 @@ impl Flatten<Module> {
                                         ng.sources.push((v, v_source));
                                         if let Some(v_decl) = self.blocks.maybe_value(decl) {
                                             ng.sources.push((v, v_decl));
-                                            format!("{}:store({},{})", v, v_decl, v_source)
-                                        } else {
-                                            format!("{}:store(??,{})", v, v_source)
                                         }
+                                        format!("{}:{}", v, self.code_to_string(link_id, b))
                                     }
+
                                     LCode::Call(offset) => {
                                         let v_target = self.value(offset);
                                         ng.sources.push((v, v_target));
                                         format!("{}:{}", v, self.code_to_string(link_id, b))
                                     }
-                                    LCode::Arg(num) => {
-                                        format!(
-                                            "{}:arg({}) => {}",
-                                            v,
-                                            num,
-                                            self.mem_to_string(entry.mem, b)
-                                        )
+
+                                    LCode::Arg(_) => {
+                                        format!("{}:{}", v, self.code_to_string(link_id, b))
                                     }
+
                                     LCode::Label => {
                                         let s_name = if let Some(name) = entry.name {
                                             b.labels.r(name.into())

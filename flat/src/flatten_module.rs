@@ -237,6 +237,15 @@ impl Flatten<Module> {
                 }
             }
 
+            LCode::Arg(num) => {
+                format!("arg({}) => {}", num, self.mem_to_string(entry.mem, b))
+            }
+
+            LCode::CallValue(offset) => {
+                let v_target = self.value(offset);
+                format!("callvalue({})", v_target)
+            }
+
             LCode::Jump(value_id) => {
                 format!("jump({})", value_id)
             }
@@ -245,12 +254,30 @@ impl Flatten<Module> {
                 format!("String({})", s)
             }
 
+            LCode::Load(decl) => {
+                let v_decl = self.value(decl);
+                format!("load({})", v_decl)
+            }
+
+            LCode::Store(decl, source) => {
+                let v_source = self.value(source);
+                if let Some(v_decl) = self.blocks.maybe_value(decl) {
+                    format!("store({},{})", v_decl, v_source)
+                } else {
+                    format!("store(??,{})", v_source)
+                }
+            }
+
             LCode::Ternary(c, x, y) => {
                 format!("Ternary({:?},{},{})", c, x, y)
             }
 
             LCode::Branch(c, x, y) => {
                 format!("Branch({:?},{},{})", c, x, y)
+            }
+
+            LCode::Block(block_id) => {
+                format!("block({})", block_id)
             }
 
             LCode::Switch(link_id, m) => {
