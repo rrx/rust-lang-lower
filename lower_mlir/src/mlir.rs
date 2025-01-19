@@ -333,11 +333,7 @@ impl<'c> MLIRGenerator<'c> {
         }
     }
 
-    pub fn resolve_value_lower_load<T: Copy + Into<CodeOffset>>(
-        &mut self,
-        v: T,
-        v_value: LinkId,
-    ) -> Option<SymIndex> {
+    pub fn resolve_value_lower_load(&mut self, v: BlockId, v_value: LinkId) -> Option<SymIndex> {
         if let Some(index) = self.resolve_value(v_value) {
             match index {
                 SymIndex::Static(_, _, v_decl) => Some(self.lower_load(v, v_decl)),
@@ -460,7 +456,7 @@ impl<'c> MLIRGenerator<'c> {
         let indicies = values
             .into_iter()
             .map(|call_link_id| {
-                self.resolve_value_lower_load(link_id, call_link_id)
+                self.resolve_value_lower_load(block_id, call_link_id)
                     .unwrap()
             })
             .collect();
