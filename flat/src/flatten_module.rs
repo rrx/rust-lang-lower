@@ -19,7 +19,7 @@ impl Flatten<Module> {
         self.blocks.get_block_successors(block_id)
     }
 
-    pub fn get_type(&self, v: CodeOffset) -> AstType {
+    pub fn get_type<T: Copy + Into<CodeOffset>>(&self, v: T) -> AstType {
         let value_id = self.value(v);
         let link_id = self.link(value_id);
         let entry = self.get_entry(link_id);
