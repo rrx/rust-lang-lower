@@ -183,7 +183,7 @@ impl Flatten<Module> {
             let entry = self.get_link_entry(v);
             if let LCode::Val(_) = entry.code {
                 ng.sources.push((module, value_id));
-                let s = format!("{}:{}", v, self.inner.code_to_string(v, b));
+                let s = format!("{}:{}", v, self.code_to_string(v, b));
                 block_group.push_value(GroupValue::new(format!("{}", v), s));
             } else {
                 continue;
@@ -274,7 +274,7 @@ impl Flatten<Module> {
                                         {
                                             ng.edges.push((v, v_target));
                                         }
-                                        format!("{}:{}", v, self.inner.code_to_string(link_id, b))
+                                        format!("{}:{}", v, self.code_to_string(link_id, b))
                                     }
                                     LCode::Switch(link_id, cases) => {
                                         let v_link = self.resolve_code_offset(link_id.into());

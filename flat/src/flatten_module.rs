@@ -1,4 +1,4 @@
-use compile_core::AstType;
+use compile_core::{AstType, Literal};
 use petgraph::graph::NodeIndex;
 
 use std::convert::Into;
@@ -90,7 +90,7 @@ impl Flatten<Module> {
         Some(CodeRow {
             pos: v,
             link: link_id,
-            value: self.inner.code_to_string(link_id, b),
+            value: self.code_to_string(link_id, b),
             ty: s_ty,
             mem: format!("{:?}", entry.mem),
             name: self
@@ -172,6 +172,79 @@ impl Flatten<Module> {
             }
 
             return Some(current);
+        }
+    }
+
+    pub fn get_label_args(&self, link_id: LinkId) -> Vec<AstType> {
+        let entry = self.get_entry(link_id);
+        let block_id = entry.block_id;
+        let block = self.blocks.get_block(block_id);
+        let args: Vec<_> = block.iter_args().collect();
+        let mut out = vec![];
+        for current in args {
+            let entry = self.get_entry(current);
+            if let LCode::Arg(_) = &entry.code {
+                out.push(entry.ty.clone());
+            } else {
+                unreachable!()
+            }
+        }
+        out
+    }
+
+    pub fn code_to_string(&self, link_id: LinkId, b: &NB) -> String {
+        let entry = self.get_entry(link_id);
+        match &entry.code {
+            LCode::Declare => {
+                let code_str = b.labels.r(entry.name.unwrap().into());
+                format!("declare {}", code_str)
+            }
+
+            LCode::DeclareFunction(maybe_entry) => {
+                let code_str = b.labels.r(entry.name.unwrap().into());
+                if let Some(entry_id) = maybe_entry {
+                    format!("declare_function({},{})", code_str, entry_id)
+                } else {
+                    format!("declare_function({})", code_str)
+                }
+            }
+
+            LCode::Label => {
+                let args = self.get_label_args(link_id);
+                if let Some(key) = entry.name {
+                    format!("label({},{})", b.labels.r(key.into()), args.len())
+                } else {
+                    format!("label(_,{})", args.len())
+                }
+            }
+
+            LCode::Jump(value_id) => {
+                format!("jump({})", value_id)
+            }
+
+            LCode::Val(Literal::String(s)) => {
+                format!("String({})", s)
+            }
+
+            LCode::Ternary(c, x, y) => {
+                format!("Ternary({:?},{},{})", c, x, y)
+            }
+
+            LCode::Branch(c, x, y) => {
+                format!("Branch({:?},{},{})", c, x, y)
+            }
+
+            LCode::Switch(link_id, m) => {
+                let mut s = vec![];
+                for (k, v) in m {
+                    s.push(format!("{}->{}", k, v));
+                }
+                format!("switch({},{})", link_id, s.join(","))
+            }
+
+            _ => {
+                format!("{:?}", entry.code)
+            }
         }
     }
 }
