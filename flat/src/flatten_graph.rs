@@ -119,7 +119,7 @@ impl Flatten<Module> {
     }
 
     fn get_cfg(&self, block_id: BlockId, b: &NodeBuilder) -> CFG {
-        let entry_id = self.resolve_code_offset(block_id.into());
+        let entry_id = self.blocks.resolve_code_offset(block_id);
         self.get_graph(entry_id, Some(Successor::BlockScope), b)
     }
 
@@ -139,7 +139,7 @@ impl Flatten<Module> {
                 let c = cfg.g.add_node(Node::new_block(name, entry_id.into()));
                 cfg.ids.insert(entry_id, c);
                 for (succ_type, next_code_offset) in self.get_block_successors(entry_id) {
-                    if let Some(v) = self.maybe_resolve_code_offset(next_code_offset) {
+                    if let Some(v) = self.blocks.maybe_resolve_code_offset(next_code_offset) {
                         if scope.is_none() || scope == Some(succ_type) {
                             stack.push_back(v);
                         }
@@ -155,7 +155,7 @@ impl Flatten<Module> {
             let id = cfg.ids.get(entry_id).unwrap();
             for (succ_type, next_code_offset) in self.get_block_successors(*entry_id) {
                 if let Successor::BlockScope = succ_type {
-                    if let Some(v) = self.maybe_resolve_code_offset(next_code_offset) {
+                    if let Some(v) = self.blocks.maybe_resolve_code_offset(next_code_offset) {
                         let child_id = cfg.ids.get(&v).unwrap();
                         cfg.g.add_edge(*id, *child_id, ());
                     }
@@ -172,6 +172,7 @@ impl Flatten<Module> {
         let mut scope_group = Group::new("static scope".into(), "".into());
         let static_block_id = BlockId::new(0);
         let module = self
+            .blocks
             .maybe_resolve_code_offset(static_block_id.into())
             .unwrap();
         let static_block = self.blocks.get_block(static_block_id);
@@ -179,7 +180,7 @@ impl Flatten<Module> {
         let mut block_group = Group::new("static block".into(), "".into());
         block_group.push_value(GroupValue::new("V0".into(), "module".into()));
         for v in links {
-            let value_id = self.resolve_code_offset(v.into());
+            let value_id = self.value(v);
             let entry = self.get_link_entry(v);
             if let LCode::Val(_) = entry.code {
                 ng.sources.push((module, value_id));
@@ -254,7 +255,7 @@ impl Flatten<Module> {
                                 let code = &entry.code;
                                 let v_decl = match entry.mem {
                                     VarDefinitionSpace::Stack(x) => {
-                                        let v_source = self.resolve_code_offset(x.into());
+                                        let v_source = self.value(x);
                                         ng.sources.push((v, v_source));
                                         Some(v_source)
                                     }
@@ -270,47 +271,47 @@ impl Flatten<Module> {
                                 let s = match code {
                                     LCode::Jump(offset) => {
                                         if let Some(v_target) =
-                                            self.maybe_resolve_code_offset(offset.into())
+                                            self.blocks.maybe_resolve_code_offset(offset.into())
                                         {
                                             ng.edges.push((v, v_target));
                                         }
                                         format!("{}:{}", v, self.code_to_string(link_id, b))
                                     }
                                     LCode::Switch(link_id, cases) => {
-                                        let v_link = self.resolve_code_offset(link_id.into());
+                                        let v_link = self.value(*link_id);
                                         ng.sources.push((v, v_link));
                                         for (_index, block_id) in cases.iter() {
                                             let v_target =
-                                                self.resolve_code_offset(block_id.into());
+                                                self.blocks.resolve_code_offset(block_id);
                                             ng.edges.push((v, v_target));
                                         }
                                         format!("{}:switch({},{:?})", v, v_link, cases)
                                     }
                                     LCode::Branch(c, b1, b2) => {
-                                        let v_target = self.resolve_code_offset(*c);
+                                        let v_target = self.blocks.resolve_code_offset(*c);
                                         ng.sources.push((v, v_target));
-                                        let v_target = self.resolve_code_offset(b1.into());
+                                        let v_target = self.blocks.resolve_code_offset(b1);
                                         ng.edges.push((v, v_target));
-                                        let v_target = self.resolve_code_offset(b2.into());
+                                        let v_target = self.blocks.resolve_code_offset(b2);
                                         ng.edges.push((v, v_target));
                                         format!("{}:{}", v, self.code_to_string(link_id, b))
                                     }
                                     LCode::CallValue(offset) => {
-                                        let v_target = self.resolve_code_offset(*offset);
+                                        let v_target = self.blocks.resolve_code_offset(*offset);
                                         ng.sources.push((v, v_target));
                                         format!("{}:callvalue({})", v, v_target)
                                     }
                                     LCode::Load(decl) => {
-                                        let v_decl = self.resolve_code_offset(decl.into());
+                                        let v_decl = self.value(*decl);
                                         ng.sources.push((v, v_decl));
                                         format!("{}:load({})", v, v_decl)
                                     }
 
                                     LCode::Store(decl, source) => {
-                                        let v_source = self.resolve_code_offset(source.into());
+                                        let v_source = self.value(*source);
                                         ng.sources.push((v, v_source));
                                         if let Some(v_decl) =
-                                            self.maybe_resolve_code_offset(decl.into())
+                                            self.blocks.maybe_resolve_code_offset(decl.into())
                                         {
                                             ng.sources.push((v, v_decl));
                                             format!("{}:store({},{})", v, v_decl, v_source)
@@ -319,7 +320,7 @@ impl Flatten<Module> {
                                         }
                                     }
                                     LCode::Call(offset) => {
-                                        let v_target = self.resolve_code_offset(*offset);
+                                        let v_target = self.blocks.resolve_code_offset(*offset);
                                         ng.sources.push((v, v_target));
                                         format!("{}:{}", v, self.code_to_string(link_id, b))
                                     }
@@ -371,7 +372,9 @@ impl Flatten<Module> {
 
     pub fn save_graph(&self, filename: &str, b: &NB) {
         use petgraph::dot::{Config, Dot};
-        let value_id = self.resolve_code_offset(self.blocks.static_block_id().into());
+        let value_id = self
+            .blocks
+            .resolve_code_offset(self.blocks.static_block_id());
 
         let cfg = self.get_graph(value_id, None, b);
         let s = format!(
@@ -437,11 +440,11 @@ impl Flatten<Module> {
                         // block marked dead
                         format!("label = \"B{:?}:dead\"", index.index(),)
                     } else {
-                        if let Some(v) = self.maybe_resolve_code_offset(block_id.into()) {
+                        if let Some(v) = self.blocks.maybe_resolve_code_offset(block_id.into()) {
                             let link_id = self.state.values.get(v);
                             let entry = self.get_entry(link_id);
                             if entry.value_id.is_some() {
-                                let v = self.resolve_code_offset(block_id.into());
+                                let v = self.blocks.resolve_code_offset(block_id);
                                 // block found
                                 format!("label = \"B{:?}:{}\"", index.index(), v)
                             } else {
@@ -481,7 +484,7 @@ impl FlattenInner {
                 &|_, (_, c)| {
                     match c {
                         ContinuationFlow::Block(block_id) => {
-                            let link_id = self.resolve_code_offset_link(block_id.into());
+                            let link_id = self.blocks.resolve_code_offset_link(block_id.into());
                             let entry = self.get_entry(link_id);
                             let s_name = if let Some(name) = entry.name {
                                 b.labels.r(name.into())
@@ -491,7 +494,7 @@ impl FlattenInner {
                             format!("label = \"B.{}:{}\"", s_name, block_id)
                         }
                         ContinuationFlow::BlockArg(block_id, arg) => {
-                            let link_id = self.resolve_code_offset_link(block_id.into());
+                            let link_id = self.blocks.resolve_code_offset_link(block_id.into());
                             let entry = self.get_entry(link_id);
                             let s_name = if let Some(name) = entry.name {
                                 b.labels.r(name.into())
@@ -501,21 +504,21 @@ impl FlattenInner {
                             format!("label = \"BA.{}:{}:{}\"", s_name, block_id, arg)
                         }
                         ContinuationFlow::Jump(link_id) => {
-                            if let Some(v) = self.maybe_resolve_code_offset(link_id.into()) {
+                            if let Some(v) = self.blocks.maybe_resolve_code_offset(link_id.into()) {
                                 format!("label = \"JUMP:{}\"", v)
                             } else {
                                 format!("label = \"JUMP:?{}\"", link_id)
                             }
                         }
                         ContinuationFlow::JumpArg(link_id, arg) => {
-                            if let Some(v) = self.maybe_resolve_code_offset(link_id.into()) {
+                            if let Some(v) = self.blocks.maybe_resolve_code_offset(link_id.into()) {
                                 format!("label = \"JUMP:{}:{}\"", v, arg)
                             } else {
                                 format!("label = \"JUMP:?{}:{}\"", link_id, arg)
                             }
                         }
                         ContinuationFlow::Variable(link_id) => {
-                            if let Some(v) = self.maybe_resolve_code_offset(link_id.into()) {
+                            if let Some(v) = self.blocks.maybe_resolve_code_offset(link_id.into()) {
                                 format!("label = \"VAR:{}\"", v)
                             } else {
                                 format!("label = \"VAR:?\"")

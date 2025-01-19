@@ -82,7 +82,7 @@ impl FlattenState for Module {}
 
 pub struct FlattenInner {
     pub(super) link: LinkOptions,
-    pub(super) blocks: BlockGraph<BlockGraphStateOpen>,
+    pub blocks: BlockGraph<BlockGraphStateOpen>,
     pub(super) open_identifiers: Vec<LinkId>,
     pub(super) scoped_continuations: ScopedContinuations,
     pub(super) deferred_goto: DeferredGotoList,
@@ -189,49 +189,6 @@ impl Flatten<Module> {
 }
 
 impl FlattenInner {
-    pub fn resolve_code_offset_link(&self, code_offset: CodeOffset) -> LinkId {
-        self.maybe_resolve_code_offset_link(code_offset)
-            .expect(&format!("Unable to resolve: {}", code_offset))
-    }
-
-    pub fn resolve_code_offset(&self, code_offset: CodeOffset) -> ValueId {
-        self.maybe_resolve_code_offset(code_offset)
-            .expect(&format!("Unable to resolve: {}", code_offset))
-    }
-
-    pub fn maybe_resolve_code_offset_link(&self, code_offset: CodeOffset) -> Option<LinkId> {
-        match code_offset {
-            CodeOffset::Value(_) => {
-                unreachable!()
-            }
-            CodeOffset::Link(link_id) => Some(link_id),
-            CodeOffset::Block(block_id) => {
-                if let Some(link_id) = self.blocks.block_links.get(&block_id) {
-                    Some(*link_id)
-                } else {
-                    None
-                }
-            }
-        }
-    }
-    pub fn maybe_resolve_code_offset(&self, code_offset: CodeOffset) -> Option<ValueId> {
-        match code_offset {
-            CodeOffset::Value(v) => Some(v),
-            CodeOffset::Link(link_id) => {
-                let entry = self.get_entry(link_id);
-                entry.value_id
-            }
-            CodeOffset::Block(block_id) => {
-                if let Some(link_id) = self.blocks.block_links.get(&block_id) {
-                    let entry = self.get_entry(*link_id);
-                    entry.value_id
-                } else {
-                    None
-                }
-            }
-        }
-    }
-
     pub fn dump_scope(&self, block_id: BlockId, b: &NB) {
         let block = self.blocks.get_block(block_id);
         self.blocks.dump_scope(block.scope(), b);

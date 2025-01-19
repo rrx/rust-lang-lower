@@ -102,6 +102,12 @@ impl From<LinkId> for CodeOffset {
     }
 }
 
+impl From<&ValueId> for CodeOffset {
+    fn from(item: &ValueId) -> Self {
+        Self::Value(*item)
+    }
+}
+
 impl From<ValueId> for CodeOffset {
     fn from(item: ValueId) -> Self {
         Self::Value(item)

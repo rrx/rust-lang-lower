@@ -359,12 +359,12 @@ impl<'c> MLIRGenerator<'c> {
         }
     }
 
-    pub fn resolve_value(&self, offset: CodeOffset) -> Option<SymIndex> {
+    pub fn resolve_value<T: Copy + Into<CodeOffset>>(&self, offset: T) -> Option<SymIndex> {
         //if let Some(offset_decl) = self.blockify.resolve_declaration(offset) {
-        let mut current = offset;
+        let mut current = offset.into();
         loop {
             //println!("resolve: {:?}", (offset, current));
-            let v_decl = self.blockify.resolve_code_offset(current);
+            let v_decl = self.blockify.blocks.resolve_code_offset(current);
             let code = self.blockify.get_code(v_decl);
             /*
             if let LCode::Value(next_value_id) = code {
@@ -418,7 +418,7 @@ impl<'c> MLIRGenerator<'c> {
             */
             break;
         }
-        let v = self.blockify.resolve_code_offset(current);
+        let v = self.blockify.blocks.resolve_code_offset(current);
         self.index.get(&v).cloned()
         //} else {
         //None
@@ -493,7 +493,7 @@ impl<'c> MLIRGenerator<'c> {
         println!("{}: jump ty: {}", v, entry.ty);
         assert_eq!(entry.ty.fields().len(), arity);
 
-        let target_value_id = self.blockify.resolve_code_offset(target.into());
+        let target_value_id = self.blockify.blocks.resolve_code_offset(target);
         let link_id = self.link(v);
         let entry = self.blockify.get_entry(link_id);
         println!("{}: jump target ty: {}", v, entry.ty);
@@ -533,8 +533,8 @@ impl<'c> MLIRGenerator<'c> {
             .collect();
         let rs = self.values(indicies);
 
-        let arg_value_id = self.blockify.resolve_code_offset(arg.into());
-        let i_arg = self.resolve_value(arg_value_id.into()).unwrap();
+        let arg_value_id = self.blockify.value(arg);
+        let i_arg = self.resolve_value(arg_value_id).unwrap();
         let v_arg = self.value0(i_arg);
         let flag_type = IntegerType::new(self.context, 64).into();
 
@@ -545,7 +545,7 @@ impl<'c> MLIRGenerator<'c> {
             .iter()
             .map(|i| {
                 let block_id = m.get(&(*i as usize)).unwrap();
-                let target_value_id = self.blockify.resolve_code_offset(block_id.into());
+                let target_value_id = self.blockify.blocks.resolve_code_offset(block_id);
                 let c = self
                     .blocks
                     .get(&target_value_id)
@@ -672,7 +672,7 @@ impl<'c> MLIRGenerator<'c> {
             self.index.insert(v, index);
             index
         } else {
-            self.resolve_value(v_value.into()).unwrap()
+            self.resolve_value(v_value).unwrap()
         };
 
         // resolve address
@@ -697,7 +697,7 @@ impl<'c> MLIRGenerator<'c> {
             //self.index.insert(v, index);
             index
         } else {
-            let decl_index = self.resolve_value(v_decl.into()).unwrap();
+            let decl_index = self.resolve_value(v_decl).unwrap();
             decl_index
         };
 
@@ -724,9 +724,6 @@ impl<'c> MLIRGenerator<'c> {
     pub fn lower_code(&mut self, v: ValueId) -> Result<()> {
         let code = self.blockify.get_code(v);
         let location = self.get_location(v);
-        //if self.config.verbose {
-        //println!("lower: {:?}", (v, code));
-        //}
 
         match code {
             LCode::Label => {
@@ -743,8 +740,8 @@ impl<'c> MLIRGenerator<'c> {
 
                 let entry = self.blockify.get_entry(self.link(v));
                 if let VarDefinitionSpace::Stack(decl_link_id) = entry.mem {
-                    let v_decl = self.blockify.resolve_code_offset(decl_link_id.into());
-                    let addr_index = self.resolve_value(v_decl.into()).unwrap();
+                    let v_decl = self.blockify.value(decl_link_id);
+                    let addr_index = self.resolve_value(v_decl).unwrap();
                     let r_addr = self.value0(addr_index);
                     let r_value = self.value0(value_index);
 
@@ -843,7 +840,7 @@ impl<'c> MLIRGenerator<'c> {
                 let values = self.take_call_args();
                 let indicies = values
                     .iter()
-                    .map(|value_id| self.resolve_value((*value_id).into()).unwrap())
+                    .map(|value_id| self.resolve_value(value_id).unwrap())
                     .collect();
                 let rs = self.values(indicies);
                 let op = func::r#return(&rs, location);
@@ -876,25 +873,24 @@ impl<'c> MLIRGenerator<'c> {
                     let attribute = Attribute::unit(self.context);
                     let op = self.op_ref(index);
                     op.set_attribute("llvm.emit_c_interface", attribute);
-                    let offset = block_id.clone().into();
-                    let entry_id = self.blockify.resolve_code_offset(offset);
+                    let entry_id = self.blockify.blocks.resolve_code_offset(block_id);
                     let block_ids = self.blockify.blocks(block_id, entry_id, self.b);
 
                     // create blocks
                     for block_id in block_ids.iter() {
-                        let entry_id = self.blockify.resolve_code_offset(*block_id);
+                        let entry_id = self.blockify.blocks.resolve_code_offset(*block_id);
                         self.create_block(entry_id);
                     }
 
                     // lower
                     for block_id in block_ids.iter() {
-                        let entry_id = self.blockify.resolve_code_offset(*block_id);
+                        let entry_id = self.blockify.blocks.resolve_code_offset(*block_id);
                         self.lower_block(entry_id)?;
                     }
 
                     // append blocks to region
                     for block_id in block_ids.iter() {
-                        let entry_id = self.blockify.resolve_code_offset(*block_id);
+                        let entry_id = self.blockify.blocks.resolve_code_offset(*block_id);
                         self.append_op(index, entry_id, 0);
                     }
                 }
@@ -1024,8 +1020,8 @@ impl<'c> MLIRGenerator<'c> {
 
                 let mut syms = vec![];
                 for link_id in link_ids {
-                    let v = self.blockify.resolve_code_offset(link_id.into());
-                    let sym = self.resolve_value(link_id.into()).unwrap();
+                    let v = self.blockify.value(link_id);
+                    let sym = self.resolve_value(link_id).unwrap();
                     syms.push((v, sym));
                 }
 
@@ -1069,8 +1065,8 @@ impl<'c> MLIRGenerator<'c> {
 
             LCode::Store(v_decl, v_value) => {
                 self.ensure_call_args_empty();
-                let v_decl = self.blockify.resolve_code_offset(v_decl.into());
-                let v_value = self.blockify.resolve_code_offset(v_value.into());
+                let v_decl = self.blockify.value(v_decl);
+                let v_value = self.blockify.value(v_value);
                 let index = self.lower_store(v, v_decl, v_value);
                 self.index.insert(v, index);
             }
@@ -1079,7 +1075,7 @@ impl<'c> MLIRGenerator<'c> {
                 self.ensure_call_args_empty();
                 let block_id = self.blockify.get_entry_id(v).unwrap();
                 let v_decl = self.blockify.resolve_declaration(v_decl.into()).unwrap();
-                let v_decl = self.blockify.resolve_code_offset(v_decl.into());
+                let v_decl = self.blockify.blocks.resolve_code_offset(v_decl);
                 let index = self.lower_load(block_id, v_decl);
                 self.index.insert(v, index);
             }
@@ -1247,8 +1243,8 @@ impl<'c> MLIRGenerator<'c> {
 
             LCode::Branch(condition, then_block_id, else_block_id) => {
                 self.ensure_call_args_empty();
-                let v_then = self.blockify.resolve_code_offset((*then_block_id).into());
-                let v_else = self.blockify.resolve_code_offset((*else_block_id).into());
+                let v_then = self.blockify.blocks.resolve_code_offset(then_block_id);
+                let v_else = self.blockify.blocks.resolve_code_offset(else_block_id);
 
                 let block_id = self.blockify.get_entry_id(v).unwrap();
                 let c_index = self
@@ -1283,15 +1279,15 @@ impl<'c> MLIRGenerator<'c> {
             LCode::Ternary(condition, then_block_id, else_block_id) => {
                 self.ensure_call_args_empty();
                 // THEN
-                let v_then = self.blockify.resolve_code_offset(then_block_id.into());
+                let v_then = self.blockify.blocks.resolve_code_offset(then_block_id);
                 let then_block_ids = self.blockify.blocks(*then_block_id, v_then, self.b);
 
                 for block_id in then_block_ids.iter() {
-                    let entry_id = self.blockify.resolve_code_offset(*block_id);
+                    let entry_id = self.blockify.blocks.resolve_code_offset(*block_id);
                     self.create_block(entry_id);
                 }
                 for block_id in then_block_ids.iter() {
-                    let entry_id = self.blockify.resolve_code_offset(*block_id);
+                    let entry_id = self.blockify.blocks.resolve_code_offset(*block_id);
                     self.lower_block(entry_id)?;
                 }
 
@@ -1301,15 +1297,15 @@ impl<'c> MLIRGenerator<'c> {
                 let then_ty = r2.r#type();
 
                 // ELSE
-                let v_else = self.blockify.resolve_code_offset(else_block_id.into());
+                let v_else = self.blockify.blocks.resolve_code_offset(else_block_id);
                 let else_block_ids = self.blockify.blocks(*else_block_id, v_else, self.b);
 
                 for block_id in else_block_ids.iter() {
-                    let entry_id = self.blockify.resolve_code_offset(*block_id);
+                    let entry_id = self.blockify.blocks.resolve_code_offset(*block_id);
                     self.create_block(entry_id);
                 }
                 for block_id in else_block_ids.iter() {
-                    let entry_id = self.blockify.resolve_code_offset(*block_id);
+                    let entry_id = self.blockify.blocks.resolve_code_offset(*block_id);
                     self.lower_block(entry_id)?;
                 }
 
@@ -1320,19 +1316,19 @@ impl<'c> MLIRGenerator<'c> {
 
                 let then_region = Region::new();
                 for block_id in then_block_ids.iter() {
-                    let entry_id = self.blockify.resolve_code_offset(*block_id);
+                    let entry_id = self.blockify.blocks.resolve_code_offset(*block_id);
                     let block = self.take_block(entry_id);
                     then_region.append_block(block);
                 }
 
                 let else_region = Region::new();
                 for block_id in else_block_ids.iter() {
-                    let entry_id = self.blockify.resolve_code_offset(*block_id);
+                    let entry_id = self.blockify.blocks.resolve_code_offset(*block_id);
                     let block = self.take_block(entry_id);
                     else_region.append_block(block);
                 }
 
-                let c_index = self.resolve_value((*condition).into()).unwrap();
+                let c_index = self.resolve_value(condition).unwrap();
                 let r_c = self.value0(c_index);
 
                 assert_eq!(then_ty, else_ty);
@@ -1350,7 +1346,7 @@ impl<'c> MLIRGenerator<'c> {
                 let values = self.take_call_args();
                 let indicies = values
                     .iter()
-                    .map(|value_id| self.resolve_value((*value_id).into()).unwrap())
+                    .map(|value_id| self.resolve_value(value_id).unwrap())
                     .collect();
                 let rs = self.values(indicies);
                 let r = rs[0];

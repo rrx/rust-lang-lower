@@ -5,7 +5,7 @@ use std::collections::HashSet;
 
 use crate::{
     AbstractionId, AbstractionsBuilder, BlockId, CodeEntry, CodeOffset, FunctionVariantBuilder,
-    LinkId, Links, NodeBuilder, SafeBlock, SafeBlockEmpty, ScopeId, ScopeLayer, VariantId,
+    LinkId, Links, NodeBuilder, SafeBlock, SafeBlockEmpty, ScopeId, ScopeLayer, ValueId, VariantId,
 };
 
 use std::collections::HashMap;
@@ -285,6 +285,52 @@ impl<S: BlockGraphState> BlockGraph<S> {
             NodeIndex::new(target_block_id.index()),
             succ_type,
         );
+    }
+
+    pub fn resolve_code_offset_link(&self, code_offset: CodeOffset) -> LinkId {
+        self.maybe_resolve_code_offset_link(code_offset)
+            .expect(&format!("Unable to resolve: {}", code_offset))
+    }
+
+    pub fn resolve_code_offset<T: Copy + Into<CodeOffset>>(&self, code_offset: T) -> ValueId {
+        self.maybe_resolve_code_offset(code_offset.into())
+            .expect(&format!("Unable to resolve: {}", code_offset.into()))
+    }
+
+    pub fn maybe_resolve_code_offset_link<T: Copy + Into<CodeOffset>>(
+        &self,
+        code_offset: T,
+    ) -> Option<LinkId> {
+        match code_offset.into() {
+            CodeOffset::Value(_) => {
+                unreachable!()
+            }
+            CodeOffset::Link(link_id) => Some(link_id),
+            CodeOffset::Block(block_id) => {
+                if let Some(link_id) = self.block_links.get(&block_id) {
+                    Some(*link_id)
+                } else {
+                    None
+                }
+            }
+        }
+    }
+    pub fn maybe_resolve_code_offset(&self, code_offset: CodeOffset) -> Option<ValueId> {
+        match code_offset {
+            CodeOffset::Value(v) => Some(v),
+            CodeOffset::Link(link_id) => {
+                let entry = self.get_entry(link_id);
+                entry.value_id
+            }
+            CodeOffset::Block(block_id) => {
+                if let Some(link_id) = self.block_links.get(&block_id) {
+                    let entry = self.get_entry(*link_id);
+                    entry.value_id
+                } else {
+                    None
+                }
+            }
+        }
     }
 }
 
