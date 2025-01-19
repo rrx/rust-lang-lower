@@ -4,8 +4,8 @@ use petgraph::graph::NodeIndex;
 use std::convert::Into;
 
 use crate::{
-    CodeOffset, CodeRow, Flatten, LCode, LinkId, Module, NodeBuilder as NB, StringLabel, Successor,
-    ValueId, VarDefinitionSpace,
+    BlockId, CodeOffset, CodeRow, Flatten, LCode, LinkId, Module, NodeBuilder as NB, StringLabel,
+    Successor, ValueId, VarDefinitionSpace,
 };
 
 use tabled::{settings::Style, Table};
@@ -15,9 +15,7 @@ impl Flatten<Module> {
         self.link.shared_libraries()
     }
 
-    pub fn get_block_successors(&self, link_id: LinkId) -> Vec<(Successor, CodeOffset)> {
-        let entry = self.get_entry(link_id);
-        let block_id = entry.block_id;
+    pub fn get_block_successors(&self, block_id: BlockId) -> Vec<(Successor, BlockId)> {
         self.blocks.get_block_successors(block_id)
     }
 

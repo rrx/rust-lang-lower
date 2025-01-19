@@ -878,8 +878,7 @@ impl<'c> MLIRGenerator<'c> {
                     let attribute = Attribute::unit(self.context);
                     let op = self.op_ref(index);
                     op.set_attribute("llvm.emit_c_interface", attribute);
-                    let entry_id = self.blockify.value(block_id);
-                    let block_ids = self.blockify.blocks(block_id, entry_id, self.b);
+                    let block_ids = self.blockify.blocks(block_id, self.b);
 
                     // create blocks
                     for block_id in block_ids.iter() {
@@ -1283,7 +1282,7 @@ impl<'c> MLIRGenerator<'c> {
                 self.ensure_call_args_empty();
                 // THEN
                 let v_then = self.blockify.value(then_block_id);
-                let then_block_ids = self.blockify.blocks(*then_block_id, v_then, self.b);
+                let then_block_ids = self.blockify.blocks(*then_block_id, self.b);
 
                 for block_id in then_block_ids.iter() {
                     let entry_id = self.blockify.value(block_id);
@@ -1301,7 +1300,7 @@ impl<'c> MLIRGenerator<'c> {
 
                 // ELSE
                 let v_else = self.blockify.blocks.value(else_block_id);
-                let else_block_ids = self.blockify.blocks(*else_block_id, v_else, self.b);
+                let else_block_ids = self.blockify.blocks(*else_block_id, self.b);
 
                 for block_id in else_block_ids.iter() {
                     let entry_id = self.blockify.blocks.value(block_id);

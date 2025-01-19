@@ -354,7 +354,7 @@ impl BlockGraph<BlockGraphStateOpen> {
         self.bg.node_weight_mut(index).unwrap()
     }
 
-    pub fn get_block_successors(&self, block_id: BlockId) -> Vec<(Successor, CodeOffset)> {
+    pub fn get_block_successors(&self, block_id: BlockId) -> Vec<(Successor, BlockId)> {
         let index = NodeIndex::new(block_id.index());
         let edges = self
             .bg

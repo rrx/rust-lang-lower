@@ -1,4 +1,4 @@
-use crate::{CodeOffset, LinkId};
+use crate::{BlockId, CodeOffset, LinkId};
 use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::Bfs;
@@ -21,14 +21,15 @@ impl Shape {
 pub struct Node {
     pub ty: Shape,
     pub name: String,
-    pub link: LinkId,
+    pub block_id: BlockId,
 }
+
 impl Node {
-    pub fn new_block(name: String, link: LinkId) -> Self {
+    pub fn new_block(name: String, block_id: BlockId) -> Self {
         Self {
             ty: Shape::Box,
             name,
-            link,
+            block_id,
         }
     }
 }
@@ -36,7 +37,7 @@ impl Node {
 pub type CFGGraph = DiGraph<Node, ()>;
 
 pub struct CFG {
-    pub ids: HashMap<LinkId, NodeIndex>,
+    pub ids: HashMap<BlockId, NodeIndex>,
     pub g: CFGGraph,
 }
 
@@ -48,9 +49,9 @@ impl CFG {
         }
     }
 
-    pub fn leafs(&self, link_id: LinkId) -> Vec<LinkId> {
+    pub fn leafs(&self, block_id: BlockId) -> Vec<BlockId> {
         let mut out = vec![];
-        let mut bfs = Bfs::new(&self.g, *self.ids.get(&link_id).unwrap());
+        let mut bfs = Bfs::new(&self.g, *self.ids.get(&block_id).unwrap());
         while let Some(nx) = bfs.next(&self.g) {
             let outgoing = self
                 .g
@@ -58,18 +59,18 @@ impl CFG {
                 .collect::<Vec<_>>();
             if outgoing.len() == 0 {
                 let node = self.g.node_weight(nx).unwrap();
-                out.push(node.link);
+                out.push(node.block_id);
             }
         }
         out
     }
 
-    pub fn blocks(&self, link_id: LinkId) -> Vec<LinkId> {
+    pub fn blocks(&self, block_id: BlockId) -> Vec<BlockId> {
         let mut blocks = vec![];
-        let mut bfs = Bfs::new(&self.g, *self.ids.get(&link_id).unwrap());
+        let mut bfs = Bfs::new(&self.g, *self.ids.get(&block_id).unwrap());
         while let Some(nx) = bfs.next(&self.g) {
             let node = self.g.node_weight(nx).unwrap();
-            blocks.push(node.link);
+            blocks.push(node.block_id);
         }
         blocks
     }
