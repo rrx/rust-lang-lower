@@ -258,7 +258,6 @@ impl<'c> MLIRGenerator<'c> {
         let link_id = self.link(offset);
         let block_id = self.blockify.get_block_id(offset);
         let location = self.get_location(offset);
-        let v = self.blockify.value(offset);
 
         let index = if self.blockify.is_in_static_scope(offset.into()) {
             let (value, ast_ty) = self.build_static_attribute(lit);
@@ -562,7 +561,7 @@ impl<'c> MLIRGenerator<'c> {
         Ok(())
     }
 
-    pub fn build_struct_type(&mut self, values: Vec<CodeOffset>) -> (Type<'c>, Type<'c>) {
+    pub fn build_struct_type(&mut self, values: Vec<LinkId>) -> (Type<'c>, Type<'c>) {
         let types = values
             .iter()
             .map(|v| {
@@ -583,11 +582,7 @@ impl<'c> MLIRGenerator<'c> {
     }
     */
 
-    pub fn build_struct(
-        &mut self,
-        link_id: LinkId,
-        values: Vec<CodeOffset>,
-    ) -> (Type<'c>, Type<'c>) {
+    pub fn build_struct(&mut self, link_id: LinkId, values: Vec<LinkId>) -> (Type<'c>, Type<'c>) {
         let (ptr_type, tuple_type) = self.build_struct_type(values);
         let location = self.get_location(link_id);
         // construct a sized struct memref and store it somewhere
