@@ -118,7 +118,7 @@ impl Flatten<Module> {
         block_id: BlockId,
         offset: T,
         b: &NodeBuilder,
-    ) -> Vec<CodeOffset> {
+    ) -> Vec<LinkId> {
         let cfg = self.get_cfg(block_id, b);
         let link_id = self.link(offset);
         cfg.blocks(link_id)
@@ -141,7 +141,7 @@ impl Flatten<Module> {
                     continue;
                 }
                 let name = self.code_to_string(link_id, b);
-                let c = cfg.g.add_node(Node::new_block(name, link_id.into()));
+                let c = cfg.g.add_node(Node::new_block(name, link_id));
                 cfg.ids.insert(link_id, c);
                 for (succ_type, next_code_offset) in self.get_block_successors(link_id) {
                     if let Some(v) = self.blocks.maybe_link(next_code_offset) {
@@ -379,7 +379,8 @@ impl Flatten<Module> {
                 &[Config::EdgeNoLabel, Config::NodeNoLabel],
                 &|_, _er| String::new(),
                 &|_, (_index, data)| {
-                    match data.code_offset {
+                    let offset = data.link.into();
+                    match offset {
                         CodeOffset::Link(link_id) => {
                             format!(
                                 //"label = \"L{}:{}\" shape=\"{:?}\"",

@@ -21,14 +21,14 @@ impl Shape {
 pub struct Node {
     pub ty: Shape,
     pub name: String,
-    pub code_offset: CodeOffset,
+    pub link: LinkId,
 }
 impl Node {
-    pub fn new_block(name: String, code_offset: CodeOffset) -> Self {
+    pub fn new_block(name: String, link: LinkId) -> Self {
         Self {
             ty: Shape::Box,
             name,
-            code_offset,
+            link,
         }
     }
 }
@@ -48,7 +48,7 @@ impl CFG {
         }
     }
 
-    pub fn leafs(&self, link_id: LinkId) -> Vec<CodeOffset> {
+    pub fn leafs(&self, link_id: LinkId) -> Vec<LinkId> {
         let mut out = vec![];
         let mut bfs = Bfs::new(&self.g, *self.ids.get(&link_id).unwrap());
         while let Some(nx) = bfs.next(&self.g) {
@@ -58,18 +58,18 @@ impl CFG {
                 .collect::<Vec<_>>();
             if outgoing.len() == 0 {
                 let node = self.g.node_weight(nx).unwrap();
-                out.push(node.code_offset);
+                out.push(node.link);
             }
         }
         out
     }
 
-    pub fn blocks(&self, link_id: LinkId) -> Vec<CodeOffset> {
+    pub fn blocks(&self, link_id: LinkId) -> Vec<LinkId> {
         let mut blocks = vec![];
         let mut bfs = Bfs::new(&self.g, *self.ids.get(&link_id).unwrap());
         while let Some(nx) = bfs.next(&self.g) {
             let node = self.g.node_weight(nx).unwrap();
-            blocks.push(node.code_offset);
+            blocks.push(node.link);
         }
         blocks
     }
